@@ -178,38 +178,70 @@ type DiscountedPrice = {
     | null;
   price: number;
 };
-export function getDiscountedPrice(cart: CartState, item: CartItem): DiscountedPrice {
-  let applicable: DiscountedPrice = {
-    discount: null,
-    price: item.price * item.quantity,
-  };
-  for (const discountCode of cart.discountCodes) {
-    const discount = discountCode.products[item.product.permalink];
-    if (!discount) continue;
-    if (
-      discount.minimum_amount_cents &&
-      cart.items
-        .filter(
-          ({ product }) =>
-            (!discount.product_ids || discount.product_ids.includes(product.id)) &&
-            !discount.excluded_product_ids?.includes(product.id),
-        )
-        .reduce((acc, item) => acc + item.price * item.quantity, 0) < discount.minimum_amount_cents
-    )
-      continue;
-    const discounted = applyOfferCodeToCents(discount, item.price) * item.quantity;
-    if (discounted <= applicable.price && hasMetDiscountConditions(discount, item.quantity))
-      applicable = { discount: { type: "code", value: discount, code: discountCode.code }, price: discounted };
-  }
+
+const hasMetCartDiscountConditions = (cart: CartState, item: CartItem, discount: Discount) =>
+  hasMetDiscountConditions(discount, item.quantity) &&
+  (!discount.minimum_amount_cents ||
+    cart.items
+      .filter(
+        ({ product }) =>
+          (!discount.product_ids || discount.product_ids.includes(product.id)) &&
+          !discount.excluded_product_ids?.includes(product.id),
+      )
+      .reduce((total, cartItem) => total + cartItem.price * cartItem.quantity, 0) >= discount.minimum_amount_cents);
+
+const getNonCodeDiscountedPrice = (cart: CartState, item: CartItem): DiscountedPrice => {
+  let applicable: DiscountedPrice = { discount: null, price: item.price * item.quantity };
   if (item.accepted_offer?.discount) {
     const discounted = applyOfferCodeToCents(item.accepted_offer.discount, item.price) * item.quantity;
     if (discounted < applicable.price)
-      return { discount: { type: "cross-sell", value: item.accepted_offer.discount }, price: discounted };
+      applicable = { discount: { type: "cross-sell", value: item.accepted_offer.discount }, price: discounted };
   }
   if (item.product.ppp_details && !cart.rejectPppDiscount) {
     const pppDiscountedPrice = computeDiscountedPrice(item.price * item.quantity, null, item.product);
     if (pppDiscountedPrice.value < applicable.price)
-      return { discount: { type: "ppp" }, price: pppDiscountedPrice.value };
+      applicable = { discount: { type: "ppp" }, price: pppDiscountedPrice.value };
+  }
+  return applicable;
+};
+
+const isOncePerCartAllocationCandidate = (cart: CartState, item: CartItem, discount: Discount) => {
+  if (discount.type !== "fixed" || !hasMetCartDiscountConditions(cart, item, discount)) return false;
+  const fullPrice = item.price * item.quantity;
+  const discountedPrice = Math.max(fullPrice - (discount.once_per_cart_amount_cents ?? discount.cents), 0);
+  return discountedPrice < fullPrice && discountedPrice <= getNonCodeDiscountedPrice(cart, item).price;
+};
+
+export function getDiscountedPrice(cart: CartState, item: CartItem, sourceItem: CartItem = item): DiscountedPrice {
+  let applicable = getNonCodeDiscountedPrice(cart, item);
+  for (const discountCode of cart.discountCodes) {
+    const discount = discountCode.products[item.product.permalink];
+    if (!discount) continue;
+    if (!hasMetCartDiscountConditions(cart, item, discount)) continue;
+    const oncePerCart = discount.type === "fixed" && discount.once_per_cart;
+    const allocatedItemIndex = oncePerCart
+      ? cart.items.findIndex((candidate) => {
+          const candidateDiscount = discountCode.products[candidate.product.permalink];
+          return (
+            candidate.product.creator.id === item.product.creator.id &&
+            candidateDiscount?.type === "fixed" &&
+            candidateDiscount.once_per_cart &&
+            candidateDiscount.once_per_cart_id === discount.once_per_cart_id &&
+            isOncePerCartAllocationCandidate(cart, candidate, candidateDiscount)
+          );
+        })
+      : -1;
+    const comparableItemIndex = cart.items.indexOf(sourceItem);
+    if (oncePerCart && (allocatedItemIndex < 0 || allocatedItemIndex !== comparableItemIndex)) continue;
+    const discounted = oncePerCart
+      ? Math.max(item.price * item.quantity - (discount.once_per_cart_amount_cents ?? discount.cents), 0)
+      : applyOfferCodeToCents(discount, item.price) * item.quantity;
+    if (discounted <= applicable.price) {
+      const effectiveDiscount = oncePerCart
+        ? { ...discount, cents: discount.once_per_cart_amount_cents ?? discount.cents }
+        : discount;
+      applicable = { discount: { type: "code", value: effectiveDiscount, code: discountCode.code }, price: discounted };
+    }
   }
   return applicable;
 }

@@ -832,6 +832,29 @@ describe OfferCode do
 
         expect(offer_code.quantity_left).to eq 0
       end
+
+      it "counts a multi-quantity purchase once for a fixed order-level discount" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true)
+        purchase = create(:purchase, link: @product, offer_code:, seller: @product.user, price_cents: @product.price_cents * 10, quantity: 10)
+        purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                      once_per_cart: true, pre_discount_minimum_price_cents: @product.price_cents)
+
+        expect(offer_code.quantity_left).to eq offer_code.max_purchase_count - 1
+      end
+
+      it "keeps each purchase's recorded usage mode when the code changes" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: false)
+        legacy_purchase = create(:purchase, link: @product, offer_code:, seller: @product.user, price_cents: @product.price_cents * 2, quantity: 2)
+        legacy_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                             once_per_cart: false, pre_discount_minimum_price_cents: @product.price_cents)
+        offer_code.update!(once_per_cart: true)
+        order_level_purchase = create(:purchase, link: @product, offer_code:, seller: @product.user,
+                                                 price_cents: @product.price_cents * 10, quantity: 10)
+        order_level_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                                  once_per_cart: true, pre_discount_minimum_price_cents: @product.price_cents)
+
+        expect(offer_code.quantity_left).to eq offer_code.max_purchase_count - 3
+      end
     end
 
     describe "product offer codes" do
@@ -903,6 +926,16 @@ describe OfferCode do
             duration_in_billing_cycles: 1,
             minimum_amount_cents: 100,
           }
+        )
+      end
+
+      it "includes a stable allocation identity for order-level pricing" do
+        offer_code.update!(once_per_cart: true)
+
+        expect(offer_code.discount).to include(
+          once_per_cart: true,
+          once_per_cart_id: offer_code.external_id,
+          once_per_cart_amount_cents: 100
         )
       end
     end

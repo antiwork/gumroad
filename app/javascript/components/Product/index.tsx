@@ -570,7 +570,10 @@ export const Product = ({
           ) : null}
           {discountCode ? (
             discountCode.valid ? (
-              (discountedPriceCents < priceCents || discountCode.discount.minimum_quantity) && !pppDiscounted ? (
+              (discountedPriceCents < priceCents ||
+                discountCode.discount.minimum_quantity ||
+                (discountCode.discount.type === "fixed" && discountCode.discount.once_per_cart)) &&
+              !pppDiscounted ? (
                 <Alert role="status" variant="success">
                   <div className="flex flex-col gap-4">
                     {discountCode.discount.minimum_quantity

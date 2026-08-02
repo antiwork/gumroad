@@ -61,9 +61,8 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(2)
     end
 
-    # products_data means two things at once: how much to take off a line, and which products
-    # the code covers. The money lands once; the coverage stays complete, because dropping a
-    # line here silently drops the code from the cart on removal and on post-SCA rehydration.
+    # Keep the configured amount with every covered line so a cart edit can move the allocation.
+    # `cents` still marks the original winner for clients that have not learned that rule yet.
     it "charges the discount on one line but reports coverage for every eligible line" do
       result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
 
@@ -71,6 +70,8 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data].size).to eq(2)
       expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
       expect(result[:products_data].values.count { _1[:discount][:cents].zero? }).to eq(1)
+      expect(result[:products_data].values).to all(satisfy { _1[:discount][:once_per_cart] })
+      expect(result[:products_data].values).to all(satisfy { _1[:discount][:once_per_cart_amount_cents] == 500 })
     end
 
     it "spends one use regardless of cart breadth, so a capped code survives a wide cart" do
@@ -112,8 +113,8 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data]).to include(cross_sell_product1.unique_permalink, cross_sell_product2.unique_permalink)
     end
 
-    # The spent code covers cross-sells at zero too: re-resolving the full amount for a
-    # cross-sell would deduct the fixed discount a second time in the same cart.
+    # The spent code covers cross-sells at zero too. Its allocation metadata lets checkout
+    # move the amount if the original line leaves without deducting it twice while both remain.
     it "does not grant the fixed amount again on cross-sells once it is spent" do
       cross_sell_product1 = create(:product, user: seller, price_cents: 3000)
       cross_sell_product2 = create(:product, user: seller, price_cents: 4000)
@@ -124,6 +125,7 @@ describe OfferCodeDiscountComputingService do
 
       expect(result[:products_data].size).to eq(4)
       expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
+      expect(result[:products_data].values).to all(satisfy { _1[:discount][:once_per_cart_amount_cents] == 500 })
     end
 
     # The winning line can itself be a cross-sell of a later line. The later line's
@@ -154,16 +156,14 @@ describe OfferCodeDiscountComputingService do
 
       result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
 
-      # A surviving line makes this a partial application, not a fatal error — see #6751.
+      # A surviving line makes this a partial application, not a fatal error.
       expect(result[:error_code]).to be_nil
       expect(result[:partial_ineligibility_code]).to eq(:unmet_minimum_purchase_quantity)
       expect(result[:products_data].size).to eq(1)
       expect(result[:products_data][product.unique_permalink][:discount][:cents]).to eq(500)
     end
 
-    # Pins the limit documented in #process (gumroad-private#1650): the code lands whole on one
-    # line and the remainder is dropped rather than spilling onto the next. The second line is
-    # still covered, at zero. Spilling is a deliberate change and should redden here.
+    # The code lands whole on one line; the remainder does not spill onto the next line.
     it "drops the remainder when the discounted line costs less than the code" do
       cheap = create(:product, user: seller, price_cents: 300)
       dearer = create(:product, user: seller, price_cents: 400)
@@ -589,6 +589,20 @@ describe OfferCodeDiscountComputingService do
 
     context "universal offer code" do
       let(:universal_offer_code_for_cross_sells) { create(:universal_offer_code, user: seller, amount_percentage: 50, amount_cents: nil, currency_type: "usd") }
+
+      it "keeps checkout allocations keyed only by submitted lines" do
+        products = {
+          "line-item" => { quantity: "1", permalink: product.unique_permalink },
+        }
+
+        result = OfferCodeDiscountComputingService.new(
+          universal_offer_code_for_cross_sells.code,
+          products,
+          key_by_input: true
+        ).process
+
+        expect(result[:products_data].keys).to eq(["line-item"])
+      end
 
       it "applies discount to main product and all applicable cross-sells" do
         result = OfferCodeDiscountComputingService.new(universal_offer_code_for_cross_sells.code, products_data).process

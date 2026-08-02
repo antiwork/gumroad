@@ -114,7 +114,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
         price /= product.ppp_details.factor;
       } else if (discountCode?.valid && hasMetDiscountConditions(discountCode.discount, selection.quantity)) {
         if (discountCode.discount.type === "percent") price /= (100 - discountCode.discount.percents) / 100.0;
-        else price += discountCode.discount.cents;
+        else if (!discountCode.discount.once_per_cart || selection.quantity === 1) price += discountCode.discount.cents;
       }
 
       url.searchParams.set("price", Math.round(price).toString());

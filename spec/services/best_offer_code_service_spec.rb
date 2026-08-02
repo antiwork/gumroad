@@ -231,6 +231,39 @@ describe BestOfferCodeService do
           expect(subject.result&.dig(:valid)).to be(true)
         end
       end
+
+      context "when comparing a once-per-cart fixed code with a percentage code" do
+        let(:quantity) { 10 }
+        let(:url_offer_code) do
+          create(:offer_code, products: [product], code: "URL_FIXED", amount_cents: 1000, currency_type: product.price_currency_type,
+                              once_per_cart: true)
+        end
+        let(:default_offer_code) do
+          create(:offer_code, products: [product], code: "DEFAULT_PERCENT", amount_cents: nil, amount_percentage: 20,
+                              currency_type: product.price_currency_type)
+        end
+
+        it "chooses the code that saves more across the full quantity" do
+          expect(subject.result&.dig(:code)).to eq(default_offer_code.code)
+        end
+      end
+
+      context "when percentage rounding differs between one unit and the total" do
+        let(:product) { create(:product, user: seller, price_cents: 199, price_currency_type: "usd") }
+        let(:quantity) { 2 }
+        let(:url_offer_code) do
+          create(:offer_code, products: [product], code: "URL_PERCENT", amount_cents: nil, amount_percentage: 50,
+                              currency_type: product.price_currency_type)
+        end
+        let(:default_offer_code) do
+          create(:offer_code, products: [product], code: "DEFAULT_FIXED", amount_cents: 199,
+                              currency_type: product.price_currency_type, once_per_cart: true)
+        end
+
+        it "uses the same per-unit rounding as checkout" do
+          expect(subject.result&.dig(:code)).to eq(url_offer_code.code)
+        end
+      end
     end
 
     context "with inactive offer codes" do

@@ -105,6 +105,7 @@ class Subscription::UpdaterService
           params[:offer_code] != original_discount.offer_code ||
             params[:offer_code].amount != original_discount.offer_code_amount ||
             params[:offer_code].is_percent? != original_discount.offer_code_is_percent ||
+            params[:offer_code].once_per_cart? != original_discount.once_per_cart? ||
             params[:offer_code].duration_in_billing_cycles != original_discount.duration_in_billing_cycles
         else
           params[:offer_code].present?

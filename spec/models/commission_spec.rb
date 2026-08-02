@@ -238,6 +238,18 @@ describe Commission, :vcr do
           expect(completion_purchase.price_cents).to eq(500)
         end
       end
+
+      it "keeps the checkout application mode and counts the commission once" do
+        offer_code.update!(max_purchase_count: 10, once_per_cart: true)
+        deposit_purchase.purchase_offer_code_discount.update!(once_per_cart: true)
+        offer_code.update!(once_per_cart: false)
+
+        commission.create_completion_purchase!
+
+        completion_discount = commission.reload.completion_purchase.purchase_offer_code_discount
+        expect(completion_discount.once_per_cart).to be(true)
+        expect(offer_code.reload.times_used).to eq(1)
+      end
     end
 
     context "when the deposit purchase has PPP discount applied" do

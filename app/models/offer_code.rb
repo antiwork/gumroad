@@ -12,9 +12,7 @@ class OfferCode < ApplicationRecord
 
   has_flags 1 => :is_cancellation_discount,
             2 => :created_via_cli,
-            # Off by default: a fixed-amount code has always been deducted from every cart line,
-            # and sellers price around that. Opting in makes the amount an order-level discount
-            # that lands once. Only meaningful for is_cents? codes.
+            # Keep legacy fixed discounts per-item unless the seller opts into order-level pricing.
             3 => :once_per_cart,
             :column => "flags",
             :flag_query_mode => :bit_operator,
@@ -82,7 +80,7 @@ class OfferCode < ApplicationRecord
   def is_valid_for_purchase?(purchase_quantity: 1)
     return true if max_purchase_count.nil?
 
-    quantity_left >= purchase_quantity
+    quantity_left >= (is_cents? && once_per_cart? ? 1 : purchase_quantity)
   end
 
   def quantity_left
@@ -175,18 +173,26 @@ class OfferCode < ApplicationRecord
     json
   end
 
-  # Batched uses-left for capped codes, for surfaces that price many products in one request:
-  # one grouped aggregate where per-code times_used would issue one SUM each. Returns
-  # id => whether one more purchase still fits under the cap.
+  # Batched uses-left for capped codes, preserving the usage mode recorded at checkout.
   def self.uses_left_by_id(codes)
-    used = Purchase.counts_towards_offer_code_uses
-                   .where(offer_code_id: codes.map(&:id))
-                   .group(:offer_code_id).sum(:quantity)
+    purchases = Purchase.counts_towards_offer_code_uses.where(offer_code_id: codes.map(&:id))
+    per_item = purchases.left_joins(:purchase_offer_code_discount)
+                        .where(purchase_offer_code_discounts: { once_per_cart: [false, nil] })
+                        .group(:offer_code_id).sum(:quantity)
+    per_cart = purchases.joins(:purchase_offer_code_discount)
+                        .where(purchase_offer_code_discounts: { once_per_cart: true })
+                        .group(:offer_code_id).count
+    used = per_item.merge(per_cart) { |_id, item_uses, cart_uses| item_uses + cart_uses }
     codes.to_h { |code| [code.id, (code.max_purchase_count - used.fetch(code.id, 0)) >= 1] }
   end
 
   def times_used
-    purchases.counts_towards_offer_code_uses.sum(:quantity)
+    uses = purchases.counts_towards_offer_code_uses
+    per_item = uses.left_joins(:purchase_offer_code_discount)
+                   .where(purchase_offer_code_discounts: { once_per_cart: [false, nil] }).sum(:quantity)
+    per_cart = uses.joins(:purchase_offer_code_discount)
+                   .where(purchase_offer_code_discounts: { once_per_cart: true }).count
+    per_item + per_cart
   end
 
   def auto_delete_if_single_use_exhausted!
@@ -247,6 +253,11 @@ class OfferCode < ApplicationRecord
       }
     )
     json[:excluded_product_ids] = excluded_products.map(&:external_id) if universal? && excluded_products.present?
+    if is_cents? && once_per_cart?
+      json[:once_per_cart] = true
+      json[:once_per_cart_id] = external_id
+      json[:once_per_cart_amount_cents] = amount_cents
+    end
     json
   end
 

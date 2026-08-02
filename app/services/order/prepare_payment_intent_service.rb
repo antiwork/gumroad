@@ -952,15 +952,40 @@ class Order::PreparePaymentIntentService
     # sides resolve different Klarna answers near the window edges (an Element/intent
     # method-set mismatch that fails the whole cart at confirm). Instead we reconstruct the
     # chosen pre-discount amount from the purchase's own displayed price by inverting the
-    # offer code, mirroring the presenter's basis. A 100%-off code can't be inverted
+    # offer code, mirroring the presenter's basis. For a once-per-cart fixed code, use the
+    # submitted pre-discount line total because clamping can discard part of the amount.
+    # A 100%-off code can't be inverted
     # (original_price returns nil); fall back to the discounted amount, which is 0 and fails
     # closed out of Klarna's >= $1 window on both sides anyway.
     def klarna_window_price_cents(purchase)
       offer_code = purchase.original_offer_code
       return purchase.displayed_price_cents if offer_code.blank?
 
+      if offer_code.is_cents? && offer_code.once_per_cart?
+        submitted_price = submitted_pre_discount_price_cents_by_purchase_id[purchase.id]
+        return submitted_price if submitted_price.present?
+
+        if purchase.displayed_price_cents.zero?
+          return purchase.purchase_offer_code_discount.pre_discount_minimum_price_cents * purchase.quantity
+        end
+
+        return purchase.displayed_price_cents + offer_code.amount_cents
+      end
+
       original_per_unit = offer_code.original_price(purchase.displayed_price_per_unit_cents)
       original_per_unit.present? ? original_per_unit * purchase.quantity : purchase.displayed_price_cents
+    end
+
+    def submitted_pre_discount_price_cents_by_purchase_id
+      @submitted_pre_discount_price_cents_by_purchase_id ||= begin
+        remaining_line_items = params.fetch(:line_items, []).group_by { _1[:permalink] }.transform_values(&:dup)
+        order.purchases.each_with_object({}) do |purchase, prices|
+          line_item = remaining_line_items[purchase.link.unique_permalink]&.shift
+          if line_item&.[](:price_cents).present?
+            prices[purchase.id] = [line_item[:price_cents].to_i - line_item[:tip_cents].to_i, 0].max
+          end
+        end
+      end
     end
 
     # The cart's uniform forced pricing currency, or nil. Mirrors the presenter's

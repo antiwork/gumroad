@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class OfferCodeDiscountComputingService
+  attr_reader :offer_code_ids_by_permalink
+
   # While computing it rejects the product if quantity of the product is greater
   # than the quantity left for the offer_code for e.g. Suppose seller adds a
   # universal offer code which has 4 quantity left and a user adds three products
@@ -11,17 +13,20 @@ class OfferCodeDiscountComputingService
   #   => A[2], B[3], C[2] --> A[2], C[2]
   #   => A[2], C[3]       --> A[2]
 
-  def initialize(code, products, buyer: nil)
+  def initialize(code, products, buyer: nil, key_by_input: false)
     @code = code
     @products = products || {}
     @buyer = buyer
+    @key_by_input = key_by_input
+    @offer_code_ids_by_permalink = {}
   end
 
   def process
     products_data = {}
 
-    links.each do |link|
-      purchase_quantity = products[link.unique_permalink][:quantity].to_i
+    product_entries.each do |input_key, product, link|
+      purchase_quantity = product[:quantity].to_i
+      output_key = key_by_input ? input_key : link.unique_permalink
       offer_code = find_applicable_offer_code_for(link)
 
       next unless offer_code
@@ -29,22 +34,13 @@ class OfferCodeDiscountComputingService
 
       resolved_discount = offer_code.evaluate_for_buyer(buyer, product: link)
 
-      # A fixed-amount code is an amount off the order, so a later line takes no money.
-      # It is still *covered* by the code, and products_data carries both meanings: the
-      # amount to deduct, and the set of products the code applies to. Consumers of the
-      # second meaning (keeping the code when a line is removed, visibleDiscounts, the
-      # per-item lookup in cartState, and the rehydration after a failed or SCA-challenged
-      # charge in Order::CreateService / ConfirmService) must still see this line, so it is
-      # emitted with a zero amount rather than omitted.
-      #
-      # Only the times-of-use check is skipped here: the cart-level amount was already spent,
-      # so re-checking it would report :sold_out for a line nobody is charging. Line-level
-      # requirements still hold — an under-minimum-quantity line falls through and reports
-      # :unmet_minimum_purchase_quantity instead of being covered.
+      # Keep later covered lines in the response, but allocate the order-level discount to
+      # only the first eligible line. Checkout uses the zero allocation to keep the code visible.
       if once_per_cart?(offer_code) && already_applied?(offer_code) &&
          meets_minimum_purchase_quantity?(offer_code, purchase_quantity)
         if resolved_discount
-          products_data[link.unique_permalink] = { discount: resolved_discount.merge(cents: 0) }
+          products_data[output_key] = { discount: resolved_discount.merge(cents: 0) }
+          offer_code_ids_by_permalink[output_key] = offer_code.id
           optimistically_apply_to_applicable_cross_sells(products_data, link)
         end
         next
@@ -55,7 +51,8 @@ class OfferCodeDiscountComputingService
       if resolved_discount && eligible?(offer_code, purchase_quantity, units)
         track_usage(offer_code, units)
         mark_applied(offer_code)
-        products_data[link.unique_permalink] = { discount: resolved_discount }
+        products_data[output_key] = { discount: resolved_discount }
+        offer_code_ids_by_permalink[output_key] = offer_code.id
         optimistically_apply_to_applicable_cross_sells(products_data, link)
       else
         track_ineligibility(offer_code, purchase_quantity, units, resolved_discount)
@@ -70,18 +67,26 @@ class OfferCodeDiscountComputingService
   end
 
   private
-    attr_reader :code, :products, :buyer
+    attr_reader :code, :products, :buyer, :key_by_input
 
     # Ordered by the buyer's cart, not the DB's plan: a capped code is consumed
     # greedily, so iteration order decides which lines win a scarce discount.
     def links
       @_links ||= begin
         permalinks = products.values.map { it[:permalink] }.uniq
-        by_permalink = Link.visible
+        links_by_permalink = Link.visible
           .includes({ available_cross_sells: :product })
           .where(unique_permalink: permalinks)
           .index_by(&:unique_permalink)
-        permalinks.filter_map { by_permalink[it] }
+        permalinks.filter_map { links_by_permalink[it] }
+      end
+    end
+
+    def product_entries
+      links_by_permalink = links.index_by(&:unique_permalink)
+      products.filter_map do |input_key, product|
+        link = links_by_permalink[product[:permalink]]
+        [input_key, product, link] if link
       end
     end
 
@@ -216,6 +221,8 @@ class OfferCodeDiscountComputingService
     # will still be validated and updated during checkout, where the buyer will
     # be able to see the correct discount and adjust accordingly.
     def optimistically_apply_to_applicable_cross_sells(products_data, link)
+      return if key_by_input
+
       link.available_cross_sells.each do |cross_sell|
         # A cross-sell that already holds an allocation — typically because it is itself a
         # cart line — keeps it: rewriting here would zero out the line that won the code.
@@ -234,6 +241,7 @@ class OfferCodeDiscountComputingService
         end
 
         products_data[cross_sell.product.unique_permalink] = { discount: resolved_discount }
+        offer_code_ids_by_permalink[cross_sell.product.unique_permalink] = offer_code.id
       end
     end
 end

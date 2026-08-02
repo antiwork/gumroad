@@ -44,6 +44,7 @@ class Commission < ApplicationRecord
     )
 
     completion_purchase = build_completion_purchase(completion_purchase_attributes)
+    completion_purchase.inherit_offer_code_from(deposit_purchase)
 
     deposit_tip = deposit_purchase.tip
     if deposit_tip.present?

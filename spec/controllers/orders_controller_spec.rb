@@ -770,6 +770,58 @@ describe OrdersController, :vcr do
         end
       end
 
+      it "returns once-per-cart codes when charging fails after order creation" do
+        purchases = double("order_purchases", successful: [])
+        allow(purchases).to receive(:each).and_return([])
+        order = double("order", persisted?: true, purchases:, send_charge_receipts: nil)
+        create_service = instance_double(Order::CreateService, perform: [order, {}, []])
+        charge_service = instance_double(Order::ChargeService, perform: { "uid" => { success: false } })
+        recovered = [{ code: "SAVE", products: { product_1.unique_permalink => { type: "fixed", cents: 100 } } }]
+
+        allow(Order::CreateService).to receive(:new).and_return(create_service)
+        allow(Order::ChargeService).to receive(:new).and_return(charge_service)
+        allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return(recovered)
+
+        post :create, params: multiple_purchase_params
+
+        expect(response.parsed_body["offer_codes"]).to eq(JSON.parse(recovered.to_json))
+      end
+
+      it "removes a capped once-per-cart code after another line consumes its last use" do
+        purchases = double("order_purchases", successful: [])
+        allow(purchases).to receive(:each).and_return([])
+        order = double("order", persisted?: true, purchases:, send_charge_receipts: nil)
+        stale = [{
+          code: "SAVE",
+          products: {
+            product_1.unique_permalink => {
+              type: "fixed",
+              cents: 0,
+              once_per_cart: true,
+              once_per_cart_id: "offer-code-1",
+            },
+          },
+        }]
+        create_service = instance_double(
+          Order::CreateService,
+          perform: [order, { "unique-id-0" => { success: false } }, stale]
+        )
+        charge_service = instance_double(Order::ChargeService, perform: {})
+        discount_service = instance_double(
+          OfferCodeDiscountComputingService,
+          process: { products_data: {}, error_code: :sold_out }
+        )
+
+        allow(Order::CreateService).to receive(:new).and_return(create_service)
+        allow(Order::ChargeService).to receive(:new).and_return(charge_service)
+        allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return([])
+        allow(OfferCodeDiscountComputingService).to receive(:new).and_return(discount_service)
+
+        post :create, params: multiple_purchase_params
+
+        expect(response.parsed_body["offer_codes"]).to eq([])
+      end
+
       describe "single item purchases that require SCA" do
         let(:price) { 10_00 }
         let(:multiple_purchase_params_with_sca) do
@@ -2468,6 +2520,23 @@ describe OrdersController, :vcr do
       expect(Charge.last.stripe_payment_intent_id).to be_present
 
       expect(Event.purchase.where(purchase_id: Purchase.last.id)).to be_empty
+    end
+
+    it "returns once-per-cart codes when preparing the payment fails after order creation" do
+      purchases = double("order_purchases")
+      allow(purchases).to receive(:each).and_return([])
+      order = double("order", persisted?: true, purchases:)
+      create_service = instance_double(Order::CreateService, perform: [order, {}, []])
+      prepare_service = instance_double(Order::PreparePaymentIntentService, perform: { "unique-id-0" => { success: false } })
+      recovered = [{ code: "SAVE", products: { product.unique_permalink => { type: "fixed", cents: 100 } } }]
+
+      allow(Order::CreateService).to receive(:new).and_return(create_service)
+      allow(Order::PreparePaymentIntentService).to receive(:new).and_return(prepare_service)
+      allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return(recovered)
+
+      post :prepare, params: { line_items:, confirmation_token: "ctoken-test" }.merge(common_params)
+
+      expect(response.parsed_body["offer_codes"]).to eq(JSON.parse(recovered.to_json))
     end
 
     it "records the client-confirm lane in the purchase's payment-flow analytics row" do

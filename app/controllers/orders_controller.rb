@@ -20,6 +20,7 @@ class OrdersController < ApplicationController
     attribute_utm_link_sale(order, order_params[:browser_guid])
 
     purchase_responses.merge!(charge_responses)
+    offer_codes = offer_codes_after_payment(order, offer_codes, purchase_responses, order_params[:line_items])
 
     order.purchases.each { create_purchase_event_and_recommendation_info(_1) }
     order.send_charge_receipts unless purchase_responses.any? { |_k, v| v[:requires_card_action] || v[:requires_card_setup] }
@@ -72,6 +73,7 @@ class OrdersController < ApplicationController
     ).perform
 
     purchase_responses.merge!(prepare_responses)
+    offer_codes = offer_codes_after_payment(order, offer_codes, purchase_responses, order_params[:line_items])
 
     record_purchase_events(order)
 
@@ -85,9 +87,12 @@ class OrdersController < ApplicationController
     order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 
-    finalize_responses, = finalize_client_confirmed_order(order)
+    finalize_responses, _, offer_codes = finalize_client_confirmed_order(
+      order,
+      retry_offer_codes: params[:retry_offer_codes]
+    )
 
-    render json: { success: true, line_items: finalize_responses, offer_codes: [], can_buyer_sign_up: }
+    render json: { success: true, line_items: finalize_responses, offer_codes:, can_buyer_sign_up: }
   end
 
   # Records a client-side stripe.confirmPayment failure so redirect-based payment methods
@@ -138,6 +143,47 @@ class OrdersController < ApplicationController
   end
 
   private
+    def offer_codes_after_payment(order, offer_codes, purchase_responses, line_items)
+      candidates = Order::OfferCodeRecoveryService.merge_responses(
+        offer_codes,
+        Order::OfferCodeRecoveryService.for_order(order)
+      )
+      retry_line_items = line_items.select { purchase_responses.dig(_1[:uid], :success) != true }
+
+      preserved = candidates.filter_map do |response|
+        products = response[:products].reject { |_permalink, discount| discount[:once_per_cart] }
+        { code: response[:code], products: } if products.any?
+      end
+      revalidated = candidates.filter_map do |response|
+        permalinks = response[:products].filter_map do |permalink, discount|
+          permalink if discount[:once_per_cart]
+        end
+        products = retry_line_items.filter_map do |line_item|
+          next unless permalinks.include?(line_item[:permalink])
+          [line_item[:uid], line_item.slice(:permalink, :quantity)]
+        end.to_h
+        next if products.empty?
+
+        service = OfferCodeDiscountComputingService.new(
+          response[:code],
+          products,
+          buyer: logged_in_user,
+          key_by_input: true
+        )
+        result = service.process
+        next if result[:error_code].present?
+
+        discounts = result[:products_data].filter_map do |line_item_uid, data|
+          next unless data.dig(:discount, :once_per_cart)
+          line_item = retry_line_items.find { _1[:uid] == line_item_uid }
+          [line_item[:permalink], data[:discount]] if line_item
+        end.to_h
+        { code: response[:code], products: discounts } if discounts.any?
+      end
+
+      Order::OfferCodeRecoveryService.merge_responses(preserved, revalidated)
+    end
+
     # Methods that confirm in-page: a failed attempt transitions the intent, so
     # `payment_intent.payment_failed` fires and `Purchase::ChargeEventsHandler#handle_event_failed!`
     # writes the code to `purchases.stripe_error_code`.

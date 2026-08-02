@@ -35,20 +35,18 @@ class Checkout::DiscountsController < Sellers::BaseController
     offer_code = OfferCode.find_by_external_id!(params[:id])
     authorize [:checkout, offer_code]
 
-    purchases = offer_code.purchases.counts_towards_offer_code_uses
-    statistics = purchases.group(:link_id).pluck(:link_id, "SUM(quantity)", "SUM(price_cents)")
+    purchases = offer_code.purchases.offer_code_statistics
+    uses = purchases.not_is_commission_completion_purchase
+    per_item = uses.left_joins(:purchase_offer_code_discount)
+                   .where(purchase_offer_code_discounts: { once_per_cart: [false, nil] })
+                   .group(:link_id).sum(:quantity)
+    per_cart = uses.joins(:purchase_offer_code_discount)
+                   .where(purchase_offer_code_discounts: { once_per_cart: true })
+                   .group(:link_id).count
+    uses_by_product = per_item.merge(per_cart) { |_link_id, item_uses, cart_uses| item_uses + cart_uses }
+    products = uses_by_product.transform_keys { ObfuscateIds.encrypt(_1) }
 
-    products = {}
-    total = 0
-    revenue_cents = 0
-
-    statistics.each do |(link_id, total_quantity, total_price_cents)|
-      products[ObfuscateIds.encrypt(link_id)] = total_quantity
-      total += total_quantity
-      revenue_cents += total_price_cents
-    end
-
-    render json: { uses: { total:, products: }, revenue_cents: }
+    render json: { uses: { total: uses_by_product.values.sum, products: }, revenue_cents: purchases.sum(:price_cents) }
   end
 
   def create
@@ -111,7 +109,7 @@ class Checkout::DiscountsController < Sellers::BaseController
       params.permit(
         :name, :code, :universal, :max_purchase_count, :amount_cents, :amount_percentage,
         :currency_type, :valid_at, :expires_at, :minimum_quantity, :duration_in_billing_cycles,
-        :minimum_amount_cents, :existing_customers_only,
+        :minimum_amount_cents, :existing_customers_only, :once_per_cart,
         selected_product_ids: [], ownership_product_ids: [], excluded_product_ids: [],
         ownership_duration_tiers: [[:months, :amount_percentage]]
       )
@@ -153,6 +151,7 @@ class Checkout::DiscountsController < Sellers::BaseController
       if offer_code_params[:amount_percentage].present?
         params[:amount_cents] = nil
         params[:currency_type] = nil
+        params[:once_per_cart] = false
       else
         params[:amount_percentage] = nil
       end

@@ -45,6 +45,58 @@ type ConfirmOrderResponse = {
 };
 type OrderErrorResponse = { success: false; error_message: string };
 
+export const mergeOfferCodes = (...groups: OfferCodes[]): OfferCodes =>
+  Array.from(
+    groups
+      .flat()
+      .reduce((merged, offerCode) => {
+        const key = offerCode.code.trim().toLowerCase();
+        const current = merged.get(key);
+        merged.set(key, current ? { ...current, products: { ...current.products, ...offerCode.products } } : offerCode);
+        return merged;
+      }, new Map<string, OfferCodes[number]>())
+      .values(),
+  );
+
+export const replaceOncePerCartOfferCodes = (offerCodes: OfferCodes, replacements: OfferCodes): OfferCodes =>
+  mergeOfferCodes(
+    offerCodes.flatMap((offerCode) => {
+      const products = Object.fromEntries(
+        Object.entries(offerCode.products).filter(
+          ([, discount]) => discount.type !== "fixed" || !discount.once_per_cart,
+        ),
+      );
+      return Object.keys(products).length > 0 ? [{ ...offerCode, products }] : [];
+    }),
+    replacements,
+  );
+
+export const offerCodesForFailedLineItems = (
+  requestData: StartCartPurchaseRequestPayload,
+  lineItems: Partial<Record<LineItemUid, { success: boolean }>>,
+  offerCodes: OfferCodes,
+): OfferCodes => {
+  const failedPermalinks = new Set(
+    requestData.lineItems.filter((lineItem) => !lineItems[lineItem.uid]?.success).map((lineItem) => lineItem.permalink),
+  );
+  return offerCodes.flatMap((offerCode) => {
+    const products = Object.fromEntries(
+      Object.entries(offerCode.products).filter(([permalink]) => failedPermalinks.has(permalink)),
+    );
+    return Object.keys(products).length > 0 ? [{ ...offerCode, products }] : [];
+  });
+};
+
+const retryOfferCodeCandidates = (requestData: StartCartPurchaseRequestPayload, offerCodes: OfferCodes) =>
+  offerCodes.map((offerCode) => ({
+    code: offerCode.code,
+    products: Object.fromEntries(
+      requestData.lineItems
+        .filter((lineItem) => offerCode.products[lineItem.permalink])
+        .map((lineItem) => [lineItem.uid, { permalink: lineItem.permalink, quantity: lineItem.quantity }]),
+    ),
+  }));
+
 // Initiates a request to create an order to purchase all the line items in the cart.
 // Handles SCA actions where appropriate.
 // Result object is guaranteed to have a result for each line item in the request.
@@ -69,6 +121,7 @@ export const startOrderCreation = async (requestData: StartCartPurchaseRequestPa
         clientSecret,
         stripeConnectAccountId,
         requiresCardAction,
+        retryOfferCodeCandidates(requestData, response.offer_codes),
       );
       const lineItemResults = Object.values(orderConfirmResponse.line_items);
       const result = {
@@ -78,7 +131,7 @@ export const startOrderCreation = async (requestData: StartCartPurchaseRequestPa
           return lineItems;
         }, {}),
         canBuyerSignUp: response.can_buyer_sign_up,
-        offerCodes: response.offer_codes,
+        offerCodes: replaceOncePerCartOfferCodes(response.offer_codes, orderConfirmResponse.offer_codes),
       };
       return ensureValidCartResult(requestData, result);
     }
@@ -122,6 +175,7 @@ const ensureValidCartResult = (
 const translateOrderFailureResponseIntoLineItemFailures = (
   requestData: StartCartPurchaseRequestPayload,
   cartResponse: OrderErrorResponse,
+  offerCodes: OfferCodes = [],
 ): CartPurchaseResult => ({
   lineItems: requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>(
     (lineItems, lineItem) => ({
@@ -131,7 +185,7 @@ const translateOrderFailureResponseIntoLineItemFailures = (
     {},
   ),
   canBuyerSignUp: false,
-  offerCodes: [],
+  offerCodes,
 });
 
 // Initiates order creation, which may or may not require further action
@@ -171,6 +225,7 @@ const confirmOrder = async (
   clientSecret: string,
   stripeConnectAccountId: string | null,
   requiresCardAction: boolean,
+  retryOfferCodes: ReturnType<typeof retryOfferCodeCandidates>,
 ): Promise<ConfirmOrderResponse> => {
   let stripeError = undefined;
 
@@ -190,6 +245,7 @@ const confirmOrder = async (
     orderId,
     clientSecret,
     stripeError,
+    retryOfferCodes,
   });
 };
 
@@ -199,10 +255,12 @@ const confirmOrderAfterAction = async ({
   orderId,
   clientSecret,
   stripeError,
+  retryOfferCodes,
 }: {
   orderId: string;
   clientSecret: string;
   stripeError: StripeError | undefined;
+  retryOfferCodes: ReturnType<typeof retryOfferCodeCandidates>;
 }): Promise<ConfirmOrderResponse> => {
   const response = await request({
     method: "POST",
@@ -211,6 +269,7 @@ const confirmOrderAfterAction = async ({
     data: {
       client_secret: clientSecret,
       stripe_error: stripeError,
+      retry_offer_codes: retryOfferCodes,
     },
   });
   if (!response.ok) throw new ResponseError();
@@ -259,13 +318,16 @@ export const startClientConfirmOrderCreation = async (
   confirmationTokenId: string,
   // See PurchasePaymentMethod in ./purchase for why this is needed.
   selectedMethodType: string,
+  activeOfferCodes: OfferCodes = [],
 ): Promise<CartPurchaseResult> => {
   let confirmedReturnUrl: string | null = null;
+  let retryOfferCodes = activeOfferCodes;
   try {
     const prepareResponse = await prepareClientConfirmOrder(requestData, confirmationTokenId);
     if (!prepareResponse.success) {
-      return translateOrderFailureResponseIntoLineItemFailures(requestData, prepareResponse);
+      return translateOrderFailureResponseIntoLineItemFailures(requestData, prepareResponse, activeOfferCodes);
     }
+    retryOfferCodes = mergeOfferCodes(activeOfferCodes, prepareResponse.offer_codes);
 
     const confirmationLineItem =
       Object.values(prepareResponse.line_items).find(
@@ -279,7 +341,7 @@ export const startClientConfirmOrderCreation = async (
         requestData,
         prepareResponse.line_items,
         prepareResponse.can_buyer_sign_up,
-        prepareResponse.offer_codes,
+        offerCodesForFailedLineItems(requestData, prepareResponse.line_items, retryOfferCodes),
       );
     }
 
@@ -307,10 +369,14 @@ export const startClientConfirmOrderCreation = async (
       // with zero server-side evidence of why — gumroad-private#933). Fire-and-forget: the
       // buyer-facing failure below must render whether or not the report lands.
       void reportClientConfirmError(order.id, "confirm", confirmResult.error, selectedMethodType);
-      return translateOrderFailureResponseIntoLineItemFailures(requestData, {
-        success: false,
-        error_message: confirmResult.error.message ?? "Sorry, something went wrong.",
-      });
+      return translateOrderFailureResponseIntoLineItemFailures(
+        requestData,
+        {
+          success: false,
+          error_message: confirmResult.error.message ?? "Sorry, something went wrong.",
+        },
+        retryOfferCodes,
+      );
     }
 
     // The card is captured from here on, so any later failure must surface as a distinct
@@ -322,7 +388,10 @@ export const startClientConfirmOrderCreation = async (
     )}`;
 
     // Inline methods resolve in-page, then finalize via the (idempotent) AJAX endpoint.
-    const finalizeResponse = await finalizeClientConfirmOrder(order.id);
+    const finalizeResponse = await finalizeClientConfirmOrder(
+      order.id,
+      retryOfferCodeCandidates(requestData, retryOfferCodes),
+    );
 
     // The card is captured, so any non-all-success finalize (processing, a per-line error, or empty)
     // must surface as processing, never a resubmittable failure. `[].every` is true, so guard empty.
@@ -331,12 +400,12 @@ export const startClientConfirmOrderCreation = async (
       lineItems.length > 0 && lineItems.every((lineItem) => lineItem.success && !("processing" in lineItem));
     if (!allSucceeded) throw new PaymentConfirmedError(confirmedReturnUrl);
 
-    // offer_codes/can_buyer_sign_up are cart-level; finalize doesn't carry them, so keep prepare's.
+    const finalizedOfferCodes = replaceOncePerCartOfferCodes(retryOfferCodes, finalizeResponse.offer_codes);
     return mapResultsByUid(
       requestData,
       finalizeResponse.line_items,
       prepareResponse.can_buyer_sign_up,
-      prepareResponse.offer_codes,
+      offerCodesForFailedLineItems(requestData, finalizeResponse.line_items, finalizedOfferCodes),
     );
   } catch (error) {
     if (error instanceof PaymentConfirmedError) throw error;
@@ -345,7 +414,7 @@ export const startClientConfirmOrderCreation = async (
     // A failure after the card was confirmed must not re-enable resubmission — the charge may be
     // captured. Surface it as a pending outcome; a pre-confirmation error is a normal failure.
     if (confirmedReturnUrl) throw new PaymentConfirmedError(confirmedReturnUrl);
-    return ensureValidCartResult(requestData, { lineItems: {}, canBuyerSignUp: false, offerCodes: [] });
+    return ensureValidCartResult(requestData, { lineItems: {}, canBuyerSignUp: false, offerCodes: retryOfferCodes });
   }
 };
 
@@ -391,12 +460,15 @@ const prepareClientConfirmOrder = async (
 };
 
 // No retry: a dropped finalize surfaces as "processing" and the webhook/worker finalize server-side.
-const finalizeClientConfirmOrder = async (orderId: string): Promise<FinalizeOrderResponse> => {
+const finalizeClientConfirmOrder = async (
+  orderId: string,
+  retryOfferCodes: ReturnType<typeof retryOfferCodeCandidates>,
+): Promise<FinalizeOrderResponse> => {
   const response = await request({
     method: "POST",
     url: Routes.finalize_order_path(orderId),
     accept: "json",
-    data: {},
+    data: { retry_offer_codes: retryOfferCodes },
   });
   if (!response.ok) throw new ResponseError();
   return typia.assert<FinalizeOrderResponse>(await response.json());

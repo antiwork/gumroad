@@ -3015,6 +3015,33 @@ describe Subscription::UpdaterService, :vcr do
         expect(new_discount.offer_code_is_percent).to eq(true)
       end
 
+      it "updates the discount snapshot when the seller changes its cart application mode" do
+        original_purchase = @subscription.original_purchase
+        original_discount = original_purchase.purchase_offer_code_discount
+        @offer_code.update!(amount_cents: 100, amount_percentage: nil)
+        original_discount.update!(offer_code_amount: 100, offer_code_is_percent: false, once_per_cart: false)
+        @offer_code.update!(once_per_cart: true)
+        new_perceived = @original_tier_quarterly_price.price_cents - @offer_code.amount_cents
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            offer_code: @offer_code,
+            perceived_price_cents: new_perceived,
+            perceived_upgrade_price_cents: new_perceived,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq true
+        new_purchase = @subscription.reload.original_purchase
+        expect(new_purchase.id).not_to eq(original_purchase.id)
+        expect(new_purchase.purchase_offer_code_discount.once_per_cart).to be(true)
+      end
+
       it "applies a different offer code when provided" do
         new_offer_code = create(:offer_code, code: "newcode", amount_cents: nil, amount_percentage: 15, products: [@product], user: @product.user)
         new_perceived = @original_tier_quarterly_price.price_cents - new_offer_code.amount_off(@original_tier_quarterly_price.price_cents)

@@ -632,6 +632,7 @@ const CheckoutIndexPage = () => {
               requestData,
               requestData.paymentMethod.confirmationTokenId,
               requestData.paymentMethod.selectedMethodType,
+              cartForm.data.cart.discountCodes,
             )
           : await startOrderCreation(requestData);
       const results = Object.entries(result.lineItems).flatMap(([key, result]) => {
@@ -978,7 +979,7 @@ const CheckoutIndexPage = () => {
               crossSell={currentOffer}
               accept={acceptOffer}
               decline={completeOffer}
-              cart={cartForm.data.cart}
+              cart={getCartIfAccepted()}
             />
           ) : (
             <UpsellModal cart={cartForm.data.cart} upsell={currentOffer} accept={acceptOffer} decline={completeOffer} />

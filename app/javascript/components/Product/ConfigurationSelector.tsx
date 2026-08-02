@@ -204,6 +204,31 @@ export const computeDiscountedPrice = (
   return discountedPrice;
 };
 
+export const computeSelectionDiscountedPrice = (
+  priceCents: number,
+  discount: Discount | null,
+  product: Product,
+  quantity: number,
+) => {
+  if (discount?.type !== "fixed" || !discount.once_per_cart || quantity <= 1) {
+    return computeDiscountedPrice(priceCents, discount, product);
+  }
+
+  const pppDiscountedPrice = computeDiscountedPrice(priceCents, null, product);
+  const discountTotal = applyOfferCodeToCents(discount, priceCents * quantity);
+  if (pppDiscountedPrice.ppp && pppDiscountedPrice.value * quantity < discountTotal) {
+    return pppDiscountedPrice;
+  }
+
+  // The product page quotes one unit, while this discount applies to the cart total.
+  return { value: priceCents, ppp: false };
+};
+
+export const withConfiguredOncePerCartAmount = (discount: Discount): Discount =>
+  discount.type === "fixed" && discount.once_per_cart
+    ? { ...discount, cents: discount.once_per_cart_amount_cents ?? discount.cents }
+    : discount;
+
 export const applySelection = (product: Product, discount: Discount | null, selection: PriceSelection) => {
   const basePriceCents = !product.is_legacy_subscription
     ? selection.rent && product.rental
@@ -213,16 +238,18 @@ export const applySelection = (product: Product, discount: Discount | null, sele
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;
   const maxQuantity = getMaxQuantity(product, selectedOption);
   const priceCents = basePriceCents + (selectedOption ? computeOptionPrice(selectedOption, selection.recurrence) : 0);
-  const discountedPrice = computeDiscountedPrice(
-    priceCents,
-    hasMetDiscountConditions(discount, selection.quantity) ? discount : null,
-    product,
-  );
+  const applicableDiscount = hasMetDiscountConditions(discount, selection.quantity) ? discount : null;
+  const discountedPrice = computeSelectionDiscountedPrice(priceCents, applicableDiscount, product, selection.quantity);
+  const discountedTotalCents =
+    applicableDiscount?.type === "fixed" && applicableDiscount.once_per_cart && !discountedPrice.ppp
+      ? applyOfferCodeToCents(applicableDiscount, priceCents * selection.quantity)
+      : discountedPrice.value * selection.quantity;
   return {
     selectedOption,
     basePriceCents,
     priceCents,
     discountedPriceCents: discountedPrice.value,
+    discountedTotalCents,
     pppDiscounted: discountedPrice.ppp,
     isPWYW: product.is_tiered_membership ? (selectedOption?.is_pwyw ?? false) : !!product.pwyw,
     maxQuantity,
@@ -252,6 +279,7 @@ export const OptionRadioButton = ({
   discount,
   recurrence,
   product,
+  quantity = 1,
   hidePrice,
 }: {
   disabled?: boolean;
@@ -267,10 +295,11 @@ export const OptionRadioButton = ({
   discount: Discount | null;
   recurrence?: RecurrenceId | null;
   product: Product;
+  quantity?: number;
   hidePrice?: boolean | undefined;
 }) => {
   priceCents ??= 0;
-  const { value: discountedPriceCents } = computeDiscountedPrice(priceCents, discount, product);
+  const { value: discountedPriceCents } = computeSelectionDiscountedPrice(priceCents, discount, product, quantity);
   const buyerLocalContext = buyerLocalContextFor(product);
   return (
     <Tab isSelected={selected} asChild className={recurrence ? "flex-col" : undefined}>
@@ -731,6 +760,7 @@ export const ConfigurationSelector = React.forwardRef<
             isPWYW={!!product.pwyw}
             discount={discount}
             product={product}
+            quantity={selection.quantity}
             hidePrice={hidePrices}
           />
           <OptionRadioButton
@@ -743,6 +773,7 @@ export const ConfigurationSelector = React.forwardRef<
             isPWYW={!!product.pwyw}
             discount={discount}
             product={product}
+            quantity={selection.quantity}
             hidePrice={hidePrices}
           />
         </Tabs>
@@ -784,6 +815,7 @@ export const ConfigurationSelector = React.forwardRef<
                 discount={discount}
                 recurrence={selection.recurrence}
                 product={product}
+                quantity={selection.quantity}
                 hidePrice={hidePrices}
               />
             ))}

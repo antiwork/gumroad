@@ -1,8 +1,16 @@
 import type { Stripe } from "@stripe/stripe-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PaymentConfirmedError, startClientConfirmOrderCreation } from "$app/data/order";
-import type { StartCartPurchaseRequestPayload } from "$app/data/purchase";
+import {
+  mergeOfferCodes,
+  offerCodesForFailedLineItems,
+  PaymentConfirmedError,
+  replaceOncePerCartOfferCodes,
+  startClientConfirmOrderCreation,
+  startOrderCreation,
+} from "$app/data/order";
+import type { ConfirmedPurchaseResponse, StartCartPurchaseRequestPayload } from "$app/data/purchase";
+import type { Discount } from "$app/parsers/checkout";
 import { request } from "$app/utils/request";
 import { getStripeInstance } from "$app/utils/stripe_loader";
 
@@ -22,8 +30,25 @@ vi.mock("typia", () => ({ default: { assert: (value: unknown) => value } }));
 
 const requestMock = vi.mocked(request);
 const getStripeInstanceMock = vi.mocked(getStripeInstance);
+const confirmPaymentMock = vi.fn();
 
 const jsonResponse = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+const fixedDiscount = (cents: number): Extract<Discount, { type: "fixed" }> => ({
+  type: "fixed",
+  cents,
+  product_ids: null,
+  expires_at: null,
+  minimum_quantity: null,
+  duration_in_billing_cycles: null,
+  minimum_amount_cents: null,
+});
+const oncePerCartDiscount = (cents: number): Discount => ({
+  ...fixedDiscount(cents),
+  type: "fixed",
+  once_per_cart: true,
+  once_per_cart_id: "offer-code-1",
+  once_per_cart_amount_cents: 100,
+});
 
 const clientConfirmPaymentMethod = {
   type: "payment-element-client-confirm",
@@ -100,6 +125,171 @@ const prepareResponse = {
   offer_codes: [],
 };
 
+const confirmedPurchase = (permalink: string): ConfirmedPurchaseResponse => ({
+  success: true,
+  domain: "gumroad.test",
+  protocol: "https",
+  name: "Product",
+  remaining: null,
+  should_show_receipt: true,
+  show_view_content_button_on_product_page: true,
+  is_recurring_billing: false,
+  is_physical: false,
+  has_files: true,
+  product_id: `product-${permalink}`,
+  product_permalink: `https://gumroad.test/l/${permalink}`,
+  permalink,
+  is_gift_receiver_purchase: false,
+  gift_receiver_text: "",
+  is_gift_sender_purchase: false,
+  gift_sender_text: "",
+  content_url: null,
+  redirect_token: null,
+  url_redirect_external_id: null,
+  price: "$10",
+  id: `purchase-${permalink}`,
+  seller_id: "seller",
+  email: "buyer@example.com",
+  full_name: "Buyer",
+  view_content_button_text: "View content",
+  is_following: null,
+  has_third_party_analytics: false,
+  currency_type: "usd",
+  non_formatted_price: 10,
+  subscription_has_lapsed: false,
+  extra_purchase_notice: null,
+  account_by_this_email_exists: false,
+  display_product_reviews: false,
+  has_shipping_to_show: false,
+  shipping_amount: "$0",
+  has_sales_tax_to_show: false,
+  sales_tax_amount: "$0",
+  non_formatted_seller_tax_amount: "0",
+  was_tax_excluded_from_price: false,
+  sales_tax_label: null,
+  has_sales_tax_or_shipping_to_show: false,
+  total_price_including_tax_and_shipping: "$10",
+  quantity: 1,
+  show_quantity: false,
+  variants_displayable: "",
+  twitter_share_url: "",
+  twitter_share_text: "",
+  enabled_integrations: { circle: false, discord: false },
+  native_type: "digital",
+});
+
+describe("mergeOfferCodes", () => {
+  it("keeps codes recovered during both order creation and confirmation", () => {
+    expect(
+      mergeOfferCodes(
+        [{ code: "SAVE", products: { first: fixedDiscount(100) } }],
+        [{ code: " save ", products: { second: fixedDiscount(0) } }],
+      ),
+    ).toMatchObject([{ code: "SAVE", products: { first: { cents: 100 }, second: { cents: 0 } } }]);
+  });
+});
+
+describe("replaceOncePerCartOfferCodes", () => {
+  it("removes stale cart-level codes while preserving legacy codes", () => {
+    expect(
+      replaceOncePerCartOfferCodes(
+        [
+          {
+            code: "SAVE",
+            products: { stale: oncePerCartDiscount(0), legacy: fixedDiscount(100) },
+          },
+        ],
+        [],
+      ),
+    ).toEqual([{ code: "SAVE", products: { legacy: fixedDiscount(100) } }]);
+  });
+});
+
+describe("startOrderCreation", () => {
+  it("sends failed-line code candidates for server revalidation after SCA", async () => {
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe: Stripe = Object.create(null);
+    stripe.confirmCardPayment = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b", quantity: 2 };
+    const mixedRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            "product-a ": {
+              success: true,
+              requires_card_action: true,
+              client_secret: "pi_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+            "product-b ": {
+              success: false,
+              permalink: "product-b",
+              error_message: "Invalid variant.",
+              name: null,
+              formatted_price: "$10",
+              error_code: null,
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [{ code: "SAVE", products: { "product-b": oncePerCartDiscount(0) } }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            purchase: {
+              success: false,
+              permalink: "product-a",
+              error_message: "Card failed.",
+              name: null,
+              formatted_price: "$10",
+              error_code: null,
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [{ code: "save", products: { "product-b": oncePerCartDiscount(100) } }],
+        }),
+      );
+
+    const result = await startOrderCreation(mixedRequestData);
+
+    expect(requestMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          retry_offer_codes: [
+            {
+              code: "SAVE",
+              products: { "product-b ": { permalink: "product-b", quantity: 2 } },
+            },
+          ],
+        }),
+      }),
+    );
+    expect(result.offerCodes).toEqual([{ code: "save", products: { "product-b": oncePerCartDiscount(100) } }]);
+  });
+});
+
 describe("startClientConfirmOrderCreation", () => {
   beforeEach(() => {
     vi.stubGlobal("Routes", {
@@ -111,7 +301,8 @@ describe("startClientConfirmOrderCreation", () => {
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
     const stripe: Stripe = Object.create(null);
-    stripe.confirmPayment = vi.fn().mockResolvedValue({});
+    confirmPaymentMock.mockReset().mockResolvedValue({});
+    stripe.confirmPayment = confirmPaymentMock;
     getStripeInstanceMock.mockResolvedValue(stripe);
   });
 
@@ -207,7 +398,83 @@ describe("startClientConfirmOrderCreation", () => {
     );
   });
 
+  it("keeps active code coverage only for failed lines", () => {
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const mixedRequestData = { ...requestData, lineItems: [...requestData.lineItems, secondLine] };
+    const activeOfferCodes = [
+      {
+        code: "SAVE",
+        products: { "product-a": fixedDiscount(100), "product-b": fixedDiscount(0) },
+      },
+    ];
+    const result = offerCodesForFailedLineItems(
+      mixedRequestData,
+      { "product-a ": { success: true }, "product-b ": { success: false } },
+      activeOfferCodes,
+    );
+
+    expect(result).toEqual([{ code: "SAVE", products: { "product-b": fixedDiscount(0) } }]);
+  });
+
+  it("drops a capped cart-level code when finalization no longer returns it", async () => {
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const mixedRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...prepareResponse,
+          line_items: {
+            ...prepareResponse.line_items,
+            "product-b ": {
+              success: false,
+              permalink: "product-b",
+              error_message: "There is a temporary problem.",
+              name: null,
+              formatted_price: "$10",
+              error_code: null,
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            },
+          },
+          offer_codes: [{ code: "SAVE", products: { "product-b": oncePerCartDiscount(0) } }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: { "product-a ": confirmedPurchase("product-a") },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    const result = await startClientConfirmOrderCreation(mixedRequestData, "ct_123", "card");
+
+    expect(requestMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: {
+          retry_offer_codes: [
+            {
+              code: "SAVE",
+              products: { "product-b ": { permalink: "product-b", quantity: 1 } },
+            },
+          ],
+        },
+      }),
+    );
+    expect(result.lineItems["product-b "]?.success).toBe(false);
+    expect(result.offerCodes).toEqual([]);
+  });
+
   it("reports a confirm failure to the server so redirect-method errors are visible in production", async () => {
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-a": fixedDiscount(100) } }];
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
       .mockResolvedValueOnce(jsonResponse({ success: true }));
@@ -217,7 +484,7 @@ describe("startClientConfirmOrderCreation", () => {
     });
     getStripeInstanceMock.mockResolvedValue(stripe);
 
-    const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card");
+    const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
 
     expect(requestMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -233,6 +500,18 @@ describe("startClientConfirmOrderCreation", () => {
     );
     // The buyer still sees the failure — reporting must not change the outcome.
     expect(Object.values(result.lineItems).every((lineItem) => !lineItem.success)).toBe(true);
+    expect(result.offerCodes).toEqual(activeOfferCodes);
+  });
+
+  it("preserves active codes when payment confirmation rejects before capture", async () => {
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-a": fixedDiscount(100) } }];
+    requestMock.mockResolvedValueOnce(jsonResponse(prepareResponse));
+    confirmPaymentMock.mockRejectedValueOnce(new Error("network down"));
+
+    const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
+
+    expect(Object.values(result.lineItems).every((lineItem) => !lineItem.success)).toBe(true);
+    expect(result.offerCodes).toEqual(activeOfferCodes);
   });
 
   it("reports the selected Payment Element row, which is the only method signal a decline carries", async () => {

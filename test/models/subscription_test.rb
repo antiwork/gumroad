@@ -4510,6 +4510,21 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_equal false, renewal_purchase.purchase_offer_code_discount.offer_code_is_percent
   end
 
+  test "#auto_renewal_offer_code applies an order-level fixed discount once across quantity" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    @arc_subscription.original_purchase.update!(quantity: 2, displayed_price_cents: 400, price_cents: 400)
+    fixed_code = create_offer_code(user: @arc_seller, products: [@arc_product], ownership_products: [@arc_product],
+                                   existing_customers_only: true, amount_cents: 50, amount_percentage: nil,
+                                   currency_type: @arc_product.price_currency_type, once_per_cart: true)
+
+    renewal_purchase = @arc_subscription.build_purchase
+
+    assert_equal fixed_code, @arc_subscription.auto_renewal_offer_code.offer_code
+    assert_equal 350, @arc_subscription.current_subscription_price_cents
+    assert_equal true, renewal_purchase.purchase_offer_code_discount.once_per_cart
+  end
+
   test "#auto_renewal_offer_code ignores inactive renewal discounts" do
     auto_renewal_context
     create_offer_code(user: @arc_seller, code: "expiredrenewal", products: [@arc_product], ownership_products: [@arc_product], existing_customers_only: true, amount_cents: nil, amount_percentage: 60, currency_type: nil, valid_at: 2.days.ago, expires_at: 1.day.ago)

@@ -832,10 +832,14 @@ class Purchase < ApplicationRecord
       .not_is_archived_original_subscription_purchase
       .where(subscription: { deactivated_at: nil })
   }
-  scope :counts_towards_offer_code_uses, lambda {
+  scope :offer_code_statistics, lambda {
     where(purchase_state: NON_GIFT_SUCCESS_STATES)
       .not_recurring_charge
       .not_is_archived_original_subscription_purchase
+  }
+  scope :counts_towards_offer_code_uses, lambda {
+    offer_code_statistics
+      .not_is_commission_completion_purchase
   }
   scope :counts_towards_volume, lambda {
     successful
@@ -1827,13 +1831,16 @@ class Purchase < ApplicationRecord
     elsif is_preorder_charge?
       minimum_price = preorder.authorization_purchase.displayed_price_cents
     else
-      minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
+      price_before_discount = minimum_paid_price_cents_per_unit_before_discount
+      minimum_price_cents = if once_per_cart_fixed_offer_code?
+        price_before_discount * quantity - offer_amount_off(price_before_discount * quantity)
+      else
+        (price_before_discount - offer_amount_off(price_before_discount)) * quantity
+      end
       # We allow offer codes larger than the product price, which would make this negative. Floor it
       # at 0 here, before splitting into installments, so a snapshot-backed installment price stays
       # authoritative rather than being overwritten when the live product price later drops.
       minimum_price_cents = 0 if offer_code_for_pricing.present? && minimum_price_cents < 0
-      # We want an offer code to apply to every quantity separately ($2 offer code on 2 CDs = $4 off).
-      minimum_price_cents *= quantity
 
       minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
 
@@ -2341,6 +2348,7 @@ class Purchase < ApplicationRecord
         offer_code_is_percent = resolved_discount[:type] == "percent"
         offer_code_amount = offer_code_is_percent ? resolved_discount[:percents] : resolved_discount[:cents]
         self.build_purchase_offer_code_discount(offer_code:, offer_code_amount:, offer_code_is_percent:,
+                                                once_per_cart: !offer_code_is_percent && offer_code.once_per_cart?,
                                                 pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
                                                 duration_in_months: link.is_recurring_billing? ? offer_code.duration_in_months : nil)
       else
@@ -2362,6 +2370,21 @@ class Purchase < ApplicationRecord
     self.gumroad_tax_cents = 0
     self.shipping_cents = 0
     self.fee_cents = 0
+  end
+
+  def inherit_offer_code_from(reference_purchase)
+    discount = reference_purchase.purchase_offer_code_discount
+    self.offer_code = discount&.offer_code || reference_purchase.offer_code
+    return if discount.blank?
+
+    build_purchase_offer_code_discount(
+      offer_code: discount.offer_code,
+      offer_code_amount: discount.offer_code_amount,
+      offer_code_is_percent: discount.offer_code_is_percent,
+      once_per_cart: discount.once_per_cart,
+      pre_discount_minimum_price_cents: discount.pre_discount_minimum_price_cents,
+      duration_in_months: discount.duration_in_months
+    )
   end
 
   def prepare_for_charge!
@@ -3406,9 +3429,12 @@ class Purchase < ApplicationRecord
 
     if has_cached_offer_code?
       original_offer_code = purchase_offer_code_discount.offer_code
+      flags = original_offer_code.flags
+      once_per_cart_flag = OfferCode.flag_mapping["flags"][:once_per_cart]
+      flags = purchase_offer_code_discount.once_per_cart? ? flags | once_per_cart_flag : flags & ~once_per_cart_flag
       purchase_offer_code_discount.offer_code_is_percent ?
-        OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name) :
-        OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name)
+        OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name, flags:) :
+        OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name, flags:)
     else
       offer_code
     end
@@ -3818,8 +3844,12 @@ class Purchase < ApplicationRecord
   def total_price_before_installments
     return nil unless is_installment_payment
 
-    minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
-    minimum_price_cents *= quantity
+    price_before_discount = minimum_paid_price_cents_per_unit_before_discount
+    minimum_price_cents = if once_per_cart_fixed_offer_code?
+      price_before_discount * quantity - offer_amount_off(price_before_discount * quantity)
+    else
+      (price_before_discount - offer_amount_off(price_before_discount)) * quantity
+    end
     minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
 
     calculated_price = minimum_price_cents.round
@@ -4005,6 +4035,11 @@ class Purchase < ApplicationRecord
 
     def offer_amount_off(purchase_min_price)
       offer_code_for_pricing&.amount_off(purchase_min_price) || 0
+    end
+
+    def once_per_cart_fixed_offer_code?
+      pricing_offer_code = offer_code_for_pricing
+      pricing_offer_code&.is_cents? && pricing_offer_code.once_per_cart?
     end
 
     def displayed_price_usd_cents

@@ -72,6 +72,188 @@ describe Order::CreateService, :vcr do
   end
 
   describe "#perform" do
+    context "with a fixed discount applied once per cart" do
+      let(:offer_code) do
+        create(
+          :universal_offer_code,
+          user: seller_1,
+          amount_cents: 1_00,
+          amount_percentage: nil,
+          currency_type: "usd",
+          once_per_cart: true
+        )
+      end
+
+      before do
+        params[:line_items] = [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: price_1 - 1_00,
+            quantity: 1,
+            discount_code: offer_code.code,
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            perceived_price_cents: price_2,
+            quantity: 1,
+            discount_code: offer_code.code,
+          },
+        ]
+      end
+
+      it "matches the quoted allocation when building purchases" do
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1 - 1_00, price_2])
+        expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([offer_code.id, nil])
+        expect(order.purchases.order(:id).first.purchase_offer_code_discount.once_per_cart).to be(true)
+      end
+
+      it "deducts the fixed amount once when the winning line has multiple units" do
+        params[:line_items].first.merge!(quantity: 2, perceived_price_cents: price_1 * 2 - 1_00)
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1 * 2 - 1_00, price_2])
+      end
+
+      it "allocates by line identity when two variants share a permalink" do
+        offer_code.update!(minimum_quantity: 2)
+        variant_category = create(:variant_category, link: product_1)
+        first_variant = create(:variant, variant_category:, name: "First")
+        second_variant = create(:variant, variant_category:, name: "Second")
+        params[:line_items] = [
+          {
+            uid: "first-variant",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: price_1,
+            quantity: 1,
+            variants: [first_variant.external_id],
+          },
+          {
+            uid: "second-variant",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: price_1 * 2 - 1_00,
+            quantity: 2,
+            variants: [second_variant.external_id],
+            discount_code: offer_code.code,
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1, price_1 * 2 - 1_00])
+        expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([nil, offer_code.id])
+      end
+
+      it "normalizes the submitted code before allocating the discount" do
+        params[:line_items].each { _1[:discount_code] = " #{offer_code.code.upcase} " }
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1 - 1_00, price_2])
+        expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([offer_code.id, nil])
+      end
+
+      it "uses the resolved offer code identity for equivalent spellings" do
+        offer_code.update!(code: "SAVE")
+        params[:line_items].first[:discount_code] = "SAVE"
+        params[:line_items].second[:discount_code] = "SAVÉ"
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1 - 1_00, price_2])
+        expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([offer_code.id, nil])
+      end
+
+      it "keeps separate product-scoped codes with the same text" do
+        offer_code.mark_deleted!
+        first_code = create(:offer_code, user: seller_1, products: [product_1], code: "SAVE", amount_cents: 1_00,
+                                         amount_percentage: nil, currency_type: "usd", once_per_cart: true)
+        second_code = create(:offer_code, user: seller_1, products: [product_2], code: "SAVE", amount_cents: 1_00,
+                                          amount_percentage: nil, currency_type: "usd", once_per_cart: true)
+        params[:line_items].each { _1[:discount_code] = "SAVE" }
+        params[:line_items].second[:perceived_price_cents] -= 1_00
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1 - 1_00, price_2 - 1_00])
+        expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([first_code.id, second_code.id])
+      end
+
+      it "restores code coverage for every eligible line when checkout fails" do
+        product_1.update!(max_purchase_count: 1)
+        product_2.update!(max_purchase_count: 1)
+        params[:line_items].first.merge!(quantity: 2, perceived_price_cents: price_1 * 2 - 1_00)
+        params[:line_items].second.merge!(quantity: 2, perceived_price_cents: price_2 * 2)
+
+        _order, purchase_responses, offer_code_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses.values).to all(include(success: false))
+        expect(offer_code_responses.one?).to be(true)
+        expect(offer_code_responses.first[:products].keys).to contain_exactly(
+          product_1.unique_permalink,
+          product_2.unique_permalink
+        )
+      end
+
+      it "restores the code when only an unallocated line fails" do
+        product_2.update!(max_purchase_count: 1)
+        params[:line_items].second.merge!(quantity: 2, perceived_price_cents: price_2 * 2)
+
+        order, purchase_responses, offer_code_responses = Order::CreateService.new(params:).perform
+
+        expect(order.purchases.first).to be_in_progress
+        expect(purchase_responses.values.one?).to be(true)
+        expect(purchase_responses.values.first).to include(success: false)
+        expect(offer_code_responses.one?).to be(true)
+        expect(offer_code_responses.first[:products].keys).to contain_exactly(
+          product_1.unique_permalink,
+          product_2.unique_permalink
+        )
+      end
+
+      it "restores coverage when an unallocated line fails before persistence" do
+        params[:line_items].second.delete(:discount_code)
+        params[:line_items].second[:variants] = [create(:variant).external_id]
+
+        order, purchase_responses, offer_code_responses = Order::CreateService.new(params:).perform
+
+        expect(order.purchases.one?).to be(true)
+        expect(purchase_responses.values.one?).to be(true)
+        expect(purchase_responses.values.first).to include(success: false)
+        expect(offer_code_responses.one?).to be(true)
+        expect(offer_code_responses.first[:products].keys).to contain_exactly(
+          product_1.unique_permalink,
+          product_2.unique_permalink
+        )
+      end
+
+      it "restores every covered line when purchase creation fails before persistence" do
+        params[:line_items].each { _1[:discount_code] = " #{offer_code.code.upcase} " }
+        failed_service = instance_double(Purchase::CreateService, perform: [nil, "Invalid purchase", nil])
+        allow(Purchase::CreateService).to receive(:new).and_return(failed_service)
+
+        order, purchase_responses, offer_code_responses = Order::CreateService.new(params:).perform
+
+        expect(order).not_to be_persisted
+        expect(purchase_responses.values).to all(include(success: false))
+        expect(offer_code_responses.one?).to be(true)
+        expect(offer_code_responses.first[:products].keys).to contain_exactly(
+          product_1.unique_permalink,
+          product_2.unique_permalink
+        )
+      end
+    end
+
     it "creates an order along with the associated purchases in progress" do
       expect do
         expect do

@@ -926,6 +926,7 @@ describe CheckoutPresenter do
                                  recurrence: "monthly",
                                  quantity: 1,
                                  price: @original_price_cents,
+                                 pre_discount_price: @original_price_cents,
                                  prorated_discount_price_cents: @subscription.prorated_discount_price_cents,
                                  alive: false,
                                  pending_cancellation: true,

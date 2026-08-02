@@ -5,6 +5,7 @@ import typia from "typia";
 
 import { confirmLineItem } from "$app/data/purchase";
 import { updateSubscription } from "$app/data/subscription";
+import { initialSubscriptionUnitPrice, selectedSubscriptionTotal } from "$app/pages/Subscriptions/price";
 import { SavedCreditCard } from "$app/parsers/card";
 import { Discount } from "$app/parsers/checkout";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
@@ -64,6 +65,7 @@ type Props = {
     recurrence: RecurrenceId;
     option_id: string | null;
     price: number;
+    pre_discount_price: number;
     quantity: number;
     alive: boolean;
     pending_cancellation: boolean;
@@ -122,7 +124,10 @@ export default function SubscriptionsManage() {
     rent: false,
     optionId: subscription.option_id,
     quantity: subscription.quantity,
-    price: { value: subscription.price / subscription.quantity, error: false },
+    price: {
+      value: initialSubscriptionUnitPrice(subscription),
+      error: false,
+    },
     callStartTime: null,
     payInInstallments: subscription.is_installment_plan,
   };
@@ -158,7 +163,7 @@ export default function SubscriptionsManage() {
     ppp_details: null,
   };
 
-  const { isPWYW, discountedPriceCents } = applySelection(
+  const { isPWYW, discountedPriceCents, discountedTotalCents } = applySelection(
     configurationSelectorProduct,
     subscription.discount,
     selection,
@@ -168,9 +173,15 @@ export default function SubscriptionsManage() {
   const noChangesToNonPriceOptions =
     selection.optionId === subscription.option_id && !isRecurrenceChanged && !isQuantityChanged && !isResubscribing;
 
-  const price =
-    (isPWYW || noChangesToNonPriceOptions ? (selection.price.value ?? discountedPriceCents) : discountedPriceCents) *
-    selection.quantity;
+  const selectedTotalPrice =
+    selection.price.value === null
+      ? discountedTotalCents
+      : selectedSubscriptionTotal({
+          unitPrice: selection.price.value,
+          quantity: selection.quantity,
+          discount: subscription.discount,
+        });
+  const price = isPWYW || noChangesToNonPriceOptions ? selectedTotalPrice : discountedTotalCents;
   const requirePayment = price > 0;
   const noChangesToCurrentPlan = noChangesToNonPriceOptions && (!isPWYW || price === subscription.price);
   let amountDueToday =
