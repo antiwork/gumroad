@@ -257,7 +257,7 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
       end
 
       context "when the email info is associated with a charge" do
-        let(:charge) { create(:charge, purchases: [purchase], seller:) }
+        let(:charge) { create(:charge, purchases: [purchase], seller:, merchant_account: nil) }
         let(:order) { charge.order }
 
         before do
@@ -299,18 +299,27 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
     it "reports consumption events recorded against the member purchases" do
       create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "1.2.3.4")
 
-      content = described_class.perform(bundle_purchase)
+      expect(described_class.perform(bundle_purchase)).to eq(
+        <<~TEXT.strip_heredoc.rstrip
+        The customer accessed the product 1 time.
 
-      expect(content).to include("The customer accessed the product 1 time.")
-      expect(content).to include("consumed_at,event_type,platform,ip_address,product\n")
-      expect(content).to end_with("web,1.2.3.4,\"Member One\"")
+        consumed_at,event_type,platform,ip_address,product
+        2024-05-08 00:00:00 UTC,watch,web,1.2.3.4,"Member One"
+        TEXT
+      )
     end
 
-    it "counts url_redirect uses on the members when there are no consumption events" do
+    it "returns nil when neither the wrapper nor members have access" do
+      expect(described_class.perform(bundle_purchase)).to be_nil
+    end
+
+    it "counts url_redirect uses on the wrapper and members when there are no consumption events" do
+      bundle_purchase.create_url_redirect!
+      bundle_purchase.url_redirect.update!(uses: 2)
       member_purchase.create_url_redirect!
       member_purchase.url_redirect.update!(uses: 7)
 
-      expect(described_class.perform(bundle_purchase)).to include("The customer accessed the product 7 times.")
+      expect(described_class.perform(bundle_purchase)).to eq("The customer accessed the product 9 times.")
     end
 
     it "reports a redirect-only member's uses alongside another member's consumption events" do
@@ -348,14 +357,42 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
       expect(described_class.perform(bundle_purchase)).to include("The customer accessed the product 2 times.")
     end
 
-    it "leaves the CSV shape unchanged for a non-bundle purchase" do
+    it "limits bundle consumption rows after merging member events by time" do
+      second_member = create(:purchase, link: create(:product, user: seller, name: "Member Two"), seller:, email: bundle_purchase.email, is_bundle_product_purchase: true)
+      create(:bundle_product_purchase, bundle_purchase:, product_purchase: second_member)
+      consumed_at = DateTime.parse("2024-05-08")
+
+      12.times do |i|
+        create(
+          :consumption_event,
+          purchase_id: i.even? ? member_purchase.id : second_member.id,
+          consumed_at: consumed_at + i.minutes,
+          ip_address: "10.0.0.#{i}"
+        )
+      end
+
+      content = described_class.perform(bundle_purchase)
+      rows = content.lines.grep(/10\.0\.0\./).map(&:strip)
+      expected_rows = described_class::LOG_RECORDS_LIMIT.times.map do |i|
+        product_name = i.even? ? "Member One" : "Member Two"
+        "2024-05-08 00:0#{i}:00 UTC,watch,web,10.0.0.#{i},\"#{product_name}\""
+      end
+
+      expect(content).to include("The customer accessed the product 12 times. Most recent 10 log records:")
+      expect(rows).to eq(expected_rows)
+    end
+
+    it "leaves non-bundle output byte-identical" do
       create(:consumption_event, purchase_id: purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "0.0.0.0")
 
-      content = described_class.perform(purchase)
+      expect(described_class.perform(purchase)).to eq(
+        <<~TEXT.strip_heredoc.rstrip
+        The customer accessed the product 1 time.
 
-      expect(content).to include("consumed_at,event_type,platform,ip_address\n")
-      expect(content).to end_with("web,0.0.0.0")
-      expect(content).to_not include(purchase.link.name)
+        consumed_at,event_type,platform,ip_address
+        2024-05-08 00:00:00 UTC,watch,web,0.0.0.0
+        TEXT
+      )
     end
   end
 end
