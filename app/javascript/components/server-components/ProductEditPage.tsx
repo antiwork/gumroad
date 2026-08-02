@@ -261,10 +261,14 @@ const applyCanonicalIds = (
   // connect -> save -> disconnect -> save (no reload) emits no deletion,
   // because the stale baseline still says the integration was never on.
   if (response.loaded_integrations) product.loaded_integrations = response.loaded_integrations;
-  for (const file of product.files) {
+  // Replace the array, don't mutate entries: `filesById` memoizes on
+  // `product.files` identity, and the mounted editor's node ids are remapped to
+  // the canonical ids in the same commit. A stale Map misses every lookup and
+  // the embed renders blank.
+  product.files = product.files.map((file) => {
     const canonicalId = fileMappings[file.id];
-    if (canonicalId) file.id = canonicalId;
-  }
+    return canonicalId ? { ...file, id: canonicalId } : file;
+  });
   for (const variant of product.variants) {
     const canonicalId = variantMappings[variant.id];
     if (canonicalId) {
