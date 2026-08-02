@@ -114,8 +114,19 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
       end
     end
 
+    # Ask the database, not Ruby. The adoption fingerprint matches `name` under utf8mb4_unicode_ci,
+    # which folds full-width forms and ignores zero-width characters — so a name Ruby's casecmp?
+    # considers different can still satisfy that fingerprint. Comparing with the same collation is
+    # what makes this check and the fingerprint agree.
     def reserved_agent_application_name?
-      @application_params[:name].to_s.strip.casecmp?(Ai::StoreAgentApiClient::AGENT_APP_NAME)
+      name = @application_params[:name].to_s.strip
+      return false if name.blank?
+
+      OauthApplication.connection.select_value(
+        OauthApplication.sanitize_sql_array(
+          ["SELECT ? = ? COLLATE utf8mb4_unicode_ci", name, Ai::StoreAgentApiClient::AGENT_APP_NAME]
+        )
+      ) == 1
     end
 
     def reject_reserved_agent_application_name(path)

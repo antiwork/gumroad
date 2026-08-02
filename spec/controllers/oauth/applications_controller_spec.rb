@@ -104,6 +104,20 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
       expect(session[:inertia_errors][:base]).to eq([reserved_name_error])
     end
 
+    # utf8mb4_unicode_ci ignores zero-width characters and folds full-width forms, so these names
+    # would satisfy the adoption fingerprint's `name =` predicate even though Ruby's casecmp? sees
+    # them as different strings.
+    ["Gumroad\u200B Store Agent (internal)", "ＧＵＭＲＯＡＤ Store Agent (internal)"].each do |name|
+      it "rejects #{name.inspect}, which the database collation equates to the reserved name" do
+        reserved_params = { oauth_application: { name:, redirect_uri: "http://hi" } }
+
+        expect { post(:create, params: reserved_params) }.not_to change { OauthApplication.count }
+
+        expect(response).to redirect_to(settings_advanced_path)
+        expect(session[:inertia_errors][:base]).to eq([reserved_name_error])
+      end
+    end
+
     it "creates an application with a normal name" do
       normal_params = {
         oauth_application: {

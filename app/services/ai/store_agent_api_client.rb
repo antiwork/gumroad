@@ -113,19 +113,27 @@ class Ai::StoreAgentApiClient
     end
 
     def agent_application
-      @_app ||= OauthApplication.find_by(owner: seller, owner_type: "User", is_first_party_agent_app: true) ||
-        adopt_or_create_agent_application
+      @_app ||= alive_flagged_agent_application || adopt_or_create_agent_application
+    end
+
+    # Alive-only: the backfill flags soft-deleted rows too, and a seller can delete this app from
+    # Settings > Advanced without the flag being cleared. Binding to a deleted row would mint tokens
+    # against an application whose deletion already revoked every grant and token it had.
+    def alive_flagged_agent_application
+      OauthApplication.alive.find_by(owner: seller, owner_type: "User", is_first_party_agent_app: true)
     end
 
     def adopt_or_create_agent_application
       seller.with_lock do
         # No `return` inside this block: the app loads Rails 7.0 defaults, where a non-local return
         # rolls the surrounding transaction back and silently discards the adoption write.
-        flagged_app = OauthApplication.find_by(owner: seller, owner_type: "User", is_first_party_agent_app: true)
-        matching_app = flagged_app || OauthApplication.find_by(agent_application_fingerprint)
+        matching_app = alive_flagged_agent_application || OauthApplication.find_by(agent_application_fingerprint)
 
         if matching_app.present?
-          matching_app.update!(is_first_party_agent_app: true) unless matching_app.is_first_party_agent_app?
+          # update_column, not update!: these rows can be years old, and re-running the model's
+          # validations here would brick the agent for a seller whose legacy icon or scopes no
+          # longer validate.
+          matching_app.update_column(:is_first_party_agent_app, true) unless matching_app.is_first_party_agent_app?
           matching_app
         else
           OauthApplication.create!(
