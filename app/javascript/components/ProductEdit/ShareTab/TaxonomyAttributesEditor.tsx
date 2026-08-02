@@ -64,7 +64,9 @@ const AttributeInput = ({
         </Select>
       );
     case "boolean":
-      return <Switch checked={value === true || value === "true"} onChange={(event) => onChange(event.target.checked)} />;
+      return (
+        <Switch checked={value === true || value === "true"} onChange={(event) => onChange(event.target.checked)} />
+      );
     case "number":
       return (
         <Input

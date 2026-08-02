@@ -24,7 +24,8 @@ import hands from "$assets/images/illustrations/hands.png";
 export const ShareTab = () => {
   const currentSeller = useCurrentSeller();
 
-  const { product, updateProduct, profileSections, taxonomies, taxonomyAttributes, isListedOnDiscover } = useProductEditContext();
+  const { product, updateProduct, profileSections, taxonomies, taxonomyAttributes, isListedOnDiscover } =
+    useProductEditContext();
 
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
