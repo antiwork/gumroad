@@ -18,7 +18,11 @@ class IndonesiaBankAccount < BankAccount
 
   stripped_fields :account_holder_full_name, remove_duplicate_spaces: false, nilify_blanks: false
 
-  validate :validate_bank_code, if: -> { will_save_change_to_bank_number? }
+  # Only on write: 2,233 live rows predate the digits-only rule, and re-validating them would abort
+  # unrelated saves — including the mark_deleted! that a switch to another payout method performs
+  # after the Stripe account is already gone. A nil code on a new row is still rejected: nothing
+  # presence-validates bank_number.
+  validate :validate_bank_code, if: -> { new_record? || will_save_change_to_bank_number? }
   validate :validate_account_number
 
   def routing_number

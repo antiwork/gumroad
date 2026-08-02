@@ -54,6 +54,10 @@ describe IndonesiaBankAccount do
       expect(ba.errors.full_messages).to include("Enter your bank's 3-digit Indonesian bank code, digits only.")
     end
 
+    it "rejects a new row with no bank code at all" do
+      expect(build(:indonesia_bank_account, bank_code: nil)).not_to be_valid
+    end
+
     it "does not re-validate a pre-existing bad code on an unrelated save" do
       ba = build(:indonesia_bank_account, bank_code: "BBSB")
       ba.save!(validate: false)
