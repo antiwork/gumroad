@@ -2225,6 +2225,21 @@ class Purchase < ApplicationRecord
     end
   end
 
+  def mark_giftee_purchase_as_not_chargeback_reversed
+    giftee_purchase = gift_given.present? ? gift_given.giftee_purchase : nil
+    return if giftee_purchase.nil?
+
+    giftee_purchase.chargeback_reversed = false
+    giftee_purchase.save!
+  end
+
+  def mark_product_purchases_as_not_chargeback_reversed!
+    return unless is_bundle_purchase?
+    product_purchases.each do |product_purchase|
+      product_purchase.update!(chargeback_reversed: false)
+    end
+  end
+
   # Public: Sets the price on the purchase object and attempts to charge the user's card.
   # Attaches a resulting `charge_intent` to the purchase. The charge intent can succeed immediately
   # (if no user action is required), fail immediately, or require user action.
