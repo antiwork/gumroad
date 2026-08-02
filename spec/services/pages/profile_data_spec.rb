@@ -35,6 +35,31 @@ describe Pages::ProfileData do
       end
     end
 
+    describe "seller_rating" do
+      it "is nil when the seller_reputation_summary flag is off" do
+        expect(Pages::ProfileData.build(seller)[:seller_rating]).to be_nil
+      end
+
+      it "carries the summary when the flag is on and thresholds are met" do
+        Feature.activate_user(:seller_reputation_summary, seller)
+        summary = { average: 4.8, count: 12, products_count: 2 }
+        allow_any_instance_of(User).to receive(:seller_reputation_summary).and_return(summary)
+
+        expect(Pages::ProfileData.build(seller)[:seller_rating]).to eq(summary)
+      end
+
+      it "changes the cache key when a qualifying review stat moves" do
+        Feature.activate_user(:seller_reputation_summary, seller)
+        product = create(:product, user: seller)
+        seller_profile = SellerProfile.find_by(seller_id: seller.id)
+        key_before = Pages::ProfileData.cache_key(seller.reload, seller_profile)
+
+        create(:product_review, purchase: create(:purchase, link: product), rating: 5)
+
+        expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(key_before)
+      end
+    end
+
     it "does not expose draft products in the public profile data payload" do
       published_product = create(:product, user: seller, name: "Published product", draft: false)
       draft_product = create(:product, user: seller, name: "Draft product", draft: true)

@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 class Pages::ProfileData
-  # Bumped when the shape of the cached payload changes (v5 added the *_total counts and
-  # moved product/post URLs onto the seller's live custom domain), so already-cached entries
-  # built by the previous shape are not served to pages that now expect the new keys.
-  CACHE_VERSION = "v5"
+  # Bumped when the shape of the cached payload changes (v6 added seller_rating), so
+  # already-cached entries built by the previous shape are not served to pages that
+  # now expect the new keys.
+  CACHE_VERSION = "v6"
   MAX_ITEMS = 100
   DESCRIPTION_LIMIT = 200
 
@@ -25,6 +25,9 @@ class Pages::ProfileData
         # advertising an incomplete catalogue (gumroad-private#1522).
         products_total: products_total(seller),
         posts_total: posts_total(seller),
+        # nil both when gated off and when the seller misses the display
+        # thresholds; a page treats the two identically (show nothing).
+        seller_rating: seller.seller_reputation_summary,
       }
     end
   end
@@ -40,6 +43,11 @@ class Pages::ProfileData
       seller.products.cache_key_with_version,
       seller.installments.visible_on_profile.cache_key_with_version,
       seller_profile&.cache_key_with_version,
+      # Review writes touch product_review_stats, not links, so the products key
+      # above never moves when a rating lands; the flag state and stat high-water
+      # mark keep the cached seller_rating honest.
+      seller.reputation_summary_enabled?,
+      seller.reputation_summary_enabled? ? ProductReviewStat.joins(:link).where(links: { user_id: seller.id }).maximum(:updated_at) : nil,
     ].join("/")
   end
 
