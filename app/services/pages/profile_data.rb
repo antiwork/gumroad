@@ -25,9 +25,11 @@ class Pages::ProfileData
         # advertising an incomplete catalogue (gumroad-private#1522).
         products_total: products_total(seller),
         posts_total: posts_total(seller),
-        # nil both when gated off and when the seller misses the display
-        # thresholds; a page treats the two identically (show nothing).
-        seller_rating: seller.seller_reputation_summary,
+        # Omitted rather than nil when gated off, matching ProfilePresenter and
+        # ProductProps, so a seller without the flag gets a byte-identical payload.
+        # Present-but-nil still happens when the flag is on and the seller misses
+        # the display thresholds; a page treats absent and nil identically.
+        **(seller.reputation_summary_enabled? ? { seller_rating: seller.seller_reputation_summary } : {}),
       }
     end
   end

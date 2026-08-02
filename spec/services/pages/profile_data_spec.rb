@@ -36,8 +36,8 @@ describe Pages::ProfileData do
     end
 
     describe "seller_rating" do
-      it "is nil when the seller_reputation_summary flag is off" do
-        expect(Pages::ProfileData.build(seller)[:seller_rating]).to be_nil
+      it "is absent when the seller_reputation_summary flag is off" do
+        expect(Pages::ProfileData.build(seller)).not_to have_key(:seller_rating)
       end
 
       it "carries the summary when the flag is on and thresholds are met" do
