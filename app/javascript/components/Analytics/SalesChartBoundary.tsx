@@ -2,15 +2,8 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 
-// A failed chunk fetch is a render error, so without a boundary React unmounts everything above it
-// — the seller loses the whole Analytics page because one chart could not download. Everything else
-// on this page (stats, referrers, locations) is independent of the chart and still worth reading,
-// so the failure is contained to the chart's own box.
-//
-// Reloading is the recovery rather than a local retry: `React.lazy` permanently caches the rejected
-// import, so there is no way to ask it again within this document. A reload also picks up a fresh
-// asset manifest, which fixes the other real cause here — a deploy re-hashing the chunk filename
-// while the seller had the page open.
+// Keep chart chunk failures inside the chart box; the rest of Analytics remains useful.
+// Reloading is the recovery because React.lazy caches a rejected import for this document.
 const SalesChartLoadFailed = () => (
   <div role="alert" className="flex flex-col items-center gap-3 p-8 text-center">
     <p>We couldn&apos;t load the sales chart. Your sales data is unaffected.</p>
