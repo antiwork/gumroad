@@ -1969,7 +1969,7 @@ class LinksController < ApplicationController
       checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?#{Rack::Utils.build_query(checkout_params)}".to_json)
       store_hostnames_js = ERB::Util.json_escape(product_store_hostnames.to_json)
       title = ERB::Util.h(product.name.to_s)
-      canonical = ERB::Util.h(product.long_url.to_s)
+      canonical = ERB::Util.h(product.long_url(host: custom_domain_host_for_meta).to_s)
       # The wrapper is what search engines see at the canonical /l/<permalink>
       # URL — the seller's HTML lives in a sandboxed, opaque-origin iframe whose
       # content crawlers generally do NOT attribute to this page. Without the
@@ -1989,7 +1989,7 @@ class LinksController < ApplicationController
       # untouched. Escape quotes explicitly so a description containing `"`
       # can't break out of the meta tag's attribute value.
       description_attr = description.gsub('"', "&quot;")
-      structured_data = product.structured_data
+      structured_data = product.structured_data(host: custom_domain_host_for_meta)
       # json_escape keeps the JSON valid while escaping <, >, & so a
       # description containing "</script>" can't break out of the script tag.
       structured_data_tag = if structured_data.any?

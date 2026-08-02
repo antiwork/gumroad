@@ -9,6 +9,12 @@ module PageMeta::Product
     def set_product_page_meta(product)
       product_description = product.description.present? ? product.plaintext_description : "Available on Gumroad"
 
+      # On a seller's own domain the page must point search engines at that domain, not at
+      # the *.gumroad.com subdomain Link#long_url defaults to — otherwise Search Console
+      # reports "Alternate page with proper canonical tag" and indexes the subdomain instead.
+      # UsersController does the same for the profile page via User#profile_url.
+      canonical_url = product.long_url(host: custom_domain_host_for_meta)
+
       set_meta_tag(name: "description", content: product_description)
       set_meta_tag(property: "gr:page:type", content: "product")
       set_meta_tag(property: "product:retailer_item_id", content: product.unique_permalink)
@@ -23,7 +29,7 @@ module PageMeta::Product
         set_meta_tag(property: "product:price:currency", content: product.price_currency_type.upcase)
       end
 
-      set_open_graph_meta(product, product_description:)
+      set_open_graph_meta(product, product_description:, canonical_url:)
 
       set_twitter_meta(product, product_description:)
 
@@ -31,17 +37,23 @@ module PageMeta::Product
         set_meta_tag(tag_name: "link", rel: "preload", as: "image", href: asset.url)
       end
 
-      set_meta_tag(tag_name: "link", rel: "canonical", href: product.long_url, head_key: "canonical")
+      set_meta_tag(tag_name: "link", rel: "canonical", href: canonical_url, head_key: "canonical")
 
-      if (structured_data = product.structured_data).any?
+      if (structured_data = product.structured_data(host: custom_domain_host_for_meta)).any?
         set_meta_tag(tag_name: "script", type: "application/ld+json", inner_content: structured_data, head_key: "structured-data")
       end
     end
 
-    def set_open_graph_meta(product, product_description:)
+    # nil on gumroad.com, so Link#long_url keeps its subdomain default. Rails' url_for wants a
+    # bare host with no trailing slash; seller_custom_domain_url is a root_url.
+    def custom_domain_host_for_meta
+      seller_custom_domain_url&.chomp("/")
+    end
+
+    def set_open_graph_meta(product, product_description:, canonical_url:)
       set_meta_tag(property: "og:title", content: product.name)
       set_meta_tag(property: "og:description", content: product_description)
-      set_meta_tag(property: "og:url", content: product.long_url)
+      set_meta_tag(property: "og:url", content: canonical_url)
 
       set_open_graph_image_meta(product)
 
