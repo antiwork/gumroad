@@ -95,6 +95,12 @@ const renderPage = (props = defaultProps()) => {
   );
 };
 
+const creatorCheckbox = (name: string): HTMLInputElement => {
+  const input = screen.getByText(name).closest("label")?.querySelector("input");
+  if (!input) throw new Error(`expected a checkbox for creator ${name}`);
+  return input;
+};
+
 const lastGetParams = (): Record<string, string> => {
   const call = mocks.routerGet.mock.calls.at(-1);
   if (!call) throw new Error("expected router.get to have been called");
@@ -152,6 +158,29 @@ describe("LibraryPage", () => {
 
     // Same URL vocabulary the old client wrote to the address bar, so bookmarks keep working.
     expect(lastGetParams()).toEqual({ sort: "recently_updated", creators: "c1,c2" });
+  });
+
+  it("composes creator selections made before the server echoes the first one back", () => {
+    renderPage();
+
+    // No props arrive between the two clicks: the second must build on the first, and the
+    // first checkbox must stay checked while its request is in flight.
+    fireEvent.click(creatorCheckbox("Ann"));
+    fireEvent.click(creatorCheckbox("Zoe"));
+
+    expect(lastGetParams()).toEqual({ sort: "recently_updated", creators: "c2,c1" });
+    expect(creatorCheckbox("Ann").checked).toBe(true);
+  });
+
+  it("unchecks a creator selected optimistically when it is clicked again", () => {
+    renderPage();
+
+    fireEvent.click(creatorCheckbox("Zoe"));
+    expect(creatorCheckbox("Zoe").checked).toBe(true);
+
+    fireEvent.click(creatorCheckbox("Zoe"));
+    expect(creatorCheckbox("Zoe").checked).toBe(false);
+    expect(lastGetParams()).toEqual({ sort: "recently_updated" });
   });
 
   it("preserves bundle and archived params and omits empty ones when toggling a filter", () => {

@@ -214,16 +214,19 @@ export default function LibraryPage() {
   }
 
   // Two quick filter clicks would otherwise both build on the props of the page they were
-  // clicked from, so the second visit silently reverts the first. Base each navigation on
-  // the last requested params until the server echoes them back.
-  const pendingSearch = React.useRef<SearchParams | null>(null);
+  // clicked from, so the second visit silently reverts the first. Base each navigation and
+  // every control's rendered state on the last requested params until the server echoes
+  // them back — a ref would fix the request but leave the checkboxes showing stale state,
+  // and the toggles derive their next value from what is rendered.
+  const [pendingSearch, setPendingSearch] = React.useState<SearchParams | null>(null);
   React.useEffect(() => {
-    pendingSearch.current = null;
+    setPendingSearch(null);
   }, [search]);
+  const activeSearch = pendingSearch ?? search;
 
   const navigate = (updates: Partial<SearchParams> & { page?: number }) => {
-    const next = { ...(pendingSearch.current ?? search), ...updates };
-    pendingSearch.current = next;
+    const next = { ...activeSearch, ...updates };
+    setPendingSearch(next);
     const data: Record<string, string> = { sort: next.sort };
     if (next.query) data.query = next.query;
     if (next.creators.length > 0) data.creators = next.creators.join(",");
@@ -249,7 +252,10 @@ export default function LibraryPage() {
   const isLibraryEmpty = archivedCount + unarchivedCount === 0;
   const showArchivedNotice = !isLibraryEmpty && !search.show_archived_only && unarchivedCount === 0;
   const hasParams =
-    search.show_archived_only || search.query !== "" || search.creators.length > 0 || search.bundles.length > 0;
+    activeSearch.show_archived_only ||
+    activeSearch.query !== "" ||
+    activeSearch.creators.length > 0 ||
+    activeSearch.bundles.length > 0;
   const [deleting, setDeleting] = React.useState<Result | null>(null);
 
   const sortUid = React.useId();
@@ -305,7 +311,7 @@ export default function LibraryPage() {
   });
 
   const commitQuery = () => {
-    if (enteredQuery !== search.query) navigate({ query: enteredQuery });
+    if (enteredQuery !== activeSearch.query) navigate({ query: enteredQuery });
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -406,7 +412,7 @@ export default function LibraryPage() {
                       </FieldsetTitle>
                       <FormSelect
                         id={sortUid}
-                        value={search.sort}
+                        value={activeSearch.sort}
                         onChange={(e) =>
                           navigate({ sort: e.target.value === "purchase_date" ? "purchase_date" : "recently_updated" })
                         }
@@ -426,7 +432,7 @@ export default function LibraryPage() {
                           inputId={bundlesUid}
                           instanceId={bundlesUid}
                           options={bundles}
-                          value={bundles.filter(({ id }) => search.bundles.includes(id))}
+                          value={bundles.filter(({ id }) => activeSearch.bundles.includes(id))}
                           onChange={(selectedOptions) => navigate({ bundles: selectedOptions.map(({ id }) => id) })}
                           isMulti
                           isClearable
@@ -441,7 +447,7 @@ export default function LibraryPage() {
                         All Creators
                         <Checkbox
                           wrapperClassName="ml-auto"
-                          checked={search.creators.length === 0}
+                          checked={activeSearch.creators.length === 0}
                           onClick={() => navigate({ creators: [] })}
                           readOnly
                         />
@@ -452,12 +458,12 @@ export default function LibraryPage() {
                           <span className="shrink-0 text-muted">{`(${creator.count})`}</span>
                           <Checkbox
                             wrapperClassName="ml-auto"
-                            checked={search.creators.includes(creator.id)}
+                            checked={activeSearch.creators.includes(creator.id)}
                             onClick={() =>
                               navigate({
-                                creators: search.creators.includes(creator.id)
-                                  ? search.creators.filter((id) => id !== creator.id)
-                                  : [...search.creators, creator.id],
+                                creators: activeSearch.creators.includes(creator.id)
+                                  ? activeSearch.creators.filter((id) => id !== creator.id)
+                                  : [...activeSearch.creators, creator.id],
                               })
                             }
                             readOnly
@@ -482,9 +488,9 @@ export default function LibraryPage() {
                         <Label className="justify-between">
                           Show archived only
                           <Checkbox
-                            checked={search.show_archived_only}
+                            checked={activeSearch.show_archived_only}
                             readOnly
-                            onClick={() => navigate({ show_archived_only: !search.show_archived_only })}
+                            onClick={() => navigate({ show_archived_only: !activeSearch.show_archived_only })}
                           />
                         </Label>
                       </Fieldset>
