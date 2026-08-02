@@ -8,7 +8,6 @@ import { trackUserProductAction } from "$app/data/user_action_event";
 import { incrementProductViews } from "$app/data/view_event";
 import { Wishlist } from "$app/data/wishlists";
 import { Discount } from "$app/parsers/checkout";
-import { SellerReputation } from "$app/parsers/profile";
 import {
   AnalyticsData,
   AssetPreview,
@@ -20,6 +19,7 @@ import {
   Ratings,
   RatingsWithPercentages,
 } from "$app/parsers/product";
+import { SellerReputation } from "$app/parsers/profile";
 import { classNames } from "$app/utils/classNames";
 import {
   BuyerLocalCurrencyContext,
