@@ -556,7 +556,7 @@ describe Checkout::BuyerCurrencyEligibility do
     # reaches this state: the row is never rewritten, so its whole snapshot stays USD-consistent.
     it "withholds the direct listed-amount path when the purchase's snapshotted currency disagrees with the repriced product" do
       purchase
-      product.update!(price_currency_type: Currency::EUR)
+      product.update!(price_currency_type: Currency::EUR, price_cents: 20_00)
 
       expect(forced_decision).to be_eligible
       expect(forced_decision.currency).to eq(Currency::EUR)
@@ -571,7 +571,7 @@ describe Checkout::BuyerCurrencyEligibility do
                           seller:,
                           merchant_account:,
                           purchase_state: "in_progress")
-      repriced_product.update!(price_currency_type: Currency::INR)
+      repriced_product.update!(price_currency_type: Currency::INR, price_cents: 7300)
 
       upi_decision = described_class.new(order:,
                                          seller:,
