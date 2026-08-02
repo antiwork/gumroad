@@ -1,0 +1,157 @@
+{
+  "root": "/Users/gumclaw/tmp/m6867-before",
+  "manifest_path": "/Users/gumclaw/tmp/m6867-before/public/vite/.vite/manifest.json",
+  "entry": "pages/Analytics/Index.tsx",
+  "total_blocking_bytes": 2840179,
+  "chunk_count": 28,
+  "chunks": [
+    {
+      "key": "_vendor-TXwNHuzW.js",
+      "file": "assets/vendor-TXwNHuzW.js",
+      "bytes": 2132530
+    },
+    {
+      "key": "_vendor-charts-BiocXLme.js",
+      "file": "assets/vendor-charts-BiocXLme.js",
+      "bytes": 331000
+    },
+    {
+      "key": "_DomainSettings-nwL7CIuL.js",
+      "file": "assets/DomainSettings-nwL7CIuL.js",
+      "bytes": 285223
+    },
+    {
+      "key": "_useFlashMessage-Cef61Jxh.js",
+      "file": "assets/useFlashMessage-Cef61Jxh.js",
+      "bytes": 36197
+    },
+    {
+      "key": "pages/Analytics/Index.tsx",
+      "file": "assets/Index-BMK2sDo0.js",
+      "bytes": 22816
+    },
+    {
+      "key": "_currency-DhzVB3_Q.js",
+      "file": "assets/currency-DhzVB3_Q.js",
+      "bytes": 4377
+    },
+    {
+      "key": "_CurrentSeller-B208wQ4E.js",
+      "file": "assets/CurrentSeller-B208wQ4E.js",
+      "bytes": 3736
+    },
+    {
+      "key": "_Table-B3avZEVn.js",
+      "file": "assets/Table-B3avZEVn.js",
+      "bytes": 3074
+    },
+    {
+      "key": "_useAnalyticsDateRange-CYdvCVw3.js",
+      "file": "assets/useAnalyticsDateRange-CYdvCVw3.js",
+      "bytes": 2504
+    },
+    {
+      "key": "_DateRangePicker-ChIsDKsV.js",
+      "file": "assets/DateRangePicker-ChIsDKsV.js",
+      "bytes": 2263
+    },
+    {
+      "key": "_WithTooltip-Cy6b5G4V.js",
+      "file": "assets/WithTooltip-Cy6b5G4V.js",
+      "bytes": 1666
+    },
+    {
+      "key": "_request-DzEC0uyW.js",
+      "file": "assets/request-DzEC0uyW.js",
+      "bytes": 1491
+    },
+    {
+      "key": "_Stats-DRdTbXz2.js",
+      "file": "assets/Stats-DRdTbXz2.js",
+      "bytes": 1437
+    },
+    {
+      "key": "_Tabs-DiJgncnC.js",
+      "file": "assets/Tabs-DiJgncnC.js",
+      "bytes": 1411
+    },
+    {
+      "key": "_sales-C-IXLVXJ.js",
+      "file": "assets/sales-C-IXLVXJ.js",
+      "bytes": 1261
+    },
+    {
+      "key": "_DateInput-BIWlzvgA.js",
+      "file": "assets/DateInput-BIWlzvgA.js",
+      "bytes": 1001
+    },
+    {
+      "key": "_AnalyticsLayout-BL_Jyuog.js",
+      "file": "assets/AnalyticsLayout-BL_Jyuog.js",
+      "bytes": 979
+    },
+    {
+      "key": "_styles-BWo3DzBa.js",
+      "file": "assets/styles-BWo3DzBa.js",
+      "bytes": 887
+    },
+    {
+      "key": "_Checkbox-C5rwzaEe.js",
+      "file": "assets/Checkbox-C5rwzaEe.js",
+      "bytes": 812
+    },
+    {
+      "key": "_Pill-sn_5iJkF.js",
+      "file": "assets/Pill-sn_5iJkF.js",
+      "bytes": 801
+    },
+    {
+      "key": "_Card-bX8d14wP.js",
+      "file": "assets/Card-bX8d14wP.js",
+      "bytes": 736
+    },
+    {
+      "key": "_NavigationButton-5DHMZZ6B.js",
+      "file": "assets/NavigationButton-5DHMZZ6B.js",
+      "bytes": 715
+    },
+    {
+      "key": "_PageHeader-CDyi7hVH.js",
+      "file": "assets/PageHeader-CDyi7hVH.js",
+      "bytes": 699
+    },
+    {
+      "key": "_useIsAboveBreakpoint-SHI72U2u.js",
+      "file": "assets/useIsAboveBreakpoint-SHI72U2u.js",
+      "bytes": 608
+    },
+    {
+      "key": "_Select-CYDQ7xTf.js",
+      "file": "assets/Select-CYDQ7xTf.js",
+      "bytes": 577
+    },
+    {
+      "key": "_Placeholder-Dsv2OxM3.js",
+      "file": "assets/Placeholder-Dsv2OxM3.js",
+      "bytes": 524
+    },
+    {
+      "key": "_useSortingTableDriver-CpwLHKga.js",
+      "file": "assets/useSortingTableDriver-CpwLHKga.js",
+      "bytes": 524
+    },
+    {
+      "key": "_LoadingSpinner-Dg-e6V86.js",
+      "file": "assets/LoadingSpinner-Dg-e6V86.js",
+      "bytes": 330
+    }
+  ],
+  "chart_chunks_in_closure": [
+    {
+      "key": "_vendor-charts-BiocXLme.js",
+      "file": "assets/vendor-charts-BiocXLme.js",
+      "bytes": 331000
+    }
+  ],
+  "dynamic_imports_from_closure": []
+}
