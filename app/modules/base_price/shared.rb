@@ -39,7 +39,13 @@ module BasePrice::Shared
     end
 
     recurrences_to_delete = (BasePrice::Recurrence.all - enabled_recurrences.keys.map(&:to_s)).push(nil)
+    # A product has exactly one display currency, but create_or_update_new_price! scopes its
+    # upsert by currency — so changing the currency writes a new row and leaves the old one
+    # alive. Two live rows per recurrence make available_price_cents (and the search index it
+    # feeds) report both denominations, and Variant#recurrence_price_values picks whichever
+    # row is first by id, which is the stale one. Retire anything not in the current currency.
     prices_to_delete = prices.alive.where(recurrence: recurrences_to_delete)
+                             .or(prices.alive.where.not(currency: price_currency_type))
     prices_to_delete.map(&:mark_deleted!)
 
     enqueue_index_update_for(["price_cents", "available_price_cents"]) if prices_to_delete.any?
