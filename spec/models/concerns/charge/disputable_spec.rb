@@ -1897,6 +1897,7 @@ describe Charge::Disputable, :vcr do
           let!(:charge) do
             create(:charge, processor_transaction_id: charge_transaction_id, amount_cents: 222,
                             disputed_at: 10.days.ago, dispute_reversed_at: 1.day.ago,
+                            merchant_account: create(:merchant_account, charge_processor_merchant_id: "acct_flip_#{SecureRandom.hex(6)}"),
                             purchases: [first_purchase, second_purchase])
           end
           let(:charge_flip_event) { build(:charge_event_dispute_lost, charge_id: charge_transaction_id) }
