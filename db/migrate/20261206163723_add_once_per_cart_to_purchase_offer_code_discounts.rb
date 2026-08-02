@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 class AddOncePerCartToPurchaseOfferCodeDiscounts < ActiveRecord::Migration[7.1]
-  # The original version ran on earlier branch databases, so both directions must be idempotent.
-  SUPERSEDED_VERSION = "20260802045331"
+  # Earlier versions ran on branch databases, so both directions must be idempotent.
+  SUPERSEDED_VERSIONS = %w[20260802045331 20261206000026].freeze
 
   def up
     add_once_per_cart = !column_exists?(:purchase_offer_code_discounts, :once_per_cart)
@@ -28,7 +28,7 @@ class AddOncePerCartToPurchaseOfferCodeDiscounts < ActiveRecord::Migration[7.1]
     def superseded_version_applied?
       connection.select_value(
         ActiveRecord::Base.sanitize_sql_array(
-          ["SELECT 1 FROM schema_migrations WHERE version = ? LIMIT 1", SUPERSEDED_VERSION]
+          ["SELECT 1 FROM schema_migrations WHERE version IN (?) LIMIT 1", SUPERSEDED_VERSIONS]
         )
       ).present?
     end

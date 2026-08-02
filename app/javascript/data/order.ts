@@ -335,12 +335,11 @@ export const startClientConfirmOrderCreation = async (
 
     if (!confirmationLineItem) {
       // No charge required (e.g. an all-free cart): the prepare responses are already final.
-      const finalOfferCodes = replaceOncePerCartOfferCodes(activeOfferCodes, prepareResponse.offer_codes);
       return mapResultsByUid(
         requestData,
         prepareResponse.line_items,
         prepareResponse.can_buyer_sign_up,
-        offerCodesForFailedLineItems(requestData, prepareResponse.line_items, finalOfferCodes),
+        offerCodesForFailedLineItems(requestData, prepareResponse.line_items, prepareResponse.offer_codes),
       );
     }
 
@@ -384,7 +383,7 @@ export const startClientConfirmOrderCreation = async (
     // The return page resolves a captured payment to its durable outcome (receipt, pending, or
     // failed-with-restored-cart), so every post-capture error carries its URL.
     confirmedReturnUrl = `${Routes.checkout_return_url(order.id)}?payment_intent=${encodeURIComponent(
-      clientSecret.split("_secret")[0] ?? "",
+      clientSecret.split("_secret")[0],
     )}`;
 
     // Inline methods resolve in-page, then finalize via the (idempotent) AJAX endpoint.

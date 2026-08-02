@@ -1,4 +1,5 @@
 import type { Stripe } from "@stripe/stripe-js";
+import typia from "typia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -213,7 +214,7 @@ describe("startOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe: Stripe = Object.create(null);
+    const stripe = typia.assert<Stripe>({});
     stripe.confirmCardPayment = vi.fn().mockResolvedValue({});
     getStripeInstanceMock.mockResolvedValue(stripe);
 
@@ -273,19 +274,16 @@ describe("startOrderCreation", () => {
 
     const result = await startOrderCreation(mixedRequestData);
 
-    expect(requestMock).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        data: expect.objectContaining({
-          retry_offer_codes: [
-            {
-              code: "SAVE",
-              products: { "product-b ": { permalink: "product-b", quantity: 2 } },
-            },
-          ],
-        }),
-      }),
-    );
+    expect(requestMock.mock.calls[1]?.[0]).toMatchObject({
+      data: {
+        retry_offer_codes: [
+          {
+            code: "SAVE",
+            products: { "product-b ": { permalink: "product-b", quantity: 2 } },
+          },
+        ],
+      },
+    });
     expect(result.offerCodes).toEqual([{ code: "save", products: { "product-b": oncePerCartDiscount(100) } }]);
   });
 });
@@ -300,7 +298,7 @@ describe("startClientConfirmOrderCreation", () => {
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
-    const stripe: Stripe = Object.create(null);
+    const stripe = typia.assert<Stripe>({});
     confirmPaymentMock.mockReset().mockResolvedValue({});
     stripe.confirmPayment = confirmPaymentMock;
     getStripeInstanceMock.mockResolvedValue(stripe);
@@ -311,16 +309,14 @@ describe("startClientConfirmOrderCreation", () => {
 
     await startClientConfirmOrderCreation(requestData, "ct_123", "card");
 
-    expect(requestMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        method: "POST",
-        url: "/orders/prepare",
-        data: expect.objectContaining({
-          confirmation_token: "ct_123",
-          payment_element_mount_currency: "usd",
-        }),
-      }),
-    );
+    expect(requestMock.mock.calls[0]?.[0]).toMatchObject({
+      method: "POST",
+      url: "/orders/prepare",
+      data: {
+        confirmation_token: "ct_123",
+        payment_element_mount_currency: "usd",
+      },
+    });
   });
 
   it("throws a non-resubmittable error when finalize returns a failed line item after capture", async () => {
@@ -453,6 +449,36 @@ describe("startClientConfirmOrderCreation", () => {
     expect(result.offerCodes).toEqual([]);
   });
 
+  it("does not restore a legacy code rejected during a no-charge prepare", async () => {
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-a": fixedDiscount(100) } }];
+    requestMock.mockResolvedValueOnce(
+      jsonResponse({
+        ...prepareResponse,
+        line_items: {
+          "product-a ": {
+            success: false,
+            permalink: "product-a",
+            error_message: "The discount is no longer available.",
+            name: null,
+            formatted_price: "$10",
+            error_code: null,
+            is_tax_mismatch: false,
+            card_country: null,
+            ip_country: null,
+            updated_product: null,
+          },
+        },
+        offer_codes: [],
+      }),
+    );
+
+    const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
+
+    expect(confirmPaymentMock).not.toHaveBeenCalled();
+    expect(result.lineItems["product-a "]?.success).toBe(false);
+    expect(result.offerCodes).toEqual([]);
+  });
+
   it("drops a capped cart-level code when finalization no longer returns it", async () => {
     const firstLine = requestData.lineItems.at(0);
     if (!firstLine) throw new Error("Missing test line item");
@@ -513,7 +539,7 @@ describe("startClientConfirmOrderCreation", () => {
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
       .mockResolvedValueOnce(jsonResponse({ success: true }));
-    const stripe: Stripe = Object.create(null);
+    const stripe = typia.assert<Stripe>({});
     stripe.confirmPayment = vi.fn().mockResolvedValue({
       error: { type: "invalid_request_error", code: "payment_intent_unexpected_state", message: "Bad state." },
     });
@@ -521,18 +547,19 @@ describe("startClientConfirmOrderCreation", () => {
 
     const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
 
-    expect(requestMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        method: "POST",
-        url: "/orders/order-token/confirm_error",
-        data: expect.objectContaining({
-          stage: "confirm",
-          stripe_error_type: "invalid_request_error",
-          stripe_error_code: "payment_intent_unexpected_state",
-          stripe_error_message: "Bad state.",
-        }),
-      }),
-    );
+    const reportRequest = requestMock.mock.calls.find(
+      ([options]) => options.url === "/orders/order-token/confirm_error",
+    )?.[0];
+    expect(reportRequest).toMatchObject({
+      method: "POST",
+      url: "/orders/order-token/confirm_error",
+      data: {
+        stage: "confirm",
+        stripe_error_type: "invalid_request_error",
+        stripe_error_code: "payment_intent_unexpected_state",
+        stripe_error_message: "Bad state.",
+      },
+    });
     // The buyer still sees the failure — reporting must not change the outcome.
     expect(Object.values(result.lineItems).every((lineItem) => !lineItem.success)).toBe(true);
     expect(result.offerCodes).toEqual(activeOfferCodes);
@@ -555,7 +582,7 @@ describe("startClientConfirmOrderCreation", () => {
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
       .mockResolvedValueOnce(jsonResponse({ success: true }));
-    const stripe: Stripe = Object.create(null);
+    const stripe = typia.assert<Stripe>({});
     stripe.confirmPayment = vi.fn().mockResolvedValue({
       error: { type: "card_error", code: "card_declined", message: "Your card was declined." },
     });
@@ -567,14 +594,15 @@ describe("startClientConfirmOrderCreation", () => {
       "ideal",
     );
 
-    expect(requestMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: "/orders/order-token/confirm_error",
-        data: expect.objectContaining({
-          payment_method_type: null,
-          selected_payment_method_type: "ideal",
-        }),
-      }),
-    );
+    const reportRequest = requestMock.mock.calls.find(
+      ([options]) => options.url === "/orders/order-token/confirm_error",
+    )?.[0];
+    expect(reportRequest).toMatchObject({
+      url: "/orders/order-token/confirm_error",
+      data: {
+        payment_method_type: null,
+        selected_payment_method_type: "ideal",
+      },
+    });
   });
 });
