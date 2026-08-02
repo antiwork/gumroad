@@ -17,9 +17,23 @@ class SubscribePreviewGeneratorService
 
   # Any avatar, including the default one, is an <img>, so this is satisfied on
   # every profile rather than only on sellers who uploaded a portrait.
+  #
+  # `complete && naturalWidth > 0` only means the bytes arrived; Chromium still
+  # decodes afterwards and screenshots taken in that window get an empty circle.
+  # decode() is the event that says the frame is paintable, so the poll kicks it
+  # off once and then reports the flag it sets. A rejected decode counts as done
+  # so a permanently broken avatar cannot hold the wait open.
   AVATAR_READY_SCRIPT = <<~JS
     const img = document.querySelector("img");
-    return !!img && img.complete && img.naturalWidth > 0;
+    if (!img) return false;
+    if (window.__gumroadAvatarDecoded) return true;
+    if (!window.__gumroadAvatarDecodeStarted) {
+      window.__gumroadAvatarDecodeStarted = true;
+      img.decode()
+        .then(() => { window.__gumroadAvatarDecoded = true; })
+        .catch(() => { window.__gumroadAvatarDecoded = true; });
+    }
+    return false;
   JS
 
   def self.generate_pngs(users)

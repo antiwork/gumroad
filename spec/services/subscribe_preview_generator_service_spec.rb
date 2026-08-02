@@ -22,15 +22,36 @@ describe SubscribePreviewGeneratorService, type: :system, js: true do
     end
 
     it "waits for the avatar to decode before screenshotting" do
-      script_results = []
-      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:execute_script).and_wrap_original do |original, driver, script, *args|
-        script_results << script
-        original.call(driver, script, *args)
+      scripts = []
+      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:execute_script).and_wrap_original do |original, script, *args|
+        scripts << script
+        original.call(script, *args)
       end
 
       described_class.generate_pngs([@user1])
 
-      expect(script_results).to include(described_class::AVATAR_READY_SCRIPT)
+      expect(scripts).to include(described_class::AVATAR_READY_SCRIPT)
+    end
+
+    it "screenshots only once the avatar has actually decoded" do
+      last_ready_result = nil
+      ready_at_screenshot = nil
+
+      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:execute_script).and_wrap_original do |original, script, *args|
+        result = original.call(script, *args)
+        last_ready_result = result if script == described_class::AVATAR_READY_SCRIPT
+        result
+      end
+      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:screenshot_as).and_wrap_original do |original, *args|
+        ready_at_screenshot = last_ready_result
+        original.call(*args)
+      end
+
+      described_class.generate_pngs([@user1])
+
+      # The script only returns true after img.decode() has settled, so this
+      # fails if the screenshot is taken on load-complete alone.
+      expect(ready_at_screenshot).to be(true)
     end
 
     it "still returns a png when the avatar never loads" do
