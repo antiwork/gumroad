@@ -342,16 +342,20 @@ describe Purchase::VariantUpdaterService do
       end
 
       it "does not mint an orphan license on a recurring subscription charge" do
-        purchase = create(:purchase, link: product, variant_attributes: [free_variant])
-        allow(purchase).to receive(:is_recurring_subscription_charge).and_return(true)
+        subscription = create(:subscription, link: product)
+        create(:purchase, link: product, subscription:, is_original_subscription_purchase: true,
+                          variant_attributes: [free_variant])
+        charge = create(:purchase, link: product, subscription:, is_original_subscription_purchase: false,
+                                   variant_attributes: [free_variant])
+        expect(charge.is_recurring_subscription_charge).to be true
 
         expect do
           Purchase::VariantUpdaterService.new(
-            purchase:,
+            purchase: charge,
             variant_id: full_variant.external_id,
-            quantity: purchase.quantity,
+            quantity: charge.quantity,
           ).perform
-        end.not_to change { License.where(purchase_id: purchase.id).count }
+        end.not_to change { License.count }
       end
     end
   end
