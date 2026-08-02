@@ -172,6 +172,7 @@ const StateInput = () => {
         <Select
           id={`${uid}state`}
           value={state.state}
+          aria-invalid={errors.has("state")}
           onChange={(e) => dispatch({ type: "set-value", state: e.target.value })}
           disabled={isProcessing(state)}
         >
@@ -1795,6 +1796,17 @@ const PaymentMethodsSection = ({
   );
 };
 
+// Hidden controls (`display: none`, `visibility: hidden`) cannot take focus, so scrolling to one
+// would leave the buyer staring at a page with nothing visibly wrong. The visibility check must be
+// asked for by name — an argless checkVisibility() accepts `visibility: hidden` elements — and the
+// older engines only know the legacy `checkVisibilityCSS` spelling. `checkVisibility` is
+// unimplemented in the test DOM; treating that as visible keeps the scan honest there.
+const isFocusable = (input: HTMLInputElement | HTMLSelectElement) =>
+  !input.disabled &&
+  (typeof input.checkVisibility === "function"
+    ? input.checkVisibility({ visibilityProperty: true, checkVisibilityCSS: true })
+    : true);
+
 export const PaymentForm = ({
   className,
   notice,
@@ -1810,21 +1822,35 @@ export const PaymentForm = ({
   const isTestPurchase = loggedInUser && state.products.find((product) => product.testPurchase);
   const isFreePurchase = isTestPurchase || !requiresPayment(state);
 
-  const paymentFormRef = React.useRef<HTMLDivElement | null>(null);
   const recaptcha = useRecaptcha({
     siteKey: state.recaptchaKey,
     scoreBased: state.recaptchaScoreBased,
     action: "checkout",
   });
 
-  React.useEffect(() => {
-    if (paymentFormRef.current && state.status.type === "input") {
-      // Stripe nests the input inside aria-invalid, hence the second query selector.
-      paymentFormRef.current
-        .querySelector<HTMLInputElement>("input[aria-invalid=true], [aria-invalid=true] input")
-        ?.focus();
-    }
+  const paymentFormRef = React.useRef<HTMLDivElement | null>(null);
 
+  // Keyed on validationFailedCount because a refused submit goes "input" → "input" (see the
+  // State field's comment in payment.ts).
+  React.useEffect(() => {
+    if (state.status.type !== "input") return;
+    const root = paymentFormRef.current;
+    if (!root) return;
+    // Widen past this form to the checkout root so tip and gift errors — which render above it —
+    // are reachable, but no further: an unrelated invalid control elsewhere on the page would
+    // otherwise win document order and steal the buyer's focus. The preview dashboard renders
+    // PaymentForm with no checkout ancestor, hence the fallback.
+    const scope = root.closest("[data-checkout-scope]") ?? root;
+    // Stripe nests the input inside aria-invalid, hence the descendant query selector. Selects
+    // matter too: the US/CA State field is a native select, invisible to an input-only scan.
+    const selector = "input[aria-invalid=true], select[aria-invalid=true], [aria-invalid=true] input";
+    const invalidInput = [...scope.querySelectorAll<HTMLInputElement | HTMLSelectElement>(selector)].find(isFocusable);
+    if (!invalidInput) return;
+    invalidInput.scrollIntoView({ behavior: "smooth", block: "center" });
+    invalidInput.focus({ preventScroll: true });
+  }, [state.status.type, state.validationFailedCount]);
+
+  React.useEffect(() => {
     if (state.status.type === "starting" && isFreePurchase) {
       dispatch({ type: "set-payment-method", paymentMethod: { type: "not-applicable" } });
     }
@@ -1854,7 +1880,7 @@ export const PaymentForm = ({
   const isPayPalAvailable = useIsPayPalAvailable();
 
   return (
-    <div ref={paymentFormRef} className={`flex flex-col gap-6 ${className}`} aria-label="Payment form">
+    <div className={`flex flex-col gap-6 ${className}`} aria-label="Payment form" ref={paymentFormRef}>
       {showCustomFields ? <CustomFields className="p-4 sm:p-5" /> : null}
       <CustomerDetails className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5" />
       {!isFreePurchase ? (

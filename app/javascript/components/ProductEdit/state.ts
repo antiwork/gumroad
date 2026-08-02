@@ -275,6 +275,7 @@ export const ProductEditContext = React.createContext<{
   // a numeric database id, so a shared map cannot safely follow mapping chains.
   variantIdMappings: Record<string, string>;
   richContentIdMappings: Record<string, string>;
+  fileIdMappings: Record<string, string>;
   // Canonical page id → file ids removed by the last successful save. The
   // content tab uses this one-shot response signal to reconcile its mounted
   // TipTap document; changing product state alone does not update that editor.

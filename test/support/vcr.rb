@@ -13,9 +13,13 @@ require "vcr"
 # Porting a cassette-backed spec: wrap the HTTP section of the test in
 #   VCR.use_cassette("<the original RSpec description path>") { ... }
 # using the name the RSpec metadata would have derived (e.g.
-# "AssetPreview/Embeddable_link/succeeds_with_a_video_URL"). On CI the record
-# mode is :none, so a wrong or missing cassette name errors loudly instead of
-# silently reaching the network — the port is machine-checkable.
+# "AssetPreview/Embeddable_link/succeeds_with_a_video_URL"). Where a whole context
+# is cassette-backed, a setup/teardown pair may insert the cassette instead and
+# rebuild that name from Minitest's `name` — see
+# test/business/sales_tax/sales_tax_calculator_test.rb. Either way, insert
+# unconditionally: on CI the record mode is :none, so a wrong or missing cassette
+# name errors loudly instead of silently reaching the network, and locally
+# `record: :once` can still capture a new one. The port stays machine-checkable.
 #
 # Keep the ignore-hosts and sensitive-data lists in sync with spec_helper.
 VCR.configure do |config|

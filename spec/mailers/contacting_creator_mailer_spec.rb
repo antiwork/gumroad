@@ -175,7 +175,8 @@ describe ContactingCreatorMailer do
     it "promises the next payout date when the account is not under a payout hold" do
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to include("next payout date")
+      expect(mail.body.encoded).to include("add a bank account there")
+      expect(mail.body.encoded).to include("Your balance will be sent on the next payout date after that.")
       expect(mail.body.encoded).to_not include("on hold")
     end
 
@@ -210,8 +211,41 @@ describe ContactingCreatorMailer do
 
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to include("PayPal is the only payout method we can offer in your country")
+      expect(mail.body.encoded).to include("We've stopped retrying this payout, because every attempt to that account will be refused")
+      expect(mail.body.encoded).to include("PayPal will not send payments to accounts registered in that country, and bank transfer is not available in yours")
+      expect(mail.body.encoded).to include("If you do not, we have no way to pay you right now")
+      expect(mail.body.encoded).to_not include("until you change how you get paid")
       expect(mail.body.encoded).to_not include("add a bank account")
+      expect(mail.body.encoded).to_not include("is not forfeited")
+      expect(mail.body.encoded).to_not include("next payout date")
+      expect(mail.body.encoded).to_not include("reply to this email so we can review the hold")
+    end
+
+    # The no-rail wording replaces the fix, not the hold disclosure: the hold is a separate fact and
+    # is still what a seller who does find a payable account would hit next.
+    it "still names a hold for a PayPal-only seller whose account is on hold" do
+      payment.user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: payment.user, country: "Ukraine")
+      expect(payment.user.reload.can_setup_bank_payouts?).to be(false)
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("we have no way to pay you right now")
+      expect(mail.body.encoded).to include("Payouts on your account are also on hold")
+      expect(mail.body.encoded).to_not include("add a bank account")
+    end
+
+    it "keeps the in-place PayPal-only path for a currency rejection" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: payment.user, country: "Ukraine")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("add US dollars as a currency you accept")
+      expect(mail.body.encoded).to include("use a different PayPal account")
+      expect(mail.body.encoded).to_not include("we have no way to pay you right now")
     end
   end
 
@@ -286,7 +320,8 @@ describe ContactingCreatorMailer do
           expect(mail.subject).to eq "🚨 Urgent: Action required for resolving disputed sale"
 
           expect(mail.body.encoded).to include "A customer of yours (#{purchase.email}) has disputed their purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
-          expect(mail.body.encoded).to include "Any additional information you can provide in the next 72 hours will help us win on your behalf."
+          expect(mail.body.encoded).to include "Any additional information you can provide by"
+          expect(mail.body.encoded).to include "(in the next 72 hours) will help us win on your behalf."
           expect(mail.body.encoded).to include "Submit additional information"
         end
 
@@ -324,6 +359,36 @@ describe ContactingCreatorMailer do
             expect(mail.body.encoded).not_to include "Submit additional information"
             expect(mail.subject).to eq "A sale has been disputed"
             expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        describe "chargeback evidence due soon" do
+          it "reminds the seller while the submission window is still open" do
+            dispute_evidence.update!(seller_contacted_at: 49.hours.ago)
+
+            mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
+
+            expect(mail.to).to eq [seller.email]
+            expect(mail.subject).to eq "Reminder: Submit dispute evidence within 24 hours"
+            expect(mail.body.encoded).to include "Please submit any additional information by"
+            expect(mail.body.encoded).to include "You have 23 hours left."
+            expect(mail.body.encoded).to include "Submit additional information"
+          end
+
+          it "does not send once the seller has already submitted" do
+            dispute_evidence.update!(seller_submitted_at: Time.current)
+
+            mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
+
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+          end
+
+          it "does not send once the evidence has been resolved" do
+            dispute_evidence.update!(resolved_at: Time.current, resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+
+            mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
+
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
           end
         end
 
@@ -411,7 +476,8 @@ describe ContactingCreatorMailer do
           charge.disputed_purchases.each do |purchase|
             expect(mail.body.encoded).to include purchase.link.name
           end
-          expect(mail.body.encoded).to include "Any additional information you can provide in the next 72 hours will help us win on your behalf."
+          expect(mail.body.encoded).to include "Any additional information you can provide by"
+          expect(mail.body.encoded).to include "(in the next 72 hours) will help us win on your behalf."
           expect(mail.body.encoded).to include "Submit additional information"
         end
       end

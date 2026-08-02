@@ -13,6 +13,15 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
   let(:disputed_purchase) do
     create(
       :disputed_purchase,
+      # Shipments only exist for orders that needed delivery (gumroad-private#1665), and the
+      # shipping-tracking rows below are the point of this spec. A physical product also makes
+      # the address fields required on the purchase.
+      link: product,
+      street_address: "123 Sample St",
+      city: "San Francisco",
+      state: "CA",
+      country: "United States",
+      zip_code: "12343",
       email: "customer@example.com",
       full_name: "Joe Doe",
       ip_state: "California",
@@ -134,6 +143,47 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
       it "omits the tracking row" do
         expect(uncategorized_text).to_not include("shipment tracking URL")
         expect(uncategorized_text).to include("Billing postal code: 12345")
+      end
+    end
+
+    # A shipment row predating Shipment's create-time gate can still hang off a digital purchase,
+    # and its URL would be shipping evidence in a digital-product dispute.
+    context "when the product never required shipping" do
+      before do
+        other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint")
+        create(:shipment, purchase: disputed_purchase, tracking_url: "https://track.aftership.com/94001")
+        product.update_columns(flags: 0, require_shipping: false)
+      end
+
+      it "omits the tracking row even though a shipment exists" do
+        expect(disputed_purchase.reload.shipment).to be_present
+        expect(uncategorized_text).to_not include("shipment tracking URL")
+        expect(uncategorized_text).to include("Billing postal code: 12345")
+      end
+    end
+
+    # The gate reads the product as at checkout, so a seller disabling shipping later cannot
+    # erase the tracking URL for an order that genuinely shipped.
+    context "when the seller disables shipping after the order shipped", :versioning do
+      # Created ahead of the purchase so the product's own create-version cannot round into the
+      # second after `purchase.created_at` and shadow the checkout-time reification.
+      let(:product) do
+        travel_to 1.hour.ago do
+          create(:physical_product, name: "Sample product title at purchase time")
+        end
+      end
+
+      before do
+        other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint")
+        create(:shipment, purchase: disputed_purchase, tracking_url: "https://track.aftership.com/94001")
+        travel_to 1.hour.from_now do
+          product.update!(is_physical: false, require_shipping: false)
+        end
+      end
+
+      it "keeps the tracking row" do
+        expect(uncategorized_text)
+          .to include("Seller-provided shipment tracking URL: https://track.aftership.com/94001")
       end
     end
   end

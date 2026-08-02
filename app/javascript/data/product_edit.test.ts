@@ -4,7 +4,9 @@ import { EditorState, TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyFileIdMappingsToRichContent,
   applyRichContentPageSaveResponse,
+  buildRichContentFileIdMappingTransaction,
   buildRichContentReconciliationTransaction,
   HiddenVariantContentConflictError,
   canonicalRichContentScope,
@@ -309,6 +311,46 @@ describe("overlapping save reconciliation", () => {
 });
 
 describe("removeFileEmbedsFromRichContent", () => {
+  it("rewrites mapped file embed ids throughout rich content", () => {
+    const page = {
+      id: "page",
+      title: "Files",
+      updated_at: "before",
+      description: {
+        type: "doc",
+        content: [
+          { type: "fileEmbed", attrs: { id: "temporary-file", uid: "file-uid" } },
+          {
+            type: "fileEmbedGroup",
+            attrs: { uid: "group-uid" },
+            content: [
+              { type: "fileEmbed", attrs: { id: "temporary-file", uid: "group-file-uid" } },
+              { type: "fileEmbed", attrs: { id: "keep-file", uid: "keep-uid" } },
+            ],
+          },
+        ],
+      },
+    };
+
+    applyRichContentPageSaveResponse(page, { file_id_mappings: { "temporary-file": "canonical-file" } });
+    expect(page.description).toEqual({
+      type: "doc",
+      content: [
+        { type: "fileEmbed", attrs: { id: "canonical-file", uid: "file-uid" } },
+        {
+          type: "fileEmbedGroup",
+          attrs: { uid: "group-uid" },
+          content: [
+            { type: "fileEmbed", attrs: { id: "canonical-file", uid: "group-file-uid" } },
+            { type: "fileEmbed", attrs: { id: "keep-file", uid: "keep-uid" } },
+          ],
+        },
+      ],
+    });
+
+    expect(applyFileIdMappingsToRichContent(page.description, { missing: "unused" })).toEqual(page.description);
+  });
+
   it("removes reported embeds, prunes empty groups, and preserves other content", () => {
     const description = {
       type: "doc",
@@ -406,6 +448,64 @@ describe("removeFileEmbedsFromRichContent", () => {
     expect(undoneState.doc.toJSON()).toEqual({
       type: "doc",
       content: [{ type: "paragraph", content: [{ type: "text", text: "First edit" }] }],
+    });
+  });
+
+  it("keeps mounted-editor file id remapping out of undo history", () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: "block+" },
+        paragraph: { group: "block", content: "text*" },
+        text: {},
+        fileEmbed: {
+          group: "block",
+          atom: true,
+          attrs: { id: { default: null }, uid: { default: null } },
+        },
+      },
+    });
+    const originalDocument = schema.nodeFromJSON({
+      type: "doc",
+      content: [
+        { type: "fileEmbed", attrs: { id: "temporary-file", uid: "file-uid" } },
+        { type: "paragraph", content: [{ type: "text", text: "Saved text" }] },
+      ],
+    });
+    let state = EditorState.create({
+      doc: originalDocument,
+      plugins: [history()],
+    });
+    const editTransaction = state.tr.insertText(
+      " still editing",
+      originalDocument.child(0).nodeSize + "Saved".length + 1,
+    );
+    state = state.apply(editTransaction);
+    const transaction = buildRichContentFileIdMappingTransaction(state, { "temporary-file": "canonical-file" });
+
+    expect(transaction.getMeta("addToHistory")).toBe(false);
+    expect(transaction.getMeta("preventUpdate")).toBe(true);
+
+    const reconciledState = state.apply(transaction);
+    expect(reconciledState.doc.toJSON()).toEqual({
+      type: "doc",
+      content: [
+        { type: "fileEmbed", attrs: { id: "canonical-file", uid: "file-uid" } },
+        { type: "paragraph", content: [{ type: "text", text: "Saved still editing text" }] },
+      ],
+    });
+
+    let undoneState = reconciledState;
+    expect(
+      undo(reconciledState, (undoTransaction) => {
+        undoneState = reconciledState.apply(undoTransaction);
+      }),
+    ).toBe(true);
+    expect(undoneState.doc.toJSON()).toEqual({
+      type: "doc",
+      content: [
+        { type: "fileEmbed", attrs: { id: "canonical-file", uid: "file-uid" } },
+        { type: "paragraph", content: [{ type: "text", text: "Saved text" }] },
+      ],
     });
   });
 });

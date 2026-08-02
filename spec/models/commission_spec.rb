@@ -61,6 +61,83 @@ describe Commission, :vcr do
       expect { commission.create_completion_purchase! }.to raise_error(ActiveRecord::RecordInvalid)
     end
 
+    context "when the deposit is no longer chargeable" do
+      let(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
+      let(:deposit_purchase) { commission.deposit_purchase }
+
+      # Refunding the deposit is what the Help Center tells sellers to do to reject a commission,
+      # and nothing transitions the commission when they do — so the completion button stays live.
+      it "refuses to charge when the deposit was fully refunded" do
+        deposit_purchase.update!(stripe_refunded: true)
+
+        expect { commission.create_completion_purchase! }
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
+          .and not_change { Purchase.count }
+
+        expect(commission.reload.completion_purchase).to be_nil
+        expect(commission.status).to eq(Commission::STATUS_IN_PROGRESS)
+      end
+
+      it "refuses to charge when the deposit was refunded through a different instance after this one was loaded" do
+        deposit_purchase # memoize the association before the refund lands elsewhere
+        Purchase.find(deposit_purchase.id).update!(stripe_refunded: true)
+
+        expect { commission.create_completion_purchase! }
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
+          .and not_change { Purchase.count }
+      end
+
+      it "refuses to charge when the deposit was partially refunded" do
+        deposit_purchase.update!(stripe_partially_refunded: true)
+
+        expect { commission.create_completion_purchase! }
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
+          .and not_change { Purchase.count }
+      end
+
+      it "refuses to charge when the deposit was charged back" do
+        deposit_purchase.update!(chargeback_date: Date.today)
+
+        expect { commission.create_completion_purchase! }
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
+          .and not_change { Purchase.count }
+      end
+
+      # A reversed chargeback leaves the deposit good, so it must NOT block — otherwise winning a
+      # dispute would strand the commission.
+      it "still charges when a chargeback was reversed" do
+        deposit_purchase.update!(chargeback_date: Date.today, chargeback_reversed: true)
+
+        expect { commission.create_completion_purchase! }.to change { Purchase.count }.by(1)
+        expect(commission.reload.status).to eq(Commission::STATUS_COMPLETED)
+      end
+
+      it "refuses to charge when the deposit never succeeded" do
+        deposit_purchase.update_columns(purchase_state: "failed")
+
+        expect { commission.create_completion_purchase! }
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
+          .and not_change { Purchase.count }
+      end
+
+      it "refuses to charge a cancelled commission" do
+        commission.update!(status: Commission::STATUS_CANCELLED)
+
+        expect { commission.create_completion_purchase! }
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
+          .and not_change { Purchase.count }
+      end
+
+      # A seller buying their own commission product gets a `test_successful` deposit; completing
+      # it charges nothing but is a supported flow, so the state gate must admit it.
+      it "still charges when the deposit is a seller test purchase" do
+        deposit_purchase.update_columns(purchase_state: "test_successful")
+
+        expect { commission.create_completion_purchase! }.to change { Purchase.count }.by(1)
+        expect(commission.reload.status).to eq(Commission::STATUS_COMPLETED)
+      end
+    end
+
     context "when status is not completed" do
       let(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
       let(:deposit_purchase) { commission.deposit_purchase }

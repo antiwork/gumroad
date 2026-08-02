@@ -25,7 +25,7 @@ class Admin::Users::Products::TosViolationFlagsController < Admin::Users::Produc
         @user.update!(tos_violation_reason: suspend_tos_reason)
         comment_content = "Flagged for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} for a product named '#{@product.name}' (#{suspend_tos_reason})"
         @user.flag_for_tos_violation!(author_id: current_user.id, product_id: @product.id, content: comment_content)
-        @product.public_send(@product.is_tiered_membership? ? :unpublish! : :delete!)
+        @product.take_down_for_tos_violation!
       end
 
       render json: { success: true }

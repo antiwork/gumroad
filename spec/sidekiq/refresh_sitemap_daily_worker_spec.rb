@@ -21,5 +21,11 @@ describe RefreshSitemapDailyWorker do
 
       described_class.new.perform
     end
+
+    # Regenerating a month overwrites its file, so retrying costs nothing and a killed run
+    # would otherwise leave that month frozen with nothing recorded (gumroad-private#1679).
+    it "retries a failed run" do
+      expect(described_class.sidekiq_options["retry"]).to eq(3)
+    end
   end
 end

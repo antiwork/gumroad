@@ -282,5 +282,97 @@ describe Purchase::VariantUpdaterService do
         end
       end
     end
+    context "when the new variant's content carries a license-key block" do
+      let(:product) { create(:product, is_licensed: true) }
+      let(:category) { create(:variant_category, link: product, title: "Tier") }
+      let(:free_variant) { create(:variant, variant_category: category, name: "Free Version") }
+      let(:full_variant) { create(:variant, variant_category: category, name: "Full Version") }
+
+      before do
+        create(:rich_content, entity: free_variant, description: [{ "type" => "paragraph" }])
+        create(:rich_content, entity: full_variant, description: [{ "type" => RichContent::LICENSE_KEY_NODE_TYPE }])
+      end
+
+      it "mints the license the purchase had suppressed" do
+        purchase = create(:purchase, link: product, variant_attributes: [free_variant])
+        expect(purchase.license).to be_nil
+
+        success = Purchase::VariantUpdaterService.new(
+          purchase:,
+          variant_id: full_variant.external_id,
+          quantity: purchase.quantity,
+        ).perform
+
+        expect(success).to be true
+        expect(purchase.reload.uses_license_key?).to be true
+        expect(purchase.license).to be_present
+        expect(purchase.license.serial).to be_present
+        expect(product.reload.licenses).to include(purchase.license)
+      end
+
+      it "keeps the existing license when the purchase already has one" do
+        other_full_variant = create(:variant, variant_category: category, name: "Full Version 2")
+        create(:rich_content, entity: other_full_variant, description: [{ "type" => RichContent::LICENSE_KEY_NODE_TYPE }])
+        purchase = create(:purchase, link: product, variant_attributes: [full_variant])
+        existing = purchase.create_license!
+        expect(existing).to be_present
+
+        Purchase::VariantUpdaterService.new(
+          purchase:,
+          variant_id: other_full_variant.external_id,
+          quantity: purchase.quantity,
+        ).perform
+
+        expect(purchase.reload.uses_license_key?).to be true
+        expect(purchase.license).to eq(existing)
+        expect(License.where(purchase_id: purchase.id).count).to eq(1)
+      end
+
+      it "does not mint a license when the new variant's content omits the block" do
+        purchase = create(:purchase, link: product, variant_attributes: [full_variant])
+
+        Purchase::VariantUpdaterService.new(
+          purchase:,
+          variant_id: free_variant.external_id,
+          quantity: purchase.quantity,
+        ).perform
+
+        expect(purchase.reload.uses_license_key?).to be false
+        expect(purchase.license).to be_nil
+      end
+
+      it "backfills the license onto the original purchase when a recurring charge is swapped" do
+        subscription = create(:subscription, link: product)
+        original = create(:purchase, link: product, subscription:, is_original_subscription_purchase: true,
+                                     variant_attributes: [free_variant])
+        charge = create(:purchase, link: product, subscription:, is_original_subscription_purchase: false,
+                                   variant_attributes: [free_variant])
+        expect(charge.is_recurring_subscription_charge).to be true
+
+        expect do
+          Purchase::VariantUpdaterService.new(
+            purchase: charge,
+            variant_id: full_variant.external_id,
+            quantity: charge.quantity,
+          ).perform
+        end.to change { License.count }.by(1)
+
+        expect(License.where(purchase_id: charge.id)).to be_empty
+        expect(original.reload.license).to be_present
+        expect(charge.reload.license).to eq(original.license)
+
+        license_pushes = ElasticsearchIndexerWorker.jobs.map { |job| job["args"] }
+          .select { |action, params| action == "update" && params["fields"] == ["license_serial", "license_uses"] }
+        expect(license_pushes.map { |_, params| params["record_id"] }).to match_array([charge.id, original.id])
+      end
+
+      it "does not mint a duplicate when another request minted the license after the stale check" do
+        purchase = create(:purchase, link: product, variant_attributes: [full_variant])
+        purchase.license # cache the association as absent
+        Purchase.find(purchase.id).create_license!
+
+        expect { purchase.create_license! }.not_to change { License.count }
+      end
+    end
   end
 end

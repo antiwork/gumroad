@@ -109,6 +109,32 @@ wait_for_healthcheck() {
 # Named because both the wait and the final confirmation have to agree on it.
 LONG_RUNNING_FAILSAFE_WINDOW_TEST='[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }'
 
+# Long-running non-payout jobs — the monthly/quarterly finance and tax reports and the
+# daily instant payouts (see LongRunningJobTracking). These are NOT safe to
+# interrupt: they hold no checkpoint, so a recycled worker means the run starts over, and
+# killed runs of these are how finance reports have silently gone missing. So we wait longer
+# (up to 2 hours, the slowest of them is the Canada sales report at well over an hour) and,
+# if one is still running at the end of that, skip this deploy rather than kill the report.
+#
+# Note this check runs on EVERY deploy, not only overnight ones, and it skips rather than
+# proceeds — so a manual mid-day re-run of one of these reports will make that deploy wait
+# and then drop. That is the intended trade (never kill a report), and the skipped change
+# ships with the next push or via require-approval; the bound on how long a hung job can keep
+# skipping deploys is LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL.
+#
+# Fail-safe window (used ONLY when the healthcheck cannot be reached): the UTC hours these
+# jobs are actually SCHEDULED for, plus ~2h of runtime headroom. Read straight off
+# config/sidekiq_schedule.yml, which is written in UTC — the schedule is not an ET
+# midnight-6am block, so testing ET hours here would leave most of it uncovered:
+#   UTC 00:00 outstanding balances CSV
+#   UTC 01:00 monthly financial reports (fans out the Canada sales report, 1-2h)
+#   UTC 02:00 YTD sales report   UTC 03:00 TaxJar upload, India sales report
+#   UTC 08:00 daily instant payouts
+#   UTC 10:00 quarterly financial reports (VAT + per-country sales reports)
+#   UTC 11:00 finances / deferred refunds / Stripe balance summaries reports
+# => hours 00-05 and 08-13. Outside those we proceed, because nothing that registers here
+# is scheduled to be running.
+
 # The long-running blocker can be entered more than once (the confirmation loop below re-waits
 # when it goes busy again), so all of those entries share ONE attempt budget instead of each
 # getting a fresh 40. A per-entry budget is what killed build #18755 in a different disguise:

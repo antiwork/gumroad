@@ -784,7 +784,8 @@ describe Api::V2::SalesController do
 
   describe "PUT 'mark_as_shipped'" do
     before do
-      @product = create(:product, user: @seller)
+      # Shipments only exist for orders that needed delivery (gumroad-private#1665).
+      @purchase.link.update!(require_shipping: true)
       @params = { id: @purchase.external_id }
     end
 
@@ -819,7 +820,7 @@ describe Api::V2::SalesController do
       end
 
       it "marks shipment as shipped and includes tracking url" do
-        tracking_url = "sample-tracking-url"
+        tracking_url = "https://example.com/track"
         @params.merge!(tracking_url:)
 
         # There is no shipment yet
@@ -843,6 +844,18 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "rejects tracking values that are not full URLs" do
+        @params.merge!(tracking_url: "1Z999AA10123456784")
+
+        put :mark_as_shipped, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "Tracking URL #{Shipment::VALID_TRACKING_LINK_MESSAGE}"
+        }.as_json)
+        expect(@purchase.reload.shipment).to eq nil
+      end
+
       it "does not allow you to mark someone else's sale as shipped" do
         @params.merge!(id: @purchase_by_seller.external_id)
         put :mark_as_shipped, params: @params
@@ -850,6 +863,18 @@ describe Api::V2::SalesController do
           success: false,
           message: "The sale was not found."
         }.as_json)
+      end
+
+      it "refuses to create a shipment when the product never required shipping" do
+        @purchase.link.update!(require_shipping: false)
+
+        put :mark_as_shipped, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "Purchase does not require shipping"
+        }.as_json)
+        expect(@purchase.reload.shipment).to be_nil
       end
     end
 

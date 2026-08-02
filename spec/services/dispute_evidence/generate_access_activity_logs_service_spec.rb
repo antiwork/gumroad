@@ -282,4 +282,80 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
       end
     end
   end
+
+  # Access rows are written against the member purchases the buyer downloads, not the disputed
+  # wrapper.
+  describe "bundle purchases" do
+    let(:bundle_purchase) { create(:purchase, link: create(:product, :bundle, user: seller), is_bundle_purchase: true) }
+    let(:member_product) { create(:product, user: seller, name: "Member One") }
+    let(:member_purchase) do
+      create(:purchase, link: member_product, seller:, email: bundle_purchase.email, is_bundle_product_purchase: true)
+    end
+
+    before do
+      create(:bundle_product_purchase, bundle_purchase:, product_purchase: member_purchase)
+    end
+
+    it "reports consumption events recorded against the member purchases" do
+      create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "1.2.3.4")
+
+      content = described_class.perform(bundle_purchase)
+
+      expect(content).to include("The customer accessed the product 1 time.")
+      expect(content).to include("consumed_at,event_type,platform,ip_address,product\n")
+      expect(content).to end_with("web,1.2.3.4,\"Member One\"")
+    end
+
+    it "counts url_redirect uses on the members when there are no consumption events" do
+      member_purchase.create_url_redirect!
+      member_purchase.url_redirect.update!(uses: 7)
+
+      expect(described_class.perform(bundle_purchase)).to include("The customer accessed the product 7 times.")
+    end
+
+    it "reports a redirect-only member's uses alongside another member's consumption events" do
+      second_member = create(:purchase, link: create(:product, user: seller, name: "Member Two"), seller:, email: bundle_purchase.email, is_bundle_product_purchase: true)
+      create(:bundle_product_purchase, bundle_purchase:, product_purchase: second_member)
+      create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "1.2.3.4")
+      second_member.create_url_redirect!
+      second_member.url_redirect.update!(uses: 5)
+
+      content = described_class.perform(bundle_purchase)
+
+      expect(content).to include("The customer accessed the product 1 time.")
+      expect(content).to include("The customer accessed the product 5 more times.")
+    end
+
+    it "does not recount uses on a member whose accesses are already event-logged" do
+      create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "1.2.3.4")
+      member_purchase.create_url_redirect!
+      member_purchase.url_redirect.update!(uses: 3)
+
+      content = described_class.perform(bundle_purchase)
+
+      expect(content).to include("The customer accessed the product 1 time.")
+      expect(content).to_not include("more time")
+    end
+
+    it "orders the merged wrapper and member events by time" do
+      create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-09"), ip_address: "9.9.9.9")
+      create(:consumption_event, purchase_id: bundle_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "8.8.8.8")
+
+      rows = described_class.perform(bundle_purchase).lines.grep(/\d+\.\d+\.\d+\.\d+/)
+
+      expect(rows.first).to include("8.8.8.8")
+      expect(rows.last).to include("9.9.9.9")
+      expect(described_class.perform(bundle_purchase)).to include("The customer accessed the product 2 times.")
+    end
+
+    it "leaves the CSV shape unchanged for a non-bundle purchase" do
+      create(:consumption_event, purchase_id: purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "0.0.0.0")
+
+      content = described_class.perform(purchase)
+
+      expect(content).to include("consumed_at,event_type,platform,ip_address\n")
+      expect(content).to end_with("web,0.0.0.0")
+      expect(content).to_not include(purchase.link.name)
+    end
+  end
 end

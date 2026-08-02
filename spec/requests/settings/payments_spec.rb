@@ -936,6 +936,22 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to_not have_field("PayPal Email")
     end
 
+    it "does not offer direct deposit to an India creator, who cannot complete bank setup" do
+      @user.update!(payment_address: "barny@paypal.com")
+      old_user_compliance_info = @user.alive_user_compliance_info
+      new_user_compliance_info = old_user_compliance_info.dup
+      new_user_compliance_info.country = "India"
+      ActiveRecord::Base.transaction do
+        old_user_compliance_info.mark_deleted!
+        new_user_compliance_info.save!
+      end
+
+      visit settings_payments_path
+
+      expect(page).to have_field("PayPal Email")
+      expect(page).to_not have_button("Switch to direct deposit")
+    end
+
     it "keeps the creator on PayPal payouts if the bank account info is not entered" do
       @user.update!(payment_address: "paypal-gr-integspecs@gumroad.com")
 
@@ -2209,7 +2225,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
-        fill_in("Bank Identifier Code (BIC)", with: "BCDEFGHI123")
+        fill_in("Bank Identifier Code (BIC)", with: "BCDEPHM1123")
         fill_in("Account #", with: "01567890123456789")
         fill_in("Confirm account #", with: "01567890123456789")
         expect(page).to have_content("Must exactly match the name on your bank account")
