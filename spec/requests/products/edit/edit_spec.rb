@@ -775,10 +775,10 @@ describe("Product Edit Scenario", type: :system, js: true) do
       expect(page).not_to have_text("Publicly show the number of sales on your product page")
     end
 
-    it "doesn't show the option to change currency code for membership products" do
+    it "shows the option to change currency code for membership products" do
       visit "/products/#{@membership_product.unique_permalink}/edit"
       wait_for_ajax
-      expect(page).not_to have_select("Currency", visible: :all)
+      expect(page).to have_select("Currency", visible: :all)
     end
   end
 

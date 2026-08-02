@@ -486,6 +486,33 @@ describe("Product Edit Memberships", type: :system, js: true) do
         ]
       end
 
+      describe "display currency" do
+        before do
+          @product = create(:membership_product_with_preset_tiered_pricing, user: seller)
+        end
+
+        it "changes the display currency from a tier amount input and re-denominates all tier prices on save" do
+          visit edit_link_path(@product.unique_permalink)
+
+          within tier_rows[0] do
+            select "€", from: "Currency", visible: false
+          end
+
+          # The selector drives the single product-wide currency, so the other tier follows.
+          within tier_rows[1] do
+            expect(page).to have_select("Currency", selected: "€", visible: false)
+          end
+
+          save_change
+
+          expect(@product.reload.price_currency_type).to eq "eur"
+          first_tier = @product.tiers.find_by!(name: "First Tier")
+          second_tier = @product.tiers.find_by!(name: "Second Tier")
+          expect(first_tier.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents).to eq 300
+          expect(second_tier.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents).to eq 500
+        end
+      end
+
       it "does not allow to save if not all tiers have the same recurrences enabled" do
         visit edit_link_path(@product.unique_permalink)
 
