@@ -94,9 +94,18 @@ class ProfilePresenter
       # the virtual default products section (only possible when the creator has no saved
       # sections), replace the tabs with a single tab that points at it. Any leftover saved tabs
       # can't reference real sections here - there are none.
-      if include_default_products_section &&
-         sections_props[:sections].any? { _1[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
-        tabs = [{ name: ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME, sections: [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID] }]
+      if include_default_products_section
+        if sections_props[:sections].any? { _1[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+          tabs = [{ name: ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME, sections: [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID] }]
+        else
+          # Sections can also exist while no tab references any of them (the editor can persist an
+          # empty tab); serve one tab pointing at every saved section. Fires only when no tab would
+          # render anything, and sorts by id because the query has no ORDER BY and this is user-visible.
+          section_ids = sections_props[:sections].map { _1[:id] }.sort_by { ObfuscateIds.decrypt(_1) }
+          if section_ids.any? && tabs.none? { |tab| tab[:sections].intersect?(section_ids) }
+            tabs = [{ name: tabs.first&.dig(:name) || ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME, sections: section_ids }]
+          end
+        end
       end
       {
         **sections_props,
