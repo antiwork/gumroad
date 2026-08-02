@@ -53,7 +53,13 @@ Taxonomy.find_or_create_by!(slug: "photoshop", parent: mockups)
 Taxonomy.find_or_create_by!(slug: "illustrator", parent: mockups)
 Taxonomy.find_or_create_by!(slug: "canva", parent: mockups)
 Taxonomy.find_or_create_by!(slug: "indesign", parent: mockups)
-Taxonomy.find_or_create_by!(slug: "fonts", parent: design)
+fonts = Taxonomy.find_or_create_by!(slug: "fonts", parent: design)
+[
+  { name: "format", label: "Format", value_type: "enum", values: ["OTF", "TTF", "WOFF2"], position: 0 },
+  { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "App embedding"], position: 1 },
+  { name: "variable_font", label: "Variable font", value_type: "boolean", values: [], position: 2 },
+  { name: "styles", label: "Styles", value_type: "number", values: [], position: 3 },
+].each { TaxonomyAttribute.find_or_create_by!(taxonomy: fonts, name: _1[:name]) { |attribute| attribute.assign_attributes(_1) } }
 branding = Taxonomy.find_or_create_by!(slug: "branding", parent: design)
 Taxonomy.find_or_create_by!(slug: "logos", parent: branding)
 Taxonomy.find_or_create_by!(slug: "business-cards", parent: branding)

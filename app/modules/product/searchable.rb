@@ -10,6 +10,7 @@ module Product::Searchable
   MAX_NUMBER_OF_PROFILE_TAGS = 200
   RECOMMENDED_PRODUCTS_PER_PAGE = 9
   MAX_NUMBER_OF_FILETYPES = 8
+  MAX_NUMBER_OF_TAXONOMY_ATTRIBUTE_FILTERS = 20
   MAX_OFFER_CODES_IN_INDEX = 300
   MAX_PRICE_FILTER_CENTS = 10_000_000_000 # $100,000,000 — upper bound for ES long-typed price range filters
 
@@ -21,7 +22,7 @@ module Product::Searchable
     "deleted_at" => ["is_recommendable", "is_alive_on_profile", "is_alive"],
     "banned_at" => ["is_recommendable", "is_alive_on_profile", "is_alive"],
     "max_purchase_count" => ["is_recommendable"],
-    "taxonomy_id" => ["taxonomy_id", "is_recommendable"],
+    "taxonomy_id" => ["taxonomy_id", "taxonomy_attribute_filters", "is_recommendable"],
     "content_updated_at" => "content_updated_at",
     "archived" => ["is_recommendable", "is_alive_on_profile"],
     "is_in_preorder_state" => "is_preorder",
@@ -54,6 +55,7 @@ module Product::Searchable
     past_year_fee_cents
     staff_picked_at
     offer_codes
+    taxonomy_attribute_filters
   ] + ATTRIBUTE_TO_SEARCH_FIELDS_MAP.values.flatten)
 
   MAX_PARTIAL_SEARCH_RESULTS = 5
@@ -157,6 +159,7 @@ module Product::Searchable
         indexes :offer_codes, type: :text do
           indexes :code, type: :keyword, ignore_above: 256
         end
+        indexes :taxonomy_attribute_filters, type: :keyword
       end
 
       after_create :enqueue_search_index!
@@ -251,6 +254,12 @@ module Product::Searchable
             if params[:filetypes]
               must do
                 terms "filetypes.keyword" => Array.wrap(params[:filetypes])
+              end
+            end
+
+            if params[:taxonomy_attribute_filters]
+              must do
+                terms taxonomy_attribute_filters: Array.wrap(params[:taxonomy_attribute_filters])
               end
             end
 
@@ -367,6 +376,13 @@ module Product::Searchable
           terms do
             field "tags.keyword"
             size tags_aggregation_size
+          end
+        end
+
+        aggregation "taxonomy_attribute_filters" do
+          terms do
+            field "taxonomy_attribute_filters"
+            size MAX_NUMBER_OF_TAXONOMY_ATTRIBUTE_FILTERS
           end
         end
 
@@ -524,6 +540,7 @@ module Product::Searchable
       when "past_year_fee_cents" then total_fee_cents(created_after: 1.year.ago)
       when "staff_picked_at" then staff_picked_at
       when "offer_codes" then product_and_universal_offer_codes.last(MAX_OFFER_CODES_IN_INDEX).map(&:code)
+      when "taxonomy_attribute_filters" then taxonomy_attribute_filter_tokens
       else
         raise "Error building search properties. #{attribute_key} is not a valid property"
       end

@@ -476,6 +476,7 @@ class LinksController < ApplicationController
           :custom_button_text_option,
           :custom_summary,
           :custom_attributes,
+          :taxonomy_attribute_values,
           :file_attributes,
           :covers,
           :refund_policy,
@@ -505,6 +506,7 @@ class LinksController < ApplicationController
         @product.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
         @product.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
         @product.save_custom_attributes((product_permitted_params[:custom_attributes] || []).filter { _1[:name].present? || _1[:description].present? })
+        @product.save_taxonomy_attribute_values(product_permitted_params[:taxonomy_attribute_values]) unless product_permitted_params[:taxonomy_attribute_values].nil?
         @product.save_tags!(product_permitted_params[:tags] || [])
         @product.reorder_previews((product_permitted_params[:covers] || []).map.with_index.to_h)
         if !current_seller.account_level_refund_policy_enabled?

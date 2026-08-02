@@ -15,8 +15,28 @@ module SearchProducts
         total: product_response.results.total,
         tags_data: product_response.aggregations["tags.keyword"]["buckets"].to_a.map(&:to_h),
         filetypes_data: filetype_response.aggregations["filetypes.keyword"]["buckets"].to_a.map(&:to_h),
+        taxonomy_attributes_data: taxonomy_attributes_data(params, product_response),
         products: product_response.records
       }
+    end
+
+    def taxonomy_attributes_data(params, product_response)
+      return [] if params[:taxonomy_id].blank?
+
+      attributes = Taxonomy.find_by(id: params[:taxonomy_id])&.taxonomy_attributes&.select(&:filterable?) || []
+      return [] if attributes.empty?
+
+      buckets_by_key = product_response.aggregations["taxonomy_attribute_filters"]["buckets"].to_a.index_by { |bucket| bucket["key"] }
+      attributes.filter_map do |attribute|
+        filters = attribute.normalized_options.filter_map do |option|
+          token = attribute.filter_token_for(option)
+          bucket = buckets_by_key[token]
+          { key: token, label: option, doc_count: bucket ? bucket["doc_count"] : 0 } if token
+        end
+        next if filters.empty?
+
+        { name: attribute.name, label: attribute.label, filters: }
+      end
     end
 
     # Value-shape coercions only. Split out from format_search_params! so callers that build
@@ -34,12 +54,16 @@ module SearchProducts
         search_params[:filetypes] = search_params[:filetypes].split(",").map { |f| f.squish.downcase }
       end
 
+      if search_params[:taxonomy_attribute_filters].is_a?(String)
+        search_params[:taxonomy_attribute_filters] = search_params[:taxonomy_attribute_filters].split(",").map(&:squish)
+      end
+
       if search_params[:ids].is_a?(String)
         search_params[:ids] = search_params[:ids].split(",").map(&:strip)
       end
 
       # These reach ES as `terms` clauses, which reject a nested structure with a 400.
-      %i[tags filetypes ids].each do |key|
+      %i[tags filetypes ids taxonomy_attribute_filters].each do |key|
         next unless search_params[key].is_a?(Array)
 
         search_params[key] = search_params[key].filter_map { |element| scalar_search_value(element)&.to_s }

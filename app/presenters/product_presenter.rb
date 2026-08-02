@@ -149,6 +149,7 @@ class ProductPresenter
         custom_receipt_text: product.custom_receipt_text,
         custom_receipt_text_max_length: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH,
         custom_attributes: product.custom_attributes,
+        taxonomy_attribute_values: product.taxonomy_attribute_values,
         file_attributes: product.file_info_for_product_page.map { { name: _1.to_s, value: _2 } },
         max_purchase_count: product.max_purchase_count,
         quantity_enabled: product.quantity_enabled,
@@ -302,6 +303,15 @@ class ProductPresenter
         }
       end,
       taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_category_picker,
+      taxonomy_attributes: TaxonomyAttribute.active_ordered.includes(:taxonomy).map do |attribute|
+        {
+          taxonomy_id: attribute.taxonomy_id.to_s,
+          name: attribute.name,
+          label: attribute.label,
+          value_type: attribute.value_type,
+          values: attribute.normalized_options,
+        }
+      end,
       earliest_membership_price_change_date: BaseVariant::MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE.days.from_now.in_time_zone(product.user.timezone).iso8601,
       custom_domain_verification_status:,
       sales_count_for_inventory: product.max_purchase_count? ? product.sales_count_for_inventory : 0,
