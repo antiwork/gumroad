@@ -404,7 +404,13 @@ class Checkout::BuyerCurrencyEligibility
     # directly. A mixed cart still falls back — one direct line beside one quoted line needs
     # the per-line basis tracked in gumroad-private#1298.
     if listed_in_buyer_currency.any?
-      return fallback(:listed_currency_is_buyer_currency) unless listed_in_buyer_currency.all? && self.class.listed_currency_direct_charge_enabled?(seller)
+      # The direct lane charges `displayed_price_cents`, which is denominated in the
+      # purchase's snapshotted currency, not the product's current one. A seller who
+      # repriced from USD to the buyer's currency after the purchase was built would
+      # otherwise get USD-denominated cents sent as the buyer's currency.
+      return fallback(:listed_currency_is_buyer_currency) unless listed_in_buyer_currency.all? &&
+                                                                purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
+                                                                self.class.listed_currency_direct_charge_enabled?(seller)
 
       # No settlement gate applies: the marker only predicts FX quote failures, and this
       # lane mints no quote because the listed price is already in the buyer's currency.

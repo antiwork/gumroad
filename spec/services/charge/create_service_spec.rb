@@ -426,6 +426,55 @@ describe Charge::CreateService, :vcr do
       end
     end
 
+    it "refuses a direct-listed charge that arrives with a quote token" do
+      seller = create(:user, disable_buyer_local_currency: false)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      stripe_chargeable = instance_double(StripeChargeablePaymentMethod)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp", get_chargeable_for: stripe_chargeable)
+      product = create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 15_00)
+      purchase = create(:purchase,
+                        link: product,
+                        seller:,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        ip_address: "203.0.113.1",
+                        displayed_price_cents: 15_00,
+                        displayed_price_currency_type: Currency::CAD,
+                        rate_converted_to_usd: "0.8",
+                        price_cents: 18_75,
+                        total_transaction_cents: 18_75)
+
+      expect(Charge::DirectListedPresentment).not_to receive(:new)
+      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+      Charge::CreateService.new(order:,
+                                seller:,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents: 18_75,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: false,
+                                off_session: false,
+                                statement_description: seller.name_or_username,
+                                params: { buyer_currency_quote: "stale-token" }).perform
+
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      end
+    end
+
     it "converts the e-mandate cap into the charge currency on a buyer-presentment charge" do
       # The cap is registered with this charge and then governs every future off-session
       # renewal. Stripe reads mandate_options[:amount] in the mandate's own currency, and the

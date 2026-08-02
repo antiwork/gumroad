@@ -298,7 +298,15 @@ class Charge::CreateService
       raise BuyerCurrencyQuoteInvalid, "charge-time eligibility fallback (#{eligibility_decision.fallback_reason}) with a quote token present"
     end
 
-    return direct_listed_presentment_processor_args(eligibility_decision) if eligibility_decision.direct_listed_amount?
+    if eligibility_decision.direct_listed_amount?
+      # This lane mints no quote, so the display side never issues a token for a cart that
+      # reaches it. A token here was issued for a different cart, and its locked total is not
+      # the listed price about to be charged — fail closed like the fallback case above rather
+      # than charge past a total the buyer confirmed.
+      raise BuyerCurrencyQuoteInvalid, "direct-listed presentment with a quote token present" if quote_token.present?
+
+      return direct_listed_presentment_processor_args(eligibility_decision)
+    end
 
     if quote_token.blank?
       Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: missing_buyer_currency_quote")

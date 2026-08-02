@@ -370,11 +370,21 @@ describe Checkout::BuyerCurrencyEligibility do
 
   it "allows direct listed charging when every purchase is priced in the buyer's own currency" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
-    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                     displayed_price_currency_type: Currency::CAD)
 
     expect(decision).to be_eligible
     expect(decision.currency).to eq(Currency::CAD)
     expect(decision.direct_listed_amount?).to eq(true)
+  end
+
+  it "falls back when the product was repriced into the buyer's currency after the purchase was built" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                     displayed_price_currency_type: Currency::USD)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
   end
 
   it "falls back for a mixed cart with a buyer-currency product and a quoted product" do
@@ -411,7 +421,8 @@ describe Checkout::BuyerCurrencyEligibility do
   it "does not apply the FX-quote settlement gate to direct listed charging" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
-    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                     displayed_price_currency_type: Currency::CAD)
 
     expect(decision).to be_eligible
     expect(decision.direct_listed_amount?).to eq(true)
