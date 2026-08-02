@@ -191,24 +191,10 @@ class ContentModeration::ContentExtractor
       value.downcase.start_with?("data:image/")
     end
 
-    # The moderations endpoint only reads base64 raster data URLs, so inline
-    # images are reshaped into what it can actually review — otherwise a static
-    # payload it rejects blocks the page on every save, forever.
-    #
-    #   - A percent-encoded raster payload is re-encoded to base64: same bytes,
-    #     the encoding the endpoint demands.
-    #   - An SVG is unreviewable by the endpoint in ANY encoding, but it is not
-    #     opaque either: it renders only in image contexts here (img/srcset/
-    #     poster/CSS — the sanitizer leaves `data:` nowhere navigable), where
-    #     browsers block external loads. So an SVG that provably references no
-    #     other image is reviewed as what it is — markup — through the text
-    #     strategies, and never sent to the image endpoint.
-    #   - Everything else (an SVG that could smuggle raster content, unsupported
-    #     raster types, malformed payloads) stays in the image list unchanged:
-    #     the classifier refuses it and the page blocks, now with copy naming
-    #     the image rather than a fictitious temporary outage.
-    #
-    # Returns [image_urls, svg_sources].
+    # Reshape inline images into what the moderations endpoint can review:
+    # percent-encoded rasters re-encode to base64, provably self-contained SVGs
+    # move to text review, and everything else stays on the image list where the
+    # classifier fails it closed. Returns [image_urls, svg_sources].
     def partition_page_images(urls)
       image_urls = []
       svg_sources = []
@@ -219,7 +205,9 @@ class ContentModeration::ContentExtractor
           image_urls << url
         elsif parsed[:content_type] == "image/svg+xml"
           source = decode_data_url_payload(parsed).force_encoding(Encoding::UTF_8).scrub
-          if self_contained_svg?(source)
+          # The byte cap sits BEFORE the parse so an attacker-sized payload never
+          # reaches Nokogiri/Crass; over-cap SVGs fail closed as images.
+          if source.bytesize <= MAX_PAGE_SVG_TEXT_LENGTH && self_contained_svg?(source)
             svg_sources << source
           else
             image_urls << url
@@ -234,12 +222,16 @@ class ContentModeration::ContentExtractor
       [image_urls.uniq, svg_sources.uniq]
     end
 
+    # `;base64` is a positional flag — the last parameter before the comma —
+    # not a bag-of-params member; honoring it elsewhere decodes a payload
+    # browsers read literally into garbage.
     def parse_data_url(url)
       header, comma, payload = url.partition(",")
       return nil if comma.empty?
 
-      parameters = header.delete_prefix("data:").split(";").map { |part| part.strip.downcase }
-      { content_type: parameters.shift.to_s, base64: parameters.include?("base64"), payload: }
+      parameters = header.sub(/\Adata:/i, "").split(";").map { |part| part.strip.downcase }
+      base64 = parameters.length > 1 && parameters.last == "base64"
+      { content_type: parameters.shift.to_s, base64:, payload: }
     end
 
     # Percent-decoding is lenient — a `%` not followed by two hex digits stays
@@ -256,13 +248,9 @@ class ContentModeration::ContentExtractor
     end
 
     # Whether this SVG can be reviewed as pure markup: it must be unable to pull
-    # in ANY other image. Checked structurally where references can actually
-    # load (href, CSS url()), plus a blanket rejection of `data:` anywhere in
-    # decoded attribute or text content so a nested payload can't ride in
-    # through a vector the structural checks didn't model (SMIL values, future
-    # attributes). Every rejection fails closed — the SVG stays on the image
-    # list and blocks the page — so being over-strict here costs a seller an
-    # actionable error, never a bypass.
+    # in ANY other image. Structural checks where references can load (href,
+    # CSS), plus a blanket `data:` rejection over decoded content for vectors
+    # they don't model (SMIL values, future attributes). Fails closed.
     def self_contained_svg?(source)
       document = Nokogiri::XML(source)
       return false unless document.root&.name&.casecmp?("svg")
@@ -300,20 +288,25 @@ class ContentModeration::ContentExtractor
     end
 
     # Whether every reference this CSS can load points inside the document.
-    # Token-level, so CSS escapes (`\64 ata:`) read as a browser reads them;
-    # @import is rejected outright — a self-contained SVG has no business
-    # importing a stylesheet.
+    # Token-level, so CSS escapes (`\64 ata:`) read as a browser reads them.
+    # Strings are treated as references too: inside any function because
+    # image-set()/cross-fade()/etc. load string arguments as URLs (and new image
+    # functions keep appearing), and at the top level any scheme'd string is
+    # rejected so a var() indirection can't smuggle one in. Fails closed.
     def css_references_all_local?(css)
-      tokens = Crass::Tokenizer.tokenize(css.to_s)
-      tokens.each_with_index do |token, index|
+      depth = 0
+      Crass::Tokenizer.tokenize(css.to_s).each do |token|
         case token[:node]
+        when :function, :"("
+          depth += 1
+        when :")"
+          depth -= 1
         when :url, :bad_url
           return false unless token[:value].to_s.strip.start_with?("#")
-        when :function
-          if token[:name].to_s.casecmp?("url")
-            argument = tokens[(index + 1)..].find { |candidate| candidate[:node] != :whitespace }
-            return false unless argument && argument[:node] == :string && argument[:value].to_s.strip.start_with?("#")
-          end
+        when :string, :bad_string
+          value = token[:value].to_s.strip
+          return false if depth > 0 && !value.start_with?("#")
+          return false if value.match?(/\A[a-z][a-z0-9+.-]*:/i)
         when :at_keyword
           return false if token[:value].to_s.casecmp?("import")
         end

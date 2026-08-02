@@ -34,11 +34,9 @@ class ContentModeration::Strategies::ClassifierStrategy
   # "we asked and OpenAI would not answer" (nil). Both leave the image
   # unmoderated and both block a full-coverage caller; only the logs differ.
   UNREACHED = :unreached
-  # An image whose PAYLOAD the endpoint deterministically refuses (a non-base64
-  # or unsupported-format data URL, or an oversized inline image). Blocks a
-  # full-coverage caller just like nil/UNREACHED, but must not be reported as
-  # transient: the input is static, so "try again later" is a promise that can
-  # never come true (gumroad-private#1695).
+  # A payload the endpoint deterministically refuses. Blocks a full-coverage
+  # caller like nil/UNREACHED, but must not read as transient: the input is
+  # static, so "try again later" can never come true.
   UNSUPPORTED = :unsupported
   PERMANENT_REJECTION_CODES = %w[invalid_data_url invalid_image_format].freeze
   UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."

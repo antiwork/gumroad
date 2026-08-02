@@ -314,33 +314,48 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(result.text).to include("buy illegal things")
     end
 
+    # Each rejection example pairs its unsafe SVG with a safe one on the same
+    # page: the safe SVG must move to text while the unsafe one stays an image,
+    # so a parser that stopped discriminating fails these instead of passing
+    # them vacuously.
+    def safe_svg_img
+      %(<img src="data:image/svg+xml;base64,#{Base64.strict_encode64(%(<svg xmlns="http://www.w3.org/2000/svg"><text>safeharbor</text></svg>))}">)
+    end
+
     it "keeps an SVG that embeds another image on the image list, where full coverage blocks it" do
       # An SVG-as-image renders embedded data: payloads, so excluding this one
       # would display a raster no strategy ever reviewed.
       svg = %(<svg xmlns="http://www.w3.org/2000/svg"><image href="data:image/png;base64,AAAA"/></svg>)
       url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
-      page = page_for(custom_html: %(<img src="#{url}">))
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
 
       result = extractor.extract_from_page(page)
 
       expect(result.image_urls).to eq([url])
       expect(result.text).not_to include("AAAA")
+      expect(result.text).to include("safeharbor")
     end
 
     it "keeps an SVG whose foreignObject could render arbitrary HTML" do
       svg = %(<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div>anything</div></foreignObject></svg>)
       url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
-      page = page_for(custom_html: %(<img src="#{url}">))
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
 
-      expect(extractor.extract_from_page(page).image_urls).to eq([url])
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
     end
 
     it "keeps an SVG that references anything outside itself" do
       svg = %(<svg xmlns="http://www.w3.org/2000/svg"><use href="https://elsewhere.example/sprite.svg#icon"/></svg>)
       url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
-      page = page_for(custom_html: %(<img src="#{url}">))
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
 
-      expect(extractor.extract_from_page(page).image_urls).to eq([url])
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
     end
 
     it "keeps an SVG whose CSS hides a nested payload behind an escape" do
@@ -348,24 +363,103 @@ RSpec.describe ContentModeration::ContentExtractor do
       # does for the page's own CSS applies inside a candidate SVG.
       svg = %(<svg xmlns="http://www.w3.org/2000/svg"><rect style="mask-image:url(\\64 ata:image/png;base64,AAAA)"/></svg>)
       url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
-      page = page_for(custom_html: %(<img src="#{url}">))
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
 
-      expect(extractor.extract_from_page(page).image_urls).to eq([url])
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG whose CSS loads a nested payload as an image-set string" do
+      # image-set()/cross-fade() take plain string arguments that load as URLs;
+      # only :url tokens were rejected before, so this bypassed image review.
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><rect style="mask-image:image-set('data:image/png;base64,AAAA' 1x)"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG whose image-set string hides the payload behind a CSS escape" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><rect style="mask-image:image-set('\\64 ata:image/png;base64,AAAA' 1x)"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG whose image-set string references a remote image" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><rect style="mask-image:image-set('https://elsewhere.example/x.png' 1x)"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
     end
 
     it "keeps an SVG that hides a nested payload behind an XML entity" do
       svg = %(<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="href" to="&#100;ata:image/png;base64,AAAA"/></svg>)
       url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
-      page = page_for(custom_html: %(<img src="#{url}">))
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
 
-      expect(extractor.extract_from_page(page).image_urls).to eq([url])
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
     end
 
     it "keeps a data URL whose payload is not the SVG it claims to be" do
       url = "data:image/svg+xml;base64,#{Base64.strict_encode64("<html><p>not svg</p></html>")}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG whose decoded source exceeds the SVG text budget, without parsing it" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><text>#{"padding " * 700}</text></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "re-encodes a raster data URL whose scheme is uppercase, which browsers render all the same" do
+      # A case-sensitive scheme strip left `DATA:` payloads with a content type
+      # of "data:image/png" — never re-encoded, permanently unreviewable.
+      page = page_for(custom_html: %(<img src="DATA:image/png,PNG%20payload">))
+
+      expect(extractor.extract_from_page(page).image_urls).to eq([
+                                                                   "data:image/png;base64,#{Base64.strict_encode64("PNG payload")}",
+                                                                 ])
+    end
+
+    it "honors ;base64 only as the final parameter, as the data-URL grammar positions it" do
+      # With `;base64;charset=utf-8` the payload is literal, not base64; reading
+      # the flag positionally keeps this SVG reviewable instead of decoding it
+      # into garbage that blocks the page forever.
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><text>positional flag</text></svg>)
+      url = "data:image/svg+xml;base64;charset=utf-8,#{CGI.escape(svg).gsub("+", "%20")}"
       page = page_for(custom_html: %(<img src="#{url}">))
 
-      expect(extractor.extract_from_page(page).image_urls).to eq([url])
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to be_empty
+      expect(result.text).to include("positional flag")
     end
 
     it "extracts images painted by CSS, which render without any img tag" do
