@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 module WithProductFiles
+  # Each fingerprint comparison is a synchronous S3 HEAD on the save request, so
+  # the scan is capped. A true match past the cap re-creates a row — the rare
+  # pre-existing duplicate — which beats an unbounded save stalling or timing out.
+  FINGERPRINT_MATCH_MAX_CANDIDATES = 5
+
   def self.included(base)
     base.class_eval do
       has_many :product_files
@@ -291,7 +296,9 @@ module WithProductFiles
       submitted_etag = s3_etag_for(submitted_file)
       return if submitted_etag.blank?
 
-      preferred_product_files(candidates, existing_files).detect { s3_etag_for(_1) == submitted_etag }
+      preferred_product_files(candidates, existing_files)
+        .first(FINGERPRINT_MATCH_MAX_CANDIDATES)
+        .detect { s3_etag_for(_1) == submitted_etag }
     end
 
     def preferred_product_file(candidates, existing_files)

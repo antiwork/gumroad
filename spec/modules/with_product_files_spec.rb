@@ -380,6 +380,23 @@ describe WithProductFiles do
         expect(requested_keys).to include(s3_key_for(original_url), s3_key_for(new_url))
       end
 
+      it "caps S3 fingerprint lookups when many same-size files share no matching ETag" do
+        product = create(:product)
+        cap = WithProductFiles::FINGERPRINT_MATCH_MAX_CANDIDATES
+        new_url = "#{S3_BASE_URL}attachments/fingerprint-capped/original/guide.pdf"
+        candidate_urls = (1..cap + 2).map { "#{S3_BASE_URL}attachments/fingerprint-candidate-#{_1}/original/guide.pdf" }
+        candidate_urls.each { create(:product_file, link: product, url: _1, size: 123) }
+        requested_keys = stub_s3_etags(
+          candidate_urls.each_with_index.to_h { |url, i| [s3_key_for(url), "\"candidate-etag-#{i}\""] }
+            .merge(s3_key_for(new_url) => "\"submitted-etag\""),
+        )
+
+        expect do
+          product.save_files!([{ external_id: SecureRandom.uuid, url: new_url, size: 123, display_name: "Guide" }], delete_missing: false)
+        end.to change { product.product_files.alive.count }.by(1)
+        expect(requested_keys.size).to eq(cap + 1)
+      end
+
       it "prefers a referenced duplicate file row before the oldest matching row" do
         product = create(:product)
         url = "#{S3_BASE_URL}attachments/referenced/original/guide.pdf"
