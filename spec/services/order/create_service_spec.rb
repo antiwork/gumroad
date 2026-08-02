@@ -112,6 +112,16 @@ describe Order::CreateService, :vcr do
         expect(order.purchases.order(:id).first.purchase_offer_code_discount.once_per_cart).to be(true)
       end
 
+      it "reserves one capped use for the whole cart" do
+        offer_code.update!(max_purchase_count: 1)
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([offer_code.id, nil])
+        expect(offer_code.quantity_left).to eq(0)
+      end
+
       it "deducts the fixed amount once when the winning line has multiple units" do
         params[:line_items].first.merge!(quantity: 2, perceived_price_cents: price_1 * 2 - 1_00)
 
