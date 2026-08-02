@@ -389,6 +389,33 @@ describe PaypalChargeProcessor, :vcr do
         end
       end
 
+      # NONE is in PayPal's documented outcome set: the case closed without a decision. It
+      # takes the same leave-formalized path, but must not be reported as unrecognized —
+      # that would bury a real unknown-code alert in expected noise.
+      it "leaves the dispute unresolved when outcome_code is NONE without reporting it as unrecognized" do
+        purchase = create(:purchase_with_balance, stripe_transaction_id: "6Y199803HH2987814")
+        purchase.update_attribute(:chargeback_date, Time.current)
+        described_class.handle_order_events(paypal_dispute_event("CUSTOMER.DISPUTE.CREATED"))
+        expect(purchase.reload.dispute.formalized?).to be(true)
+
+        event_info = paypal_dispute_event("CUSTOMER.DISPUTE.RESOLVED", dispute_outcome: { "outcome_code" => "NONE" })
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          /closed without a decision/,
+          hash_including(paypal_dispute_id: "PP-D-4805", outcome_code: "NONE")
+        )
+
+        expect do
+          described_class.handle_order_events(event_info)
+        end.to_not raise_error
+
+        dispute = purchase.reload.dispute
+        expect(dispute.formalized?).to be(true)
+        expect(dispute.lost?).to be(false)
+        expect(dispute.won?).to be(false)
+        expect(purchase.chargeback_reversed).to be_falsey
+      end
+
       it "marks dispute as LOST for the other documented buyer-favour outcome codes" do
         %w[RESOLVED_WITH_PAYOUT ACCEPTED].each do |outcome_code|
           purchase = create(:purchase_with_balance, stripe_transaction_id: "6Y199803HH2987814")
