@@ -617,6 +617,60 @@ describe Purchase::Blockable do
 
       expect(purchase.processor_rule_refusal).to eq({ error: "could not read the processor outcome" })
     end
+
+    context "when a newer attempt is not the refusal" do
+      def outcome_for(type:, reason:, predicate: nil)
+        outcome = { "type" => type, "reason" => reason, "network_status" => "not_sent_to_network" }
+        outcome["rule"] = { "id" => "ssr_test", "predicate" => predicate } if predicate
+        { "outcome" => outcome }
+      end
+
+      before do
+        # Newest first, since the scan walks created_at DESC.
+        create(:purchase, email: buyer_email, stripe_transaction_id: "ch_newer", created_at: 1.hour.ago)
+        purchase.update_column(:created_at, 3.hours.ago)
+      end
+
+      # The refusal that stranded the #1739 buyer sat behind later attempts that died for unrelated
+      # reasons, so stopping at the newest attempt reports a clean unblock over a live rule.
+      it "finds a rule refusal sitting behind a newer ordinary decline" do
+        allow(Stripe::Charge).to receive(:retrieve) do |params, _opts|
+          params[:id] == "ch_newer" ? outcome_for(type: "issuer_declined", reason: "generic_decline")
+                                    : outcome_for(type: "blocked", reason: "rule", predicate: ":card_count_for_email_daily: > 3")
+        end
+
+        refusal = purchase.processor_rule_refusal
+
+        expect(refusal[:kind]).to eq(:velocity_rule)
+        expect(refusal[:charge_id]).to eq("ch_latest")
+      end
+
+      it "stops at a newer authorized attempt, because the buyer already got through" do
+        allow(Stripe::Charge).to receive(:retrieve) do |params, _opts|
+          params[:id] == "ch_newer" ? outcome_for(type: "authorized", reason: "approved_by_network")
+                                    : outcome_for(type: "blocked", reason: "rule", predicate: ":card_count_for_email_daily: > 3")
+        end
+
+        expect(purchase.processor_rule_refusal).to be_nil
+      end
+
+      it "reads at most PROCESSOR_REFUSAL_MAX_READS charges" do
+        create_list(:purchase, 5, email: buyer_email, stripe_transaction_id: "ch_extra", created_at: 2.hours.ago)
+        allow(Stripe::Charge).to receive(:retrieve).and_return(outcome_for(type: "issuer_declined", reason: "generic_decline"))
+
+        purchase.processor_rule_refusal
+
+        expect(Stripe::Charge).to have_received(:retrieve).exactly(Purchase::Blockable::PROCESSOR_REFUSAL_MAX_READS).times
+      end
+    end
+
+    it "names the charge in both notes so the agent can inspect it" do
+      velocity = { kind: :velocity_rule, charge_id: "ch_blocked", network_status: "not_sent_to_network" }
+      platform = { kind: :platform_block, charge_id: "ch_blocked" }
+
+      expect(purchase.processor_rule_refusal_note(velocity)).to include("ch_blocked")
+      expect(purchase.processor_rule_refusal_note(platform)).to include("ch_blocked")
+    end
   end
 
   describe "#unblock_buyer!" do

@@ -241,6 +241,13 @@ module Purchase::Blockable
   # tight budget and never retries: a slow processor must not turn a done unblock into a timeout.
   PROCESSOR_REFUSAL_READ_OPTS = { read_timeout: 5, open_timeout: 2, max_network_retries: 0 }.freeze
 
+  # A refusal can sit behind newer attempts that failed for unrelated reasons (an issuer decline, a
+  # card the buyer mistyped), so the newest attempt alone is not enough. These bound the scan: the
+  # buyer in gumroad-private#1739 made 16 attempts in the window, and an unblock that has already
+  # committed cannot spend that many round trips.
+  PROCESSOR_REFUSAL_MAX_READS = 4
+  PROCESSOR_REFUSAL_TIME_BUDGET = 8.seconds
+
   # Whether the PROCESSOR is still refusing this buyer on one of our own risk rules, read from the
   # processor rather than inferred from our rows.
   #
@@ -262,32 +269,45 @@ module Purchase::Blockable
   #
   # Returns nil when nothing on the processor side is holding them.
   def processor_rule_refusal
-    latest = Purchase.where(email:)
-                     .where(created_at: PROCESSOR_REFUSAL_WINDOW.ago..)
-                     .where(charge_processor_id: StripeChargeProcessor.charge_processor_id)
-                     .where.not(stripe_transaction_id: nil)
-                     .order(created_at: :desc)
-                     .reject { |purchase| purchase.merchant_account&.is_a_stripe_connect_account? }
-                     .first
-    return if latest.nil?
+    candidates = Purchase.where(email:)
+                         .where(created_at: PROCESSOR_REFUSAL_WINDOW.ago..)
+                         .where(charge_processor_id: StripeChargeProcessor.charge_processor_id)
+                         .where.not(stripe_transaction_id: nil)
+                         .order(created_at: :desc)
+                         .reject { |purchase| purchase.merchant_account&.is_a_stripe_connect_account? }
+                         .first(PROCESSOR_REFUSAL_MAX_READS)
+    return if candidates.empty?
 
-    charge = Stripe::Charge.retrieve({ id: latest.stripe_transaction_id, expand: %w[outcome.rule] },
-                                     PROCESSOR_REFUSAL_READ_OPTS)
-    outcome = charge["outcome"] || {}
-    return unless outcome["type"] == "blocked" && outcome["reason"] == "rule"
+    deadline = Time.current + PROCESSOR_REFUSAL_TIME_BUDGET
 
-    rule = outcome["rule"]
-    predicate = rule.is_a?(String) ? nil : rule&.[]("predicate")
+    candidates.each do |candidate|
+      charge = Stripe::Charge.retrieve({ id: candidate.stripe_transaction_id, expand: %w[outcome.rule] },
+                                       PROCESSOR_REFUSAL_READ_OPTS)
+      outcome = charge["outcome"] || {}
 
-    {
-      kind: value_list_predicate?(predicate) ? :platform_block : :velocity_rule,
-      charge_id: latest.stripe_transaction_id,
-      network_status: outcome["network_status"],
-      risk_level: outcome["risk_level"],
-      seller_message: outcome["seller_message"],
-      predicate:,
-      attempted_at: latest.created_at,
-    }
+      # A later authorised attempt means the buyer already got through, so an earlier refusal in the
+      # window is spent — stop rather than warning about a rule that is no longer holding them.
+      return if outcome["type"] == "authorized"
+
+      if outcome["type"] == "blocked" && outcome["reason"] == "rule"
+        rule = outcome["rule"]
+        predicate = rule.is_a?(String) ? nil : rule&.[]("predicate")
+
+        return {
+          kind: value_list_predicate?(predicate) ? :platform_block : :velocity_rule,
+          charge_id: candidate.stripe_transaction_id,
+          network_status: outcome["network_status"],
+          risk_level: outcome["risk_level"],
+          seller_message: outcome["seller_message"],
+          predicate:,
+          attempted_at: candidate.created_at,
+        }
+      end
+
+      break if Time.current >= deadline
+    end
+
+    nil
   rescue StandardError => e
     # The unblock has already committed, so this read must never raise: report that the check could
     # not run rather than either failing the unblock or returning a nil that reads as "not blocked".
@@ -302,12 +322,12 @@ module Purchase::Blockable
 
     case refusal[:kind]
     when :platform_block
-      "Stripe's latest refusal was the block just cleared, not a separate limit. Radar picks the " \
-        "removal up within a few minutes — have the buyer retry shortly."
+      "Stripe's latest refusal (#{refusal[:charge_id]}) was the block just cleared, not a separate " \
+        "limit. Radar picks the removal up within a few minutes — have the buyer retry shortly."
     else
-      "Stripe is still refusing this buyer on one of our risk rules (#{refusal[:network_status]}), " \
-        "and there is nothing left for us to lift: it clears on its own about a day after their " \
-        "first attempt. Do not promise an immediate retry."
+      "Stripe is still refusing this buyer on one of our risk rules (charge #{refusal[:charge_id]}, " \
+        "#{refusal[:network_status]}), and there is nothing left for us to lift: it clears on its " \
+        "own about a day after their first attempt. Do not promise an immediate retry."
     end
   end
 
@@ -316,8 +336,6 @@ module Purchase::Blockable
 
     PLATFORM_BLOCK_VALUE_LISTS.any? { |list| predicate.include?(list) }
   end
-
-
 
   private def buyer_blockable_values
     @_buyer_blockable_values ||= blockable_values_for([self, *sibling_buyer_purchases], extra_fingerprints: [recent_stripe_fingerprint], widened_emails: false)
