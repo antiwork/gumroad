@@ -566,6 +566,73 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [])
   end
 
+  test "destination_balance_drift_error when Gumroad's held-at-Stripe balances sum NEGATIVE fails the payout instead of silently subtracting the debit from the wire amount" do
+    setup_drift
+    @eur_balance.update!(holding_amount_cents: -728_50)
+    StripeTransferInternallyToCreator.expects(:transfer_funds_to_account).never
+
+    errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
+
+    assert_includes errors.first, "Destination ledger is negative"
+    assert_includes errors.first, "-72850 eur cents"
+    assert_equal "failed", @payment.reload.state
+    assert_equal Payment::FailureReason::INSUFFICIENT_FUNDS, @payment.failure_reason
+  end
+
+  test "destination_balance_drift_error when the held-at-Stripe balances sum negative names the offending balance rows so the reader does not have to find them by hand" do
+    setup_drift
+    @eur_balance.update!(holding_amount_cents: -728_50)
+
+    errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
+
+    assert_includes errors.first, "Balance #{@eur_balance.id}: -72850"
+  end
+
+  test "destination_balance_drift_error when the held-at-Stripe balances sum negative does not consult Stripe because a negative ledger is drift on its own evidence" do
+    setup_drift
+    @eur_balance.update!(holding_amount_cents: -728_50)
+    Stripe::Balance.expects(:retrieve).never
+
+    StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
+  end
+
+  test "destination_balance_drift_error when a negative row is outweighed by healthy rows so the set still sums positive falls through to the ordinary Stripe comparison" do
+    setup_drift
+    residue = create_balance(user: @user, merchant_account: @eur_merchant_account, holding_currency: Currency::EUR, holding_amount_cents: -728_50, date: Date.today - 1)
+    StripePayoutProcessor.stubs(:get_payout_details).returns([@eur_merchant_account, [], [@eur_balance, residue]])
+    stub_stripe_balance(available: 1_000_00, pending: 0)
+
+    errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance, residue])
+
+    assert_empty errors
+    # 1_356_14 - 728_50: the residue is still netted off the wire, which is exactly why the set has
+    # to sum positive for this path to be safe.
+    assert_equal 627_64, @payment.amount_cents
+  end
+
+  test "destination_balance_drift_error when the held-at-Stripe balances sum negative on a KRW account still fails because the negative check needs no cross-currency comparison" do
+    setup_drift
+    krw_merchant_account = create_merchant_account(user: @user, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::KRW, country: "KR")
+    krw_balance = create_balance(user: @user, merchant_account: krw_merchant_account, holding_currency: Currency::KRW, holding_amount_cents: -100_00)
+    StripePayoutProcessor.stubs(:get_payout_details).returns([krw_merchant_account, [], [krw_balance]])
+    Stripe::Balance.expects(:retrieve).never
+
+    errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [krw_balance])
+
+    assert_includes errors.first, "Destination ledger is negative"
+    assert_equal Payment::FailureReason::INSUFFICIENT_FUNDS, @payment.reload.failure_reason
+  end
+
+  test "destination_balance_drift_error when the held-at-Stripe balances sum to exactly zero skips the drift check because there is nothing to settle either way" do
+    setup_drift
+    @eur_balance.update!(holding_amount_cents: 0)
+    Stripe::Balance.expects(:retrieve).never
+
+    errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
+
+    assert_empty errors
+  end
+
   test "destination_balance_drift_error when the destination merchant account is KRW skips the drift check because KRW subunit conventions differ between Gumroad and Stripe" do
     setup_drift
     krw_merchant_account = create_merchant_account(user: @user, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::KRW, country: "KR")
