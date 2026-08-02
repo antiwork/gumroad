@@ -40,25 +40,30 @@ class AddCybersecurityTaxonomy < ActiveRecord::Migration[7.1]
     bust_taxonomy_cache
   end
 
-  # Only removes a subcategory that is empty. A seller who categorised a product here between
-  # deploy and rollback would otherwise have it silently repointed by the foreign key, and losing
-  # a seller's categorisation is worse than leaving a row behind.
+  # Only removes rows no product points at. A seller who categorised a product here between deploy
+  # and rollback would otherwise lose that categorisation, which is worse than leaving a row behind.
   def down
     category = Taxonomy.find_by_path([PARENT_SLUG, CATEGORY_SLUG])
     return if category.nil?
 
-    rows = Taxonomy.where(parent: category).to_a << category
-    in_use = Link.where(taxonomy_id: rows.map(&:id)).distinct.pluck(:taxonomy_id)
+    children = Taxonomy.where(parent: category).to_a
+    in_use = Link.where(taxonomy_id: children.map(&:id) << category.id).distinct.pluck(:taxonomy_id)
 
-    if in_use.any?
-      say "Keeping #{in_use.size} cybersecurity taxonomy row(s) still referenced by products"
-      rows.reject! { |row| in_use.include?(row.id) }
+    removable = children.reject { |child| in_use.include?(child.id) }
+    # The parent goes only once nothing is left under it. Dropping it while a kept child still
+    # hangs off it would orphan that child, putting the seller's product on a taxonomy path that
+    # no longer resolves to a root — worse than the rollback simply leaving the subtree in place.
+    keep_category = in_use.include?(category.id) || removable.size < children.size
+
+    if keep_category
+      say "Keeping the cybersecurity category and #{children.size - removable.size} subcategory(ies) still referenced by products"
     end
 
     # destroy, not delete_all: closure_tree maintains taxonomy_hierarchies through callbacks, and
     # a bare delete would strand those rows, leaving self_and_ancestors wrong for the subtree.
     # Children first, so the parent is childless by the time it goes.
-    rows.sort_by { |row| row.slug == CATEGORY_SLUG ? 1 : 0 }.each(&:destroy!)
+    removable.each(&:destroy!)
+    category.destroy! unless keep_category
     bust_taxonomy_cache
   end
 

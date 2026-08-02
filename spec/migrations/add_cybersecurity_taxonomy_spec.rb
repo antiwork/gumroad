@@ -98,6 +98,34 @@ describe AddCybersecurityTaxonomy do
       expect(Taxonomy.find_by_path(%w[software-development cybersecurity penetration-testing])).to be_nil
     end
 
+    it "keeps the parent category when a child is kept, so the child is never orphaned" do
+      migration.up
+      in_use = Taxonomy.find_by_path(%w[software-development cybersecurity network-security])
+      create(:product, taxonomy: in_use)
+
+      migration.down
+
+      # Removing the parent while keeping the child would leave the seller's product on a path
+      # that no longer resolves up to a root.
+      category = Taxonomy.find_by_path([described_class::PARENT_SLUG, described_class::CATEGORY_SLUG])
+      expect(category).to be_present
+      expect(in_use.reload.parent).to eq(category)
+      expect(in_use.self_and_ancestors.pluck(:slug)).to eq(
+        %w[network-security cybersecurity software-development]
+      )
+    end
+
+    it "keeps the category when a product points at the category itself" do
+      migration.up
+      category = Taxonomy.find_by_path([described_class::PARENT_SLUG, described_class::CATEGORY_SLUG])
+      create(:product, taxonomy: category)
+
+      migration.down
+
+      expect(category.reload).to be_present
+      expect(Taxonomy.where(parent: category)).to be_empty
+    end
+
     it "does nothing when the category is already absent" do
       expect { migration.down }.not_to raise_error
     end
