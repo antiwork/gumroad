@@ -333,9 +333,9 @@ describe UrlRedirectsController, inertia: true do
           it "lists every member purchase's own download page" do
             get :download_page, params: { id: purchase.url_redirect.token }
 
-            bundle_products = response.parsed_body.dig("props", "content", "bundle_products")
-            expect(bundle_products.map { _1["name"] }).to match_array(purchase.product_purchases.map { _1.link.name })
-            expect(bundle_products.map { _1["url"] })
+            bundle_products = inertia.props.dig(:content, :bundle_products)
+            expect(bundle_products.map { _1[:name] }).to match_array(purchase.product_purchases.map { _1.link.name })
+            expect(bundle_products.map { _1[:url] })
               .to match_array(purchase.product_purchases.map { _1.url_redirect.download_page_url })
           end
         end
