@@ -9468,6 +9468,12 @@ describe StripeMerchantAccountManager, :vcr do
           end
 
           it "still sends the company phone once it can be accepted" do
+            # A business payload walks the account's people, which the cassette does not carry.
+            # Stubbed rather than recorded because the assertion below is about the account
+            # update's own payload, not about anything the person calls return.
+            allow(Stripe::Account).to receive(:list_persons).and_return("data" => [])
+            allow(Stripe::Account).to receive(:create_person).and_return(Stripe::Person.construct_from(id: "person_phone_holdback"))
+            allow(Stripe::Account).to receive(:update_person)
             allow(Stripe::Account).to receive(:update)
             subject.update_account(user, passphrase: "1234")
             expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
