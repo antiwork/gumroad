@@ -1899,9 +1899,6 @@ describe("computeTipsForLines", () => {
 });
 
 describe("counting submits refused by client-side validation", () => {
-  // A refused submit usually goes "input" → "input" (Pay is clicked from "input"), so the status
-  // type alone cannot tell PaymentForm's scroll-to-first-error effect that a submit just failed.
-  // validationFailedCount is that signal (gumroad-private#1703).
   const requiredFieldProduct = product({
     customFields: [{ id: "field-1", type: "text", name: "Nickname", required: true, collect_per_product: false }],
   });

@@ -73,8 +73,6 @@ describe("Product checkout - custom fields", type: :system, js: true) do
     add_to_cart(@product)
     check_out(@product, error: true)
 
-    # The refused Pay click must scroll to and focus the first unmet field — a red border alone
-    # is invisible when the field is above the fold on mobile.
     expect(page).to have_field("your nickname", focused: true)
     expect(page).to have_text("This field is required.", count: 2)
     expect(page).to have_text("Please accept the Terms and Conditions.")

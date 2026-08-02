@@ -1817,16 +1817,16 @@ export const PaymentForm = ({
     action: "checkout",
   });
 
-  // Keyed on validationFailedCount as well as the status type: a submit refused by validation
-  // usually goes "input" → "input" (Pay is clicked from "input"), so the type alone never
-  // re-fires this effect and the only feedback was the field's red border — invisible when a
-  // required custom field sits above a scrolled-down Pay button (gumroad-private#1703).
+  // Keyed on validationFailedCount because a refused submit goes "input" → "input" (see the
+  // State field's comment in payment.ts).
   React.useEffect(() => {
-    if (!paymentFormRef.current || state.status.type !== "input") return;
+    if (state.status.type !== "input") return;
     // Stripe nests the input inside aria-invalid, hence the second query selector.
-    const invalidInput = paymentFormRef.current.querySelector<HTMLInputElement>(
-      "input[aria-invalid=true], [aria-invalid=true] input",
-    );
+    const selector = "input[aria-invalid=true], [aria-invalid=true] input";
+    // Tip and gift errors flag inputs outside the payment form, hence the document fallback.
+    const invalidInput =
+      paymentFormRef.current?.querySelector<HTMLInputElement>(selector) ??
+      document.querySelector<HTMLInputElement>(selector);
     if (!invalidInput) return;
     invalidInput.scrollIntoView({ behavior: "smooth", block: "center" });
     invalidInput.focus({ preventScroll: true });

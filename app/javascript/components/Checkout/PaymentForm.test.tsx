@@ -158,6 +158,26 @@ describe("PaymentForm validation-failure feedback", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
+  it("falls back to a document-wide scan for fields flagged outside the payment form (tip, gift)", () => {
+    // The tip and gift inputs render as siblings of PaymentForm in Checkout/index.tsx.
+    const tipField = <input aria-label="Custom tip" aria-invalid="true" data-testid="tip-outside-payment-form" />;
+    render(
+      <LoggedInUserProvider value={null}>
+        {tipField}
+        <StateContext.Provider
+          value={[state({ status: { type: "input", errors: new Set(["tip"]) }, validationFailedCount: 1 }), vi.fn()]}
+        >
+          <PaymentForm />
+        </StateContext.Provider>
+      </LoggedInUserProvider>,
+    );
+
+    const field = screen.getByTestId("tip-outside-payment-form");
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.instances[0]).toBe(field);
+    expect(document.activeElement).toBe(field);
+  });
+
   it("tells the buyer the flagged field is required", () => {
     const { rerenderWith } = renderPaymentForm(state());
     expect(screen.queryByText("This field is required.")).toBeNull();
