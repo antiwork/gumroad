@@ -36,8 +36,11 @@ describe BestOfferCodeService do
         let(:url_code) { url_offer_code.code }
 
         it "returns the url_code" do
-          expect(subject.result&.dig(:code)).to eq(url_offer_code.code)
-          expect(subject.result&.dig(:valid)).to be(true)
+          result = subject.result
+
+          expect(result&.dig(:code)).to eq(url_offer_code.code)
+          expect(result&.dig(:valid)).to be(true)
+          expect(result).not_to have_key(:offer_code)
         end
       end
 
@@ -133,6 +136,42 @@ describe BestOfferCodeService do
           it "returns the default_code" do
             expect(subject.result&.dig(:code)).to eq(default_offer_code.code)
             expect(subject.result&.dig(:valid)).to be(true)
+          end
+        end
+
+        context "when the buyer qualifies for a better ownership tier" do
+          let(:buyer) { create(:user) }
+          let(:url_offer_code) do
+            create(
+              :tiered_offer_code,
+              user: seller,
+              products: [product],
+              code: "URL_TIERED"
+            )
+          end
+          let(:default_offer_code) do
+            create(
+              :offer_code,
+              products: [product],
+              code: "DEFAULT20",
+              amount_cents: nil,
+              amount_percentage: 20,
+              currency_type: product.price_currency_type
+            )
+          end
+          let(:url_code) { url_offer_code.code }
+
+          subject { described_class.new(product:, url_code:, quantity:, buyer:) }
+
+          before do
+            create(:purchase, purchaser: buyer, link: product, seller:, created_at: 13.months.ago)
+          end
+
+          it "compares the percentage resolved for the buyer" do
+            expect(subject.result).to include(
+              code: url_offer_code.code,
+              discount: include(percents: 50)
+            )
           end
         end
 

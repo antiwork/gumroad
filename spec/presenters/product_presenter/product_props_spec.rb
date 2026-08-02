@@ -141,7 +141,6 @@ describe ProductPresenter::ProductProps do
             discount_code: {
               valid: true,
               code: "sxsw",
-              offer_code:,
               discount: {
                 type: "fixed",
                 cents: 100,
