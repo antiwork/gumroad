@@ -17,6 +17,18 @@ describe OfferCodeDiscountComputingService do
     }
   end
 
+  it "reads quantities from each entry, not from the caller's choice of hash key" do
+    index_keyed = {
+      "0" => { quantity: "3", permalink: product.unique_permalink },
+      "1" => { quantity: "2", permalink: product2.unique_permalink }
+    }
+
+    result = OfferCodeDiscountComputingService.new(universal_offer_code.code, index_keyed).process
+
+    expect(result[:error_code]).to be_nil
+    expect(result[:products_data].keys).to match_array([product.unique_permalink, product2.unique_permalink])
+  end
+
   it "returns invalid error_code in result when offer code is invalid" do
     result = OfferCodeDiscountComputingService.new("invalid_offer_code", products_data).process
 

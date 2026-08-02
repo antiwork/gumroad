@@ -21,7 +21,7 @@ class OfferCodeDiscountComputingService
     products_data = {}
 
     links.each do |link|
-      purchase_quantity = products[link.unique_permalink][:quantity].to_i
+      purchase_quantity = quantities_by_permalink[link.unique_permalink].to_i
       offer_code = find_applicable_offer_code_for(link)
 
       next unless offer_code
@@ -58,6 +58,15 @@ class OfferCodeDiscountComputingService
           .where(unique_permalink: permalinks)
           .index_by(&:unique_permalink)
         permalinks.filter_map { by_permalink[it] }
+      end
+    end
+
+    # Callers key `products` however they like — by permalink, or by cart index.
+    # Only the permalink inside each entry is authoritative, so never index
+    # `products` by permalink: doing so 500s on any index-keyed payload.
+    def quantities_by_permalink
+      @_quantities_by_permalink ||= products.values.each_with_object({}) do |entry, acc|
+        acc[entry[:permalink]] = entry[:quantity]
       end
     end
 
