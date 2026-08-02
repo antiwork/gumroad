@@ -28,7 +28,7 @@ module SearchProducts
 
       buckets_by_key = product_response.aggregations["taxonomy_attribute_filters"]["buckets"].to_a.index_by { |bucket| bucket["key"] }
       attributes.filter_map do |attribute|
-        filters = attribute.normalized_options.filter_map do |option|
+        filters = attribute.filter_options.filter_map do |option|
           token = attribute.filter_token_for(option)
           bucket = buckets_by_key[token]
           { key: token, label: option, doc_count: bucket ? bucket["doc_count"] : 0 } if token
@@ -56,6 +56,8 @@ module SearchProducts
 
       if search_params[:taxonomy_attribute_filters].is_a?(String)
         search_params[:taxonomy_attribute_filters] = search_params[:taxonomy_attribute_filters].split(",").map(&:squish)
+      elsif search_params[:taxonomy_attribute_filters].is_a?(ActionController::Parameters) || search_params[:taxonomy_attribute_filters].is_a?(Hash)
+        search_params[:taxonomy_attribute_filters] = search_params[:taxonomy_attribute_filters].values.filter_map { |filter| scalar_search_value(filter)&.to_s&.squish }
       end
 
       if search_params[:ids].is_a?(String)

@@ -10,7 +10,7 @@ class CreateTaxonomyAttributes < ActiveRecord::Migration[7.1]
 
   def up
     create_table :taxonomy_attributes do |t|
-      t.references :taxonomy, null: false, foreign_key: true
+      t.references :taxonomy, null: false
       t.string :name, null: false
       t.string :label, null: false
       t.string :value_type, null: false

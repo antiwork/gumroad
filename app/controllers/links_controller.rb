@@ -246,7 +246,7 @@ class LinksController < ApplicationController
         user.present? &&
         search_params[:section_id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID &&
         user.seller_profile_sections.on_profile.none?
-      return render json: { total: 0, filetypes_data: [], tags_data: [], products: [] } if user.nil? || (section.nil? && !searching_default_products_section && search_params[:ids].blank?)
+      return render json: { total: 0, filetypes_data: [], tags_data: [], taxonomy_attributes_data: [], products: [] } if user.nil? || (section.nil? && !searching_default_products_section && search_params[:ids].blank?)
       search_params[:section] = section if section
       search_params[:is_alive_on_profile] = true
       search_params[:user_id] = user.id

@@ -36,13 +36,11 @@ class TaxonomyAttribute < ApplicationRecord
     "#{name}:#{normalized_value.parameterize(separator: "_")}"
   end
 
-  def label_for_token_value(token_value)
-    return token_value.titleize if value_type == "boolean"
-
-    normalized_options.find { |option| option.parameterize(separator: "_") == token_value } || token_value
-  end
-
   def normalized_options
     Array(values).map(&:to_s)
+  end
+
+  def filter_options
+    value_type == "boolean" ? %w[true false] : normalized_options
   end
 end

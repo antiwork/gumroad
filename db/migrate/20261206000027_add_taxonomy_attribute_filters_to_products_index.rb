@@ -11,4 +11,7 @@ class AddTaxonomyAttributeFiltersToProductsIndex < ActiveRecord::Migration[7.1]
       }
     )
   end
+
+  def down
+  end
 end
