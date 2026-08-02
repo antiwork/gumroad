@@ -48,6 +48,11 @@ module WithProductFiles
     # alive before the save (SaveFilesService's clear-all target).
     existing_files = alive_product_files.dup
     existing_files_by_external_id = existing_files.index_by(&:external_id)
+    # Rows the payload names by their canonical id are off-limits as dedupe
+    # targets: a retry can't name an id the client never received, so a named
+    # row means the client wants BOTH — the picker re-embedding a file already
+    # on the product, or a sibling version attaching it.
+    directly_addressed_files = files_params.filter_map { existing_files_by_external_id[_1[:external_id] || _1[:id]] }
     should_check_pdf_stampability = false
     file_id_mappings = {}
 
@@ -56,7 +61,7 @@ module WithProductFiles
 
       begin
         external_id = file_params.delete(:external_id) || file_params.delete(:id)
-        product_file = existing_files_by_external_id[external_id] || reusable_product_file_for(file_params, existing_files) || product_files.build(url: file_params[:url])
+        product_file = existing_files_by_external_id[external_id] || reusable_product_file_for(file_params, existing_files - directly_addressed_files) || product_files.build(url: file_params[:url])
         files_to_keep << product_file
 
         # Defaults to true so that usage sites of this function continue
@@ -278,10 +283,14 @@ module WithProductFiles
       submitted_file = ProductFile.new(url: file_params[:url])
       return unless submitted_file.s3?
 
+      # Candidate check first: a genuinely new attach almost never has one, and
+      # every S3 HEAD below is a synchronous round trip on the save request.
+      candidates = existing_files.select { _1.s3? && _1.size == size }
+      return if candidates.empty?
+
       submitted_etag = s3_etag_for(submitted_file)
       return if submitted_etag.blank?
 
-      candidates = existing_files.select { _1.s3? && _1.size == size }
       preferred_product_files(candidates, existing_files).detect { s3_etag_for(_1) == submitted_etag }
     end
 

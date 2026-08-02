@@ -3384,7 +3384,6 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_no_difference -> { @product.product_files.alive.count } do
       post :update, params: @params.merge(
         files: [
-          { id: product_file.external_id, url: original_url, size: 123, display_name: "Guide" },
           { id: temporary_id, url: retried_url, size: 123, display_name: "Guide" },
         ]
       ), format: :json
@@ -3420,8 +3419,31 @@ class LinksControllerUpdateTest < ActionController::TestCase
     new_file = @product.product_files.alive.find_by!(url: new_url)
     assert_equal new_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
     assert_not_equal product_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
-    assert_includes requested_keys, s3_key_for(original_url)
-    assert_includes requested_keys, s3_key_for(new_url)
+    # The payload names the original by its canonical id, so it is excluded
+    # from the candidate pool and never fingerprinted.
+    assert_not_includes requested_keys, s3_key_for(original_url)
+  end
+
+  test "PUT update keeps a deliberate second embed of an already-attached url" do
+    clear_setup_files
+    url = "#{S3_BASE_URL}attachments/deliberate/original/guide.pdf"
+    product_file = create_product_file(link: @product, url:, size: 123, display_name: "Guide")
+    temporary_id = SecureRandom.uuid
+
+    # The "Existing product files" picker names the canonical row AND adds a
+    # second entry for the same url. A retry can never name an id the client
+    # never received, so naming it means the seller wants both rows.
+    assert_difference -> { @product.product_files.alive.count }, 1 do
+      post :update, params: @params.merge(
+        files: [
+          { id: product_file.external_id, url:, size: 123, display_name: "Guide" },
+          { id: temporary_id, url:, size: 123, display_name: "Guide" },
+        ]
+      ), format: :json
+    end
+
+    assert_response :success
+    assert_not_equal product_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
   end
 
   test "PUT update preserves correct s3 key for s3 files containing percent and ampersand" do
