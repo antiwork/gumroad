@@ -109,6 +109,25 @@ describe Page do
       described_class.new(pageable: user, slug: "about", title: "About", custom_html: "<p>Visible copy</p><marquee>hiddenFromSanitizer</marquee>").valid?
     end
 
+    it "sends a video's poster to the classifier and never the video file itself" do
+      # gumroad-private#1728: the video src rode along with the poster, and a
+      # file over OpenAI's limit then blocked the publish for good. Asserted at
+      # the save rather than on the extractor alone, because the poster has to
+      # survive the sanitizer and reach the strategy for the page to publish.
+      expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |text:, image_urls:, max_images:|
+        expect(image_urls).to eq(["https://cdn.example.com/frame.jpg"])
+        instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                        perform: strategy_result.new(status: "compliant", reasoning: []))
+      end
+
+      page = described_class.new(
+        pageable: user, slug: "about", title: "About",
+        custom_html: %(<video src="https://public-files.gumroad.com/clip.mov" poster="https://cdn.example.com/frame.jpg"></video>)
+      )
+
+      expect(page).to be_valid
+    end
+
     it "lets a seller unpublish a page without waiting on the moderation service" do
       page = described_class.create!(pageable: user, custom_html: "<p>Hand-lettered posters</p>")
       stub_strategies(blocklist: "flagged", reasons: ["Matched blocked word: forbidden"])
