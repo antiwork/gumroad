@@ -4,10 +4,9 @@ type ObserveElement = (element: Element, callback: (isIntersecting: boolean) => 
 
 const NodeVisibilityContext = React.createContext<ObserveElement | null>(null);
 
-// An element only works as an IntersectionObserver root while it is the thing that scrolls. When it
-// isn't, the page scrolls instead, target and root move together, and no further intersections are
-// ever generated — so observed nodes stay stuck at whatever they resolved to on mount. Reading the
-// computed overflow keeps this in step with the layout's own breakpoints instead of restating them.
+// An element only works as a root while it is the thing that scrolls: otherwise target and root move
+// together and no further intersections are ever generated. Reading the computed overflow keeps this
+// in step with the layout's own breakpoints instead of restating them.
 const scrollRootFor = (element: Element | null): Element | null => {
   if (!element) return null;
   const { overflowY } = getComputedStyle(element);
@@ -34,7 +33,7 @@ export const NodeVisibilityProvider = ({
   }, [scrollRef]);
 
   React.useEffect(() => {
-    if (root === undefined || typeof IntersectionObserver === "undefined") return;
+    if (root === undefined) return;
 
     const observer = new IntersectionObserver(
       (entries) => {

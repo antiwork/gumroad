@@ -97,9 +97,13 @@ describe("NodeVisibilityProvider", () => {
   it("observes against the viewport when the layout element does not scroll", () => {
     render(<Harness overflowY="visible" />);
 
-    // Rooting at a non-scrolling element makes target and root move together, so nodes below the
-    // initial rootMargin never intersect and stay blank for the session.
     expect(latest().root).toBeNull();
+  });
+
+  it("observes against the layout element when it scrolls with a persistent scrollbar", () => {
+    const { container } = render(<Harness overflowY="scroll" />);
+
+    expect(latest().root).toBe(container.firstElementChild);
   });
 
   it("keeps the prefetch window that makes virtualization invisible to the user", () => {
