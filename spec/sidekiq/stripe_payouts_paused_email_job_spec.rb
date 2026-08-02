@@ -65,6 +65,19 @@ describe StripePayoutsPausedEmailJob do
     end
   end
 
+  context "when the seller deactivated their account during the debounce window" do
+    before do
+      create(:balance, user:, amount_cents: 5_00, state: "unpaid")
+      user.update!(deleted_at: Time.current)
+    end
+
+    it "does not email a departed seller about a pause they can no longer act on" do
+      expect do
+        run
+      end.to_not have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review)
+    end
+  end
+
   context "when the pause resolved before the debounce window elapsed" do
     before { user.update!(payouts_paused_internally: false) }
 

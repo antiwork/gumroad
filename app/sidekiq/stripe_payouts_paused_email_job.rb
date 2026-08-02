@@ -26,16 +26,15 @@ class StripePayoutsPausedEmailJob
       # email now, so this stale job must not send (or we'd double-email).
       next unless merchant_account.stripe_payouts_pause_email_claim_token == claim_token
 
-      if user.payouts_paused_internally? && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
+      if user.payouts_paused_internally? && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE && user.account_active?
         if email_type == "under_review" && nothing_at_stake?(user)
-          # "Payouts paused, under review" tells a seller with no balance and no
-          # sales that something alarming happened to money they do not have and
-          # asks nothing of them — Stripe is only re-checking what it already
-          # has. Drop the claim rather than keeping it so a later webhook for
-          # this same sustained pause re-schedules: once the seller does have a
-          # sale or a balance, the notice becomes true and gets sent.
-          # "action_required" is deliberately still sent to this cohort — it is
-          # actionable and unblocks their first payout.
+          # Stripe is only re-checking data it already has, so a pause over an account with
+          # no balance and no sales withholds nothing and asks nothing. Clearing the claim
+          # (rather than marking it sent) is what lets a later account.updated for this same
+          # pause re-claim once the seller has stakes — no Gumroad-side event re-triggers it,
+          # so a seller who earns during a quiet pause learns from the payments settings page.
+          # Re-claim churn on each webhook is the accepted cost of that.
+          # action_required is exempt: it is actionable and unblocks their first payout.
           merchant_account.update!(stripe_payouts_pause_email_sent: nil, stripe_payouts_pause_email_claim_token: nil)
         else
           email_to_send = email_type
@@ -59,9 +58,6 @@ class StripePayoutsPausedEmailJob
   end
 
   private
-    # No money is being withheld: nothing has ever been earned and nothing is
-    # waiting to be paid out. A pause over an empty account changes nothing the
-    # seller can see or act on.
     def nothing_at_stake?(user)
       user.unpaid_balance_cents.zero? && !user.sales.all_success_states.exists?
     end
