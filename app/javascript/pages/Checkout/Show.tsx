@@ -1,5 +1,6 @@
 import { Head, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
+import { flushSync } from "react-dom";
 import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
@@ -340,7 +341,7 @@ const CheckoutIndexPage = () => {
   };
   const acceptOffer = () => {
     const newCart = getCartIfAccepted();
-    cartForm.setData({ cart: newCart });
+    flushSync(() => cartForm.setData({ cart: newCart }));
     // Synchronously, not via the passive effect below: completeOffer can dispatch "validate" in
     // the same tick, and a passive invalidation would run after it — submitting through a payment
     // configuration computed for the pre-offer cart. An accepted offer changes the cart's items,

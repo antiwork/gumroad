@@ -194,6 +194,7 @@ const getNonCodeDiscountedPrice = (cart: CartState, item: CartItem): DiscountedP
     const discounted = applyOfferCodeToCents(item.accepted_offer.discount, item.price) * item.quantity;
     if (discounted < applicable.price)
       applicable = { discount: { type: "cross-sell", value: item.accepted_offer.discount }, price: discounted };
+    return applicable;
   }
   if (item.product.ppp_details && !cart.rejectPppDiscount) {
     const pppDiscountedPrice = computeDiscountedPrice(item.price * item.quantity, null, item.product);

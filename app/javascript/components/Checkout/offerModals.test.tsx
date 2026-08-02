@@ -3,7 +3,13 @@ import { render } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { CartItem, CartState, CrossSell, Product } from "$app/components/Checkout/cartState";
+import {
+  getDiscountedPrice,
+  type CartItem,
+  type CartState,
+  type CrossSell,
+  type Product,
+} from "$app/components/Checkout/cartState";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { UpsellModal, type OfferedUpsell } from "$app/components/Checkout/UpsellModal";
 import {
@@ -303,5 +309,15 @@ describe("checkout offer modals", () => {
     );
 
     expect(view.getAllByText("$19").length).toBeGreaterThan(0);
+  });
+
+  it("uses the accepted cross-sell discount instead of PPP", () => {
+    const itemProduct = product({ ppp_details: { country: "LV", factor: 0.49, minimum_price: 0 } });
+    const item = cartItem(itemProduct, { accepted_offer: { id: "cross-sell-id", discount } });
+
+    expect(getDiscountedPrice({ items: [item], discountCodes: [] }, item)).toMatchObject({
+      discount: { type: "cross-sell" },
+      price: 900,
+    });
   });
 });
