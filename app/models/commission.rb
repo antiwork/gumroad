@@ -31,6 +31,10 @@ class Commission < ApplicationRecord
 
   def create_completion_purchase!
     return if is_completed?
+    # A completion still settling in the buyer's presentment currency leaves the commission
+    # in_progress with the buyer already charged, so `is_completed?` alone would charge them a
+    # second time here. A failed attempt stays retryable.
+    return if completion_purchase.present? && !completion_purchase.failed?
     ensure_deposit_is_chargeable!
     ensure_deliverable_is_attached!
 
@@ -82,6 +86,14 @@ class Commission < ApplicationRecord
 
   def completion_display_price_cents
     (deposit_purchase.displayed_price_cents / COMMISSION_DEPOSIT_PROPORTION) - deposit_purchase.displayed_price_cents
+  end
+
+  # Keyed on the completion charge, not the status alone: a completion still settling in the
+  # buyer's presentment currency leaves the commission in_progress with the buyer already
+  # charged, and the files justify that charge. Serialized to the seller UI so its affordances
+  # match what CommissionsController#update will accept.
+  def files_are_editable?
+    !is_completed? && completion_purchase.nil?
   end
 
   private
