@@ -273,6 +273,26 @@ describe Purchase::Risk do
           .and change { purchase.errors.full_messages }.from([]).to(["Your card was not charged. Please try again on a different browser and/or internet connection."])
       end
 
+      it "returns error when a blocked buyer ip_address lands in the seller's slots because the seller has none" do
+        seller = create(:user, current_sign_in_ip: nil, last_sign_in_ip: nil, account_created_ip: nil)
+        purchase = build(:purchase, link: create(:product, user: seller), seller:, ip_address: blocked_ip_address)
+        allow(seller).to receive(:compliant?).and_return(true)
+
+        expect do
+          purchase.check_for_fraud
+        end.to change { purchase.error_code }
+          .from(nil).to(PurchaseErrorCode::BLOCKED_IP_ADDRESS)
+      end
+
+      it "still lets a compliant seller sell when it is the seller's own ip_address that is blocked" do
+        seller = create(:user, current_sign_in_ip: blocked_ip_address)
+        purchase = build(:purchase, link: create(:product, user: seller), seller:)
+        allow(seller).to receive(:compliant?).and_return(true)
+
+        purchase.check_for_fraud
+        expect(purchase.error_code).to be_nil
+      end
+
       describe "subscription purchase" do
         let(:subscription) { create(:subscription) }
 
