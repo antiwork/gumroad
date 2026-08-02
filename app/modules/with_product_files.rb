@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 module WithProductFiles
+  # Each fingerprint comparison is a synchronous S3 HEAD on the save request, so
+  # the scan is capped. A true match past the cap re-creates a row — the rare
+  # pre-existing duplicate — which beats an unbounded save stalling or timing out.
+  FINGERPRINT_MATCH_MAX_CANDIDATES = 5
+
   def self.included(base)
     base.class_eval do
       has_many :product_files
@@ -43,17 +48,25 @@ module WithProductFiles
   def save_files!(files_params, rich_content_params = [], delete_missing: true)
     files_to_keep = []
     new_product_files = []
-    existing_files = alive_product_files
+    # dup: rows created below are appended to this list, and `alive_product_files`
+    # is memoized — mutating it in place grows callers' own snapshots of what was
+    # alive before the save (SaveFilesService's clear-all target).
+    existing_files = alive_product_files.dup
     existing_files_by_external_id = existing_files.index_by(&:external_id)
+    # Rows the payload names by their canonical id are off-limits as dedupe
+    # targets: a retry can't name an id the client never received, so a named
+    # row means the client wants BOTH — the picker re-embedding a file already
+    # on the product, or a sibling version attaching it.
+    directly_addressed_files = files_params.filter_map { existing_files_by_external_id[_1[:external_id] || _1[:id]] }
     should_check_pdf_stampability = false
-    rich_content_id_mappings = {}
+    file_id_mappings = {}
 
     files_params.each do |file_params|
       next unless file_params[:url].present?
 
       begin
         external_id = file_params.delete(:external_id) || file_params.delete(:id)
-        product_file = existing_files_by_external_id[external_id] || product_files.build(url: file_params[:url])
+        product_file = existing_files_by_external_id[external_id] || reusable_product_file_for(file_params, existing_files - directly_addressed_files) || product_files.build(url: file_params[:url])
         files_to_keep << product_file
 
         # Defaults to true so that usage sites of this function continue
@@ -75,7 +88,14 @@ module WithProductFiles
 
         should_check_pdf_stampability = true if product_file.saved_change_to_pdf_stamp_enabled? && product_file.pdf_stamp_enabled?
 
-        rich_content_id_mappings[external_id] = product_file.external_id if external_id != product_file.external_id
+        if external_id.present? && external_id != product_file.external_id
+          file_id_mappings[external_id] = product_file.external_id
+          existing_files_by_external_id[external_id] = product_file
+        end
+        unless existing_files_by_external_id.key?(product_file.external_id)
+          existing_files << product_file
+          existing_files_by_external_id[product_file.external_id] = product_file
+        end
         save_subtitle_files(product_file, subtitle_files_params)
         product_file.thumbnail.attach thumbnail_signed_id if thumbnail_signed_id.present?
       rescue ActiveRecord::RecordInvalid => e
@@ -86,8 +106,8 @@ module WithProductFiles
       end
     end
 
-    if rich_content_id_mappings.any?
-      rich_content_params.each { apply_rich_content_id_mappings(_1, rich_content_id_mappings) }
+    if file_id_mappings.any?
+      rich_content_params.each { apply_rich_content_id_mappings(_1, file_id_mappings) }
     end
 
     (existing_files - files_to_keep).each(&:mark_deleted) if delete_missing
@@ -97,6 +117,7 @@ module WithProductFiles
     link.content_updated_at = Time.current if new_product_files.any?(&:link_id?)
     PdfUnstampableNotifierJob.perform_in(5.seconds, link.id) if is_a?(Link) && should_check_pdf_stampability
     link&.enqueue_index_update_for(["filetypes"])
+    file_id_mappings
   end
 
   def transcode_videos!(queue: TranscodeVideoForStreamingWorker.sidekiq_options["queue"], first_batch_size: 30, additional_delay_after_first_batch: 5.minutes)
@@ -251,6 +272,64 @@ module WithProductFiles
     rescue ActiveRecord::RecordInvalid => e
       errors.add(:base, e.message)
       raise e
+    end
+
+    def reusable_product_file_for(file_params, existing_files)
+      matching_url_files = existing_files.select { _1.url == file_params[:url] }
+      return preferred_product_file(matching_url_files, existing_files) if matching_url_files.any?
+
+      matching_fingerprint_product_file_for(file_params, existing_files)
+    end
+
+    def matching_fingerprint_product_file_for(file_params, existing_files)
+      size = ActiveModel::Type::Integer.new.cast(file_params[:size])
+      return if size.nil?
+
+      submitted_file = ProductFile.new(url: file_params[:url])
+      return unless submitted_file.s3?
+
+      # Candidate check first: a genuinely new attach almost never has one, and
+      # every S3 HEAD below is a synchronous round trip on the save request.
+      candidates = existing_files.select { _1.s3? && _1.size == size }
+      return if candidates.empty?
+
+      submitted_etag = s3_etag_for(submitted_file)
+      return if submitted_etag.blank?
+
+      preferred_product_files(candidates, existing_files)
+        .first(FINGERPRINT_MATCH_MAX_CANDIDATES)
+        .detect { s3_etag_for(_1) == submitted_etag }
+    end
+
+    def preferred_product_file(candidates, existing_files)
+      preferred_product_files(candidates, existing_files).first
+    end
+
+    def preferred_product_files(candidates, existing_files)
+      return candidates if candidates.size <= 1
+
+      referenced_external_ids = referenced_product_file_external_ids(existing_files)
+      candidates.sort_by do |file|
+        [
+          referenced_external_ids.include?(file.external_id) ? 0 : 1,
+          file.created_at || Time.zone.at(0),
+          file.id || 0,
+        ]
+      end
+    end
+
+    def referenced_product_file_external_ids(existing_files)
+      file_ids = []
+      file_ids.concat(alive_rich_contents.flat_map(&:embedded_product_file_ids_in_order)) if respond_to?(:alive_rich_contents)
+      file_ids.concat(alive_variants.flat_map { _1.alive_rich_contents.flat_map(&:embedded_product_file_ids_in_order) }) if respond_to?(:alive_variants)
+
+      existing_files.select { file_ids.include?(_1.id) }.map(&:external_id).to_set
+    end
+
+    def s3_etag_for(product_file)
+      product_file.s3_object.etag
+    rescue Aws::S3::Errors::ServiceError, Seahorse::Client::NetworkingError
+      nil
     end
 
     # Private: associate_dropbox_file_and_product_file

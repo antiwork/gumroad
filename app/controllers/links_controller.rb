@@ -539,7 +539,8 @@ class LinksController < ApplicationController
         product_permitted_params[:variants].each { rich_content_params.push(*_1[:rich_content]) } if product_permitted_params[:variants].present?
         rich_content_params = rich_content_params.flat_map { _1[:description] = _1.dig(:description, :content) }
         rich_contents_to_keep = []
-        SaveFilesService.perform(@product, product_permitted_params, rich_content_params, contract: product_save_contract)
+        file_id_mappings = SaveFilesService.perform(@product, product_permitted_params, rich_content_params, contract: product_save_contract)
+        save_id_mappings[:files].merge!(file_id_mappings) if file_id_mappings.present?
         existing_rich_contents = @product.alive_rich_contents.to_a
         rich_content.each.with_index do |product_rich_content, index|
           rich_content = existing_rich_contents.find { |c| c.external_id === product_rich_content[:id] } || @product.alive_rich_contents.build
@@ -689,10 +690,10 @@ class LinksController < ApplicationController
       }
     end
 
-    # The editor needs the canonical ids of records this save created (pages
-    # and variants submitted under client-generated ids) so its next save
+    # The editor needs the canonical ids of records this save created (pages,
+    # variants, and files submitted under client-generated ids) so its next save
     # addresses them instead of re-creating them — without this, saving twice
-    # without a reload trips the content deletion guard.
+    # without a reload trips the content deletion guard or re-attaches files.
     render json: save_id_mappings_response
   end
 
@@ -1438,11 +1439,11 @@ class LinksController < ApplicationController
     end
 
     # Accumulates client id → canonical server id for records this save
-    # creates (pages and variants submitted under client-generated ids).
+    # creates (pages, variants, and files submitted under client-generated ids).
     # Returned to the editor so its next save addresses the created records
     # instead of re-creating them (which would trip the deletion guards).
     def save_id_mappings
-      @_save_id_mappings ||= { variants: {}, rich_content: {}, removed_file_embeds: {} }
+      @_save_id_mappings ||= { variants: {}, rich_content: {}, files: {}, removed_file_embeds: {} }
     end
 
     # Snapshot stored move/copy provenance before this save can repair or
@@ -1635,6 +1636,7 @@ class LinksController < ApplicationController
       {
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
+        file_id_mappings: save_id_mappings[:files],
         rich_content_removed_file_embed_ids: save_id_mappings[:removed_file_embeds],
         **content_updated_at_response,
         # The revision token for the state this save just committed
