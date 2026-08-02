@@ -182,10 +182,11 @@ class ContentModeration::ModerateRecordService
     ai_results = run_ai_strategies(content)
     flagged = ai_results.select { |r| r.status == "flagged" }
 
-    # Judgment-preset flags (spam, off-platform fulfillment) that didn't
-    # reproduce when PromptStrategy resampled them. They don't block the
-    # publish, but we still leave a note so the flag rate and false-positive
-    # rate can be measured against blocked publishes.
+    # Judgment-preset flags (spam, off-platform fulfillment, and adult content the
+    # model judged on text alone) that didn't reproduce when PromptStrategy
+    # resampled them. They don't block the publish, but we still leave a note so
+    # the flag rate and false-positive rate can be measured against blocked
+    # publishes.
     audit_reasons = ai_results.flat_map { |r| r.respond_to?(:audit_reasoning) ? Array(r.audit_reasoning) : [] }
 
     reasons = flagged.flat_map(&:reasoning)
@@ -515,10 +516,10 @@ class ContentModeration::ModerateRecordService
           # images come from our own uploads and their galleries are unbounded.
           max_images: entity_type == :page ? :all : ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE,
         ),
-        # `corroborate_judgment_flags` makes a spam or off-platform-fulfillment
-        # flag block only when it reproduces on resampling; a lone flag is
-        # returned as audit_reasoning and recorded as a non-blocking note
-        # instead (see `check` above).
+        # `corroborate_judgment_flags` makes a spam, off-platform-fulfillment, or
+        # text-only adult-content flag block only when it reproduces on resampling;
+        # a lone flag is returned as audit_reasoning and recorded as a non-blocking
+        # note instead (see `check` above).
         ContentModeration::Strategies::PromptStrategy.new(
           text: content.text,
           image_urls: content.image_urls,

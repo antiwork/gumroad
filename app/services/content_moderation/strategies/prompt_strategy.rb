@@ -239,7 +239,7 @@ class ContentModeration::Strategies::PromptStrategy
       next if result[:status] == "compliant"
       next unless passes_uncertainty_check?(result[:reasoning])
 
-      if corroborated_preset?(preset) && @corroborate_judgment_flags
+      if @corroborate_judgment_flags && corroborated_preset?(preset, images_sent: result[:images_sent])
         flagged_resamples, resamples_run = run_resamples(preset)
         corroborated = flagged_resamples == CORROBORATION_RESAMPLES
         Rails.logger.info(
@@ -286,18 +286,22 @@ class ContentModeration::Strategies::PromptStrategy
       list
     end
 
-    # An adult-content flag on a record that sent no image is an inference about
-    # words, not a reading of a picture, so it earns the same resampling as spam.
-    # `skip_images` covers presets that never send images; `sampled_image_urls`
-    # being empty covers a record that simply has none to send (a profile page's
-    # prose, a text-only listing) — and, because it is memoized per instance, a
-    # preset that fell back to text-only after OpenAI could not fetch an image
-    # still counts as having had images available.
-    def corroborated_preset?(preset)
+    # An adult-content flag the model reached without seeing a picture is an
+    # inference about words, not a reading of an image, so it earns the same
+    # resampling as spam. Keyed on what the flagging sample actually sent rather
+    # than on what the record holds: a preset that fell back to text-only because
+    # OpenAI could not fetch the image (see #evaluate_preset) also reasoned about
+    # prose alone, and blocking it on one sample is the bug this addresses.
+    def corroborated_preset?(preset, images_sent:)
       return true if CORROBORATED_PRESETS.include?(preset[:name])
       return false unless TEXT_ONLY_CORROBORATED_PRESETS.include?(preset[:name])
 
-      preset[:skip_images] || sampled_image_urls.empty?
+      !images_sent
+    end
+
+    # Whether a chat call built with this `skip_images` actually carried images.
+    def images_sent?(skip_images:)
+      !skip_images && sampled_image_urls.any?
     end
 
     # Re-runs a preset to see whether the initial flag reproduces, and
@@ -339,6 +343,7 @@ class ContentModeration::Strategies::PromptStrategy
       {
         status: parsed["flagged"] ? "flagged" : "compliant",
         reasoning: parsed["reasoning"].to_s,
+        images_sent: images_sent?(skip_images:),
       }
     rescue Faraday::BadRequestError => e
       # OpenAI regularly fails to download some of our image URLs (signed

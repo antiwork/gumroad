@@ -108,6 +108,38 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
       expect(result.audit_reasoning).to eq(["adult_content (uncorroborated, 1/2 samples flagged): adult prose"])
     end
 
+    # OpenAI regularly cannot fetch our signed image URLs and the preset retries
+    # text-only. That retry's verdict rests on prose, so it is resampled like any
+    # other text-only flag — keying on the record's images instead would leave this
+    # path hard-blocking on one sample, which is the same bug in a second place.
+    it "corroborates a flag from the text-only retry after OpenAI could not fetch the image" do
+      bad_request = Faraday::BadRequestError.new(
+        { status: 400, body: { "error" => { "code" => "invalid_image_url", "message" => "could not fetch" } } }
+      )
+      responses = [
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # text-only retry flags
+        json_chat_response(uncertain: false),                         # uncertainty check
+        json_chat_response(flagged: false, reasoning: ""),            # resample 1 decides
+        json_chat_response(flagged: false, reasoning: "")             # spam preset
+      ]
+      call = 0
+      allow(client).to receive(:chat) do
+        call += 1
+        raise bad_request if call == 1
+
+        responses[call - 2]
+      end
+
+      result = described_class.new(
+        text: "profile copy",
+        image_urls: ["https://files.gumroad.com/signed/cover.png"],
+        corroborate_judgment_flags: true
+      ).perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.audit_reasoning).to eq(["adult_content (uncorroborated, 1/2 samples flagged): adult prose"])
+    end
+
     it "leaves a text-only adult_content flag blocking when corroboration is not requested" do
       allow(client).to receive(:chat).and_return(
         json_chat_response(flagged: true, reasoning: "adult prose"),
