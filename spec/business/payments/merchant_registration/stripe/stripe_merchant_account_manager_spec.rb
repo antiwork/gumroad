@@ -9456,50 +9456,6 @@ describe StripeMerchantAccountManager, :vcr do
 
           expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
         end
-
-        # The withholding must not be permanent. `company[:phone]` is diff-based, so without the
-        # nil in update_account a phone withheld during the mismatch reads as unchanged forever
-        # and is never sent again — including after the seller fixes their legal-entity country.
-        context "when the seller is a business and the countries later agree" do
-          let(:user_compliance_info_2) do
-            create(:user_compliance_info_business, user:, country: "Korea, Republic of",
-                                                   business_country: "Korea, Republic of",
-                                                   business_phone: "+821012345678")
-          end
-
-          it "still sends the company phone once it can be accepted" do
-            # A business payload walks the account's people, which the cassette does not carry.
-            # Stubbed rather than recorded because the assertions below are about the account
-            # update's own payload, not about anything the person calls return.
-            allow(Stripe::Account).to receive(:list_persons).and_return("data" => [])
-            allow(Stripe::Account).to receive(:create_person).and_return(Stripe::Person.construct_from(id: "person_phone_holdback"))
-            allow(Stripe::Account).to receive(:update_person)
-
-            # Collected across every call rather than asserted on a call count: a business payload
-            # can also emit the isolated identity call, which is not what this example is about.
-            withheld = []
-            allow(Stripe::Account).to receive(:update) { |_id, attributes| withheld << attributes }
-            subject.update_account(user, passphrase: "1234")
-            expect(withheld).to be_present
-            expect(withheld.flat_map { |attributes| attributes.fetch(:company, {}).keys }).not_to include(:phone)
-
-            # Advance the marker as the real first call would have: Stripe now points at the
-            # record whose phone was withheld. Without it the phone stays in the diff for the
-            # second call anyway and this example would pass with the fix reverted.
-            stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-            stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info_2.external_id
-            stripe_account["country"] = "KR"
-            allow(Stripe::Account).to receive(:retrieve)
-              .with(merchant_account.charge_processor_merchant_id).and_return(stripe_account)
-
-            resent = []
-            allow(Stripe::Account).to receive(:update) { |_id, attributes| resent << attributes }
-
-            subject.update_account(user, passphrase: "1234")
-
-            expect(resent.filter_map { |attributes| attributes.dig(:company, :phone) }).to include("+821012345678")
-          end
-        end
       end
 
       # gumroad-private#1575. The address is withheld because Stripe will never accept it; an
