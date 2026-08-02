@@ -168,9 +168,12 @@ class ContentModeration::ContentExtractor
     # refuses them and counts them unmoderated, which blocks the page, where
     # dropping them here would publish it.
     def page_image_urls(document)
-      sources = document.css("img[src], video[poster]").flat_map do |node|
-        [node["src"], node["poster"]]
-      end
+      # Each attribute is read only off the element it belongs to: a <video src poster> matched
+      # by the old combined selector also yielded its src, sending the video file to the image
+      # classifier. Anything over 20 MB is rejected, and a rejection counts against full
+      # coverage, so an oversized video blocked the page behind "try again in a few minutes".
+      sources = document.css("img[src]").map { |node| node["src"] }
+      sources += document.css("video[poster]").map { |node| node["poster"] }
       sources += document.css("img[srcset], source[srcset]").flat_map do |node|
         srcset_urls(node["srcset"])
       end

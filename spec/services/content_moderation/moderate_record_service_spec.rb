@@ -987,10 +987,24 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       )
 
       expect(message).to eq(
-        "This page includes an image in a format we can’t review (such as an SVG data URL or a very large inline image), " \
-        "so we can’t publish it as is. Re-encode that image as a regular PNG, JPEG, GIF, or WebP file and try again."
+        "This page includes an image we can’t review, because the format is unsupported (such as an SVG data URL) " \
+        "or the file is too large. Replace it with a smaller PNG, JPEG, GIF, or WebP and try again."
       )
       expect(message).not_to include("temporary issue")
+    end
+
+    it "does not tell a seller whose asset is only oversized to re-encode a format they are already using" do
+      # `file_too_large` reaches this branch for a plain PNG on the seller's own
+      # CDN (gumroad-private#1728), so copy naming only the format sent them at
+      # a property of the file that was never the problem.
+      message = described_class.seller_message(
+        [ContentModeration::Strategies::ClassifierStrategy::UNSUPPORTED_IMAGE_REASON],
+        "page"
+      )
+
+      expect(message).to include("too large")
+      expect(message).not_to include("inline")
+      expect(message).not_to include("Re-encode")
     end
 
     it "explains what is missing for an off-platform fulfillment flag" do

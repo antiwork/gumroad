@@ -4,28 +4,14 @@ class ContentModeration::ModerateRecordService
   AUTHOR_NAME = "ContentModeration"
   ADMIN_COMMENT_DEDUP_WINDOW = 5.minutes
 
-  # How long we're willing to spend looking files up in storage while deciding
-  # whether a listing delivers anything (see `has_deliverable_file?`). This is a
-  # time budget rather than a file count so that no attached file is excluded
-  # from the check by its position in the list.
   STORAGE_CHECK_TIME_BUDGET_SECONDS = 2.0
 
-  # One storage-check budget, shared by a product and every variant it carries,
-  # so a single save spends one budget however many file lists it contains.
+  # One budget shared by a product and every variant it carries, so a save spends one
+  # budget however many file lists it contains and logs one warning rather than one per tier.
   #
-  # It also collects which files were left unchecked once the time ran out. The
-  # collection is deliberately kept here rather than logged by each list, because
-  # running out of time is one event for the whole save: a membership with ten
-  # tiers would otherwise emit ten separate warnings for it, and none of them
-  # would say how many files went unchecked in total. The caller logs the total
-  # once, after the whole check has finished.
-  #
-  # Files are tracked by id rather than counted, because the same file can turn
-  # up in more than one list: a file attached to a tier also belongs to the
-  # product, since `ProductFile#link_id` points at the product either way, so the
-  # product's own list and the tier's list both walk it. Counting would report a
-  # bigger total than the number of files the seller actually attached, and would
-  # report a file as unchecked even when an earlier list had already looked it up.
+  # Tracked by file id, not counted: a file attached to a tier also belongs to the product
+  # (`ProductFile#link_id` points at the product either way), so both lists walk it and
+  # counting would double-report.
   class StorageCheckBudget
     def initialize(seconds:)
       @deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + seconds
@@ -122,8 +108,14 @@ class ContentModeration::ModerateRecordService
       # Unlike the transient branch above, retrying can never fix this: the
       # image itself is something our review can’t read, so the seller has to
       # change it and the copy has to say so.
-      "This #{noun} includes an image in a format we can’t review (such as an SVG data URL or a very large inline image), " \
-      "so we can’t publish it as is. Re-encode that image as a regular PNG, JPEG, GIF, or WebP file and try again."
+      #
+      # Format and size are both named, and no byte figure is quoted: the two
+      # ceilings differ (MAX_DATA_IMAGE_BYTES for an inline payload, OpenAI's
+      # own limit for a URL it downloads), so one number here would be wrong for
+      # whichever case the seller is actually in. "Smaller" is what they can act
+      # on either way.
+      "This #{noun} includes an image we can’t review, because the format is unsupported (such as an SVG data URL) " \
+      "or the file is too large. Replace it with a smaller PNG, JPEG, GIF, or WebP and try again."
     elsif rs.any? { |r| r.to_s.start_with?(TOO_MANY_IMAGES_REASON_PREFIX) }
       "This #{noun} has more images than we can review, so we can’t publish it as is. " \
       "Reduce it to at most #{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS} images " \
@@ -198,15 +190,8 @@ class ContentModeration::ModerateRecordService
 
     reasons = flagged.flat_map(&:reasoning)
 
-    # A spam flag on a product that actually delivers something is downgraded
-    # to a note instead of blocking the publish (see
-    # `spam_flag_should_not_block?`).
-    #
-    # Asked only when there is a spam flag to downgrade. Answering it means
-    # walking the product's files and, for files their own row can't answer for,
-    # spending up to a two-second budget on storage lookups — work that changes
-    # nothing when nothing was flagged, and whose "we ran out of time" warning
-    # would otherwise be written during saves that go on to succeed.
+    # Order matters: `spam_flag_should_not_block?` can spend a two-second storage budget and
+    # log a "ran out of time" warning, so never ask it unless there is a spam flag to downgrade.
     if reasons.any? { |r| spam_reason?(r) } && spam_flag_should_not_block?
       downgraded, reasons = reasons.partition { |r| spam_reason?(r) }
       audit_reasons += downgraded.map { |r| "#{r} (#{spam_downgrade_note_reason})" }
@@ -250,95 +235,50 @@ class ContentModeration::ModerateRecordService
       reason.to_s.start_with?("spam:")
     end
 
-    # Whether a spam flag should be recorded as a note instead of blocking the
-    # publish.
+    # The spam preset fires on the info-product writing STYLE (all-caps headline, benefit
+    # bullets, earnings framing), not on anything that makes a listing actually spam. What
+    # separates the two is whether the listing DELIVERS anything: link farms and fake listings
+    # have nothing attached. So a product with a deliverable keeps the flag as a reviewable
+    # note and publishes; an empty one still blocks, as do all the other presets, which key on
+    # concrete content rather than tone (gumroad-private#1358).
     #
-    # The spam preset is a judgment call about intent, and in practice it fires
-    # on the writing STYLE of the info-product genre (an all-caps headline
-    # repeated in the description, benefit bullets with little prose between
-    # them, earnings framing) rather than on anything that makes a listing
-    # actually spam. A seller with a real ebook attached hit this ten times in
-    # fifteen minutes and had no way to tell what to change
-    # (gumroad-private#1358).
-    #
-    # The signal that separates the two cases is whether the listing delivers
-    # anything: keyword-stuffed link farms and fake listings have nothing
-    # attached, while a product with files, readable content, or a
-    # Gumroad-provisioned community invite is selling something real, however
-    # loudly it is written. So for a product that has a deliverable we keep the
-    # flag as a reviewable note and let the publish through; for an empty
-    # listing the flag still blocks, as do all the other presets and the
-    # blocklist, which key on concrete content rather than tone.
-    #
-    # Posts are unaffected: they have no deliverable of their own, so a spam
-    # flag on a post keeps blocking as before.
-    #
-    # A page has no deliverable of its own, so the product test above can't be
-    # applied to it. What stands in for it is whether the page belongs to a real
-    # storefront: a seller with live products or completed sales has something
-    # the page is plausibly selling, and blocking on tone there would mean an
-    # agent that wrote a perfectly ordinary sales page cannot save it and cannot
-    # be told what to change. A seller with neither is the shape this change
-    # exists to stop — an agent or the CLI standing up a link farm on a
-    # gumroad.com subdomain — and the spam preset (whose flag conditions name
-    # link farms and keyword stuffing explicitly) is the only preset that reads
-    # it, so for them a corroborated spam flag keeps blocking.
+    # A page has no deliverable of its own, so the storefront stands in for it: live products
+    # or completed sales mean the page is plausibly selling something, while a seller with
+    # neither is the link-farm-on-a-gumroad.com-subdomain shape this exists to stop. Posts have
+    # no deliverable either and are not covered here, so a spam flag on a post always blocks.
     def spam_flag_should_not_block?
       return seller_has_storefront? if entity_type == :page
 
       entity_type == :product && product_has_substantive_deliverable?
     end
 
-    # Why an admin is reading a downgraded spam flag rather than a block. A page
-    # is not a listing and has nothing attached, so it can't borrow the product
-    # wording.
+    # Why an admin is reading a downgraded spam flag rather than a block.
     def spam_downgrade_note_reason
       entity_type == :page ? "not blocked: seller has a live storefront" : "not blocked: listing has content attached"
     end
 
-    # Whether the page's owner has anything on Gumroad besides the page. Kept to
-    # two indexed existence checks: this is asked inside a save, and only when
-    # there is a spam flag to downgrade.
+    # Kept to two indexed existence checks: this runs inside a save.
     def seller_has_storefront?
       return false if user.blank?
 
       user.links.alive.exists? || user.sales.successful.exists?
     end
 
-    # The stricter half of "does this listing deliver anything", used only to
-    # decide whether a corroborated spam flag stops being a block.
-    #
-    # `product_has_deliverable?` is deliberately generous because it gates a
-    # QUESTION we ask a model (see `check_off_platform_fulfillment?`): being
-    # generous there only means we don't ask, and the other presets still run.
-    # Here the same generosity would let a listing publish, so states a spammer
-    # can produce for free are not enough:
-    #
-    #   - a page with a title and nothing in it (the title renders in the
-    #     buyer's page list, but there is nothing to read),
-    #   - a bundle with no component products in it,
-    #   - a "coffee"/tip listing, which has no deliverable by design,
-    #   - an attached file whose upload never finished, so there is nothing in
-    #     storage to hand the buyer (see `has_deliverable_file?`),
-    #   - an integration Gumroad does not fulfil on purchase (only a Circle or
-    #     Discord invite is itself the thing the buyer receives; a Zoom or
-    #     Google Calendar connection is scheduling plumbing attached to a call).
-    #
-    # Everything that does establish a real deliverable still downgrades the
-    # flag: uploaded files at the product or variant level, a content page with
-    # an actual body, a physical product (it ships), a bundle that contains
-    # products, a call or commission (work the seller performs), or a
-    # Gumroad-provisioned community invite.
+    # The stricter half of "does this listing deliver anything". Distinct from
+    # `product_has_deliverable?`, which is generous on purpose because it only gates a QUESTION
+    # we ask a model; here the same generosity would let a listing publish, so states a spammer
+    # gets for free do NOT count: a page with only a title, an empty bundle, a coffee/tip
+    # listing, a file whose upload never finished, and integrations Gumroad does not fulfil on
+    # purchase (only a Circle/Discord invite IS the deliverable; Zoom and Google Calendar are
+    # scheduling plumbing).
     def product_has_substantive_deliverable?
       return true if record.is_physical?
       return true if record.is_bundle? && record.bundle_products.alive.any?
       return true if record.native_type.in?([Link::NATIVE_TYPE_CALL, Link::NATIVE_TYPE_COMMISSION])
       return true if gumroad_fulfilled_community_integration?
 
-      # One budget for the whole product, not one per file list. A product
-      # carries its own files and a separate list per variant, so giving each
-      # list its own budget would multiply the worst case by the number of
-      # variants a single save can contain.
+      # One budget for the whole product, not one per file list — otherwise the worst case
+      # multiplies by the number of variants a single save can contain.
       budget = StorageCheckBudget.new(seconds: STORAGE_CHECK_TIME_BUDGET_SECONDS)
 
       found_file = has_deliverable_file?(record, budget:) ||
@@ -348,16 +288,10 @@ class ContentModeration::ModerateRecordService
       # that has some passes whether or not we got through its files.
       has_deliverable = found_file || has_readable_body_content?(record)
 
-      # Say so once for the whole save when a spent budget left files unchecked
-      # and the product still came out with no deliverable, so a rejection that
-      # only means "we ran out of time" is explicable from the logs.
-      #
-      # Two things about where this sits are deliberate. It is outside the
-      # per-list check, so a membership with many tiers produces one line
-      # carrying the total rather than one line per tier. And it waits for the
-      # whole answer rather than just the file half of it, so a product that ran
-      # out of budget on its files but passed on its page content doesn't carry a
-      # failure-shaped warning about files nobody needed to look at.
+      # So a rejection that only means "we ran out of time" is explicable from the logs. Its
+      # position is deliberate: outside the per-list check (one line per save, not per tier),
+      # and after the page-content half, so a product that ran out of budget on files but
+      # passed on content carries no failure-shaped warning.
       if !has_deliverable && budget.unchecked_file_count.positive?
         Rails.logger.warn(
           "ContentModeration: storage check budget spent with " \
@@ -369,60 +303,25 @@ class ContentModeration::ModerateRecordService
       has_deliverable
     end
 
-    # An attached file only counts when there is really something in storage
-    # behind it.
+    # An attached file counts only when something is really in storage behind it. An alive
+    # `ProductFile` row is not proof: a save racing an unfinished multipart upload leaves a row
+    # pointing at a key that was never written, and nothing deletes it afterwards (see
+    # `ProductFile#stored_file_present?`). The save API takes each file's storage URL from the
+    # client, so a caller can submit arbitrarily many such rows.
     #
-    # An alive `ProductFile` row is not by itself proof that the buyer receives a
-    # file: a product save that races an unfinished multipart upload leaves a row
-    # pointing at a key that was never written, and nothing deletes that row
-    # afterwards (see `ProductFile#stored_file_present?`). Counting it here
-    # would hand back the bypass the rest of this method closes — attach nothing,
-    # abandon an upload, publish anyway. The same goes for a long list of such
-    # rows: the save API takes each file's storage URL from the client, so a
-    # caller can submit as many never-uploaded rows as it likes, and "there are
-    # a lot of them" is not evidence that any one is real.
+    # Most rows answer for themselves (analyzed file, external link, purged object) and are
+    # settled for free; only the rest cost a storage request. Those are capped by TIME, not by
+    # file count, because a count cap must pick a slice and the caller controls the list — any
+    # slice can be pushed off a real file by padding. It also can't be fixed by ordering: a
+    # genuinely stored file can be unverifiable at either end of creation order (uploaded
+    # moments ago before AnalyzeFileWorker ran, or analysis that will never succeed — retries
+    # exhausted, or a video whose metadata can't be read, see
+    # `WithFileProperties#video_analysis_failed`, which nothing revisits). Newest-first is still
+    # the right order: the freshly-uploaded file usually answers on the first request.
     #
-    # Most files answer from the row alone (an analyzed file, an external link, a
-    # purged object), so those are settled first and for free. Only files the row
-    # cannot answer for cost a request to storage, and those are bounded by a time
-    # budget rather than a file count.
-    #
-    # A count-based cap had to choose WHICH files to spend it on, and every choice
-    # left a real deliverable unreachable. A file a row cannot answer for has
-    # never been analyzed successfully, and a genuinely stored file lands in that
-    # state at either end of creation order: it was uploaded moments ago and
-    # AnalyzeFileWorker hasn't run yet (the newest such row), or its analysis will
-    # never succeed even though the object is really there — the worker exhausted
-    # its retries, or it's a video whose metadata can't be read, which clears the
-    # flag deliberately (see WithFileProperties#video_analysis_failed) and which
-    # nothing ever revisits, so it ages into being the oldest such row. Checking
-    # the newest few plus the oldest few covers both, but then a stored file
-    # sitting BETWEEN two runs of abandoned uploads falls in the gap and the
-    # seller is told their listing delivers nothing.
-    #
-    # There is no ordering that fixes this, because the save API takes each file's
-    # storage URL from the client: whatever slice we pick, a caller can submit
-    # enough dead rows to push a real file out of it, and a legitimate seller can
-    # land there by accident. So instead every unverifiable file is eligible, and
-    # what's capped is the time spent — we stop asking once the budget is gone.
-    # Ordering newest-first still matters, since the freshly-uploaded file is the
-    # single likeliest deliverable and usually answers on the first request.
-    #
-    # A listing carrying many dead rows therefore costs a bounded amount of time
-    # instead of a bounded number of files, and no attached file is excluded from
-    # the check by its position in the list.
-    #
-    # An exhausted budget still fails the check, which is deliberate: running out
-    # of time means we could not prove there is a deliverable, and passing on
-    # "we don't know" would hand back exactly the bypass this method exists to
-    # close, since the caller decides how many rows the check has to get through.
-    # What the budget changes is that exhaustion now takes genuinely slow storage
-    # responses rather than being guaranteed by row count alone, and when it does
-    # happen we say so in the log instead of failing silently.
-    #
-    # This can only decide how cheaply an honest seller is confirmed; it can never
-    # let an empty listing through, because passing still requires an object to
-    # actually be in storage.
+    # An exhausted budget FAILS the check on purpose — "we don't know" must not pass, or the
+    # bypass reopens. It can only make an honest seller cheaper to confirm; passing always
+    # requires an object actually in storage.
     def has_deliverable_file?(owner, budget:)
       unverifiable_from_row = []
 
@@ -453,20 +352,12 @@ class ContentModeration::ModerateRecordService
       false
     end
 
-    # Rich content with something in the body, ignoring pages that only have a
-    # title. See `product_has_substantive_deliverable?` for why the title alone
-    # doesn't count here even though it counts for the off-platform preset.
-    #
-    # Blocks that don't themselves give the buyer anything are also ignored (see
-    # RichContent::NODE_TYPES_WITHOUT_OWN_CONTENT): a `posts` block on a listing
-    # with no published posts and a `fileEmbed` pointing at a missing file both
-    # render nothing at all, and a recommendation, an upsell for another product
-    # or a form field asks something of the buyer rather than delivering to them.
-    # Each is one click to insert, so dropping one into an otherwise empty page
-    # is not a deliverable. A file that really is attached still downgrades the
-    # flag — the `alive_product_files` checks in
-    # `product_has_substantive_deliverable?` cover that case directly, without
-    # needing the embed node to vouch for it.
+    # Rich content with something in the body, ignoring title-only pages (see
+    # `product_has_substantive_deliverable?`) and blocks that deliver nothing themselves: a
+    # `posts` block with no published posts and a `fileEmbed` pointing at a missing file render
+    # nothing, and recommendations, upsells and form fields ask something OF the buyer. Each is
+    # one click to insert. A genuinely attached file is still covered, by the
+    # `alive_product_files` checks in `product_has_substantive_deliverable?`.
     def has_readable_body_content?(product)
       has_own_body_content = ->(rich_content) do
         rich_content.has_body_content?(excluding_node_types: RichContent::NODE_TYPES_WITHOUT_OWN_CONTENT)
@@ -546,19 +437,10 @@ class ContentModeration::ModerateRecordService
       threads.map(&:value)
     end
 
-    # Only ask about off-platform fulfillment when the product genuinely has
-    # nothing for the buyer to receive on Gumroad: no uploaded files (at the
-    # product level or on any of its variants/tiers), no written or embedded
-    # content, no Gumroad-managed integration (a Discord or Circle invite IS
-    # the deliverable, and Gumroad itself provisions it on purchase), and not a
-    # type whose deliverable is inherently something other than content (a call
-    # is a scheduled meeting, a commission is work the seller performs, a
-    # coffee/tip has no deliverable by design, a physical product ships, a
-    # bundle delivers its component products). Checking this first means a
-    # listing with real content can never be blocked by this preset no matter
-    # how the description mentions Telegram or Discord — the preset is about
-    # empty listings that route buyers off-platform, and the emptiness half of
-    # that is decided here in code rather than by a model.
+    # The preset is about EMPTY listings that route buyers off-platform, so the emptiness half
+    # is decided here in code rather than by a model. Gating on it first means a listing with
+    # real content can never be blocked by this preset however its description mentions
+    # Telegram or Discord.
     def check_off_platform_fulfillment?
       return false unless entity_type == :product
 
