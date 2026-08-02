@@ -8466,4 +8466,96 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     # is the distinction the table exists to make.
     assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
   end
+
+  # --- a save that confirmed a removal it never named (gumroad-private#1508)
+  #
+  # The report above is gated on requested_deletion?, so it is blind to the
+  # shape actually reported: a payload naming NO deletion. The confirmed ids
+  # are the witness, because the editor derives both lists from the same
+  # in-session state.
+
+  test "flag on: a confirmed removal the deletion operations never named is reported" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    survivor = create_variant(variant_category: @category, name: "Confirmed but unnamed")
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      confirmed_removed_variant_ids: [survivor.external_id],
+      deletion_operations: { deleted_ids: {} },
+    ), format: :json
+    assert_response :success
+
+    assert survivor.reload.alive?, "precondition: nothing was named, so the row must still be alive"
+    report = notified.find { |message, _| message == "Product save confirmed a removal its deletion operations never named" }
+    assert report, "expected the unstated-confirmed-removal report (got: #{notified.inspect})"
+    assert_equal [survivor.external_id], report.last[:unstated_variant_ids]
+    assert_empty report.last[:named_variant_ids]
+  end
+
+  test "flag on: a confirmed removal the payload did name reports nothing" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      confirmed_removed_variant_ids: [removed.external_id],
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert_empty notified.select { |message, _| message == "Product save confirmed a removal its deletion operations never named" }
+  end
+
+  # A resent payload naming an already-deleted row is not a live defect: the
+  # editor clears its confirmed ids after a successful save, so reporting this
+  # would be noise on every duplicate submit.
+  test "flag on: a confirmed id whose row is already deleted is not reported" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    already_gone = create_variant(variant_category: @category, name: "Already gone")
+    already_gone.mark_deleted!
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      confirmed_removed_variant_ids: [already_gone.external_id],
+      deletion_operations: { deleted_ids: {} },
+    ), format: :json
+    assert_response :success
+
+    assert_empty notified.select { |message, _| message == "Product save confirmed a removal its deletion operations never named" }
+  end
+
+  # A tab predating the contract sends neither key, so its confirmed ids carry
+  # no contradiction — it has no way to state a deletion.
+  test "flag on: a payload with no contract keys is not reported" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    survivor = create_variant(variant_category: @category, name: "Survivor")
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      confirmed_removed_variant_ids: [survivor.external_id],
+    ), format: :json
+    assert_response :success
+
+    assert_empty notified.select { |message, _| message == "Product save confirmed a removal its deletion operations never named" }
+  end
 end

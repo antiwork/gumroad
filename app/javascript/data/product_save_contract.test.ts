@@ -5,6 +5,7 @@ import {
   buildDeletionOperations,
   confirmRichContentMoveSourceDeletions,
   hasDeletions,
+  reorderPreservingMembership,
 } from "$app/data/product_save_contract";
 
 // The editor's save used to delete whatever the payload didn't mention. Under
@@ -451,5 +452,33 @@ describe("buildDeletionOperations, version-scoped integrations", () => {
       }),
     );
     expect(afterRefresh.variant_deleted_ids).toEqual({ v1: { integrations: ["discord"] } });
+  });
+});
+
+// The reported failure in gumroad-private#1508: a save that returned 200 and
+// deleted nothing. Under the contract the only payload that produces it is one
+// whose deletion operations name nothing, so a row leaving state without a
+// confirmed-removal id is the client-side defect. Reorder was that route.
+describe("reorderPreservingMembership", () => {
+  const rows = [{ id: "a" }, { id: "b" }, { id: "c" }];
+
+  it("applies the order it was given", () => {
+    expect(reorderPreservingMembership(rows, ["c", "a", "b"])).toEqual([{ id: "c" }, { id: "a" }, { id: "b" }]);
+  });
+
+  it("keeps a row the order omitted instead of dropping it", () => {
+    expect(reorderPreservingMembership(rows, ["c", "a"])).toEqual([{ id: "c" }, { id: "a" }, { id: "b" }]);
+  });
+
+  it("keeps every row when the order is empty", () => {
+    expect(reorderPreservingMembership(rows, [])).toEqual(rows);
+  });
+
+  it("ignores ids that are not in the list and never duplicates one", () => {
+    expect(reorderPreservingMembership(rows, ["b", "ghost", "b", "a", "c"])).toEqual([
+      { id: "b" },
+      { id: "a" },
+      { id: "c" },
+    ]);
   });
 });
