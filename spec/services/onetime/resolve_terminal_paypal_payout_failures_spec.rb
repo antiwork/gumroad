@@ -317,6 +317,20 @@ describe Onetime::ResolveTerminalPaypalPayoutFailures do
       expect(content).to_not include("registered in a country")
     end
 
+    # The half of the cohort gp#1661 is actually about: locked account AND no bank rail. This is
+    # where the old copy dead-ended, so the backfill has to reach it with the honest answer.
+    it "gives a locked-account seller with no bank rail the plain no-rail answer" do
+      create(:user_compliance_info, user: seller, country: "Ukraine")
+      terminal_failure_for(seller, reason: "PAYPAL 3015")
+
+      described_class.process(dry_run: false)
+
+      content = latest_seller_visible_note(seller).content
+      expect(content).to include("we have no way to pay you right now")
+      expect(content).to include("We hope to have a way to pay out your balance in the future")
+      expect(content).to_not include("add a bank account")
+    end
+
     # A currency rejection is explained but still retried, so nothing this task writes may claim
     # the payouts have stopped. Reviewer finding on #6526: the eligibility check deliberately uses
     # the wider EXPLAINED set rather than the retry-blocking one, and that is only defensible while
