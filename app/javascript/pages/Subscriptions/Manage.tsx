@@ -123,6 +123,7 @@ export default function SubscriptionsManage() {
   const restartable = !subscription.alive || subscription.pending_cancellation;
   const isResubscribing =
     !subscription.alive && !subscription.pending_cancellation && !subscription.is_installment_plan;
+  const pricingDiscount = subscription.is_installment_plan ? null : subscription.discount;
   const initialSelection = {
     recurrence: subscription.recurrence,
     rent: false,
@@ -170,7 +171,7 @@ export default function SubscriptionsManage() {
 
   const { isPWYW, discountedPriceCents, discountedTotalCents } = applySelection(
     configurationSelectorProduct,
-    subscription.discount,
+    pricingDiscount,
     selection,
   );
   const isQuantityChanged = selection.quantity !== subscription.quantity;
@@ -184,12 +185,12 @@ export default function SubscriptionsManage() {
       : selectedSubscriptionTotal({
           unitPrice: selection.price.value,
           quantity: selection.quantity,
-          discount: subscription.discount,
+          discount: pricingDiscount,
           minimumPrice: getMinPriceCents(product.currency_code),
         });
   const price = withOncePerCartMinimum(
     isPWYW || noChangesToNonPriceOptions ? selectedTotalPrice : discountedTotalCents,
-    subscription.discount,
+    pricingDiscount,
     getMinPriceCents(product.currency_code),
   );
   const requirePayment = price > 0;
@@ -451,7 +452,7 @@ export default function SubscriptionsManage() {
             selection={selection}
             setSelection={setSelection}
             initialSelection={initialSelection}
-            discount={subscription.discount}
+            discount={pricingDiscount}
           />
         </CardContent>
       ) : null}

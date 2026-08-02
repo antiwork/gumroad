@@ -25,6 +25,7 @@ describe("subscription pricing", () => {
       pre_discount_price: 2_000,
       quantity: 2,
       discount: oncePerCartDiscount,
+      is_installment_plan: false,
     });
 
     expect(unitPrice).toBe(1_000);
@@ -40,6 +41,7 @@ describe("subscription pricing", () => {
       pre_discount_price: 2_000,
       quantity: 2,
       discount,
+      is_installment_plan: false,
     });
 
     expect(unitPrice).toBe(900);
@@ -52,5 +54,18 @@ describe("subscription pricing", () => {
       selectedSubscriptionTotal({ unitPrice: 75, quantity: 2, discount: oncePerCartDiscount, minimumPrice: 99 }),
     ).toBe(99);
     expect(withOncePerCartMinimum(50, oncePerCartDiscount, 99)).toBe(99);
+  });
+
+  it("keeps installment plans at the next installment price", () => {
+    const unitPrice = initialSubscriptionUnitPrice({
+      price: 900,
+      pre_discount_price: 3_000,
+      quantity: 1,
+      discount: oncePerCartDiscount,
+      is_installment_plan: true,
+    });
+
+    expect(unitPrice).toBe(900);
+    expect(selectedSubscriptionTotal({ unitPrice, quantity: 1, discount: null, minimumPrice: 99 })).toBe(900);
   });
 });

@@ -100,7 +100,7 @@ class Order::CreateService
               # in Purchase::CreateService#build_purchase.
               :payment_element_mount_currency, :payment_method_list_token
             )
-            .merge(line_item_params.except(:uid, :permalink))
+            .merge(line_item_params.except(:uid, :permalink, :once_per_cart_discount_cents))
             .merge({ cart_items: })
         ).merge(
           submitted_pre_discount_price_cents: submitted_pre_discount_price_cents(line_item_params, allocated_discount),
@@ -246,6 +246,10 @@ class Order::CreateService
       allocations_by_uid = {}
       zero_allocations_by_uid = Hash.new { |hash, line_item_uid| hash[line_item_uid] = [] }
       grouped_items.each do |(group_type, group_value), items|
+        items = items.each_with_index.sort_by do |item, index|
+          allocation_cents = [Integer(item[:once_per_cart_discount_cents], exception: false).to_i, 0].max
+          [-allocation_cents, index]
+        end.map(&:first)
         submitted_uids = items.to_set { _1.fetch(:uid) }
         ordered_items = items + line_items.reject { submitted_uids.include?(_1.fetch(:uid)) }
         products = ordered_items.to_h do |item|

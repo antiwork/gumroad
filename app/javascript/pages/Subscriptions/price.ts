@@ -5,6 +5,7 @@ type SubscriptionPrice = {
   pre_discount_price: number;
   quantity: number;
   discount: Discount | null;
+  is_installment_plan: boolean;
 };
 
 const oncePerCartAmount = (discount: Discount | null) =>
@@ -14,8 +15,9 @@ export const withOncePerCartMinimum = (total: number, discount: Discount | null,
   oncePerCartAmount(discount) !== null && total > 0 && total < minimumPrice ? minimumPrice : total;
 
 export const initialSubscriptionUnitPrice = (subscription: SubscriptionPrice) =>
-  (oncePerCartAmount(subscription.discount) === null ? subscription.price : subscription.pre_discount_price) /
-  subscription.quantity;
+  (subscription.is_installment_plan || oncePerCartAmount(subscription.discount) === null
+    ? subscription.price
+    : subscription.pre_discount_price) / subscription.quantity;
 
 export const selectedSubscriptionTotal = ({
   unitPrice,

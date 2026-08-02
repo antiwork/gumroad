@@ -599,6 +599,12 @@ const CheckoutIndexPage = () => {
               callStartTime: item.call_start_time,
               payInInstallments: item.pay_in_installments,
               discountCode: discounted.discount?.type === "code" ? discounted.discount.code : null,
+              oncePerCartDiscountCents:
+                discounted.discount?.type === "code" &&
+                discounted.discount.value.type === "fixed" &&
+                discounted.discount.value.once_per_cart
+                  ? discounted.discount.value.cents
+                  : null,
               isPppDiscounted:
                 !!item.product.ppp_details &&
                 !cartForm.data.cart.rejectPppDiscount &&

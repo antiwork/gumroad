@@ -237,7 +237,9 @@ class CheckoutPresenter
     end
     discount = subscription_discount_for_next_charge(subscription, buyer: logged_in_user)
     subscription_price = subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user)
-    pre_discount_price = if discount&.dig(:type) == "fixed" && discount[:once_per_cart]
+    pre_discount_price = if subscription.is_installment_plan
+      subscription_price
+    elsif discount&.dig(:type) == "fixed" && discount[:once_per_cart]
       subscription.original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || subscription_price
     else
       subscription_price
