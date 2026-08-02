@@ -39,8 +39,16 @@ class Purchase::VariantUpdaterService
 
     # Swapping into a variant whose content carries a license-key block flips
     # uses_license_key? false -> true after the key would normally have been
-    # minted at purchase time, and nothing else backfills it. Idempotent.
-    purchase.create_license!
+    # minted at purchase time, and nothing else backfills it.
+    if purchase.create_license!
+      # variants_changed below only refreshes variant fields, and License's own
+      # index hook is on: :update — so nothing else pushes the new serial.
+      ElasticsearchIndexerWorker.perform_in(
+        2.seconds,
+        "update",
+        { "record_id" => purchase.id, "class_name" => "Purchase", "fields" => ["license_serial", "license_uses"] }
+      )
+    end
 
     if purchase.is_gift_sender_purchase?
       Purchase::VariantUpdaterService.new(

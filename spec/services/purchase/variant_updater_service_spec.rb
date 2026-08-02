@@ -311,22 +311,25 @@ describe Purchase::VariantUpdaterService do
       end
 
       it "keeps the existing license when the purchase already has one" do
+        other_full_variant = create(:variant, variant_category: category, name: "Full Version 2")
+        create(:rich_content, entity: other_full_variant, description: [{ "type" => RichContent::LICENSE_KEY_NODE_TYPE }])
         purchase = create(:purchase, link: product, variant_attributes: [full_variant])
         existing = purchase.create_license!
         expect(existing).to be_present
 
         Purchase::VariantUpdaterService.new(
           purchase:,
-          variant_id: free_variant.external_id,
+          variant_id: other_full_variant.external_id,
           quantity: purchase.quantity,
         ).perform
 
-        expect(purchase.reload.license).to eq(existing)
+        expect(purchase.reload.uses_license_key?).to be true
+        expect(purchase.license).to eq(existing)
+        expect(License.where(purchase_id: purchase.id).count).to eq(1)
       end
 
       it "does not mint a license when the new variant's content omits the block" do
         purchase = create(:purchase, link: product, variant_attributes: [full_variant])
-        purchase.license&.destroy!
 
         Purchase::VariantUpdaterService.new(
           purchase:,
@@ -336,6 +339,19 @@ describe Purchase::VariantUpdaterService do
 
         expect(purchase.reload.uses_license_key?).to be false
         expect(purchase.license).to be_nil
+      end
+
+      it "does not mint an orphan license on a recurring subscription charge" do
+        purchase = create(:purchase, link: product, variant_attributes: [free_variant])
+        allow(purchase).to receive(:is_recurring_subscription_charge).and_return(true)
+
+        expect do
+          Purchase::VariantUpdaterService.new(
+            purchase:,
+            variant_id: full_variant.external_id,
+            quantity: purchase.quantity,
+          ).perform
+        end.not_to change { License.where(purchase_id: purchase.id).count }
       end
     end
   end

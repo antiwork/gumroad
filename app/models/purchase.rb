@@ -2032,6 +2032,10 @@ class Purchase < ApplicationRecord
 
   def create_license!
     return if is_gift_sender_purchase
+    # The license canonically lives on the original purchase, and #license reads
+    # it from there for a charge row — so minting here would write an orphan the
+    # guard below can never see again.
+    return if is_recurring_subscription_charge
     return unless uses_license_key?
     return if license.present?
 
