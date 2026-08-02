@@ -4391,6 +4391,7 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
   describe "idempotency key" do
     # A dispute accepts evidence once (gumroad-private#1612) and FightDisputeJob retries five
     # times, so the key is what stops a retry after a landed call spending the submission again.
+    # It only works if it is IMMUTABLE across attempts, which is what these pin.
     def capture_options(evidence_row = nil)
       captured = nil
       allow(Stripe::Dispute).to receive(:update) { |_id, _params, opts| captured = opts }
@@ -4401,10 +4402,10 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
     before { DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload) }
 
     it "sends one derived from the evidence row" do
-      expect(capture_options[:idempotency_key]).to include(disputed_purchase.dispute.reload.dispute_evidence.external_id)
+      expect(capture_options[:idempotency_key]).to eq("dispute_evidence_#{disputed_purchase.dispute.reload.dispute_evidence.external_id}")
     end
 
-    it "is stable across a retry that re-reads the same unchanged row" do
+    it "is stable across a retry that re-reads the same row" do
       # The payload is NOT stable across attempts — create_dispute_evidence_stripe_file uploads a
       # fresh Stripe file each call — so anything digesting it would change here and let the retry
       # spend the one-shot submission.
@@ -4413,7 +4414,9 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
       expect(capture_options[:idempotency_key]).to eq(first[:idempotency_key])
     end
 
-    it "changes when the seller writes a statement between attempts" do
+    it "is stable after the seller writes a statement into the same row" do
+      # `updated_at` is not usable either: the seller legitimately writes into this row during the
+      # 2.19-day assembly-to-submission gap, and a retry after a landed call must still replay.
       first = capture_options
 
       evidence_row = disputed_purchase.dispute.reload.dispute_evidence
@@ -4421,7 +4424,18 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
         evidence_row.update!(reason_for_winning: "The buyer signed for the parcel.")
       end
 
-      expect(capture_options(evidence_row.reload)[:idempotency_key]).to_not eq(first[:idempotency_key])
+      expect(capture_options(evidence_row.reload)[:idempotency_key]).to eq(first[:idempotency_key])
+    end
+
+    it "differs between two evidence rows" do
+      other_purchase = create(:free_purchase, link: create(:physical_product))
+      create(:dispute_formalized, purchase: other_purchase)
+      DisputeEvidence.create_from_dispute!(other_purchase.dispute.reload)
+
+      mine = capture_options
+      theirs = capture_options(other_purchase.dispute.reload.dispute_evidence)
+
+      expect(theirs[:idempotency_key]).to_not eq(mine[:idempotency_key])
     end
   end
 end

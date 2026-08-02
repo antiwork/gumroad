@@ -820,14 +820,15 @@ class StripeChargeProcessor
         customer_communication: create_dispute_evidence_stripe_file(dispute_evidence.customer_communication_file),
       }
 
-      # A dispute accepts evidence once, and FightDisputeJob has five Sidekiq retries: a network
-      # failure on a call that actually landed would otherwise spend the submission a second time.
-      # Keyed on the row's `updated_at` rather than the payload, because the payload is not stable
-      # across attempts — `create_dispute_evidence_stripe_file` re-uploads and returns a fresh
-      # Stripe file id every call, so a payload digest would change on every retry and defeat the
-      # guard. `updated_at` moves exactly when the seller writes into the row, which is the one
-      # case a retry legitimately carries different evidence and needs its own key.
-      idempotency_key = "dispute_evidence_#{dispute_evidence.external_id}_#{dispute_evidence.updated_at.to_i}"
+      # A dispute accepts evidence once (gumroad-private#1612) and FightDisputeJob has five Sidekiq
+      # retries, so a network failure on a call that actually landed would otherwise spend the
+      # submission a second time. The key must be IMMUTABLE for that to work: anything derived from
+      # the payload or from `updated_at` changes between attempts — the payload because
+      # create_dispute_evidence_stripe_file re-uploads and returns a fresh Stripe file id on every
+      # call, `updated_at` because the seller writes their statement into the same row. One evidence
+      # row is one permitted submission (the job returns early once the row is resolved), so the
+      # row's own identity is the whole key.
+      idempotency_key = "dispute_evidence_#{dispute_evidence.external_id}"
 
       Stripe::Dispute.update(charge.dispute, { evidence: }, { idempotency_key: })
     end
