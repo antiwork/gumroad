@@ -94,9 +94,20 @@ class ProfilePresenter
       # the virtual default products section (only possible when the creator has no saved
       # sections), replace the tabs with a single tab that points at it. Any leftover saved tabs
       # can't reference real sections here - there are none.
-      if include_default_products_section &&
-         sections_props[:sections].any? { _1[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
-        tabs = [{ name: ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME, sections: [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID] }]
+      if include_default_products_section
+        if sections_props[:sections].any? { _1[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+          tabs = [{ name: ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME, sections: [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID] }]
+        else
+          # A saved layout can also be unrenderable: sections exist but no tab references any of
+          # them (the editor can persist an empty tab while its sections survive), which left the
+          # public page showing only the follow form. Serve one tab pointing at every saved
+          # section. A deliberately empty tab next to a working one is left alone — this only
+          # triggers when no tab would render anything.
+          section_ids = sections_props[:sections].map { _1[:id] }
+          if section_ids.any? && tabs.none? { |tab| tab[:sections].intersect?(section_ids) }
+            tabs = [{ name: tabs.first&.dig(:name) || ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME, sections: section_ids }]
+          end
+        end
       end
       {
         **sections_props,
