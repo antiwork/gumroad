@@ -175,18 +175,32 @@ class OfferCode < ApplicationRecord
 
   # Batched uses-left for capped codes, preserving the usage mode recorded at checkout.
   def self.uses_left_by_id(codes)
-    purchases = Purchase.counts_towards_offer_code_uses.where(offer_code_id: codes.map(&:id))
+    code_ids = codes.map(&:id)
+    purchases = Purchase.counts_towards_offer_code_uses.where(offer_code_id: code_ids)
     per_item = purchases.left_joins(:purchase_offer_code_discount)
                         .where(purchase_offer_code_discounts: { once_per_cart: [false, nil] })
                         .group(:offer_code_id).sum(:quantity)
-    per_cart = purchases.joins(:purchase_offer_code_discount)
-                        .where(purchase_offer_code_discounts: { once_per_cart: true })
-                        .group(:offer_code_id).count
+    legacy_per_cart = purchases.joins(:purchase_offer_code_discount)
+                               .where(purchase_offer_code_discounts: { once_per_cart: true, once_per_cart_allocation_id: nil })
+                               .group(:offer_code_id).count
     reservations = Purchase.active_once_per_cart_offer_code_reservations
-                           .where(offer_code_id: codes.map(&:id))
+                           .where(offer_code_id: code_ids)
+                           .where(purchase_offer_code_discounts: { once_per_cart_allocation_id: nil })
                            .group(:offer_code_id).count
-    used = per_item.merge(per_cart) { |_id, item_uses, cart_uses| item_uses + cart_uses }
+    completed_allocations = Purchase.completed_once_per_cart_allocation_uses.where(offer_code_id: code_ids)
+    allocation_uses = completed_allocations.group(:offer_code_id)
+                                           .distinct.count("purchase_offer_code_discounts.once_per_cart_allocation_id")
+    active_allocations = Purchase.active_once_per_cart_allocation_uses.where(offer_code_id: code_ids)
+    allocation_reservations = active_allocations
+      .where.not(purchase_offer_code_discounts: {
+                   once_per_cart_allocation_id: completed_allocations.select("purchase_offer_code_discounts.once_per_cart_allocation_id")
+                 })
+      .group(:offer_code_id)
+      .distinct.count("purchase_offer_code_discounts.once_per_cart_allocation_id")
+    used = per_item.merge(legacy_per_cart) { |_id, item_uses, cart_uses| item_uses + cart_uses }
                    .merge(reservations) { |_id, completed_uses, reserved_uses| completed_uses + reserved_uses }
+                   .merge(allocation_uses) { |_id, legacy_uses, allocation_count| legacy_uses + allocation_count }
+                   .merge(allocation_reservations) { |_id, completed_uses, reserved_uses| completed_uses + reserved_uses }
     codes.to_h { |code| [code.id, (code.max_purchase_count - used.fetch(code.id, 0)) >= 1] }
   end
 
@@ -194,18 +208,35 @@ class OfferCode < ApplicationRecord
     uses = purchases.counts_towards_offer_code_uses
     per_item = uses.left_joins(:purchase_offer_code_discount)
                    .where(purchase_offer_code_discounts: { once_per_cart: [false, nil] }).sum(:quantity)
-    per_cart = uses.joins(:purchase_offer_code_discount)
-                   .where(purchase_offer_code_discounts: { once_per_cart: true }).count
-    per_item + per_cart
+    legacy_per_cart = uses.joins(:purchase_offer_code_discount)
+                          .where(purchase_offer_code_discounts: { once_per_cart: true, once_per_cart_allocation_id: nil }).count
+    allocation_uses = purchases.merge(Purchase.completed_once_per_cart_allocation_uses)
+                                .distinct.count("purchase_offer_code_discounts.once_per_cart_allocation_id")
+    per_item + legacy_per_cart + allocation_uses
   end
 
   def active_once_per_cart_reservations(excluding_purchase: nil, excluding_order: nil)
     reservations = purchases.merge(Purchase.active_once_per_cart_offer_code_reservations)
-    reservations = reservations.where.not(id: excluding_purchase.id) if excluding_purchase&.persisted?
-    if excluding_order&.persisted?
-      reservations = reservations.where.not(id: excluding_order.order_purchases.select(:purchase_id))
+    completed_allocations = purchases.merge(Purchase.completed_once_per_cart_allocation_uses)
+    active_allocations = purchases.merge(Purchase.active_once_per_cart_allocation_uses)
+    if excluding_purchase&.persisted?
+      reservations = reservations.where.not(id: excluding_purchase.id)
+      completed_allocations = completed_allocations.where.not(id: excluding_purchase.id)
+      active_allocations = active_allocations.where.not(id: excluding_purchase.id)
     end
-    reservations.count
+    if excluding_order&.persisted?
+      excluded_purchase_ids = excluding_order.order_purchases.select(:purchase_id)
+      reservations = reservations.where.not(id: excluded_purchase_ids)
+      completed_allocations = completed_allocations.where.not(id: excluded_purchase_ids)
+      active_allocations = active_allocations.where.not(id: excluded_purchase_ids)
+    end
+    legacy_reservations = reservations.where(purchase_offer_code_discounts: { once_per_cart_allocation_id: nil }).count
+    allocation_reservations = active_allocations
+      .where.not(purchase_offer_code_discounts: {
+                   once_per_cart_allocation_id: completed_allocations.select("purchase_offer_code_discounts.once_per_cart_allocation_id")
+                 })
+      .distinct.count("purchase_offer_code_discounts.once_per_cart_allocation_id")
+    legacy_reservations + allocation_reservations
   end
 
   def auto_delete_if_single_use_exhausted!

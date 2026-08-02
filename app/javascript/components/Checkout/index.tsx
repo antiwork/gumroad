@@ -721,7 +721,24 @@ const CartItemComponent = ({
   });
   const [error, setError] = React.useState<null | string>(null);
 
-  const discount = getDiscountedPrice(cart, item);
+  const selectionWithoutDiscount = applySelection(item.product, null, selection);
+  const provisionalItem = {
+    ...item,
+    price: selectionWithoutDiscount.isPWYW
+      ? (selection.price.value ?? selectionWithoutDiscount.priceCents)
+      : selectionWithoutDiscount.priceCents,
+    quantity: selection.quantity,
+    option_id: selection.optionId,
+    recurrence: selection.recurrence,
+    rent: selection.rent,
+    call_start_time: selection.callStartTime,
+    pay_in_installments: selection.payInInstallments,
+  };
+  const provisionalCart = {
+    ...cart,
+    items: cart.items.map((candidate) => (candidate === item ? provisionalItem : candidate)),
+  };
+  const discount = getDiscountedPrice(provisionalCart, provisionalItem);
 
   const { priceCents, isPWYW } = applySelection(
     item.product,

@@ -30,6 +30,14 @@ class Order::CreateService
   def perform
     common_params = params.except(:line_items)
     line_items = params.fetch(:line_items, [])
+    line_item_uids = line_items.map { _1[:uid] }
+    if line_item_uids.any?(&:blank?) || line_item_uids.uniq.length != line_item_uids.length
+      invalid_responses = line_item_uids.uniq.index_with do
+        error_response("The cart data is invalid. Please refresh and try again.")
+      end
+      return Order.new(purchaser: buyer), invalid_responses, []
+    end
+
     discount_allocations = compute_discount_allocations(line_items)
 
     offer_codes = {}
@@ -38,11 +46,10 @@ class Order::CreateService
     purchase_responses = {}
     failed_purchases = []
     cart_items = line_items.map { _1.slice(:permalink, :price_cents) }
-    applied_once_per_cart_allocations = Set.new
+    spent_once_per_cart_allocations = Set.new
 
     line_items.each do |line_item_params|
       submitted_discount_code = line_item_params[:discount_code]
-      normalized_discount_code = normalize_discount_code(submitted_discount_code)
       product = Link.find_by(unique_permalink: line_item_params[:permalink])
       line_item_uid = line_item_params[:uid]
 
@@ -52,18 +59,31 @@ class Order::CreateService
       end
 
       begin
-        allocation = discount_allocations[normalized_discount_code]
+        allocation = discount_allocations[line_item_uid]
         allocated_discount = allocation&.dig(
           :products_data,
           line_item_uid,
           :discount
         )
+        once_per_cart_discount_allocation = nil
+        spends_once_per_cart_use = false
         if allocated_discount&.[](:once_per_cart)
           allocation_key = allocation.fetch(:offer_code_ids_by_permalink).fetch(line_item_uid)
-          if applied_once_per_cart_allocations.include?(allocation_key)
-            line_item_params = line_item_params.except(:discount_code)
+          allocated_cents = allocated_discount[:cents].to_i
+          if allocated_cents.positive?
+            spends_once_per_cart_use = !spent_once_per_cart_allocations.include?(allocation_key)
+            line_item_params = if spends_once_per_cart_use
+              line_item_params.merge(discount_code: allocation.fetch(:submitted_discount_code))
+            else
+              line_item_params.except(:discount_code)
+            end
+            once_per_cart_discount_allocation = {
+              offer_code_id: allocation_key,
+              amount_cents: allocated_cents,
+              allocation_id: allocation.fetch(:allocation_id),
+            }
           else
-            applied_once_per_cart_allocations << allocation_key
+            line_item_params = line_item_params.except(:discount_code)
           end
         end
 
@@ -83,7 +103,8 @@ class Order::CreateService
             .merge(line_item_params.except(:uid, :permalink))
             .merge({ cart_items: })
         ).merge(
-          submitted_pre_discount_price_cents: submitted_pre_discount_price_cents(line_item_params, allocated_discount)
+          submitted_pre_discount_price_cents: submitted_pre_discount_price_cents(line_item_params, allocated_discount),
+          once_per_cart_discount_allocation:
         )
 
         # Card params are excluded from build_purchase_params (charging is handled by
@@ -103,6 +124,7 @@ class Order::CreateService
           # Subscription restart SCA: add the upgrade purchase to the order so the
           # confirm endpoint can find it, and use the `order` key the frontend expects
           if sca_response[:purchase].is_a?(Hash) && (upgrade_purchase = Purchase.find_by_secure_external_id(sca_response[:purchase][:id], scope: "confirm"))
+            spent_once_per_cart_allocations << allocation_key if spends_once_per_cart_use
             order.purchases << upgrade_purchase
             order.save!
             sca_response = sca_response.except(:purchase).merge(
@@ -119,7 +141,7 @@ class Order::CreateService
         if error
           purchase_responses[line_item_uid] = error_response(error, purchase:)
           failed_purchases << purchase if purchase&.persisted?
-          recovered_allocations = discount_allocations.values.select do |candidate|
+          recovered_allocations = discount_allocations.values.uniq.select do |candidate|
             candidate.dig(:products_data, line_item_uid, :discount, :once_per_cart)
           end
           recovered_allocations.each { restore_once_per_cart_coverage(offer_codes, _1, line_items) }
@@ -130,6 +152,7 @@ class Order::CreateService
         end
 
         if purchase&.persisted?
+          spent_once_per_cart_allocations << allocation_key if spends_once_per_cart_use && error.blank?
           if Purchase::ALL_SUCCESS_STATES.include?(purchase.purchase_state)
             # Pre-existing purchase from subscription restart — don't add to order
             purchase_responses[line_item_uid] = purchase.purchase_response
@@ -211,25 +234,51 @@ class Order::CreateService
 
   private
     def compute_discount_allocations(line_items)
-      products = line_items.to_h do |item|
-        [item.fetch(:uid), item.slice(:permalink, :quantity)]
+      links_by_permalink = Link.where(unique_permalink: line_items.map { _1[:permalink] }).index_by(&:unique_permalink)
+      grouped_items = line_items
+        .select { _1[:discount_code].present? }
+        .group_by do |item|
+          normalized_code = normalize_discount_code(item[:discount_code])
+          offer_code = links_by_permalink[item[:permalink]]&.find_offer_code(code: normalized_code)
+          offer_code.present? ? [:offer_code, offer_code.id] : [:discount_code, normalized_code]
+        end
+
+      allocations_by_uid = {}
+      zero_allocations_by_uid = Hash.new { |hash, line_item_uid| hash[line_item_uid] = [] }
+      grouped_items.each do |(group_type, group_value), items|
+        submitted_uids = items.to_set { _1.fetch(:uid) }
+        ordered_items = items + line_items.reject { submitted_uids.include?(_1.fetch(:uid)) }
+        products = ordered_items.to_h do |item|
+          [item.fetch(:uid), item.slice(:permalink, :quantity, :price_cents, :tip_cents)]
+        end
+        service = OfferCodeDiscountComputingService.new(
+          normalize_discount_code(items.first[:discount_code]),
+          products,
+          buyer:,
+          key_by_input: true,
+          offer_code_id: group_type == :offer_code ? group_value : nil
+        )
+        allocation = service.process.merge(
+          offer_code_ids_by_permalink: service.offer_code_ids_by_permalink,
+          submitted_discount_code: items.first[:discount_code],
+          allocation_id: SecureRandom.uuid
+        )
+        items.each { allocations_by_uid[_1.fetch(:uid)] = allocation }
+        allocation[:products_data].each do |line_item_uid, product_data|
+          discount = product_data[:discount]
+          if discount&.[](:once_per_cart) && discount[:cents].to_i.zero?
+            zero_allocations_by_uid[line_item_uid] << allocation
+          end
+        end
       end
 
-      line_items
-        .select { _1[:discount_code].present? }
-        .group_by { normalize_discount_code(_1[:discount_code]) }
-        .transform_values do |items|
-          service = OfferCodeDiscountComputingService.new(
-            normalize_discount_code(items.first[:discount_code]),
-            products,
-            buyer:,
-            key_by_input: true
-          )
-          service.process.merge(
-            offer_code_ids_by_permalink: service.offer_code_ids_by_permalink,
-            submitted_discount_code: items.first[:discount_code]
-          )
-        end
+      zero_allocations_by_uid.each do |line_item_uid, allocations|
+        next if allocations_by_uid.key?(line_item_uid)
+
+        distinct_allocations = allocations.uniq
+        allocations_by_uid[line_item_uid] = distinct_allocations.first if distinct_allocations.one?
+      end
+      allocations_by_uid
     end
 
     def restore_once_per_cart_coverage(offer_codes, allocation, line_items)
@@ -258,7 +307,7 @@ class Order::CreateService
     end
 
     def normalize_discount_code(code)
-      code.to_s.strip.downcase
+      code.to_s.unicode_normalize(:nfc).strip.downcase
     end
 
     def build_purchase_params(product, purchase_params)

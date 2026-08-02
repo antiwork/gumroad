@@ -4,6 +4,18 @@ module OfferCode::Sorting
   extend ActiveSupport::Concern
 
   SORT_KEYS = ["name", "revenue", "uses", "term"]
+  USES_SORT_SQL = <<~SQL.squish
+    COALESCE(SUM(
+      CASE
+        WHEN purchase_offer_code_discounts.once_per_cart = TRUE
+          THEN CASE WHEN purchase_offer_code_discounts.once_per_cart_allocation_id IS NULL THEN 1 ELSE 0 END
+        ELSE purchases.quantity
+      END
+    ), 0) + COUNT(DISTINCT CASE
+      WHEN purchase_offer_code_discounts.once_per_cart = TRUE
+        THEN purchase_offer_code_discounts.once_per_cart_allocation_id
+    END)
+  SQL
 
   SORT_KEYS.each do |key|
     const_set(key.upcase, key)
@@ -20,9 +32,9 @@ module OfferCode::Sorting
           .group(:id)
           .order("SUM(purchases.price_cents) #{direction}")
       when USES
-        left_outer_joins(:purchases_that_count_towards_offer_code_uses)
+        left_outer_joins(purchases_that_count_towards_offer_code_uses: :purchase_offer_code_discount)
           .group(:id)
-          .order("SUM(purchases.quantity) #{direction}")
+          .order(Arel.sql("#{USES_SORT_SQL} #{direction}"))
       when TERM
         order(valid_at: direction, expires_at: direction)
       else

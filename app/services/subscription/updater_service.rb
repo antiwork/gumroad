@@ -21,6 +21,11 @@ class Subscription::UpdaterService
     [:price_range, :perceived_price_cents, :perceived_upgrade_price_cents, :quantity, :submitted_pre_discount_price_cents].each do |param|
       params[param] = params[param].to_i if params[param]
     end
+    if params[:once_per_cart_discount_allocation]
+      params[:once_per_cart_discount_allocation] = params[:once_per_cart_discount_allocation].to_h.symbolize_keys
+      params[:once_per_cart_discount_allocation][:offer_code_id] = params[:once_per_cart_discount_allocation][:offer_code_id].to_i
+      params[:once_per_cart_discount_allocation][:amount_cents] = params[:once_per_cart_discount_allocation][:amount_cents].to_i
+    end
 
     if params[:contact_info].present?
       params[:contact_info] = params[:contact_info].transform_values do |value|
@@ -99,7 +104,9 @@ class Subscription::UpdaterService
         end
 
         original_discount = subscription.original_purchase.purchase_offer_code_discount
-        discount_changed = if params[:clear_discount]
+        discount_changed = if params[:once_per_cart_discount_allocation].present?
+          true
+        elsif params[:clear_discount]
           true
         elsif params[:offer_code].present? && original_discount.present?
           params[:offer_code] != original_discount.offer_code ||
@@ -122,6 +129,7 @@ class Subscription::UpdaterService
             clear_deleted_discount: should_clear_original_discount?,
             authenticated_offer_code_buyer: logged_in_user,
             submitted_pre_discount_price_cents: params[:submitted_pre_discount_price_cents] || params[:price_range],
+            once_per_cart_discount_allocation: params[:once_per_cart_discount_allocation],
           )
           subscription.reload
         end

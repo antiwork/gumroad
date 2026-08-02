@@ -2964,7 +2964,7 @@ describe Subscription::UpdaterService, :vcr do
         original_purchase = @subscription.original_purchase
         expect(original_purchase.purchase_offer_code_discount).to be_present
 
-        full_price = @original_tier_quarterly_price.price_cents
+        full_price = @product.price_cents + @original_tier_quarterly_price.price_cents
 
         expect(@subscription).to receive(:send_restart_notifications!)
         result = described_class.new(

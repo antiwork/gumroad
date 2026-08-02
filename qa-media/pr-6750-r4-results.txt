@@ -1,8 +1,0 @@
-desktop leg=on subtotal=20 discounts=-1 total=19 chip=true lines=2
-desktop leg=on ASSERTED OK -> /tmp/qa6750/shots/pr-6750-r4-flag-on-desktop.png
-mobile-375 leg=on subtotal=20 discounts=-1 total=19 chip=true lines=2
-mobile-375 leg=on ASSERTED OK -> /tmp/qa6750/shots/pr-6750-r4-flag-on-mobile-375.png
-desktop leg=off subtotal=20 discounts=-2 total=18 chip=true lines=2
-desktop leg=off ASSERTED OK -> /tmp/qa6750/shots/pr-6750-r4-flag-off-desktop.png
-mobile-375 leg=off subtotal=20 discounts=-2 total=18 chip=true lines=2
-mobile-375 leg=off ASSERTED OK -> /tmp/qa6750/shots/pr-6750-r4-flag-off-mobile-375.png

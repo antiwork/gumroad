@@ -13,12 +13,13 @@ class OfferCodeDiscountComputingService
   #   => A[2], B[3], C[2] --> A[2], C[2]
   #   => A[2], C[3]       --> A[2]
 
-  def initialize(code, products, buyer: nil, key_by_input: false, excluding_order: nil)
+  def initialize(code, products, buyer: nil, key_by_input: false, excluding_order: nil, offer_code_id: nil)
     @code = code
     @products = products || {}
     @buyer = buyer
     @key_by_input = key_by_input
     @excluding_order = excluding_order
+    @offer_code_id = offer_code_id
     @offer_code_ids_by_permalink = {}
   end
 
@@ -35,12 +36,14 @@ class OfferCodeDiscountComputingService
 
       resolved_discount = offer_code.evaluate_for_buyer(buyer, product: link)
 
-      # Keep later covered lines in the response, but allocate the order-level discount to
-      # only the first eligible line. Checkout uses the zero allocation to keep the code visible.
+      # Keep later covered lines in the response and carry any amount the first line could not
+      # absorb. Checkout uses zero allocations to keep the code visible after it is fully spent.
       if once_per_cart?(offer_code) && already_applied?(offer_code) &&
          meets_minimum_purchase_quantity?(offer_code, purchase_quantity)
         if resolved_discount
-          products_data[output_key] = { discount: resolved_discount.merge(cents: 0) }
+          products_data[output_key] = {
+            discount: allocate_once_per_cart_discount(resolved_discount, offer_code, product, link, purchase_quantity)
+          }
           offer_code_ids_by_permalink[output_key] = offer_code.id
           optimistically_apply_to_applicable_cross_sells(products_data, link)
         end
@@ -52,6 +55,9 @@ class OfferCodeDiscountComputingService
       if resolved_discount && eligible?(offer_code, purchase_quantity, units)
         track_usage(offer_code, units)
         mark_applied(offer_code)
+        if once_per_cart?(offer_code)
+          resolved_discount = allocate_once_per_cart_discount(resolved_discount, offer_code, product, link, purchase_quantity)
+        end
         products_data[output_key] = { discount: resolved_discount }
         offer_code_ids_by_permalink[output_key] = offer_code.id
         optimistically_apply_to_applicable_cross_sells(products_data, link)
@@ -68,7 +74,7 @@ class OfferCodeDiscountComputingService
   end
 
   private
-    attr_reader :code, :products, :buyer, :key_by_input, :excluding_order
+    attr_reader :code, :products, :buyer, :key_by_input, :excluding_order, :offer_code_id
 
     # Ordered by the buyer's cart, not the DB's plan: a capped code is consumed
     # greedily, so iteration order decides which lines win a scarce discount.
@@ -94,12 +100,15 @@ class OfferCodeDiscountComputingService
     end
 
     def offer_codes
-      return OfferCode.none if code.blank?
+      return OfferCode.none if code.blank? && offer_code_id.blank?
 
-      @_offer_codes ||= OfferCode
-        .includes(:products, :excluded_products)
-        .where(user_id: links.map(&:user_id), code:)
-        .alive
+      @_offer_codes ||= begin
+        relation = OfferCode
+          .includes(:products, :excluded_products)
+          .where(user_id: links.map(&:user_id))
+        relation = offer_code_id.present? ? relation.where(id: offer_code_id) : relation.where(code:)
+        relation.alive
+      end
     end
 
     def offer_codes_by_user_id
@@ -123,6 +132,24 @@ class OfferCodeDiscountComputingService
     def mark_applied(offer_code)
       @applied_offer_code_ids ||= Set.new
       @applied_offer_code_ids << offer_code.id
+    end
+
+    def allocate_once_per_cart_discount(discount, offer_code, product, link, purchase_quantity)
+      @remaining_once_per_cart_discount_cents ||= {}
+      remaining = @remaining_once_per_cart_discount_cents.fetch(offer_code.id, discount[:once_per_cart_amount_cents])
+      allocated = [remaining, once_per_cart_allocation_capacity(product, link, purchase_quantity)].min
+      @remaining_once_per_cart_discount_cents[offer_code.id] = remaining - allocated
+      discount.merge(cents: allocated)
+    end
+
+    def once_per_cart_allocation_capacity(product, link, purchase_quantity)
+      submitted_price = Integer(product[:price_cents], exception: false)
+      if submitted_price
+        tip_cents = Integer(product[:tip_cents], exception: false) || 0
+        return [submitted_price - tip_cents, 0].max
+      end
+
+      link.price_cents * purchase_quantity
     end
 
     # How much of max_purchase_count this line spends. A fixed-amount code is applied once

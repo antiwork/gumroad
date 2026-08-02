@@ -842,6 +842,95 @@ describe OfferCode do
         expect(offer_code.quantity_left).to eq offer_code.max_purchase_count - 1
       end
 
+      it "counts one allocation across successful subscription restart fragments" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
+        subscription = create(:subscription, link: membership)
+        updated_original = create(
+          :purchase,
+          link: membership,
+          seller: offer_code.user,
+          subscription:,
+          offer_code:,
+          is_original_subscription_purchase: true,
+          is_updated_original_subscription_purchase: true
+        )
+        recurring_fragment = create(
+          :purchase,
+          link: membership,
+          seller: offer_code.user,
+          subscription:,
+          offer_code:,
+          is_original_subscription_purchase: false,
+          is_upgrade_purchase: true
+        )
+        allocation_id = SecureRandom.uuid
+        [updated_original, recurring_fragment].each do |purchase|
+          purchase.create_purchase_offer_code_discount!(
+            offer_code:,
+            offer_code_amount: 100,
+            offer_code_is_percent: false,
+            once_per_cart: true,
+            once_per_cart_allocation_id: allocation_id,
+            pre_discount_minimum_price_cents: membership.price_cents
+          )
+        end
+
+        expect(offer_code.quantity_left).to eq(0)
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+      end
+
+      it "does not count an archived subscription restart allocation" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
+        subscription = create(:subscription, link: membership)
+        purchase = create(
+          :purchase,
+          link: membership,
+          seller: offer_code.user,
+          subscription:,
+          offer_code:,
+          is_original_subscription_purchase: true,
+          is_updated_original_subscription_purchase: true,
+          is_archived_original_subscription_purchase: true
+        )
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: SecureRandom.uuid,
+          pre_discount_minimum_price_cents: membership.price_cents
+        )
+
+        expect(offer_code.quantity_left).to eq(1)
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => true)
+      end
+
+      it "reserves one allocation on a subscription restart awaiting payment" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
+        subscription = create(:subscription, link: membership)
+        subscription.purchases << create(:membership_purchase, link: membership, seller: offer_code.user)
+        purchase = create(
+          :purchase_in_progress,
+          link: membership,
+          seller: offer_code.user,
+          subscription:,
+          offer_code:,
+          is_original_subscription_purchase: false,
+          is_upgrade_purchase: true
+        )
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: SecureRandom.uuid,
+          pre_discount_minimum_price_cents: membership.price_cents
+        )
+
+        expect(offer_code.quantity_left).to eq(0)
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+      end
+
       it "reserves a use while a cart-level purchase is in progress" do
         offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
         purchase = create(:purchase, link: @product, offer_code:, seller: @product.user,

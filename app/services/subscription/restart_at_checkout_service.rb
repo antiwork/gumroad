@@ -35,7 +35,12 @@ class Subscription::RestartAtCheckoutService
                               subscription.current_subscription_price_cents(authenticated_offer_code_buyer: buyer)
       original_discount = subscription.original_purchase.purchase_offer_code_discount
       new_discount_code = params.dig(:purchase, :discount_code)
-      new_offer_code = new_discount_code.present? ? product.find_offer_code(code: new_discount_code.downcase.strip) : nil
+      allocation_offer_code_id = params.dig(:once_per_cart_discount_allocation, :offer_code_id)
+      new_offer_code = if new_discount_code.present?
+        product.find_offer_code(code: new_discount_code.downcase.strip)
+      elsif allocation_offer_code_id.present?
+        OfferCode.find_by(id: allocation_offer_code_id)
+      end
 
       {
         variants: params[:variants] || default_variant_ids,
@@ -53,6 +58,7 @@ class Subscription::RestartAtCheckoutService
         offer_code: new_offer_code,
         clear_discount: original_discount.present? && new_offer_code.blank?,
         submitted_pre_discount_price_cents: params[:submitted_pre_discount_price_cents],
+        once_per_cart_discount_allocation: params[:once_per_cart_discount_allocation],
       }.compact
     end
 

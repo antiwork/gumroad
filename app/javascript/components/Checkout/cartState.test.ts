@@ -193,6 +193,39 @@ describe("getDiscountedPrice", () => {
     expect(effectiveDiscount?.type === "fixed" ? effectiveDiscount.cents : null).toBe(100);
   });
 
+  it("carries a cart-level discount across lines when the first line cannot absorb it", () => {
+    const secondProduct = { ...product, id: "second-id", permalink: "second" };
+    const firstItem = { ...item, price: 1_000, quantity: 1 };
+    const secondItem = { ...item, price: 1_000, quantity: 1, product: secondProduct };
+    const discount = {
+      type: "fixed" as const,
+      cents: 1_500,
+      once_per_cart: true,
+      once_per_cart_amount_cents: 1_500,
+      ...discountConditions,
+    };
+    const cart: CartState = {
+      items: [firstItem, secondItem],
+      discountCodes: [{ code: "SAVE", products: { product: discount, second: discount }, fromUrl: false }],
+    };
+
+    const firstResult = getDiscountedPrice(cart, firstItem);
+    const secondResult = getDiscountedPrice(cart, secondItem);
+
+    expect(firstResult.price).toBe(0);
+    expect(secondResult.price).toBe(500);
+    expect(
+      firstResult.discount?.type === "code" && firstResult.discount.value.type === "fixed"
+        ? firstResult.discount.value.cents
+        : null,
+    ).toBe(1_000);
+    expect(
+      secondResult.discount?.type === "code" && secondResult.discount.value.type === "fixed"
+        ? secondResult.discount.value.cents
+        : null,
+    ).toBe(500);
+  });
+
   it("does not submit the code from a covered line that received no allocation", () => {
     const secondProduct = { ...product, id: "second-id", permalink: "second" };
     const secondItem = { ...item, product: secondProduct };
@@ -310,6 +343,50 @@ describe("getDiscountedPrice", () => {
     const copiedItem = { ...item, option_id: "offered-option" };
 
     expect(getDiscountedPrice(cart, copiedItem, item).price).toBe(1_900);
+  });
+
+  it("uses the offered option price when pricing a copied cart item", () => {
+    const currentItem = { ...item, price: 1_000, quantity: 1 };
+    const cart: CartState = {
+      items: [currentItem],
+      discountCodes: [
+        {
+          code: "SAVE",
+          products: {
+            product: {
+              type: "fixed",
+              cents: 1_500,
+              once_per_cart: true,
+              once_per_cart_amount_cents: 1_500,
+              ...discountConditions,
+            },
+          },
+          fromUrl: false,
+        },
+      ],
+    };
+    const offeredItem = { ...currentItem, price: 2_000, option_id: "offered-option" };
+
+    expect(getDiscountedPrice(cart, offeredItem, currentItem).price).toBe(500);
+  });
+
+  it("allocates the remaining discount when pricing an additive cross-sell", () => {
+    const crossSellProduct = { ...product, id: "cross-sell-id", permalink: "cross-sell" };
+    const currentItem = { ...item, price: 1_000, quantity: 1 };
+    const crossSellItem = { ...item, price: 1_000, quantity: 1, product: crossSellProduct };
+    const discount = {
+      type: "fixed" as const,
+      cents: 1_500,
+      once_per_cart: true,
+      once_per_cart_amount_cents: 1_500,
+      ...discountConditions,
+    };
+    const cart: CartState = {
+      items: [currentItem],
+      discountCodes: [{ code: "SAVE", products: { product: discount, "cross-sell": discount }, fromUrl: false }],
+    };
+
+    expect(getDiscountedPrice(cart, crossSellItem).price).toBe(500);
   });
 
   it("keeps the source identity when pricing a copy of the second duplicate line", () => {

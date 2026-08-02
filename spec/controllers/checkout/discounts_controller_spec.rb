@@ -174,6 +174,27 @@ describe Checkout::DiscountsController do
       expect(response.parsed_body.dig("uses", "total")).to eq(6)
     end
 
+    it "counts a split cart allocation once under its first successful product" do
+      allocation_id = SecureRandom.uuid
+      [purchase1, purchase2].each do |purchase|
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 50,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: allocation_id,
+          pre_discount_minimum_price_cents: 100
+        )
+      end
+
+      get :statistics, params: { id: offer_code.external_id }, as: :json
+
+      expect(response.parsed_body.dig("uses")).to eq(
+        "total" => 1,
+        "products" => { products.first.external_id => 1 }
+      )
+    end
+
     it "counts a commission once while including both payments in revenue" do
       purchase1.destroy!
       purchase2.destroy!

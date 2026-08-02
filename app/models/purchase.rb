@@ -617,7 +617,7 @@ class Purchase < ApplicationRecord
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
                 :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited,
-                :submitted_pre_discount_price_cents
+                :submitted_pre_discount_price_cents, :once_per_cart_discount_allocation
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -657,6 +657,27 @@ class Purchase < ApplicationRecord
       .where(purchase_offer_code_discounts: { once_per_cart: true })
       .where("purchases.purchaser_id IS NULL OR purchases.purchaser_id != purchases.seller_id")
       .where("purchases.preorder_id IS NULL OR purchases.flags & ? != 0", flag_mapping["flags"][:is_preorder_authorization])
+      .where(
+        "purchases.created_at >= :cutoff OR purchases.stripe_status IS NOT NULL OR " \
+        "purchases.processor_setup_intent_id IS NOT NULL OR processor_payment_intents.id IS NOT NULL",
+        cutoff: ChargeProcessor::TIME_TO_COMPLETE_SCA.ago
+      )
+  }
+  scope :completed_once_per_cart_allocation_uses, lambda {
+    where(purchase_state: NON_GIFT_SUCCESS_STATES)
+      .not_is_archived_original_subscription_purchase
+      .joins(:purchase_offer_code_discount)
+      .where(purchase_offer_code_discounts: { once_per_cart: true })
+      .where.not(purchase_offer_code_discounts: { once_per_cart_allocation_id: nil })
+      .where("purchases.purchaser_id IS NULL OR purchases.purchaser_id != purchases.seller_id")
+  }
+  scope :active_once_per_cart_allocation_uses, lambda {
+    in_progress
+      .joins(:purchase_offer_code_discount)
+      .left_joins(:processor_payment_intent)
+      .where(purchase_offer_code_discounts: { once_per_cart: true })
+      .where.not(purchase_offer_code_discounts: { once_per_cart_allocation_id: nil })
+      .where("purchases.purchaser_id IS NULL OR purchases.purchaser_id != purchases.seller_id")
       .where(
         "purchases.created_at >= :cutoff OR purchases.stripe_status IS NOT NULL OR " \
         "purchases.processor_setup_intent_id IS NOT NULL OR processor_payment_intents.id IS NOT NULL",
@@ -1300,7 +1321,7 @@ class Purchase < ApplicationRecord
         else
           code_purchases.sum(&:quantity)
         end
-        next if units_spent <= offer_code.quantity_left
+        next if units_spent <= offer_code.quantity_left(excluding_order: code_purchases.first.order)
 
         code_purchases.each do |purchase|
           purchase.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
@@ -2378,6 +2399,22 @@ class Purchase < ApplicationRecord
   end
 
   def set_price_and_rate
+    if once_per_cart_discount_allocation.present? && !has_cached_offer_code?
+      allocated_offer_code = OfferCode.find_by(id: once_per_cart_discount_allocation[:offer_code_id])
+      if allocated_offer_code&.is_cents? && allocated_offer_code.once_per_cart?
+        discount = build_purchase_offer_code_discount(
+          offer_code: allocated_offer_code,
+          offer_code_amount: once_per_cart_discount_allocation[:amount_cents],
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: link.is_recurring_billing? ? allocated_offer_code.duration_in_months : nil
+        )
+        discount.once_per_cart_allocation_id = once_per_cart_discount_allocation[:allocation_id]
+        discount.pre_discount_displayed_price_cents = verified_pre_discount_displayed_price_cents
+      end
+    end
+
     if offer_code.present? && !has_cached_offer_code?
       resolved_discount = resolved_offer_code_discount_for_buyer
       if resolved_discount.present?
@@ -2419,6 +2456,7 @@ class Purchase < ApplicationRecord
       offer_code_amount: discount.offer_code_amount,
       offer_code_is_percent: discount.offer_code_is_percent,
       once_per_cart: discount.once_per_cart,
+      once_per_cart_allocation_id: discount.once_per_cart_allocation_id,
       pre_discount_minimum_price_cents: discount.pre_discount_minimum_price_cents,
       pre_discount_displayed_price_cents: discount.pre_discount_displayed_price_cents,
       duration_in_months: discount.duration_in_months

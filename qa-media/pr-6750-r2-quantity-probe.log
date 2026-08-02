@@ -1,7 +1,0 @@
-MARK6750Q SERVICE minqty emits={"demo" => {type: "fixed", cents: 100, product_ids: nil, expires_at: nil, minimum_quantity: 2, duration_in_billing_cycles: nil, minimum_amount_cents: nil}}
-MARK6750Q SERVICE partial=:unmet_minimum_purchase_quantity error=nil
-MARK6750Q CART would_render=200c for a 100c code
-MARK6750Q CHARGE demo qty=2 offer_amount_off=100
-MARK6750Q CHARGE c qty=1 offer_amount_off=100
-MARK6750Q CONTROL fixed qty1x2 emits={"demo" => 100, "c" => 0} (renders -1)
-MARK6750Q DONE

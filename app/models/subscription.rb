@@ -305,6 +305,7 @@ class Subscription < ApplicationRecord
         offer_code_amount: original_discount.offer_code_amount,
         offer_code_is_percent: original_discount.offer_code_is_percent,
         once_per_cart: original_discount.once_per_cart,
+        once_per_cart_allocation_id: original_discount.once_per_cart_allocation_id,
         pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
         pre_discount_displayed_price_cents: original_discount.pre_discount_displayed_price_cents,
         duration_in_months: original_discount.duration_in_months
@@ -521,7 +522,7 @@ class Subscription < ApplicationRecord
 
   # creates a new original subscription purchase & archives the existing one.
   # Any changes to the subscription made here must be reverted in `Subscription::UpdaterService#restore_original_purchase`
-  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false, clear_deleted_discount: false, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED, submitted_pre_discount_price_cents: nil)
+  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false, clear_deleted_discount: false, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED, submitted_pre_discount_price_cents: nil, once_per_cart_discount_allocation: nil)
     raise Subscription::UpdateFailed, "Installment plans cannot be updated." if is_installment_plan?
     raise Subscription::UpdateFailed, "Changing plans for fixed-length subscriptions is not currently supported." if has_fixed_length?
 
@@ -547,6 +548,7 @@ class Subscription < ApplicationRecord
       new_purchase.is_original_subscription_purchase = true
       new_purchase.perceived_price_cents = perceived_price_cents
       new_purchase.submitted_pre_discount_price_cents = submitted_pre_discount_price_cents
+      new_purchase.once_per_cart_discount_allocation = once_per_cart_discount_allocation
       new_purchase.price_range = perceived_price_cents.present? ? perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0) : nil
       new_purchase.business_vat_id = business_vat_id.presence || original_purchase.purchase_sales_tax_info&.business_vat_id
       new_purchase.quantity = new_quantity if new_quantity.present?
@@ -564,7 +566,10 @@ class Subscription < ApplicationRecord
       original_purchase.is_archived_original_subscription_purchase = true
       original_purchase.save!
 
-      if offer_code.present?
+      if once_per_cart_discount_allocation.present?
+        new_purchase.offer_code = offer_code
+        new_purchase.purchase_offer_code_discount = nil
+      elsif offer_code.present?
         new_purchase.offer_code = offer_code
         new_purchase.purchase_offer_code_discount = nil
       elsif clear_discount && new_purchase.offer_code == original_purchase.offer_code && !new_purchase.offer_code&.tiered?
@@ -589,6 +594,7 @@ class Subscription < ApplicationRecord
           offer_code_amount: copied_discount.offer_code_amount,
           offer_code_is_percent: copied_discount.offer_code_is_percent,
           once_per_cart: copied_discount.once_per_cart,
+          once_per_cart_allocation_id: copied_discount.once_per_cart_allocation_id,
           duration_in_months: copied_discount.duration_in_months
         )
       elsif new_purchase.offer_code.present? && new_purchase.offer_code == original_purchase.offer_code && (original_discount = original_purchase.purchase_offer_code_discount)
@@ -600,6 +606,7 @@ class Subscription < ApplicationRecord
           offer_code_amount: original_discount.offer_code_amount,
           offer_code_is_percent: original_discount.offer_code_is_percent,
           once_per_cart: original_discount.once_per_cart,
+          once_per_cart_allocation_id: original_discount.once_per_cart_allocation_id,
           duration_in_months: original_discount.duration_in_months
         )
       end

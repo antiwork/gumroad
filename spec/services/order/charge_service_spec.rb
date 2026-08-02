@@ -2386,10 +2386,19 @@ describe Order::ChargeService, :vcr do
       offer_code.save!(validate: false)
 
       order = create(:order)
+      allocation_id = SecureRandom.uuid
       [variant_a, variant_b].each do |variant|
         purchase = build(:purchase_in_progress, link: product, seller:, offer_code:, quantity: 1)
         purchase.variant_attributes << variant
         purchase.save(validate: false)
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 50,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: allocation_id,
+          pre_discount_minimum_price_cents: product.price_cents
+        )
         order.purchases << purchase
       end
 

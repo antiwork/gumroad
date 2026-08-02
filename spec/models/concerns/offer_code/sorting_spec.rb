@@ -28,6 +28,28 @@ describe OfferCode::Sorting do
       expect(seller.offer_codes.sorted_by(key: "uses", direction: "desc")).to eq([offer_code1, offer_code2, offer_code3])
     end
 
+    it "sorts a split cart allocation as one use" do
+      split_cart_code = create(:offer_code, code: "split-cart", user: seller, products: [product1])
+      regular_code = create(:offer_code, code: "regular", user: seller, products: [product1])
+      allocation_id = SecureRandom.uuid
+      3.times do
+        purchase = create(:purchase, link: product1, offer_code: split_cart_code)
+        purchase.create_purchase_offer_code_discount!(
+          offer_code: split_cart_code,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: allocation_id,
+          pre_discount_minimum_price_cents: 1000
+        )
+      end
+      2.times { create(:purchase, link: product1, offer_code: regular_code) }
+
+      sorted_codes = seller.offer_codes.where(id: [split_cart_code.id, regular_code.id]).sorted_by(key: "uses", direction: "asc")
+
+      expect(sorted_codes).to eq([split_cart_code, regular_code])
+    end
+
     it "returns offer codes sorted by revenue" do
       expect(seller.offer_codes.sorted_by(key: "uses", direction: "asc")).to eq([offer_code3, offer_code2, offer_code1])
       expect(seller.offer_codes.sorted_by(key: "uses", direction: "desc")).to eq([offer_code1, offer_code2, offer_code3])

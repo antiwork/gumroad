@@ -1,6 +1,0 @@
-MARK6750S cross_sell_pass for=of before={"of" => 100} after={"of" => 100}
-MARK6750S cross_sell_pass for=demo before={"of" => 100, "demo" => 0} after={"of" => 0, "demo" => 0}
-MARK6750S cross_sell_pass for=c before={"of" => 0, "demo" => 0, "c" => 0} after={"of" => 0, "demo" => 0, "c" => 0}
-MARK6750S FINAL {"of" => 0, "demo" => 0, "c" => 0}
-MARK6750S x_is_cart_line=true a_cross_sells=["of"]
-MARK6750S DONE

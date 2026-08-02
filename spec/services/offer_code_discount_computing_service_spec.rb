@@ -172,8 +172,7 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data][product.unique_permalink][:discount][:cents]).to eq(500)
     end
 
-    # The code lands whole on one line; the remainder does not spill onto the next line.
-    it "drops the remainder when the discounted line costs less than the code" do
+    it "carries the remainder when the first discounted line costs less than the code" do
       cheap = create(:product, user: seller, price_cents: 300)
       dearer = create(:product, user: seller, price_cents: 400)
       products = {
@@ -185,9 +184,8 @@ describe OfferCodeDiscountComputingService do
 
       expect(result[:error_code]).to be_nil
       expect(result[:products_data].size).to eq(2)
-      charged = result[:products_data].values.select { _1[:discount][:cents].positive? }
-      expect(charged.size).to eq(1)
-      expect(charged.first[:discount]).to include(type: "fixed", cents: 500)
+      expect(result[:products_data].values.map { _1[:discount][:cents] }).to eq([300, 200])
+      expect(result[:products_data].values).to all(satisfy { _1[:discount][:once_per_cart_amount_cents] == 500 })
     end
   end
 

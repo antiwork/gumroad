@@ -40,10 +40,17 @@ class Checkout::DiscountsController < Sellers::BaseController
     per_item = uses.left_joins(:purchase_offer_code_discount)
                    .where(purchase_offer_code_discounts: { once_per_cart: [false, nil] })
                    .group(:link_id).sum(:quantity)
-    per_cart = uses.joins(:purchase_offer_code_discount)
-                   .where(purchase_offer_code_discounts: { once_per_cart: true })
-                   .group(:link_id).count
-    uses_by_product = per_item.merge(per_cart) { |_link_id, item_uses, cart_uses| item_uses + cart_uses }
+    legacy_per_cart = uses.joins(:purchase_offer_code_discount)
+                          .where(purchase_offer_code_discounts: { once_per_cart: true, once_per_cart_allocation_id: nil })
+                          .group(:link_id).count
+    allocation_representatives = uses.joins(:purchase_offer_code_discount)
+                                     .where(purchase_offer_code_discounts: { once_per_cart: true })
+                                     .where.not(purchase_offer_code_discounts: { once_per_cart_allocation_id: nil })
+                                     .group("purchase_offer_code_discounts.once_per_cart_allocation_id")
+                                     .select("MIN(purchases.id)")
+    allocated_per_cart = uses.where(id: allocation_representatives).group(:link_id).count
+    uses_by_product = per_item.merge(legacy_per_cart) { |_link_id, item_uses, cart_uses| item_uses + cart_uses }
+                              .merge(allocated_per_cart) { |_link_id, legacy_uses, allocation_uses| legacy_uses + allocation_uses }
     products = uses_by_product.transform_keys { ObfuscateIds.encrypt(_1) }
 
     render json: { uses: { total: uses_by_product.values.sum, products: }, revenue_cents: purchases.sum(:price_cents) }

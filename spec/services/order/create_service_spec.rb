@@ -115,6 +115,208 @@ describe Order::CreateService, :vcr do
         expect(order.purchases.order(:id).first.purchase_offer_code_discount.pre_discount_displayed_price_cents).to eq(price_1)
       end
 
+      it "carries an amount the first line cannot absorb onto the next line" do
+        product_1.update!(price_cents: 10_00)
+        offer_code.update!(amount_cents: 15_00, max_purchase_count: 1)
+        params[:line_items] = [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 0,
+            quantity: 1,
+            discount_code: offer_code.code,
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 5_00,
+            quantity: 1,
+            discount_code: offer_code.code,
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        purchases = order.purchases.order(:id)
+
+        expect(purchase_responses).to be_empty
+        expect(purchases.map(&:displayed_price_cents)).to eq([0, 5_00])
+        expect(purchases.map(&:offer_code_id)).to eq([offer_code.id, offer_code.id])
+        expect(purchases.map { _1.purchase_offer_code_discount.offer_code_amount }).to eq([10_00, 5_00])
+        expect(purchases.map(&:displayed_price_cents_before_offer_code)).to eq([10_00, 10_00])
+        expect(offer_code.quantity_left).to eq(0)
+      end
+
+      it "keeps the cart code identity when a later fragment is an accepted cross-sell" do
+        product_1.update!(price_cents: 10_00)
+        offer_code.update!(amount_cents: 15_00, max_purchase_count: 1)
+        cross_sell_code = create(:offer_code, user: seller_1, products: [product_2], code: "CROSSSELL", amount_cents: 1_00,
+                                              max_purchase_count: 1)
+        cross_sell = create(
+          :upsell,
+          seller: seller_1,
+          product: product_2,
+          selected_products: [product_1],
+          offer_code: cross_sell_code,
+          cross_sell: true
+        )
+        params[:line_items] = [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 0,
+            quantity: 1,
+            discount_code: offer_code.code,
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 5_00,
+            quantity: 1,
+            discount_code: offer_code.code,
+            accepted_offer: {
+              id: cross_sell.external_id,
+              original_product_id: product_1.external_id,
+            },
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        purchase = order.purchases.find_by(link: product_2)
+
+        expect(purchase_responses).to be_empty
+        expect(purchase.offer_code).to eq(offer_code)
+        expect(purchase.purchase_offer_code_discount.offer_code).to eq(offer_code)
+        expect(cross_sell_code.quantity_left).to eq(1)
+      end
+
+      it "keeps capped-code usage on a surviving fragment when the first allocation fails" do
+        product_1.update!(price_cents: 10_00)
+        offer_code.update!(amount_cents: 15_00, max_purchase_count: 1)
+        params[:line_items] = [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 0,
+            quantity: 1,
+            variants: [create(:variant).external_id],
+            discount_code: offer_code.code,
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 5_00,
+            quantity: 1,
+            discount_code: offer_code.code,
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        surviving_purchase = order.purchases.find_by(link: product_2)
+
+        expect(purchase_responses["unique-id-0"]).to include(success: false)
+        expect(surviving_purchase).to be_in_progress
+        expect(surviving_purchase.offer_code_id).to eq(offer_code.id)
+        expect(surviving_purchase.displayed_price_cents).to eq(5_00)
+        expect(surviving_purchase.purchase_offer_code_discount.offer_code_amount).to eq(5_00)
+        expect(offer_code.quantity_left).to eq(0)
+      end
+
+      it "does not reprice surviving lines after checkout submission" do
+        product_1.update!(price_cents: 10_00)
+        offer_code.update!(amount_cents: 15_00, max_purchase_count: 1)
+        params[:line_items] = [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 0,
+            quantity: 1,
+            variants: [create(:variant).external_id],
+            discount_code: offer_code.code,
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 5_00,
+            quantity: 1,
+            discount_code: offer_code.code,
+          },
+          {
+            uid: "unique-id-2",
+            permalink: product_3.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 10_00,
+            quantity: 1,
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        second_purchase = order.purchases.find_by(link: product_2)
+        third_purchase = order.purchases.find_by(link: product_3)
+
+        expect(purchase_responses["unique-id-0"]).to include(success: false)
+        expect(second_purchase.displayed_price_cents).to eq(5_00)
+        expect(third_purchase.displayed_price_cents).to eq(10_00)
+        expect(second_purchase.purchase_offer_code_discount.offer_code_amount).to eq(5_00)
+        expect(third_purchase.purchase_offer_code_discount).to be_nil
+        expect(second_purchase.offer_code_id).to eq(offer_code.id)
+        expect(third_purchase.offer_code_id).to be_nil
+        expect(offer_code.quantity_left).to eq(0)
+      end
+
+      it "restores the use when no discounted line survives" do
+        product_1.update!(price_cents: 10_00)
+        offer_code.update!(amount_cents: 10_00, max_purchase_count: 1)
+        params[:line_items] = [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 0,
+            quantity: 1,
+            variants: [create(:variant).external_id],
+            discount_code: offer_code.code,
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 10_00,
+            quantity: 1,
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        surviving_purchase = order.purchases.find_by(link: product_2)
+
+        expect(purchase_responses["unique-id-0"]).to include(success: false)
+        expect(surviving_purchase.displayed_price_cents).to eq(10_00)
+        expect(surviving_purchase.offer_code_id).to be_nil
+        expect(surviving_purchase.purchase_offer_code_discount).to be_nil
+        expect(offer_code.quantity_left).to eq(1)
+      end
+
+      it "rejects duplicate line item IDs before allocating the discount" do
+        params[:line_items].second[:uid] = params[:line_items].first[:uid]
+
+        expect do
+          order, purchase_responses = Order::CreateService.new(params:).perform
+
+          expect(order).not_to be_persisted
+          expect(purchase_responses.values).to all(include(
+            success: false,
+            error_message: "The cart data is invalid. Please refresh and try again."
+          ))
+        end.not_to change(Purchase, :count)
+      end
+
       it "snapshots the chosen PWYW price when the discount reaches exactly zero" do
         chosen_price = price_1 + 2_00
         product_1.update!(customizable_price: true)
@@ -199,6 +401,18 @@ describe Order::CreateService, :vcr do
 
         expect(purchase_responses).to be_empty
         expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1 * 2 - 1_00, price_2])
+      end
+
+      it "prioritizes the line that submitted the code" do
+        params[:line_items].first.delete(:discount_code)
+        params[:line_items].first[:perceived_price_cents] = price_1
+        params[:line_items].second[:perceived_price_cents] = price_2 - 1_00
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1, price_2 - 1_00])
+        expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([nil, offer_code.id])
       end
 
       it "allocates by line identity when two variants share a permalink" do
