@@ -327,8 +327,6 @@ export const startClientConfirmOrderCreation = async (
     if (!prepareResponse.success) {
       return translateOrderFailureResponseIntoLineItemFailures(requestData, prepareResponse, activeOfferCodes);
     }
-    retryOfferCodes = mergeOfferCodes(activeOfferCodes, prepareResponse.offer_codes);
-
     const confirmationLineItem =
       Object.values(prepareResponse.line_items).find(
         (lineItem): lineItem is OrderRequiresPaymentConfirmationResponse =>
@@ -337,14 +335,16 @@ export const startClientConfirmOrderCreation = async (
 
     if (!confirmationLineItem) {
       // No charge required (e.g. an all-free cart): the prepare responses are already final.
+      const finalOfferCodes = replaceOncePerCartOfferCodes(activeOfferCodes, prepareResponse.offer_codes);
       return mapResultsByUid(
         requestData,
         prepareResponse.line_items,
         prepareResponse.can_buyer_sign_up,
-        offerCodesForFailedLineItems(requestData, prepareResponse.line_items, retryOfferCodes),
+        offerCodesForFailedLineItems(requestData, prepareResponse.line_items, finalOfferCodes),
       );
     }
 
+    retryOfferCodes = mergeOfferCodes(activeOfferCodes, prepareResponse.offer_codes);
     const { client_secret: clientSecret, order } = confirmationLineItem;
     const stripe = order.stripe_connect_account_id
       ? await getConnectedAccountStripeInstance(order.stripe_connect_account_id)

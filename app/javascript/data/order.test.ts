@@ -418,6 +418,41 @@ describe("startClientConfirmOrderCreation", () => {
     expect(result).toEqual([{ code: "SAVE", products: { "product-b": fixedDiscount(0) } }]);
   });
 
+  it("does not restore a cart-level code rejected during a no-charge prepare", async () => {
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const mixedRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-b": oncePerCartDiscount(0) } }];
+    requestMock.mockResolvedValueOnce(
+      jsonResponse({
+        ...prepareResponse,
+        line_items: {
+          "product-a ": confirmedPurchase("product-a"),
+          "product-b ": {
+            success: false,
+            permalink: "product-b",
+            error_message: "The discount is no longer available.",
+            name: null,
+            formatted_price: "$10",
+            error_code: null,
+            is_tax_mismatch: false,
+            card_country: null,
+            ip_country: null,
+            updated_product: null,
+          },
+        },
+        offer_codes: [],
+      }),
+    );
+
+    const result = await startClientConfirmOrderCreation(mixedRequestData, "ct_123", "card", activeOfferCodes);
+
+    expect(confirmPaymentMock).not.toHaveBeenCalled();
+    expect(result.lineItems["product-b "]?.success).toBe(false);
+    expect(result.offerCodes).toEqual([]);
+  });
+
   it("drops a capped cart-level code when finalization no longer returns it", async () => {
     const firstLine = requestData.lineItems.at(0);
     if (!firstLine) throw new Error("Missing test line item");
