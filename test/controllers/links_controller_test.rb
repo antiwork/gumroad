@@ -2029,6 +2029,31 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_response :success
   end
 
+  test "PUT update re-denominates membership tier prices when the editor changes display currency" do
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller, price_currency_type: "usd")
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      price_currency_type: "eur",
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 } } },
+        { id: second_tier.external_id, name: second_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    }, format: :json
+
+    assert_response :success
+    assert_equal "eur", product.reload.price_currency_type
+    assert_equal 300, first_tier.reload.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+    assert_equal 500, second_tier.reload.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+  end
+
   test "PUT update rejects a stale tier save that would re-enable a recurrence another session turned off" do
     enforce_stale_content_block!
     # Both tiers carry the same set of recurrences — the editor enforces that,
