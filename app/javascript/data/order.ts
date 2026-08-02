@@ -343,7 +343,7 @@ export const startClientConfirmOrderCreation = async (
       );
     }
 
-    retryOfferCodes = mergeOfferCodes(activeOfferCodes, prepareResponse.offer_codes);
+    retryOfferCodes = prepareResponse.offer_codes;
     const { client_secret: clientSecret, order } = confirmationLineItem;
     const stripe = order.stripe_connect_account_id
       ? await getConnectedAccountStripeInstance(order.stripe_connect_account_id)

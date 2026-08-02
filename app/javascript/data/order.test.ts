@@ -534,10 +534,46 @@ describe("startClientConfirmOrderCreation", () => {
     expect(result.offerCodes).toEqual([]);
   });
 
+  it("does not restore a legacy code rejected by prepare when another line needs confirmation", async () => {
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const mixedRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-b": fixedDiscount(100) } }];
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...prepareResponse,
+          line_items: {
+            ...prepareResponse.line_items,
+            "product-b ": {
+              success: false,
+              permalink: "product-b",
+              error_message: "The discount is no longer available.",
+              name: null,
+              formatted_price: "$10",
+              error_code: null,
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            },
+          },
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ success: true }));
+    confirmPaymentMock.mockResolvedValueOnce({ error: { message: "Card failed." } });
+
+    const result = await startClientConfirmOrderCreation(mixedRequestData, "ct_123", "card", activeOfferCodes);
+
+    expect(result.offerCodes).toEqual([]);
+  });
+
   it("reports a confirm failure to the server so redirect-method errors are visible in production", async () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": fixedDiscount(100) } }];
     requestMock
-      .mockResolvedValueOnce(jsonResponse(prepareResponse))
+      .mockResolvedValueOnce(jsonResponse({ ...prepareResponse, offer_codes: activeOfferCodes }))
       .mockResolvedValueOnce(jsonResponse({ success: true }));
     const stripe = typia.assert<Stripe>({});
     stripe.confirmPayment = vi.fn().mockResolvedValue({
@@ -565,9 +601,9 @@ describe("startClientConfirmOrderCreation", () => {
     expect(result.offerCodes).toEqual(activeOfferCodes);
   });
 
-  it("preserves active codes when payment confirmation rejects before capture", async () => {
+  it("preserves codes accepted by prepare when payment confirmation rejects before capture", async () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": fixedDiscount(100) } }];
-    requestMock.mockResolvedValueOnce(jsonResponse(prepareResponse));
+    requestMock.mockResolvedValueOnce(jsonResponse({ ...prepareResponse, offer_codes: activeOfferCodes }));
     confirmPaymentMock.mockRejectedValueOnce(new Error("network down"));
 
     const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);

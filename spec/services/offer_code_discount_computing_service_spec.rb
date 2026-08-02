@@ -243,6 +243,21 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data].values).to all(satisfy { _1[:discount][:once_per_cart_amount_cents] == 500 })
     end
 
+    it "carries the amount that would leave a line below the currency minimum" do
+      fixed_code.update!(amount_cents: 199)
+      cheap = create(:product, user: seller, price_cents: 100)
+      dearer = create(:product, user: seller, price_cents: 1000)
+      products = {
+        cheap.unique_permalink => { quantity: "2", permalink: cheap.unique_permalink, price_cents: 200 },
+        dearer.unique_permalink => { quantity: "1", permalink: dearer.unique_permalink, price_cents: 1000 },
+      }
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].values.map { _1[:discount][:cents] }).to eq([101, 98])
+    end
+
     it "splits the amount across duplicate checkout lines after aggregate eligibility" do
       duplicate_lines = {
         "first" => { quantity: "1", permalink: product.unique_permalink, price_cents: 300 },

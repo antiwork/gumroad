@@ -177,7 +177,12 @@ class OfferCodeDiscountComputingService
     def allocate_once_per_cart_discount(discount, offer_code, product, link, purchase_quantity)
       @remaining_once_per_cart_discount_cents ||= {}
       remaining = @remaining_once_per_cart_discount_cents.fetch(offer_code.id, discount[:once_per_cart_amount_cents])
-      allocated = [remaining, once_per_cart_allocation_capacity(product, link, purchase_quantity)].min
+      full_price = once_per_cart_allocation_capacity(product, link, purchase_quantity)
+      allocated = [remaining, full_price].min
+      price_after_discount = full_price - allocated
+      if price_after_discount.positive? && price_after_discount < link.currency["min_price"]
+        allocated = [full_price - link.currency["min_price"], 0].max
+      end
       @remaining_once_per_cart_discount_cents[offer_code.id] = remaining - allocated
       discount.merge(cents: allocated)
     end

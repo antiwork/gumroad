@@ -1915,6 +1915,8 @@ class Purchase < ApplicationRecord
       minimum_price -= prorated_discount_price_cents
     end
 
+    return currency_minimum_or_zero(minimum_price) if once_per_cart_fixed_offer_code?
+
     minimum_price.round
   end
 
@@ -3982,7 +3984,7 @@ class Purchase < ApplicationRecord
     end
     minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
 
-    calculated_price = minimum_price_cents.round
+    calculated_price = once_per_cart_fixed_offer_code? ? currency_minimum_or_zero(minimum_price_cents) : minimum_price_cents.round
     calculated_price > 0 ? calculated_price : price_cents
   end
 
@@ -4167,6 +4169,13 @@ class Purchase < ApplicationRecord
       offer_code_for_pricing&.amount_off(purchase_min_price) || 0
     end
 
+    def currency_minimum_or_zero(price_cents)
+      rounded_price = price_cents.round
+      return link.currency["min_price"] if rounded_price.positive? && rounded_price < link.currency["min_price"]
+
+      rounded_price
+    end
+
     def once_per_cart_fixed_offer_code?
       pricing_offer_code = offer_code_for_pricing
       pricing_offer_code&.is_cents? && pricing_offer_code.once_per_cart?
@@ -4186,7 +4195,7 @@ class Purchase < ApplicationRecord
         price
       end
       price -= prorated_discount_price_cents if is_upgrade_purchase && prorated_discount_price_cents
-      price.round
+      currency_minimum_or_zero(price)
     end
 
     def displayed_price_usd_cents

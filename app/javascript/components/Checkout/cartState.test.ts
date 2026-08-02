@@ -332,6 +332,53 @@ describe("getDiscountedPrice", () => {
     expect(getDiscountedPrice(cart, secondItem).price).toBe(1_900);
   });
 
+  it("moves the allocation when another code wins on the first covered line", () => {
+    const secondProduct = { ...product, id: "second-id", permalink: "second" };
+    const firstItem = { ...item, quantity: 1 };
+    const secondItem = { ...item, quantity: 1, product: secondProduct };
+    const cartDiscount = {
+      type: "fixed" as const,
+      cents: 500,
+      once_per_cart: true,
+      once_per_cart_amount_cents: 500,
+      ...discountConditions,
+    };
+    const cart: CartState = {
+      items: [firstItem, secondItem],
+      discountCodes: [
+        { code: "CART", products: { product: cartDiscount, second: cartDiscount }, fromUrl: false },
+        {
+          code: "PRODUCT",
+          products: { product: { type: "fixed", cents: 800, ...discountConditions } },
+          fromUrl: false,
+        },
+      ],
+    };
+
+    expect(getDiscountedPrice(cart, firstItem).price).toBe(200);
+    expect(getDiscountedPrice(cart, secondItem).price).toBe(500);
+  });
+
+  it("carries the discount left by the currency minimum onto the next line", () => {
+    const secondProduct = { ...product, id: "second-id", permalink: "second" };
+    const firstItem = { ...item, price: 100, quantity: 2 };
+    const secondItem = { ...item, price: 1_000, quantity: 1, product: secondProduct };
+    const discount = {
+      type: "fixed" as const,
+      cents: 199,
+      once_per_cart: true,
+      once_per_cart_amount_cents: 199,
+      ...discountConditions,
+    };
+    const cart: CartState = {
+      items: [firstItem, secondItem],
+      discountCodes: [{ code: "SAVE", products: { product: discount, second: discount }, fromUrl: false }],
+    };
+
+    expect(getDiscountedPrice(cart, firstItem).price).toBe(99);
+    expect(getDiscountedPrice(cart, secondItem).price).toBe(902);
+  });
+
   it("keeps the allocation when pricing a copied cart item", () => {
     const cart = cartWith({
       type: "fixed",

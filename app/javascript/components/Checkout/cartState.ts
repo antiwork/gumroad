@@ -7,7 +7,7 @@ import {
   FreeTrial,
   ProductNativeType,
 } from "$app/parsers/product";
-import { CurrencyCode } from "$app/utils/currency";
+import { CurrencyCode, getMinPriceCents } from "$app/utils/currency";
 import { applyOfferCodeToCents } from "$app/utils/offer-code";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 
@@ -203,72 +203,58 @@ const getNonCodeDiscountedPrice = (cart: CartState, item: CartItem): DiscountedP
   return applicable;
 };
 
-const oncePerCartAllocationForItem = (
+const getDiscountedPriceForItem = (
   cart: CartState,
   item: CartItem,
-  sourceItem: CartItem,
-  discountCode: CartState["discountCodes"][number],
-  discount: Extract<Discount, { type: "fixed" }>,
-) => {
-  let remaining = discount.once_per_cart_amount_cents ?? discount.cents;
-  let sourceItemVisited = false;
-  for (const candidate of cart.items) {
-    sourceItemVisited ||= candidate === sourceItem;
-    const pricedCandidate = candidate === sourceItem ? item : candidate;
-    const candidateDiscount = discountCode.products[pricedCandidate.product.permalink];
-    if (
-      pricedCandidate.product.creator.id !== item.product.creator.id ||
-      candidateDiscount?.type !== "fixed" ||
-      !candidateDiscount.once_per_cart ||
-      candidateDiscount.once_per_cart_id !== discount.once_per_cart_id ||
-      !hasMetCartDiscountConditions(cart, pricedCandidate, candidateDiscount)
-    )
-      continue;
-
-    const fullPrice = pricedCandidate.price * pricedCandidate.quantity;
-    const allocated = Math.min(remaining, fullPrice);
-    if (allocated <= 0 || fullPrice - allocated > getNonCodeDiscountedPrice(cart, pricedCandidate).price) continue;
-    if (candidate === sourceItem) return allocated;
-    remaining -= allocated;
-  }
-
-  if (!sourceItemVisited) {
-    const candidateDiscount = discountCode.products[item.product.permalink];
-    if (
-      candidateDiscount?.type === "fixed" &&
-      candidateDiscount.once_per_cart &&
-      candidateDiscount.once_per_cart_id === discount.once_per_cart_id &&
-      hasMetCartDiscountConditions(cart, item, candidateDiscount)
-    ) {
-      const fullPrice = item.price * item.quantity;
-      const allocated = Math.min(remaining, fullPrice);
-      if (allocated > 0 && fullPrice - allocated <= getNonCodeDiscountedPrice(cart, item).price) return allocated;
-    }
-  }
-
-  return 0;
-};
-
-export function getDiscountedPrice(cart: CartState, item: CartItem, sourceItem: CartItem = item): DiscountedPrice {
+  remainingOncePerCartDiscounts: Map<string, number>,
+): DiscountedPrice => {
   let applicable = getNonCodeDiscountedPrice(cart, item);
-  for (const discountCode of cart.discountCodes) {
+  let winningOncePerCartAllocation: { key: string; cents: number; remaining: number } | null = null;
+  for (const [discountCodeIndex, discountCode] of cart.discountCodes.entries()) {
     const discount = discountCode.products[item.product.permalink];
     if (!discount) continue;
     if (!hasMetCartDiscountConditions(cart, item, discount)) continue;
     const oncePerCart = discount.type === "fixed" && discount.once_per_cart;
-    const allocatedCents = oncePerCart
-      ? oncePerCartAllocationForItem(cart, item, sourceItem, discountCode, discount)
-      : 0;
+    const allocationKey = oncePerCart
+      ? `${item.product.creator.id}:${discount.once_per_cart_id ?? `${discountCodeIndex}:${discountCode.code}`}`
+      : null;
+    const configuredAmount = oncePerCart ? (discount.once_per_cart_amount_cents ?? discount.cents) : 0;
+    const remaining = allocationKey ? (remainingOncePerCartDiscounts.get(allocationKey) ?? configuredAmount) : 0;
+    const fullPrice = item.price * item.quantity;
+    let allocatedCents = oncePerCart ? Math.min(remaining, fullPrice) : 0;
+    const priceAfterAllocation = fullPrice - allocatedCents;
+    const minimumPrice = getMinPriceCents(item.product.currency_code);
+    if (priceAfterAllocation > 0 && priceAfterAllocation < minimumPrice) {
+      allocatedCents = Math.max(fullPrice - minimumPrice, 0);
+    }
     if (oncePerCart && allocatedCents <= 0) continue;
     const discounted = oncePerCart
-      ? item.price * item.quantity - allocatedCents
+      ? fullPrice - allocatedCents
       : applyOfferCodeToCents(discount, item.price) * item.quantity;
     if (discounted <= applicable.price) {
       const effectiveDiscount = oncePerCart ? { ...discount, cents: allocatedCents } : discount;
       applicable = { discount: { type: "code", value: effectiveDiscount, code: discountCode.code }, price: discounted };
+      winningOncePerCartAllocation = allocationKey ? { key: allocationKey, cents: allocatedCents, remaining } : null;
     }
   }
+  if (winningOncePerCartAllocation) {
+    remainingOncePerCartDiscounts.set(
+      winningOncePerCartAllocation.key,
+      winningOncePerCartAllocation.remaining - winningOncePerCartAllocation.cents,
+    );
+  }
   return applicable;
+};
+
+export function getDiscountedPrice(cart: CartState, item: CartItem, sourceItem: CartItem = item): DiscountedPrice {
+  const remainingOncePerCartDiscounts = new Map<string, number>();
+  for (const candidate of cart.items) {
+    const pricedCandidate = candidate === sourceItem ? item : candidate;
+    const discountedPrice = getDiscountedPriceForItem(cart, pricedCandidate, remainingOncePerCartDiscounts);
+    if (candidate === sourceItem) return discountedPrice;
+  }
+
+  return getDiscountedPriceForItem(cart, item, remainingOncePerCartDiscounts);
 }
 
 export function newCartState(): CartState {

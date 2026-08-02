@@ -148,6 +148,36 @@ describe Order::CreateService, :vcr do
         expect(offer_code.quantity_left).to eq(0)
       end
 
+      it "carries the amount that would leave a positive total below the currency minimum" do
+        product_1.update!(price_cents: 1_00)
+        offer_code.update!(amount_cents: 1_99)
+        params[:line_items] = [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            price_cents: 2_00,
+            perceived_price_cents: 99,
+            quantity: 2,
+            discount_code: offer_code.code,
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 9_02,
+            quantity: 1,
+            discount_code: offer_code.code,
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        purchases = order.purchases.order(:id)
+
+        expect(purchase_responses).to be_empty
+        expect(purchases.map(&:displayed_price_cents)).to eq([99, 9_02])
+        expect(purchases.map { _1.purchase_offer_code_discount.offer_code_amount }).to eq([1_01, 98])
+      end
+
       it "keeps the cart code identity when a later fragment is an accepted cross-sell" do
         product_1.update!(price_cents: 10_00)
         offer_code.update!(amount_cents: 15_00, max_purchase_count: 1)
