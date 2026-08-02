@@ -45,9 +45,15 @@ describe "Profile page search params", :elasticsearch_wait_for_refresh, type: :r
   end
 
   it "renders when a visitor supplies a comma-joined ?ids= list" do
-    get_profile("?ids=1,2")
+    other_seller_product = create(:product, user: create(:user), name: "Someone else's product")
+
+    get_profile("?ids=#{other_seller_product.id}")
 
     expect(response).to be_successful
+    # :ids replaces the section's curated product list outright, so it staying out of the
+    # allowlist is what keeps a visitor from renaming the section's contents.
+    expect(response.body).to_not include(other_seller_product.name)
+    expect(response.body).to include(product.name)
   end
 
   it "renders when a visitor supplies internal-only curated sort params" do
@@ -60,6 +66,35 @@ describe "Profile page search params", :elasticsearch_wait_for_refresh, type: :r
     # search_options coerces these unconditionally (`.to_i`/`.to_f`), so an array shape raises
     # NoMethodError or 400s Elasticsearch unless normalized first.
     get_profile("?from[]=2&rating[]=4&query[]=a&min_price[]=1&size[]=3")
+
+    expect(response).to be_successful
+  end
+
+  it "renders when scalar filters arrive nested more than one level deep" do
+    # The nested scalars collapse to their innermost value, so `query` really filters here;
+    # the point of the example is that the crafted shape renders instead of raising.
+    get_profile("?query[][]=a&rating[][]=4&from[][]=2&size[][]=3&min_price[x]=1&sort[x]=y")
+
+    expect(response).to be_successful
+  end
+
+  it "renders when list filters arrive nested" do
+    get_profile("?tags[][]=a&filetypes[][]=pdf&ids[][]=1")
+
+    expect(response).to be_successful
+  end
+
+  it "renders when a visitor asks for more results than the result window allows" do
+    # search_options clamps `from` into 0..(MAX_RESULT_WINDOW - size), which raises on an
+    # inverted range unless size is bounded first.
+    get_profile("?size=20000")
+
+    expect(response).to be_successful
+    expect(response.body).to include(product.name)
+  end
+
+  it "renders when a visitor asks for a negative page size" do
+    get_profile("?size=-1")
 
     expect(response).to be_successful
   end

@@ -38,28 +38,34 @@ module SearchProducts
         search_params[:ids] = search_params[:ids].split(",").map(&:strip)
       end
 
-      search_params[:from] = Array.wrap(search_params[:from]).first.to_i if search_params[:from].present?
+      # These reach ES as `terms` clauses, which reject a nested structure with a 400.
+      %i[tags filetypes ids].each do |key|
+        next unless search_params[key].is_a?(Array)
 
-      if search_params[:size].is_a?(String)
-        search_params[:size] = search_params[:size].to_i
-      elsif search_params[:size].is_a?(Array)
-        search_params[:size] = search_params[:size].first.to_i
+        search_params[key] = search_params[key].filter_map { |element| scalar_search_value(element)&.to_s }
       end
 
-      # search_options builds `simple_query_string` and numeric clauses from these; none accepts
-      # a nested structure, and it coerces unconditionally (`.to_i`, `.to_f`). Take the first
-      # element of an array (matching how :from and :size already collapse) and drop a hash,
-      # whose values have no scalar reading.
-      %i[query rating min_price max_price sort recommended_by].each do |key|
-        value = search_params[key]
-        next unless value.is_a?(Array) || value.is_a?(Hash) || value.is_a?(ActionController::Parameters)
-
-        search_params[key] = value.is_a?(Array) ? value.first : nil
+      # search_options coerces each of these unconditionally (`.to_i`, `.to_f`) or hands it to ES
+      # as a scalar; a crafted `?query[][]=x` would otherwise 500 a public profile URL.
+      %i[query rating min_price max_price sort recommended_by from size].each do |key|
+        search_params[key] = scalar_search_value(search_params[key]) if search_params.key?(key)
       end
+
+      search_params[:from] = search_params[:from].to_i if search_params[:from].present?
+      # search_options computes MAX_RESULT_WINDOW - size and clamps against it, so an oversized
+      # or negative size raises on the range rather than returning nothing.
+      search_params[:size] = search_params[:size].to_i.clamp(0, Link::MAX_RESULT_WINDOW) if search_params[:size].present?
 
       search_params.delete(:search) unless search_params[:search].is_a?(Hash)
 
       search_params
+    end
+
+    # Collapses a crafted nested param to the scalar the search layer expects, or nil when it has
+    # no scalar reading. A deeper nesting collapses to nil rather than being unwrapped further.
+    def scalar_search_value(value)
+      value = value.first if value.is_a?(Array)
+      value.is_a?(String) || value.is_a?(Numeric) ? value : nil
     end
 
     def format_search_params!
