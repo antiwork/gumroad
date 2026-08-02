@@ -1,31 +1,10 @@
 # frozen_string_literal: true
 
 # Nightly sweep that clears STALE, TRANSIENT suppression entries from
-# SendGrid's bounce/block lists (see gumroad-private#1210).
-#
-# Why: the ops runbook calls stale transient bounces "the #1 cause of the
-# false 'I get nothing' report". A one-off failure (receiving server timed
-# out, greylisting, DNS still propagating on a brand-new domain) lands the
-# address on a suppression list, and SendGrid then silently drops every
-# future email to it — long after the underlying condition resolved. The
-# event-driven retry pipeline for NEW failures was never landed (see the
-# close rationale on antiwork/gumroad#6073); until it is, this sweep is the
-# only thing clearing the backlog.
-#
-# An entry is cleared only when ALL of these hold:
-#   1. Its recorded reason classifies as :transient (fail-closed classifier —
-#      hard bounces and unrecognized reasons are left alone).
-#   2. It is older than MIN_SUPPRESSION_AGE — a still-fresh suppression may
-#      be a condition that has not actually cleared yet.
-#   3. The address belongs to a user who signed in AFTER the suppression was
-#      created — live login activity is strong evidence the mailbox's owner
-#      is real and active, so the transient failure has almost certainly
-#      resolved.
-#
-# Guardrails: only the bounce/block deliverability lists are touched — never
-# spam_reports or unsubscribes (consent surfaces). The run is bounded by
-# MAX_CLEARS_PER_RUN so a mass-bounce incident can't turn into a mass-clear
-# incident, and every clear is logged individually.
+# SendGrid's bounce/block lists (gumroad-private#1210): one transient bounce
+# otherwise silently blocks every future email to that address. The retry
+# pipeline for NEW failures never landed (antiwork/gumroad#6073), so this
+# sweep is the only thing clearing the backlog.
 class StaleTransientSuppressionSweepJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low
