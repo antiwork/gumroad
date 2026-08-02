@@ -539,7 +539,7 @@ describe Checkout::BuyerCurrencyEligibility do
     end
 
     it "allows iDEAL in EUR for an EUR-priced product and flags the direct listed-amount case" do
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::EUR))
 
       expect(forced_decision).to be_eligible
       expect(forced_decision.currency).to eq(Currency::EUR)
