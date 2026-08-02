@@ -779,6 +779,7 @@ describe CustomerMailer do
       let(:commission) { create(:commission) }
 
       before do
+        commission.files.attach(file_fixture("test.pdf"))
         commission.create_completion_purchase!
         commission.deposit_purchase.create_url_redirect!
       end
