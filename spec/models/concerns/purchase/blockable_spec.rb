@@ -570,7 +570,8 @@ describe Purchase::Blockable do
     end
 
     it "returns nil when the buyer has no Stripe attempt inside the window" do
-      purchase.update!(stripe_transaction_id: nil)
+      # update! re-runs the purchase's charge validations; only the column matters here.
+      purchase.update_column(:stripe_transaction_id, nil)
 
       expect(purchase.processor_rule_refusal).to be_nil
     end
