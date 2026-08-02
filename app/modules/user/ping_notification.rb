@@ -75,13 +75,9 @@ module User::PingNotification
   end
 
   private
-    # The Store Agent mints a token per request and revokes it in its own ensure block, so its
-    # subscriptions are permanently token-less by design, and the notifier's created_at cutover
-    # cannot exclude them because they are created now. 24 are live in production, and their owners
-    # cannot re-authorize an application that has no authorization flow. That agent-created webhooks
-    # never deliver is a real bug, but it is ours to fix, not to ask the seller to act on.
+    # Store Agent subscriptions are token-less by design; seller notices only report third-party apps.
     def reportable_undeliverable?(oauth_application)
-      oauth_application.name != Ai::StoreAgentApiClient::AGENT_APP_NAME
+      !oauth_application.is_first_party_agent_app?
     end
 
     def live_ping_notification_token?(oauth_application)
