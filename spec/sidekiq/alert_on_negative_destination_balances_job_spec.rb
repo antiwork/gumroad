@@ -76,6 +76,16 @@ describe AlertOnNegativeDestinationBalancesJob do
     end
   end
 
+  it "stays silent for a negative destination total matched by a negative USD ledger, which is refund netting the payout handles" do
+    create(:balance, user: seller, merchant_account:, date: Date.today - 1,
+                     amount_cents: -728_50, holding_currency: Currency::PHP, holding_amount_cents: -728_50)
+    make_payable
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
   it "stays silent when no balance is negative" do
     create(:balance, user: seller, merchant_account:, date: Date.today - 1,
                      holding_currency: Currency::PHP, holding_amount_cents: 100_00)
@@ -107,14 +117,17 @@ describe AlertOnNegativeDestinationBalancesJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
-  it "does not report a residue row on a dead merchant account" do
+  it "reports a residue row on a retired merchant account, marking it, because the payout run still takes that row" do
     residue_row(-728_50)
     make_payable
     merchant_account.update!(deleted_at: Time.current)
 
     described_class.new.perform
 
-    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include(seller.email)
+      expect(message).to include("[RETIRED account]")
+    end
   end
 
   it "sums several residue rows on one account into a single line rather than one per row" do

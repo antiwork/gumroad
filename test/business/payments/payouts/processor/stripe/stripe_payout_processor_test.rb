@@ -568,7 +568,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
 
   test "destination_balance_drift_error when Gumroad's held-at-Stripe balances sum NEGATIVE fails the payout instead of silently subtracting the debit from the wire amount" do
     setup_drift
-    @eur_balance.update!(holding_amount_cents: -728_50)
+    @eur_balance.update!(holding_amount_cents: -728_50, amount_cents: 0)
     StripeTransferInternallyToCreator.expects(:transfer_funds_to_account).never
 
     errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
@@ -581,7 +581,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
 
   test "destination_balance_drift_error when the held-at-Stripe balances sum negative names the offending balance rows so the reader does not have to find them by hand" do
     setup_drift
-    @eur_balance.update!(holding_amount_cents: -728_50)
+    @eur_balance.update!(holding_amount_cents: -728_50, amount_cents: 0)
 
     errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
 
@@ -590,7 +590,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
 
   test "destination_balance_drift_error when the held-at-Stripe balances sum negative does not consult Stripe because a negative ledger is drift on its own evidence" do
     setup_drift
-    @eur_balance.update!(holding_amount_cents: -728_50)
+    @eur_balance.update!(holding_amount_cents: -728_50, amount_cents: 0)
     Stripe::Balance.expects(:retrieve).never
 
     StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
@@ -598,7 +598,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
 
   test "destination_balance_drift_error when a negative row is outweighed by healthy rows so the set still sums positive falls through to the ordinary Stripe comparison" do
     setup_drift
-    residue = create_balance(user: @user, merchant_account: @eur_merchant_account, holding_currency: Currency::EUR, holding_amount_cents: -728_50, date: Date.today - 1)
+    residue = create_balance(user: @user, merchant_account: @eur_merchant_account, holding_currency: Currency::EUR, holding_amount_cents: -728_50, amount_cents: 0, date: Date.today - 1)
     StripePayoutProcessor.stubs(:get_payout_details).returns([@eur_merchant_account, [], [@eur_balance, residue]])
     stub_stripe_balance(available: 1_000_00, pending: 0)
 
@@ -613,7 +613,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
   test "destination_balance_drift_error when the held-at-Stripe balances sum negative on a KRW account still fails because the negative check needs no cross-currency comparison" do
     setup_drift
     krw_merchant_account = create_merchant_account(user: @user, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::KRW, country: "KR")
-    krw_balance = create_balance(user: @user, merchant_account: krw_merchant_account, holding_currency: Currency::KRW, holding_amount_cents: -100_00)
+    krw_balance = create_balance(user: @user, merchant_account: krw_merchant_account, holding_currency: Currency::KRW, holding_amount_cents: -100_00, amount_cents: 0)
     StripePayoutProcessor.stubs(:get_payout_details).returns([krw_merchant_account, [], [krw_balance]])
     Stripe::Balance.expects(:retrieve).never
 
@@ -631,6 +631,17 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
 
     assert_empty errors
+  end
+
+  test "destination_balance_drift_error when a negative destination total is matched by a negative USD ledger proceeds, because a refund debits both sides and the payout nets coherently" do
+    setup_drift
+    @eur_balance.update!(holding_amount_cents: -728_50, amount_cents: -728_50)
+    Stripe::Balance.expects(:retrieve).never
+
+    errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
+
+    assert_empty errors
+    assert_not_equal "failed", @payment.reload.state
   end
 
   test "destination_balance_drift_error when the destination merchant account is KRW skips the drift check because KRW subunit conventions differ between Gumroad and Stripe" do

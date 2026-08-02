@@ -328,22 +328,34 @@ class StripePayoutProcessor
 
     expected_destination_cents = balances_held_by_stripe.sum(&:holding_amount_cents)
 
-    # A negative total is the drift, not an absence of it. `prepare_payment_and_set_amount` adds this
-    # sum straight into `payment.amount_cents`, so it comes off the wire while the seller's USD
-    # ledger still reads whole — the rows that dig it carry `amount_cents: 0`. That is worse than a
-    # blocked payout: nothing fails, the seller is just paid short and nobody is told. Checked ahead
-    # of the currency skips below because it needs no comparison against Stripe's balance to be true.
-    if expected_destination_cents.negative?
+    # A negative destination total is only drift when the USD ledger DISAGREES with it. Two classes
+    # produce one:
+    #
+    #   FX residue      holding < 0, `amount_cents: 0` — the seller's USD balance reads whole while
+    #                   the local-currency wire is short. Nothing fails; they are just paid less
+    #                   than they were told, which is why nobody finds it until they write in.
+    #   refund netting  holding < 0 AND amount_cents < 0 — both sides carry the debit, Stripe has
+    #                   already debited the destination, and the payout nets coherently. Measured 973
+    #                   such sets in production against 262 residue ones, so failing on the sign
+    #                   alone would block sellers who are paid correctly today, and three cycles of
+    #                   that auto-pauses them with a misattributed reason.
+    #
+    # So the trip condition is the sign disagreement, not the sign. Checked ahead of the currency
+    # skips below because it compares two of our own numbers and needs nothing from Stripe.
+    usd_ledger_cents = balances_held_by_stripe.sum(&:amount_cents)
+    if expected_destination_cents.negative? && !usd_ledger_cents.negative?
       return "Destination ledger is negative on #{merchant_account.charge_processor_merchant_id}: " \
              "balances held at Stripe sum to #{expected_destination_cents} " \
-             "#{merchant_account.currency} cents across #{balances_held_by_stripe.size} " \
+             "#{merchant_account.currency} cents while their USD ledger reads #{usd_ledger_cents} " \
+             "cents, across #{balances_held_by_stripe.size} " \
              "balance#{"s" if balances_held_by_stripe.size != 1} " \
-             "(#{negative_balance_ids(balances_held_by_stripe).join(", ")}). A payout cannot settle a " \
-             "debit, and paying out would subtract it from the wire amount. Reconcile the destination " \
-             "balance before retry.#{retired_account_balances_hint(merchant_account)}"
+             "(#{negative_balance_ids(balances_held_by_stripe).join(", ")}). Paying out would subtract " \
+             "the difference from the wire amount without it appearing in the seller's balance. " \
+             "Reconcile the destination balance before retry." \
+             "#{retired_account_balances_hint(merchant_account)}"
     end
 
-    return nil if expected_destination_cents.zero?
+    return nil if expected_destination_cents <= 0
 
     # KRW: Gumroad stores 100 subunits while Stripe reports single-unit, so the raw cents comparison
     # is off by 100x and would always flag drift for healthy accounts. Skipping is safer than

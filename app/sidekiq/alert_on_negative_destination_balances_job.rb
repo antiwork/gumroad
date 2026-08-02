@@ -22,11 +22,13 @@ class AlertOnNegativeDestinationBalancesJob
   # Report at most this many. The alert exists to be read.
   MAX_REPORTED = 25
 
-  # The bound on the work: how many negative rows get their seller's payability resolved. Everything
+  # The bound on the work: how many negative sets get their seller's payability resolved. Everything
   # past it is unscanned and the report says so rather than presenting its count as the total.
-  # Candidates arrive most-negative first, so a truncated scan still holds the largest exposures.
   # Measured 7,962 such rows in production (2026-08-02), of which 117 sellers were payable.
   MAX_CANDIDATES_SCANNED = 12_000
+
+  # Users aggregated per statement by the keyset walk in `candidate_pairs`.
+  USER_BATCH_SIZE = 25_000
 
   def perform
     scan = scan_for_negative_destinations
@@ -51,14 +53,21 @@ class AlertOnNegativeDestinationBalancesJob
       candidates.each do |user_id, merchant_account_id|
         merchant_account = MerchantAccount.find_by(id: merchant_account_id)
         next if merchant_account.nil?
-        next unless merchant_account.alive?
         next unless merchant_account.is_a_gumroad_managed_stripe_account?
 
-        # The guard sums the whole per-account set, so a single negative row outweighed by healthy
-        # ones is not in this population — it takes the ordinary Stripe comparison instead.
+        # Dead accounts are reported, not skipped. `mark_balances_processing` takes a seller's unpaid
+        # balances regardless of their merchant account's liveness, so a residue row parked on a
+        # RETIRED account — the country-change case `retired_account_balances_hint` exists for — will
+        # fail the real payout. Skipping it here would hide exactly the shape the guard most often
+        # trips on. The line says which, so a reader knows the row is on an account nobody watches.
         set = Balance.unpaid.where(user_id:, merchant_account_id:)
         set_total = set.sum(:holding_amount_cents)
         next unless set_total.negative?
+
+        # Same trip condition as the payout guard: a negative destination total matched by a negative
+        # USD ledger is refund netting, which pays out coherently. Reporting those would bury the
+        # residue rows under ~4x their number of sellers nobody needs to act on.
+        next if set.sum(:amount_cents).negative?
 
         user = User.find_by(id: user_id)
         next if user.nil? || user.suspended?
@@ -69,7 +78,7 @@ class AlertOnNegativeDestinationBalancesJob
             merchant_account:,
             set_total:,
             row_count: set.count,
-            worst_row_cents: set.minimum(:holding_amount_cents),
+            retired: !merchant_account.alive?,
             unpaid_usd_cents: user.unpaid_balance_cents,
           }
         else
@@ -80,24 +89,42 @@ class AlertOnNegativeDestinationBalancesJob
       { payable: report_order(payable), not_payable:, truncated: }
     end
 
-    # One entry per (seller, merchant account) with a negative row, most negative first — so a
-    # truncated scan keeps the largest exposures rather than an arbitrary page of them.
+    # One entry per (seller, merchant account) whose Stripe-held set nets negative.
     #
-    # Grouped rather than plucked per row: a seller can carry several residue rows on one account
-    # (this class compounds one per returned payout cycle) and they are one line in the report.
+    # Walked with a keyset cursor over `user_id` rather than a single ordered GROUP BY. There is no
+    # index on `holding_amount_cents`, so filtering on it first scans every unpaid row; and
+    # `Payouts.holding_balance_user_ids` carries the note that a whole-table aggregate over unpaid
+    # balances kept blowing MySQL's statement cap. Grouping by user_id never splits a user's SUM, so
+    # batching cannot change the answer. With `retry: 2`, a job that times out is a detector that
+    # silently never reports — the shape this one exists to prevent.
     def candidate_pairs
-      Balance.unpaid
-             .where(holding_amount_cents: ...0)
-             .group(:user_id, :merchant_account_id)
-             .order(Arel.sql("SUM(balances.holding_amount_cents) ASC"))
-             .limit(MAX_CANDIDATES_SCANNED + 1)
-             .pluck(:user_id, :merchant_account_id)
+      pairs = []
+      last_user_id = 0
+
+      loop do
+        batch = Balance.unpaid
+                       .where("user_id > ?", last_user_id)
+                       .group(:user_id, :merchant_account_id)
+                       .order(:user_id)
+                       .limit(USER_BATCH_SIZE)
+                       .pluck(:user_id, :merchant_account_id, Arel.sql("SUM(holding_amount_cents)"))
+        break if batch.empty?
+
+        pairs.concat(batch.filter_map do |user_id, merchant_account_id, holding_cents|
+          [user_id, merchant_account_id] if holding_cents.negative? && merchant_account_id.present?
+        end)
+        last_user_id = batch.last.first
+        break if pairs.size > MAX_CANDIDATES_SCANNED
+      end
+
+      pairs
     end
 
-    # Reads the same bar the payout run does rather than re-deriving one, so a line here means the
-    # next cycle really would reach this seller. A seller under their minimum is not safe, only not
-    # firing yet — they move into this report the moment they clear it, which is why the message
-    # carries their count too.
+    # A deliberately WIDER bar than the payout run's. `Payouts.is_user_payable` also gates on
+    # compliance, payout pauses, in-flight payments and a usable bank account; this reads only
+    # balance against minimum, so the report can name a seller no cycle would currently reach —
+    # including one this guard has already had paused. That is the right direction for a report
+    # whose job is to surface the row before it costs anyone money.
     def payable?(user)
       user.unpaid_balance_cents >= user.minimum_payout_amount_cents
     end
@@ -131,8 +158,9 @@ class AlertOnNegativeDestinationBalancesJob
     def line_for(entry)
       currency = entry[:merchant_account].currency
       rows = entry[:row_count] > 1 ? " across #{entry[:row_count]} balances" : ""
+      retired = entry[:retired] ? " [RETIRED account]" : ""
       "• #{entry[:user].email} (user #{entry[:user].id}) — #{entry[:set_total]} #{currency} cents#{rows} " \
-        "on #{entry[:merchant_account].charge_processor_merchant_id}, " \
+        "on #{entry[:merchant_account].charge_processor_merchant_id}#{retired}, " \
         "against #{entry[:unpaid_usd_cents]} USD cents payable, next payout #{entry[:user].next_payout_date}"
     end
 
