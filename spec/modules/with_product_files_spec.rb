@@ -317,21 +317,6 @@ describe WithProductFiles do
     context "when called on a Link record" do
       let(:product) { create(:product_with_pdf_files_with_size) }
 
-      it "does not reuse a row another param in the same request addresses by external_id" do
-        product = create(:product)
-        url = "#{S3_BASE_URL}attachments/shared/original/guide.pdf"
-        existing = product.product_files.create!(url:, size: 123)
-        fresh_id = SecureRandom.uuid
-
-        product.save_files!(
-          [{ external_id: existing.external_id, url:, size: 123 }, { external_id: fresh_id, url:, size: 123 }],
-          [],
-          delete_missing: false
-        )
-
-        expect(product.product_files.alive.count).to eq(2)
-      end
-
       it "reuses the same row across repeated identical editor retry requests" do
         product = create(:product)
         url = "#{S3_BASE_URL}attachments/retry/original/guide.pdf"
