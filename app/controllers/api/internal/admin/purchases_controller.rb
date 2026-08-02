@@ -317,7 +317,23 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       surviving = purchase.unblock_buyer!
       create_unblock_buyer_comments!(purchase)
 
-      if surviving.any?
+      # Stripe can keep refusing this buyer on one of our own Radar rules after every block we hold
+      # is gone, and the block we just cleared is what made them cycle cards into it. Read it from
+      # Stripe and say so, rather than reporting a clean unblock and inviting a retry Stripe will
+      # refuse (gumroad-private#1739).
+      refusal = purchase.processor_rule_refusal
+      refusal_note =
+        if refusal.nil?
+          ""
+        elsif refusal[:error]
+          " Could not check whether Stripe is still refusing this buyer — verify the latest charge before promising a retry."
+        else
+          " Stripe is still refusing this buyer on one of our risk rules (charge #{refusal[:charge_id]}, " \
+            "#{refusal[:network_status]}). That is a time-based rule with nothing for us to lift; it clears on its " \
+            "own about a day after their first attempt, so do not promise an immediate retry."
+        end
+
+      if surviving.any? || refusal.present?
         # Say so rather than reporting a bare success. Three years of "Buyer unblocked" notes were
         # written over unblocks that left a row behind, and the silence is what hid it
         # (gumroad-private#1648).
@@ -325,8 +341,11 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
           success: true,
           status: "partially_unblocked",
           surviving_blocks: surviving.map { |block| { object_type: block.object_type, object_value: block.object_value } },
-          message: "Unblocked buyer for purchase number #{purchase.external_id_numeric}, but #{surviving.size} block(s) still hold this buyer: " \
-                   "#{surviving.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}"
+          processor_rule_refusal: refusal,
+          message: "Unblocked buyer for purchase number #{purchase.external_id_numeric}." +
+                   (surviving.any? ? " #{surviving.size} block(s) still hold this buyer: " \
+                                     "#{surviving.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}." : "") +
+                   refusal_note
         }
       end
 

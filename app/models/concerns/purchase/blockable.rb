@@ -229,6 +229,47 @@ module Purchase::Blockable
     scopes.reduce { |combined, scope| combined.or(scope) }
   end
 
+  # How far back to look for the buyer's latest processor attempt. Radar's own velocity predicates
+  # run over 24h, so an older charge says nothing about whether a rule is holding them now.
+  PROCESSOR_REFUSAL_WINDOW = 24.hours
+
+  # Whether the PROCESSOR is still refusing this buyer on one of our own risk rules, read from the
+  # processor rather than inferred from our rows.
+  #
+  # This has to come from Stripe. A refusal on a Radar rule is a predicate over Stripe's own view of
+  # the last 24h, so there is no value-list item to delete and clearing every PlatformBlock leaves
+  # it standing. Our purchase rows cannot stand in for it: an attempt that dies before the card is
+  # authorised stores no `stripe_fingerprint` at all, so a buyer who cycled four payment methods can
+  # look like one card to us (gumroad-private#1739 — 14 of 16 attempts had a NULL fingerprint).
+  #
+  # Returns nil when nothing on the processor side is holding them.
+  def processor_rule_refusal
+    latest = Purchase.where(email:)
+                     .where(created_at: PROCESSOR_REFUSAL_WINDOW.ago..)
+                     .where(charge_processor_id: StripeChargeProcessor.charge_processor_id)
+                     .where.not(stripe_transaction_id: nil)
+                     .order(created_at: :desc)
+                     .first
+    return if latest.nil?
+
+    charge = ChargeProcessor.get_charge(latest.charge_processor_id, latest.stripe_transaction_id,
+                                       merchant_account: latest.merchant_account)
+    return unless charge&.outcome_type == "blocked" && charge.outcome_reason == "rule"
+
+    {
+      charge_id: latest.stripe_transaction_id,
+      network_status: charge.network_status,
+      risk_level: charge.risk_level,
+      seller_message: charge.seller_message,
+      attempted_at: latest.created_at,
+    }
+  rescue ChargeProcessorError => e
+    # A failed read must not make an unblock look clean, so report that the check could not run
+    # rather than swallowing it into a nil that reads as "not blocked".
+    Rails.logger.info("processor_rule_refusal: could not read charge for purchase #{id}: #{e.message}")
+    { error: "could not read the processor outcome" }
+  end
+
   private def buyer_blockable_values
     @_buyer_blockable_values ||= blockable_values_for([self, *sibling_buyer_purchases], extra_fingerprints: [recent_stripe_fingerprint], widened_emails: false)
   end

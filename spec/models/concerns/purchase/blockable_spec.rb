@@ -541,6 +541,47 @@ describe Purchase::Blockable do
     end
   end
 
+  describe "#processor_rule_refusal" do
+    let(:buyer_email) { "velocity-buyer@example.com" }
+    let(:purchase) { create(:purchase, email: buyer_email, stripe_transaction_id: "ch_latest") }
+
+    def stripe_charge_double(outcome_type:, outcome_reason:)
+      instance_double(StripeCharge, outcome_type:, outcome_reason:,
+                                    network_status: "not_sent_to_network",
+                                    risk_level: "normal",
+                                    seller_message: "Payment was blocked by one of your Radar rules.")
+    end
+
+    it "reports the refusal when Stripe blocked the latest charge on one of our rules" do
+      allow(ChargeProcessor).to receive(:get_charge)
+        .and_return(stripe_charge_double(outcome_type: "blocked", outcome_reason: "rule"))
+
+      refusal = purchase.processor_rule_refusal
+
+      expect(refusal[:charge_id]).to eq("ch_latest")
+      expect(refusal[:network_status]).to eq("not_sent_to_network")
+    end
+
+    it "returns nil when the issuer declined rather than one of our rules" do
+      allow(ChargeProcessor).to receive(:get_charge)
+        .and_return(stripe_charge_double(outcome_type: "issuer_declined", outcome_reason: "generic_decline"))
+
+      expect(purchase.processor_rule_refusal).to be_nil
+    end
+
+    it "returns nil when the buyer has no Stripe attempt inside the window" do
+      purchase.update!(stripe_transaction_id: nil)
+
+      expect(purchase.processor_rule_refusal).to be_nil
+    end
+
+    it "says the check could not run rather than reading as clean when Stripe is unreachable" do
+      allow(ChargeProcessor).to receive(:get_charge).and_raise(ChargeProcessorUnavailableError.new("boom"))
+
+      expect(purchase.processor_rule_refusal).to eq({ error: "could not read the processor outcome" })
+    end
+  end
+
   describe "#unblock_buyer!" do
     context "when buyer is not blocked" do
       it "does not call #unblock! on any blocked objects" do

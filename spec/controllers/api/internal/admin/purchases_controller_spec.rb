@@ -1546,6 +1546,42 @@ describe Api::Internal::Admin::PurchasesController do
       expect(purchase.reload.is_buyer_blocked_by_admin?).to be(false)
     end
 
+    it "warns that Stripe still refuses the buyer when a Radar rule blocked the latest charge" do
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+      allow_any_instance_of(Purchase).to receive(:processor_rule_refusal)
+        .and_return({ charge_id: "ch_blocked", network_status: "not_sent_to_network" })
+
+      post :unblock_buyer, params: params
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("success" => true, "status" => "partially_unblocked")
+      expect(response.parsed_body["processor_rule_refusal"]).to include("charge_id" => "ch_blocked")
+      expect(response.parsed_body["message"]).to include("Stripe is still refusing this buyer")
+      expect(response.parsed_body["message"]).to include("do not promise an immediate retry")
+    end
+
+    it "says the processor check could not run rather than reporting a clean unblock" do
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+      allow_any_instance_of(Purchase).to receive(:processor_rule_refusal)
+        .and_return({ error: "could not read the processor outcome" })
+
+      post :unblock_buyer, params: params
+
+      expect(response.parsed_body["status"]).to eq("partially_unblocked")
+      expect(response.parsed_body["message"]).to include("Could not check whether Stripe is still refusing")
+    end
+
+    it "reports a plain success when nothing on the processor side holds the buyer" do
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+      allow_any_instance_of(Purchase).to receive(:processor_rule_refusal).and_return(nil)
+
+      post :unblock_buyer, params: params
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["message"]).to eq("Successfully unblocked buyer for purchase number #{purchase.external_id_numeric}")
+      expect(response.parsed_body["processor_rule_refusal"]).to be_nil
+    end
+
     it "reports partially_unblocked with the surviving blocks when the unblock leaves rows behind" do
       purchase.block_buyer!(blocking_user_id: admin_user.id)
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "surviving-guid")

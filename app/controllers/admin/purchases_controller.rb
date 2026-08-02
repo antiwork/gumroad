@@ -103,15 +103,28 @@ class Admin::PurchasesController < Admin::BaseController
                                              purchase: @purchase)
       end
 
-      if surviving.any?
+      refusal = @purchase.processor_rule_refusal
+      refusal_note =
+        if refusal.nil?
+          ""
+        elsif refusal[:error]
+          " Could not check whether Stripe is still refusing this buyer — verify the latest charge before promising a retry."
+        else
+          " Stripe is still refusing this buyer on one of our risk rules (charge #{refusal[:charge_id]}); " \
+            "it clears on its own about a day after their first attempt, so do not promise an immediate retry."
+        end
+
+      if surviving.any? || refusal.present?
         # Same disclosure the internal API makes: the alert this message feeds is the only thing
         # the agent sees, and a bare "Buyer unblocked!" over a surviving row is the silence that
         # hid gumroad-private#1648.
         return render json: {
           success: true,
           status: "partially_unblocked",
-          message: "Unblocked buyer, but #{surviving.size} block(s) still hold this buyer: " \
-                   "#{surviving.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}"
+          message: "Unblocked buyer." +
+                   (surviving.any? ? " #{surviving.size} block(s) still hold this buyer: " \
+                                     "#{surviving.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}." : "") +
+                   refusal_note
         }
       end
     end

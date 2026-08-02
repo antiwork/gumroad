@@ -62,7 +62,12 @@ class StripeCharge < BaseProcessorCharge
     end
 
     def fetch_risk_level(stripe_charge)
-      self.risk_level = stripe_charge[:outcome][:risk_level]
+      outcome = stripe_charge[:outcome] || {}
+      self.risk_level = outcome[:risk_level]
+      self.network_status = outcome[:network_status]
+      self.outcome_type = outcome[:type]
+      self.outcome_reason = outcome[:reason]
+      self.seller_message = outcome[:seller_message]
     end
 
     def fetch_card_details_from(stripe_charge)
