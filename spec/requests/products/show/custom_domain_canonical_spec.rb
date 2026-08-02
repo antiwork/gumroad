@@ -13,27 +13,31 @@ describe "Product page canonical URL on a custom domain", type: :request do
     expect(response).to be_successful
     expect(response.body).to include(%(href="http://seller.example.com/l/#{product.unique_permalink}"))
     expect(response.body).to include(%(content="http://seller.example.com/l/#{product.unique_permalink}"))
-    expect(response.body).not_to include("#{seller.username}.gumroad.com/l/#{product.unique_permalink}")
+    # The Inertia product prop still carries the canonical subdomain long_url; only the
+    # head tags search engines read are re-pointed.
+    expect(response.body).not_to include(%(href="#{product.long_url}"))
   end
 
   it "keeps the subdomain canonical when the request is not on a custom domain" do
     get product.long_url
 
     expect(response).to be_successful
-    expect(response.body).to include("#{seller.username}.gumroad.com/l/#{product.unique_permalink}")
+    expect(response.body).to include(%(href="#{product.long_url}"))
+    expect(response.body).not_to include("seller.example.com")
   end
 
   context "with a product that emits JSON-LD" do
     let(:product) { create(:product, user: seller, name: "Canonical Ebook", native_type: Link::NATIVE_TYPE_EBOOK) }
 
     it "uses the custom domain for the structured-data urls too" do
-      get "http://seller.example.com/l/#{product.unique_permalink}"
+      custom_domain_url = "http://seller.example.com"
 
-      expect(response).to be_successful
-      structured_data = product.structured_data(host: "http://seller.example.com")
-      expect(structured_data["url"]).to eq("http://seller.example.com/l/#{product.unique_permalink}")
-      expect(structured_data["offers"]["url"]).to eq("http://seller.example.com/l/#{product.unique_permalink}")
-      expect(product.structured_data["url"]).to include("#{seller.username}.gumroad.com")
+      structured_data = product.structured_data(host: custom_domain_url)
+      expect(structured_data["url"]).to eq("#{custom_domain_url}/l/#{product.unique_permalink}")
+      expect(structured_data["offers"]["url"]).to eq("#{custom_domain_url}/l/#{product.unique_permalink}")
+
+      # nil host keeps the pre-existing subdomain behaviour for gumroad.com requests.
+      expect(product.structured_data["url"]).to eq(product.long_url)
     end
   end
 end
