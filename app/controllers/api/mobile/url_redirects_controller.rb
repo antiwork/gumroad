@@ -53,7 +53,7 @@ class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
 
       # Stream-only files, external links and streamable rentals are viewable but never
       # fetchable as originals. The web path enforces this on its own download action.
-      e404 if action_name == "download" && !@url_redirect.is_file_downloadable?(@product_file)
+      fetch_error("Could not find url redirect") if action_name == "download" && !@url_redirect.is_file_downloadable?(@product_file)
     end
 
     def mark_rental_as_viewed

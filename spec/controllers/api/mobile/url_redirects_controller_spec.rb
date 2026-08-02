@@ -186,6 +186,7 @@ describe Api::Mobile::UrlRedirectsController do
 
     it "does not stream content for an inactive membership" do
       purchase = create(:membership_purchase)
+      purchase.link.update!(block_access_after_membership_cancellation: true)
       purchase.subscription.update!(cancelled_at: 1.day.ago)
       blocked_url_redirect = create(:url_redirect, link: purchase.link, purchase:)
 
@@ -451,6 +452,7 @@ describe Api::Mobile::UrlRedirectsController do
     end
 
     it "downloads content when a chargeback was reversed" do
+      allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(100)
       purchase = create(:purchase, link: @product, chargeback_date: Time.current)
       purchase.update!(chargeback_reversed: true)
       allowed_url_redirect = create(:url_redirect, link: @product, purchase:)
