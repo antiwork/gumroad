@@ -117,11 +117,13 @@ const retryOfferCodeCandidates = (requestData: StartCartPurchaseRequestPayload, 
 // Handles SCA actions where appropriate.
 // Result object is guaranteed to have a result for each line item in the request.
 export const startOrderCreation = async (requestData: StartCartPurchaseRequestPayload): Promise<CartPurchaseResult> => {
+  let retryOfferCodes: OfferCodes = [];
   try {
     const response = await createOrder(requestData);
     if (!response.success) {
       return translateOrderFailureResponseIntoLineItemFailures(requestData, response);
     }
+    retryOfferCodes = response.offer_codes;
     const lineItemRequiringSCA =
       Object.values(response.line_items).find(
         (lineItem): lineItem is OrderRequiresCardSetupResponse | OrderRequiresCardActionResponse =>
@@ -162,7 +164,7 @@ export const startOrderCreation = async (requestData: StartCartPurchaseRequestPa
         {},
       ),
       canBuyerSignUp: false,
-      offerCodes: [],
+      offerCodes: retryOfferCodes,
     };
     return ensureValidCartResult(requestData, result);
   }

@@ -313,6 +313,41 @@ describe("startOrderCreation", () => {
     });
     expect(result.offerCodes).toEqual([{ code: "save", products: { "product-b": oncePerCartDiscount(100) } }]);
   });
+
+  it("preserves recovered codes when SCA throws before confirmation", async () => {
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardPayment = vi.fn().mockRejectedValue(new Error("Stripe unavailable"));
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const lineItem = requestData.lineItems.at(0);
+    if (!lineItem) throw new Error("Missing test line item");
+    const recoveredOfferCodes = [{ code: "SAVE", products: { [lineItem.permalink]: oncePerCartDiscount(100) } }];
+    requestMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        line_items: {
+          [lineItem.uid]: {
+            success: true,
+            requires_card_action: true,
+            client_secret: "pi_secret",
+            order: { id: "order-token", stripe_connect_account_id: null },
+          },
+        },
+        can_buyer_sign_up: false,
+        offer_codes: recoveredOfferCodes,
+      }),
+    );
+
+    const result = await startOrderCreation(requestData);
+
+    expect(result.offerCodes).toEqual(recoveredOfferCodes);
+  });
 });
 
 describe("startClientConfirmOrderCreation", () => {
