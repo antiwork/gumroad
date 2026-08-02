@@ -1803,6 +1803,86 @@ describe Charge::Disputable, :vcr do
             end.not_to change { stripe_partially_refunded_purchase.reload.chargeback_reversed }
           end
         end
+
+        context "when the dispute was previously won (won => lost flip)" do
+          let!(:flipped_purchase) do
+            create(
+              :purchase,
+              link: product,
+              seller:,
+              stripe_transaction_id: "ch_won_then_lost",
+              price_cents: 100,
+              total_transaction_cents: 100,
+              fee_cents: 30,
+              chargeback_date: 2.days.ago,
+              chargeback_reversed: true,
+              charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            )
+          end
+          let(:flip_event) { build(:charge_event_dispute_lost, charge_id: "ch_won_then_lost") }
+
+          before do
+            create(:dispute_formalized, purchase: flipped_purchase, state: "won", won_at: 1.day.ago)
+          end
+
+          it "clears chargeback_reversed so the buyer loses access again" do
+            expect do
+              Purchase.handle_charge_event(flip_event)
+            end.to change { flipped_purchase.reload.chargeback_reversed }.from(true).to(false)
+          end
+
+          it "marks the dispute lost" do
+            Purchase.handle_charge_event(flip_event)
+            expect(flipped_purchase.reload.dispute.reload.state).to eq("lost")
+          end
+
+          it "restores the seller's payout chargeback gate" do
+            payout = ScheduledPayout.new(user: seller)
+            expect(payout.user_has_active_chargebacks?).to be(false)
+
+            Purchase.handle_charge_event(flip_event)
+
+            expect(payout.user_has_active_chargebacks?).to be(true)
+          end
+
+          it "keeps the buyer out of their library" do
+            Purchase.handle_charge_event(flip_event)
+            expect(Purchase.for_library.where(id: flipped_purchase.id)).to be_empty
+          end
+        end
+
+        context "when a won => lost flip involves a gift" do
+          let!(:gifter_purchase) do
+            create(
+              :purchase,
+              link: product,
+              seller:,
+              stripe_transaction_id: "ch_gift_won_then_lost",
+              price_cents: 100,
+              total_transaction_cents: 100,
+              fee_cents: 30,
+              chargeback_date: 2.days.ago,
+              chargeback_reversed: true,
+              is_gift_sender_purchase: true,
+              charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            )
+          end
+          let!(:giftee_purchase) do
+            create(:purchase, link: product, seller:, is_gift_receiver_purchase: true, chargeback_reversed: true)
+          end
+          let(:gift_event) { build(:charge_event_dispute_lost, charge_id: "ch_gift_won_then_lost") }
+
+          before do
+            create(:gift, gifter_purchase:, giftee_purchase:, link: product)
+            create(:dispute_formalized, purchase: gifter_purchase, state: "won", won_at: 1.day.ago)
+          end
+
+          it "clears the flag on the giftee purchase too" do
+            expect do
+              Purchase.handle_charge_event(gift_event)
+            end.to change { giftee_purchase.reload.chargeback_reversed }.from(true).to(false)
+          end
+        end
       end
     end
 

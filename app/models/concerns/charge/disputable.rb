@@ -95,6 +95,10 @@ module Charge::Disputable
       is_a?(Charge) ? update!(dispute_reversed_at:) : update!(chargeback_reversed: true)
     end
 
+    def mark_as_dispute_not_reversed!
+      is_a?(Charge) ? update!(dispute_reversed_at: nil) : update!(chargeback_reversed: false)
+    end
+
     def disputed?
       is_a?(Charge) ? disputed_at.present? : chargeback_date.present?
     end
@@ -239,21 +243,38 @@ module Charge::Disputable
     # Scoped to PayPal because Stripe-lost disputes pull the full disputed amount via the bank,
     # so a pre-dispute partial refund there does not mean the buyer is net-paying.
     disputed_purchases.each do |purchase|
-      next unless purchase.charge_processor_id == PaypalChargeProcessor.charge_processor_id
-      next unless purchase.successful?
-      next if purchase.stripe_refunded
-      next unless purchase.stripe_partially_refunded
+      if paypal_partial_refund_carve_out?(purchase)
+        purchase.update!(chargeback_reversed: true)
+        purchase.mark_giftee_purchase_as_chargeback_reversed if purchase.is_gift_sender_purchase
+        purchase.mark_product_purchases_as_chargeback_reversed!
+        next
+      end
 
-      purchase.update!(chargeback_reversed: true)
-      purchase.mark_giftee_purchase_as_chargeback_reversed if purchase.is_gift_sender_purchase
-      purchase.mark_product_purchases_as_chargeback_reversed!
+      # A dispute can transition won => lost (the state machine permits it, and 727 rows in
+      # production have taken that path). Nothing else clears the flag, so without this the
+      # purchase keeps reading "the chargeback was reversed" after we lost: the buyer keeps
+      # library access and the seller's payout skips the chargeback gate.
+      next unless purchase.chargeback_reversed?
+
+      purchase.update!(chargeback_reversed: false)
+      purchase.mark_giftee_purchase_as_not_chargeback_reversed if purchase.is_gift_sender_purchase
+      purchase.mark_product_purchases_as_not_chargeback_reversed!
     end
+
+    mark_as_dispute_not_reversed! if is_a?(Charge) && dispute_reversed_at.present?
 
     resolve_pending_dispute_evidence_if_any!("Dispute closed (lost) before evidence was submitted.")
 
     return unless first_product_without_refund_policy.present?
 
     ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id).deliver_later
+  end
+
+  def paypal_partial_refund_carve_out?(purchase)
+    purchase.charge_processor_id == PaypalChargeProcessor.charge_processor_id &&
+      purchase.successful? &&
+      !purchase.stripe_refunded &&
+      purchase.stripe_partially_refunded
   end
 
   def find_or_build_dispute(event)
