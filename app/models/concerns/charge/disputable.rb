@@ -95,6 +95,15 @@ module Charge::Disputable
       is_a?(Charge) ? update!(dispute_reversed_at:) : update!(chargeback_reversed: true)
     end
 
+    def mark_as_dispute_not_reversed!
+      # Charge grain only: the Purchase grain is cleared inside the disputed_purchases loop, which
+      # enforces the PayPal carve-out precedence this method does not know about. Anything that
+      # later claws back the win's credits must run BEFORE that clear —
+      # Purchase#seller_balance_update_eligible? requires the flag, so the debit API refuses the
+      # purchase once it is false.
+      update!(dispute_reversed_at: nil)
+    end
+
     def disputed?
       is_a?(Charge) ? disputed_at.present? : chargeback_date.present?
     end
@@ -231,29 +240,51 @@ module Charge::Disputable
 
   def handle_event_dispute_lost!(event)
     dispute = find_or_build_dispute(event)
-    dispute.mark_lost!
 
-    # PayPal can resolve a dispute as non-seller-favour while only partially refunding the buyer
-    # (e.g. INCORRECT_AMOUNT settled with a partial refund). The purchase stays successful and
-    # partially_refunded, so the chargeback flag set at formalization must be lifted to restore access.
-    # Scoped to PayPal because Stripe-lost disputes pull the full disputed amount via the bank,
-    # so a pre-dispute partial refund there does not mean the buyer is net-paying.
-    disputed_purchases.each do |purchase|
-      next unless purchase.charge_processor_id == PaypalChargeProcessor.charge_processor_id
-      next unless purchase.successful?
-      next if purchase.stripe_refunded
-      next unless purchase.stripe_partially_refunded
+    # One transaction: a raise mid-loop must roll back mark_lost! too, otherwise the processor's
+    # redelivery dies on InvalidTransition with sibling purchases only partially reconciled.
+    ActiveRecord::Base.transaction do
+      dispute.mark_lost!
 
-      purchase.update!(chargeback_reversed: true)
-      purchase.mark_giftee_purchase_as_chargeback_reversed if purchase.is_gift_sender_purchase
-      purchase.mark_product_purchases_as_chargeback_reversed!
+      # PayPal can resolve a dispute as non-seller-favour while only partially refunding the buyer
+      # (e.g. INCORRECT_AMOUNT settled with a partial refund). The purchase stays successful and
+      # partially_refunded, so the chargeback flag set at formalization must be lifted to restore access.
+      # Scoped to PayPal because Stripe-lost disputes pull the full disputed amount via the bank,
+      # so a pre-dispute partial refund there does not mean the buyer is net-paying.
+      disputed_purchases.each do |purchase|
+        if paypal_partial_refund_carve_out?(purchase)
+          purchase.update!(chargeback_reversed: true)
+          purchase.mark_giftee_purchase_as_chargeback_reversed if purchase.is_gift_sender_purchase
+          purchase.mark_product_purchases_as_chargeback_reversed!
+          next
+        end
+
+        # A dispute can transition won => lost (the state machine permits it, and 727 rows in
+        # production have taken that path). Nothing else clears the flag, so without this the
+        # purchase keeps reading "the chargeback was reversed" after we lost: the buyer keeps
+        # library access and the seller's payout skips the chargeback gate.
+        next unless purchase.chargeback_reversed?
+
+        purchase.update!(chargeback_reversed: false)
+        purchase.mark_giftee_purchase_as_not_chargeback_reversed if purchase.is_gift_sender_purchase
+        purchase.mark_product_purchases_as_not_chargeback_reversed!
+      end
+
+      mark_as_dispute_not_reversed! if is_a?(Charge) && dispute_reversed_at.present?
+
+      resolve_pending_dispute_evidence_if_any!("Dispute closed (lost) before evidence was submitted.")
     end
-
-    resolve_pending_dispute_evidence_if_any!("Dispute closed (lost) before evidence was submitted.")
 
     return unless first_product_without_refund_policy.present?
 
     ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id).deliver_later
+  end
+
+  def paypal_partial_refund_carve_out?(purchase)
+    purchase.charge_processor_id == PaypalChargeProcessor.charge_processor_id &&
+      purchase.successful? &&
+      !purchase.stripe_refunded &&
+      purchase.stripe_partially_refunded
   end
 
   # Resolve the dispute for this event by the PROCESSOR's case identity first, falling back to
