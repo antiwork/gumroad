@@ -464,7 +464,8 @@ module Purchase::Blockable
     # stop the actual human from paying with a card that is fine. Somebody spraying many stolen
     # cards at us is still caught by the card-testing velocity checks (#ban_card_testers!,
     # #ban_fraudulent_buyer_browser_guid!), which do block the browser and the email once several
-    # distinct cards have failed.
+    # distinct cards have failed — unless the sprayer has clean checkout history
+    # (#buyer_has_clean_checkout_history?), where only the per-card, IP and per-product limits apply.
     #
     # A renewal does not always carry a fingerprint of its own — a charge can fail before we ever
     # record one — so for a recurring charge we also block the card that renewal was charged on,
@@ -566,21 +567,11 @@ module Purchase::Blockable
       block_buyer!
     end
 
-    # The velocity rules' version of #buyer_has_clean_payment_history?. It needs a separate
-    # predicate because the card cannot supply provenance here: the whole trigger is several
-    # DIFFERENT cards failing, and a person hunting for a card with room on it presents cards we
-    # have never seen — in gumroad-private#1701 all six failing fingerprints were new, so the
-    # card-keyed predicate returns false for a buyer with 84 settled purchases behind him.
-    #
-    # Provenance comes from the browser instead, and only together with the email. Either alone is
-    # claimable: an unauthenticated checkout types whatever address it likes, and a browser guid is
-    # a cookie that a shared or reset device hands to the next person. Requiring settled purchases
-    # that carry BOTH means this device has paid us under this address before — which is what
-    # separates a returning customer from somebody who typed a stranger's email.
-    #
-    # Deliberately NOT `or`: on the 9 buyers who tripped these rules in the measured week, email-only
-    # history cleared a buyer with zero device history, while the both-keyed count was 5 for the
-    # established customer and 0 for all eight card testers.
+    # The velocity rules' version of #buyer_has_clean_payment_history?, which cannot be reused here:
+    # the trigger IS several never-seen cards failing, so card-keyed history is empty by
+    # construction. Provenance comes from the browser and the email together — either alone is
+    # claimable, since an unauthenticated checkout types whatever address it likes and a guid is a
+    # cookie a shared or reset device hands to the next person.
     def buyer_has_clean_checkout_history?
       return false if email.blank? || browser_guid.blank?
 

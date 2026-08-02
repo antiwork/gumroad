@@ -921,6 +921,41 @@ describe Purchase::Blockable do
               @purchase.mark_failed!
             end.to change { PlatformBlock.count }.from(0).to(4)
           end
+
+          it "still blocks when the settled purchases were free" do
+            Purchase.successful.where(browser_guid: @guid).update_all(price_cents: 0)
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.count }.from(0).to(4)
+          end
+
+          it "still blocks when the settled purchases were charged back" do
+            Purchase.successful.where(browser_guid: @guid).update_all(chargeback_date: 1.month.ago)
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.count }.from(0).to(4)
+          end
+
+          it "still blocks when the buyer is one settled purchase short of the threshold" do
+            Purchase.successful.where(browser_guid: @guid).order(:id).first.destroy!
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.count }.from(0).to(4)
+          end
+
+          it "still blocks when neither the failing purchase nor the history carries a browser guid" do
+            # Without the blank check, a nil guid on both sides matches, collapsing the exemption
+            # to email alone for exactly the rows where device provenance is absent.
+            Purchase.successful.where(browser_guid: @guid).update_all(browser_guid: nil)
+            @purchase.update_columns(browser_guid: nil)
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.email.count }.from(0).to(1)
+          end
         end
       end
 
