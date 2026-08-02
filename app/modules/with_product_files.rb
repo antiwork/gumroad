@@ -43,8 +43,12 @@ module WithProductFiles
   def save_files!(files_params, rich_content_params = [], delete_missing: true)
     files_to_keep = []
     new_product_files = []
-    existing_files = alive_product_files
+    # dup: rows created below are appended to this list, and `alive_product_files`
+    # is memoized — mutating it in place grows callers' own snapshots of what was
+    # alive before the save (SaveFilesService's clear-all target).
+    existing_files = alive_product_files.dup
     existing_files_by_external_id = existing_files.index_by(&:external_id)
+    directly_addressed_files = files_params.filter_map { existing_files_by_external_id[_1[:external_id] || _1[:id]] }
     should_check_pdf_stampability = false
     file_id_mappings = {}
 
@@ -53,7 +57,7 @@ module WithProductFiles
 
       begin
         external_id = file_params.delete(:external_id) || file_params.delete(:id)
-        product_file = existing_files_by_external_id[external_id] || reusable_product_file_for(file_params, existing_files) || product_files.build(url: file_params[:url])
+        product_file = existing_files_by_external_id[external_id] || reusable_product_file_for(file_params, existing_files - directly_addressed_files) || product_files.build(url: file_params[:url])
         files_to_keep << product_file
 
         # Defaults to true so that usage sites of this function continue
