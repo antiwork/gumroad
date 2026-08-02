@@ -101,6 +101,28 @@ describe Bundles::ProductController, inertia: true do
       expect(bundle.default_offer_code).to be_nil
     end
 
+    # The editor also always sends custom_summary/custom_attributes, and
+    # save_custom_* saves mid-transaction — which fires
+    # clear_detached_default_offer_code and nils the association before
+    # update_default_offer_code compares. The unchanged-id check has to use the
+    # id as the request found it, or this exact browser-shaped save fails with
+    # "Offer code must apply to this product".
+    it "still changes the currency when the editor's full form is re-sent with a universal default offer code" do
+      offer_code = create(:universal_offer_code, user: seller, amount_cents: 100, currency_type: "usd", code: "univ")
+      bundle.update!(default_offer_code: offer_code)
+
+      put :update, params: {
+        bundle_id: bundle.external_id, price_currency_type: "eur", price_cents: 2000,
+        default_offer_code_id: offer_code.external_id, custom_summary: ""
+      }
+
+      bundle.reload
+      expect(flash[:alert]).to be_blank
+      expect(bundle.price_currency_type).to eq("eur")
+      expect(bundle.default_offer_code).to be_nil
+      expect(flash[:warning]).to include("univ")
+    end
+
     # A product-specific fixed-amount code is not detached or currency-checked
     # anywhere on this path, so without the warning the seller's discount stops
     # quoting with nothing said. Mirrors LinksController#update.

@@ -151,6 +151,85 @@ describe("Bundle edit page", type: :system, js: true) do
     expect(bundle.reload.default_offer_code).to be_nil
   end
 
+  describe "price currency" do
+    before do
+      $currency_namespace = Redis::Namespace.new(:currencies, redis: $redis)
+      $currency_namespace.set("EUR", 0.8)
+      $currency_namespace.set("GBP", 0.75)
+    end
+
+    it "changes the display currency from the editor and sells the bundle in the new currency" do
+      visit edit_bundle_product_path(bundle.external_id)
+
+      in_preview { expect(page).to have_selector("[itemprop='price']", text: "$2") }
+
+      currency_select = find("select[aria-label='Currency']", visible: :all)
+      expect(currency_select).to have_css("option[value='usd']", text: "$", visible: :all)
+      expect(currency_select).to have_no_css("option[value='xyz']", visible: :all)
+
+      select "€", from: "Currency", visible: false
+      expect(page).to have_select("Currency", selected: "€", visible: false)
+      # The preview follows the dropdown before anything is saved.
+      in_preview { expect(page).to have_selector("[itemprop='price']", text: "€2") }
+
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Changes saved!")
+
+      bundle.reload
+      expect(bundle.price_currency_type).to eq("eur")
+      expect(bundle.price_cents).to eq(200)
+
+      visit edit_bundle_product_path(bundle.external_id)
+      expect(page).to have_select("Currency", selected: "€", visible: false)
+
+      # A buyer sees the new currency and pays its USD conversion.
+      Capybara.reset_sessions!
+      visit bundle.long_url
+      expect(page).to have_selector("[itemprop='price']", text: "€2")
+      add_to_cart(bundle)
+      within_cart_item(bundle.name) do
+        expect(page).to have_text("US$2.50")
+      end
+      fill_checkout_form(bundle)
+      click_on "Pay"
+      expect(page).to have_alert(text: "Your purchase was successful!")
+
+      purchase = bundle.sales.successful.sole
+      expect(purchase.displayed_price_currency_type).to eq(:eur)
+      expect(purchase.displayed_price_cents).to eq(200)
+      expect(purchase.price_cents).to eq(250)
+    end
+
+    it "warns when the new currency strands a fixed-amount discount code" do
+      create(:offer_code, user: seller, products: [bundle], code: "tenoff", amount_cents: 100, currency_type: "usd")
+
+      visit edit_bundle_product_path(bundle.external_id)
+
+      select "£", from: "Currency", visible: false
+      click_on "Save changes"
+
+      expect(page).to have_alert(text: "Changes saved, but the following offer code no longer matches this bundle's currency and will not apply at checkout: tenoff.")
+      expect(bundle.reload.price_currency_type).to eq("gbp")
+    end
+
+    it "saves a currency change when the form re-sends the unchanged default discount code" do
+      offer_code = create(:universal_offer_code, user: seller, amount_cents: 100, currency_type: "usd", code: "univ")
+      bundle.update!(default_offer_code: offer_code)
+
+      visit edit_bundle_product_path(bundle.external_id)
+      expect(page).to have_checked_field("Automatically apply discount code")
+
+      select "€", from: "Currency", visible: false
+      click_on "Save changes"
+
+      # The save goes through; the now-mismatched default code is dropped and flagged.
+      expect(page).to have_alert(text: "Changes saved, but the following offer code no longer matches this bundle's currency and will not apply at checkout: univ.")
+      bundle.reload
+      expect(bundle.price_currency_type).to eq("eur")
+      expect(bundle.default_offer_code).to be_nil
+    end
+  end
+
   context "when seller refund is set to false" do
     before do
       seller.update!(refund_policy_enabled: false)

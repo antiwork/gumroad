@@ -16,6 +16,11 @@ class Bundles::ProductController < Bundles::BaseController
     was_published = @bundle.published?
     currency_before = @bundle.price_currency_type
     offer_codes_before_currency_change = nil
+    # save_custom_attributes and friends save mid-transaction, and a currency
+    # change makes that save fire clear_detached_default_offer_code — so by the
+    # time update_default_offer_code compares, the association may already read
+    # nil. Capture the id as the request found it.
+    @default_offer_code_id_at_request = @bundle.default_offer_code_id
 
     ActiveRecord::Base.transaction do
       @bundle.is_bundle = true
@@ -150,7 +155,7 @@ class Bundles::ProductController < Bundles::BaseController
       # would otherwise be rejected outright by applicable? below. Leave an
       # unchanged id to Link#clear_detached_default_offer_code, which drops it
       # when it stops applying.
-      return if offer_code == @bundle.default_offer_code
+      return if offer_code.id == @default_offer_code_id_at_request
 
       raise Link::LinkInvalid, "Offer code cannot be expired" if offer_code.inactive?
       raise Link::LinkInvalid, "Offer code must apply to this product" unless offer_code.applicable?(@bundle)
