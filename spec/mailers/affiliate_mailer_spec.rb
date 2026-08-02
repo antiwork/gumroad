@@ -146,6 +146,26 @@ describe AffiliateMailer do
     end
   end
 
+  describe "#direct_affiliate_removal_by_affiliate_user" do
+    it "sends email to the seller and copies the affiliate" do
+      seller = create(:user, name: "Seller")
+      affiliate_user = create(:user, name: "Affiliate User")
+      direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:)
+
+      mail = AffiliateMailer.direct_affiliate_removal_by_affiliate_user(direct_affiliate.id)
+      expect(mail.to).to eq([seller.form_email])
+      expect(mail.cc).to eq([affiliate_user.form_email])
+      expect(mail.subject).to eq("Affiliate User has left your affiliate program")
+      expect(mail.body.encoded).to include("Affiliate User has removed themselves from your affiliate program.")
+    end
+
+    it "does not send when the affiliate no longer exists" do
+      mail = AffiliateMailer.direct_affiliate_removal_by_affiliate_user(0)
+
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+  end
+
   describe "#collaboration_ended_by_affiliate_user" do
     it "sends email to seller" do
       seller = create(:user, name: "Seller")

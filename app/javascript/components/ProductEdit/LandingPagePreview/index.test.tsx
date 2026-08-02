@@ -9,11 +9,22 @@ import { LandingPagePreview } from "$app/components/ProductEdit/LandingPagePrevi
 // HTML is untrusted: it can post whatever it likes to the editor, so the editor
 // is the boundary. These tests drive the same messages a page could send.
 const STORE_HOSTNAMES = ["seller.gumroad.com", "store.example.com"];
+// Shared Gumroad hosts, which no seller controls. Reachable only on an exact
+// GLOBAL_NAV_PATHS match — the whole point of the two-tier allowlist.
+const GLOBAL_NAV_HOSTS = ["gumroad.com", "app.gumroad.com"];
+const GLOBAL_NAV_PATHS = ["/library", "/checkout"];
 
 let openSpy: ReturnType<typeof vi.fn>;
 
 const renderPreview = () => {
-  const result = render(<LandingPagePreview uniquePermalink="abc" storeHostnames={STORE_HOSTNAMES} />);
+  const result = render(
+    <LandingPagePreview
+      uniquePermalink="abc"
+      storeHostnames={STORE_HOSTNAMES}
+      globalNavHosts={GLOBAL_NAV_HOSTS}
+      globalNavPaths={GLOBAL_NAV_PATHS}
+    />,
+  );
   const frame = result.container.querySelector("iframe");
   if (!frame) throw new Error("expected the preview iframe to render");
   return frame;
@@ -95,5 +106,67 @@ describe("LandingPagePreview navigation messages", () => {
     postFromFrame(frame, { type: "gumroad:checkout", params: { quantity: 2 } });
 
     expect(openSpy).toHaveBeenCalledWith("/l/abc?quantity=2&wanted=true", "_blank", "noopener");
+  });
+
+  // A refusal here is a silent dead click on the shipped feature.
+  it("opens a global nav path on a shared Gumroad host", () => {
+    const frame = renderPreview();
+
+    postFromFrame(frame, { type: "gumroad:navigate", url: "https://gumroad.com/library" });
+
+    expect(openSpy).toHaveBeenCalledWith("https://gumroad.com/library", "_blank", "noopener");
+  });
+
+  it("drops the query and fragment off a global nav path", () => {
+    const frame = renderPreview();
+
+    postFromFrame(frame, { type: "gumroad:navigate", url: "https://gumroad.com/checkout?cart_id=stolen#x" });
+
+    // cart_id is a capability token that loads another cart, so forwarding the
+    // query would let seller-authored HTML inject one.
+    expect(openSpy).toHaveBeenCalledWith("https://gumroad.com/checkout", "_blank", "noopener");
+  });
+
+  it("matches a global nav path with a trailing slash", () => {
+    const frame = renderPreview();
+
+    postFromFrame(frame, { type: "gumroad:navigate", url: "https://gumroad.com/library///" });
+
+    expect(openSpy).toHaveBeenCalledWith("https://gumroad.com/library", "_blank", "noopener");
+  });
+
+  it("refuses a non-blessed path on a shared Gumroad host", () => {
+    const frame = renderPreview();
+
+    // Fails closed: the host is allowlisted for the two global paths only, so a
+    // seller cannot steer the dashboard to an arbitrary gumroad.com page.
+    postFromFrame(frame, { type: "gumroad:navigate", url: "https://gumroad.com/settings/team" });
+
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("refuses a path that only looks blessed after decoding", () => {
+    const frame = renderPreview();
+
+    // %2f is not decoded in url.pathname, so this never equals "/library".
+    postFromFrame(frame, { type: "gumroad:navigate", url: "https://gumroad.com/library/..%2fsettings" });
+
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("refuses a global nav path on a host that is not a Gumroad host", () => {
+    const frame = renderPreview();
+
+    postFromFrame(frame, { type: "gumroad:navigate", url: "https://evil.example/library" });
+
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("drops credentials embedded in a global nav URL", () => {
+    const frame = renderPreview();
+
+    postFromFrame(frame, { type: "gumroad:navigate", url: "https://user:pass@gumroad.com/library" });
+
+    expect(openSpy).toHaveBeenCalledWith("https://gumroad.com/library", "_blank", "noopener");
   });
 });

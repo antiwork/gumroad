@@ -25,12 +25,16 @@ describe ContactingCreatorMailer do
   end
 
   describe "paypal payout permanently failed" do
-    let(:payment) { create(:payment_failed, failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil, amount_cents: 439_13) }
+    let(:payment) { create(:payment_failed, failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil, amount_cents: 439_13, payment_address: "refused@example.com") }
 
     before do
       # Gumroad supports bank payouts here, so the email may suggest one. Sellers in PayPal-only
       # countries — the majority of those hitting these rejections — are covered separately below.
       create(:user_compliance_info, user: payment.user, country: "United States")
+      # The retry-blocking rejection took the PayPal address off the account before this email was
+      # enqueued, which is the state the copy describes. The removal is keyed on the address THIS
+      # payout was sent to, so the payment has to carry it too.
+      payment.user.update!(payment_address: "", invalidated_paypal_payout_address: payment.payment_address)
     end
 
     it "names PayPal, the restriction, and the fix" do
@@ -40,8 +44,36 @@ describe ContactingCreatorMailer do
       expect(mail.subject).to eq("Your PayPal account can't receive your payout.")
       expect(mail.body.encoded).to include("$439.13")
       expect(mail.body.encoded).to include("payments cannot be received in the country on that account&#39;s address")
-      expect(mail.body.encoded).to include("add a bank account in your payout settings")
+      expect(mail.body.encoded).to include("We've removed that PayPal account from your payout settings")
+      expect(mail.body.encoded).to include("add a bank account there")
       expect(mail.body.encoded).to include("stopped retrying it")
+    end
+
+    # The email is the only place most of these sellers hear about it, so it must not send them to
+    # change a PayPal address that is no longer on the account (gumroad-private#1478).
+    it "does not tell the seller to switch the PayPal account we removed" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("switch to a different PayPal account")
+    end
+
+    # 3148 is about the country on the account's address, so an account in the same country that
+    # accepts dollars would be refused exactly the same way — offering that as the fix is wrong.
+    it "describes the working alternative by country rather than by currency" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("registered in a country that can receive PayPal payments")
+    end
+
+    # A seller paid through a connected PayPal account has no saved address for us to remove, so
+    # claiming we removed one would be false.
+    it "claims no removal when there was no saved address to remove" do
+      payment.user.update!(invalidated_paypal_payout_address: nil)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("We've removed")
+      expect(mail.body.encoded).to include("connect a PayPal account registered in a country that can receive PayPal payments")
     end
 
     it "names the currency restriction for a currency rejection" do
@@ -69,6 +101,42 @@ describe ContactingCreatorMailer do
 
       expect(mail.body.encoded).to include("stopped retrying it")
       expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+    end
+
+    # gumroad-private#1661. A locked receiving account is not a country problem, so the old copy
+    # sent this seller after a PayPal account "registered in a country that can receive PayPal
+    # payments" — the wrong diagnosis, and for the 2,152 Russia-KYC sellers in that issue an
+    # instruction with no action behind it.
+    context "when PayPal has locked the receiving account" do
+      before { payment.update!(failure_reason: "PAYPAL 3015") }
+
+      it "names the lock and points the seller at PayPal, not at their country" do
+        mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+        expect(mail.body.encoded).to include("your PayPal account is locked or inactive")
+        expect(mail.body.encoded).to include("contact PayPal to have them lifted")
+        expect(mail.body.encoded).to_not include("registered in a country that can receive PayPal payments")
+      end
+
+      it "tells a seller with no bank rail plainly that we may have no way to pay them" do
+        payment.user.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info, user: payment.user, country: "Ukraine")
+        expect(payment.user.reload.can_setup_bank_payouts?).to be(false)
+
+        mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+        expect(mail.body.encoded).to include("we have no way to pay you right now")
+        expect(mail.body.encoded).to include("We hope to have a way to pay out your balance in the future")
+      end
+
+      # Only PayPal can unlock it, so an address-keyed block would freeze out a seller the moment
+      # PayPal restores them. The retries continue and the copy must not claim otherwise.
+      it "does not claim the retries stopped" do
+        mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+        expect(mail.body.encoded).to_not include("stopped retrying")
+        expect(mail.body.encoded).to include("keep trying on your usual payout schedule")
+      end
     end
 
     # The payout gate exits on payouts_paused? before any processor runs, so a paused seller is not
@@ -143,7 +211,8 @@ describe ContactingCreatorMailer do
     it "promises the next payout date when the account is not under a payout hold" do
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to include("next payout date")
+      expect(mail.body.encoded).to include("add a bank account there")
+      expect(mail.body.encoded).to include("Your balance will be sent on the next payout date after that.")
       expect(mail.body.encoded).to_not include("on hold")
     end
 
@@ -178,8 +247,41 @@ describe ContactingCreatorMailer do
 
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to include("PayPal is the only payout method we can offer in your country")
+      expect(mail.body.encoded).to include("We've stopped retrying this payout, because every attempt to that account will be refused")
+      expect(mail.body.encoded).to include("PayPal will not send payments to accounts registered in that country, and bank transfer is not available in yours")
+      expect(mail.body.encoded).to include("If you do not, we have no way to pay you right now")
+      expect(mail.body.encoded).to_not include("until you change how you get paid")
       expect(mail.body.encoded).to_not include("add a bank account")
+      expect(mail.body.encoded).to_not include("is not forfeited")
+      expect(mail.body.encoded).to_not include("next payout date")
+      expect(mail.body.encoded).to_not include("reply to this email so we can review the hold")
+    end
+
+    # The no-rail wording replaces the fix, not the hold disclosure: the hold is a separate fact and
+    # is still what a seller who does find a payable account would hit next.
+    it "still names a hold for a PayPal-only seller whose account is on hold" do
+      payment.user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: payment.user, country: "Ukraine")
+      expect(payment.user.reload.can_setup_bank_payouts?).to be(false)
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("we have no way to pay you right now")
+      expect(mail.body.encoded).to include("Payouts on your account are also on hold")
+      expect(mail.body.encoded).to_not include("add a bank account")
+    end
+
+    it "keeps the in-place PayPal-only path for a currency rejection" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: payment.user, country: "Ukraine")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("add US dollars as a currency you accept")
+      expect(mail.body.encoded).to include("use a different PayPal account")
+      expect(mail.body.encoded).to_not include("we have no way to pay you right now")
     end
   end
 
@@ -254,7 +356,8 @@ describe ContactingCreatorMailer do
           expect(mail.subject).to eq "🚨 Urgent: Action required for resolving disputed sale"
 
           expect(mail.body.encoded).to include "A customer of yours (#{purchase.email}) has disputed their purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
-          expect(mail.body.encoded).to include "Any additional information you can provide in the next 72 hours will help us win on your behalf."
+          expect(mail.body.encoded).to include "Any additional information you can provide by"
+          expect(mail.body.encoded).to include "(in the next 72 hours) will help us win on your behalf."
           expect(mail.body.encoded).to include "Submit additional information"
         end
 
@@ -292,6 +395,36 @@ describe ContactingCreatorMailer do
             expect(mail.body.encoded).not_to include "Submit additional information"
             expect(mail.subject).to eq "A sale has been disputed"
             expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        describe "chargeback evidence due soon" do
+          it "reminds the seller while the submission window is still open" do
+            dispute_evidence.update!(seller_contacted_at: 49.hours.ago)
+
+            mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
+
+            expect(mail.to).to eq [seller.email]
+            expect(mail.subject).to eq "Reminder: Submit dispute evidence within 24 hours"
+            expect(mail.body.encoded).to include "Please submit any additional information by"
+            expect(mail.body.encoded).to include "You have 23 hours left."
+            expect(mail.body.encoded).to include "Submit additional information"
+          end
+
+          it "does not send once the seller has already submitted" do
+            dispute_evidence.update!(seller_submitted_at: Time.current)
+
+            mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
+
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+          end
+
+          it "does not send once the evidence has been resolved" do
+            dispute_evidence.update!(resolved_at: Time.current, resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+
+            mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
+
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
           end
         end
 
@@ -379,7 +512,8 @@ describe ContactingCreatorMailer do
           charge.disputed_purchases.each do |purchase|
             expect(mail.body.encoded).to include purchase.link.name
           end
-          expect(mail.body.encoded).to include "Any additional information you can provide in the next 72 hours will help us win on your behalf."
+          expect(mail.body.encoded).to include "Any additional information you can provide by"
+          expect(mail.body.encoded).to include "(in the next 72 hours) will help us win on your behalf."
           expect(mail.body.encoded).to include "Submit additional information"
         end
       end
@@ -1521,6 +1655,189 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "undelivered_receipts" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, name: "Terraforming Guide") }
+
+    def undelivered_purchase
+      purchase = create(:purchase, seller:, link: product)
+      create(:customer_email_info, purchase:, state: "sent", sent_at: 3.days.ago)
+      purchase
+    end
+
+    def notified_key(purchase) = RedisKey.undelivered_receipt_notified(purchase.id)
+
+    it "names the buyer and product for a single affected sale" do
+      purchase = undelivered_purchase
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
+
+      expect(mail.to).to eq [seller.email]
+      expect(mail.subject).to eq "A buyer may not have received their receipt"
+      expect(mail.body.encoded).to include purchase.email
+      expect(mail.body.encoded).to include "Terraforming Guide"
+      expect(mail.body.encoded).to include "A buyer paid you and we have no confirmation"
+    end
+
+    it "pluralizes the subject and body for several affected sales" do
+      first = undelivered_purchase
+      second = undelivered_purchase
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [first.id, second.id])
+
+      expect(mail.subject).to eq "2 buyers may not have received their receipt"
+      expect(mail.body.encoded).to include "2 of your buyers"
+    end
+
+    # The sweep and this render are separated by a queue, and the whole email asks the seller to chase
+    # someone who may have opened their content in between.
+    it "drops a buyer who accessed their content after the sweep" do
+      listed = undelivered_purchase
+      recovered = undelivered_purchase
+      create(:url_redirect, purchase: recovered, link: product, uses: 1)
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [listed.id, recovered.id])
+
+      expect(mail.body.encoded).to include listed.email
+      expect(mail.body.encoded).not_to include recovered.email
+    end
+
+    # The count is what the seller acts on, so it has to shrink with the list rather than keep the
+    # sweep's figure and claim more affected sales than the email stands behind.
+    it "reduces the reported total when a listed buyer has recovered" do
+      listed = undelivered_purchase
+      recovered = undelivered_purchase
+      create(:url_redirect, purchase: recovered, link: product, uses: 1)
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [listed.id, recovered.id])
+
+      expect(mail.subject).to eq "A buyer may not have received their receipt"
+      expect(mail.body.encoded).not_to include "and 1 more"
+    end
+
+    it "counts the buyers it does not list" do
+      purchases = Array.new(UndeliveredReceiptNotifier::MAX_LISTED_PER_SELLER + 3) { undelivered_purchase }
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, purchases.map(&:id))
+
+      expect(mail.subject).to eq "13 buyers may not have received their receipt"
+      expect(mail.body.encoded).to include "and 3 more"
+    end
+
+    # Truncating before the recheck let the first ten buyers decide the digest for everyone: if those
+    # ten recovered, the mailer suppressed the message while the eleventh was still affected, and the
+    # job marked all of them notified. The list is cut down here, after the recheck, for that reason.
+    it "still reports an unlisted buyer when every listed buyer has recovered" do
+      recovered = Array.new(UndeliveredReceiptNotifier::MAX_LISTED_PER_SELLER) do
+        purchase = undelivered_purchase
+        create(:url_redirect, purchase:, link: product, uses: 1)
+        purchase
+      end
+      still_affected = undelivered_purchase
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, recovered.map(&:id) + [still_affected.id])
+
+      expect(mail.subject).to eq "A buyer may not have received their receipt"
+      expect(mail.body.encoded).to include still_affected.email
+      expect($redis.exists?(notified_key(recovered.first))).to be false
+    end
+
+    it "sends nothing when every listed buyer has recovered" do
+      recovered = undelivered_purchase
+      create(:url_redirect, purchase: recovered, link: product, uses: 1)
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [recovered.id])
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    it "sends nothing when the seller is gone by render time" do
+      purchase = undelivered_purchase
+
+      seller.update!(deleted_at: Time.current)
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    # A claim is not evidence the seller was told, so it expires: a render killed between claiming and
+    # delivering costs a delayed notice rather than a permanent silence.
+    it "holds the claim provisionally on a render that has not delivered" do
+      purchase = undelivered_purchase
+
+      ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id]).message
+
+      expect($redis.ttl(notified_key(purchase))).to be_between(1, UndeliveredReceiptNotifier::SEND_CLAIM_TTL.to_i)
+    end
+
+    it "records the buyers it named, with no expiry" do
+      purchase = undelivered_purchase
+
+      ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id]).deliver_now
+
+      expect($redis.exists?(notified_key(purchase))).to be true
+      expect($redis.ttl(notified_key(purchase))).to eq(-1)
+    end
+
+    # A permanent record written for a notice that never left costs the seller the notice itself:
+    # every later sweep skips that buyer.
+    it "gives the claim back when the message is suppressed at render" do
+      recovered = undelivered_purchase
+      create(:url_redirect, purchase: recovered, link: product, uses: 1)
+
+      ContactingCreatorMailer.undelivered_receipts(seller.id, [recovered.id]).deliver_now
+
+      expect($redis.exists?(notified_key(recovered))).to be false
+    end
+
+    it "gives the claim back when delivery is not performed" do
+      purchase = undelivered_purchase
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
+      mail.message.perform_deliveries = false
+      mail.deliver_now
+
+      expect($redis.exists?(notified_key(purchase))).to be false
+    end
+
+    it "gives the claim back when delivery raises" do
+      purchase = undelivered_purchase
+
+      allow_any_instance_of(Mail::Message).to receive(:deliver).and_raise(StandardError, "transport down")
+      expect do
+        ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id]).deliver_now
+      end.to raise_error(StandardError, "transport down")
+
+      expect($redis.exists?(notified_key(purchase))).to be false
+
+      allow_any_instance_of(Mail::Message).to receive(:deliver).and_call_original
+      retried = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
+
+      expect(retried.message).not_to be_a ActionMailer::Base::NullMail
+    end
+
+    # The settling callback runs for every action on this mailer — deliver callbacks cannot be scoped
+    # with `only:` — so the ivar is what keeps it from touching another action's bookkeeping.
+    it "touches no send-once state when an unrelated email is delivered" do
+      expect(UndeliveredReceiptNotifier).not_to receive(:record_sent)
+      expect(UndeliveredReceiptNotifier).not_to receive(:release_claim)
+
+      ContactingCreatorMailer.unstampable_pdf_notification(product.id).deliver_now
+    end
+
+    # The claim is what separates two renders of the same buyer: the sweep's read cannot, and the
+    # job's own Sidekiq retry re-collects these rows before any mail has been delivered.
+    it "does not name the same buyer in a second concurrent render" do
+      purchase = undelivered_purchase
+
+      ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id]).message
+      second = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
+
+      expect(second.message).to be_a ActionMailer::Base::NullMail
+    end
+  end
+
   describe "undeliverable_ping_subscription" do
     let(:seller) { create(:user) }
     let(:oauth_application) { create(:oauth_application, owner: seller, name: "Gumroad Store Agent") }
@@ -1585,6 +1902,31 @@ describe ContactingCreatorMailer do
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
 
       expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    # A disconnect in the window soft-deletes the application; deliverability alone still renders
+    # "re-authorize" advice for an app the seller removed.
+    it "sends nothing when the application was deleted by render time" do
+      oauth_application.mark_deleted!
+      # mark_deleted! soft-deletes the subscriptions too; this isolates the application's own state,
+      # which is the half the render was not re-asking.
+      ResourceSubscription.where(id: resource_subscription.id).update_all(deleted_at: nil)
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+    end
+
+    # Same shape for the agent exclusion: those subscriptions are token-less by design and their owners
+    # have no authorization flow to re-run, so a render must not email them either.
+    it "sends nothing for a Store Agent application at render time" do
+      oauth_application.update!(is_first_party_agent_app: true)
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
     end
 
     # Rendering is not sending, which is why nothing is recorded here: the record has no expiry, and
@@ -1736,8 +2078,10 @@ describe ContactingCreatorMailer do
       expect(mail.message).not_to be_a ActionMailer::Base::NullMail
     end
 
+    # `:eval`, not `:set`: the claim is the `set` and recording is the Lua settle, so stubbing `set`
+    # here would fail the claim instead and only re-test the example above.
     it "sends the email even when recording that it sent fails" do
-      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+      allow($redis).to receive(:eval).and_raise(Redis::BaseError)
       expect(ErrorNotifier).to receive(:notify).at_least(:once)
 
       expect do

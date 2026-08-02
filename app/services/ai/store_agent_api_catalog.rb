@@ -181,7 +181,7 @@ module Ai::StoreAgentApiCatalog
     # deliberately does NOT accept custom_html, so every full-page write flows through the id whose
     # summary carries that warning.
     ep("get_product_custom_html", :get, "/products/:id/custom_html", "Get a product's custom landing page HTML (the /l/ page buyers see). has_landing_page says whether a custom page is currently published; when it is false the product serves its native Gumroad page.", read: true, scope: "view_sales", path_params: %w[id]),
-    ep("update_product_custom_html", :put, "/products/:id", "Replace a product's ENTIRE custom landing page with a new page (or clear it by sending blank custom_html, restoring the native product page). Destructive: anything not included in custom_html is lost. A published page REPLACES the product's native page — price and buy button included — so the page MUST contain a buy element like <a data-gumroad-action=\"buy\">Buy now</a>; publishing HTML without one makes the product unpurchasable. The server fills elements marked data-gumroad-field=\"name\", \"price\", or \"description\" with live product values on every render. Product pages do NOT receive the gumroad-data JSON (that exists only on profile pages). Only use this to author a brand-new page; to change part of an existing page, use edit_product_custom_html.", scope: "edit_products", path_params: %w[id], params: %w[custom_html], requires_read: "get_product_custom_html"),
+    ep("update_product_custom_html", :put, "/products/:id", "Replace a product's ENTIRE custom landing page with a new page (or clear it by sending blank custom_html, restoring the native product page). Destructive: anything not included in custom_html is lost. A published page REPLACES the product's native page — price and buy button included — so the page MUST contain a buy element like <a data-gumroad-action=\"buy\">Buy now</a>; publishing HTML without one makes the product unpurchasable. The server fills elements marked data-gumroad-field=\"name\", \"price\", \"description\", \"rating\", or \"review-count\" with live product values on every render; \"rating\" and \"review-count\" leave the element's existing contents alone when the seller has reviews hidden or the product has none, so give those a fallback. Product pages do NOT receive the gumroad-data JSON (that exists only on profile pages). Only use this to author a brand-new page; to change part of an existing page, use edit_product_custom_html.", scope: "edit_products", path_params: %w[id], params: %w[custom_html], requires_read: "get_product_custom_html"),
     ep("edit_product_custom_html", :post, "/products/:id/custom_html/edit", "Make a targeted edit to a product's existing custom landing page: replaces one exact snippet (find) with new HTML (replace) and leaves the rest of the page untouched. find must match the current HTML exactly once — include enough surrounding context. Always prefer this over update_product_custom_html when a page already exists. Keep the page's buy element intact — a page without one makes the product unpurchasable.", scope: "edit_products", path_params: %w[id], params: %w[find replace], requires_read: "get_product_custom_html"),
 
     # ---- Custom fields (per product) ----
@@ -261,13 +261,11 @@ module Ai::StoreAgentApiCatalog
     ep("get_payout", :get, "/payouts/:id", "Get one payout by id.", read: true, scope: "view_payouts", path_params: %w[id]),
 
     # ---- Resource subscriptions (webhooks) ----
-    # The underlying v2 endpoints only require view_sales, but creating/removing a webhook is OAuth-
-    # app management, which the dashboard restricts to admins/owner. Gate them admin_only here so a
-    # marketing member can't install a data-exfiltrating webhook through the agent. Listing is gated
-    # too since it exposes the configured callback URLs. (Flagged for product review — see PR thread.)
-    ep("list_resource_subscriptions", :get, "/resource_subscriptions", "List the creator's webhook resource subscriptions.", read: true, scope: "view_sales", admin_only: true),
-    ep("create_resource_subscription", :put, "/resource_subscriptions", "Create a webhook resource subscription.", scope: "view_sales", admin_only: true, params: %w[resource_name post_url]),
-    ep("delete_resource_subscription", :delete, "/resource_subscriptions/:id", "Delete a webhook resource subscription.", scope: "view_sales", admin_only: true, path_params: %w[id]),
+    # Limit listing to this OAuth application so every returned webhook can be deleted with the same
+    # token. Creation stays absent until agent-created subscriptions have durable authorization.
+    # Keep both endpoints admin-only because they expose or change configured callback URLs.
+    ep("list_resource_subscriptions", :get, "/resource_subscriptions", "List the Store Agent's existing webhook resource subscriptions for one event type (resource_name: #{ResourceSubscription::VALID_RESOURCE_NAMES.join(', ')}).", read: true, scope: "view_sales", admin_only: true, params: %w[resource_name], forced_params: { current_oauth_application_only: true }),
+    ep("delete_resource_subscription", :delete, "/resource_subscriptions/:id", "Delete a Store Agent-owned webhook resource subscription.", scope: "view_sales", admin_only: true, path_params: %w[id]),
 
     # ---- Tax forms & earnings ----
     ep("list_tax_forms", :get, "/tax_forms", "List the creator's available tax forms.", read: true, scope: "view_tax_data"),

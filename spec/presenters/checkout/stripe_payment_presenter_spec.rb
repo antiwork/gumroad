@@ -1,6 +1,16 @@
 # frozen_string_literal: true
 
 describe Checkout::StripePaymentPresenter do
+  # A real token carries a signature and an expiry, so it cannot be written into the whole-hash
+  # fixtures below. Echoing the types instead keeps those fixtures asserting the thing the presenter
+  # is actually responsible for: that the list handed to the issuer is the one the Element mounted,
+  # after every strip. The signing itself is Checkout::PaymentMethodListToken's own spec.
+  before do
+    allow(Checkout::PaymentMethodListToken).to receive(:issue) do |payment_method_types:, sellers:|
+      "issued:#{payment_method_types.join(",")}" if payment_method_types.present?
+    end
+  end
+
   def checkout_product_for(product, price: product.price_cents, recurrence: nil, pay_in_installments: false,
                            is_preorder: product.is_in_preorder_state, free_trial: product.free_trial_enabled,
                            native_type: product.native_type, buyer_currency_display: nil, ppp_details: nil,
@@ -84,6 +94,9 @@ describe Checkout::StripePaymentPresenter do
         listed_currency_display: listed_currency_display ||
           (currency == "usd" ? nil : { currency:, subunit_to_unit: 100 }),
         payment_method_types:,
+        # The presenter signs the list it mounted, so the fixture pins the post-strip list: a
+        # region or amount strip that failed to reach the issuer would show up here.
+        payment_method_list_token: "issued:#{payment_method_types.join(",")}",
         stripe_link_enabled:,
         stripe_connect_account_id:,
       },

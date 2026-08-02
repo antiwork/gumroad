@@ -69,6 +69,165 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       expect(result.passed).to eq(true)
     end
 
+    context "when the record is a storefront page" do
+      let(:page) { Page.create!(pageable: seller, slug: "about", title: "About", custom_html: "<p>Copy</p>") }
+
+      # Creating the fixture is itself a moderated save now, so it has to happen
+      # under the compliant stubs from the outer `before` — lazily, it would run
+      # under whichever flagged stub the example installed and either raise
+      # RecordInvalid or spend the admin-note expectation on the fixture.
+      before { page }
+
+      it "reads the page through the page extractor" do
+        expect_any_instance_of(ContentModeration::ContentExtractor).to receive(:extract_from_page).with(page).and_call_original
+
+        expect(described_class.check(page, :page).passed).to eq(true)
+      end
+
+      it "records a flag against the seller naming the page" do
+        allow(ContentModeration::Strategies::BlocklistStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::BlocklistStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["Matched blocked word: forbidden"]))
+        )
+
+        expect(ContentModerationAdminCommentJob).to receive(:perform_async).with(
+          seller.id, a_string_including("Page ##{page.id} (about — About)")
+        )
+
+        expect(described_class.check(page, :page).passed).to eq(false)
+      end
+
+      it "keeps a spam flag as a note instead of blocking for a seller with a live storefront" do
+        create(:product, user: seller)
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["spam: reads like a sales pitch"]))
+        )
+
+        expect(ContentModerationAdminCommentJob).to receive(:perform_async).with(
+          seller.id, a_string_including("flagged but did not block")
+        )
+
+        expect(described_class.check(page, :page).passed).to eq(true)
+      end
+
+      it "blocks a spam flag when the seller has no products and no sales, the link-farm shape" do
+        expect(seller.links.alive).to be_empty
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["spam: outbound link farm"]))
+        )
+
+        result = described_class.check(page, :page)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["spam: outbound link farm"])
+      end
+
+      it "leaves no admin note for a dry-run preview candidate, which was never published" do
+        allow(ContentModeration::Strategies::BlocklistStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::BlocklistStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["Matched blocked word: forbidden"]))
+        )
+        candidate = Page.new(pageable: seller, custom_html: "<p>forbidden</p>", moderation_preview: true)
+
+        expect(ContentModerationAdminCommentJob).not_to receive(:perform_async)
+
+        expect(described_class.check(candidate, :page).passed).to eq(false)
+      end
+
+      it "still blocks a page on a flag that keys on concrete content" do
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["adult_content: explicit imagery described"]))
+        )
+
+        expect(described_class.check(page, :page).passed).to eq(false)
+      end
+
+      it "inherits a product's moderation exemption for its landing page takeover" do
+        product.update!(content_moderation_disabled: true)
+        product_page = Page.new(pageable: product, custom_html: "<p>Copy</p>")
+        expect(ContentModeration::ContentExtractor).not_to receive(:new)
+
+        expect(described_class.check(product_page, :page).passed).to eq(true)
+      end
+
+      it "asks the classifier to moderate every image, so no displayed image is approved unseen" do
+        expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new)
+          .with(hash_including(max_images: :all))
+          .and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                                      perform: strategy_result.new(status: "compliant", reasoning: [])))
+
+        expect(described_class.check(page, :page).passed).to eq(true)
+      end
+
+      context "when the page carries more images than we will review" do
+        let(:over_budget_html) do
+          count = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1
+          (1..count).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+        end
+        let(:over_budget_page) { Page.new(pageable: seller, slug: "gallery", title: "Gallery", custom_html: over_budget_html) }
+
+        it "blocks the page instead of approving it on a subset of its images" do
+          expect(ContentModeration::Strategies::ClassifierStrategy).not_to receive(:new)
+
+          result = described_class.check(over_budget_page, :page)
+
+          expect(result.passed).to eq(false)
+          expect(result.reasons).to eq(
+            ["#{described_class::TOO_MANY_IMAGES_REASON_PREFIX} " \
+             "(#{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1})"]
+          )
+        end
+
+        it "tells the seller the limit rather than naming a content violation" do
+          message = described_class.seller_message(described_class.check(over_budget_page, :page).reasons, "page")
+
+          expect(message).to include("more images than we can review")
+          expect(message).to include(ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS.to_s)
+          expect(message).not_to include("content guidelines")
+        end
+
+        it "records the block as a note rather than as abuse history" do
+          # A big gallery is a size problem, not a content violation, and the admin
+          # trail is read as abuse history.
+          expect(ContentModerationAdminCommentJob).to receive(:perform_async)
+            .with(seller.id, /flagged but did not block/)
+
+          described_class.check(over_budget_page, :page)
+        end
+
+        it "lets the seller rename an already-live page that is over the limit" do
+          over_budget_page.save!(validate: false)
+          over_budget_page.title = "Renamed gallery"
+
+          # A title-only save cannot change the images, so re-running the image
+          # phase would trap the rename on a page that predates the budget.
+          expect(over_budget_page.valid?).to eq(true)
+        end
+
+        it "counts images painted through nested CSS toward the budget" do
+          count = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1
+          nested_css = (1..count).map do |n|
+            %(.card#{n} { --img#{n}: url("https://cdn.example.com/#{n}.png"); & .hero { background-image: var(--img#{n}) } })
+          end.join("\n")
+          nested_page = Page.new(pageable: seller, slug: "nested", title: "Nested", custom_html: "<style>#{nested_css}</style>")
+
+          expect(ContentModeration::Strategies::ClassifierStrategy).not_to receive(:new)
+
+          expect(described_class.check(nested_page, :page).passed).to eq(false)
+        end
+
+        it "moderates a page that sits exactly at the limit" do
+          at_limit = (1..ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS)
+                       .map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+
+          expect(described_class.check(Page.new(pageable: seller, custom_html: at_limit), :page).passed).to eq(true)
+        end
+      end
+    end
+
     context "when blocklist flags the content" do
       before do
         allow(ContentModeration::Strategies::BlocklistStrategy).to receive(:new).and_return(
@@ -817,6 +976,35 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       message = described_class.seller_message(["OpenAI moderation flagged: violence"], "product")
 
       expect(message).to start_with("This product can’t be saved")
+    end
+
+    it "tells the seller to change the image, not to retry, when the block is an unreviewable payload" do
+      # The input is static, so the transient "try again in a few minutes" copy
+      # sent sellers into an infinite retry loop (gumroad-private#1695).
+      message = described_class.seller_message(
+        [ContentModeration::Strategies::ClassifierStrategy::UNSUPPORTED_IMAGE_REASON],
+        "page"
+      )
+
+      expect(message).to eq(
+        "This page includes an image we can’t review, because the format is unsupported (such as an SVG data URL) " \
+        "or the file is too large. Replace it with a smaller PNG, JPEG, GIF, or WebP and try again."
+      )
+      expect(message).not_to include("temporary issue")
+    end
+
+    it "does not tell a seller whose asset is only oversized to re-encode a format they are already using" do
+      # `file_too_large` reaches this branch for a plain PNG on the seller's own
+      # CDN (gumroad-private#1728), so copy naming only the format sent them at
+      # a property of the file that was never the problem.
+      message = described_class.seller_message(
+        [ContentModeration::Strategies::ClassifierStrategy::UNSUPPORTED_IMAGE_REASON],
+        "page"
+      )
+
+      expect(message).to include("too large")
+      expect(message).not_to include("inline")
+      expect(message).not_to include("Re-encode")
     end
 
     it "explains what is missing for an off-platform fulfillment flag" do

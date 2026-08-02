@@ -36,6 +36,61 @@ describe PlatformBlock do
       expect(record).to be_persisted
       expect(record.object_value).to eq("x@example.com")
     end
+
+    describe "Radar add" do
+      it "enqueues the Radar add for an email block" do
+        record = nil
+
+        expect do
+          record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "radar-add@example.com")
+        end.to change { Radar::AddValueListItemJob.jobs.size }.by(1)
+
+        expect(Radar::AddValueListItemJob.jobs.last["args"]).to eq([record.id])
+      end
+
+      it "enqueues the Radar add for a card fingerprint block" do
+        expect do
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "UTLL7GN3iOh1m222")
+        end.to change { Radar::AddValueListItemJob.jobs.size }.by(1)
+      end
+
+      it "does not enqueue for types Radar never receives" do
+        expect do
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.213", expires_in: 1.hour)
+        end.not_to change { Radar::AddValueListItemJob.jobs.size }
+      end
+
+      # add! is also called with a symbol object_type from some callers, and syncs? matches on the
+      # string form — the guard has to normalise or the whole re-assertion silently never fires.
+      it "enqueues when the caller passes a symbol object_type" do
+        expect do
+          PlatformBlock.add!(object_type: :email, object_value: "symbol-type@example.com")
+        end.to change { Radar::AddValueListItemJob.jobs.size }.by(1)
+      end
+
+      # Charge#refund_for_fraud_and_block_buyer! reaches add! inside a with_lock; a job enqueued
+      # before the commit can run against the pre-commit row, see no block, and no-op.
+      it "enqueues only after a surrounding transaction commits" do
+        record = nil
+
+        ApplicationRecord.transaction do
+          record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "in-transaction@example.com")
+          expect(Radar::AddValueListItemJob.jobs).to be_empty
+        end
+
+        expect(Radar::AddValueListItemJob.jobs.size).to eq(1)
+        expect(Radar::AddValueListItemJob.jobs.last["args"]).to eq([record.id])
+      end
+
+      it "does not enqueue when the surrounding transaction rolls back" do
+        expect do
+          ApplicationRecord.transaction do
+            PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "rolled-back@example.com")
+            raise ActiveRecord::Rollback
+          end
+        end.not_to change { Radar::AddValueListItemJob.jobs.size }
+      end
+    end
   end
 
   describe "#unblock!" do
@@ -59,6 +114,46 @@ describe PlatformBlock do
       second = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "reblock@example.com")
       expect(second.id).to eq(first.id)
       expect(second.blocked_at).to be_present
+    end
+
+    describe "Radar removal" do
+      it "enqueues the Radar removal for an email block" do
+        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "radar@example.com")
+
+        expect do
+          record.unblock!
+        end.to change { Radar::RemoveValueListItemJob.jobs.size }.by(1)
+
+        expect(Radar::RemoveValueListItemJob.jobs.last["args"]).to eq([record.id])
+      end
+
+      it "enqueues the Radar removal for a card fingerprint block" do
+        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "UTLL7GN3iOh1m111")
+
+        expect do
+          record.unblock!
+        end.to change { Radar::RemoveValueListItemJob.jobs.size }.by(1)
+
+        expect(Radar::RemoveValueListItemJob.jobs.last["args"]).to eq([record.id])
+      end
+
+      it "does not enqueue for types Radar never received" do
+        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.212", expires_in: 1.hour)
+
+        expect do
+          record.unblock!
+        end.not_to change { Radar::RemoveValueListItemJob.jobs.size }
+      end
+
+      it "enqueues again on an already-unblocked row, so re-unblocking repairs a stranded item" do
+        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "stranded@example.com")
+        record.unblock!
+        Radar::RemoveValueListItemJob.jobs.clear
+
+        expect do
+          record.unblock!
+        end.to change { Radar::RemoveValueListItemJob.jobs.size }.by(1)
+      end
     end
   end
 

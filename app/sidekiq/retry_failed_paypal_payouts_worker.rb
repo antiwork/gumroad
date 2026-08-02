@@ -3,6 +3,8 @@
 class RetryFailedPaypalPayoutsWorker
   include Sidekiq::Job
   sidekiq_options retry: 0, queue: :critical, lock: :until_executed
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 2.hours
 
   def perform
     # `retrying` was dead until this branch made it live, so this worker has been largely inert:

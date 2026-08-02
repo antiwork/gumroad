@@ -81,5 +81,13 @@ class RedisKey
     # failure count stops growing, so without this the daily run would re-alert on the same
     # seller for the rest of the period.
     def transient_payout_requeue_exhaustion_reported(user_id, payout_period_end_date) = "payouts:transient_requeue_exhaustion_reported:#{payout_period_end_date}:#{user_id}"
+    # Marks that the seller was told this purchase's receipt has no evidence of reaching the buyer.
+    # Permanent, so the nightly sweep reports each buyer once. See UndeliveredReceiptNotifier.
+    def undelivered_receipt_notified(purchase_id) = "undelivered_receipt_notified:#{purchase_id}"
+    # High-water mark for AlertSellersOfUndeliveredReceiptsJob: the last email_infos id it judged.
+    def undelivered_receipt_sweep_cursor = "undelivered_receipt_sweep:cursor"
+    # Purchases whose notice was claimed but never transmitted. The cursor is already past their
+    # email_infos rows, so this set is the only thing that brings them back.
+    def undelivered_receipt_pending_retry = "undelivered_receipt_sweep:pending_retry"
   end
 end

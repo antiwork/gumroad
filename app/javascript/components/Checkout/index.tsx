@@ -150,11 +150,15 @@ export const Checkout = ({
           "error",
         );
       } else {
-        if (pppDiscountGreaterCount > 0)
-          showAlert(
-            "The offer code will not be applied to some products for which the purchasing power parity discount is greater than the offer code discount.",
-            "warning",
-          );
+        // One showAlert, because the toast is a single slot — a second call replaces the first
+        // before it paints. Both reasons can be true and each names a different set of lines.
+        const warnings = [
+          pppDiscountGreaterCount > 0
+            ? "The offer code will not be applied to some products for which the purchasing power parity discount is greater than the offer code discount."
+            : null,
+          discount.notice,
+        ].filter(Boolean);
+        if (warnings.length > 0) showAlert(warnings.join(" "), "warning");
         updateCart({
           discountCodes: [
             { code, products: discount.products_data, fromUrl },
@@ -305,7 +309,9 @@ export const Checkout = ({
   } | null = presentmentAmounts ?? listedAmounts;
 
   return (
-    <div className="@container mx-auto w-full max-w-400">
+    // data-checkout-scope bounds PaymentForm's scroll-to-first-error scan: wide enough to reach
+    // the tip and gift fields above it, narrow enough to ignore the rest of the page.
+    <div className="@container mx-auto w-full max-w-400" data-checkout-scope>
       <PageHeader
         className="border-none pb-0 md:px-16 md:pb-0 @[64rem]:mb-2"
         title="Checkout"

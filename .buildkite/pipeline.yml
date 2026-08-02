@@ -55,7 +55,14 @@ steps:
       - require-approval
     branches: "main"
     command: ".buildkite/scripts/deploy_production.sh"
-    timeout_in_minutes: 120
+    # Must exceed the script's OWN waits plus a deploy, or the script can never reach its
+    # own decision. deploy_production.sh waits up to 45 min on the payout healthcheck and
+    # up to 120 min on the long-running-job one before it gives up and skips; a deploy then
+    # takes ~23 min more. At 120 the long-running wait alone consumed the whole step, so a
+    # deploy that waited it out was killed as `timed_out` (exit 255) instead of exiting 0 on
+    # the skip path — turning a designed "let the report finish, ship on the next push" into
+    # a red main. 240 leaves ~50 min of headroom over the 190-min worst case.
+    timeout_in_minutes: 240
     # Serialize production deploys. A deploy holds a Consul lock for its whole run
     # (median 23 minutes), and deploy_production.sh exits 1 immediately if the lock is
     # already held. Without this, two commits merged inside one deploy window race: the

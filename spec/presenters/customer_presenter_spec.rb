@@ -224,6 +224,17 @@ describe CustomerPresenter do
       )
     end
 
+    context "when a shipment has a legacy invalid tracking_url" do
+      it "does not expose the raw tracking_url" do
+        shipment = create(:shipment, purchase: purchase1, shipped_at: Time.current)
+        shipment.update_column(:tracking_url, "1Z999AA10123456784")
+
+        props = described_class.new(purchase: purchase1.reload).customer(pundit_user:)
+
+        expect(props[:shipping][:tracking]).to eq(shipped: true, url: nil)
+      end
+    end
+
     context "with a license" do
       it "mints a management token that stops working after the TTL" do
         token = described_class.new(purchase: purchase2).customer(pundit_user:)[:license][:id]
@@ -291,6 +302,7 @@ describe CustomerPresenter do
               }
             ],
             status: "in_progress",
+            files_are_editable: true,
           }
         )
         expect(props[:custom_fields]).to eq(
@@ -322,6 +334,15 @@ describe CustomerPresenter do
             },
           ]
         )
+      end
+
+      it "marks the files as non-editable while the completion charge is still settling" do
+        commission.update!(completion_purchase: create(:purchase, link: commission.deposit_purchase.link, seller: commission.deposit_purchase.seller, is_commission_completion_purchase: true))
+
+        props = described_class.new(purchase: commission.deposit_purchase).customer(pundit_user:)
+
+        expect(props[:commission][:status]).to eq("in_progress")
+        expect(props[:commission][:files_are_editable]).to be false
       end
     end
 

@@ -251,11 +251,15 @@ describe CustomerEmailInfo do
   end
 
   describe "#mark_bounced!" do
-    it "attempts to unsubscribe the buyer of the purchase" do
+    it "marks the email as bounced without changing contact consent" do
       email_info = create(:customer_email_info_delivered)
-      expect(email_info.purchase).to receive(:unsubscribe_buyer).and_call_original
+      purchase = email_info.purchase
 
-      email_info.mark_bounced!
+      expect do
+        email_info.mark_bounced!
+      end.not_to change { purchase.reload.can_contact }
+
+      expect(email_info.reload.state).to eq("bounced")
     end
   end
 end

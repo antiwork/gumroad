@@ -16,6 +16,7 @@ describe Api::Mobile::CommissionsController, :vcr do
   describe "POST complete" do
     it "creates a completion purchase" do
       expect_any_instance_of(Commission).to receive(:create_completion_purchase!).and_call_original
+      @commission.files.attach(file_fixture("test.pdf"))
 
       post :complete, params: @params.merge(id: @commission.external_id)
 

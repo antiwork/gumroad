@@ -142,8 +142,9 @@ module StripeGuardianManager
       # scan returns — so an account that already holds several legal-guardian Persons has the rest
       # standing after this sync updated one of them. Reconciling only after a create left them
       # there: an adult's name, date of birth, address and tax id at Stripe that erasure's recorded-id
-      # path cannot select, and that no later sync revisits either, since the next one takes the
-      # recorded id and never scans.
+      # path cannot select. Running it on the update path too is what gives an orphan from any
+      # earlier half-failure a further chance of being noticed, since a steady-state sync reaches
+      # its Person by recorded id and would otherwise never look at the rest of the account.
       #
       # Ordering is load-bearing: the reconcile deletes what no Guardian row of this seller points
       # at, so it must follow adopt_person_id! or it would delete the Person we just adopted.
@@ -172,7 +173,7 @@ module StripeGuardianManager
   def self.reconcile_duplicate_persons!(guardian, stripe_account_id)
     recorded_ids = Guardian.where(user_id: guardian.user_id).pluck(:stripe_person_id).compact.to_set
 
-    each_legal_guardian_person(stripe_account_id) do |person|
+    complete = each_legal_guardian_person(stripe_account_id) do |person|
       next if recorded_ids.include?(person.id)
 
       # Per-person rescue, so one refused delete does not abandon the orphans after it. The
@@ -185,13 +186,55 @@ module StripeGuardianManager
           "Deleted orphaned legal-guardian Stripe person for guardian #{guardian.id} on #{stripe_account_id}"
         )
       rescue => e
-        ErrorNotifier.notify(e)
+        notify_without_raising(e)
       end
     end
+
+    # A scan that could not finish is the one case where this method's silence would be wrong. It
+    # deletes what it does not find recorded, so the orphans on an unread page are not merely
+    # missed: nothing local points at them, and erasure's recorded-id path cannot select them.
+    #
+    # A later sync's reconcile does rescan the whole account, so a one-off no-cursor glitch
+    # self-heals. What does not self-heal is a persistent one — every rescan fails the same way —
+    # on an account whose next write may never come. The note is what that leaves behind.
+    unless complete
+      # Written before the notify, and separately rescued, for the reason the same pair carries in
+      # DeleteGuardianStripePersonJob: ErrorNotifier is the transport most likely to be down, and
+      # this record is the half meant to outlive Sentry's retention. The account is all it can name
+      # — which Persons the unread pages hold is exactly what could not be read.
+      begin
+        User.find_by(id: guardian.user_id)&.add_payout_note(
+          content: "Guardian reconciliation scan incomplete on Stripe account #{stripe_account_id}: " \
+                   "Stripe reported more legal-guardian persons but returned no cursor. The account " \
+                   "may hold unrecorded legal-guardian persons.",
+          seller_visible: false
+        )
+      rescue => e
+        Rails.logger.error(
+          "Failed to record guardian reconcile breadcrumb for guardian #{guardian.id}: #{e.class}: #{e.message}"
+        )
+      end
+
+      notify_without_raising(
+        "Guardian duplicate reconciliation scanned only part of Stripe account #{stripe_account_id} " \
+        "for guardian #{guardian.id}: Stripe reported more legal-guardian persons but returned no " \
+        "cursor. Orphaned persons on the unread pages are still at Stripe."
+      )
+    end
   rescue => e
-    ErrorNotifier.notify(e)
+    notify_without_raising(e)
   end
   private_class_method :reconcile_duplicate_persons!
+
+  # Reporting must not be able to fail the sync. Every notify on the reconcile path is inside a
+  # rescue whose own handler notifies, so a notifier that is itself down would raise out of the
+  # handler and abort merchant-account creation over a lost alert.
+  def self.notify_without_raising(payload)
+    ErrorNotifier.notify(payload)
+  rescue => e
+    Rails.logger.error("Failed to report guardian reconcile problem: #{e.class}: #{e.message}")
+  end
+  private_class_method :notify_without_raising
 
   # Every legal-guardian Person on the account, across all pages.
   #

@@ -152,6 +152,7 @@ describe "RenderingExtension" do
                 },
                 is_gumroad_admin: false,
                 is_impersonating: true,
+                promoted_nav_items: [],
                 lazy_load_offscreen_discover_images: false,
               },
               current_seller: UserPresenter.new(user: seller).as_current_seller,

@@ -42,6 +42,18 @@ module User::PingNotification
     resource_subscription.post_url.present? && live_ping_notification_token?(oauth_application)
   end
 
+  # Whether an undeliverable subscription's silence is the seller's to act on. Selection below and the
+  # mailer at render time both read this one predicate, because a subscription can turn terminal inside
+  # that window. Asked only of subscriptions #ping_notification_deliverable? has already rejected.
+  def ping_notification_notice_actionable?(resource_subscription)
+    oauth_application = resource_subscription.oauth_application
+    # A hard-deleted application leaves oauth_application_id pointing at a missing row, and a revoked
+    # one is a terminal state the seller chose — neither is undeliverable-and-worth-reporting.
+    return false if oauth_application.nil? || oauth_application.deleted?
+
+    reportable_undeliverable?(oauth_application)
+  end
+
   # Single pass, because resolving deliverability costs a token query per subscription and the read
   # paths (#urls_for_ping_notification, can_ping) run on every sale JSON.
   def ping_notification_targets(resource_name)
@@ -49,14 +61,9 @@ module User::PingNotification
     undeliverable = []
 
     resource_subscriptions.alive.where("resource_name = ?", resource_name).find_each do |resource_subscription|
-      oauth_application = resource_subscription.oauth_application
-      # We had a bug where we were actually deleting the application instead of setting its deleted_at. Handle those gracefully.
-      # A revoked application is also a terminal state the seller chose, so it is not undeliverable-and-worth-reporting.
-      next if oauth_application.nil? || oauth_application.deleted?
-
       if ping_notification_deliverable?(resource_subscription)
         deliverable << resource_subscription
-      elsif reportable_undeliverable?(oauth_application)
+      elsif ping_notification_notice_actionable?(resource_subscription)
         undeliverable << resource_subscription
       end
     end
@@ -68,13 +75,9 @@ module User::PingNotification
   end
 
   private
-    # The Store Agent mints a token per request and revokes it in its own ensure block, so its
-    # subscriptions are permanently token-less by design, and the notifier's created_at cutover
-    # cannot exclude them because they are created now. 24 are live in production, and their owners
-    # cannot re-authorize an application that has no authorization flow. That agent-created webhooks
-    # never deliver is a real bug, but it is ours to fix, not to ask the seller to act on.
+    # Store Agent subscriptions are token-less by design; seller notices only report third-party apps.
     def reportable_undeliverable?(oauth_application)
-      oauth_application.name != Ai::StoreAgentApiClient::AGENT_APP_NAME
+      !oauth_application.is_first_party_agent_app?
     end
 
     def live_ping_notification_token?(oauth_application)

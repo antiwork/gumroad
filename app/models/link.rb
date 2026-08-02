@@ -187,6 +187,9 @@ class Link < ApplicationRecord
   before_validation :associate_price, on: :create
   before_validation :set_unique_permalink
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
+  after_save :stage_renamed_custom_permalink, if: :saved_change_to_custom_permalink?
+  after_commit :redirect_renamed_custom_permalinks
+  after_rollback :discard_renamed_custom_permalinks
   validates :user, presence: true
   validates :name, presence: true, length: { maximum: 255 }
   # Keep in sync with Product::BulkUpdateSupportEmailService.
@@ -251,7 +254,9 @@ class Link < ApplicationRecord
   # code no OfferCode save ever sees. Both repair here, in the same write.
   # Persisted-only: on a duplicate every attribute reads as changed, and the
   # join rows that make the code applicable are copied after this first save.
-  before_save :clear_detached_default_offer_code, if: -> { deleted_at_changed?(to: nil) || (!new_record? && will_save_change_to_price_currency_type?) }
+  # After, not before: the detachment predicate runs in SQL against the row's new
+  # currency, so it has to see the saved value.
+  after_save :clear_detached_default_offer_code, if: -> { saved_change_to_deleted_at?(to: nil) || (!previously_new_record? && saved_change_to_price_currency_type?) }
   after_save :set_customizable_price
   after_update :invalidate_cache, if: ->(link) { (link.saved_changes.keys - PURCHASE_PROPERTIES).present? }
   after_save :note_default_offer_code_assignment
@@ -286,6 +291,42 @@ class Link < ApplicationRecord
 
   scope :alive,                           -> { where(purchase_disabled_at: nil, banned_at: nil, deleted_at: nil) }
   scope :visible,                         -> { where(deleted_at: nil) }
+  # SQL mirror of #default_offer_code_detached?, so the repairs can re-evaluate
+  # detachment inside their own UPDATE instead of reading it first. Kept beside
+  # that method — the two must agree, and only this form is race-free.
+  # `<=>` is MySQL's NULL-safe equality: a NULL price_currency_type counts as a
+  # mismatch, matching the Ruby predicate rather than swallowing the row.
+  scope :with_detached_default_offer_code, -> {
+    where(<<~SQL.squish)
+      links.default_offer_code_id IS NOT NULL AND (
+        NOT EXISTS (
+          SELECT 1 FROM offer_codes oc
+          WHERE oc.id = links.default_offer_code_id
+            AND oc.deleted_at IS NULL AND oc.code IS NOT NULL AND oc.code != ''
+        )
+        OR EXISTS (
+          SELECT 1 FROM offer_codes oc
+          WHERE oc.id = links.default_offer_code_id AND oc.universal = FALSE
+            AND NOT EXISTS (
+              SELECT 1 FROM offer_codes_products ocp
+              WHERE ocp.offer_code_id = oc.id AND ocp.product_id = links.id
+            )
+        )
+        OR EXISTS (
+          SELECT 1 FROM offer_codes oc
+          WHERE oc.id = links.default_offer_code_id AND oc.universal = TRUE
+            AND (
+              (oc.currency_type IS NOT NULL AND oc.currency_type != ''
+                AND NOT (links.price_currency_type <=> oc.currency_type))
+              OR EXISTS (
+                SELECT 1 FROM offer_codes_excluded_products ocep
+                WHERE ocep.offer_code_id = oc.id AND ocep.product_id = links.id
+              )
+            )
+        )
+      )
+    SQL
+  }
   scope :visible_and_not_archived,        -> { visible.not_archived }
   scope :by_user,                         ->(user) { where(user.present? ? { user_id: user.id } : "1 = 1") }
   scope :by_general_permalink,            ->(permalink) { where("unique_permalink = ? OR custom_permalink = ?", permalink, permalink) }
@@ -456,6 +497,7 @@ class Link < ApplicationRecord
   end
 
   def publish!
+    enforce_not_unpublished_by_admin!
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
@@ -493,8 +535,30 @@ class Link < ApplicationRecord
 
   def unpublish!(is_unpublished_by_admin: false)
     self.purchase_disabled_at ||= Time.current
-    self.is_unpublished_by_admin = is_unpublished_by_admin
+    self.is_unpublished_by_admin = true if is_unpublished_by_admin
     save!
+  end
+
+  # Staff restore path — the only caller allowed to clear the admin-takedown marker.
+  # The clear rides along in publish!'s save!, so a publish that fails its other
+  # guards leaves the takedown intact.
+  def publish_by_admin!
+    self.is_unpublished_by_admin = false
+    publish!
+  end
+
+  # Memberships are unpublished rather than deleted so existing members keep their access
+  # while the listing comes off sale. Returns the disposition applied, because the caller
+  # cannot infer it afterwards — `alive?` is false for both.
+  def take_down_for_tos_violation!
+    if is_tiered_membership?
+      # Seller publish flows must not be able to reverse an admin takedown.
+      unpublish!(is_unpublished_by_admin: true)
+      "unpublished"
+    else
+      delete!
+      "deleted"
+    end
   end
 
   def publishable?
@@ -800,9 +864,17 @@ class Link < ApplicationRecord
   #                         NOTE: a custom permalink can match different products by different sellers,
   #                         this option should only be used to support legacy URLs.
   def self.fetch_leniently(general_permalink, user: nil)
-    product_via_legacy_permalink = Link.visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink)) if user.blank?
+    live_match = Link.by_user(user).visible.by_general_permalink(general_permalink).order(created_at: :asc, id: :asc).first
+    return live_match if live_match.present?
 
-    product_via_legacy_permalink || Link.by_user(user).visible.by_general_permalink(general_permalink).order(created_at: :asc, id: :asc).first
+    legacy_redirect = Link.by_user(user).visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink))
+    return legacy_redirect if legacy_redirect.present? || user.blank?
+
+    # A seller-scoped row fills collisions the global legacy table cannot
+    # represent without taking precedence from its established mappings.
+    Link.by_user(user).visible.find_by(
+      id: ProductPermalinkRedirect.select(:product_id).where(seller_id: user.id, permalink: general_permalink)
+    )
   end
 
   def self.fetch(unique_permalink, user: nil)
@@ -1455,8 +1527,22 @@ class Link < ApplicationRecord
       errors.add(:custom_permalink, "is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.")
     end
 
+    # Runs after the row is written, as a predicated UPDATE rather than a nil
+    # assignment on this instance: writing the column from our own snapshot would
+    # overwrite a valid default a concurrent request assigned between our read and
+    # our write, and that clear marks no assignment pending, so nothing repairs it.
+    # Same transaction as the undelete/currency change, so the product is never
+    # visible carrying a default checkout refuses.
     def clear_detached_default_offer_code
-      self.default_offer_code = nil if default_offer_code_detached?
+      return if default_offer_code_id.nil?
+      return if self.class.where(id:).with_detached_default_offer_code.update_all(default_offer_code_id: nil).zero?
+
+      # Mirror the clear locally without dirtying the attribute — a later save in
+      # the same request would otherwise write this nil back over an assignment
+      # that landed in between.
+      write_attribute(:default_offer_code_id, nil)
+      clear_attribute_changes([:default_offer_code_id])
+      association(:default_offer_code).reset
     end
 
     # saved_changes only reflects the last save in a transaction, and flows like
@@ -1472,18 +1558,16 @@ class Link < ApplicationRecord
 
     # Closes the write-skew race with a concurrent discount edit: each side
     # validates against its own snapshot, so an assignment and a detaching code
-    # edit can both commit. Whichever commits second re-checks fresh state here
-    # and clears the pointer, compare-and-set so a newer assignment survives.
+    # edit can both commit. Whichever commits second clears the pointer here.
     # OfferCode#repair_detached_default_discounts covers the other commit order.
-    # Checks a fresh instance so this instance's association cache stays intact.
+    # Detachment is re-evaluated inside the UPDATE (with_detached_default_offer_code),
+    # so a reattachment landing between here and the write makes it match zero rows
+    # rather than clearing a default that became valid again.
     def repair_detached_default_offer_code
       forget_default_offer_code_assignment
       return if default_offer_code_id.nil?
 
-      fresh = Link.includes(:default_offer_code).find_by(id:)
-      return if fresh.nil? || !fresh.default_offer_code_detached?
-
-      updated = Link.where(id:, default_offer_code_id: fresh.default_offer_code_id).update_all(default_offer_code_id: nil)
+      updated = Link.where(id:).with_detached_default_offer_code.update_all(default_offer_code_id: nil)
       invalidate_cache if updated > 0
     end
 
@@ -1502,6 +1586,13 @@ class Link < ApplicationRecord
       elsif !default_offer_code.applicable?(self)
         errors.add(:default_offer_code, "must apply to this product")
       end
+    end
+
+    def enforce_not_unpublished_by_admin!
+      return unless is_unpublished_by_admin?
+
+      errors.add(:base, "This product was unpublished by Gumroad and cannot be republished by the seller.")
+      raise LinkInvalid, "This product was unpublished by Gumroad and cannot be republished by the seller."
     end
 
     def enforce_user_email_confirmation!
@@ -1597,6 +1688,75 @@ class Link < ApplicationRecord
     def release_custom_permalink_if_possible
       deleted_product = user.links.deleted.find_by(custom_permalink:)
       deleted_product&.update(custom_permalink: nil)
+    end
+
+    # Stage per save because the product editor saves twice, and its second save
+    # clears the permalink change from dirty tracking before commit.
+    def stage_renamed_custom_permalink
+      outgoing = custom_permalink_previously_was.presence
+      return if outgoing.blank?
+
+      @staged_renamed_custom_permalinks ||= []
+      @staged_renamed_custom_permalinks << outgoing
+    end
+
+    def discard_renamed_custom_permalinks
+      @staged_renamed_custom_permalinks = nil
+    end
+
+    def redirect_renamed_custom_permalinks
+      outgoing_slugs = @staged_renamed_custom_permalinks
+      discard_renamed_custom_permalinks
+      return if outgoing_slugs.blank?
+
+      # Map every hop, including a slug that only existed inside this transaction.
+      outgoing_slugs.uniq.each { redirect_renamed_custom_permalink(_1) }
+    end
+
+    def redirect_renamed_custom_permalink(outgoing)
+      record_product_permalink_redirect(outgoing)
+      record_legacy_permalink(outgoing)
+    end
+
+    def record_product_permalink_redirect(outgoing)
+      existing = ProductPermalinkRedirect.find_by(seller_id: user_id, permalink: outgoing)
+      if existing
+        # Both rows are this seller's, so the latest release wins. A seller-owned
+        # legacy mapping still outranks this row in fetch_leniently, so the
+        # repoint only reaches readers where no such mapping exists. Repointing at
+        # a product the reader skips would retire a URL that still resolves.
+        existing.update(product_id: id) unless existing.product_id == id || deleted_at.present?
+        return
+      end
+      return if LegacyPermalink.joins(:product).where(permalink: outgoing, links: { user_id: }).exists?
+
+      redirect = ProductPermalinkRedirect.create(permalink: outgoing, product_id: id, seller_id: user_id)
+      Rails.logger.warn("ProductPermalinkRedirect not recorded for #{outgoing.inspect}: #{redirect.errors.full_messages.to_sentence}") unless redirect.persisted?
+    rescue ActiveRecord::RecordNotUnique
+      # A concurrent rename by this seller won the insert; both targets are hers.
+      nil
+    end
+
+    def record_legacy_permalink(outgoing)
+      return if live_product_answers_on?(outgoing)
+      return if LegacyPermalink.exists?(permalink: outgoing)
+
+      mapping = LegacyPermalink.create(permalink: outgoing, product_id: id)
+      Rails.logger.warn("LegacyPermalink not recorded for #{outgoing.inspect}: #{mapping.errors.full_messages.to_sentence}") unless mapping.persisted?
+      withdraw_legacy_permalink(mapping.id) if mapping.persisted? && live_product_answers_on?(outgoing)
+    rescue ActiveRecord::RecordNotUnique
+      # A concurrent rename won the row; first writer keeps it.
+      nil
+    end
+
+    # Uncached: the second call has to see a claim committed since the first.
+    def live_product_answers_on?(permalink)
+      Link.uncached { Link.visible.by_general_permalink(permalink).exists? }
+    end
+
+    # Scoped to `id` so this only ever removes a row this call owns.
+    def withdraw_legacy_permalink(mapping_id)
+      LegacyPermalink.where(id: mapping_id, product_id: id).delete_all
     end
 
     def create_licenses_for_existing_customers

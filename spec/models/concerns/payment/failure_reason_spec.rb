@@ -11,7 +11,7 @@ describe Payment::FailureReason do
   # retry is a strictly stronger claim than explaining, so it must apply to strictly fewer codes.
   describe "TERMINAL_PAYPAL_FAILURE_REASONS" do
     it "explains both account-level rejections but only blocks retries on the unrepairable one" do
-      expect(described_class::EXPLAINED_PAYPAL_FAILURE_REASONS).to match_array(["PAYPAL 3148", "PAYPAL 14159"])
+      expect(described_class::EXPLAINED_PAYPAL_FAILURE_REASONS).to match_array(["PAYPAL 3148", "PAYPAL 14159", "PAYPAL 3015"])
 
       # 14159 — "your PayPal account cannot receive US dollars" — is explained but still retried,
       # because PayPal lets a recipient add receive currencies on the same account. The block is
@@ -146,18 +146,140 @@ describe Payment::FailureReason do
             # Gumroad supports bank payouts here, so the note may suggest one. Most sellers who hit
             # these rejections are in PayPal-only countries, covered separately below.
             create(:user_compliance_info, user: payment.user, country: "United States")
+            # The retry-blocking rejection also takes the PayPal address off the account, and the
+            # note says so — this is the state the seller reads it in. The payout carries the address
+            # it was attempted against, as a real payout run always sets it.
+            payment.user.update!(payment_address: "refused@example.com")
+            payment.update!(payment_address: "refused@example.com")
+          end
+
+          describe "#terminal_paypal_failure_seller_solution" do
+            # The cohort is defined by can_setup_bank_payouts?, not by the country name, so assert
+            # the country actually produces it rather than trusting the list not to move.
+            def switch_to_paypal_only_country
+              payment.user.alive_user_compliance_info.mark_deleted!
+              create(:user_compliance_info, user: payment.user, country: "Ukraine")
+              expect(payment.user.reload.can_setup_bank_payouts?).to be(false)
+            end
+
+            let(:no_payout_rail_solution) do
+              "PayPal will not send payments to accounts registered in that country, and bank transfer is not " \
+              "available in yours. If you have a PayPal account registered in a country PayPal does pay to, you " \
+              "can add it in your payout settings. If you do not, we have no way to pay you right now."
+            end
+
+            it "tells a seller with no available payout rail that we may have no way to pay them" do
+              switch_to_paypal_only_country
+
+              payment.mark_failed!("PAYPAL 3148")
+
+              solution = payment.reload.terminal_paypal_failure_seller_solution
+              expect(solution).to eq(
+                "#{no_payout_rail_solution} #{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP}"
+              )
+              expect(solution).to_not include("is not forfeited")
+            end
+
+            it "keeps the existing bank account path for country-level PayPal rejections where bank payouts are available" do
+              expect(payment.user.can_setup_bank_payouts?).to be(true)
+
+              payment.mark_failed!("PAYPAL 3148")
+
+              expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(
+                "We've removed that PayPal account from your payout settings, since we can't pay to it. Add a bank account " \
+                "there instead, or a PayPal account registered in a country that can receive PayPal payments. " \
+                "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+              )
+            end
+
+            it "keeps the in-place PayPal-only path for currency rejections where bank payouts are unavailable" do
+              switch_to_paypal_only_country
+
+              payment.mark_failed!("PAYPAL 14159")
+
+              expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(
+                "Sign in to PayPal and add US dollars to the currencies your account can receive. PayPal is the only payout " \
+                "method we can offer in your country, so the alternative is to use a different PayPal account that can " \
+                "receive US dollars, which you can change in your payout settings. " \
+                "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+              )
+            end
+
+            # gumroad-private#1661: the Russia cohort. The old copy sent them after a PayPal
+            # account registered in a receivable country, which is both the wrong diagnosis and,
+            # for much of that cohort, unfollowable.
+            it "tells a locked-account seller with no bank rail that we may have no way to pay them" do
+              switch_to_paypal_only_country
+
+              payment.mark_failed!("PAYPAL 3015")
+
+              solution = payment.reload.terminal_paypal_failure_seller_solution
+              expect(solution).to eq(
+                "Sign in to PayPal to see whether there are restrictions on your account, or contact PayPal to have them " \
+                "lifted. PayPal is the only payout method we can offer in your country, so if PayPal cannot restore your " \
+                "account and you do not have another one, we have no way to pay you right now. We hope to have a way to pay " \
+                "out your balance in the future. " \
+                "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+              )
+              expect(solution).to_not include("registered in a country that can receive PayPal payments")
+            end
+
+            it "offers the bank rail to a locked-account seller who has one" do
+              expect(payment.user.can_setup_bank_payouts?).to be(true)
+
+              payment.mark_failed!("PAYPAL 3015")
+
+              expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(
+                "Sign in to PayPal to see whether there are restrictions on your account, or contact PayPal to have them " \
+                "lifted. You can also add a bank account in your payout settings, or use a different PayPal account. " \
+                "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+              )
+            end
+
+            it "writes the locked-account explanation as a seller-visible note instead of a support-only one" do
+              expect do
+                payment.mark_failed!("PAYPAL 3015")
+              end.to change { payment.user.comments.count }.by(1)
+
+              note = payment.user.comments.last
+              expect(note.content).to include("your PayPal account is locked or inactive")
+              expect(note.content).to_not include("Solution: Log in to your PayPal account")
+            end
+
+            it "does not stop retrying a locked account, since only PayPal can unlock it" do
+              payment.mark_failed!("PAYPAL 3015")
+
+              expect(payment.reload.terminal_paypal_failure?).to be(false)
+              expect(payment.locked_account_paypal_failure?).to be(true)
+              expect(payment.explained_paypal_failure?).to be(true)
+            end
+
+            # The no-rail wording replaces the fix, not the pause disclosure: a hold is a separate
+            # fact and stays true whether or not the seller has a rail to switch to.
+            it "still names a hold for a seller with no available payout rail" do
+              switch_to_paypal_only_country
+              payment.user.update!(payouts_paused_internally: true)
+
+              payment.mark_failed!("PAYPAL 3148")
+
+              solution = payment.reload.terminal_paypal_failure_seller_solution
+              expect(solution).to start_with(no_payout_rail_solution)
+              expect(solution).to include("Payouts on your account are also on hold")
+              expect(solution).to_not include("Add a bank account")
+            end
           end
 
           it "tells the seller PayPal will not send the payout and what to change" do
             expect do
               payment.mark_failed!("PAYPAL 3148")
-            end.to change { payment.user.comments.count }.by(1)
+            end.to change { payment.user.comments.count }.by(2)
 
             note = payment.user.comments.last
             expect(note.content).to eq(
               "Your payout on #{payment.created_at.to_fs(:formatted_date_full_month)} could not be sent because " \
               "PayPal will not send payouts to your PayPal account, because payments cannot be received in the country on that account's address. " \
-              "Add a bank account in your payout settings, or use a different PayPal account that can receive US dollars. " \
+              "We've removed that PayPal account from your payout settings, since we can't pay to it. Add a bank account there instead, " \
+              "or a PayPal account registered in a country that can receive PayPal payments. " \
               "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
             )
             expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
@@ -223,9 +345,20 @@ describe Payment::FailureReason do
             payment.mark_failed!("PAYPAL 3148")
 
             note = payment.user.comments.last
-            expect(note.content).to include("PayPal is the only payout method we can offer in your country")
+            expect(note.content).to include("we have no way to pay you right now")
             expect(note.content).to_not include("Add a bank account")
             expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
+          end
+
+          # The explanation must be the newest note the seller can read; the internal record of the
+          # removal is written first and hidden, so it cannot take the banner (gumroad-private#1478).
+          it "leaves the explanation as the newest note the seller can see" do
+            payment.mark_failed!("PAYPAL 3148")
+
+            expect(payment.user.reload.latest_seller_visible_payout_note.content)
+              .to include("could not be sent because")
+            expect(payment.user.comments.with_type_payout_note.map(&:content))
+              .to include(a_string_including("removed because PayPal permanently refused"))
           end
         end
       end

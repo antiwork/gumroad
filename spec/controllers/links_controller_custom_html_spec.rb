@@ -79,7 +79,12 @@ describe LinksController, :vcr, type: :controller do
         # page unless the seller added target="_blank". The bridge lets the
         # trusted wrapper do the navigation after re-validating the hostname.
         expect(response.body).to include('e.data.type === "gumroad:navigate"')
-        expect(response.body).to include("STORE_HOSTNAMES.indexOf(url.hostname) === -1")
+        # The hostname check moved into the shared gumroadNavigationTarget
+        # helper so the interceptor and the wrapper cannot disagree; the wrapper
+        # still refuses anything the helper does not resolve.
+        expect(response.body).to include("storeHostnames.indexOf(url.hostname) !== -1")
+        expect(response.body).to include("gumroadNavigationTarget(url, STORE_HOSTNAMES)")
+        expect(response.body).to include("if (destination === null) return;")
         expect(response.body).to include(%(STORE_HOSTNAMES = ["#{URI.parse(seller.subdomain_with_protocol).host}"]))
       end
 

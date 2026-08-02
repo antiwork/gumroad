@@ -23,6 +23,87 @@ describe Pages::Interpolator do
       expect(result).to include(product.price_formatted_verbose)
     end
 
+    describe "review fields" do
+      # Real reviews rather than a hand-set stat row: reviews_count and average_rating are both
+      # derived columns written by ProductReviewStat's own SQL, so setting one by hand produces a
+      # shape production cannot reach (count 4, average 0.0) and the spec asserts a lie.
+      def review!(product, rating)
+        create(:product_review, purchase: create(:purchase, link: product), rating:)
+      end
+
+      let(:reviewed) do
+        create(:product, name: "Reviewed").tap do |p|
+          2.times { review!(p, 4) }
+          2.times { review!(p, 5) }
+        end
+      end
+
+      it "writes the average rating and the review count" do
+        html = %(<span data-gumroad-field="rating">0</span><span data-gumroad-field="review-count">no reviews</span>)
+
+        result = described_class.interpolate(html, product: reviewed.reload)
+
+        expect(result).to include(%(<span data-gumroad-field="rating">4.5</span>))
+        expect(result).to include(%(<span data-gumroad-field="review-count">4</span>))
+        expect(result).not_to include("no reviews")
+      end
+
+      it "leaves the element untouched when the seller has reviews hidden" do
+        reviewed.update!(display_product_reviews: false)
+        html = %(<span data-gumroad-field="rating">Loved by our customers</span>)
+
+        result = described_class.interpolate(html, product: reviewed.reload)
+
+        expect(result).to include("Loved by our customers")
+        expect(result).not_to include("4.5")
+      end
+
+      it "leaves the element untouched when the product has no reviews" do
+        html = %(<span data-gumroad-field="review-count">Be the first to review</span>)
+
+        result = described_class.interpolate(html, product: product)
+
+        expect(result).to include("Be the first to review")
+        expect(result).not_to include(%(<span data-gumroad-field="review-count">0</span>))
+      end
+
+      # The native page renders the rating as a JSON number, so 4.0 reaches the buyer as "4".
+      it "renders a whole-number average without a trailing zero" do
+        whole = create(:product).tap { |p| 2.times { review!(p, 4) } }
+
+        result = described_class.interpolate(%(<span data-gumroad-field="rating">x</span>), product: whole.reload)
+
+        expect(result).to include(%(<span data-gumroad-field="rating">4</span>))
+      end
+
+      # For a bundle each aggregation loads every content product's stat row, so per-marker
+      # recomputation would scale the query count with how often the page repeats the markers.
+      it "computes the review summary once even when the markers repeat" do
+        product = reviewed.reload
+        expect(product).to receive(:bundle_rating_stats).once.and_call_original
+        html = %(<span data-gumroad-field="rating">x</span><span data-gumroad-field="review-count">x</span>) * 2
+
+        result = described_class.interpolate(html, product:)
+
+        expect(result.scan(%(<span data-gumroad-field="rating">4.5</span>)).size).to eq(2)
+        expect(result.scan(%(<span data-gumroad-field="review-count">4</span>)).size).to eq(2)
+      end
+
+      # The native bundle page merges its contents' reviews in, so a bundle's own row alone
+      # would disagree with the page this markup replaces.
+      it "uses the combined bundle summary for a bundle" do
+        bundle = create(:product, :bundle, name: "Bundle")
+        inner = create(:product, user: bundle.user)
+        3.times { review!(inner, 5) }
+        create(:bundle_product, bundle:, product: inner)
+        review!(bundle, 3)
+
+        result = described_class.interpolate(%(<span data-gumroad-field="review-count">x</span>), product: bundle.reload)
+
+        expect(result).to include(%(<span data-gumroad-field="review-count">4</span>))
+      end
+    end
+
     # The native /l/ page this markup replaces auto-applies the default offer code
     # (BestOfferCodeService), so the undiscounted set price would sit next to a checkout that
     # charges less.

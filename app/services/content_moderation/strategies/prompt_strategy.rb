@@ -26,10 +26,15 @@ class ContentModeration::Strategies::PromptStrategy
   CORROBORATION_RESAMPLES = 2
 
   # Which presets are judgment calls that need corroboration before they may
-  # block a publish. Adult-content flags are NOT resampled: they key off
-  # concrete depicted content rather than an inference about the seller's
-  # intent, so a single sample is reliable enough to act on.
+  # block a publish. Adult-content flags are corroborated only when the sample
+  # carried no images (see #corroborated_preset?): with a picture in front of it
+  # the model is reading concrete depicted content, but on text alone the flag is
+  # the same kind of intent inference as spam, and one noisy sample should not
+  # block a publish.
   CORROBORATED_PRESETS = %w[spam off_platform_fulfillment].freeze
+
+  # Presets that graduate into CORROBORATED_PRESETS when no image reached the model.
+  TEXT_ONLY_CORROBORATED_PRESETS = %w[adult_content].freeze
 
   ADULT_CONTENT_RULES = <<~RULES
     You are a content moderator. Evaluate the following content for adult/sexual content policy violations.
@@ -206,6 +211,11 @@ class ContentModeration::Strategies::PromptStrategy
   JUDGE_MODEL = "gpt-4o-mini"
   SUPPORTED_IMAGE_EXTENSIONS = %w[.png .jpg .jpeg .gif .webp].freeze
 
+  # Images sent alongside the rules on each preset call. Kept small because
+  # every preset pays for them, and drawn once per instance so all presets
+  # judge the same pictures.
+  MAX_IMAGES_PER_PRESET = 3
+
   def initialize(text:, image_urls: [], corroborate_judgment_flags: false, check_off_platform_fulfillment: false)
     @text = text
     @image_urls = image_urls
@@ -229,8 +239,8 @@ class ContentModeration::Strategies::PromptStrategy
       next if result[:status] == "compliant"
       next unless passes_uncertainty_check?(result[:reasoning])
 
-      if CORROBORATED_PRESETS.include?(preset[:name]) && @corroborate_judgment_flags
-        flagged_resamples, resamples_run = run_resamples(preset)
+      if @corroborate_judgment_flags && corroborated_preset?(preset, images_sent: result[:images_sent])
+        flagged_resamples, resamples_run = run_resamples(preset, skip_images: !result[:images_sent])
         corroborated = flagged_resamples == CORROBORATION_RESAMPLES
         Rails.logger.info(
           "ContentModeration::PromptStrategy #{preset[:name]} corroboration: #{flagged_resamples}/#{resamples_run} resamples flagged; " \
@@ -276,6 +286,24 @@ class ContentModeration::Strategies::PromptStrategy
       list
     end
 
+    # An adult-content flag the model reached without seeing a picture is an
+    # inference about words, not a reading of an image, so it earns the same
+    # resampling as spam. Keyed on what the flagging sample actually sent rather
+    # than on what the record holds: a preset that fell back to text-only because
+    # OpenAI could not fetch the image (see #evaluate_preset) also reasoned about
+    # prose alone, and blocking it on one sample is the bug this addresses.
+    def corroborated_preset?(preset, images_sent:)
+      return true if CORROBORATED_PRESETS.include?(preset[:name])
+      return false unless TEXT_ONLY_CORROBORATED_PRESETS.include?(preset[:name])
+
+      !images_sent
+    end
+
+    # Whether a chat call built with this `skip_images` actually carried images.
+    def images_sent?(skip_images:)
+      !skip_images && sampled_image_urls.any?
+    end
+
     # Re-runs a preset to see whether the initial flag reproduces, and
     # returns [how many resamples flagged, how many were run]. Blocking needs
     # every resample to flag, so the first clean one decides the outcome and
@@ -286,12 +314,18 @@ class ContentModeration::Strategies::PromptStrategy
     # not flagging (evaluate_preset already maps those to compliant), so
     # transient API trouble fails open — toward publishing — like the rest of
     # this class.
-    def run_resamples(preset)
+    #
+    # `skip_images` is the flagging sample's effective payload, not the
+    # preset's default: a flag that came from the text-only retry (OpenAI
+    # rejected the image URL) must be corroborated text-only, or each resample
+    # re-sends the URL that just failed — and, if the fetch transiently
+    # succeeds, corroborates a text verdict with image-bearing samples.
+    def run_resamples(preset, skip_images:)
       flagged = 0
       run = 0
       CORROBORATION_RESAMPLES.times do
         run += 1
-        break unless evaluate_preset(preset)[:status] == "flagged"
+        break unless evaluate_preset(preset, skip_images:)[:status] == "flagged"
         flagged += 1
       end
       [flagged, run]
@@ -315,6 +349,7 @@ class ContentModeration::Strategies::PromptStrategy
       {
         status: parsed["flagged"] ? "flagged" : "compliant",
         reasoning: parsed["reasoning"].to_s,
+        images_sent: images_sent?(skip_images:),
       }
     rescue Faraday::BadRequestError => e
       # OpenAI regularly fails to download some of our image URLs (signed
@@ -414,7 +449,20 @@ class ContentModeration::Strategies::PromptStrategy
         openai_error_message: error_message[0, 1000],
         text_length: @text.to_s.length,
         image_url_count: @image_urls.size,
-        image_urls_sent: images_sent ? @image_urls.first(20) : [],
+        image_urls_sent: images_sent ? sampled_image_urls : [],
+      )
+    end
+
+    # The images every preset sees, chosen once per strategy instance: a preset
+    # retried without images, a resample, and the presets themselves must all
+    # reason about the same pictures, and re-drawing per call made each one
+    # inspect a different subset.
+    #
+    # A sample by design — a chat completion carrying every image would be a very
+    # large request. Full coverage is ClassifierStrategy's job.
+    def sampled_image_urls
+      @sampled_image_urls ||= ContentModeration::ImageSelection.bounded(
+        @image_urls.select { |url| supported_image_url?(url) }, MAX_IMAGES_PER_PRESET
       )
     end
 
@@ -431,13 +479,12 @@ class ContentModeration::Strategies::PromptStrategy
       user_content << { type: "text", text: "Content to evaluate:\n\n#{@text.presence || '[no text provided]'}" }
 
       if !skip_images && @image_urls.present?
-        supported_urls = @image_urls.select { |url| supported_image_url?(url) }
-        if supported_urls.empty? && @image_urls.any?
+        if sampled_image_urls.empty?
           Rails.logger.warn(
             "ContentModeration::PromptStrategy filtered out all #{@image_urls.size} image URLs (unsupported formats)"
           )
         end
-        supported_urls.sample(3).each do |url|
+        sampled_image_urls.each do |url|
           user_content << { type: "image_url", image_url: { url: url } }
         end
       end

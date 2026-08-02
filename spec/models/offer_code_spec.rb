@@ -488,6 +488,109 @@ describe OfferCode do
 
       offer_code.update!(max_purchase_count: 5)
     end
+
+    it "leaves a default reattached between selection and the clearing write" do
+      @product.update!(default_offer_code_id: offer_code.id)
+      offer_code.products.delete(@product)
+
+      # Stand in for a concurrent request that re-adds the product after this
+      # sweep has already decided the default is detached.
+      allow(Link).to receive(:where).and_wrap_original do |original, *args|
+        relation = original.call(*args)
+        if args.first.is_a?(Hash) && args.first[:id].is_a?(Array)
+          offer_code.products << @product unless offer_code.products.reload.include?(@product)
+        end
+        relation
+      end
+
+      offer_code.send(:repair_detached_default_discounts)
+
+      expect(@product.reload.default_offer_code_id).to eq(offer_code.id)
+    end
+
+    # Pins pre-existing behaviour rather than a change here: the sweep reads the
+    # join table, so a delete that never saved the code is still seen.
+    it "clears a default detached by a direct products.delete" do
+      @product.update!(default_offer_code_id: offer_code.id)
+
+      offer_code.products.delete(@product)
+      offer_code.send(:repair_detached_default_discounts)
+
+      expect(@product.reload.default_offer_code_id).to be_nil
+    end
+  end
+
+  describe ".with_detached_default_offer_code" do
+    # The scope is a SQL mirror of Link#default_offer_code_detached?; if the two
+    # ever disagree the repairs either miss rows or clear valid defaults.
+    def expect_scope_to_agree_with_predicate(product)
+      product.reload
+      by_sql = Link.where(id: product.id).with_detached_default_offer_code.exists?
+      expect(by_sql).to eq(product.default_offer_code_detached?)
+      by_sql
+    end
+
+    it "agrees with the Ruby predicate for an attached product-specific default" do
+      code = create(:offer_code, user: @product.user, products: [@product])
+      @product.update!(default_offer_code_id: code.id)
+
+      expect(expect_scope_to_agree_with_predicate(@product)).to eq(false)
+    end
+
+    it "agrees when the product was removed from a product-specific code" do
+      other = create(:product, user: @product.user)
+      code = create(:offer_code, user: @product.user, products: [@product, other])
+      @product.update!(default_offer_code_id: code.id)
+      code.products.delete(@product)
+
+      expect(expect_scope_to_agree_with_predicate(@product)).to eq(true)
+    end
+
+    it "agrees when the code was soft-deleted" do
+      code = create(:offer_code, user: @product.user, products: [@product])
+      @product.update!(default_offer_code_id: code.id)
+      # validate_not_used_as_default_discount blocks deleting a code in use, so
+      # this shape only exists as legacy data predating that guard.
+      code.update_column(:deleted_at, Time.current)
+
+      expect(expect_scope_to_agree_with_predicate(@product)).to eq(true)
+    end
+
+    it "agrees when the code carries no code string" do
+      code = create(:offer_code, user: @product.user, products: [@product])
+      @product.update!(default_offer_code_id: code.id)
+      code.update_column(:code, nil)
+
+      expect(expect_scope_to_agree_with_predicate(@product)).to eq(true)
+    end
+
+    it "agrees for a universal code in a different currency" do
+      code = create(:universal_offer_code, user: @product.user, currency_type: "usd")
+      @product.update!(default_offer_code_id: code.id)
+      @product.update_column(:price_currency_type, "eur")
+
+      expect(expect_scope_to_agree_with_predicate(@product)).to eq(true)
+    end
+
+    it "agrees for a percentage universal code with no currency" do
+      code = create(:universal_offer_code, user: @product.user, amount_cents: nil, amount_percentage: 50, currency_type: nil)
+      @product.update!(default_offer_code_id: code.id)
+      @product.update_column(:price_currency_type, "eur")
+
+      expect(expect_scope_to_agree_with_predicate(@product)).to eq(false)
+    end
+
+    it "agrees when a universal code excludes the product" do
+      code = create(:universal_offer_code, user: @product.user, currency_type: nil)
+      @product.update!(default_offer_code_id: code.id)
+      code.excluded_products << @product
+
+      expect(expect_scope_to_agree_with_predicate(@product)).to eq(true)
+    end
+
+    it "agrees when there is no default at all" do
+      expect(expect_scope_to_agree_with_predicate(@product)).to eq(false)
+    end
   end
 
   describe "validity dates validation" do

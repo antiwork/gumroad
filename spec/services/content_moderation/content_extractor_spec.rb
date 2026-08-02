@@ -138,6 +138,549 @@ RSpec.describe ContentModeration::ContentExtractor do
     end
   end
 
+  describe "#extract_from_page" do
+    let(:extractor) { described_class.new }
+    let(:seller) { create(:user) }
+
+    # Built, not saved: the extractor reads the page as submitted, and saving
+    # would run both the sanitizer and the moderation validation these examples
+    # are the input to.
+    def page_for(custom_html: nil, content: nil, title: "About my studio", pageable: seller)
+      Page.new(pageable:, slug: "about", title:, custom_html:, content:)
+    end
+
+    it "moderates a video's poster image without sending the video file to the image endpoint" do
+      page = page_for(custom_html: <<~HTML)
+        <p>Watch the process</p>
+        <video src="https://public-files.gumroad.com/tce9t60y8ecmiqx1b81v1gnzj28r"
+               poster="https://cdn.example.com/frame.jpg"></video>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq(["https://cdn.example.com/frame.jpg"])
+    end
+
+    it "collects a video's poster whether or not the element carries a src" do
+      page = page_for(custom_html: <<~HTML)
+        <video poster="https://cdn.example.com/no-src.jpg"></video>
+        <video src="https://public-files.gumroad.com/withsrc.mov"
+               poster="https://cdn.example.com/with-src.jpg"></video>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to contain_exactly(
+        "https://cdn.example.com/no-src.jpg",
+        "https://cdn.example.com/with-src.jpg"
+      )
+    end
+
+    it "keeps an img src and a sibling video's poster, and takes neither element's other attribute" do
+      page = page_for(custom_html: <<~HTML)
+        <img src="https://cdn.example.com/photo.png" poster="https://cdn.example.com/ignored.jpg">
+        <video src="https://public-files.gumroad.com/clip.mov"
+               poster="https://cdn.example.com/frame.jpg"></video>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to contain_exactly(
+        "https://cdn.example.com/photo.png",
+        "https://cdn.example.com/frame.jpg"
+      )
+    end
+
+    it "extracts the title, visible text, link targets, and remote image URLs" do
+      page = page_for(custom_html: <<~HTML)
+        <html><head><style>.a { color: red }</style></head>
+        <body>
+          <h1>Hand-lettered posters</h1>
+          <p>Printed to order.</p>
+          <img src="https://cdn.example.com/poster.png">
+          <a href="https://example.com/shop">My other shop</a>
+        </body></html>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).to include("Title: About my studio")
+      expect(result.text).to include("Hand-lettered posters")
+      expect(result.text).to include("Printed to order.")
+      expect(result.text).to include("https://example.com/shop")
+      expect(result.image_urls).to eq(["https://cdn.example.com/poster.png"])
+    end
+
+    it "ignores script, style, and template bodies so framework code is not moderated as content" do
+      page = page_for(custom_html: <<~HTML)
+        <style>.buy { background: red }</style>
+        <script>const scriptOnlyToken = "gibberish payload";</script>
+        <noscript>Enable JavaScript</noscript>
+        <template><p>Cloned later</p></template>
+        <p>Real copy</p>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).to include("Real copy")
+      expect(result.text).not_to include("scriptOnlyToken")
+      expect(result.text).not_to include("Enable JavaScript")
+      expect(result.text).not_to include("Cloned later")
+    end
+
+    it "reads rich text pages the same way as custom HTML pages" do
+      page = page_for(title: "Rich", content: "<p>Written in the editor</p>")
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).to include("Title: Rich")
+      expect(result.text).to include("Written in the editor")
+    end
+
+    it "strips the seller's own storefront host from link targets, keeping third-party links intact" do
+      page = page_for(custom_html: %(<a href="#{seller.subdomain_with_protocol}/l/thing">Mine</a><a href="https://elsewhere.example/x">Theirs</a>))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).not_to include(seller.subdomain)
+      expect(result.text).to include("https://elsewhere.example/x")
+    end
+
+    it "counts only the images that survive sanitization, while still reading text the sanitizer drops" do
+      page = page_for(custom_html: <<~HTML)
+        <img src="https://cdn.example.com/kept.png">
+        <marquee>buy illegal things<img src="https://cdn.example.com/dropped.png"></marquee>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      # An image inside a dropped tag never renders, so counting it would reject a
+      # page over a limit it does not really reach. Text in one still says
+      # something, so it is still moderated.
+      expect(result.image_urls).to eq(["https://cdn.example.com/kept.png"])
+      expect(result.text).to include("buy illegal things")
+    end
+
+    it "extracts every image the page can display, not just img src" do
+      page = page_for(custom_html: <<~HTML)
+        <img src="https://cdn.example.com/remote.png">
+        <img srcset="https://cdn.example.com/one.png 1x, https://cdn.example.com/two.png 2x">
+        <picture><source srcset="https://cdn.example.com/source.png"></picture>
+        <video poster="https://cdn.example.com/poster.jpg"></video>
+      HTML
+
+      # The sanitizer permits srcset and poster, so an image reachable only
+      # through one of them renders to every visitor.
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "https://cdn.example.com/remote.png",
+                                                                            "https://cdn.example.com/one.png",
+                                                                            "https://cdn.example.com/two.png",
+                                                                            "https://cdn.example.com/source.png",
+                                                                            "https://cdn.example.com/poster.jpg",
+                                                                          ])
+    end
+
+    it "extracts images whose scheme is not lowercase, which browsers render all the same" do
+      page = page_for(custom_html: <<~HTML)
+        <img src="HTTPS://cdn.example.com/upper.png">
+        <img srcset="Http://cdn.example.com/mixed.png 1x">
+        <video poster="HTTPS://cdn.example.com/poster.jpg"></video>
+        <a href="HTTPS://elsewhere.example/shop">Shop</a>
+      HTML
+
+      result = extractor.extract_from_page(page)
+      # URI schemes are case-insensitive, so a case-sensitive predicate would let
+      # a seller display an image the moderation pass never sees.
+      expect(result.image_urls).to match_array([
+                                                 "HTTPS://cdn.example.com/upper.png",
+                                                 "Http://cdn.example.com/mixed.png",
+                                                 "HTTPS://cdn.example.com/poster.jpg",
+                                               ])
+      expect(result.text).to include("HTTPS://elsewhere.example/shop")
+    end
+
+    it "extracts inline data: images, which render without ever being uploaded" do
+      page = page_for(custom_html: <<~HTML)
+        <img src="data:image/png;base64,AAAA">
+        <img srcset="data:image/png;base64,BBBB 1x, https://cdn.example.com/remote.png 2x">
+      HTML
+
+      # A data: URL contains commas, so srcset splitting must not bisect one.
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "data:image/png;base64,AAAA",
+                                                                            "data:image/png;base64,BBBB",
+                                                                            "https://cdn.example.com/remote.png",
+                                                                          ])
+    end
+
+    it "re-encodes a percent-encoded raster data URL into the base64 form the classifier can review" do
+      page = page_for(custom_html: <<~HTML)
+        <style>.tile { background-image: url("data:image/png,%89PNG%0D%0A") }</style>
+      HTML
+
+      # The moderations endpoint only accepts base64 data URLs; sending the
+      # percent-encoded form is a guaranteed 400 that blocks the page forever.
+      # Same bytes, reviewable encoding.
+      expect(extractor.extract_from_page(page).image_urls).to eq([
+                                                                   "data:image/png;base64,#{Base64.strict_encode64("\x89PNG\r\n".b)}",
+                                                                 ])
+    end
+
+    it "reviews a self-contained SVG data URL as markup text instead of blocking the page on it" do
+      # The feTurbulence film-grain trick (gumroad-private#1695): the standard
+      # way generated pages paint noise textures. No moderation endpoint reads
+      # SVG in any encoding, but this one provably references no other image,
+      # so its markup is reviewed through the text strategies instead.
+      grain = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E" \
+              "%3Cfilter id='grainy'%3E%3CfeTurbulence baseFrequency='0.9'/%3E%3C/filter%3E" \
+              "%3Crect width='100' height='100' filter='url(%23grainy)'/%3E%3C/svg%3E"
+      page = page_for(custom_html: <<~HTML)
+        <style>.grain::before { background-image: url("#{grain}") }</style>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to be_empty
+      expect(result.text).to include("feTurbulence")
+    end
+
+    it "reviews a base64 SVG data URL's text the same way, including words rendered by <text>" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><text>buy illegal things</text></svg>)
+      page = page_for(custom_html: <<~HTML)
+        <img src="data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}">
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to be_empty
+      expect(result.text).to include("buy illegal things")
+    end
+
+    # Each rejection example pairs its unsafe SVG with a safe one on the same
+    # page: the safe SVG must move to text while the unsafe one stays an image,
+    # so a parser that stopped discriminating fails these instead of passing
+    # them vacuously.
+    def safe_svg_img
+      %(<img src="data:image/svg+xml;base64,#{Base64.strict_encode64(%(<svg xmlns="http://www.w3.org/2000/svg"><text>safeharbor</text></svg>))}">)
+    end
+
+    it "keeps an SVG that embeds another image on the image list, where full coverage blocks it" do
+      # An SVG-as-image renders embedded data: payloads, so excluding this one
+      # would display a raster no strategy ever reviewed.
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><image href="data:image/png;base64,AAAA"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).not_to include("AAAA")
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG whose foreignObject could render arbitrary HTML" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div>anything</div></foreignObject></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG that references anything outside itself" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><use href="https://elsewhere.example/sprite.svg#icon"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG whose CSS hides a nested payload behind an escape" do
+      # `\\64 ata:` tokenizes to `data:` — the same escape reading css_image_urls
+      # does for the page's own CSS applies inside a candidate SVG.
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><rect style="mask-image:url(\\64 ata:image/png;base64,AAAA)"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG whose CSS loads a nested payload as an image-set string" do
+      # image-set()/cross-fade() take plain string arguments that load as URLs;
+      # only :url tokens were rejected before, so this bypassed image review.
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><rect style="mask-image:image-set('data:image/png;base64,AAAA' 1x)"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG whose image-set string hides the payload behind a CSS escape" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><rect style="mask-image:image-set('\\64 ata:image/png;base64,AAAA' 1x)"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG whose image-set string references a remote image" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><rect style="mask-image:image-set('https://elsewhere.example/x.png' 1x)"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG that hides a nested payload behind an XML entity" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="href" to="&#100;ata:image/png;base64,AAAA"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps a data URL whose payload is not the SVG it claims to be" do
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64("<html><p>not svg</p></html>")}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG whose decoded source exceeds the SVG text budget, without parsing it" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><text>#{"padding " * 700}</text></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">#{safe_svg_img}))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).to include("safeharbor")
+    end
+
+    it "keeps an SVG past the aggregate text budget on the image list instead of truncating it out of review" do
+      # Each fits the budget alone but not together. The overflow SVG must fail
+      # closed as an image: truncating it out of the joined text would leave it
+      # absent from both review channels.
+      first = %(<svg xmlns="http://www.w3.org/2000/svg"><text>firstmarker #{"padding " * 400}</text></svg>)
+      second = %(<svg xmlns="http://www.w3.org/2000/svg"><text>overflowmarker #{"padding " * 400}</text></svg>)
+      second_url = "data:image/svg+xml;base64,#{Base64.strict_encode64(second)}"
+      page = page_for(custom_html: <<~HTML)
+        <img src="data:image/svg+xml;base64,#{Base64.strict_encode64(first)}">
+        <img src="#{second_url}">
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([second_url])
+      expect(result.text).to include("firstmarker")
+      expect(result.text).not_to include("overflowmarker")
+    end
+
+    it "re-encodes a raster data URL whose scheme is uppercase, which browsers render all the same" do
+      # A case-sensitive scheme strip left `DATA:` payloads with a content type
+      # of "data:image/png" — never re-encoded, permanently unreviewable.
+      page = page_for(custom_html: %(<img src="DATA:image/png,PNG%20payload">))
+
+      expect(extractor.extract_from_page(page).image_urls).to eq([
+                                                                   "data:image/png;base64,#{Base64.strict_encode64("PNG payload")}",
+                                                                 ])
+    end
+
+    it "honors ;base64 only as the final parameter, as the data-URL grammar positions it" do
+      # With `;base64;charset=utf-8` the payload is literal, not base64; reading
+      # the flag positionally keeps this SVG reviewable instead of decoding it
+      # into garbage that blocks the page forever.
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><text>positional flag</text></svg>)
+      url = "data:image/svg+xml;base64;charset=utf-8,#{CGI.escape(svg).gsub("+", "%20")}"
+      page = page_for(custom_html: %(<img src="#{url}">))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to be_empty
+      expect(result.text).to include("positional flag")
+    end
+
+    it "extracts images painted by CSS, which render without any img tag" do
+      page = page_for(custom_html: <<~HTML)
+        <div style="background-image: url('https://cdn.example.com/inline.png')">Studio</div>
+        <style>
+          .hero { background: url(data:image/png;base64,AAAA) no-repeat }
+          @media screen { .promo { border-image: url("https://cdn.example.com/media.png") } }
+        </style>
+      HTML
+
+      # The sanitizer keeps the style attribute and tag, and the page CSP's
+      # style-src 'unsafe-inline' lets them apply, so a CSS background is as
+      # rendered as an img src.
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "https://cdn.example.com/inline.png",
+                                                                            "data:image/png;base64,AAAA",
+                                                                            "https://cdn.example.com/media.png",
+                                                                          ])
+    end
+
+    it "reads CSS as a browser tokenizes it, so escapes and custom properties cannot hide an image" do
+      page = page_for(custom_html: <<~HTML)
+        <style>
+          .a { background-image: /* comment */ url(\\68ttps://cdn.example.com/escaped.png) }
+          .b { --bg: url("https://cdn.example.com/var.png") }
+          .c { background-image: var(--bg) }
+          .d { background-image: image-set(url("https://cdn.example.com/set.png") 1x) }
+        </style>
+      HTML
+
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "https://cdn.example.com/escaped.png",
+                                                                            "https://cdn.example.com/var.png",
+                                                                            "https://cdn.example.com/set.png",
+                                                                          ])
+    end
+
+    it "recovers images painted through CSS nesting, which the parser cannot structure but browsers render" do
+      page = page_for(custom_html: <<~HTML)
+        <style>
+          .card {
+            --seller-image: url("https://cdn.example.com/nested-var.png");
+            & .hero { background-image: var(--seller-image) }
+            & .side { .deep { background-image: url("https://cdn.example.com/deep.png") } }
+          }
+          @media screen {
+            .promo { & .banner { background: url("https://cdn.example.com/media-nested.png") } }
+          }
+        </style>
+      HTML
+
+      # Crass returns a nested rule as a bare :error node with its declarations
+      # discarded, so without the flattened re-read these images rendered while
+      # extraction had nothing to hand to moderation.
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "https://cdn.example.com/nested-var.png",
+                                                                            "https://cdn.example.com/deep.png",
+                                                                            "https://cdn.example.com/media-nested.png",
+                                                                          ])
+    end
+
+    it "leaves unused custom-property URLs out, so a URL nothing renders cannot block a page" do
+      page = page_for(custom_html: <<~HTML)
+        <style>
+          :root { --unused: url("https://dead.example.com/never-rendered.png") }
+          .a { --indirect: url("https://cdn.example.com/chained.png") }
+          .b { --painted: var(--indirect) }
+        </style>
+        <div style="background-image: var(--painted, var(--fallback))"></div>
+        <style>
+          .c { --fallback: url("https://cdn.example.com/fallback.png") }
+          .d { color: var(--unused-by-a-non-image-property) }
+          .e { --unused-by-a-non-image-property: url("https://dead.example.com/text-only.png") }
+        </style>
+      HTML
+
+      # A custom property no image-painting declaration reads (directly, through
+      # another custom property, or as a var() fallback) makes no browser
+      # request — collecting it would let an unreviewable parked URL block an
+      # otherwise safe page. References resolve across style attributes and
+      # blocks, since custom properties inherit document-wide.
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "https://cdn.example.com/chained.png",
+                                                                            "https://cdn.example.com/fallback.png",
+                                                                          ])
+    end
+
+    it "leaves font URLs out of the image set, so a custom font cannot block a page" do
+      page = page_for(custom_html: <<~HTML)
+        <style>
+          @font-face { font-family: brand; src: url("https://fonts.gstatic.com/f.woff2") }
+          h1 { font-family: brand; background: url("https://cdn.example.com/hero.png") }
+        </style>
+      HTML
+
+      # A font sent to the image endpoint fails moderation, and under full
+      # coverage an unmoderated "image" rejects the whole page. The background
+      # alongside it pins that fonts are excluded by choice, not by the
+      # stylesheet going unread.
+      expect(extractor.extract_from_page(page).image_urls).to eq(["https://cdn.example.com/hero.png"])
+    end
+
+    it "excludes relative image sources, which have no absolute form to send" do
+      page = page_for(custom_html: %(<img src="/local/asset.png"><img src="https://cdn.example.com/remote.png">))
+
+      expect(extractor.extract_from_page(page).image_urls).to eq(["https://cdn.example.com/remote.png"])
+    end
+
+    it "truncates the text so one page cannot make an unbounded moderation call" do
+      page = page_for(custom_html: "<p>#{"word " * 8_000}</p>")
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text.length).to be <= described_class::MAX_PAGE_TEXT_LENGTH + described_class::MAX_PAGE_LINK_TEXT_LENGTH
+      expect(result.text).to end_with("word")
+    end
+
+    it "returns every remote image, so the caller can reject a page it cannot fully review" do
+      many_images = (1..30).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+      page = page_for(custom_html: many_images)
+
+      expect(extractor.extract_from_page(page).image_urls.size).to eq(30)
+    end
+
+    it "keeps link targets when the prose alone would exhaust the whole text budget" do
+      padding = "word " * 8_000
+      page = page_for(custom_html: %(<p>#{padding}</p><a href="https://linkfarm.example/deals">deals</a>))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).to include("https://linkfarm.example/deals")
+    end
+
+    it "orders the images the same way on every extraction, so re-saving cannot change which are moderated first" do
+      images = (1..60).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+      page = page_for(custom_html: images)
+
+      selections = 5.times.map { extractor.extract_from_page(page).image_urls }
+
+      expect(selections.uniq.size).to eq(1)
+      expect(selections.first.size).to eq(60)
+    end
+
+    it "does not return the images in document order, so a prefix-shaped cap could not be gamed" do
+      images = (1..60).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+      page = page_for(custom_html: images)
+
+      document_order = (1..60).map { |n| "https://cdn.example.com/#{n}.png" }
+
+      expect(extractor.extract_from_page(page).image_urls).not_to eq(document_order)
+    end
+
+    it "reads a product landing page takeover, whose owner is the product's seller" do
+      page = page_for(pageable: create(:product, user: seller), custom_html: "<p>Buy my thing</p>")
+
+      expect(extractor.extract_from_page(page).text).to include("Buy my thing")
+    end
+  end
+
   describe "#extract_from_post" do
     let(:extractor) { described_class.new }
     let(:post) do

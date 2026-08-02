@@ -97,6 +97,8 @@ type Props = {
   price_checker_enabled: boolean;
   custom_html_pages_enabled: boolean;
   custom_html_store_hostnames: string[];
+  custom_html_global_nav_hosts: string[];
+  custom_html_global_nav_paths: string[];
   ai_generated: boolean;
 };
 
@@ -131,6 +133,7 @@ const createContextValue = (props: Props) => ({
   save: () => Promise.resolve(false),
   variantIdMappings: {},
   richContentIdMappings: {},
+  fileIdMappings: {},
   richContentRemovedFileEmbedIds: {},
   googleClientId: props.google_client_id,
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
@@ -140,6 +143,8 @@ const createContextValue = (props: Props) => ({
   priceCheckerEnabled: props.price_checker_enabled,
   customHtmlPagesEnabled: props.custom_html_pages_enabled,
   customHtmlStoreHostnames: props.custom_html_store_hostnames,
+  customHtmlGlobalNavHosts: props.custom_html_global_nav_hosts,
+  customHtmlGlobalNavPaths: props.custom_html_global_nav_paths,
   contentUpdates: null,
   setContentUpdates: () => {},
   aiGenerated: props.ai_generated,
@@ -241,6 +246,7 @@ const applyCanonicalIds = (
   sentPagesById: ReadonlyMap<string, ScopedPage> = new Map(),
 ) => {
   const variantMappings = response.variant_id_mappings ?? {};
+  const fileMappings = response.file_id_mappings ?? {};
   const variantTimestamps = response.variant_updated_at ?? {};
   const variantBaselines = response.variant_loaded_integrations ?? {};
   // Adopt the revision token for the state this save committed. The token the
@@ -255,6 +261,14 @@ const applyCanonicalIds = (
   // connect -> save -> disconnect -> save (no reload) emits no deletion,
   // because the stale baseline still says the integration was never on.
   if (response.loaded_integrations) product.loaded_integrations = response.loaded_integrations;
+  // Replace the array, don't mutate entries: `filesById` memoizes on
+  // `product.files` identity, and the mounted editor's node ids are remapped to
+  // the canonical ids in the same commit. A stale Map misses every lookup and
+  // the embed renders blank.
+  product.files = product.files.map((file) => {
+    const canonicalId = fileMappings[file.id];
+    return canonicalId ? { ...file, id: canonicalId } : file;
+  });
   for (const variant of product.variants) {
     const canonicalId = variantMappings[variant.id];
     if (canonicalId) {
@@ -360,6 +374,7 @@ const ProductEditPage = (props: Props) => {
   // variant and page external ids are not distinct namespaces.
   const [variantIdMappings, setVariantIdMappings] = React.useState<Record<string, string>>({});
   const [richContentIdMappings, setRichContentIdMappings] = React.useState<Record<string, string>>({});
+  const [fileIdMappings, setFileIdMappings] = React.useState<Record<string, string>>({});
   const [richContentRemovedFileEmbedIds, setRichContentRemovedFileEmbedIds] = React.useState<Record<string, string[]>>(
     {},
   );
@@ -447,6 +462,7 @@ const ProductEditPage = (props: Props) => {
       lastSavedProductRef.current = reconciled;
       setVariantIdMappings((previous) => ({ ...previous, ...response.variant_id_mappings }));
       setRichContentIdMappings((previous) => ({ ...previous, ...response.rich_content_id_mappings }));
+      setFileIdMappings((previous) => ({ ...previous, ...response.file_id_mappings }));
       setRichContentRemovedFileEmbedIds(response.rich_content_removed_file_embed_ids ?? {});
       updateProduct((current) => {
         applyCanonicalIds(current, response, sentPagesById);
@@ -547,6 +563,7 @@ const ProductEditPage = (props: Props) => {
       saving,
       variantIdMappings,
       richContentIdMappings,
+      fileIdMappings,
       richContentRemovedFileEmbedIds,
       contentUpdates,
       setContentUpdates,
@@ -560,6 +577,7 @@ const ProductEditPage = (props: Props) => {
       filesById,
       variantIdMappings,
       richContentIdMappings,
+      fileIdMappings,
       richContentRemovedFileEmbedIds,
     ],
   );

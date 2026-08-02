@@ -288,7 +288,10 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
     context "when purchase is a commission deposit purchase", :vcr do
       let!(:commission) { create(:commission) }
 
-      before { commission.create_completion_purchase! }
+      before do
+        commission.files.attach(file_fixture("test.pdf"))
+        commission.create_completion_purchase!
+      end
 
       it "returns the deposit and completion purchases" do
         get :customer_charges, params: { purchase_id: commission.deposit_purchase.external_id, purchase_email: commission.deposit_purchase.email }

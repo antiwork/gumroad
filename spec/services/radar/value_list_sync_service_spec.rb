@@ -261,4 +261,193 @@ describe Radar::ValueListSyncService do
       expect { service.sync_blocked_cards }.not_to raise_error
     end
   end
+
+  describe "#remove_block" do
+    before do
+      allow(Stripe::Radar::ValueList).to receive(:list).and_return(double(data: [value_list]))
+    end
+
+    def stub_item(value, id)
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .with(value_list: "rsl_123", value: value)
+        .and_return(double(data: [double("ValueListItem", id:)]))
+    end
+
+    it "removes an unblocked email without waiting for the daily window" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "now@example.com")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+      stub_item("now@example.com", "rsli_1")
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_1")
+
+      expect(service.remove_block(block)).to be(true)
+    end
+
+    it "removes an unblocked card fingerprint" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "UTLL7GN3iOh1m111")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+      stub_item("UTLL7GN3iOh1m111", "rsli_3")
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_3")
+
+      expect(service.remove_block(block)).to be(true)
+    end
+
+    it "leaves Radar alone when the row was re-blocked between enqueue and run" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "reblocked@example.com")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+      # Re-blocked behind this handle, so only a reload can see it — deleting the reload from
+      # remove_block must redden here.
+      PlatformBlock.find(block.id).update_columns(blocked_at: Time.current)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
+
+      expect(service.remove_block(block)).to be(false)
+    end
+
+    it "restores the item when the row is re-blocked between the check and the delete" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "raced@example.com")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+      stub_item("raced@example.com", "rsli_9")
+
+      # Commits the re-block after remove_block has already passed its reload check, which is the
+      # only window where a delete can strip Radar enforcement from a live block.
+      allow(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_9") do
+        PlatformBlock.find(block.id).update_columns(blocked_at: Time.current)
+      end
+
+      expect(Stripe::Radar::ValueListItem).to receive(:create).with(
+        value_list: "rsl_123",
+        value: "raced@example.com"
+      )
+
+      expect(service.remove_block(block)).to be(false)
+    end
+
+    it "does not re-add the item when no concurrent re-block happened" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "clean@example.com")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+      stub_item("clean@example.com", "rsli_10")
+      allow(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_10")
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      expect(service.remove_block(block)).to be(true)
+    end
+
+    it "skips types that were never pushed to Radar" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.212", expires_in: 1.hour)
+      block.update_columns(blocked_at: nil, expires_at: nil)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
+
+      expect(service.remove_block(block)).to be(false)
+    end
+
+    it "skips fingerprints the add path would have rejected, mirroring the daily job's filter" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "not a fingerprint")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
+
+      expect(service.remove_block(block)).to be(false)
+    end
+  end
+
+  describe "#add_block" do
+    before do
+      allow(Stripe::Radar::ValueList).to receive(:list).and_return(double(data: [value_list]))
+      allow(Stripe::Radar::ValueListItem).to receive(:list).and_return(double(data: []))
+    end
+
+    it "pushes a newly blocked email to Radar without waiting for the daily window" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "fresh@example.com")
+
+      expect(Stripe::Radar::ValueListItem).to receive(:create).with(value_list: "rsl_123", value: "fresh@example.com")
+
+      expect(service.add_block(block)).to be(true)
+    end
+
+    # The converse of the removal race, and the reason remove_block's final check does not need a
+    # lock: an unblock committing after add_block's reload would otherwise leave a live Radar item
+    # rejecting a buyer who is no longer blocked, until tomorrow's sync.
+    it "removes the item when the row is unblocked between the check and the create" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "raced-add@example.com")
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .with(value_list: "rsl_123", value: "raced-add@example.com")
+        .and_return(double(data: [double("ValueListItem", id: "rsli_20")]))
+
+      allow(Stripe::Radar::ValueListItem).to receive(:create) do
+        PlatformBlock.find(block.id).update_columns(blocked_at: nil, expires_at: nil)
+      end
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_20")
+
+      expect(service.add_block(block)).to be(false)
+    end
+
+    it "does not remove the item when no concurrent unblock happened" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "clean-add@example.com")
+      allow(Stripe::Radar::ValueListItem).to receive(:create)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
+
+      expect(service.add_block(block)).to be(true)
+    end
+
+    it "skips a row already cleared before the job ran" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "already-clear@example.com")
+      PlatformBlock.find(block.id).update_columns(blocked_at: nil, expires_at: nil)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      expect(service.add_block(block)).to be(false)
+    end
+
+    it "skips types that are never pushed to Radar" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.214", expires_in: 1.hour)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      expect(service.add_block(block)).to be(false)
+    end
+
+    it "skips fingerprints the daily job's filter would have rejected" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "not a fingerprint")
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      expect(service.add_block(block)).to be(false)
+    end
+  end
+
+  describe "add loop re-check" do
+    before do
+      allow(Stripe::Radar::ValueList).to receive(:list).and_return(double(data: [value_list]))
+      allow(Stripe::Radar::ValueListItem).to receive(:list).and_return(double(data: []))
+    end
+
+    it "does not re-add an email cleared after the sync's SELECT" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "cleared-mid-sync@example.com")
+      allow_any_instance_of(PlatformBlock).to receive(:reload) do |record|
+        record.assign_attributes(blocked_at: nil)
+        record
+      end
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      service.sync_blocked_emails
+    end
+  end
+
+  describe ".syncs?" do
+    it "is true only for the types the daily job pushes to Radar" do
+      expect(described_class.syncs?(PlatformBlock::TYPES[:email])).to be(true)
+      expect(described_class.syncs?(PlatformBlock::TYPES[:charge_processor_fingerprint])).to be(true)
+
+      (PlatformBlock::TYPES.values - [PlatformBlock::TYPES[:email], PlatformBlock::TYPES[:charge_processor_fingerprint]]).each do |type|
+        expect(described_class.syncs?(type)).to be(false)
+      end
+    end
+  end
 end

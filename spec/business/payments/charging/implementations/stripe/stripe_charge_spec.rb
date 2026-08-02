@@ -369,6 +369,177 @@ describe StripeCharge, :vcr do
       end
     end
 
+    describe "with a destination payment Stripe never credited" do
+      # Reproduces gumroad-private#1608: the seller's cut is our one-subunit floor in the charge's
+      # currency, which rounds below one subunit of the destination account's currency, so Stripe
+      # accepts the destination payment and never produces a balance transaction for it.
+      let(:charge_amount_cents) { 93 }
+      let(:seller_transfer_cents) { 1 }
+      let(:merchant_account_currency) { Currency::EUR }
+
+      let(:stripe_charge_hash) do
+        {
+          id: "ch_test_1608",
+          status: "succeeded",
+          refunded: false,
+          dispute: nil,
+          currency: Currency::USD,
+          amount: charge_amount_cents,
+          destination: "acct_test_1608",
+          payment_method_details: { card: { fingerprint: "fp_test", last4: "4242", brand: "visa", exp_month: 12, exp_year: 2030, country: "US", checks: { address_postal_code_check: nil } } },
+          billing_details: { address: { postal_code: nil } },
+          payment_method: "pm_test",
+          outcome: { risk_level: "normal" },
+        }
+      end
+
+      let(:stripe_charge_balance_transaction) do
+        {
+          currency: Currency::USD,
+          amount: charge_amount_cents,
+          net: charge_amount_cents - 30,
+          fee_details: [{ type: "stripe_fee", currency: Currency::USD, amount: 30 }],
+        }
+      end
+
+      let(:stripe_destination_transfer) { { amount: seller_transfer_cents, currency: Currency::USD } }
+
+      let(:destination_payment_age) { 48.hours }
+
+      let(:stripe_destination_payment) do
+        {
+          id: "py_test_1608",
+          status: "succeeded",
+          captured: true,
+          currency: Currency::USD,
+          amount: seller_transfer_cents,
+          balance_transaction: nil,
+          created: destination_payment_age.ago.to_i,
+        }
+      end
+
+      let(:charge) do
+        described_class.new(
+          stripe_charge_hash,
+          stripe_charge_balance_transaction,
+          nil,
+          nil,
+          stripe_destination_transfer,
+          stripe_destination_payment:,
+          merchant_account_currency:
+        )
+      end
+
+      it "builds a flow of funds instead of waiting forever" do
+        expect(charge.flow_of_funds).to be_present
+      end
+
+      it "records the amount the destination account actually received: nothing" do
+        expect(charge.flow_of_funds.merchant_account_gross_amount.cents).to eq(0)
+        expect(charge.flow_of_funds.merchant_account_net_amount.cents).to eq(0)
+      end
+
+      it "labels the merchant account amounts in that account's own currency, not the charge's" do
+        expect(charge.flow_of_funds.merchant_account_gross_amount.currency).to eq(Currency::EUR)
+        expect(charge.flow_of_funds.merchant_account_net_amount.currency).to eq(Currency::EUR)
+        # Relabelling the transfer's own USD cents as this account's would block the seller's whole
+        # payout, because payouts require a balance's holding currency to match its account's.
+        expect(charge.flow_of_funds.merchant_account_gross_amount.currency).not_to eq(stripe_destination_payment[:currency])
+      end
+
+      it "leaves the issued, settled and gumroad amounts derived from the platform charge" do
+        expect(charge.flow_of_funds.issued_amount.cents).to eq(charge_amount_cents)
+        expect(charge.flow_of_funds.settled_amount.cents).to eq(charge_amount_cents)
+        expect(charge.flow_of_funds.gumroad_amount.cents).to eq(charge_amount_cents - seller_transfer_cents)
+      end
+
+      context "when the destination payment is still inside the settlement grace window" do
+        let(:destination_payment_age) { 1.hour }
+
+        it "keeps waiting, because Stripe may still credit it" do
+          expect(charge.flow_of_funds).to be_nil
+        end
+      end
+
+      # Pin the boundary itself, so the constant cannot drift without a red test.
+      context "just inside the grace window" do
+        let(:destination_payment_age) { described_class::DESTINATION_PAYMENT_SETTLEMENT_GRACE - 1.minute }
+
+        it "keeps waiting" do
+          expect(charge.flow_of_funds).to be_nil
+        end
+      end
+
+      context "just past the grace window" do
+        let(:destination_payment_age) { described_class::DESTINATION_PAYMENT_SETTLEMENT_GRACE + 1.minute }
+
+        it "builds the flow of funds" do
+          expect(charge.flow_of_funds).to be_present
+        end
+      end
+
+      context "when the destination payment has not been captured" do
+        let(:stripe_destination_payment) do
+          {
+            id: "py_test_1608",
+            status: "pending",
+            captured: false,
+            currency: Currency::USD,
+            amount: seller_transfer_cents,
+            balance_transaction: nil,
+            created: 48.hours.ago.to_i,
+          }
+        end
+
+        it "keeps waiting rather than booking a zero credit for an unsettled payment" do
+          expect(charge.flow_of_funds).to be_nil
+        end
+      end
+
+      context "when the destination account's currency is unknown" do
+        let(:merchant_account_currency) { nil }
+
+        it "keeps waiting, because there is no correct currency to label zero with" do
+          expect(charge.flow_of_funds).to be_nil
+        end
+      end
+
+      context "when the destination payment object was not fetched" do
+        let(:charge) do
+          described_class.new(
+            stripe_charge_hash,
+            stripe_charge_balance_transaction,
+            nil,
+            nil,
+            stripe_destination_transfer,
+            merchant_account_currency:
+          )
+        end
+
+        it "keeps the pre-existing wait behaviour" do
+          expect(charge.flow_of_funds).to be_nil
+        end
+      end
+
+      context "when there is no application fee and no destination transfer" do
+        let(:charge) do
+          described_class.new(
+            stripe_charge_hash,
+            stripe_charge_balance_transaction,
+            nil,
+            nil,
+            nil,
+            stripe_destination_payment:,
+            merchant_account_currency:
+          )
+        end
+
+        it "still returns nil, since the gumroad amount cannot be derived" do
+          expect(charge.flow_of_funds).to be_nil
+        end
+      end
+    end
+
     describe "with a stripe charge destined for a managed account" do
       let(:application_fee) { 50 }
 

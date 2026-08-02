@@ -91,7 +91,7 @@ class Admin::PurchasesController < Admin::BaseController
 
   def unblock_buyer
     if @purchase.buyer_blocked?
-      @purchase.unblock_buyer!
+      surviving = @purchase.unblock_buyer!
 
       comment_content = "Buyer unblocked by Admin (#{current_user.email})"
       @purchase.comments.create!(content: comment_content, comment_type: "note", author_id: current_user.id)
@@ -101,6 +101,18 @@ class Admin::PurchasesController < Admin::BaseController
                                              comment_type: "note",
                                              author: current_user,
                                              purchase: @purchase)
+      end
+
+      if surviving.any?
+        # Same disclosure the internal API makes: the alert this message feeds is the only thing
+        # the agent sees, and a bare "Buyer unblocked!" over a surviving row is the silence that
+        # hid gumroad-private#1648.
+        return render json: {
+          success: true,
+          status: "partially_unblocked",
+          message: "Unblocked buyer, but #{surviving.size} block(s) still hold this buyer: " \
+                   "#{surviving.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}"
+        }
       end
     end
 

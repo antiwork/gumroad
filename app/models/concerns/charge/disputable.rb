@@ -95,6 +95,15 @@ module Charge::Disputable
       is_a?(Charge) ? update!(dispute_reversed_at:) : update!(chargeback_reversed: true)
     end
 
+    def mark_as_dispute_not_reversed!
+      # Charge grain only: the Purchase grain is cleared inside the disputed_purchases loop, which
+      # enforces the PayPal carve-out precedence this method does not know about. Anything that
+      # later claws back the win's credits must run BEFORE that clear —
+      # Purchase#seller_balance_update_eligible? requires the flag, so the debit API refuses the
+      # purchase once it is false.
+      update!(dispute_reversed_at: nil)
+    end
+
     def disputed?
       is_a?(Charge) ? disputed_at.present? : chargeback_date.present?
     end
@@ -231,38 +240,103 @@ module Charge::Disputable
 
   def handle_event_dispute_lost!(event)
     dispute = find_or_build_dispute(event)
-    dispute.mark_lost!
 
-    # PayPal can resolve a dispute as non-seller-favour while only partially refunding the buyer
-    # (e.g. INCORRECT_AMOUNT settled with a partial refund). The purchase stays successful and
-    # partially_refunded, so the chargeback flag set at formalization must be lifted to restore access.
-    # Scoped to PayPal because Stripe-lost disputes pull the full disputed amount via the bank,
-    # so a pre-dispute partial refund there does not mean the buyer is net-paying.
-    disputed_purchases.each do |purchase|
-      next unless purchase.charge_processor_id == PaypalChargeProcessor.charge_processor_id
-      next unless purchase.successful?
-      next if purchase.stripe_refunded
-      next unless purchase.stripe_partially_refunded
+    # One transaction: a raise mid-loop must roll back mark_lost! too, otherwise the processor's
+    # redelivery dies on InvalidTransition with sibling purchases only partially reconciled.
+    ActiveRecord::Base.transaction do
+      dispute.mark_lost!
 
-      purchase.update!(chargeback_reversed: true)
-      purchase.mark_giftee_purchase_as_chargeback_reversed if purchase.is_gift_sender_purchase
-      purchase.mark_product_purchases_as_chargeback_reversed!
+      # PayPal can resolve a dispute as non-seller-favour while only partially refunding the buyer
+      # (e.g. INCORRECT_AMOUNT settled with a partial refund). The purchase stays successful and
+      # partially_refunded, so the chargeback flag set at formalization must be lifted to restore access.
+      # Scoped to PayPal because Stripe-lost disputes pull the full disputed amount via the bank,
+      # so a pre-dispute partial refund there does not mean the buyer is net-paying.
+      disputed_purchases.each do |purchase|
+        if paypal_partial_refund_carve_out?(purchase)
+          purchase.update!(chargeback_reversed: true)
+          purchase.mark_giftee_purchase_as_chargeback_reversed if purchase.is_gift_sender_purchase
+          purchase.mark_product_purchases_as_chargeback_reversed!
+          next
+        end
+
+        # A dispute can transition won => lost (the state machine permits it, and 727 rows in
+        # production have taken that path). Nothing else clears the flag, so without this the
+        # purchase keeps reading "the chargeback was reversed" after we lost: the buyer keeps
+        # library access and the seller's payout skips the chargeback gate.
+        next unless purchase.chargeback_reversed?
+
+        purchase.update!(chargeback_reversed: false)
+        purchase.mark_giftee_purchase_as_not_chargeback_reversed if purchase.is_gift_sender_purchase
+        purchase.mark_product_purchases_as_not_chargeback_reversed!
+      end
+
+      mark_as_dispute_not_reversed! if is_a?(Charge) && dispute_reversed_at.present?
+
+      resolve_pending_dispute_evidence_if_any!("Dispute closed (lost) before evidence was submitted.")
     end
-
-    resolve_pending_dispute_evidence_if_any!("Dispute closed (lost) before evidence was submitted.")
 
     return unless first_product_without_refund_policy.present?
 
     ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id).deliver_later
   end
 
+  def paypal_partial_refund_carve_out?(purchase)
+    purchase.charge_processor_id == PaypalChargeProcessor.charge_processor_id &&
+      purchase.successful? &&
+      !purchase.stripe_refunded &&
+      purchase.stripe_partially_refunded
+  end
+
+  # Resolve the dispute for this event by the PROCESSOR's case identity first, falling back to
+  # this disputable's has_one only when no such row exists.
+  #
+  # The has_one alone is not a stable identity. Charge::Chargeable.find_by_stripe_event resolves
+  # a combined charge's processor transaction id to the Charge before the Purchase, so a case
+  # formalized when the resolver returned the Purchase and closed after it returned the Charge
+  # would find a nil has_one on the Charge and build a SECOND row for one processor case — the
+  # original staying `formalized` forever while its twin went terminal. Anything keyed on the
+  # local row (the formalized side-effect marker, the mailers, the evidence uniqueness index)
+  # is bypassed the same way. Keying on the case makes the record an event updates independent
+  # of which object the resolver happened to return.
+  #
+  # The found row is attached to the in-memory association only; its purchase_id / charge_id are
+  # left alone, so this never reparents a historical dispute — it only makes `dispute` in this
+  # request point at the row the event is actually about.
   def find_or_build_dispute(event)
-    self.dispute ||= build_dispute(
+    return dispute if dispute.present?
+
+    existing = find_dispute_by_processor_case(event)
+    if existing.present?
+      association(:dispute).target = existing
+      return existing
+    end
+
+    self.dispute = build_dispute(
       charge_processor_id: charge_processor,
       charge_processor_dispute_id: event.extras.try(:[], :charge_processor_dispute_id),
       reason: event.extras.try(:[], :reason),
       event_created_at: event.created_at,
     )
+  end
+
+  # Blank processor dispute ids cannot form a case key — every Braintree row and a block of
+  # legacy PayPal rows have none — so they always fall through to the has_one.
+  def find_dispute_by_processor_case(event)
+    processor_dispute_id = event.extras.try(:[], :charge_processor_dispute_id)
+    return if processor_dispute_id.blank?
+
+    Dispute.where(charge_processor_id: charge_processor, charge_processor_dispute_id: processor_dispute_id)
+           .where(purchase_id: disputed_purchase_ids)
+           .order(:id)
+           .first
+  end
+
+  # The purchases this disputable covers, plus — when it is a Charge — nothing else: a case's
+  # older twin is always purchase-grain, hanging off one of the charge's own purchases. Scoping
+  # to them keeps the lookup from matching an unrelated seller's row should a processor ever
+  # reuse a dispute id.
+  def disputed_purchase_ids
+    disputed_purchases.map(&:id)
   end
 
   def create_dispute_evidence_if_needed!
@@ -367,12 +441,21 @@ module Charge::Disputable
       notice_worth_sending = DisputeEvidence.notice_worth_sending?(
         seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
       )
+      reminder_worth_scheduling = DisputeEvidence.accepting_evidence?(
+        seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
+      )
 
       # No per-step guards from here down: the completion marker written at the end prevents
       # any re-delivery from reaching this code, except for a crash inside the tiny window
       # between these enqueues and the marker write — that degrades to at-least-once
       # email/webhook delivery, which is normal for crash-retry semantics.
       ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later if notice_worth_sending
+      DisputeEvidence.schedule_due_soon_reminder(
+        dispute_id: dispute.id,
+        seller_contacted_at: stamped_at,
+        seller_submitted_at: submitted_at,
+        resolved_at:
+      ) if reminder_worth_scheduling
       AdminMailer.chargeback_notify(dispute.id).deliver_later
       CustomerLowPriorityMailer.chargeback_notice_to_customer(dispute.id).deliver_later(wait: 5.seconds)
 

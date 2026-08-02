@@ -11,6 +11,8 @@ module JsonData
 
   included do
     serialize :json_data, coder: JSON
+
+    before_save :merge_json_data_with_current_row, if: -> { persisted? && json_data_changed? }
   end
 
   class_methods do
@@ -74,4 +76,31 @@ module JsonData
 
     default
   end
+
+  private
+    # `json_data` is one text column holding many independent attributes, so a save writes the
+    # whole blob from whatever this instance loaded. An instance that has been in memory across
+    # another request's write therefore reverts that write — silently, since nothing about the
+    # column is stale from ActiveRecord's point of view.
+    #
+    # Rebase our own delta (loaded value vs in-memory value) onto the row as it stands now, so a
+    # save only moves the keys this instance actually touched. The FOR UPDATE read holds the row
+    # until the enclosing save commits; without it the merge is just a narrower version of the
+    # same race.
+    def merge_json_data_with_current_row
+      base = (json_data_was || {}).deep_stringify_keys
+      mine = json_data
+
+      current = self.class.unscoped.lock.where(id:).pick(:json_data)
+      return if current.nil?
+
+      merged = current.deep_stringify_keys
+      (base.keys | mine.keys).each do |key|
+        next if base.key?(key) == mine.key?(key) && base[key] == mine[key]
+
+        mine.key?(key) ? merged[key] = mine[key] : merged.delete(key)
+      end
+
+      self[:json_data] = merged
+    end
 end

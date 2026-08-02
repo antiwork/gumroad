@@ -78,11 +78,12 @@ class SaveFilesService
       # can never be swept up by a clear-all sent alongside them.
       preexisting_files = owner.alive_product_files.to_a
 
+      file_id_mappings = {}
       if contract.submitted?(:files)
         # The collection was actually submitted: apply creates/updates as
         # before, but `delete_missing: false` — under the contract, a file
         # missing from the payload is "no statement", not "delete me".
-        owner.save_files!(updated_file_params(params[:files]), rich_content_params, delete_missing: false)
+        file_id_mappings = owner.save_files!(updated_file_params(params[:files]), rich_content_params, delete_missing: false)
       end
       # else: absent or [] means "this request isn't about files" (Rule 1) —
       # there is nothing to create or update, and nothing gets deleted.
@@ -94,7 +95,7 @@ class SaveFilesService
           ids = contract.deleted_ids(:files)
           ids.any? ? preexisting_files.select { ids.include?(_1.external_id) } : []
         end
-      return if files_to_delete.empty?
+      return file_id_mappings if files_to_delete.empty?
 
       # An id that is both kept in the payload and listed in deleted_ids is
       # contradictory; the explicit, revision-gated deletion wins — it is the
@@ -102,6 +103,7 @@ class SaveFilesService
       files_to_delete.each { _1.mark_deleted unless _1.deleted? }
       owner.cached_alive_product_files = nil
       owner.link&.enqueue_index_update_for(["filetypes"])
+      file_id_mappings
     end
 
     def updated_file_params(all_file_params)

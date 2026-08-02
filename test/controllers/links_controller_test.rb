@@ -1012,6 +1012,33 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_collaborator_can_access(:put, :update, product: @product, params: @params, status: 200)
   end
 
+  test "PUT update records redirects when the seller renames the product URL" do
+    @product.update!(custom_permalink: "old-slug")
+
+    put :update, params: @params.merge(custom_permalink: "new-slug"), as: :json
+
+    assert_response :success
+    assert_equal "new-slug", @product.reload.custom_permalink
+    # The editor saves the product twice per request, so a commit-time
+    # `saved_change_to_custom_permalink?` gate never fires here.
+    assert_equal @product.id, ProductPermalinkRedirect.find_by(seller_id: @seller.id, permalink: "old-slug")&.product_id
+    assert_equal @product.id, LegacyPermalink.find_by(permalink: "old-slug")&.product_id
+    assert_equal @product, Link.fetch_leniently("old-slug", user: @seller)
+  end
+
+  test "PUT update writes no redirects when the product URL is untouched" do
+    @product.update!(custom_permalink: "kept-slug")
+
+    assert_no_difference -> { LegacyPermalink.count } do
+      assert_no_difference -> { ProductPermalinkRedirect.count } do
+        put :update, params: @params, as: :json
+      end
+    end
+
+    assert_response :success
+    assert_equal "kept-slug", @product.reload.custom_permalink
+  end
+
   test "PUT update returns the existing validation error when suggested price is set but the default price record is missing" do
     @product.prices.destroy_all
     @product.update_column(:customizable_price, true)
@@ -2000,6 +2027,31 @@ class LinksControllerUpdateTest < ActionController::TestCase
     }, format: :json
 
     assert_response :success
+  end
+
+  test "PUT update re-denominates membership tier prices when the editor changes display currency" do
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller, price_currency_type: "usd")
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      price_currency_type: "eur",
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 } } },
+        { id: second_tier.external_id, name: second_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    }, format: :json
+
+    assert_response :success
+    assert_equal "eur", product.reload.price_currency_type
+    assert_equal 300, first_tier.reload.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+    assert_equal 500, second_tier.reload.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents
   end
 
   test "PUT update rejects a stale tier save that would re-enable a recurrence another session turned off" do
@@ -3265,6 +3317,158 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
   def files_data_from_urls(urls)
     urls.map { { id: SecureRandom.uuid, url: _1 } }
+  end
+
+  def stub_s3_etags(etags_by_key)
+    requested_keys = []
+    s3_object = Struct.new(:etag)
+    bucket = Object.new
+    bucket.define_singleton_method(:object) do |key|
+      requested_keys << key
+      s3_object.new(etags_by_key.fetch(key))
+    end
+    resource = Object.new
+    resource.define_singleton_method(:bucket) do |bucket_name|
+      raise "Unexpected bucket #{bucket_name}" unless bucket_name == S3_BUCKET
+
+      bucket
+    end
+    Aws::S3::Resource.stubs(:new).returns(resource)
+    requested_keys
+  end
+
+  def s3_key_for(url)
+    ProductFile.new(url:).s3_key
+  end
+
+  def clear_setup_files
+    @product.product_files.alive.each(&:mark_deleted!)
+    @product.cached_alive_product_files = nil
+  end
+
+  test "PUT update reuses the same file row across repeated identical editor retry requests" do
+    Feature.activate_user(Product::SaveContract::FEATURE_NAME, @seller)
+    clear_setup_files
+    rich_content = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph" }])
+    url = "#{S3_BASE_URL}attachments/retry/original/guide.pdf"
+
+    5.times do
+      temporary_id = SecureRandom.uuid
+      post :update, params: @params.merge(
+        files: [{ id: temporary_id, url:, size: 123 }],
+        rich_content: [{ id: rich_content.external_id, title: "Files", description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: temporary_id, uid: SecureRandom.uuid } }] } }]
+      ), format: :json
+
+      assert_response :success
+      product_file = @product.product_files.alive.sole
+      assert_equal product_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
+      assert_equal [product_file.id], rich_content.reload.embedded_product_file_ids_in_order
+    end
+
+    assert_equal 1, @product.product_files.alive.count
+  end
+
+  test "PUT update returns file id mappings and a consecutive save without reload reuses the file row" do
+    Feature.activate_user(Product::SaveContract::FEATURE_NAME, @seller)
+    clear_setup_files
+    rich_content = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph" }])
+    url = "#{S3_BASE_URL}attachments/consecutive/original/guide.pdf"
+    temporary_id = SecureRandom.uuid
+
+    post :update, params: @params.merge(
+      files: [{ id: temporary_id, url:, size: 123 }],
+      rich_content: [{ id: rich_content.external_id, title: "Files", description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: temporary_id, uid: "file-uid" } }] } }]
+    ), format: :json
+
+    assert_response :success
+    product_file = @product.product_files.alive.sole
+    canonical_id = response.parsed_body.dig("file_id_mappings", temporary_id)
+    assert_equal product_file.external_id, canonical_id
+
+    post :update, params: @params.merge(
+      files: [{ id: canonical_id, url:, size: 123 }],
+      rich_content: [{ id: rich_content.external_id, title: "Files", description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: canonical_id, uid: "file-uid" } }] } }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal [product_file.id], @product.reload.product_files.alive.ids
+    assert_equal [product_file.id], rich_content.reload.embedded_product_file_ids_in_order
+  end
+
+  test "PUT update dedupes different urls when S3 ETag and size match" do
+    clear_setup_files
+    original_url = "#{S3_BASE_URL}attachments/fingerprint/original/guide.pdf"
+    retried_url = "#{S3_BASE_URL}attachments/fingerprint-retry/original/guide.pdf"
+    product_file = create_product_file(link: @product, url: original_url, size: 123, display_name: "Guide")
+    temporary_id = SecureRandom.uuid
+    requested_keys = stub_s3_etags(
+      s3_key_for(original_url) => "\"same-etag\"",
+      s3_key_for(retried_url) => "\"same-etag\"",
+    )
+
+    assert_no_difference -> { @product.product_files.alive.count } do
+      post :update, params: @params.merge(
+        files: [
+          { id: temporary_id, url: retried_url, size: 123, display_name: "Guide" },
+        ]
+      ), format: :json
+    end
+
+    assert_response :success
+    assert_equal product_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
+    assert_includes requested_keys, s3_key_for(original_url)
+    assert_includes requested_keys, s3_key_for(retried_url)
+  end
+
+  test "PUT update keeps same-name same-size files with different S3 fingerprints separate" do
+    clear_setup_files
+    original_url = "#{S3_BASE_URL}attachments/fingerprint-a/original/guide.pdf"
+    new_url = "#{S3_BASE_URL}attachments/fingerprint-b/original/guide.pdf"
+    product_file = create_product_file(link: @product, url: original_url, size: 123, display_name: "Guide")
+    temporary_id = SecureRandom.uuid
+    requested_keys = stub_s3_etags(
+      s3_key_for(original_url) => "\"first-etag\"",
+      s3_key_for(new_url) => "\"second-etag\"",
+    )
+
+    assert_difference -> { @product.product_files.alive.count }, 1 do
+      post :update, params: @params.merge(
+        files: [
+          { id: product_file.external_id, url: original_url, size: 123, display_name: "Guide" },
+          { id: temporary_id, url: new_url, size: 123, display_name: "Guide" },
+        ]
+      ), format: :json
+    end
+
+    assert_response :success
+    new_file = @product.product_files.alive.find_by!(url: new_url)
+    assert_equal new_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
+    assert_not_equal product_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
+    # The payload names the original by its canonical id, so it is excluded
+    # from the candidate pool and never fingerprinted.
+    assert_not_includes requested_keys, s3_key_for(original_url)
+  end
+
+  test "PUT update keeps a deliberate second embed of an already-attached url" do
+    clear_setup_files
+    url = "#{S3_BASE_URL}attachments/deliberate/original/guide.pdf"
+    product_file = create_product_file(link: @product, url:, size: 123, display_name: "Guide")
+    temporary_id = SecureRandom.uuid
+
+    # The "Existing product files" picker names the canonical row AND adds a
+    # second entry for the same url. A retry can never name an id the client
+    # never received, so naming it means the seller wants both rows.
+    assert_difference -> { @product.product_files.alive.count }, 1 do
+      post :update, params: @params.merge(
+        files: [
+          { id: product_file.external_id, url:, size: 123, display_name: "Guide" },
+          { id: temporary_id, url:, size: 123, display_name: "Guide" },
+        ]
+      ), format: :json
+    end
+
+    assert_response :success
+    assert_not_equal product_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
   end
 
   test "PUT update preserves correct s3 key for s3 files containing percent and ampersand" do
@@ -5486,23 +5690,38 @@ class LinksControllerShowTest < ActionController::TestCase
     @legacy_product = create_product(user: @legacy_user, custom_permalink: "custom")
   end
 
-  test "GET show redirects to a product defined by legacy permalink" do
+  test "GET show serves the oldest live product over a legacy mapping on the bare domain" do
     setup_legacy_products
     @request.host = DOMAIN
+
+    get :show, params: { id: "custom" }
+
+    # @other_product is the oldest live holder, so the mapping must not override it.
+    assert_redirected_to @other_product.long_url
+  end
+
+  test "GET show redirects via a legacy mapping on the bare domain when no live product holds the slug" do
+    setup_legacy_products
+    @request.host = DOMAIN
+    [@other_product, @legacy_product].each { _1.update!(custom_permalink: "moved-#{_1.id}") }
+    @product_with_legacy_mapping.update!(custom_permalink: "mapped-moved")
 
     get :show, params: { id: "custom" }
 
     assert_redirected_to @product_with_legacy_mapping.long_url
   end
 
-  test "GET show redirects to an earlier product matched by permalink when legacy permalink points to a deleted product" do
+  test "GET show 404s on the bare domain when the only mapping points at a deleted product" do
     setup_legacy_products
     @request.host = DOMAIN
+    # Clear the live holders first, or the live-first read answers before the
+    # mapping is ever consulted and the deleted target is never exercised.
+    [@other_product, @legacy_product].each { _1.update!(custom_permalink: "moved-#{_1.id}") }
     @product_with_legacy_mapping.mark_deleted!
 
-    get :show, params: { id: "custom" }
-
-    assert_redirected_to @other_product.long_url
+    # `e404` raises rather than rendering, so this is the file's convention for a
+    # missed `GET show` lookup (see the "NOT real" case above).
+    assert_raises(ActionController::RoutingError) { get :show, params: { id: "custom" } }
   end
 
   test "GET show renders the user's product when request comes from a custom domain (legacy lookup)" do
@@ -8212,5 +8431,39 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     assert_not removed.reload.alive?
     assert_empty notified.select { |message, _| message == "Product save applied fewer deletions than it named" }
+  end
+
+  # --- the happy path leaves an audit row (gumroad-private#1508, criterion 4)
+  #
+  # The reported save returned 200, left all three versions alive, and wrote
+  # zero ProductVariantDeletionAudit rows. The absent audit row is what made it
+  # indistinguishable from success, so asserting `deleted_at` alone would still
+  # pass against that bug: a save that deletes nothing and audits nothing looks
+  # the same as one that never named a deletion. Assert both halves.
+
+  test "flag on: a confirmed version removal deletes the row AND writes an audit row" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    assert_difference -> { ProductVariantDeletionAudit.count }, 1 do
+      post :update, params: @params.merge(
+        variants: [{ id: kept.external_id, name: "Kept" }],
+        editor_revision: current_revision,
+        confirmed_removed_variant_ids: [removed.external_id],
+        deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+      ), format: :json
+      assert_response :success
+    end
+
+    assert_not removed.reload.alive?, "the confirmed version must actually be gone"
+    assert kept.reload.alive?, "the version the payload kept must survive"
+
+    audit = ProductVariantDeletionAudit.where(product_id: @product.id).last
+    assert_equal [removed.external_id], audit.deleted_variant_external_ids
+    assert_equal @product.id, audit.product_id
+    # Confirmed in the payload, so the audit must not read as an omission — that
+    # is the distinction the table exists to make.
+    assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
   end
 end

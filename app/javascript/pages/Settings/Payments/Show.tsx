@@ -1,5 +1,5 @@
 import { Bank, CreditCard, Paypal, Stripe } from "@boxicons/react";
-import { useForm, usePage } from "@inertiajs/react";
+import { router, useForm, usePage } from "@inertiajs/react";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import typia from "typia";
@@ -29,6 +29,9 @@ import BankAccountSection, {
 } from "$app/components/Settings/PaymentsPage/BankAccountSection";
 import BeneficialOwnersSection from "$app/components/Settings/PaymentsPage/BeneficialOwnersSection";
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
+import LegalGuardianSection, {
+  type LegalGuardianProps,
+} from "$app/components/Settings/PaymentsPage/LegalGuardianSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -51,6 +54,11 @@ const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=L
 // is caught before the request goes out instead of coming back as a generic "The bank code is
 // invalid." from the server.
 const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
+
+// Same reason as Gambia above: the input's `pattern` is never enforced, and `maxLength` cannot see
+// the difference between `014` and `BCA`. Stripe resolves the ID bank from its 3-digit Sandi Bank
+// directory, so a letter code saves here and then fails bank-sync with routing_number_invalid.
+const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
 
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
@@ -215,6 +223,7 @@ type PaymentsPageProps = {
   buyer_currency_charging_enabled: boolean;
   disable_buyer_currency_rounding: boolean;
   can_manage_beneficial_owners: boolean;
+  legal_guardian: LegalGuardianProps;
   errors?: {
     base?: string[];
   };
@@ -316,6 +325,39 @@ export default function PaymentsPage() {
   };
 
   const [debitCard, setDebitCard] = React.useState<PayoutDebitCardData | null>(null);
+
+  // The guardian is added by its own endpoint, not by this page's form, so the page's own props go
+  // stale the moment it saves. Reloading only `legal_guardian` is what refreshes them — and the
+  // reason not to merge the endpoint's response into local state instead is `blocking_payouts`: it
+  // is derived server-side from the same predicate the payout gate reads, and recomputing it here
+  // would let the page tell a seller their payouts are running while Payouts.is_user_payable
+  // disagrees.
+  const refreshLegalGuardian = () => router.reload({ only: ["legal_guardian"] });
+
+  // The guardian is a person on the seller's own payout account, so they are in the seller's country
+  // and pick from its subdivisions. Empty for a country with no subdivision list, which is what
+  // hides the field — the guardian path is US-only today, so in practice this is always the US list.
+  const guardianStates = React.useMemo(() => {
+    switch (props.user.country_code) {
+      case "US":
+        return props.states.us;
+      case "CA":
+        return props.states.ca;
+      case "AU":
+        return props.states.au;
+      case "MX":
+        return props.states.mx;
+      case "AE":
+        return props.states.ae;
+      case "IE":
+        return props.states.ir;
+      case "BR":
+        return props.states.br;
+      default:
+        return [];
+    }
+  }, [props.user.country_code, props.states]);
+
   const [showNewBankAccount, setShowNewBankAccount] = React.useState(!props.bank_account_details.account_number_visual);
   const previousCountryRef = React.useRef<string | null>(
     props.compliance_info.is_business ? props.compliance_info.business_country : props.compliance_info.country,
@@ -489,8 +531,13 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "TaiwanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (form.data.bank_account.type === "IndonesiaBankAccount" && !form.data.bank_account.bank_code) {
-      markFieldInvalid("bank_code");
+    if (form.data.bank_account.type === "IndonesiaBankAccount") {
+      if (!form.data.bank_account.bank_code) {
+        markFieldInvalid("bank_code");
+      } else if (!INDONESIA_BANK_CODE_REGEX.test(form.data.bank_account.bank_code)) {
+        markFieldInvalid("bank_code");
+        setClientErrorMessage({ message: "Enter your bank's 3-digit Indonesian bank code, digits only." });
+      }
     }
     if (form.data.bank_account.type === "ChileBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
@@ -1435,7 +1482,7 @@ export default function PaymentsPage() {
               />
             ) : selectedPayoutMethod === "paypal" ? (
               <PayPalEmailSection
-                countrySupportsNativePayouts={props.user.country_supports_native_payouts}
+                canSetupBankPayouts={props.bank_account_details.show_bank_account}
                 showPayPalPayoutsFeeNote={props.user.is_charged_paypal_payout_fee}
                 isFormDisabled={props.is_form_disabled}
                 paypalEmailAddress={form.data.payment_address}
@@ -1470,6 +1517,16 @@ export default function PaymentsPage() {
               />
             )}
           </section>
+          {/* Not tied to the selected payout tab: the guardian requirement is a property of the
+              seller, not of the rail they picked, and the presenter already decides who is asked.
+              Gating it on a tab hid the form from exactly the sellers the payout gate blocks. */}
+          <LegalGuardianSection
+            legalGuardian={props.legal_guardian}
+            sellerCountry={props.user.country_code}
+            states={guardianStates}
+            isFormDisabled={props.is_form_disabled}
+            onSaved={refreshLegalGuardian}
+          />
           {selectedPayoutMethod !== "stripe" && props.can_manage_beneficial_owners ? (
             <BeneficialOwnersSection
               countries={props.countries}

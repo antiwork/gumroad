@@ -5,6 +5,8 @@ class EmailOutstandingBalancesCsvWorker
   include FinanceReportFailureAlert
   include LongRunningJobTracking
   sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :raise
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 2.hours
 
   # The balances are read live (point-in-time, no reporting-period args), so a re-run is
   # always safe and needs no arguments.

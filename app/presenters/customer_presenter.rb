@@ -50,7 +50,7 @@ class CustomerPresenter
           tracking: purchase.shipment.present? ?
             {
               shipped: purchase.shipment.shipped?,
-              url: purchase.shipment.tracking_url,
+              url: purchase.shipment.calculated_tracking_url,
             } : { shipped: false },
         } : nil,
       is_bundle_purchase: purchase.is_bundle_purchase,
@@ -123,6 +123,7 @@ class CustomerPresenter
         id: commission.external_id,
         files: commission.files.map { file_details(_1) },
         status: commission.status,
+        files_are_editable: commission.files_are_editable?,
       } : nil,
       custom_fields: purchase.purchase_custom_fields.map do |field|
         if field[:type] == CustomField::TYPE_FILE

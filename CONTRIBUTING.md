@@ -12,7 +12,7 @@ Your PR on your fork is held to the same bar as anything we write. Concretely, a
 
 - **Visual evidence** for anything a user can see, before/after, desktop + mobile, light + dark. Video preferred. This is the #1 rule below and it is not waived for forks. The one exception is the same one we give ourselves: a PR that only touches documentation or agent skill files needs no video, because the diff is the reviewable artifact.
 - **QA steps** someone else can actually follow to verify the change.
-- **Test results** — updated tests, and a screenshot of them passing.
+- **Test results** — updated tests where appropriate, and the relevant commands/checks run. No screenshot of passing specs or terminal output is required.
 - **An AI disclosure** naming the specific model, after a `---` separator.
 - **A self-review** comment on your own diff, and a **What / Why / Before-After / Test Results** description.
 
@@ -55,9 +55,9 @@ Non-trivial PRs should follow this structure:
 - **What** — What this PR does. Concrete changes, not a list of files.
 - **Why** — Why this change exists and why this approach was chosen over alternatives. When other PRs or approaches exist for the same problem, name them and say why this one wins (fewer changes, right API, no backend/storage churn, etc.).
 - **Before/After** — Video is required for all PRs, except PRs that only touch documentation or agent skill files, where the diff itself is the reviewable artifact. For user-facing changes, show before/after with desktop and mobile, light and dark mode. For non-user-facing changes, include a short video walking through the relevant existing functionality.
-- **Test Results** — Screenshot of tests passing locally.
+- **Test Results** — List the relevant test commands/checks run. No screenshot of passing specs or terminal output is required.
 
-Store screenshots and videos in `qa-media/` using the naming convention `pr-<number>-<description>.<ext>`. From a fork, use your own fork's PR number — it won't match any number here, and that's fine. Reference them in PR descriptions with raw GitHub URLs:
+Store visual evidence screenshots and videos in `qa-media/` using the naming convention `pr-<number>-<description>.<ext>`. From a fork, use your own fork's PR number — it won't match any number here, and that's fine. Reference them in PR descriptions with raw GitHub URLs:
 
 ```markdown
 ![description](https://raw.githubusercontent.com/antiwork/gumroad/<branch>/qa-media/pr-5160-pagination-page1.png)
@@ -158,6 +158,8 @@ Do not push code with failing tests. CI is not a substitute for local verificati
 
 - When creating financial records (receipts, sales), copy the specific values (amount, currency, percentage) at the time of purchase instead of referencing mutable data like a `DiscountCode` ID. This ensures historical records remain accurate if the original object is edited or deleted.
 - Do not use database-level foreign key constraints (`add_foreign_key`). Avoiding hard constraints simplifies data migration and sharding operations at scale.
+- **Number migrations with a real UTC timestamp** (`rails g migration` does this; `date -u +%Y%m%d%H%M%S` if you are writing the file by hand). Hand-picked `...000015`-style sequence numbers collide: two open PRs pick the same next number, git sees no conflict because the filenames differ, both merge, and `rake db:prepare` then aborts on `main` for everyone with `Duplicate migration <version>` (PR #6716). `bin/check-migration-versions` runs in CI and catches this; run it locally with no arguments before pushing.
+- **A migration whose version has already been deployed cannot be renumbered freely.** Rails keys completion on the version number alone, so a database that recorded the old version treats the renumbered migration as already applied. Make both directions safe: guard `up` on `table_exists?`/`column_exists?`, and have `down` leave the schema in place while the superseded version is still present in `schema_migrations`.
 - **Do not add, remove, or rename columns on the `users` or `purchases` tables.** These tables are too large for schema changes. Migrations that alter their schema will block deployments. If you need new data associated with users or purchases, create a new table and reference it. This also applies to adding or removing indexes on these tables.
 - Do not use dynamic string interpolation for Tailwind class names (e.g., `` `text-${color}` ``). Tailwind scanners cannot detect these during build. Use full class names or a lookup map.
 - Prefer re-using deprecated boolean flags (https://github.com/pboling/flag_shih_tzu) instead of creating new ones. Deprecated flags are named `DEPRECATED_<something>`. To re-use this flag you'll first need to reset the values for it on staging and production and then rename the flag to the new name. You can reset the flag like this:

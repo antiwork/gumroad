@@ -54,6 +54,7 @@ class UserComplianceInfo < ApplicationRecord
 
   after_create_commit :handle_stripe_compliance_info
   after_create_commit :handle_compliance_info_request
+  after_create_commit :detect_legal_entity_country_drift
 
   scope :country, ->(country) { where(country:) }
 
@@ -121,12 +122,21 @@ class UserComplianceInfo < ApplicationRecord
   # the legal guardian to the checks above, because a seller under 18 cannot be verified on their
   # own.
   #
-  # Deliberately has no payout-eligibility caller yet, and must not gain one before the guardian
-  # form ships: 187 US under-18 sellers hold a balance today and 65 have already been paid, so
-  # wiring this into Payouts.is_user_payable now would strand them with no surface on which to
-  # supply the guardian it demands. Wire it in the same change that gives them one.
+  # Read by Payouts.is_user_payable and by the payout-settings page, which is why the two cannot
+  # disagree about whether a seller is ready. Kept separate from has_completed_compliance_info?
+  # because Exports::TaxSummary::Payable reads that one: 16,004 live compliance rows carry an
+  # under-18 birthday, and folding the guardian in there would drop all of them out of 1099 exports.
+  # Tax reporting stays guardian-blind; payout readiness is this predicate.
   def has_completed_payout_compliance_info?
-    return false unless has_completed_compliance_info?
+    has_completed_compliance_info? && legal_guardian_requirement_met?
+  end
+
+  # Whether the guardian side alone is satisfied. Split from the predicate above because the payout
+  # gate and the page's guardian copy both need this question WITHOUT the seller's own details
+  # folded in: a minor whose guardian is complete but whose own tax id is missing would otherwise be
+  # told to add a guardian they already added, and the note naming the field they are actually
+  # missing would never be written.
+  def legal_guardian_requirement_met?
     # An unsupported country is not the same as no requirement. There is no guardian path to
     # complete there, so the account can never be verified and must not read as ready.
     return false if legal_guardian_unsupported?
@@ -155,8 +165,11 @@ class UserComplianceInfo < ApplicationRecord
   # A minor our payment partner offers no guardian path for. Deliberately distinct from
   # requires_legal_guardian? being false: we neither ask them for a guardian nor let the absence of
   # that ask read as payout readiness. Their route is a supported country or turning 18.
+  #
+  # A minor with no country on file is neither: telling them payouts start at 18 would be wrong the
+  # moment they pick the US, which the country modal is already asking them to do.
   def legal_guardian_unsupported?
-    under_legal_guardian_age? && !GUARDIAN_SUPPORTED_COUNTRY_CODES.include?(country_code)
+    under_legal_guardian_age? && country_code.present? && !GUARDIAN_SUPPORTED_COUNTRY_CODES.include?(country_code)
   end
 
   # Public: Returns the ISO_3166-1 Alpha-2 country code for the country stored in this compliance info.
@@ -254,6 +267,16 @@ class UserComplianceInfo < ApplicationRecord
       UserComplianceInfoRequest.handle_new_user_compliance_info(self)
     end
 
+    # A UserComplianceInfo is immutable, so every edit lands as a new record —
+    # that create is the moment the derived legal-entity country can change, and
+    # the only hook where drift against the Stripe account country is visible.
+    # Deferred to Sidekiq because it reads the Stripe account country off the
+    # merchant account and writes an admin note; neither belongs in the caller's
+    # save transaction. See DetectLegalEntityCountryDriftJob.
+    def detect_legal_entity_country_drift
+      DetectLegalEntityCountryDriftJob.perform_async(id)
+    end
+
     def kana_fields_format
       return if country_code != Compliance::Countries::JPN.alpha2
 
@@ -313,7 +336,7 @@ class UserComplianceInfo < ApplicationRecord
     end
 
     def birthday_is_over_minimum_age
-      errors.add :base, "You must be 13 years old to use Gumroad." if birthday && birthday > MINIMUM_DATE_OF_BIRTH_AGE.years.ago
+      errors.add :base, "You must be #{MINIMUM_DATE_OF_BIRTH_AGE} years old to use Gumroad." if birthday && birthday > MINIMUM_DATE_OF_BIRTH_AGE.years.ago
     end
 
     # attr_mutable lets guardian_id be set after creation, which the attach flow needs. It must not

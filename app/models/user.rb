@@ -12,7 +12,8 @@ class User < ApplicationRecord
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          AttributeBlockable, PayoutInfo, EmailNormalization, SingleUseResetPasswordToken
+          AttributeBlockable, PayoutInfo, EmailNormalization, SingleUseResetPasswordToken,
+          DashboardNavItems
 
   has_many :user_external_authentications, dependent: :destroy
 
@@ -207,6 +208,10 @@ class User < ApplicationRecord
   attr_json_data_accessor :payout_date_of_last_payment_failure_email
   # Separate from the column above on purpose — see Payment#send_paypal_terminal_failure_email.
   attr_json_data_accessor :payout_date_of_last_paypal_terminal_failure_email
+  # The PayPal payout address we took off the account after PayPal permanently refused it, kept so
+  # support can put it back and so the payout code can still find the rejection that stands against
+  # it. See Payment#invalidate_paypal_payout_address.
+  attr_json_data_accessor :invalidated_paypal_payout_address
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
@@ -1141,19 +1146,42 @@ class User < ApplicationRecord
   end
 
   # Anchored on the payout account, not the Gumroad signup date: a seller can hold an
-  # account for years before connecting one. A recreated payout account resets this.
+  # account for years before connecting one.
   #
   # Every account a payout could land on has to season: the destination is picked at payout time,
   # so seasoning only the managed account leaves a fresh connected account as a hole.
+  #
+  # An account inherits seasoning from any earlier account of the same kind, alive or retired. A
+  # country change or payout-method switch retires one row and creates another, and reading only
+  # the live row restarts the clock on a seller who has been processing with us for years. A newly
+  # connected rail has no earlier account of its kind to inherit from, so it still seasons on its
+  # own.
   def stripe_accounts_seasoned_for_instant_payouts?
     managed_account = stripe_account
     return false if managed_account.nil?
 
     [managed_account, stripe_connect_account].compact.all? do |account|
-      account.created_at <= MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
+      seasoned_for_instant_payouts?(account)
     end
   end
   private :stripe_accounts_seasoned_for_instant_payouts?
+
+  def seasoned_for_instant_payouts?(account)
+    cutoff = MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
+    return true if account.created_at <= cutoff
+
+    # A predecessor has to have actually carried money: a rejected Stripe::Account.create leaves a
+    # row that was mark_deleted! the same second with both charge-processor timestamps still NULL
+    # (StripeMerchantAccountManager.cleanup_failed_merchant_account). Counting those would season a
+    # minutes-old account off an attempt that never processed anything.
+    merchant_accounts.stripe.any? do |predecessor|
+      predecessor.created_at <= cutoff &&
+        predecessor.is_a_stripe_connect_account? == account.is_a_stripe_connect_account? &&
+        !predecessor.stripe_rejected? &&
+        (predecessor.charge_processor_deleted? || predecessor.charge_processor_alive?)
+    end
+  end
+  private :seasoned_for_instant_payouts?
 
   def instant_payouts_supported?
     eligible_for_instant_payouts? && (active_bank_account&.supports_instant_payouts? || false)
@@ -1306,6 +1334,19 @@ class User < ApplicationRecord
     return nil unless has_paypal_account_connected?
 
     paypal_connect_account.paypal_account_details&.dig("primary_email")
+  end
+
+  # The PayPal address whose rejection history describes this seller's situation, which is not
+  # always one we would pay to.
+  #
+  # Taking a permanently-refused address off the account (Payment#invalidate_paypal_payout_address)
+  # removes the only link between the seller and the rejection standing against them, since every
+  # part of the payout code finds those rejections by address. Without this, invalidating would
+  # silently undo the explanation the seller reads and the block that stopped the retries. So
+  # readers asking "what is wrong with this account" use this, while anything deciding where to
+  # SEND money keeps using #paypal_payout_email — which is blank, exactly as intended.
+  def paypal_payout_email_for_failure_lookup
+    paypal_payout_email.presence || invalidated_paypal_payout_address.presence
   end
 
   def purchased_small_bets?

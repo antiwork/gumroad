@@ -47,6 +47,25 @@ describe Discover::TaxonomyPresenter do
     end
   end
 
+  describe "TAXONOMY_LABELS" do
+    it "has a label for every seeded taxonomy" do
+      unlabelled = Taxonomy.pluck(:slug) - Discover::TaxonomyPresenter::TAXONOMY_LABELS.keys
+
+      expect(unlabelled).to be_empty
+    end
+  end
+
+  describe "cybersecurity category" do
+    it "sits under Software Development with its subcategories" do
+      cybersecurity = Taxonomy.find_by_path(["software-development", "cybersecurity"])
+
+      expect(cybersecurity).to be_present
+      expect(Taxonomy.where(parent: cybersecurity).pluck(:slug)).to match_array(
+        %w[network-security penetration-testing security-and-compliance privacy-and-encryption]
+      )
+    end
+  end
+
   describe "#taxonomies_for_category_picker" do
     it "sorts taxonomies alphabetically by breadcrumb so each root is followed by its descendants" do
       picker_taxonomies = presenter.taxonomies_for_category_picker

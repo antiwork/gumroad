@@ -103,21 +103,44 @@ describe("Library Scenario", type: :system, js: true) do
     end
   end
 
-  it "shows subscriptions where the original purchase is refunded" do
-    subscription_link = create(:subscription_product, name: "some name", user: @user)
-    subscription = create(:subscription, user: @user, link: subscription_link, created_at: 3.days.ago)
-    purchase = create(:purchase, link: subscription_link, subscription:, is_original_subscription_purchase: true, created_at: 3.days.ago, purchaser: @user)
-    create(:url_redirect, purchase:)
-
-    non_subscription_link = create(:product, is_recurring_billing: false, user: @user)
-    normal_purchase = create(:purchase, link: non_subscription_link, purchaser: @user)
-    create(:url_redirect, purchase: normal_purchase)
-
-    create(:purchase, link: subscription_link, subscription:, is_original_subscription_purchase: false, purchaser: @user)
-    purchase.update_attribute(:stripe_refunded, true)
+  it "links a refunded subscription purchase to its paid renewal" do
+    seller = create(:user)
+    product = create(:membership_product, name: "Membership archive", user: seller)
+    create(:product_file, link: product)
+    subscription = create(:subscription, user: @user, link: product, created_at: 3.days.ago)
+    purchase = create(
+      :purchase,
+      link: product,
+      subscription:,
+      is_original_subscription_purchase: true,
+      created_at: 3.days.ago,
+      succeeded_at: 3.days.ago,
+      purchaser: @user,
+      email: @user.email
+    )
+    purchase.create_url_redirect!
+    renewal = create(
+      :purchase,
+      link: product,
+      subscription:,
+      is_original_subscription_purchase: false,
+      succeeded_at: 1.day.ago,
+      purchaser: @user,
+      email: @user.email
+    )
+    renewal.create_url_redirect!
+    purchase.update!(stripe_refunded: true)
     Link.import(refresh: true, force: true)
+
     visit "/library"
-    expect(page).to have_product_card(subscription_link)
+
+    expect(page).to have_product_card(product)
+    within find_product_card(product) do
+      expect(page).to have_link(href: renewal.url_redirect.download_page_url)
+      expect(page).not_to have_link(href: purchase.url_redirect.download_page_url)
+      find("a[href='#{renewal.url_redirect.download_page_url}']").click
+    end
+    expect(page).to have_current_path(renewal.url_redirect.download_page_url)
   end
 
   it "shows subscriptions where the subscription plan has been upgraded" do
@@ -211,7 +234,7 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to have_status(text: "You have 2 archived purchases. Click here to view")
 
     click_on "Click here to view"
-    expect(page.current_url).to include("show_archived_only=true")
+    expect(page).to have_current_path(/show_archived_only=true/)
     expect(page).to have_checked_field("Show archived only")
 
     expect(page).to have_product_card(purchase1.link)
@@ -224,7 +247,7 @@ describe("Library Scenario", type: :system, js: true) do
     end
     click_on "Unarchive"
 
-    expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
+    expect(page).to have_current_path("/library?sort=recently_updated&show_archived_only=true")
     expect(page).to have_product_card(purchase3.link)
     expect(page).to_not have_product_card(purchase1.link)
 
@@ -256,7 +279,7 @@ describe("Library Scenario", type: :system, js: true) do
     click_on "Unarchive"
     wait_for_ajax
 
-    expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
+    expect(page).to have_current_path("/library?sort=recently_updated&show_archived_only=true")
 
     visit "/library"
     wait_for_ajax
@@ -364,28 +387,31 @@ describe("Library Scenario", type: :system, js: true) do
 
       expect(find_field("All Creators", visible: false).checked?).to eq(true)
       find_and_click("label", text: @creator.name)
+      # The filter now applies on the server, so wait for the refreshed page before
+      # reading checkbox state, which Capybara does not retry.
+      expect(page).to have_text("Showing 1-10 of 10")
       expect(find_field("All Creators", visible: false).checked?).to eq(false)
       expect(find_field(@creator.name, visible: false).checked?).to eq(true)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-10 of 10")
       scroll_to find_product_card(@b.link)
       expect(page).to have_product_card(count: 10)
       expect_to_show_purchases_in_order([@j, @i, @h, @g, @f, @e, @d, @c, @b, @a])
 
       find_and_click("label", text: @creator.name)
+      expect(page).to have_text("Showing 1-12 of 12")
       find_and_click("label", text: @another_creator.name)
+      expect(page).to have_text("Showing 1-2 of 2")
       expect(find_field(@creator.name, visible: false).checked?).to eq(false)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(true)
       expect(find_field("All Creators", visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-2 of 2")
       expect(page).to have_product_card(count: 2)
       expect_to_show_purchases_in_order([another_b, another_a])
 
       find_and_click("label", text: "All Creators")
+      expect(page).to have_text("Showing 1-12 of 12")
       expect(find_field("All Creators", visible: false).checked?).to eq(true)
       expect(find_field(@creator.name, visible: false).checked?).to eq(false)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-12 of 12")
       scroll_to find_product_card(@d.link)
       expect_to_show_purchases_in_order([another_b, another_a, @j, @i, @h, @g, @f, @e, @d, @c, @b, @a])
     end

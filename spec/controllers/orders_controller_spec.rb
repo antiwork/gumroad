@@ -2491,6 +2491,22 @@ describe OrdersController, :vcr do
       expect(response.parsed_body["success"]).to be(true)
     end
 
+    # Both halves of the token's threading are pinned here: the controller has to merge it into the
+    # order params, and Order::CreateService has to keep it OUT of the Purchase attributes. The POST
+    # runs the real Order::CreateService, so letting the token through would raise
+    # UnknownAttributeError in build_purchase before this expectation could even be reached.
+    it "passes the signed payment-method list token to the prepare service without treating it as a Purchase attribute" do
+      token = Checkout::PaymentMethodListToken.issue(payment_method_types: %w[card link], sellers: [seller])
+
+      expect(Order::PreparePaymentIntentService).to receive(:new).with(
+        hash_including(params: hash_including(payment_method_list_token: token))
+      ).and_call_original
+
+      post :prepare, params: { line_items:, confirmation_token: confirmation_token_id, payment_method_list_token: token }.merge(common_params)
+
+      expect(response.parsed_body["line_items"]["unique-id-0"]["requires_payment_confirmation"]).to be(true)
+    end
+
     it "enforces reCAPTCHA before building the order or issuing a client_secret" do
       allow(CheckoutRecaptcha).to receive(:site_key).and_return("test-site-key")
       allow_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
@@ -2718,6 +2734,68 @@ describe OrdersController, :vcr do
 
         expect(response.parsed_body["success"]).to be(true)
       end
+
+      # The type says invalid_request_error, but the code proves an attempt happened, so
+      # `payment_intent.payment_failed` records it on the purchase.
+      {
+        "payment_intent_authentication_failure" => "card",
+        "payment_intent_payment_attempt_failed" => "link",
+      }.each do |stripe_error_code, method_type|
+        it "logs but does not notify for #{stripe_error_code} on #{method_type}" do
+          params = { line_items: line_items.map(&:dup) }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          expect(ErrorNotifier).not_to receive(:notify)
+          expect(Rails.logger).to receive(:error).with(/Client-confirm browser error for order #{order.id}/)
+
+          post :confirm_error, params: {
+            id: order.secure_external_id(scope: "confirm"),
+            payment_method_type: method_type,
+            stripe_error_type: "invalid_request_error",
+            stripe_error_code:,
+          }
+
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
+      # `_<decline_code>` is the form the server composes onto purchases.stripe_error_code; a
+      # browser never posts it. Matching exactly means an unrecognised code stays visible.
+      it "notifies for a composed decline code, which no browser posts" do
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(stripe_error_code: "payment_intent_authentication_failure_generic_decline")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          payment_method_type: "card",
+          stripe_error_type: "invalid_request_error",
+          stripe_error_code: "payment_intent_authentication_failure_generic_decline",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "does not notify when only the selected row names the method on an attempt code" do
+        # The blank-payment_method_type case from gumroad-private#1514.
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          selected_payment_method_type: "card",
+          stripe_error_type: "invalid_request_error",
+          stripe_error_code: "payment_intent_authentication_failure",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
     end
 
     context "when the failure leaves no server-side trace" do
@@ -2843,6 +2921,27 @@ describe OrdersController, :vcr do
           payment_method_type: "card",
           stripe_error_type: "invalid_request_error",
           stripe_error_code: "payment_intent_unexpected_state",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "notifies for an attempt code on a redirect method, whose failure nothing else records" do
+        # The suppression is two mandatory conditions, and this pins the second: a redirect method
+        # is never in the server-recorded denylist, so an attempt code cannot suppress it.
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(selected_payment_method_type: "ideal")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          selected_payment_method_type: "ideal",
+          stripe_error_type: "invalid_request_error",
+          stripe_error_code: "payment_intent_authentication_failure",
         }
 
         expect(response.parsed_body["success"]).to be(true)

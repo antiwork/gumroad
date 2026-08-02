@@ -6,6 +6,13 @@ class CustomDomain < ApplicationRecord
   WWW_PREFIX = "www"
   MAX_FAILED_VERIFICATION_ATTEMPTS_COUNT = 3
   ROUTABILITY_REFRESH_INTERVAL = 6.hours
+  # How long a Let's Encrypt certificate is actually good for. Renewal starts earlier
+  # (renew_in in config/ssl_certificates.yml.erb, 75 days) so that issuance — an async
+  # Sidekiq job that can be rate-limited for days — has room to finish while the current
+  # certificate still works. Judging active? against renew_in instead would drop the
+  # seller back to their *.gumroad.com subdomain the moment renewal became due, throwing
+  # that buffer away; a spec pins renew_in below this.
+  CERTIFICATE_LIFETIME = 90.days
 
   include Deletable
 
@@ -152,7 +159,7 @@ class CustomDomain < ApplicationRecord
   end
 
   def active?
-    verified? && has_valid_certificate?(1.week)
+    verified? && has_valid_certificate?(CERTIFICATE_LIFETIME)
   end
 
   private

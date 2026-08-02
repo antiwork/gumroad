@@ -329,6 +329,11 @@ class ProductPresenter
       # to. Same list the public wrapper enforces (User#custom_html_store_hostnames),
       # so seller HTML previewed in the editor can't open an arbitrary site.
       custom_html_store_hostnames: product.user.custom_html_store_hostnames,
+      # Mirrors the values the sandbox bridge is served
+      # (RendersCustomHtmlPages#custom_html_navigation_allowlist_js) so the preview
+      # admits exactly what the public wrapper admits.
+      custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
+      custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
       dropbox_api_key: DROPBOX_PICKER_API_KEY,
       ai_generated:,
     }

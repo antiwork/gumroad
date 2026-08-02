@@ -69,6 +69,17 @@ describe User::PingNotification do
       expect(post_urls).to match_array([[user.notification_endpoint, user.notification_content_type]])
     end
 
+    # Ai::StoreAgentService's system prompt tells creators Ping is sales-only and routes every other
+    # event type elsewhere. If notification_endpoint ever starts firing on another resource, that
+    # advice becomes wrong — redden here rather than in the prompt.
+    it "never sends notification_endpoint anything but 'sale'" do
+      user = create(:user, notification_endpoint: "http://notification.com")
+
+      (ResourceSubscription::VALID_RESOURCE_NAMES - [ResourceSubscription::SALE_RESOURCE_NAME]).each do |resource_name|
+        expect(user.urls_for_ping_notification(resource_name)).to be_empty, "#{resource_name} unexpectedly reached the Ping endpoint"
+      end
+    end
+
     it "contains the post_urls and content_type for the respective resources based on input parameter" do
       user = create(:user, notification_endpoint: "http://notification.com")
       oauth_app = create(:oauth_application, owner: user)
@@ -121,6 +132,12 @@ describe User::PingNotification do
     end
 
     it "is false without a live token" do
+      expect(user.ping_notification_deliverable?(subscription)).to be false
+    end
+
+    it "is false for a flagged application without a live token" do
+      oauth_app.update!(is_first_party_agent_app: true)
+
       expect(user.ping_notification_deliverable?(subscription)).to be false
     end
 
@@ -201,8 +218,19 @@ describe User::PingNotification do
       expect(targets.undeliverable_subscriptions).to be_empty
     end
 
-    it "does not report a Store Agent subscription as undeliverable" do
+    it "reports a same-name unflagged Store Agent subscription as undeliverable" do
       agent_app = create(:oauth_application, owner: user, name: Ai::StoreAgentApiClient::AGENT_APP_NAME)
+      subscription = create(:resource_subscription, oauth_application: agent_app, user:)
+
+      targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
+
+      expect(targets.deliverable_subscriptions).to be_empty
+      expect(targets.undeliverable_subscriptions).to eq([subscription])
+      expect(targets.post_urls).to be_empty
+    end
+
+    it "does not report a flagged Store Agent subscription as undeliverable" do
+      agent_app = create(:oauth_application, owner: user, name: Ai::StoreAgentApiClient::AGENT_APP_NAME, is_first_party_agent_app: true)
       create(:resource_subscription, oauth_application: agent_app, user:)
 
       targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)

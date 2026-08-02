@@ -90,8 +90,12 @@ class Charge::MethodForcedPresentment
     # this currency on the merchant account so subsequent checkouts in it skip the doomed
     # FX-quote round trip entirely (issue #6011) — other currencies keep quoting. A
     # persistence failure must never break the charge that is already falling back.
+    # Recorded on the account the quote was minted on (see #quoted_result), which for a
+    # destination charge is the platform account rather than the seller's.
     begin
-      merchant_account&.record_settlement_currency_mismatch!(forced_currency || Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type))
+      Checkout::BuyerCurrencyEligibility
+        .fx_quote_merchant_account(merchant_account)
+        &.record_settlement_currency_mismatch!(forced_currency || Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type))
     rescue StandardError => persistence_error
       Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{persistence_error.class} #{persistence_error.message}")
     end
@@ -213,10 +217,31 @@ class Charge::MethodForcedPresentment
     # the currency) and convert the canonical USD totals through it.
     def quoted_result(decision)
       currency = decision.currency
+      # Must be the account the intent is created on — Stripe honours a quote only in the
+      # context that minted it, which for a destination charge is the platform account.
+      quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account)
+      return nil if quote_merchant_account.blank?
+
+      # Ramp gate for quoting a destination charge, a pairing production has never minted.
+      # Unlike the card lane, nil here refuses the checkout rather than falling back to USD:
+      # the caller (Order::PreparePaymentIntentService#method_forced_presentment_required?)
+      # fails it, because the buyer's token was minted on a forced-currency element. Costs no
+      # live traffic — the quoted branch needs a USD-priced cart, and a currency-forcing method
+      # is only offered on a cart already priced in its own currency, which never quotes. The
+      # routing above stays ungated; only the decision to quote at all is gated here.
+      if Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account).present? &&
+         !Checkout::BuyerCurrencyEligibility.destination_charge_quotes_enabled?(seller)
+        Rails.logger.info("Method-forced presentment fallback for charge #{charge.external_id}: destination charge quoting disabled")
+        return nil
+      end
+
       quote = StripeFxQuote.create(
         to_currency: Currency::USD,
         from_currency: currency,
-        stripe_account_id: merchant_account.charge_processor_merchant_id
+        stripe_account_id: quote_merchant_account.charge_processor_merchant_id,
+        # Declared up front because Stripe matches the quote's destination against the
+        # intent's transfer_data[destination] exactly; see StripeFxQuote#create.
+        destination_account_id: Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account)
       )
 
       presentment_total_cents = presentment_cents_for(amount_cents, quote.fx_rate, currency)

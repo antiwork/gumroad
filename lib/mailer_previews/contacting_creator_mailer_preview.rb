@@ -145,6 +145,10 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.undeliverable_ping_subscription(ResourceSubscription.last&.id)
   end
 
+  def undelivered_receipts
+    ContactingCreatorMailer.undelivered_receipts(Purchase.last&.seller_id, Purchase.last(2).map(&:id))
+  end
+
   def video_preview_conversion_error
     ContactingCreatorMailer.video_preview_conversion_error(Link.last&.id)
   end

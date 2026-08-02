@@ -8,11 +8,12 @@ class AffiliatedProductsPresenter
 
   PER_PAGE = 20
 
-  def initialize(user, query: nil, page: nil, sort: nil)
+  def initialize(user, query: nil, page: nil, sort: nil, can_remove_affiliations: false)
     @user = user
     @query = query.presence
     @page = page
     @sort = sort
+    @can_remove_affiliations = can_remove_affiliations
   end
 
   def affiliated_products_page_props
@@ -27,7 +28,7 @@ class AffiliatedProductsPresenter
   end
 
   private
-    attr_reader :user, :query, :page, :sort
+    attr_reader :user, :query, :page, :sort, :can_remove_affiliations
 
     def affiliated_products_data
       # Pagy's default count for a grouped relation (COUNT(*) OVER ()) executes
@@ -56,8 +57,11 @@ class AffiliatedProductsPresenter
         "COALESCE(affiliates_links.affiliate_basis_points || affiliates.affiliate_basis_points, -1)"
       )
       pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE, overflow: :last_page, count:)
+      records = records.to_a
+      removable_affiliates = removable_affiliates_by_id(records)
       records = records.map do |product|
         revenue = product.revenue || 0
+        removable = removable_affiliates[product.affiliate_id]
         {
           product_name: product.name,
           url: product.affiliate_type.constantize.new(id: product.affiliate_id).referral_url_for_product(product),
@@ -65,13 +69,31 @@ class AffiliatedProductsPresenter
           revenue:,
           humanized_revenue: MoneyFormatter.format(revenue, :usd, no_cents_if_whole: true, symbol: true),
           sales_count: product.sales_count,
-          affiliate_type: product.affiliate_type.underscore
+          affiliate_type: product.affiliate_type.underscore,
+          affiliate_id: removable&.external_id,
+          seller_name: removable&.seller&.name_or_username,
         }
       end
       { pagination: PagyPresenter.new(pagination).props, affiliated_products: records }
     end
 
+    # Direct affiliations the user can end from this page, keyed by affiliate id. Global rows are
+    # excluded: those are the user's own Gumroad Affiliates enrollment, not a seller's addition.
+    # One extra query per page rather than joining users into the grouped revenue query above.
+    def removable_affiliates_by_id(records)
+      return {} unless can_remove_affiliations
+
+      direct_ids = records.filter_map { _1.affiliate_id if _1.affiliate_type == DirectAffiliate.name }
+      return {} if direct_ids.empty?
+
+      DirectAffiliate.where(id: direct_ids).includes(:seller).index_by(&:id)
+    end
+
     def stats
+      # Unfiltered on purpose: these are the account's headline totals, not a description of the
+      # current search. The destroy response repaints them, so a removal made while a search is
+      # active would otherwise show the filtered counts as the account totals.
+      scope = affiliated_products_scope(filtered: false)
       {
         # A plain indexed gross sum of every affiliate credit the user has
         # earned — the same population as `total_sales` right below, so the two
@@ -86,8 +108,11 @@ class AffiliatedProductsPresenter
         # unique link ids in Ruby. For affiliates promoting thousands of
         # products, that unbounded grouped query took multiple seconds and was
         # the main source of slow requests on this page.
-        total_products: affiliated_products_scope.distinct.count("affiliates_links.link_id"),
-        total_affiliated_creators: user.affiliated_creators.count,
+        total_products: scope.distinct.count("affiliates_links.link_id"),
+        # Derived from the same alive scope as the list rather than User#affiliated_creators, so the
+        # count always matches the table: that association walks every affiliate row including
+        # soft-deleted ones and collaborations, and does not filter deleted or banned products.
+        total_affiliated_creators: scope.distinct.count("links.user_id"),
       }
     end
 
@@ -125,13 +150,13 @@ class AffiliatedProductsPresenter
     # not banned) products, filtered by the optional search query. It carries
     # no aggregation, so callers that only need a count don't pay for the
     # revenue/sales grouping.
-    def affiliated_products_scope
+    def affiliated_products_scope(filtered: true)
       scope = ProductAffiliate.
         joins(:product).
         joins(:affiliate).
         where(affiliate_id: Affiliate.direct_or_global_affiliates.alive.where(affiliate_user_id: user.id).pluck(:id)).
         where(links: { deleted_at: nil, banned_at: nil })
-      scope = scope.where("links.name LIKE :query", query: "%#{query.strip}%") if query
+      scope = scope.where("links.name LIKE :query", query: "%#{query.strip}%") if filtered && query
       scope
     end
 
