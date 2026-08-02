@@ -160,6 +160,21 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(result.reasoning).to eq([described_class::UNSUPPORTED_IMAGE_REASON])
   end
 
+  it "tells the seller an oversized remote asset cannot be reviewed rather than to retry" do
+    image_urls = ["https://public-files.gumroad.com/tce9t60y8ecmiqx1b81v1gnzj28r"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    bad_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "file_too_large", "message" => "File size exceeds the limit." } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations).and_raise(bad_error)
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNSUPPORTED_IMAGE_REASON])
+  end
+
   it "keeps the retry reason when a transient failure sits alongside an unsupported payload" do
     # Retrying can still resolve the fetch failure, and once it does, the next
     # save reports the unsupported image on its own.

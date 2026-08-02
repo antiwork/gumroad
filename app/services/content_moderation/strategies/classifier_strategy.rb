@@ -38,7 +38,7 @@ class ContentModeration::Strategies::ClassifierStrategy
   # caller like nil/UNREACHED, but must not read as transient: the input is
   # static, so "try again later" can never come true.
   UNSUPPORTED = :unsupported
-  PERMANENT_REJECTION_CODES = %w[invalid_data_url invalid_image_format].freeze
+  PERMANENT_REJECTION_CODES = %w[invalid_data_url invalid_image_format file_too_large].freeze
   UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."
   UNSUPPORTED_IMAGE_REASON = "The content contains an inline image the moderation endpoint cannot review (unsupported format or too large)."
 

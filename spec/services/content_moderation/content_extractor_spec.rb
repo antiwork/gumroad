@@ -149,6 +149,48 @@ RSpec.describe ContentModeration::ContentExtractor do
       Page.new(pageable:, slug: "about", title:, custom_html:, content:)
     end
 
+    it "moderates a video's poster image without sending the video file to the image endpoint" do
+      page = page_for(custom_html: <<~HTML)
+        <p>Watch the process</p>
+        <video src="https://public-files.gumroad.com/tce9t60y8ecmiqx1b81v1gnzj28r"
+               poster="https://cdn.example.com/frame.jpg"></video>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq(["https://cdn.example.com/frame.jpg"])
+    end
+
+    it "collects a video's poster whether or not the element carries a src" do
+      page = page_for(custom_html: <<~HTML)
+        <video poster="https://cdn.example.com/no-src.jpg"></video>
+        <video src="https://public-files.gumroad.com/withsrc.mov"
+               poster="https://cdn.example.com/with-src.jpg"></video>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to contain_exactly(
+        "https://cdn.example.com/no-src.jpg",
+        "https://cdn.example.com/with-src.jpg"
+      )
+    end
+
+    it "keeps an img src and a sibling video's poster, and takes neither element's other attribute" do
+      page = page_for(custom_html: <<~HTML)
+        <img src="https://cdn.example.com/photo.png" poster="https://cdn.example.com/ignored.jpg">
+        <video src="https://public-files.gumroad.com/clip.mov"
+               poster="https://cdn.example.com/frame.jpg"></video>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to contain_exactly(
+        "https://cdn.example.com/photo.png",
+        "https://cdn.example.com/frame.jpg"
+      )
+    end
+
     it "extracts the title, visible text, link targets, and remote image URLs" do
       page = page_for(custom_html: <<~HTML)
         <html><head><style>.a { color: red }</style></head>
