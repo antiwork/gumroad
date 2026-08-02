@@ -113,6 +113,8 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     end
 
     it "unblocks the buyer and reports a plain success when nothing survives" do
+      allow_any_instance_of(Purchase).to receive(:processor_rule_refusal).and_return(nil)
+
       post :unblock_buyer, params: { external_id: @purchase.external_id }
 
       expect(response.parsed_body).to eq("success" => true)
@@ -120,6 +122,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     end
 
     it "reports the blocks that survive the unblock" do
+      allow_any_instance_of(Purchase).to receive(:processor_rule_refusal).and_return(nil)
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "surviving-guid")
       surviving = PlatformBlock.active.where(object_value: "surviving-guid")
       allow_any_instance_of(Purchase).to receive(:unblock_buyer!).and_return(surviving)
@@ -128,6 +131,28 @@ describe Admin::PurchasesController, :vcr, inertia: true do
 
       expect(response.parsed_body).to include("success" => true, "status" => "partially_unblocked")
       expect(response.parsed_body["message"]).to include("1 block(s) still hold this buyer: browser_guid surviving-guid")
+    end
+
+    it "warns that Stripe is still refusing the buyer even when every block cleared" do
+      allow_any_instance_of(Purchase).to receive(:processor_rule_refusal)
+        .and_return({ charge_id: "ch_blocked", network_status: "not_sent_to_network" })
+
+      post :unblock_buyer, params: { external_id: @purchase.external_id }
+
+      expect(response.parsed_body).to include("success" => true, "status" => "partially_unblocked")
+      expect(response.parsed_body["message"]).to include("Stripe is still refusing this buyer")
+      expect(response.parsed_body["message"]).to include("ch_blocked")
+      expect(response.parsed_body["message"]).not_to include("block(s) still hold this buyer")
+    end
+
+    it "says the processor check could not run rather than reporting a clean unblock" do
+      allow_any_instance_of(Purchase).to receive(:processor_rule_refusal)
+        .and_return({ error: "could not read the processor outcome" })
+
+      post :unblock_buyer, params: { external_id: @purchase.external_id }
+
+      expect(response.parsed_body["status"]).to eq("partially_unblocked")
+      expect(response.parsed_body["message"]).to include("Could not check whether Stripe is still refusing")
     end
   end
 

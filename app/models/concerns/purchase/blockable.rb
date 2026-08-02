@@ -253,7 +253,7 @@ module Purchase::Blockable
     return if latest.nil?
 
     charge = ChargeProcessor.get_charge(latest.charge_processor_id, latest.stripe_transaction_id,
-                                       merchant_account: latest.merchant_account)
+                                        merchant_account: latest.merchant_account)
     return unless charge&.outcome_type == "blocked" && charge.outcome_reason == "rule"
 
     {
