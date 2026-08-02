@@ -9,7 +9,12 @@ require "test_helper"
 module NestedMinitestContext
   def describe(description, *additional, &block)
     child = Class.new(self)
-    child.instance_variable_set(:@context_name, [@context_name, description, *additional].compact.join(" / "))
+    context_name = [@context_name, description, *additional].compact.join(" / ")
+    child.instance_variable_set(:@context_name, context_name)
+    # Anonymous classes report a nil name, which makes a failure in one of the 34
+    # near-identical country contexts unattributable (several descriptions repeat
+    # verbatim across contexts) and leaves no `-n` selector to re-run it.
+    child.define_singleton_method(:name) { context_name }
     child.public_instance_methods.grep(/\Atest_/).each { |method_name| child.send(:undef_method, method_name) }
     (@nested_contexts ||= []) << child
     child.class_eval(&block)
@@ -22,7 +27,14 @@ module NestedMinitestContext
     method_name = "test_%04d_%s" % [@test_counter, description]
     define_method(method_name, &block)
     (@nested_contexts || []).each do |child|
-      child.send(:undef_method, method_name) if child.public_method_defined?(method_name)
+      # Only hide a test the child INHERITED. @test_counter restarts per class, so a
+      # parent test declared after a nested context can generate the same
+      # test_<ordinal>_<description> name as one the child defined itself; undefining
+      # by name alone would silently delete the child's test and it would run zero times.
+      next unless child.public_method_defined?(method_name)
+      next if child.instance_methods(false).include?(method_name.to_sym)
+
+      child.send(:undef_method, method_name)
     end
     method_name
   end
@@ -422,17 +434,14 @@ class SalesTaxCalculatorTest < ActiveSupport::TestCase
 
       describe "with TaxJar" do
         setup do
+          # The cassettes were recorded under RSpec, which derived the path from the
+          # describe/context/it chain. Rebuild that name from the Minitest method name.
           cassette_name = name.sub(/\Atest_\d+_/, "").gsub(/[^0-9A-Za-z_]/, "_")
-          cassette = "SalesTaxCalculator/_calculate/with_TaxJar/#{cassette_name}"
-          cassette_path = Rails.root.join("spec", "support", "fixtures", "vcr_cassettes", "#{cassette}.yml")
-          if File.file?(cassette_path)
-            VCR.insert_cassette(cassette)
-            @vcr_cassette_inserted = true
-          end
+          VCR.insert_cassette("SalesTaxCalculator/_calculate/with_TaxJar/#{cassette_name}")
         end
 
         teardown do
-          VCR.eject_cassette if @vcr_cassette_inserted
+          VCR.eject_cassette
         end
 
         setup do
