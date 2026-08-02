@@ -215,16 +215,13 @@ export default function LibraryPage() {
 
   // Two quick filter clicks would otherwise both build on the props of the page they were
   // clicked from, so the second visit silently reverts the first. Base each navigation and
-  // every control's rendered state on the last requested params until the server echoes
-  // them back — a ref would fix the request but leave the checkboxes showing stale state,
-  // and the toggles derive their next value from what is rendered.
+  // every control's rendered state on the last requested params until that request settles
+  // — a ref would fix the request but leave the checkboxes showing stale state, and the
+  // toggles derive their next value from what is rendered.
   const [pendingSearch, setPendingSearch] = React.useState<SearchParams | null>(null);
-  React.useEffect(() => {
-    setPendingSearch(null);
-  }, [search]);
   const activeSearch = pendingSearch ?? search;
 
-  const navigate = (updates: Partial<SearchParams> & { page?: number }) => {
+  const navigate = ({ page, ...updates }: Partial<SearchParams> & { page?: number }) => {
     const next = { ...activeSearch, ...updates };
     setPendingSearch(next);
     const data: Record<string, string> = { sort: next.sort };
@@ -232,8 +229,19 @@ export default function LibraryPage() {
     if (next.creators.length > 0) data.creators = next.creators.join(",");
     if (next.bundles.length > 0) data.bundles = next.bundles.join(",");
     if (next.show_archived_only) data.show_archived_only = "true";
-    if (updates.page !== undefined && updates.page > 1) data.page = updates.page.toString();
-    router.get(Routes.library_path(), data, { preserveState: true, preserveScroll: updates.page === undefined });
+    if (page !== undefined && page > 1) data.page = page.toString();
+    router.get(Routes.library_path(), data, {
+      preserveState: true,
+      preserveScroll: page === undefined,
+      onFinish: (visit) => {
+        // Inertia fires this for superseded visits too. Clearing there would drop a newer
+        // click's params and reinstate exactly the bug this fixes, so only a visit that
+        // ran to its own end hands control back to the server's props — which is also what
+        // snaps the controls back when the request failed.
+        if (visit.cancelled || visit.interrupted) return;
+        setPendingSearch(null);
+      },
+    });
   };
 
   // Unarchiving the only archived purchase leaves the archived tab empty, so drop back to
