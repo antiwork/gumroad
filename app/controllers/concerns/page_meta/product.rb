@@ -44,9 +44,17 @@ module PageMeta::Product
       end
     end
 
-    # nil on gumroad.com, so Link#long_url keeps its subdomain default. Rails' url_for wants a
-    # bare host with no trailing slash; seller_custom_domain_url is a root_url.
+    # nil unless the request really arrived on a seller-registered custom domain, so Link#long_url
+    # keeps its subdomain default everywhere else. Rails' url_for wants a bare host with no
+    # trailing slash; seller_custom_domain_url is a root_url.
+    #
+    # @is_user_custom_domain is deliberately NOT enough on its own: it is also true on a seller's
+    # *.gumroad.com subdomain, where re-deriving the canonical from request.host_with_port instead
+    # of long_url only introduces ways for the two to disagree (a port, a www prefix) about a URL
+    # that was already correct.
     def custom_domain_host_for_meta
+      return unless CustomDomain.find_by_host(request.host)
+
       seller_custom_domain_url&.chomp("/")
     end
 
