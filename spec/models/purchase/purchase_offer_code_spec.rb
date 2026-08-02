@@ -45,4 +45,27 @@ describe Purchase, "offer-code capacity" do
     expect(purchase).not_to be_persisted
     expect(purchase.error_code).to eq(PurchaseErrorCode::OFFER_CODE_SOLD_OUT)
   end
+
+  it "sizes a temporary-discount mandate from the saved PWYW total" do
+    product = create(:membership_product, price_cents: 10_00, customizable_price: true)
+    offer_code = create(:offer_code, products: [product], amount_cents: 5_00, once_per_cart: true)
+    purchase = build(
+      :purchase_in_progress,
+      link: product,
+      seller: product.user,
+      displayed_price_cents: 15_00,
+      total_transaction_cents: 15_00
+    )
+    purchase.build_purchase_offer_code_discount(
+      offer_code:,
+      offer_code_amount: 5_00,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      pre_discount_minimum_price_cents: 10_00,
+      pre_discount_displayed_price_cents: 20_00,
+      duration_in_months: 1
+    )
+
+    expect(purchase.mandate_maximum_amount_cents).to eq(20_00)
+  end
 end

@@ -3850,7 +3850,8 @@ class Purchase < ApplicationRecord
     # Scale the charged total (which already includes tax) by the pre-discount/discounted
     # price ratio instead of re-deriving price + tax + FX from scratch — the mandate is an
     # upper bound, so a proportional estimate is sufficient and much simpler.
-    pre_discount_cents = discount.pre_discount_minimum_price_cents * reference_purchase.quantity
+    pre_discount_cents = discount.pre_discount_displayed_price_cents ||
+      discount.pre_discount_minimum_price_cents * reference_purchase.quantity
     [(Rational(base_cents * pre_discount_cents, reference_purchase.displayed_price_cents)).ceil, base_cents].max
   end
 
