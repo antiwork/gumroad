@@ -186,6 +186,18 @@ describe ProfilePresenter do
         expect(props[:tabs]).to eq([{ name: "New page", sections: [text_section.external_id, products_section.external_id] }])
       end
 
+      it "orders the fallback tab's sections by id regardless of the query's return order" do
+        # The sections query has no ORDER BY; simulate the database returning rows in a
+        # different plan-dependent order.
+        allow_any_instance_of(ProfileSectionsPresenter).to receive(:props).and_wrap_original do |original, **kwargs|
+          original.call(**kwargs).tap { _1[:sections] = _1[:sections].reverse }
+        end
+
+        props = described_class.new(pundit_user: visitor_pundit_user, seller: broken_seller).profile_props(seller_custom_domain_url: nil, request:)
+
+        expect(props[:tabs]).to eq([{ name: "New page", sections: [text_section.external_id, products_section.external_id] }])
+      end
+
       it "repairs tabs whose only references point at sections that no longer exist" do
         broken_seller.seller_profile.update!(json_data: { tabs: [{ name: "New page", sections: [products_section.id + 100] }] })
 

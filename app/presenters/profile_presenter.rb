@@ -98,12 +98,10 @@ class ProfilePresenter
         if sections_props[:sections].any? { _1[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
           tabs = [{ name: ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME, sections: [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID] }]
         else
-          # A saved layout can also be unrenderable: sections exist but no tab references any of
-          # them (the editor can persist an empty tab while its sections survive), which left the
-          # public page showing only the follow form. Serve one tab pointing at every saved
-          # section. A deliberately empty tab next to a working one is left alone — this only
-          # triggers when no tab would render anything.
-          section_ids = sections_props[:sections].map { _1[:id] }
+          # Sections can also exist while no tab references any of them (the editor can persist an
+          # empty tab); serve one tab pointing at every saved section. Fires only when no tab would
+          # render anything, and sorts by id because the query has no ORDER BY and this is user-visible.
+          section_ids = sections_props[:sections].map { _1[:id] }.sort_by { ObfuscateIds.decrypt(_1) }
           if section_ids.any? && tabs.none? { |tab| tab[:sections].intersect?(section_ids) }
             tabs = [{ name: tabs.first&.dig(:name) || ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME, sections: section_ids }]
           end
