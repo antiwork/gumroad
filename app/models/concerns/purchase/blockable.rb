@@ -47,24 +47,31 @@ module Purchase::Blockable
 
   # Failures the buyer had no part in, so they cannot be evidence of card testing.
   #
-  # The temporary-network codes mean our call to the processor never completed — the card was
-  # never contacted, so the attempt says nothing about it. Counting them lets a processor
-  # incident manufacture its own fraud evidence against everyone who retried during it.
+  # Split by the column each lands in: our own outage codes are written to `error_code`, while a
+  # card decline is written to `stripe_error_code` (and leaves `error_code` NULL — see
+  # #failure_code, which reads `stripe_error_code || error_code`).
   #
-  # The issuer declines below are the ordinary ones. A card tester's declines look like
-  # `card_declined_fraudulent` / `card_declined_do_not_honor`; "no money on this card" is what a
-  # real wallet looks like when somebody hunts for one with room on it. Composed the way
-  # StripeErrorHandler builds them: "card_declined" + "_" + Stripe's decline_code.
+  # The outage codes mean our call to the processor never completed, so the card was never
+  # contacted and the attempt says nothing about it. Counting them lets a processor incident
+  # manufacture its own fraud evidence against everyone who retried during it.
   CARD_TESTING_UNCOUNTED_ERROR_CODES = [
     PurchaseErrorCode::STRIPE_UNAVAILABLE,
     PurchaseErrorCode::PAYPAL_UNAVAILABLE,
     PurchaseErrorCode::PROCESSING_ERROR,
     PurchaseErrorCode::PROCESSOR_INVALID_REQUEST,
-    PurchaseErrorCode::STRIPE_INSUFFICIENT_FUNDS,
-    "card_declined_transaction_not_allowed",
-    "card_declined_generic_decline",
   ].freeze
   private_constant :CARD_TESTING_UNCOUNTED_ERROR_CODES
+
+  # Issuer declines that describe the buyer's balance rather than the card's standing. "No money
+  # on this card" is what a real wallet looks like when somebody hunts for one with room on it.
+  # Deliberately narrow: generic_decline is the issuer's catch-all and is common in genuine
+  # card-testing traffic, so excluding it would blunt the rule against the people it exists for.
+  # Spelled the way StripeErrorHandler composes them: "card_declined" + "_" + decline_code.
+  CARD_TESTING_UNCOUNTED_DECLINE_CODES = [
+    PurchaseErrorCode::STRIPE_INSUFFICIENT_FUNDS,
+    "card_declined_transaction_not_allowed",
+  ].freeze
+  private_constant :CARD_TESTING_UNCOUNTED_DECLINE_CODES
 
   MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5
 
@@ -439,10 +446,8 @@ module Purchase::Blockable
     def ban_fraudulent_buyer_browser_guid!
       return unless stripe_fingerprint
 
-      unique_failed_fingerprints = countable_card_testing_failures
-                                     .select("distinct stripe_fingerprint")
-                                     .where(browser_guid:)
-      return if unique_failed_fingerprints.count < MAX_NUMBER_OF_FAILED_FINGERPRINTS
+      recent_failures = countable_card_testing_failures.where(browser_guid:)
+      return if distinct_card_count(recent_failures) < MAX_NUMBER_OF_FAILED_FINGERPRINTS
       return if buyer_has_clean_checkout_history?
 
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
@@ -578,29 +583,46 @@ module Purchase::Blockable
     end
 
     def block_buyer_based_on_recent_failures!
-      unique_failed_fingerprints = countable_card_testing_failures
-                                           .select("distinct stripe_fingerprint")
-                                           .where("email = ? or browser_guid = ?", email, browser_guid)
-                                           .where(created_at: CARD_TESTING_WATCH_PERIOD.ago..)
+      recent_failures = countable_card_testing_failures
+                          .where("email = ? or browser_guid = ?", email, browser_guid)
+                          .where(created_at: CARD_TESTING_WATCH_PERIOD.ago..)
 
-      return if unique_failed_fingerprints.count < MAX_NUMBER_OF_FAILED_FINGERPRINTS
+      return if distinct_card_count(recent_failures) < MAX_NUMBER_OF_FAILED_FINGERPRINTS
       return if buyer_has_clean_checkout_history?
 
       block_buyer!
     end
 
     # The velocity rules count DISTINCT fingerprints as a proxy for "how many different cards has
-    # this person tried". Two things break that proxy, and both strand real buyers:
+    # this person tried". Signal-free failures break that proxy: see CARD_TESTING_UNCOUNTED_*.
     #
-    # PayPal writes a per-transaction billing-agreement token into stripe_fingerprint, so one
-    # wallet mints a fresh "card" on every attempt — four retries on a single funding source trip
-    # a four-card rule. Scoping to Stripe rows keeps the proxy honest; PayPal abuse is caught by
-    # the per-product and IP limits, which do not depend on the fingerprint being a card.
+    # The two lists are matched against different columns — a card decline writes
+    # stripe_error_code and leaves error_code NULL, while our own outage codes write error_code
+    # (see #failure_code, which reads `stripe_error_code || error_code`). Both comparisons must
+    # survive NULL: `col NOT IN (...)` evaluates to NULL, not TRUE, when col is NULL, which would
+    # silently drop every real decline from the count.
     #
-    # Signal-free failures are excluded outright: see CARD_TESTING_UNCOUNTED_ERROR_CODES.
+    # Deliberately NOT scoped to Stripe: PayPal rows still count toward the buyer and IP rules,
+    # which are the only thing standing between us and somebody cycling stolen PayPal accounts.
+    # Their per-transaction token problem is fixed by counting them per wallet, not by hiding them.
     def countable_card_testing_failures
-      Purchase.failed.stripe.with_stripe_fingerprint
-              .where.not(error_code: CARD_TESTING_UNCOUNTED_ERROR_CODES)
+      Purchase.failed.with_stripe_fingerprint
+              .where("(stripe_error_code NOT IN (?) OR stripe_error_code IS NULL)", CARD_TESTING_UNCOUNTED_DECLINE_CODES)
+              .where("(error_code NOT IN (?) OR error_code IS NULL)", CARD_TESTING_UNCOUNTED_ERROR_CODES)
+    end
+
+    # PayPal writes a per-transaction billing-agreement token into stripe_fingerprint, so one
+    # wallet mints a fresh "card" on every attempt and four retries on a single funding source
+    # trip a four-card rule. Collapse each PayPal payer to one unit of evidence — a buyer cycling
+    # several stolen PayPal accounts still accumulates one per account — while every Stripe
+    # fingerprint stays its own card.
+    def distinct_card_count(relation)
+      rows = relation.pluck(:charge_processor_id, :stripe_fingerprint, :email)
+      stripe_cards = rows.reject { |processor, _, _| processor == PaypalChargeProcessor.charge_processor_id }
+                         .map { |_, fingerprint, _| fingerprint }
+      paypal_payers = rows.select { |processor, _, _| processor == PaypalChargeProcessor.charge_processor_id }
+                          .map { |_, _, payer| payer }
+      stripe_cards.uniq.size + paypal_payers.uniq.size
     end
 
     # The velocity rules' version of #buyer_has_clean_payment_history?, which cannot be reused here:
@@ -680,12 +702,11 @@ module Purchase::Blockable
     def block_ip_address_based_on_recent_failures!
       return if PlatformBlock.ip_address.active.find_by(object_value: ip_address).present?
 
-      unique_failed_fingerprints = countable_card_testing_failures
-                                           .select("distinct stripe_fingerprint")
-                                           .where("ip_address = ?", ip_address)
-                                           .where(created_at: CARD_TESTING_IP_ADDRESS_WATCH_PERIOD.ago..)
+      recent_failures = countable_card_testing_failures
+                          .where("ip_address = ?", ip_address)
+                          .where(created_at: CARD_TESTING_IP_ADDRESS_WATCH_PERIOD.ago..)
 
-      return if unique_failed_fingerprints.count < MAX_NUMBER_OF_FAILED_FINGERPRINTS
+      return if distinct_card_count(recent_failures) < MAX_NUMBER_OF_FAILED_FINGERPRINTS
 
       PlatformBlock.add!(
         object_type: PlatformBlock::TYPES[:ip_address],
