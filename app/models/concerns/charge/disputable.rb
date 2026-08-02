@@ -96,7 +96,12 @@ module Charge::Disputable
     end
 
     def mark_as_dispute_not_reversed!
-      is_a?(Charge) ? update!(dispute_reversed_at: nil) : update!(chargeback_reversed: false)
+      # Charge grain only: the Purchase grain is cleared inside the disputed_purchases loop, which
+      # enforces the PayPal carve-out precedence this method does not know about. Anything that
+      # later claws back the win's credits must run BEFORE that clear —
+      # Purchase#seller_balance_update_eligible? requires the flag, so the debit API refuses the
+      # purchase once it is false.
+      update!(dispute_reversed_at: nil)
     end
 
     def disputed?

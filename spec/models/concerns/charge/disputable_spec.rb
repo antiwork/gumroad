@@ -1883,6 +1883,39 @@ describe Charge::Disputable, :vcr do
             end.to change { giftee_purchase.reload.chargeback_reversed }.from(true).to(false)
           end
         end
+
+        context "when a won => lost flip arrives at charge grain" do
+          let(:charge_transaction_id) { "ch_charge_won_then_lost" }
+          let!(:first_purchase) do
+            create(:purchase, link: product, seller:, stripe_transaction_id: charge_transaction_id,
+                              chargeback_date: 10.days.ago, chargeback_reversed: true)
+          end
+          let!(:second_purchase) do
+            create(:purchase, link: product, seller:, stripe_transaction_id: charge_transaction_id,
+                              chargeback_date: 10.days.ago, chargeback_reversed: true)
+          end
+          let!(:charge) do
+            create(:charge, processor_transaction_id: charge_transaction_id, amount_cents: 222,
+                            disputed_at: 10.days.ago, dispute_reversed_at: 1.day.ago,
+                            purchases: [first_purchase, second_purchase])
+          end
+          let(:charge_flip_event) { build(:charge_event_dispute_lost, charge_id: charge_transaction_id) }
+
+          before { create(:dispute, charge:, purchase: nil, state: "won", won_at: 1.day.ago) }
+
+          it "clears dispute_reversed_at on the charge" do
+            expect do
+              charge.handle_event(charge_flip_event)
+            end.to change { charge.reload.dispute_reversed_at }.from(be_present).to(nil)
+          end
+
+          it "clears the flag on every purchase in the charge" do
+            charge.handle_event(charge_flip_event)
+
+            expect(first_purchase.reload.chargeback_reversed).to be(false)
+            expect(second_purchase.reload.chargeback_reversed).to be(false)
+          end
+        end
       end
     end
 
