@@ -78,4 +78,56 @@ describe JsonData do
       expect(model.json_data["attribute"]).to eq("hi")
     end
   end
+
+  describe "concurrent writers" do
+    let!(:user) { create(:user) }
+
+    it "keeps an attribute another writer set after this instance loaded json_data" do
+      stale = User.find(user.id)
+      stale.payout_threshold_cents
+
+      fresh = User.find(user.id)
+      fresh.au_backtax_sales_cents = 4321
+      fresh.save!
+
+      stale.payout_threshold_cents = 9999
+      stale.save!
+
+      expect(user.reload.au_backtax_sales_cents).to eq(4321)
+      expect(user.payout_threshold_cents).to eq(9999)
+    end
+
+    it "still deletes a key this instance removed" do
+      user.update!(gumroad_day_timezone: "UTC")
+
+      stale = User.find(user.id)
+      stale.json_data
+
+      User.find(user.id).update!(au_backtax_sales_cents: 4321)
+
+      stale.json_data.delete("gumroad_day_timezone")
+      stale.save!
+
+      expect(user.reload.json_data).not_to have_key("gumroad_day_timezone")
+      expect(user.au_backtax_sales_cents).to eq(4321)
+    end
+
+    it "lets this instance overwrite a key the other writer also set" do
+      stale = User.find(user.id)
+      stale.json_data
+
+      User.find(user.id).update!(au_backtax_sales_cents: 4321)
+
+      stale.au_backtax_sales_cents = 1111
+      stale.save!
+
+      expect(user.reload.au_backtax_sales_cents).to eq(1111)
+    end
+
+    it "does not read the row back when json_data is untouched" do
+      expect(User).not_to receive(:unscoped)
+
+      user.update!(name: "Fresh name")
+    end
+  end
 end
