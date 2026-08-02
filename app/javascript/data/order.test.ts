@@ -6,7 +6,6 @@ import {
   mergeOfferCodes,
   offerCodesForFailedLineItems,
   PaymentConfirmedError,
-  replaceOncePerCartOfferCodes,
   startClientConfirmOrderCreation,
   startOrderCreation,
 } from "$app/data/order";
@@ -192,22 +191,6 @@ describe("mergeOfferCodes", () => {
   });
 });
 
-describe("replaceOncePerCartOfferCodes", () => {
-  it("removes stale cart-level codes while preserving legacy codes", () => {
-    expect(
-      replaceOncePerCartOfferCodes(
-        [
-          {
-            code: "SAVE",
-            products: { stale: oncePerCartDiscount(0), legacy: fixedDiscount(100) },
-          },
-        ],
-        [],
-      ),
-    ).toEqual([{ code: "SAVE", products: { legacy: fixedDiscount(100) } }]);
-  });
-});
-
 describe("startOrderCreation", () => {
   it("preserves active codes when order creation fails before line results", async () => {
     vi.stubGlobal("Routes", { orders_path: () => "/orders" });
@@ -357,6 +340,63 @@ describe("startOrderCreation", () => {
     const result = await startOrderCreation(requestData, activeOfferCodes);
 
     expect(result.offerCodes).toEqual(activeOfferCodes);
+  });
+
+  it("drops a legacy code rejected during SCA confirmation", async () => {
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardPayment = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const lineItem = requestData.lineItems.at(0);
+    if (!lineItem) throw new Error("Missing test line item");
+    const activeOfferCodes = [{ code: "SAVE", products: { [lineItem.permalink]: fixedDiscount(100) } }];
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [lineItem.uid]: {
+              success: true,
+              requires_card_action: true,
+              client_secret: "pi_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            purchase: {
+              success: false,
+              permalink: lineItem.permalink,
+              error_message: "The discount is no longer available.",
+              name: null,
+              formatted_price: "$10",
+              error_code: null,
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    const result = await startOrderCreation(requestData, activeOfferCodes);
+
+    expect(result.offerCodes).toEqual([]);
   });
 });
 
@@ -551,7 +591,7 @@ describe("startClientConfirmOrderCreation", () => {
     expect(result.offerCodes).toEqual([]);
   });
 
-  it("drops a capped cart-level code when finalization no longer returns it", async () => {
+  it("drops a legacy code when finalization no longer returns it", async () => {
     const firstLine = requestData.lineItems.at(0);
     if (!firstLine) throw new Error("Missing test line item");
     const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
@@ -575,7 +615,7 @@ describe("startClientConfirmOrderCreation", () => {
               updated_product: null,
             },
           },
-          offer_codes: [{ code: "SAVE", products: { "product-b": oncePerCartDiscount(0) } }],
+          offer_codes: [{ code: "SAVE", products: { "product-b": fixedDiscount(100) } }],
         }),
       )
       .mockResolvedValueOnce(

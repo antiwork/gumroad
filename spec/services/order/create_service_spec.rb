@@ -72,6 +72,20 @@ describe Order::CreateService, :vcr do
   end
 
   describe "#perform" do
+    it "rejects carts above the product limit before allocating discounts" do
+      stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 4)
+      expect(OfferCodeDiscountComputingService).not_to receive(:new)
+
+      order, purchase_responses = Order::CreateService.new(params:).perform
+
+      expect(order).not_to be_persisted
+      expect(purchase_responses.keys).to match_array(params[:line_items].pluck(:uid))
+      expect(purchase_responses.values).to all(include(
+        success: false,
+        error_message: "You cannot add more than 4 products to the cart."
+      ))
+    end
+
     context "with a fixed discount applied once per cart" do
       let(:offer_code) do
         create(

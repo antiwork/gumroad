@@ -68,4 +68,36 @@ describe Purchase, "offer-code capacity" do
 
     expect(purchase.mandate_maximum_amount_cents).to eq(20_00)
   end
+
+  it "locks a capped cart discount for an updated original subscription purchase" do
+    product = create(:membership_product)
+    offer_code = create(
+      :offer_code,
+      products: [product],
+      amount_cents: 100,
+      once_per_cart: true,
+      max_purchase_count: 1
+    )
+    purchase = build(
+      :purchase_in_progress,
+      link: product,
+      seller: product.user,
+      offer_code:,
+      is_original_subscription_purchase: true,
+      is_updated_original_subscription_purchase: true
+    )
+    purchase.build_purchase_offer_code_discount(
+      offer_code:,
+      offer_code_amount: 100,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      once_per_cart_allocation_id: SecureRandom.uuid,
+      pre_discount_minimum_price_cents: product.price_cents
+    )
+    purchase.skip_preparing_for_charge = true
+
+    expect(offer_code).to receive(:with_lock).and_call_original
+
+    purchase.prepare_for_charge!
+  end
 end

@@ -286,6 +286,10 @@ class OrdersController < ApplicationController
       # Don't allow the order to go through if the buyer is a bot. Pretend that the order succeeded instead.
       return render json: { success: true } if is_bot?
 
+      if params[:line_items].is_a?(Array) && params[:line_items].length > Cart::MAX_ALLOWED_CART_PRODUCTS
+        return render_error("You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart.")
+      end
+
       # Don't allow the order to go through if cookies are disabled and it's a paid order
       contains_paid_purchase = if params[:line_items].present?
         params[:line_items].any? { |product_params| product_params[:perceived_price_cents] != "0" }

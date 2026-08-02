@@ -31,6 +31,12 @@ class Order::CreateService
     common_params = params.except(:line_items)
     line_items = params.fetch(:line_items, [])
     line_item_uids = line_items.map { _1[:uid] }
+    if line_items.length > Cart::MAX_ALLOWED_CART_PRODUCTS
+      invalid_responses = line_item_uids.uniq.index_with do
+        error_response("You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart.")
+      end
+      return Order.new(purchaser: buyer), invalid_responses, []
+    end
     if line_item_uids.any?(&:blank?) || line_item_uids.uniq.length != line_item_uids.length
       invalid_responses = line_item_uids.uniq.index_with do
         error_response("The cart data is invalid. Please refresh and try again.")

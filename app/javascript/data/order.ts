@@ -58,19 +58,6 @@ export const mergeOfferCodes = (...groups: OfferCodes[]): OfferCodes =>
       .values(),
   );
 
-export const replaceOncePerCartOfferCodes = (offerCodes: OfferCodes, replacements: OfferCodes): OfferCodes =>
-  mergeOfferCodes(
-    offerCodes.flatMap((offerCode) => {
-      const products = Object.fromEntries(
-        Object.entries(offerCode.products).filter(
-          ([, discount]) => discount.type !== "fixed" || !discount.once_per_cart,
-        ),
-      );
-      return Object.keys(products).length > 0 ? [{ ...offerCode, products }] : [];
-    }),
-    replacements,
-  );
-
 const offerCodesForPermalinks = (offerCodes: OfferCodes, permalinks: Set<string>): OfferCodes =>
   offerCodes.flatMap((offerCode) => {
     const products = Object.fromEntries(
@@ -171,7 +158,7 @@ export const startOrderCreation = async (
           return lineItems;
         }, {}),
         canBuyerSignUp: response.can_buyer_sign_up,
-        offerCodes: replaceOncePerCartOfferCodes(retryOfferCodes, orderConfirmResponse.offer_codes),
+        offerCodes: orderConfirmResponse.offer_codes,
       };
       return ensureValidCartResult(requestData, result);
     }
@@ -442,12 +429,11 @@ export const startClientConfirmOrderCreation = async (
       lineItems.length > 0 && lineItems.every((lineItem) => lineItem.success && !("processing" in lineItem));
     if (!allSucceeded) throw new PaymentConfirmedError(confirmedReturnUrl);
 
-    const finalizedOfferCodes = replaceOncePerCartOfferCodes(retryOfferCodes, finalizeResponse.offer_codes);
     return mapResultsByUid(
       requestData,
       finalizeResponse.line_items,
       prepareResponse.can_buyer_sign_up,
-      offerCodesForFailedLineItems(requestData, finalizeResponse.line_items, finalizedOfferCodes),
+      offerCodesForFailedLineItems(requestData, finalizeResponse.line_items, finalizeResponse.offer_codes),
     );
   } catch (error) {
     if (error instanceof PaymentConfirmedError) throw error;

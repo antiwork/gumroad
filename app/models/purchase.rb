@@ -2502,7 +2502,8 @@ class Purchase < ApplicationRecord
 
   def prepare_for_charge!
     reservable_offer_code = offer_code if offer_code&.is_cents? && offer_code.once_per_cart? &&
-      offer_code.max_purchase_count.present? && !does_not_count_towards_max_purchases && !is_test_purchase?
+      offer_code.max_purchase_count.present? &&
+      (!does_not_count_towards_max_purchases || is_updated_original_subscription_purchase) && !is_test_purchase?
 
     self.chargeable = process_without_charging!(reservable_offer_code:)
   end

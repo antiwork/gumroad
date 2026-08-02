@@ -59,6 +59,23 @@ describe OrdersController, :vcr do
       common_purchase_params_without_payment.merge(pp_native_payment_params)
     end
 
+    it "rejects carts above the product limit before creating an order" do
+      stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 1)
+      expect(Order::CreateService).not_to receive(:new)
+
+      post :create, params: {
+        line_items: [
+          { uid: "first", permalink: "first", perceived_price_cents: 0 },
+          { uid: "second", permalink: "second", perceived_price_cents: 0 },
+        ]
+      }
+
+      expect(response.parsed_body).to include(
+        "success" => false,
+        "error_message" => "You cannot add more than 1 products to the cart."
+      )
+    end
+
     context "single purchase" do
       let(:single_purchase_params) do
         {
