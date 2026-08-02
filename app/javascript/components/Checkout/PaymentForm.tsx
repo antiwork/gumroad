@@ -172,6 +172,7 @@ const StateInput = () => {
         <Select
           id={`${uid}state`}
           value={state.state}
+          aria-invalid={errors.has("state")}
           onChange={(e) => dispatch({ type: "set-value", state: e.target.value })}
           disabled={isProcessing(state)}
         >
@@ -1798,7 +1799,7 @@ const PaymentMethodsSection = ({
 // `hidden`/`display: none` controls cannot take focus, so scrolling to one would leave the buyer
 // staring at a page with nothing visibly wrong. `checkVisibility` is unimplemented in the test DOM;
 // treating that as visible keeps the scan honest there — the tests assert placement, not layout.
-const isFocusable = (input: HTMLInputElement) =>
+const isFocusable = (input: HTMLInputElement | HTMLSelectElement) =>
   !input.disabled && (typeof input.checkVisibility === "function" ? input.checkVisibility() : true);
 
 export const PaymentForm = ({
@@ -1835,9 +1836,10 @@ export const PaymentForm = ({
     // otherwise win document order and steal the buyer's focus. The preview dashboard renders
     // PaymentForm with no checkout ancestor, hence the fallback.
     const scope = root.closest("[data-checkout-scope]") ?? root;
-    // Stripe nests the input inside aria-invalid, hence the second query selector.
-    const selector = "input[aria-invalid=true], [aria-invalid=true] input";
-    const invalidInput = [...scope.querySelectorAll<HTMLInputElement>(selector)].find(isFocusable);
+    // Stripe nests the input inside aria-invalid, hence the descendant query selector. Selects
+    // matter too: the US/CA State field is a native select, invisible to an input-only scan.
+    const selector = "input[aria-invalid=true], select[aria-invalid=true], [aria-invalid=true] input";
+    const invalidInput = [...scope.querySelectorAll<HTMLInputElement | HTMLSelectElement>(selector)].find(isFocusable);
     if (!invalidInput) return;
     invalidInput.scrollIntoView({ behavior: "smooth", block: "center" });
     invalidInput.focus({ preventScroll: true });

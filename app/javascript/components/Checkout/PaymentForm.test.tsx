@@ -241,6 +241,28 @@ describe("PaymentForm validation-failure feedback", () => {
     expect(document.activeElement).toBe(field);
   });
 
+  it("lands on the State select when it is the unmet field, not only on invalid inputs", () => {
+    // The US/CA State field renders as a native select — an input-only scan finds nothing and
+    // the refused Pay is silent again.
+    const base = state();
+    renderPaymentForm({
+      ...base,
+      products: base.products.map((p) => ({ ...p, requireShipping: true, shippableCountryCodes: ["US"] })),
+      usStates: ["AL", "CA"],
+      status: { type: "input", errors: new Set(["state"]) },
+      validationFailedCount: 1,
+    });
+
+    const field = screen.getByLabelText("State");
+    expect(field.tagName).toBe("SELECT");
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    // isSameNode / id, not toBe: happy-dom hands out a Proxy per select lookup (for indexed
+    // option access), so reference equality between lookups fails on the same node.
+    const scrolled = scrollIntoView.mock.instances[0];
+    expect(scrolled instanceof Node && field.isSameNode(scrolled)).toBe(true);
+    expect(document.activeElement?.id).toBe(field.id);
+  });
+
   it("still scans its own subtree when rendered with no checkout ancestor (preview dashboard)", () => {
     renderPaymentForm(failedState(1));
 
