@@ -100,8 +100,10 @@ module StripeMerchantAccountManager
   private_class_method :stripe_payouts_pause_email_type
 
   # Claims (at most one of each) pause email per Stripe-disabled episode,
-  # surviving admin/payout-method resumes (the marker is cleared only when
-  # Stripe re-enables payouts). Action-required is claimed on first notice or on
+  # surviving admin/payout-method resumes. The marker is cleared when Stripe
+  # re-enables payouts, and also by StripePayoutsPausedEmailJob when it declines
+  # to send (see its nothing_at_stake?) so a later webhook can re-claim — an
+  # episode can therefore claim more than once. Action-required is claimed on first notice or on
   # escalation from under-review; under-review is claimed as the first notice or
   # on de-escalation from action-required (the seller satisfied the outstanding
   # requirements but payouts stay paused pending Stripe's review). Updates the
