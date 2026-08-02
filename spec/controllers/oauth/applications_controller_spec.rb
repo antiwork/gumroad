@@ -45,6 +45,7 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
   let(:other_user) { create(:user) }
   let(:seller) { create(:named_seller) }
   let(:app) { create(:oauth_application, owner: seller) }
+  let(:reserved_name_error) { Oauth::ApplicationsController::RESERVED_AGENT_APP_NAME_ERROR }
 
   include_context "with user signed in as admin for seller"
 
@@ -72,6 +73,49 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
     it "creates a new application with no revenue share" do
       expect { post(:create, params:) }.to change { OauthApplication.count }.by 1
       expect(OauthApplication.last.affiliate_basis_points).to eq nil
+    end
+
+    it "rejects the reserved Store Agent name" do
+      reserved_params = {
+        oauth_application: {
+          name: Ai::StoreAgentApiClient::AGENT_APP_NAME,
+          redirect_uri: "http://hi"
+        }
+      }
+
+      expect { post(:create, params: reserved_params) }.not_to change { OauthApplication.count }
+
+      expect(response).to redirect_to(settings_advanced_path)
+      expect(flash[:alert]).to eq(reserved_name_error)
+      expect(session[:inertia_errors][:base]).to eq([reserved_name_error])
+    end
+
+    it "rejects the reserved Store Agent name case-insensitively with surrounding whitespace" do
+      reserved_params = {
+        oauth_application: {
+          name: "  #{Ai::StoreAgentApiClient::AGENT_APP_NAME.downcase}  ",
+          redirect_uri: "http://hi"
+        }
+      }
+
+      expect { post(:create, params: reserved_params) }.not_to change { OauthApplication.count }
+
+      expect(response).to redirect_to(settings_advanced_path)
+      expect(session[:inertia_errors][:base]).to eq([reserved_name_error])
+    end
+
+    it "creates an application with a normal name" do
+      normal_params = {
+        oauth_application: {
+          name: "Store tools",
+          redirect_uri: "http://hi"
+        }
+      }
+
+      expect { post(:create, params: normal_params) }.to change { OauthApplication.count }.by(1)
+
+      expect(OauthApplication.last.name).to eq("Store tools")
+      expect(response).to redirect_to(edit_oauth_application_path(OauthApplication.last.external_id))
     end
 
     context "with an icon" do
@@ -227,6 +271,21 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
 
         expect(response).to redirect_to(edit_oauth_application_path(app.external_id))
         expect(flash[:notice]).to eq("Application updated.")
+      end
+
+      it "rejects renaming to the reserved Store Agent name" do
+        reserved_params = {
+          id: app.external_id,
+          oauth_application: {
+            name: " #{Ai::StoreAgentApiClient::AGENT_APP_NAME} "
+          }
+        }
+
+        expect { put(:update, params: reserved_params) }.not_to change { app.reload.name }
+
+        expect(response).to redirect_to(edit_oauth_application_path(app.external_id))
+        expect(flash[:alert]).to eq(reserved_name_error)
+        expect(session[:inertia_errors][:base]).to eq([reserved_name_error])
       end
 
       describe "bad update params" do

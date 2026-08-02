@@ -19,11 +19,10 @@
 #     (StoreAgentService) turns them into a proposed action the creator must confirm, and only then
 #     does StoreAgentActionExecutor replay the same request to mutate.
 class Ai::StoreAgentApiClient
-  # The dedicated first-party OAuth application that backs the agent. Owned by the creator so the
-  # token's application owner and resource owner are the same account. The app is registered with the
-  # FULL scope superset; each minted token, however, carries only the subset the acting user's role
-  # permits (Ai::StoreAgentScopes.permitted_for), so role narrowing happens per-token, not per-app.
+  # Display name for the dedicated first-party OAuth app. Identity comes from
+  # is_first_party_agent_app; the name carries no authorization meaning.
   AGENT_APP_NAME = "Gumroad Store Agent (internal)"
+  AGENT_APP_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
   # The full public scope superset the agent app is registered with. Individual tokens are minted
   # with a narrowed SUBSET of these based on the acting user's role; see Ai::StoreAgentScopes.
   AGENT_APP_SCOPES = Ai::StoreAgentScopes.all_scopes_string
@@ -113,12 +112,38 @@ class Ai::StoreAgentApiClient
       )
     end
 
-    # One agent OAuth app per creator (owned by them). find_or_create keeps it stable across turns.
     def agent_application
-      @_app ||= OauthApplication.find_or_create_by!(name: AGENT_APP_NAME, owner: seller) do |app|
-        app.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
-        app.scopes = AGENT_APP_SCOPES
+      @_app ||= OauthApplication.find_by(owner: seller, owner_type: "User", is_first_party_agent_app: true) ||
+        adopt_or_create_agent_application
+    end
+
+    def adopt_or_create_agent_application
+      seller.with_lock do
+        # No `return` inside this block: the app loads Rails 7.0 defaults, where a non-local return
+        # rolls the surrounding transaction back and silently discards the adoption write.
+        flagged_app = OauthApplication.find_by(owner: seller, owner_type: "User", is_first_party_agent_app: true)
+        matching_app = flagged_app || OauthApplication.find_by(agent_application_fingerprint)
+
+        if matching_app.present?
+          matching_app.update!(is_first_party_agent_app: true) unless matching_app.is_first_party_agent_app?
+          matching_app
+        else
+          OauthApplication.create!(
+            agent_application_fingerprint.except(:deleted_at).merge(is_first_party_agent_app: true)
+          )
+        end
       end
+    end
+
+    def agent_application_fingerprint
+      {
+        owner: seller,
+        owner_type: "User",
+        name: AGENT_APP_NAME,
+        redirect_uri: AGENT_APP_REDIRECT_URI,
+        scopes: AGENT_APP_SCOPES,
+        deleted_at: nil,
+      }
     end
 
     def api_host

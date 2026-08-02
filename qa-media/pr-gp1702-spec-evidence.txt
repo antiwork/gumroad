@@ -1,0 +1,37 @@
+Local verification for gumroad-private#1702
+Branch: fix/gp1702-first-party-agent-app-flag (base origin/main 609fefe6f)
+
+== migration applies forward from origin/main's schema ==
+$ rails db:schema:load   # at origin/main
+pre-migration  MAX(version) = 20261206000024
+$ rails db:migrate
+== 20261206000025 AddIsFirstPartyAgentAppToOauthApplications: migrated (0.4803s)
+post-migration MAX(version) = 20261206000025
+
+Field	Type	Null	Key	Default	Extra
+is_first_party_agent_app	tinyint(1)	NO		0	
+Key_name Column_name
+index_oauth_applications_on_owner_and_first_party_agent owner_id
+index_oauth_applications_on_owner_and_first_party_agent owner_type
+index_oauth_applications_on_owner_and_first_party_agent is_first_party_agent_app
+
+== specs ==
+$ bundle exec rspec spec/services/ai/store_agent_api_client_spec.rb \
+    spec/modules/user/ping_notification_spec.rb \
+    spec/controllers/oauth/applications_controller_spec.rb \
+    spec/services/onetime/backfill_first_party_store_agent_oauth_applications_spec.rb
+
+Finished in 9.05 seconds (files took 17.08 seconds to load)
+69 examples, 3 failures
+
+66 pass. The 3 failures are PRE-EXISTING and unrelated (send_test_ping needs seeded
+Gumroad merchant accounts, which the local test DB lacks). Proven on an untouched
+origin/main worktree with no diff applied:
+
+$ bundle exec rspec spec/modules/user/ping_notification_spec.rb   # detached @ origin/main
+18 examples, 3 failures
+rspec ./spec/modules/user/ping_notification_spec.rb:18 # User::PingNotification#send_test_ping when notification_content_type if application/json sends JSON payload in test ping
+rspec ./spec/modules/user/ping_notification_spec.rb:32 # User::PingNotification#send_test_ping when notification_content_type is application/x-www-form-urlencoded sends form-encoded payload in test ping
+rspec ./spec/modules/user/ping_notification_spec.rb:40 # User::PingNotification#send_test_ping when notification_content_type is application/x-www-form-urlencoded encodes brackets in the payload keys
+
+Identical three examples, identical failure.
