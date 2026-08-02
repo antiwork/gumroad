@@ -134,13 +134,16 @@ class AlertSellersOfUndeliveredReceiptsJob
       :collected
     end
 
+    # A charge receipt covers the whole order, so any of the charge's successful purchases carries
+    # the seller and the buyer's email. Scoped to the charge rather than the order: an order can
+    # hold charges for several sellers, and the receipt row belongs to one of them.
     def purchase_for(row)
       return Purchase.find_by(id: row.purchase_id) if row.purchase_id.present?
 
       charge_id = EmailInfoCharge.where(email_info_id: row.id).pick(:charge_id)
       return nil if charge_id.nil?
 
-      Charge.find_by(id: charge_id)&.purchase_as_orderable
+      Charge.find_by(id: charge_id)&.successful_purchases&.first
     end
 
     # Enqueues one digest per seller. Answers whether every buyer in this run is accounted for —

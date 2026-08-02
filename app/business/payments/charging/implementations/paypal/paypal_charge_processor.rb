@@ -623,8 +623,8 @@ class PaypalChargeProcessor
     if paypal_rest_api.successful_response?(api_response) && api_response.result.id.present?
       api_response.result.id
     else
-      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal create order: ", api_response.result.details&.first&.description)
-      raise determine_create_order_error(api_response), error_message
+      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal create order: ", paypal_rejection_description(api_response))
+      raise build_paypal_rejection(determine_create_order_error(api_response), error_message, api_response)
     end
   end
 
@@ -644,8 +644,8 @@ class PaypalChargeProcessor
     if paypal_rest_api.successful_response?(api_response) && api_response.result.id.present?
       api_response.result
     else
-      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal capture order: ", api_response.result.details[0].description)
-      raise determine_capture_order_error(api_response), error_message
+      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal capture order: ", paypal_rejection_description(api_response))
+      raise build_paypal_rejection(determine_capture_order_error(api_response), error_message, api_response)
     end
   end
 
@@ -797,6 +797,38 @@ class PaypalChargeProcessor
   private_class_method
   def self.build_error_message(error_code, error_message)
     "#{error_code}|#{error_message}"
+  end
+
+  # PayPal's rejection arrives as a parsed response body, not an exception object, so the
+  # `issue` string is the only thing that says WHY it refused — and every unnamed issue maps
+  # to one ChargeProcessorInvalidRequestError. Carrying it into processor_error_code is what
+  # puts it on the failed purchase's stripe_error_code instead of discarding it here
+  # (gumroad-private#1715: 912 failures in 14 days, all indistinguishable).
+  def self.build_paypal_rejection(error_class, message, api_response)
+    return error_class.new(message) unless error_class == ChargeProcessorInvalidRequestError
+    error_class.new(message, processor_error_code: paypal_rejection_issue(api_response))
+  end
+
+  # Falls back to the response's top-level name (INSTRUMENT_DECLINED, UNPROCESSABLE_ENTITY)
+  # when PayPal sends no details array — that is still more than the blank column we have now.
+  def self.paypal_rejection_issue(api_response)
+    detail = paypal_rejection_detail(api_response)
+    issue = detail.issue if detail.respond_to?(:issue)
+    return issue if issue.present?
+    api_response.result.name.presence if api_response.result.respond_to?(:name)
+  end
+
+  def self.paypal_rejection_description(api_response)
+    detail = paypal_rejection_detail(api_response)
+    detail.description if detail.respond_to?(:description)
+  end
+
+  # Shapes vary by endpoint and error class, and this runs while a failure is already being
+  # raised: a NoMethodError here would replace the real charge error with a crash.
+  def self.paypal_rejection_detail(api_response)
+    api_response.result.details&.first
+  rescue StandardError
+    nil
   end
 
   private_class_method

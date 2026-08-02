@@ -1,5 +1,7 @@
 import { lazy, useEffect, useState } from "react";
 
+import { fetchWithOneRetry } from "$app/utils/lazy_chunk";
+
 // The product editor is by far the largest page in the dashboard: it carries the rich text editor,
 // the file uploader, and the live product preview. Two things follow from that, and this module
 // owns both.
@@ -12,26 +14,6 @@ import { lazy, useEffect, useState } from "react";
 //    the time a seller clicks a product the code is usually already in memory and the editor
 //    appears immediately, with no skeleton at all.
 const importProductEditPage = () => import("$app/components/server-components/ProductEditPage");
-
-// Network failures are removed from the browser's module map, so the same import can recover when
-// tried again. React.lazy does not make that retry itself: once the promise it receives rejects, it
-// remembers the rejection. Complete one retry before giving React the final promise.
-const RETRY_DELAY_MS = 500;
-
-export const fetchWithOneRetry = async <T>(fetch: () => Promise<T>, delayMs = RETRY_DELAY_MS): Promise<T> => {
-  try {
-    return await fetch();
-  } catch (firstError) {
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-    try {
-      return await fetch();
-    } catch {
-      // Report the first failure because it happened under normal conditions; the second attempt
-      // was a recovery probe and can obscure the original cause.
-      throw firstError;
-    }
-  }
-};
 
 // Fetch the editor's code without rendering it. Safe to call repeatedly: the browser and the module
 // registry both cache the result, so only the first call costs a request.
