@@ -10,7 +10,7 @@ import { Label } from "$app/components/ui/Label";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
-const MAX_ALLOWED_TAGS = 5;
+const MAX_ALLOWED_TAGS = 10;
 const MIN_TAG_LENGTH = 2;
 const MAX_TAG_LENGTH = 20;
 const clean = (tag: string) => tag.toLowerCase().replace(/^[#\s]+|,/gu, "");

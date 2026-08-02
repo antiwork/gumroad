@@ -2127,7 +2127,7 @@ describe Ai::StoreAgentService do
     end
 
     it "states the editor's product tag limits instead of leaving the model to guess" do
-      expect(prompt).to include("dashboard product editor lets creators add up to 5 tags per product")
+      expect(prompt).to include("dashboard product editor lets creators add up to 10 tags per product")
       expect(prompt).to include("each tag must be 2-20 characters")
       expect(prompt).to include("Existing products can have more tags")
       expect(prompt).to include("never state a different editor limit")
