@@ -55,12 +55,4 @@ class EmailInfo < ApplicationRecord
       sent_at
     end
   end
-
-  def unsubscribe_buyer
-    if charge_id
-      email_info_charge.charge.order.unsubscribe_buyer
-    else
-      purchase.orderable.unsubscribe_buyer
-    end
-  end
 end
