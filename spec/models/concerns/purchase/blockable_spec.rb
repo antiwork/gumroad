@@ -852,6 +852,111 @@ describe Purchase::Blockable do
             end.to_not change { PlatformBlock.count }
           end
         end
+
+        context "when the buyer has settled purchases from this same email and browser" do
+          before do
+            @guid = SecureRandom.hex
+            3.times do
+              create(:purchase, purchaser: @purchaser, email: @purchaser.email, browser_guid: @guid,
+                                purchase_state: "successful", price_cents: 500,
+                                created_at: (Purchase::Blockable::MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY + 1.day).ago)
+            end
+            3.times do |n|
+              create(:failed_purchase, purchaser: @purchaser, email: @purchaser.email, browser_guid: @guid,
+                                       stripe_fingerprint: SecureRandom.hex, created_at: n.days.ago)
+            end
+
+            @purchase = create(:purchase, purchaser: @purchaser, email: @purchaser.email, browser_guid: @guid,
+                                          purchase_state: "in_progress", stripe_fingerprint: SecureRandom.hex,
+                                          charge_processor_id: StripeChargeProcessor.charge_processor_id)
+          end
+
+          it "doesn't block the buyer's own identifiers" do
+            @purchase.mark_failed!
+
+            # The buyer-bound identifiers are what strand someone: email, browser guid and card
+            # blocks never expire. The IP rule is separate, shared between people, and does expire.
+            expect(PlatformBlock.pluck(:object_type)).to_not include("email", "browser_guid", "charge_processor_fingerprint")
+          end
+
+          it "doesn't block the browser guid on the lifetime-failure rule either" do
+            # #ban_fraudulent_buyer_browser_guid! counts failures with no time window at all and
+            # writes a guid block that never expires — the single row that leaves a buyer with no
+            # self-service route (gumroad-private#1701).
+            Purchase.failed.where(browser_guid: @guid).update_all(created_at: 2.years.ago)
+
+            @purchase.mark_failed!
+
+            expect(PlatformBlock.browser_guid.count).to eq 0
+          end
+
+          it "still blocks when the settled purchases are too recent to count" do
+            Purchase.successful.where(browser_guid: @guid).update_all(created_at: 1.day.ago)
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.count }.from(0).to(4)
+          end
+
+          it "still blocks when the settled purchases came from a different browser" do
+            Purchase.successful.where(browser_guid: @guid).update_all(browser_guid: SecureRandom.hex)
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.count }.from(0).to(4)
+          end
+
+          it "still blocks when the settled purchases were made under a different email" do
+            Purchase.successful.where(browser_guid: @guid).update_all(email: "someone-else@example.com")
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.count }.from(0).to(4)
+          end
+
+          it "still blocks when the settled purchases were all refunded" do
+            Purchase.successful.where(browser_guid: @guid).find_each { _1.update!(stripe_refunded: true) }
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.count }.from(0).to(4)
+          end
+
+          it "still blocks when the settled purchases were free" do
+            Purchase.successful.where(browser_guid: @guid).update_all(price_cents: 0)
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.count }.from(0).to(4)
+          end
+
+          it "still blocks when the settled purchases were charged back" do
+            Purchase.successful.where(browser_guid: @guid).update_all(chargeback_date: 1.month.ago)
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.count }.from(0).to(4)
+          end
+
+          it "still blocks when the buyer is one settled purchase short of the threshold" do
+            Purchase.successful.where(browser_guid: @guid).order(:id).first.destroy!
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.count }.from(0).to(4)
+          end
+
+          it "still blocks when neither the failing purchase nor the history carries a browser guid" do
+            # Without the blank check, a nil guid on both sides matches, collapsing the exemption
+            # to email alone for exactly the rows where device provenance is absent.
+            Purchase.successful.where(browser_guid: @guid).update_all(browser_guid: nil)
+            @purchase.update_columns(browser_guid: nil)
+
+            expect do
+              @purchase.mark_failed!
+            end.to change { PlatformBlock.email.count }.from(0).to(1)
+          end
+        end
       end
 
       context "when purchases with different cards fail from the same IP address" do

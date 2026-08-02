@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
+  RESERVED_AGENT_APP_NAME_ERROR = "That application name is reserved."
+
   protect_from_forgery
 
   include CsrfTokenInjector
@@ -24,6 +26,7 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
   def create
     @application = OauthApplication.new
     authorize([:settings, :authorized_applications, @application])
+    return reject_reserved_agent_application_name(settings_advanced_path) if reserved_agent_application_name?
 
     @application.name = @application_params[:name]
     @application.redirect_uri = @application_params[:redirect_uri]
@@ -58,6 +61,7 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
 
   def update
     authorize([:settings, :authorized_applications, @application])
+    return reject_reserved_agent_application_name(edit_oauth_application_path(@application.external_id)) if reserved_agent_application_name?
 
     @application.name = @application_params[:name] if @application_params[:name].present?
     @application.redirect_uri = @application_params[:redirect_uri] if @application_params[:redirect_uri].present?
@@ -108,5 +112,26 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
           redirect_to oauth_applications_url
         end
       end
+    end
+
+    # Ask the database, not Ruby. The adoption fingerprint matches `name` under utf8mb4_unicode_ci,
+    # which folds full-width forms and ignores zero-width characters — so a name Ruby's casecmp?
+    # considers different can still satisfy that fingerprint. Comparing with the same collation is
+    # what makes this check and the fingerprint agree.
+    def reserved_agent_application_name?
+      name = @application_params[:name].to_s.strip
+      return false if name.blank?
+
+      OauthApplication.connection.select_value(
+        OauthApplication.sanitize_sql_array(
+          ["SELECT ? = ? COLLATE utf8mb4_unicode_ci", name, Ai::StoreAgentApiClient::AGENT_APP_NAME]
+        )
+      ) == 1
+    end
+
+    def reject_reserved_agent_application_name(path)
+      redirect_to path,
+                  alert: RESERVED_AGENT_APP_NAME_ERROR,
+                  inertia: { errors: { base: [RESERVED_AGENT_APP_NAME_ERROR] } }
     end
 end

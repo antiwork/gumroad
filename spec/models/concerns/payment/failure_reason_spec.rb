@@ -11,7 +11,7 @@ describe Payment::FailureReason do
   # retry is a strictly stronger claim than explaining, so it must apply to strictly fewer codes.
   describe "TERMINAL_PAYPAL_FAILURE_REASONS" do
     it "explains both account-level rejections but only blocks retries on the unrepairable one" do
-      expect(described_class::EXPLAINED_PAYPAL_FAILURE_REASONS).to match_array(["PAYPAL 3148", "PAYPAL 14159"])
+      expect(described_class::EXPLAINED_PAYPAL_FAILURE_REASONS).to match_array(["PAYPAL 3148", "PAYPAL 14159", "PAYPAL 3015"])
 
       # 14159 — "your PayPal account cannot receive US dollars" — is explained but still retried,
       # because PayPal lets a recipient add receive currencies on the same account. The block is
@@ -203,6 +203,55 @@ describe Payment::FailureReason do
                 "receive US dollars, which you can change in your payout settings. " \
                 "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
               )
+            end
+
+            # gumroad-private#1661: the Russia cohort. The old copy sent them after a PayPal
+            # account registered in a receivable country, which is both the wrong diagnosis and,
+            # for much of that cohort, unfollowable.
+            it "tells a locked-account seller with no bank rail that we may have no way to pay them" do
+              switch_to_paypal_only_country
+
+              payment.mark_failed!("PAYPAL 3015")
+
+              solution = payment.reload.terminal_paypal_failure_seller_solution
+              expect(solution).to eq(
+                "Sign in to PayPal to see whether there are restrictions on your account, or contact PayPal to have them " \
+                "lifted. PayPal is the only payout method we can offer in your country, so if PayPal cannot restore your " \
+                "account and you do not have another one, we have no way to pay you right now. We hope to have a way to pay " \
+                "out your balance in the future. " \
+                "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+              )
+              expect(solution).to_not include("registered in a country that can receive PayPal payments")
+            end
+
+            it "offers the bank rail to a locked-account seller who has one" do
+              expect(payment.user.can_setup_bank_payouts?).to be(true)
+
+              payment.mark_failed!("PAYPAL 3015")
+
+              expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(
+                "Sign in to PayPal to see whether there are restrictions on your account, or contact PayPal to have them " \
+                "lifted. You can also add a bank account in your payout settings, or use a different PayPal account. " \
+                "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+              )
+            end
+
+            it "writes the locked-account explanation as a seller-visible note instead of a support-only one" do
+              expect do
+                payment.mark_failed!("PAYPAL 3015")
+              end.to change { payment.user.comments.count }.by(1)
+
+              note = payment.user.comments.last
+              expect(note.content).to include("your PayPal account is locked or inactive")
+              expect(note.content).to_not include("Solution: Log in to your PayPal account")
+            end
+
+            it "does not stop retrying a locked account, since only PayPal can unlock it" do
+              payment.mark_failed!("PAYPAL 3015")
+
+              expect(payment.reload.terminal_paypal_failure?).to be(false)
+              expect(payment.locked_account_paypal_failure?).to be(true)
+              expect(payment.explained_paypal_failure?).to be(true)
             end
 
             # The no-rail wording replaces the fix, not the pause disclosure: a hold is a separate

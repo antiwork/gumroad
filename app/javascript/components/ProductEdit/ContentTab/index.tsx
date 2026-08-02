@@ -35,6 +35,7 @@ import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/
 import {
   copyRichContentPages,
   prepareRichContentPagesForMove,
+  reconcileMountedEditorFileEmbedIds,
   reconcileMountedEditorFileEmbeds,
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
@@ -184,6 +185,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     uniquePermalink,
     filesById,
     richContentIdMappings,
+    fileIdMappings,
     richContentRemovedFileEmbedIds,
   } = useProductEditContext();
   const uid = React.useId();
@@ -343,6 +345,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
   const removedFileEmbedIds = removedFileEmbedIdsForPage(selectedPage, richContentRemovedFileEmbedIds);
+  React.useEffect(() => {
+    if (editor) reconcileMountedEditorFileEmbedIds(editor, fileIdMappings);
+  }, [editor, fileIdMappings]);
   React.useEffect(() => {
     if (editor && removedFileEmbedIds?.length) {
       // A save can remove a legacy file node from product state while this
@@ -656,8 +661,17 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         <Button
                           color="primary"
                           onClick={() => {
-                            updateProduct({ files: [...product.files, ...selectingExistingFiles.selected] });
-                            onSelectFiles(selectingExistingFiles.selected.map((file) => file.id));
+                            // A picked file already attached to this product is a deliberate
+                            // re-attach (e.g. embedding it on another version), so submit it
+                            // under a fresh client id: resending the row's canonical id would
+                            // resolve to the existing row on the server and no second row —
+                            // and no second embed target — would ever be created.
+                            const existingIds = new Set(product.files.map((file) => file.id));
+                            const selected = selectingExistingFiles.selected.map((file) =>
+                              existingIds.has(file.id) ? { ...file, id: FileUtils.generateGuid() } : file,
+                            );
+                            updateProduct({ files: [...product.files, ...selected] });
+                            onSelectFiles(selected.map((file) => file.id));
                             setSelectingExistingFiles(null);
                           }}
                         >

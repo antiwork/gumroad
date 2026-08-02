@@ -30,21 +30,49 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     end
 
     def usage_activity
-      if consumption_events.any?
-        generate_from_consumption_events
-      elsif url_redirect.present? && url_redirect.uses.to_i.positive?
-        generate_from_url_redirect
+      [
+        (generate_from_consumption_events if consumption_events.any?),
+        (generate_from_url_redirect if unlogged_url_redirect_uses.positive?),
+      ].compact.join("\n\n").presence
+    end
+
+    # The disputed row on a bundle sale is the wrapper, but access rows are written against the
+    # member purchases the buyer actually downloads. Both are counted: the wrapper's own download
+    # page still increments when no member is library-visible.
+    def access_purchases
+      @_access_purchases ||= if bundle?
+        [purchase, *purchase.product_purchases.includes(:link, :url_redirect)]
       else
-        nil
+        [purchase]
       end
     end
 
+    def bundle?
+      purchase.is_bundle_purchase?
+    end
+
     def consumption_events
-      @_consumption_events ||= purchase.consumption_events.order(:consumed_at, :id)
+      @_consumption_events ||= ConsumptionEvent
+        .where(purchase_id: access_purchases.map(&:id))
+        .order(:consumed_at, :id)
+    end
+
+    # A purchase's uses counter and its consumption events describe overlapping accesses, so only
+    # event-less purchases contribute here — the old fallback, applied per purchase.
+    def unlogged_url_redirect_uses
+      @_unlogged_url_redirect_uses ||= begin
+        event_logged_ids = consumption_events.map(&:purchase_id).to_set
+        access_purchases.reject { event_logged_ids.include?(_1.id) }.sum { _1.url_redirect&.uses.to_i }
+      end
     end
 
     def generate_from_url_redirect
-      "The customer accessed the product #{url_redirect.uses} #{"time".pluralize(url_redirect.uses)}."
+      uses = unlogged_url_redirect_uses
+      if consumption_events.any?
+        "The customer accessed the product #{uses} more #{"time".pluralize(uses)}."
+      else
+        "The customer accessed the product #{uses} #{"time".pluralize(uses)}."
+      end
     end
 
     LOG_RECORDS_LIMIT = 10
@@ -57,14 +85,31 @@ class DisputeEvidence::GenerateAccessActivityLogsService
       ].flatten.join("\n")
     end
 
+    BASE_ROW_ATTRIBUTES = %w(consumed_at event_type platform ip_address).freeze
+
     def consumption_event_row_attributes
-      %w(consumed_at event_type platform ip_address)
+      BASE_ROW_ATTRIBUTES + (bundle? ? ["product"] : [])
     end
 
     def consumption_event_rows
-      consumption_events.first(LOG_RECORDS_LIMIT).map do
-        _1.slice(*consumption_event_row_attributes).values.join(",")
+      consumption_events.last(LOG_RECORDS_LIMIT).map do |event|
+        row = event.slice(*BASE_ROW_ATTRIBUTES).values
+        row += [product_name_for(event)] if bundle?
+        row.join(",")
       end
+    end
+
+    # Quoted because product names routinely contain commas; embedded quotes are doubled per CSV
+    # convention rather than rewritten, since this is evidence and the name must stay verbatim.
+    def product_name_for(event)
+      name = purchase_names_by_id[event.purchase_id]
+      return "" if name.blank?
+
+      "\"#{name.gsub("\"", "\"\"").gsub(/[\r\n]+/, " ")}\""
+    end
+
+    def purchase_names_by_id
+      @_purchase_names_by_id ||= access_purchases.index_by(&:id).transform_values { _1.link&.name }
     end
 
     def consumption_events_intro

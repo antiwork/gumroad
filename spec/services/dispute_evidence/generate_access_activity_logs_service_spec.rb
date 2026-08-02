@@ -164,14 +164,12 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
             end
           end
 
-          it "limits content to the last 10 events" do
+          it "includes the most recent 10 events, still in chronological order" do
             expect(usage_activity).to eq(
               <<~TEXT.strip_heredoc.rstrip
               The customer accessed the product 12 times. Most recent 10 log records:
 
               consumed_at,event_type,platform,ip_address
-              2024-05-06 09:00:00 UTC,download,web,0.0.0.0
-              2024-05-06 15:00:00 UTC,watch,iphone,0.0.0.0
               2024-05-06 16:00:00 UTC,watch,iphone,0.0.0.0
               2024-05-06 17:00:00 UTC,watch,iphone,0.0.0.0
               2024-05-06 18:00:00 UTC,watch,iphone,0.0.0.0
@@ -180,8 +178,18 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
               2024-05-06 21:00:00 UTC,watch,iphone,0.0.0.0
               2024-05-06 22:00:00 UTC,watch,iphone,0.0.0.0
               2024-05-06 23:00:00 UTC,watch,iphone,0.0.0.0
+              2024-05-07 00:00:00 UTC,watch,web,0.0.0.0
+              2024-05-07 00:00:00 UTC,watch,iphone,0.0.0.0
               TEXT
             )
+          end
+
+          # The header's claim is the whole point of the fix: the two oldest accesses must be the
+          # ones dropped, never the most recent, which are what rebut a "never used it" dispute.
+          it "drops the oldest events rather than the newest" do
+            expect(usage_activity).to include("2024-05-07 00:00:00 UTC,watch,iphone")
+            expect(usage_activity).not_to include("2024-05-06 09:00:00 UTC,download,web")
+            expect(usage_activity).not_to include("2024-05-06 15:00:00 UTC,watch,iphone")
           end
         end
       end
@@ -257,7 +265,7 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
       end
 
       context "when the email info is associated with a charge" do
-        let(:charge) { create(:charge, purchases: [purchase], seller:) }
+        let(:charge) { create(:charge, purchases: [purchase], seller:, merchant_account: nil) }
         let(:order) { charge.order }
 
         before do
@@ -280,6 +288,120 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
           )
         end
       end
+    end
+  end
+
+  # Access rows are written against the member purchases the buyer downloads, not the disputed
+  # wrapper.
+  describe "bundle purchases" do
+    let(:bundle_purchase) { create(:purchase, link: create(:product, :bundle, user: seller), is_bundle_purchase: true) }
+    let(:member_product) { create(:product, user: seller, name: "Member One") }
+    let(:member_purchase) do
+      create(:purchase, link: member_product, seller:, email: bundle_purchase.email, is_bundle_product_purchase: true)
+    end
+
+    before do
+      create(:bundle_product_purchase, bundle_purchase:, product_purchase: member_purchase)
+    end
+
+    it "reports consumption events recorded against the member purchases" do
+      create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "1.2.3.4")
+
+      expect(described_class.perform(bundle_purchase)).to eq(
+        <<~TEXT.strip_heredoc.rstrip
+        The customer accessed the product 1 time.
+
+        consumed_at,event_type,platform,ip_address,product
+        2024-05-08 00:00:00 UTC,watch,web,1.2.3.4,"Member One"
+        TEXT
+      )
+    end
+
+    it "returns nil when neither the wrapper nor members have access" do
+      expect(described_class.perform(bundle_purchase)).to be_nil
+    end
+
+    it "counts url_redirect uses on the wrapper and members when there are no consumption events" do
+      bundle_purchase.create_url_redirect!
+      bundle_purchase.url_redirect.update!(uses: 2)
+      member_purchase.create_url_redirect!
+      member_purchase.url_redirect.update!(uses: 7)
+
+      expect(described_class.perform(bundle_purchase)).to eq("The customer accessed the product 9 times.")
+    end
+
+    it "reports a redirect-only member's uses alongside another member's consumption events" do
+      second_member = create(:purchase, link: create(:product, user: seller, name: "Member Two"), seller:, email: bundle_purchase.email, is_bundle_product_purchase: true)
+      create(:bundle_product_purchase, bundle_purchase:, product_purchase: second_member)
+      create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "1.2.3.4")
+      second_member.create_url_redirect!
+      second_member.url_redirect.update!(uses: 5)
+
+      content = described_class.perform(bundle_purchase)
+
+      expect(content).to include("The customer accessed the product 1 time.")
+      expect(content).to include("The customer accessed the product 5 more times.")
+    end
+
+    it "does not recount uses on a member whose accesses are already event-logged" do
+      create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "1.2.3.4")
+      member_purchase.create_url_redirect!
+      member_purchase.url_redirect.update!(uses: 3)
+
+      content = described_class.perform(bundle_purchase)
+
+      expect(content).to include("The customer accessed the product 1 time.")
+      expect(content).to_not include("more time")
+    end
+
+    it "orders the merged wrapper and member events by time" do
+      create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-09"), ip_address: "9.9.9.9")
+      create(:consumption_event, purchase_id: bundle_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "8.8.8.8")
+
+      rows = described_class.perform(bundle_purchase).lines.grep(/\d+\.\d+\.\d+\.\d+/)
+
+      expect(rows.first).to include("8.8.8.8")
+      expect(rows.last).to include("9.9.9.9")
+      expect(described_class.perform(bundle_purchase)).to include("The customer accessed the product 2 times.")
+    end
+
+    it "limits bundle consumption rows after merging member events by time" do
+      second_member = create(:purchase, link: create(:product, user: seller, name: "Member Two"), seller:, email: bundle_purchase.email, is_bundle_product_purchase: true)
+      create(:bundle_product_purchase, bundle_purchase:, product_purchase: second_member)
+      consumed_at = DateTime.parse("2024-05-08")
+
+      12.times do |i|
+        create(
+          :consumption_event,
+          purchase_id: i.even? ? member_purchase.id : second_member.id,
+          consumed_at: consumed_at + i.minutes,
+          ip_address: "10.0.0.#{i}"
+        )
+      end
+
+      content = described_class.perform(bundle_purchase)
+      rows = content.lines.grep(/10\.0\.0\./).map(&:strip)
+      # Events 0 and 1 are the oldest of the twelve, so the most-recent window is 2..11.
+      expected_rows = (2..11).map do |i|
+        product_name = i.even? ? "Member One" : "Member Two"
+        "2024-05-08 00:#{format('%02d', i)}:00 UTC,watch,web,10.0.0.#{i},\"#{product_name}\""
+      end
+
+      expect(content).to include("The customer accessed the product 12 times. Most recent 10 log records:")
+      expect(rows).to eq(expected_rows)
+    end
+
+    it "leaves non-bundle output byte-identical" do
+      create(:consumption_event, purchase_id: purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "0.0.0.0")
+
+      expect(described_class.perform(purchase)).to eq(
+        <<~TEXT.strip_heredoc.rstrip
+        The customer accessed the product 1 time.
+
+        consumed_at,event_type,platform,ip_address
+        2024-05-08 00:00:00 UTC,watch,web,0.0.0.0
+        TEXT
+      )
     end
   end
 end

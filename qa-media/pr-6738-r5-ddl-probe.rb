@@ -2,6 +2,8 @@
 
 # r5 probe: the re-arming head 93b500669 is a main merge + a THIRD migration renumber
 # (20261206000023 -> 20261206000025, dodging main's create_product_permalink_redirects at ...024).
+# A later main merge forced a FOURTH renumber to 20261206000027, because main's
+# add_is_first_party_agent_app_to_oauth_applications claimed ...025 outright.
 # The whole point of that commit is that the five credit_cards columns must actually exist in the
 # DDL. Read connection.columns, never schema_migrations (which can record a migration whose DDL
 # never ran).
@@ -21,7 +23,7 @@ raise "ABORT missing credit_cards columns: #{want.reject { |c| cols.include?(c) 
 # The renumber's stated hazard: schema_migrations recording the version without the DDL.
 vers = conn.select_values("SELECT version FROM schema_migrations WHERE version LIKE '202612060000%' ORDER BY version")
 puts "MARK schema_migrations_2026120600=#{vers.join(',')}"
-puts "MARK has_025=#{vers.include?('20261206000025')} has_024=#{vers.include?('20261206000024')} has_023=#{vers.include?('20261206000023')}"
+puts "MARK has_027=#{vers.include?('20261206000027')} has_025=#{vers.include?('20261206000025')} has_024=#{vers.include?('20261206000024')} has_023=#{vers.include?('20261206000023')}"
 
 # main's ...024 companion table must also really exist (same hazard, other direction).
 puts "MARK product_permalink_redirects_table=#{conn.table_exists?('product_permalink_redirects')}"

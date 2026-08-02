@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -99,11 +99,11 @@ const expand = (prefixes, values, withVariants = false) => {
   }
 };
 
-expand(
-  ["p", "px", "py", "pt", "pr", "pb", "pl", "m", "mx", "my", "mt", "mr", "mb", "ml", "gap", "gap-x", "gap-y"],
-  spacing,
-  true,
-);
+expand(["p", "px", "py", "pt", "pr", "pb", "pl", "gap", "gap-x", "gap-y"], spacing, true);
+// Margins take `auto` as well as the numeric steps: centering a fixed-width block with
+// `mx-auto` is the most common layout move on a custom page, and omitting it silently
+// left 2,895 live pages referencing a class that compiled to nothing.
+expand(["m", "mx", "my", "mt", "mr", "mb", "ml"], [...spacing, "auto"], true);
 expand(["-m", "-mx", "-my", "-mt", "-mr", "-mb", "-ml"], spacing, true);
 expand(["w", "h", "min-w", "min-h", "max-w", "max-h"], [...spacing, ...sizeKeywords, "none", "7xl"], true);
 expand(
@@ -131,6 +131,14 @@ for (const color of colors) {
   }
 }
 expand(["bg", "text", "border", "ring", "outline", "from", "via", "to"], colorKeywords, true);
+
+// The `from-*`/`via-*`/`to-*` stops above only set custom properties; the direction
+// utility is what reads them into an actual `linear-gradient`. Without it a gradient
+// paints nothing, and `text-transparent bg-clip-text` — the standard gradient-headline
+// recipe — renders the headline invisible. Both spellings ship: `bg-linear-*` is the
+// v4 name, `bg-gradient-*` the v3 one that pages authored against older docs still use.
+expand(["bg-linear-to", "bg-gradient-to"], ["t", "tr", "r", "br", "b", "bl", "l", "tl"], true);
+addWithVariants("bg-clip-text", "bg-clip-border", "bg-clip-padding", "bg-clip-content");
 
 addWithVariants(
   "container",
@@ -290,39 +298,54 @@ addWithVariants(
   "tracking-[-0.03em]",
 );
 
-mkdirSync(dirname(sourcePath), { recursive: true });
-mkdirSync(dirname(outputPath), { recursive: true });
-writeFileSync(sourcePath, `<div class="${[...classes].sort().join(" ")}"></div>\n`);
+// Exported so a test can assert the class list contains the utilities pages depend on.
+// A missing utility is invisible at build time — Tailwind compiles whatever it is handed —
+// so the only place the omission can be caught is here, against the enumerated set.
+export const pagesTailwindClasses = classes;
 
-const result = spawnSync(tailwindBin, ["-i", inputPath, "-o", outputPath, "--minify"], {
-  cwd: root,
-  stdio: "inherit",
-});
+// Importing this file must not build anything; only running it directly should.
+// Both sides are realpath'd: Node realpaths import.meta.url but leaves an absolute
+// argv[1] as given, so any symlink in the path (macOS /tmp, a release `current`)
+// would otherwise silently skip the build and exit 0.
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === fileURLToPath(import.meta.url)) {
+  build();
+}
 
-if (result.status !== 0) process.exit(result.status ?? 1);
+function build() {
+  mkdirSync(dirname(sourcePath), { recursive: true });
+  mkdirSync(dirname(outputPath), { recursive: true });
+  writeFileSync(sourcePath, `<div class="${[...classes].sort().join(" ")}"></div>\n`);
 
-// The build is ~4.9 MB, so pages link to it as an external stylesheet instead
-// of inlining it into every response. For that link to be cacheable forever
-// (and safe across deploys), publish a copy whose filename carries a content
-// hash, plus a manifest the Rails side reads to know the current filename.
-// public/assets/pages/ is synced to the asset CDN with immutable cache
-// headers at deploy time; public/pages-tailwind.css stays as the
-// un-fingerprinted fallback for checkouts that predate the manifest.
-// The assets/ prefix is deliberate: it's the bucket prefix the deploy's
-// S3 credentials are already authorized to write (a top-level pages/
-// prefix was tried first and failed the production asset sync with
-// AccessDenied, breaking the deploy).
-const css = readFileSync(outputPath);
-const digest = createHash("sha256").update(css).digest("hex").slice(0, 12);
-const fingerprintedDir = resolve(root, "public/assets/pages");
-const fingerprintedName = `pages-tailwind-${digest}.css`;
-// Drop stale hashes locally so the directory only ever holds the current
-// build. The CDN sync doesn't delete, so previously deployed hashes keep
-// resolving for pages served by not-yet-restarted processes during a deploy.
-rmSync(fingerprintedDir, { recursive: true, force: true });
-mkdirSync(fingerprintedDir, { recursive: true });
-copyFileSync(outputPath, resolve(fingerprintedDir, fingerprintedName));
-writeFileSync(
-  resolve(root, "public/pages-tailwind-manifest.json"),
-  `${JSON.stringify({ "pages-tailwind.css": `assets/pages/${fingerprintedName}` })}\n`,
-);
+  const result = spawnSync(tailwindBin, ["-i", inputPath, "-o", outputPath, "--minify"], {
+    cwd: root,
+    stdio: "inherit",
+  });
+
+  if (result.status !== 0) process.exit(result.status ?? 1);
+
+  // The build is ~4.9 MB, so pages link to it as an external stylesheet instead
+  // of inlining it into every response. For that link to be cacheable forever
+  // (and safe across deploys), publish a copy whose filename carries a content
+  // hash, plus a manifest the Rails side reads to know the current filename.
+  // public/assets/pages/ is synced to the asset CDN with immutable cache
+  // headers at deploy time; public/pages-tailwind.css stays as the
+  // un-fingerprinted fallback for checkouts that predate the manifest.
+  // The assets/ prefix is deliberate: it's the bucket prefix the deploy's
+  // S3 credentials are already authorized to write (a top-level pages/
+  // prefix was tried first and failed the production asset sync with
+  // AccessDenied, breaking the deploy).
+  const css = readFileSync(outputPath);
+  const digest = createHash("sha256").update(css).digest("hex").slice(0, 12);
+  const fingerprintedDir = resolve(root, "public/assets/pages");
+  const fingerprintedName = `pages-tailwind-${digest}.css`;
+  // Drop stale hashes locally so the directory only ever holds the current
+  // build. The CDN sync doesn't delete, so previously deployed hashes keep
+  // resolving for pages served by not-yet-restarted processes during a deploy.
+  rmSync(fingerprintedDir, { recursive: true, force: true });
+  mkdirSync(fingerprintedDir, { recursive: true });
+  copyFileSync(outputPath, resolve(fingerprintedDir, fingerprintedName));
+  writeFileSync(
+    resolve(root, "public/pages-tailwind-manifest.json"),
+    `${JSON.stringify({ "pages-tailwind.css": `assets/pages/${fingerprintedName}` })}\n`,
+  );
+}

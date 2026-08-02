@@ -2029,6 +2029,31 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_response :success
   end
 
+  test "PUT update re-denominates membership tier prices when the editor changes display currency" do
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller, price_currency_type: "usd")
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      price_currency_type: "eur",
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 } } },
+        { id: second_tier.external_id, name: second_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    }, format: :json
+
+    assert_response :success
+    assert_equal "eur", product.reload.price_currency_type
+    assert_equal 300, first_tier.reload.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+    assert_equal 500, second_tier.reload.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+  end
+
   test "PUT update rejects a stale tier save that would re-enable a recurrence another session turned off" do
     enforce_stale_content_block!
     # Both tiers carry the same set of recurrences — the editor enforces that,
@@ -3292,6 +3317,158 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
   def files_data_from_urls(urls)
     urls.map { { id: SecureRandom.uuid, url: _1 } }
+  end
+
+  def stub_s3_etags(etags_by_key)
+    requested_keys = []
+    s3_object = Struct.new(:etag)
+    bucket = Object.new
+    bucket.define_singleton_method(:object) do |key|
+      requested_keys << key
+      s3_object.new(etags_by_key.fetch(key))
+    end
+    resource = Object.new
+    resource.define_singleton_method(:bucket) do |bucket_name|
+      raise "Unexpected bucket #{bucket_name}" unless bucket_name == S3_BUCKET
+
+      bucket
+    end
+    Aws::S3::Resource.stubs(:new).returns(resource)
+    requested_keys
+  end
+
+  def s3_key_for(url)
+    ProductFile.new(url:).s3_key
+  end
+
+  def clear_setup_files
+    @product.product_files.alive.each(&:mark_deleted!)
+    @product.cached_alive_product_files = nil
+  end
+
+  test "PUT update reuses the same file row across repeated identical editor retry requests" do
+    Feature.activate_user(Product::SaveContract::FEATURE_NAME, @seller)
+    clear_setup_files
+    rich_content = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph" }])
+    url = "#{S3_BASE_URL}attachments/retry/original/guide.pdf"
+
+    5.times do
+      temporary_id = SecureRandom.uuid
+      post :update, params: @params.merge(
+        files: [{ id: temporary_id, url:, size: 123 }],
+        rich_content: [{ id: rich_content.external_id, title: "Files", description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: temporary_id, uid: SecureRandom.uuid } }] } }]
+      ), format: :json
+
+      assert_response :success
+      product_file = @product.product_files.alive.sole
+      assert_equal product_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
+      assert_equal [product_file.id], rich_content.reload.embedded_product_file_ids_in_order
+    end
+
+    assert_equal 1, @product.product_files.alive.count
+  end
+
+  test "PUT update returns file id mappings and a consecutive save without reload reuses the file row" do
+    Feature.activate_user(Product::SaveContract::FEATURE_NAME, @seller)
+    clear_setup_files
+    rich_content = create_product_rich_content(entity: @product, description: [{ "type" => "paragraph" }])
+    url = "#{S3_BASE_URL}attachments/consecutive/original/guide.pdf"
+    temporary_id = SecureRandom.uuid
+
+    post :update, params: @params.merge(
+      files: [{ id: temporary_id, url:, size: 123 }],
+      rich_content: [{ id: rich_content.external_id, title: "Files", description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: temporary_id, uid: "file-uid" } }] } }]
+    ), format: :json
+
+    assert_response :success
+    product_file = @product.product_files.alive.sole
+    canonical_id = response.parsed_body.dig("file_id_mappings", temporary_id)
+    assert_equal product_file.external_id, canonical_id
+
+    post :update, params: @params.merge(
+      files: [{ id: canonical_id, url:, size: 123 }],
+      rich_content: [{ id: rich_content.external_id, title: "Files", description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: canonical_id, uid: "file-uid" } }] } }]
+    ), format: :json
+
+    assert_response :success
+    assert_equal [product_file.id], @product.reload.product_files.alive.ids
+    assert_equal [product_file.id], rich_content.reload.embedded_product_file_ids_in_order
+  end
+
+  test "PUT update dedupes different urls when S3 ETag and size match" do
+    clear_setup_files
+    original_url = "#{S3_BASE_URL}attachments/fingerprint/original/guide.pdf"
+    retried_url = "#{S3_BASE_URL}attachments/fingerprint-retry/original/guide.pdf"
+    product_file = create_product_file(link: @product, url: original_url, size: 123, display_name: "Guide")
+    temporary_id = SecureRandom.uuid
+    requested_keys = stub_s3_etags(
+      s3_key_for(original_url) => "\"same-etag\"",
+      s3_key_for(retried_url) => "\"same-etag\"",
+    )
+
+    assert_no_difference -> { @product.product_files.alive.count } do
+      post :update, params: @params.merge(
+        files: [
+          { id: temporary_id, url: retried_url, size: 123, display_name: "Guide" },
+        ]
+      ), format: :json
+    end
+
+    assert_response :success
+    assert_equal product_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
+    assert_includes requested_keys, s3_key_for(original_url)
+    assert_includes requested_keys, s3_key_for(retried_url)
+  end
+
+  test "PUT update keeps same-name same-size files with different S3 fingerprints separate" do
+    clear_setup_files
+    original_url = "#{S3_BASE_URL}attachments/fingerprint-a/original/guide.pdf"
+    new_url = "#{S3_BASE_URL}attachments/fingerprint-b/original/guide.pdf"
+    product_file = create_product_file(link: @product, url: original_url, size: 123, display_name: "Guide")
+    temporary_id = SecureRandom.uuid
+    requested_keys = stub_s3_etags(
+      s3_key_for(original_url) => "\"first-etag\"",
+      s3_key_for(new_url) => "\"second-etag\"",
+    )
+
+    assert_difference -> { @product.product_files.alive.count }, 1 do
+      post :update, params: @params.merge(
+        files: [
+          { id: product_file.external_id, url: original_url, size: 123, display_name: "Guide" },
+          { id: temporary_id, url: new_url, size: 123, display_name: "Guide" },
+        ]
+      ), format: :json
+    end
+
+    assert_response :success
+    new_file = @product.product_files.alive.find_by!(url: new_url)
+    assert_equal new_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
+    assert_not_equal product_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
+    # The payload names the original by its canonical id, so it is excluded
+    # from the candidate pool and never fingerprinted.
+    assert_not_includes requested_keys, s3_key_for(original_url)
+  end
+
+  test "PUT update keeps a deliberate second embed of an already-attached url" do
+    clear_setup_files
+    url = "#{S3_BASE_URL}attachments/deliberate/original/guide.pdf"
+    product_file = create_product_file(link: @product, url:, size: 123, display_name: "Guide")
+    temporary_id = SecureRandom.uuid
+
+    # The "Existing product files" picker names the canonical row AND adds a
+    # second entry for the same url. A retry can never name an id the client
+    # never received, so naming it means the seller wants both rows.
+    assert_difference -> { @product.product_files.alive.count }, 1 do
+      post :update, params: @params.merge(
+        files: [
+          { id: product_file.external_id, url:, size: 123, display_name: "Guide" },
+          { id: temporary_id, url:, size: 123, display_name: "Guide" },
+        ]
+      ), format: :json
+    end
+
+    assert_response :success
+    assert_not_equal product_file.external_id, response.parsed_body.dig("file_id_mappings", temporary_id)
   end
 
   test "PUT update preserves correct s3 key for s3 files containing percent and ampersand" do

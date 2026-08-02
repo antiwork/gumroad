@@ -52,7 +52,7 @@ import FileUtils from "$app/utils/file";
 import { priceCentsToUnit } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
-import { assertResponseError } from "$app/utils/request";
+import { assertResponseError, ResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -2224,6 +2224,10 @@ const CommissionSection = ({
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
 
+  // Server-provided rather than derived from status: a completion charge that is still settling
+  // leaves the commission in_progress, but the server already refuses file changes.
+  const filesAreEditable = commission.files_are_editable;
+
   const handleFileChange = asyncVoid(async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files?.length) return;
 
@@ -2264,8 +2268,11 @@ const CommissionSection = ({
       });
 
       showAlert("Uploaded successfully!", "success");
-    } catch {
-      showAlert("Error uploading files. Please try again.", "error");
+    } catch (e) {
+      // DirectUpload rejects with a plain Error, so this cannot use assertResponseError — that
+      // re-throws anything that is not a ResponseError and the seller would see no alert at all.
+      const message = e instanceof ResponseError && e.message ? e.message : "Error uploading files. Please try again.";
+      showAlert(message, "error");
     } finally {
       setIsLoading(false);
     }
@@ -2295,7 +2302,7 @@ const CommissionSection = ({
     try {
       setIsLoading(true);
       await completeCommission(commission.id);
-      onChange({ ...commission, status: "completed" });
+      onChange({ ...commission, status: "completed", files_are_editable: false });
       showAlert("Commission completed!", "success");
     } catch (e) {
       assertResponseError(e);
@@ -2317,30 +2324,37 @@ const CommissionSection = ({
           <CardContent>
             <Rows role="list">
               {commission.files.map((file) => (
-                <FileRow key={file.id} file={file} onDelete={() => void handleDelete(file.id)} disabled={isLoading} />
+                <FileRow
+                  key={file.id}
+                  file={file}
+                  {...(filesAreEditable ? { onDelete: () => void handleDelete(file.id) } : {})}
+                  disabled={isLoading}
+                />
               ))}
             </Rows>
           </CardContent>
         ) : null}
-        <CardContent>
-          <div className="grid w-full gap-2">
-            <label className={buttonVariants({ className: "w-full" })}>
-              <input
-                type="file"
-                onChange={handleFileChange}
-                disabled={isLoading}
-                multiple
-                style={{ display: "none" }}
-              />
-              <Paperclip className="size-5" /> Upload files
-            </label>
-            {commission.status === "in_progress" ? (
-              <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()} className="w-full">
-                Submit and mark as complete
-              </Button>
-            ) : null}
-          </div>
-        </CardContent>
+        {filesAreEditable ? (
+          <CardContent>
+            <div className="grid w-full gap-2">
+              <label className={buttonVariants({ className: "w-full" })}>
+                <input
+                  type="file"
+                  onChange={handleFileChange}
+                  disabled={isLoading}
+                  multiple
+                  style={{ display: "none" }}
+                />
+                <Paperclip className="size-5" /> Upload files
+              </label>
+              {commission.status === "in_progress" ? (
+                <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()} className="w-full">
+                  Submit and mark as complete
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        ) : null}
       </section>
     </Card>
   );

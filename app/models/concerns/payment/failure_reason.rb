@@ -15,6 +15,7 @@ module Payment::FailureReason
   PROCESSOR_UNAVAILABLE = "processor_unavailable"
   UNREVERSED_INTERNAL_TRANSFER = "unreversed_internal_transfer"
   PAYOUT_OUTCOME_UNKNOWN = "payout_outcome_unknown"
+  DESTINATION_LEDGER_NEGATIVE = "destination_ledger_negative"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
   # Failures caused by us or by the processor being unreachable, never by the seller's payout
@@ -35,6 +36,14 @@ module Payment::FailureReason
   # which is what actually holds the balance until a human reconciles against Stripe.
   UNACCOUNTED_MONEY_REASONS = [UNREVERSED_INTERNAL_TRANSFER, PAYOUT_OUTCOME_UNKNOWN].freeze
 
+  # Failures we raise about our OWN books, before Stripe is asked for anything. Like
+  # TRANSIENT_REASONS they must not count toward MAX_CONSECUTIVE_FAILED_PAYOUTS — a payout we
+  # refused says nothing about the seller's bank account, and pausing them for it points support
+  # at the wrong component. Unlike TRANSIENT_REASONS they DO get a STRIPE_FAILURE_SOLUTIONS entry:
+  # the seller cannot fix this, so the one useful thing we can tell them is to contact Support
+  # rather than re-entering correct bank details.
+  INTERNAL_RECONCILIATION_REASONS = [DESTINATION_LEDGER_NEGATIVE].freeze
+
   # The subset an automated requeue may re-issue: failures raised before Stripe could accept
   # anything, so re-issuing cannot duplicate money.
   REQUEUEABLE_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE].freeze
@@ -45,8 +54,11 @@ module Payment::FailureReason
   # receive US dollars, and Gumroad always pays PayPal out in USD.
   #
   # Everything else in PAYPAL_MASS_PAY stays a support-only note. In particular a locked or inactive
-  # receiving account (3015) and a declined transaction (9302) are deliberately NOT here: those are
-  # about one attempt, not about what the seller holds.
+  # receiving account (3015) is here as of gumroad-private#1661: it looked like a one-attempt
+  # failure, but for the 2,152 Russia-KYC sellers holding $173K it is the permanent state of the
+  # account, and the repeated-failure pause (Payment#pause_payouts_after_repeated_failures) stops
+  # their payouts after three tries WITHOUT telling them anything at all. A declined transaction
+  # (9302) is still deliberately absent: that one really is about a single attempt.
   #
   # The keys are the rejections; the values are what the seller is told about each. Written in the
   # second person because, unlike every other PayPal failure note, these are shown to the seller:
@@ -54,6 +66,7 @@ module Payment::FailureReason
   EXPLAINED_PAYPAL_FAILURE_SELLER_REASONS = {
     "PAYPAL 3148" => "PayPal will not send payouts to your PayPal account, because payments cannot be received in the country on that account's address",
     "PAYPAL 14159" => "PayPal will not send your payout, because your PayPal account cannot receive US dollars",
+    "PAYPAL 3015" => "PayPal will not send your payout, because your PayPal account is locked or inactive",
   }.freeze
 
   # Which of those rejections additionally STOP the weekly retry.
@@ -98,6 +111,25 @@ module Payment::FailureReason
   # retried, and the seller-facing copy has to offer the in-place fix rather than only telling them
   # to find another account.
   REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS = ["PAYPAL 14159"].freeze
+
+  # Rejections that are a property of the RECEIVING ACCOUNT'S STATE rather than of its country or
+  # its currencies. PayPal has locked or deactivated the account; only PayPal can unlock it, and
+  # nothing in the seller's Gumroad payout settings changes the outcome.
+  #
+  # Kept out of RETRY_BLOCKING deliberately. An unlocked account starts receiving again, and an
+  # address-keyed block would never notice — the same argument that keeps 14159 retried. What
+  # actually stops the retries here is the generic repeated-failure pause, at three consecutive
+  # failures to the same address.
+  #
+  # It also gets its own fix copy, because the generic PayPal-only wording tells the seller to go
+  # find a PayPal account in a country that can receive payments — advice that is both wrong (the
+  # country is not the problem) and, for the Russia cohort in gumroad-private#1661, unfollowable.
+  LOCKED_ACCOUNT_PAYPAL_FAILURE_REASONS = ["PAYPAL 3015"].freeze
+
+  # A locked account is by definition repairable — by PayPal — so blocking retries on it would
+  # freeze a seller out the moment PayPal restores them.
+  raise "a locked-account rejection must stay retryable" unless
+    (LOCKED_ACCOUNT_PAYPAL_FAILURE_REASONS & RETRY_BLOCKING_PAYPAL_FAILURE_REASONS).empty?
 
   # Every code that stops the retries must also have seller-facing wording, because the payout walk
   # looks that wording up by code (Payment#terminal_paypal_failure_seller_note) while deciding
@@ -144,6 +176,9 @@ module Payment::FailureReason
     ].freeze,
     "PAYPAL 14159" => [
       "PayPal will not send your payout, because your PayPal account cannot receive US dollars",
+    ].freeze,
+    "PAYPAL 3015" => [
+      "PayPal will not send your payout, because your PayPal account is locked or inactive",
     ].freeze,
   }.freeze
 
@@ -236,6 +271,23 @@ module Payment::FailureReason
     "method we can offer in your country, so the alternative is to use a different PayPal account that can " \
     "receive US dollars, which you can change in your payout settings."
 
+  # For a locked or inactive receiving account. Only PayPal can lift that, so the first step is
+  # always PayPal rather than anything in our settings.
+  TERMINAL_PAYPAL_FAILURE_SELLER_FIX_LOCKED_ACCOUNT_WITH_BANK =
+    "Sign in to PayPal to see whether there are restrictions on your account, or contact PayPal to have them " \
+    "lifted. You can also add a bank account in your payout settings, or use a different PayPal account."
+  # Said where PayPal is the only rail Gumroad offers in the seller's country AND that PayPal
+  # account is locked. This is the dead end in gumroad-private#1661: telling this seller to "use a
+  # PayPal account registered in a country that can receive payments" is an instruction with no
+  # action behind it, because the country was never the problem and, for much of this cohort,
+  # there is no second PayPal account to go get. So we say plainly that we may have no way to pay
+  # them, and that we hope to have one — rather than sending them after a fix that does not exist.
+  TERMINAL_PAYPAL_FAILURE_SELLER_FIX_LOCKED_ACCOUNT_PAYPAL_ONLY =
+    "Sign in to PayPal to see whether there are restrictions on your account, or contact PayPal to have them " \
+    "lifted. PayPal is the only payout method we can offer in your country, so if PayPal cannot restore your " \
+    "account and you do not have another one, we have no way to pay you right now. We hope to have a way to pay " \
+    "out your balance in the future."
+
   # What happens after they fix it. Three consecutive failed payouts to the same destination trip
   # an automatic hold on the whole account (Payment#pause_payouts_after_repeated_failures), and
   # sellers here have failed dozens of times, so many are already holding one. That hold is checked
@@ -317,10 +369,6 @@ module Payment::FailureReason
       reason: "per-transaction sending limit exceeded",
       solution: "Contact PayPal to get receiving limit on the account increased. If that's not possible, Gumroad can split their payout, please contact Gumroad Support"
     },
-    "PAYPAL 3015" => {
-      reason: "receiver's account is locked or inactive",
-      solution: "Log in to your PayPal account and ensure there are no restrictions on it, or contact PayPal Support for more information"
-    },
     "PAYPAL 8330" => {
       reason: "receiving limit exceeded",
       solution: "Reach out to PayPal support"
@@ -364,6 +412,10 @@ module Payment::FailureReason
     "currency_mismatch" => {
       reason: "a leftover balance held in a currency that no longer matches the payout account is blocking this payout",
       solution: "Gumroad needs to reconcile a residual balance from a previous payout currency before payouts can resume. Contact Gumroad Support",
+    },
+    "destination_ledger_negative" => {
+      reason: "a residual balance on the account holding your funds would be deducted from this payout without appearing in your balance",
+      solution: "Gumroad needs to reconcile that balance before payouts can resume; your payout details are fine and nothing needs changing. Contact Gumroad Support",
     },
     "destination_currency_mismatch" => {
       reason: "the payout currency does not match any bank account configured to receive it on the connected Stripe account",

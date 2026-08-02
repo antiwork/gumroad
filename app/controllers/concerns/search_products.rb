@@ -19,32 +19,59 @@ module SearchProducts
       }
     end
 
+    # Value-shape coercions only. Split out from format_search_params! so callers that build
+    # their own params hash (ProfileSectionsPresenter reads the raw query string) get the same
+    # normalization — search_options coerces these unconditionally (`.to_i`, `.to_f`,
+    # `each_with_index`), so an unexpected shape 400s Elasticsearch or raises.
+    def normalize_search_param_values!(search_params)
+      if search_params[:tags].is_a?(String)
+        search_params[:tags] = search_params[:tags].split(",").map { |t| t.tr("-", " ").squish.downcase }
+      elsif search_params[:tags].is_a?(ActionController::Parameters) || search_params[:tags].is_a?(Hash)
+        search_params[:tags] = search_params[:tags].values.map { |t| t.to_s.tr("-", " ").squish.downcase }
+      end
+
+      if search_params[:filetypes].is_a?(String)
+        search_params[:filetypes] = search_params[:filetypes].split(",").map { |f| f.squish.downcase }
+      end
+
+      if search_params[:ids].is_a?(String)
+        search_params[:ids] = search_params[:ids].split(",").map(&:strip)
+      end
+
+      # These reach ES as `terms` clauses, which reject a nested structure with a 400.
+      %i[tags filetypes ids].each do |key|
+        next unless search_params[key].is_a?(Array)
+
+        search_params[key] = search_params[key].filter_map { |element| scalar_search_value(element)&.to_s }
+      end
+
+      # search_options coerces each of these unconditionally (`.to_i`, `.to_f`) or hands it to ES
+      # as a scalar; a crafted `?query[][]=x` would otherwise 500 a public profile URL.
+      %i[query rating min_price max_price sort recommended_by from size].each do |key|
+        search_params[key] = scalar_search_value(search_params[key]) if search_params.key?(key)
+      end
+
+      search_params[:from] = search_params[:from].to_i if search_params[:from].present?
+      # search_options computes MAX_RESULT_WINDOW - size and clamps against it, so an oversized
+      # or negative size raises on the range rather than returning nothing.
+      search_params[:size] = search_params[:size].to_i.clamp(0, Link::MAX_RESULT_WINDOW) if search_params[:size].present?
+
+      search_params.delete(:search) unless search_params[:search].is_a?(Hash)
+
+      search_params
+    end
+
+    # Collapses a crafted nested param to the scalar the search layer expects, or nil when it has
+    # no scalar reading. A deeper nesting collapses to nil rather than being unwrapped further.
+    def scalar_search_value(value)
+      value = value.first if value.is_a?(Array)
+      value.is_a?(String) || value.is_a?(Numeric) ? value : nil
+    end
+
     def format_search_params!
-      if params[:tags].is_a?(String)
-        params[:tags] = params[:tags].split(",").map { |t| t.tr("-", " ").squish.downcase }
-      elsif params[:tags].is_a?(ActionController::Parameters) || params[:tags].is_a?(Hash)
-        params[:tags] = params[:tags].values.map { |t| t.to_s.tr("-", " ").squish.downcase }
-      end
-
-      if params[:filetypes].is_a?(String)
-        params[:filetypes] = params[:filetypes].split(",").map { |f| f.squish.downcase }
-      end
-
-      if params[:ids].is_a?(String)
-        params[:ids] = params[:ids].split(",").map(&:strip)
-      end
+      normalize_search_param_values!(params)
 
       params[:offer_code] = "__no_match__" if params[:offer_code].present? && !offer_codes_search_feature_active?(params)
-
-      params[:from] = Array.wrap(params[:from]).first.to_i if params[:from].present?
-
-      if params[:size].is_a?(String)
-        params[:size] = params[:size].to_i
-      elsif params[:size].is_a?(Array)
-        params[:size] = params[:size].first.to_i
-      end
-
-      params.delete(:search) unless params[:search].is_a?(Hash)
     end
 
     def offer_codes_search_feature_active?(params)

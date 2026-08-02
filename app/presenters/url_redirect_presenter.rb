@@ -166,6 +166,7 @@ class UrlRedirectPresenter
       {
         license:,
         content_items: download_attributes[:content_items],
+        bundle_products: bundle_product_props,
         rich_content_pages:,
         last_content_page_id: purchase&.last_content_page_id,
         posts: posts(rich_content_pages),
@@ -181,6 +182,23 @@ class UrlRedirectPresenter
           files: JSON.parse(url_redirect.product_files_hash),
         } : nil,
       }
+    end
+
+    # The members a bundle's own download page links to. Only populated for a bundle parent whose
+    # buyer has no account: everyone else is redirected to /library before this renders.
+    def bundle_product_props
+      return [] unless purchase&.is_bundle_purchase? && purchase.purchaser_id.nil?
+
+      purchase.product_purchases.filter_map do |member|
+        next unless member.has_content?
+
+        {
+          id: member.link.external_id,
+          name: member.link.name,
+          thumbnail_url: member.link.thumbnail_or_cover_url,
+          url: member.url_redirect.download_page_url,
+        }
+      end
     end
 
     def posts(rich_content_pages)

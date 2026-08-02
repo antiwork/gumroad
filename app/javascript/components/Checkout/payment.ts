@@ -263,6 +263,11 @@ export type State = {
   // tick, that "validate" is refused back to "input", and nothing ever re-submits — the buyer is
   // left on the checkout page with no feedback after the purchase they already confirmed.
   resumeSubmitAfterCheckoutPayment: boolean;
+  // Counts submits refused by client-side validation. A refused submit usually goes "input" →
+  // "input" (Pay is clicked from "input" and the failure sets "input" again), so effects keyed
+  // on the status type alone never see it — PaymentForm keys its scroll-to-first-error effect
+  // on this counter instead (gumroad-private#1703).
+  validationFailedCount: number;
   status:
     | { type: "input"; errors: Set<string> }
     | { type: "offering" }
@@ -861,6 +866,7 @@ function resumeRefusedSubmitIfReady(state: State) {
   // A resumed submit is not a free pass: it re-runs the same field validation a fresh submit does,
   // so an incomplete form lands back on "input" with the offending fields flagged.
   const resumeErrors = validatePaymentMethodIndependentFields(state);
+  if (resumeErrors.size) state.validationFailedCount += 1;
   state.status = resumeErrors.size ? { type: "input", errors: resumeErrors } : { type: "validating" };
 }
 
@@ -972,6 +978,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         return;
       }
       const errors = validatePaymentMethodIndependentFields(state);
+      if (errors.size) state.validationFailedCount += 1;
       state.status = errors.size ? { type: "input", errors } : { type: "offering" };
       break;
     }
@@ -1007,6 +1014,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         // Pay again anyway, and an armed resume would fire a submit they did not ask for the moment
         // the configuration lands — re-running validation, failing again, and clearing nothing.
         if (state.checkoutPaymentStale && refusedErrors.size === 0) state.resumeSubmitAfterCheckoutPayment = true;
+        if (refusedErrors.size) state.validationFailedCount += 1;
         state.status = {
           type: "input",
           errors: refusedErrors.size
@@ -1018,6 +1026,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         return;
       }
       const errors = validatePaymentMethodIndependentFields(state);
+      if (errors.size) state.validationFailedCount += 1;
       state.status = errors.size ? { type: "input", errors } : { type: "validating" };
       break;
     }
@@ -1066,6 +1075,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
           if (!state[field]) errors.add(field);
         }
       }
+      if (errors.size) state.validationFailedCount += 1;
       state.status = errors.size ? { type: "input", errors } : { type: "captcha", paymentMethod: action.paymentMethod };
       break;
     }
@@ -1211,6 +1221,7 @@ export function createReducer(initial: {
       paymentElementType: "card",
       checkoutPaymentStale: false,
       resumeSubmitAfterCheckoutPayment: false,
+      validationFailedCount: 0,
       willSaveCard: false,
       // Matches PaymentForm's own default (`useState(!!state.savedCreditCard)`), so the summary is
       // correct on the very first render rather than only after PaymentForm mounts and syncs.

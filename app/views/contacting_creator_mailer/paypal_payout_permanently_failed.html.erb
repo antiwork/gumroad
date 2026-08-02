@@ -37,6 +37,20 @@
         Or <a href='<%= settings_payments_url %>'>use a different PayPal account</a> that can receive US dollars.
       <% end %>
     </p>
+  <% elsif @locked_paypal_account %>
+    <p>
+      <%# Only PayPal can unlock the account, so the first step is always PayPal — never our
+          settings, and never a differently-registered account, since the country did not fail. %>
+      Sign in to PayPal to see whether there are restrictions on your account, or contact PayPal to have them lifted.
+      <% if @can_use_bank_account %>
+        You can also <a href='<%= settings_payments_url %>'>add a bank account in your payout settings</a>, or use a different PayPal account.
+      <% else %>
+        <%# The gumroad-private#1661 dead end: no bank rail, and telling them to find another PayPal
+            account is an instruction much of this cohort has no way to follow. Say so plainly. %>
+        PayPal is the only payout method we can offer in your country, so if PayPal cannot restore your account and you do not have
+        <a href='<%= settings_payments_url %>'>another one to use</a>, we have no way to pay you right now. We hope to have a way to pay out your balance in the future.
+      <% end %>
+    </p>
   <% elsif @can_use_bank_account %>
     <p>
       <%# Reached only for the rejection that also takes the address off the account, so the copy

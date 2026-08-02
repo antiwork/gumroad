@@ -119,8 +119,94 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     result = described_class.new(text: "", image_urls: [oversized], max_images: :all).perform
 
     # Refused locally: the payload IS the image, so sending it would 400 the
-    # request. Unmoderated blocks a full-coverage caller rather than passing.
+    # request. Unmoderated blocks a full-coverage caller rather than passing —
+    # and the payload is static, so the reason must not promise a retry.
     expect(call_inputs).to be_empty
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNSUPPORTED_IMAGE_REASON])
+  end
+
+  it "reports a payload OpenAI deterministically refuses as unsupported, not as a passing outage" do
+    # The film-grain shape from gumroad-private#1695: a non-base64 SVG data URL
+    # the endpoint rejects identically on every save. UNAVAILABLE_REASON maps to
+    # "temporary issue, try again in a few minutes", which for this input is a
+    # promise that can never come true.
+    image_urls = ["data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3C/svg%3E"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    bad_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "invalid_data_url", "message" => "Only base64-encoded image data URLs are supported." } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations).and_raise(bad_error)
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNSUPPORTED_IMAGE_REASON])
+  end
+
+  it "treats an unsupported image format the same as an unsupported data URL" do
+    image_urls = ["data:image/svg+xml;base64,PHN2Zy8+"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    bad_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "invalid_image_format", "message" => "Unsupported format: unknown" } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations).and_raise(bad_error)
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNSUPPORTED_IMAGE_REASON])
+  end
+
+  it "tells the seller an oversized remote asset cannot be reviewed rather than to retry" do
+    # The gumroad-private#1728 shape: one oversized asset among many, so the
+    # whole batch 400s and every image is re-asked individually. The reason has
+    # to survive that fallback — the good images come back moderated, and the
+    # only unreviewed one is a rejection no retry can change.
+    oversized = "https://public-files.gumroad.com/tce9t60y8ecmiqx1b81v1gnzj28r"
+    image_urls = ["https://cdn.example.com/ok.png", oversized]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    bad_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "file_too_large", "message" => "File size exceeds the limit." } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations) do |parameters:|
+      urls = parameters[:input].map { |part| part.dig(:image_url, :url) }
+      raise bad_error if urls.include?(oversized)
+
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNSUPPORTED_IMAGE_REASON])
+  end
+
+  it "keeps the retry reason when a transient failure sits alongside an unsupported payload" do
+    # Retrying can still resolve the fetch failure, and once it does, the next
+    # save reports the unsupported image on its own.
+    image_urls = ["data:image/svg+xml;base64,PHN2Zy8+", "https://cdn.example.com/refused.png"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    unsupported_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "invalid_image_format" } } },
+      bad_response
+    )
+    transient_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "image_url_unavailable" } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations) do |parameters:|
+      urls = parameters[:input].map { |part| part.dig(:image_url, :url) }
+      raise unsupported_error if urls.size > 1 || urls.first.to_s.start_with?("data:")
+
+      raise transient_error
+    end
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
     expect(result.status).to eq("flagged")
     expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
   end

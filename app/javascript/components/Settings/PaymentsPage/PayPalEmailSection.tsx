@@ -8,7 +8,7 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 
 const PayPalEmailSection = ({
-  countrySupportsNativePayouts,
+  canSetupBankPayouts,
   showPayPalPayoutsFeeNote,
   isFormDisabled,
   paypalEmailAddress,
@@ -19,7 +19,7 @@ const PayPalEmailSection = ({
   errorFieldNames,
   user,
 }: {
-  countrySupportsNativePayouts: boolean;
+  canSetupBankPayouts: boolean;
   showPayPalPayoutsFeeNote: boolean;
   isFormDisabled: boolean;
   paypalEmailAddress: string | null;
@@ -40,7 +40,7 @@ const PayPalEmailSection = ({
       ) : null}
       <div className="whitespace-pre-line">{feeInfoText}</div>
       <div>
-        {countrySupportsNativePayouts && !isFormDisabled ? (
+        {canSetupBankPayouts && !isFormDisabled ? (
           <button className="cursor-pointer underline all-unset" onClick={() => updatePayoutMethod("bank")}>
             Switch to direct deposit
           </button>

@@ -5,6 +5,15 @@ class SitemapService
   MAX_SITEMAP_LINKS = 50_000
   SITEMAP_PATH_MONTHLY = "sitemap/products/monthly"
 
+  # Flattens the per-row seller and cover lookups the `add` loop below makes. The
+  # variant_records leg matters: with it loaded, `.processed` finds the retina variant in
+  # memory. Only a cover being processed for the FIRST time still costs a write per row.
+  SITEMAP_PRELOADS = [
+    :user,
+    { display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } }
+  ].freeze
+  private_constant :SITEMAP_PRELOADS
+
   def generate(date = Date.current)
     # Parse date from Sidekiq job argument
     date = Date.parse(date) if date.is_a?(String)
@@ -20,7 +29,7 @@ class SitemapService
       sitemap_config(filename, path, include_index)
 
       SitemapGenerator::Sitemap.create do
-        Link.alive.where(created_at: period).find_each do |product|
+        Link.alive.where(created_at: period).preload(*SITEMAP_PRELOADS).find_each do |product|
           relative_url = Rails.application.routes.url_helpers.short_link_path(product)
           add relative_url, changefreq: "daily", priority: 1, lastmod: product.updated_at, images: [{ loc: product.preview_url }],
                             host: product.user.subdomain_with_protocol

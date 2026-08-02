@@ -386,7 +386,9 @@ module Product::Searchable
       end
 
       search_options = search_options.to_hash
-      search_options[:query][:bool][:must] << params[:search] if params[:search]
+      # Only a Hash is a well-formed ES clause; a bare `?search=foo` from a caller that reads raw
+      # query parameters would 400 the whole query. Matches format_search_params!'s own predicate.
+      search_options[:query][:bool][:must] << params[:search] if params[:search].is_a?(Hash)
 
       if (params[:ids].present? || params[:section].is_a?(SellerProfileSection)) && params[:sort] == ProductSortKey::PAGE_LAYOUT
         product_ids = Array(params[:ids] || params[:section].shown_products)

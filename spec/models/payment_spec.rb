@@ -201,10 +201,21 @@ describe Payment do
       expect(compliant_creator.reload.payouts_paused?).to eq(false)
     end
 
-    it "does not email for a retryable PayPal rejection" do
+    # 3015 stays retryable, but it is explained as of gumroad-private#1661, so the seller now
+    # hears about it. 9302 is the remaining support-only shape this case was written to cover.
+    it "does not email for a rejection the seller is not told about" do
+      expect do
+        payment.mark_failed!("PAYPAL 9302")
+      end.to_not have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed)
+    end
+
+    it "emails for a locked account even though its payouts keep retrying" do
       expect do
         payment.mark_failed!("PAYPAL 3015")
-      end.to_not have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed).with(payment.id)
+
+      expect(payment.reload.locked_account_paypal_failure?).to eq(true)
+      expect(Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS).not_to include("PAYPAL 3015")
     end
 
     describe "invalidating the payout address" do
@@ -1219,6 +1230,17 @@ describe Payment do
       (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
 
       failed_payout_with_reason(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+
+      expect(user.reload.payouts_paused?).to be(false)
+      expect(user.comments.with_type_on_probation).to be_empty
+    end
+
+    it "does not count a payout we refused because our own destination ledger was negative" do
+      # The seller's bank account is fine and they can change nothing, so pausing them would point
+      # support at the wrong component and hold a seller who did nothing wrong.
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
+
+      failed_payout_with_reason(Payment::FailureReason::DESTINATION_LEDGER_NEGATIVE)
 
       expect(user.reload.payouts_paused?).to be(false)
       expect(user.comments.with_type_on_probation).to be_empty

@@ -2033,11 +2033,22 @@ class Purchase < ApplicationRecord
   def create_license!
     return if is_gift_sender_purchase
     return unless uses_license_key?
-    return if license.present?
 
-    license = create_license
-    link.licenses << license
-    license
+    # The license canonically lives on the original purchase — #license reads it
+    # from there for a charge row — so a charge-triggered mint must write there
+    # too, or it creates an orphan the getter can never see again.
+    holder = is_recurring_subscription_charge ? subscription.original_purchase : self
+    return if holder.license.present?
+
+    # Concurrent swaps can both observe the license as missing; the row lock
+    # reloads and re-checks so only one of them mints.
+    holder.with_lock do
+      next if holder.license.present?
+
+      license = holder.create_license
+      link.licenses << license
+      license
+    end
   end
 
   def license
@@ -2085,8 +2096,14 @@ class Purchase < ApplicationRecord
   # evidence, most of all — must read the product as it stood at purchase time. Falls back to the
   # live product when no version covers the purchase, or when the purchase is mid-checkout and
   # has no created_at yet — the live product IS its checkout state.
+  #
+  # `purchases.created_at` has no sub-second precision, so the real checkout instant is somewhere
+  # in [created_at, created_at + 1s). Resolve at the END of that window: a product saved a few
+  # milliseconds after its own creation row otherwise reifies at its pre-save state and reads as
+  # digital. The widened window cannot admit a seller flipping shipping post-checkout — that never
+  # lands inside the same second as the sale.
   def required_delivery_at_checkout?
-    product = (link.paper_trail.version_at(created_at) if created_at) || link
+    product = (link.paper_trail.version_at(created_at + 1.second) if created_at) || link
     product.is_physical? || product.require_shipping?
   end
 
@@ -2216,6 +2233,21 @@ class Purchase < ApplicationRecord
     return unless is_bundle_purchase?
     product_purchases.each do |product_purchase|
       product_purchase.update!(chargeback_reversed: true)
+    end
+  end
+
+  def mark_giftee_purchase_as_not_chargeback_reversed
+    giftee_purchase = gift_given.present? ? gift_given.giftee_purchase : nil
+    return if giftee_purchase.nil?
+
+    giftee_purchase.chargeback_reversed = false
+    giftee_purchase.save!
+  end
+
+  def mark_product_purchases_as_not_chargeback_reversed!
+    return unless is_bundle_purchase?
+    product_purchases.each do |product_purchase|
+      product_purchase.update!(chargeback_reversed: false)
     end
   end
 

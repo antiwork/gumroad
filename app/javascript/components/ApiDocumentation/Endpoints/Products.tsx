@@ -156,10 +156,12 @@ gumroad products page publish <permalink> ./landing.html`}
     </p>
     <ul>
       <li>
-        <code>data-gumroad-field="name|price|description"</code> — the element's contents are replaced with the
-        product's current value (HTML-escaped). <code>price</code> is the amount a first-time buyer pays: your default
-        offer code is applied, and a membership is quoted at its default recurrence — matching the native product page
-        this HTML replaces.
+        <code>data-gumroad-field="name|price|description|rating|review-count"</code> — the element's contents are
+        replaced with the product's current value (HTML-escaped). <code>price</code> is the amount a first-time buyer
+        pays: your default offer code is applied, and a membership is quoted at its default recurrence — matching the
+        native product page this HTML replaces. <code>rating</code> and <code>review-count</code> leave the element's
+        existing contents alone when reviews are hidden on the product or it has none yet, so write your own fallback
+        text inside them.
       </li>
       <li>
         <code>data-gumroad-action="buy"</code> — wires the element up to launch the Gumroad checkout. Works on any tag (

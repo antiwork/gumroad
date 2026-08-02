@@ -241,6 +241,22 @@ describe Onetime::ClearMistakenBuyerBlocks do
 
       expect { described_class.new(dry_run: false).process }.to change { PlatformBlock.active.count }.from(3).to(0)
     end
+
+    # The browser reconstruction has to filter the same rows the live rule filters: counting
+    # failures the live rule ignores retains exactly the outage-manufactured blocks this cleanup
+    # exists to clear.
+    it "clears a browser block that only processor-outage failures supported" do
+      Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS.times do |index|
+        # update_column: creating against the already-blocked guid overwrites error_code with
+        # "blocked_browser_guid", which is not the row shape a processor outage writes.
+        create(:purchase, purchase_state: "failed",
+                          stripe_fingerprint: "outage-fingerprint-#{index}", created_at: 1.day.ago,
+                          browser_guid: failed_purchase.browser_guid)
+          .update_column(:error_code, PurchaseErrorCode::STRIPE_UNAVAILABLE)
+      end
+
+      expect { described_class.new(dry_run: false).process }.to change { PlatformBlock.active.count }.from(3).to(0)
+    end
   end
 
   # Most buyers here checked out as guests, so the purchase has no account attached and the

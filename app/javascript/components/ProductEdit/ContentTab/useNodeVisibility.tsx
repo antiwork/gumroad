@@ -4,6 +4,15 @@ type ObserveElement = (element: Element, callback: (isIntersecting: boolean) => 
 
 const NodeVisibilityContext = React.createContext<ObserveElement | null>(null);
 
+// An element only works as a root while it is the thing that scrolls: otherwise target and root move
+// together and no further intersections are ever generated. Reading the computed overflow keeps this
+// in step with the layout's own breakpoints instead of restating them.
+const scrollRootFor = (element: Element | null): Element | null => {
+  if (!element) return null;
+  const { overflowY } = getComputedStyle(element);
+  return overflowY === "auto" || overflowY === "scroll" ? element : null;
+};
+
 export const NodeVisibilityProvider = ({
   scrollRef,
   children,
@@ -11,37 +20,50 @@ export const NodeVisibilityProvider = ({
   scrollRef: React.RefObject<Element | null>;
   children: React.ReactNode;
 }) => {
-  const stableRef = React.useRef<{
-    observer: IntersectionObserver;
-    callbacks: Map<Element, (isIntersecting: boolean) => void>;
-  } | null>(null);
+  const callbacks = React.useRef(new Map<Element, (isIntersecting: boolean) => void>()).current;
+  const observerRef = React.useRef<IntersectionObserver | null>(null);
+  // undefined until the first resolve, so we don't build an observer against a root we haven't read yet.
+  const [root, setRoot] = React.useState<Element | null | undefined>(undefined);
 
-  const getObserver = () => {
-    if (!stableRef.current) {
-      const callbacks = new Map<Element, (isIntersecting: boolean) => void>();
-      const observer = new IntersectionObserver(
-        (entries) => {
-          for (const e of entries) {
-            callbacks.get(e.target)?.(e.isIntersecting);
-          }
-        },
-        { root: scrollRef.current, rootMargin: "1000px" },
-      );
-      stableRef.current = { observer, callbacks };
-    }
-    return stableRef.current;
-  };
+  React.useEffect(() => {
+    const resolve = () => setRoot(scrollRootFor(scrollRef.current));
+    resolve();
+    window.addEventListener("resize", resolve);
+    return () => window.removeEventListener("resize", resolve);
+  }, [scrollRef]);
 
-  const observe = React.useCallback<ObserveElement>((element, callback) => {
-    const { observer, callbacks } = getObserver();
-    callbacks.set(element, callback);
-    observer.observe(element);
+  React.useEffect(() => {
+    // Without the API, skip observing entirely: nodes stay in the hook's visible-by-default fallback.
+    if (root === undefined || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) callbacks.get(e.target)?.(e.isIntersecting);
+      },
+      { root, rootMargin: "1000px" },
+    );
+    observerRef.current = observer;
+    // Nodes mount before this effect, and survive a root change, so re-observe everything registered.
+    for (const element of callbacks.keys()) observer.observe(element);
 
     return () => {
-      callbacks.delete(element);
-      observer.unobserve(element);
+      observer.disconnect();
+      observerRef.current = null;
     };
-  }, []);
+  }, [root, callbacks]);
+
+  const observe = React.useCallback<ObserveElement>(
+    (element, callback) => {
+      callbacks.set(element, callback);
+      observerRef.current?.observe(element);
+
+      return () => {
+        callbacks.delete(element);
+        observerRef.current?.unobserve(element);
+      };
+    },
+    [callbacks],
+  );
 
   return <NodeVisibilityContext.Provider value={observe}>{children}</NodeVisibilityContext.Provider>;
 };

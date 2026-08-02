@@ -207,3 +207,24 @@ describe("BankAccountSection account-number hints", () => {
     },
   );
 });
+
+describe("BankAccountSection Indonesian bank code", () => {
+  // Stripe resolves the ID bank from its 3-digit Sandi Bank directory. The old field advertised
+  // maxLength 4 and no shape at all, so `BBSB` and `0140` typed cleanly and were only refused once
+  // the payout account failed to attach.
+  it("caps the bank code at 3 digits and advertises the digits-only shape", () => {
+    renderForCountry("ID");
+    const field = screen.getByLabelText<HTMLInputElement>("Bank code");
+
+    expect(field.maxLength).toBe(3);
+    expect(field.pattern).toBe("[0-9]{3}");
+    expect(field.inputMode).toBe("numeric");
+
+    const pattern = new RegExp(`^(?:${field.pattern})$`, "u");
+    expect(pattern.test("014")).toBe(true);
+    expect(pattern.test(field.placeholder)).toBe(true);
+    // maxLength alone cannot reject these — they are already 3 characters.
+    expect(pattern.test("BCA")).toBe(false);
+    expect(pattern.test("IDR")).toBe(false);
+  });
+});

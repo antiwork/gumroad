@@ -28,7 +28,7 @@ Design a unique, conversion-focused page tailored to this product — fully resp
 IMPORTANT: a custom landing page REPLACES the entire product page, including the native price and "I want this!" button. Your HTML must include at least one buy element (see below) or the product becomes unpurchasable. Always end by loading the live page and clicking through to checkout to confirm the buy flow works.
 
 Mark live values and buy buttons with data attributes that Gumroad fills in server-side:
-- data-gumroad-field="name|price|description" — interpolated with the product's current values.
+- data-gumroad-field="name|price|description|rating|review-count" — interpolated with the product's current values. rating and review-count are left as you wrote them when reviews are hidden or the product has none, so put a fallback like "Be the first to review" inside those elements.
 - data-gumroad-action="buy" — wired up to launch the Gumroad checkout. Use on any element (<a>, <button>, <div>).
 
 For products with selection state, set the choice directly on the buy element so the checkout opens pre-selected (an invalid value silently falls back to the product defaults — it won't break the page):
