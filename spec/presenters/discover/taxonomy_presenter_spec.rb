@@ -61,7 +61,7 @@ describe Discover::TaxonomyPresenter do
 
       expect(cybersecurity).to be_present
       expect(Taxonomy.where(parent: cybersecurity).pluck(:slug)).to match_array(
-        %w[network-security penetration-testing security-compliance privacy-and-encryption]
+        %w[network-security penetration-testing security-and-compliance privacy-and-encryption]
       )
     end
   end

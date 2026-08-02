@@ -106,7 +106,7 @@ Taxonomy.find_or_create_by!(slug: "raspberry-pi", parent: hardware)
 cybersecurity = Taxonomy.find_or_create_by!(slug: "cybersecurity", parent: software_development)
 Taxonomy.find_or_create_by!(slug: "network-security", parent: cybersecurity)
 Taxonomy.find_or_create_by!(slug: "penetration-testing", parent: cybersecurity)
-Taxonomy.find_or_create_by!(slug: "security-compliance", parent: cybersecurity)
+Taxonomy.find_or_create_by!(slug: "security-and-compliance", parent: cybersecurity)
 Taxonomy.find_or_create_by!(slug: "privacy-and-encryption", parent: cybersecurity)
 
 self_improvement = Taxonomy.find_or_create_by!(slug: "self-improvement")

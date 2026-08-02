@@ -249,7 +249,7 @@ class Discover::TaxonomyPresenter
     "samples" => "Samples",
     "science" => "Science",
     "science-fiction" => "Science Fiction",
-    "security-compliance" => "Security & Compliance",
+    "security-and-compliance" => "Security & Compliance",
     "self-improvement" => "Self Improvement",
     "setup-scripts" => "Setup Scripts",
     "sewing" => "Sewing",
