@@ -25,12 +25,14 @@ describe SubscribePreviewGeneratorService, type: :system, js: true do
       gate_values = []
       ready_at_screenshot = nil
 
-      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:execute_script).and_wrap_original do |original, script, *args|
+      # any_instance_of yields the receiver before the call arguments, so it has to be named — a
+      # bare *args passes it through to the original and the arity is wrong.
+      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:execute_script).and_wrap_original do |original, _driver, script, *args|
         result = original.call(script, *args)
         gate_values << result if script == described_class::AVATAR_READY_SCRIPT
         result
       end
-      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:screenshot_as).and_wrap_original do |original, *args|
+      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:screenshot_as).and_wrap_original do |original, _driver, *args|
         ready_at_screenshot = gate_values.last
         original.call(*args)
       end
