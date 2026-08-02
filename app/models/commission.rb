@@ -32,6 +32,7 @@ class Commission < ApplicationRecord
   def create_completion_purchase!
     return if is_completed?
     ensure_deposit_is_chargeable!
+    ensure_deliverable_is_attached!
 
     completion_purchase_attributes = deposit_purchase.slice(
       :link, :purchaser, :credit_card_id, :email, :full_name, :street_address,
@@ -90,6 +91,13 @@ class Commission < ApplicationRecord
       return if deposit_is_chargeable?
 
       errors.add(:base, "This commission's deposit is no longer in a completable state, so it can no longer be completed.")
+      raise ActiveRecord::RecordInvalid, self
+    end
+
+    def ensure_deliverable_is_attached!
+      return if files.attached?
+
+      errors.add(:base, "Attach at least one file before completing this commission.")
       raise ActiveRecord::RecordInvalid, self
     end
 

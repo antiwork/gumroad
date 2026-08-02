@@ -18,7 +18,7 @@ describe CommissionsController, :vcr do
       let(:request_params) { { id: commission.external_id } }
     end
 
-    it "attaches new files and purges old files" do
+    it "allows in-progress commissions to attach new files and purge old files" do
       allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
 
       commission.files.attach(file_fixture("test.png"))
@@ -33,6 +33,32 @@ describe CommissionsController, :vcr do
       expect(response).to be_successful
       expect(response).to have_http_status(:no_content)
       expect(commission.files.first.filename).to eq("test.pdf")
+    end
+
+    it "rejects attaching files to completed commissions" do
+      commission.update!(status: Commission::STATUS_COMPLETED)
+      file = fixture_file_upload("test.pdf")
+      blob = ActiveStorage::Blob.create_and_upload!(io: file, filename: "test.pdf")
+
+      expect do
+        put :update, params: { id: commission.external_id, file_signed_ids: [blob.signed_id] }, as: :json
+      end.to not_change { commission.reload.files.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ "errors" => ["This commission has already been completed, so its files can no longer be changed."] })
+    end
+
+    it "rejects purging files from completed commissions" do
+      commission.files.attach(file_fixture("test.png"))
+      commission.update!(status: Commission::STATUS_COMPLETED)
+
+      expect do
+        put :update, params: { id: commission.external_id, file_signed_ids: [] }, as: :json
+      end.to not_change { commission.reload.files.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ "errors" => ["This commission has already been completed, so its files can no longer be changed."] })
+      expect(commission.files.first.filename).to eq("test.png")
     end
 
     context "when commission is not found" do
@@ -53,6 +79,7 @@ describe CommissionsController, :vcr do
 
     it "creates a completion purchase" do
       expect_any_instance_of(Commission).to receive(:create_completion_purchase!).and_call_original
+      commission.files.attach(file_fixture("test.pdf"))
 
       post :complete, params: { id: commission.external_id }
 
