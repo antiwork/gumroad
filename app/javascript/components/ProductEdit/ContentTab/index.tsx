@@ -35,6 +35,7 @@ import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/
 import {
   copyRichContentPages,
   prepareRichContentPagesForMove,
+  reconcileMountedEditorFileEmbedIds,
   reconcileMountedEditorFileEmbeds,
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
@@ -184,6 +185,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     uniquePermalink,
     filesById,
     richContentIdMappings,
+    fileIdMappings,
     richContentRemovedFileEmbedIds,
   } = useProductEditContext();
   const uid = React.useId();
@@ -343,6 +345,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
   const removedFileEmbedIds = removedFileEmbedIdsForPage(selectedPage, richContentRemovedFileEmbedIds);
+  React.useEffect(() => {
+    if (editor) reconcileMountedEditorFileEmbedIds(editor, fileIdMappings);
+  }, [editor, fileIdMappings]);
   React.useEffect(() => {
     if (editor && removedFileEmbedIds?.length) {
       // A save can remove a legacy file node from product state while this
