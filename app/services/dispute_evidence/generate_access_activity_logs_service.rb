@@ -92,7 +92,7 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     end
 
     def consumption_event_rows
-      consumption_events.first(LOG_RECORDS_LIMIT).map do |event|
+      consumption_events.last(LOG_RECORDS_LIMIT).map do |event|
         row = event.slice(*BASE_ROW_ATTRIBUTES).values
         row += [product_name_for(event)] if bundle?
         row.join(",")

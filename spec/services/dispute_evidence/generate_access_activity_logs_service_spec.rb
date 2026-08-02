@@ -164,14 +164,12 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
             end
           end
 
-          it "limits content to the last 10 events" do
+          it "includes the most recent 10 events, still in chronological order" do
             expect(usage_activity).to eq(
               <<~TEXT.strip_heredoc.rstrip
               The customer accessed the product 12 times. Most recent 10 log records:
 
               consumed_at,event_type,platform,ip_address
-              2024-05-06 09:00:00 UTC,download,web,0.0.0.0
-              2024-05-06 15:00:00 UTC,watch,iphone,0.0.0.0
               2024-05-06 16:00:00 UTC,watch,iphone,0.0.0.0
               2024-05-06 17:00:00 UTC,watch,iphone,0.0.0.0
               2024-05-06 18:00:00 UTC,watch,iphone,0.0.0.0
@@ -180,8 +178,18 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
               2024-05-06 21:00:00 UTC,watch,iphone,0.0.0.0
               2024-05-06 22:00:00 UTC,watch,iphone,0.0.0.0
               2024-05-06 23:00:00 UTC,watch,iphone,0.0.0.0
+              2024-05-07 00:00:00 UTC,watch,web,0.0.0.0
+              2024-05-07 00:00:00 UTC,watch,iphone,0.0.0.0
               TEXT
             )
+          end
+
+          # The header's claim is the whole point of the fix: the two oldest accesses must be the
+          # ones dropped, never the most recent, which are what rebut a "never used it" dispute.
+          it "drops the oldest events rather than the newest" do
+            expect(usage_activity).to include("2024-05-07 00:00:00 UTC,watch,iphone")
+            expect(usage_activity).not_to include("2024-05-06 09:00:00 UTC,download,web")
+            expect(usage_activity).not_to include("2024-05-06 15:00:00 UTC,watch,iphone")
           end
         end
       end
