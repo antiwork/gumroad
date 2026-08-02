@@ -1235,6 +1235,17 @@ describe Payment do
       expect(user.comments.with_type_on_probation).to be_empty
     end
 
+    it "does not count a payout we refused because our own destination ledger was negative" do
+      # The seller's bank account is fine and they can change nothing, so pausing them would point
+      # support at the wrong component and hold a seller who did nothing wrong.
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
+
+      failed_payout_with_reason(Payment::FailureReason::DESTINATION_LEDGER_NEGATIVE)
+
+      expect(user.reload.payouts_paused?).to be(false)
+      expect(user.comments.with_type_on_probation).to be_empty
+    end
+
     it "still pauses when the threshold is reached by non-transient failures alone" do
       # The nil-reason rows are the point: most failures store nothing in failure_reason, and a
       # `NOT IN` filter without the IS NULL arm drops them and disables this check entirely.

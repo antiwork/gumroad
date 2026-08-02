@@ -15,6 +15,7 @@ module Payment::FailureReason
   PROCESSOR_UNAVAILABLE = "processor_unavailable"
   UNREVERSED_INTERNAL_TRANSFER = "unreversed_internal_transfer"
   PAYOUT_OUTCOME_UNKNOWN = "payout_outcome_unknown"
+  DESTINATION_LEDGER_NEGATIVE = "destination_ledger_negative"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
   # Failures caused by us or by the processor being unreachable, never by the seller's payout
@@ -34,6 +35,14 @@ module Payment::FailureReason
   # own to stop re-payment. StripePayoutProcessor pauses the seller's payouts when it stamps one,
   # which is what actually holds the balance until a human reconciles against Stripe.
   UNACCOUNTED_MONEY_REASONS = [UNREVERSED_INTERNAL_TRANSFER, PAYOUT_OUTCOME_UNKNOWN].freeze
+
+  # Failures we raise about our OWN books, before Stripe is asked for anything. Like
+  # TRANSIENT_REASONS they must not count toward MAX_CONSECUTIVE_FAILED_PAYOUTS — a payout we
+  # refused says nothing about the seller's bank account, and pausing them for it points support
+  # at the wrong component. Unlike TRANSIENT_REASONS they DO get a STRIPE_FAILURE_SOLUTIONS entry:
+  # the seller cannot fix this, so the one useful thing we can tell them is to contact Support
+  # rather than re-entering correct bank details.
+  INTERNAL_RECONCILIATION_REASONS = [DESTINATION_LEDGER_NEGATIVE].freeze
 
   # The subset an automated requeue may re-issue: failures raised before Stripe could accept
   # anything, so re-issuing cannot duplicate money.
@@ -403,6 +412,10 @@ module Payment::FailureReason
     "currency_mismatch" => {
       reason: "a leftover balance held in a currency that no longer matches the payout account is blocking this payout",
       solution: "Gumroad needs to reconcile a residual balance from a previous payout currency before payouts can resume. Contact Gumroad Support",
+    },
+    "destination_ledger_negative" => {
+      reason: "a residual balance on the account holding your funds would be deducted from this payout without appearing in your balance",
+      solution: "Gumroad needs to reconcile that balance before payouts can resume; your payout details are fine and nothing needs changing. Contact Gumroad Support",
     },
     "destination_currency_mismatch" => {
       reason: "the payout currency does not match any bank account configured to receive it on the connected Stripe account",
