@@ -45,7 +45,29 @@ module Purchase::Blockable
                          PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY]
   private_constant :IGNORED_ERROR_CODES
 
+  # Failures the buyer had no part in, so they cannot be evidence of card testing.
+  #
+  # The temporary-network codes mean our call to the processor never completed — the card was
+  # never contacted, so the attempt says nothing about it. Counting them lets a processor
+  # incident manufacture its own fraud evidence against everyone who retried during it.
+  #
+  # The issuer declines below are the ordinary ones. A card tester's declines look like
+  # `card_declined_fraudulent` / `card_declined_do_not_honor`; "no money on this card" is what a
+  # real wallet looks like when somebody hunts for one with room on it. Composed the way
+  # StripeErrorHandler builds them: "card_declined" + "_" + Stripe's decline_code.
+  CARD_TESTING_UNCOUNTED_ERROR_CODES = [
+    PurchaseErrorCode::STRIPE_UNAVAILABLE,
+    PurchaseErrorCode::PAYPAL_UNAVAILABLE,
+    PurchaseErrorCode::PROCESSING_ERROR,
+    PurchaseErrorCode::PROCESSOR_INVALID_REQUEST,
+    PurchaseErrorCode::STRIPE_INSUFFICIENT_FUNDS,
+    "card_declined_transaction_not_allowed",
+    "card_declined_generic_decline",
+  ].freeze
+  private_constant :CARD_TESTING_UNCOUNTED_ERROR_CODES
+
   MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5
+
 
   # How many of the buyer's other purchases #unblock_buyer! collects identifiers from. An admin
   # click has to stay bounded, and past a few hundred rows a buyer stops contributing new browser
@@ -417,9 +439,9 @@ module Purchase::Blockable
     def ban_fraudulent_buyer_browser_guid!
       return unless stripe_fingerprint
 
-      unique_failed_fingerprints = Purchase.failed.select("distinct stripe_fingerprint").where(
-        "browser_guid = ? and stripe_fingerprint is not null", browser_guid
-      )
+      unique_failed_fingerprints = countable_card_testing_failures
+                                     .select("distinct stripe_fingerprint")
+                                     .where(browser_guid:)
       return if unique_failed_fingerprints.count < MAX_NUMBER_OF_FAILED_FINGERPRINTS
       return if buyer_has_clean_checkout_history?
 
@@ -556,7 +578,7 @@ module Purchase::Blockable
     end
 
     def block_buyer_based_on_recent_failures!
-      unique_failed_fingerprints = Purchase.failed.stripe.with_stripe_fingerprint
+      unique_failed_fingerprints = countable_card_testing_failures
                                            .select("distinct stripe_fingerprint")
                                            .where("email = ? or browser_guid = ?", email, browser_guid)
                                            .where(created_at: CARD_TESTING_WATCH_PERIOD.ago..)
@@ -565,6 +587,20 @@ module Purchase::Blockable
       return if buyer_has_clean_checkout_history?
 
       block_buyer!
+    end
+
+    # The velocity rules count DISTINCT fingerprints as a proxy for "how many different cards has
+    # this person tried". Two things break that proxy, and both strand real buyers:
+    #
+    # PayPal writes a per-transaction billing-agreement token into stripe_fingerprint, so one
+    # wallet mints a fresh "card" on every attempt — four retries on a single funding source trip
+    # a four-card rule. Scoping to Stripe rows keeps the proxy honest; PayPal abuse is caught by
+    # the per-product and IP limits, which do not depend on the fingerprint being a card.
+    #
+    # Signal-free failures are excluded outright: see CARD_TESTING_UNCOUNTED_ERROR_CODES.
+    def countable_card_testing_failures
+      Purchase.failed.stripe.with_stripe_fingerprint
+              .where.not(error_code: CARD_TESTING_UNCOUNTED_ERROR_CODES)
     end
 
     # The velocity rules' version of #buyer_has_clean_payment_history?, which cannot be reused here:
@@ -644,7 +680,7 @@ module Purchase::Blockable
     def block_ip_address_based_on_recent_failures!
       return if PlatformBlock.ip_address.active.find_by(object_value: ip_address).present?
 
-      unique_failed_fingerprints = Purchase.failed.stripe.with_stripe_fingerprint
+      unique_failed_fingerprints = countable_card_testing_failures
                                            .select("distinct stripe_fingerprint")
                                            .where("ip_address = ?", ip_address)
                                            .where(created_at: CARD_TESTING_IP_ADDRESS_WATCH_PERIOD.ago..)
