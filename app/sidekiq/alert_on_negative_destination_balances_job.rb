@@ -101,6 +101,15 @@ class AlertOnNegativeDestinationBalancesJob
                        .pluck(:user_id, :merchant_account_id, Arel.sql("SUM(holding_amount_cents)"))
         break if batch.empty?
 
+        # The cursor moves by user, but the rows are one per (user, merchant account). A full
+        # batch can cut a user's accounts in half, so drop the boundary user's rows and re-read
+        # them whole on the next pass — a detector that silently skips a seller is worse than a
+        # slower one.
+        if batch.size == USER_BATCH_SIZE && batch.first.first != batch.last.first
+          boundary_user_id = batch.last.first
+          batch = batch.reject { |user_id, _, _| user_id == boundary_user_id }
+        end
+
         pairs.concat(batch.filter_map do |user_id, merchant_account_id, holding_cents|
           [user_id, merchant_account_id] if holding_cents.negative? && merchant_account_id.present?
         end)

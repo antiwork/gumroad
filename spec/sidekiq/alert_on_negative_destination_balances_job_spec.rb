@@ -20,9 +20,9 @@ describe AlertOnNegativeDestinationBalancesJob do
   end
 
   # Payability is read off the user, so the seller needs enough USD to clear their own minimum.
-  def make_payable
+  def make_payable(cents = 200_00)
     create(:balance, user: seller, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
-                     date: Date.today - 1, amount_cents: 200_00, holding_amount_cents: 200_00)
+                     date: Date.today - 1, amount_cents: cents, holding_amount_cents: cents)
     seller.reload
   end
 
@@ -79,6 +79,22 @@ describe AlertOnNegativeDestinationBalancesJob do
   it "stays silent for a negative destination total matched by a negative USD ledger, which is refund netting the payout handles" do
     create(:balance, user: seller, merchant_account:, date: Date.today - 1,
                      amount_cents: -728_50, holding_currency: Currency::PHP, holding_amount_cents: -728_50)
+    # Enough USD that the seller clears their minimum past the netted debit — otherwise the
+    # example is silent because nobody is payable, whether or not the netting filter exists.
+    make_payable(1_000_00)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  it "stays silent for a seller-owned Stripe Connect account, which Stripe pays out itself" do
+    connect_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                                charge_processor_merchant_id: "acct_negdest_#{SecureRandom.hex(6)}",
+                                                currency: Currency::PHP, country: "PH")
+    connect_account.update!(meta: { stripe_connect: "true" })
+    create(:balance, user: seller, merchant_account: connect_account, date: Date.today - 1,
+                     amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -728_50)
     make_payable
 
     described_class.new.perform
@@ -94,6 +110,30 @@ describe AlertOnNegativeDestinationBalancesJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  it "reports a seller whose accounts straddle a scan batch boundary" do
+    # Two merchant accounts on one seller, with the batch cut between them: cursoring on user_id
+    # alone would advance past the seller and never read the second account's negative row.
+    stub_const("#{described_class}::USER_BATCH_SIZE", 2)
+    earlier_seller = create(:user)
+    create(:balance, user: earlier_seller, date: Date.today - 1,
+                     merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+                     amount_cents: 100_00, holding_amount_cents: 100_00)
+    second_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                               charge_processor_merchant_id: "acct_negdest_#{SecureRandom.hex(6)}",
+                                               currency: Currency::PHP, country: "PH")
+    residue_row(100_00)
+    create(:balance, user: seller, merchant_account: second_account, date: Date.today - 1,
+                     amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -728_50)
+    make_payable
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include(seller.email)
+      expect(message).to include(second_account.charge_processor_merchant_id)
+    end
   end
 
   it "does not report a negative row that healthy rows on the same account outweigh, because the payout guard lets that set through" do
