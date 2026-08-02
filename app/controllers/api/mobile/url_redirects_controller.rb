@@ -3,6 +3,7 @@
 class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
   before_action :fetch_url_redirect_by_external_id, only: :url_redirect_attributes
   before_action :fetch_url_redirect_by_token, only: %i[stream hls_playlist download]
+  before_action :check_permissions, only: %i[stream hls_playlist download]
   before_action :mark_rental_as_viewed, only: :hls_playlist
   before_action :check_for_expired_rentals, only: %i[stream hls_playlist]
   after_action :increment_product_uses_count, only: %i[stream download]
@@ -53,6 +54,19 @@ class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
 
     def mark_rental_as_viewed
       @url_redirect.mark_rental_as_viewed!
+    end
+
+    def check_permissions
+      purchase = @url_redirect.purchase
+
+      return if purchase.nil?
+
+      if purchase.stripe_refunded ||
+         (purchase.chargeback_date.present? && !purchase.chargeback_reversed) ||
+         purchase.is_access_revoked ||
+         (purchase.subscription.present? && !purchase.subscription.grant_access_to_product?)
+        fetch_error("Could not find url redirect")
+      end
     end
 
     def check_for_expired_rentals
