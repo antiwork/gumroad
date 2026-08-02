@@ -1266,7 +1266,16 @@ class Purchase < ApplicationRecord
         next if code_purchases.size < 2
         offer_code = code_purchases.first.offer_code
         next if offer_code&.max_purchase_count.nil?
-        next if code_purchases.sum(&:quantity) <= offer_code.quantity_left
+        # Must spend uses the same way OfferCodeDiscountComputingService#usage_units did when it
+        # quoted this cart: a once-per-cart code costs one use for the whole cart, not one per
+        # unit. Counting per unit here would reject at charge time a cart the quote accepted —
+        # after the buyer has entered payment details.
+        units_spent = if offer_code.is_cents? && offer_code.once_per_cart?
+          1
+        else
+          code_purchases.sum(&:quantity)
+        end
+        next if units_spent <= offer_code.quantity_left
 
         code_purchases.each do |purchase|
           purchase.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
