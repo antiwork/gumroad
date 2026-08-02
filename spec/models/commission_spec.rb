@@ -71,7 +71,7 @@ describe Commission, :vcr do
         deposit_purchase.update!(stripe_refunded: true)
 
         expect { commission.create_completion_purchase! }
-          .to raise_error(ActiveRecord::RecordInvalid, /deposit was refunded or disputed/)
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
           .and not_change { Purchase.count }
 
         expect(commission.reload.completion_purchase).to be_nil
@@ -82,7 +82,7 @@ describe Commission, :vcr do
         deposit_purchase.update!(stripe_partially_refunded: true)
 
         expect { commission.create_completion_purchase! }
-          .to raise_error(ActiveRecord::RecordInvalid, /deposit was refunded or disputed/)
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
           .and not_change { Purchase.count }
       end
 
@@ -90,7 +90,7 @@ describe Commission, :vcr do
         deposit_purchase.update!(chargeback_date: Date.today)
 
         expect { commission.create_completion_purchase! }
-          .to raise_error(ActiveRecord::RecordInvalid, /deposit was refunded or disputed/)
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
           .and not_change { Purchase.count }
       end
 
@@ -107,7 +107,7 @@ describe Commission, :vcr do
         deposit_purchase.update_columns(purchase_state: "failed")
 
         expect { commission.create_completion_purchase! }
-          .to raise_error(ActiveRecord::RecordInvalid, /deposit was refunded or disputed/)
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
           .and not_change { Purchase.count }
       end
 
@@ -115,8 +115,17 @@ describe Commission, :vcr do
         commission.update!(status: Commission::STATUS_CANCELLED)
 
         expect { commission.create_completion_purchase! }
-          .to raise_error(ActiveRecord::RecordInvalid, /deposit was refunded or disputed/)
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
           .and not_change { Purchase.count }
+      end
+
+      # A seller buying their own commission product gets a `test_successful` deposit; completing
+      # it charges nothing but is a supported flow, so the state gate must admit it.
+      it "still charges when the deposit is a seller test purchase" do
+        deposit_purchase.update_columns(purchase_state: "test_successful")
+
+        expect { commission.create_completion_purchase! }.to change { Purchase.count }.by(1)
+        expect(commission.reload.status).to eq(Commission::STATUS_COMPLETED)
       end
     end
 
