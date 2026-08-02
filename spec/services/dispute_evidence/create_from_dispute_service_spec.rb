@@ -198,7 +198,7 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
         receive(:perform).with(purchase).and_return("Sample uncategorized text")
       )
       allow(DisputeEvidence::GenerateAccessActivityLogsService).to(
-        receive(:perform).with(purchase).and_return("Sample activity logs")
+        receive(:perform).with(purchase, other_purchases: anything).and_return("Sample activity logs")
       )
       allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(purchase).and_return(sample_image)
     end

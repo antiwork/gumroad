@@ -29,14 +29,14 @@ class DisputeEvidence::CreateFromDisputeService
     # that we hold billing details we do not.
     dispute_evidence.billing_address = nil
     if shipment.present?
-      dispute_evidence.shipping_address = build_shipping_address(purchase_at_checkout)
+      dispute_evidence.shipping_address = build_shipping_address(as_at_checkout(shipment.purchase))
       dispute_evidence.shipped_at = shipment.shipped_at
       dispute_evidence.shipping_carrier, dispute_evidence.shipping_tracking_number =
         carrier_and_tracking_number(shipment)
     end
     dispute_evidence.product_description = generate_product_description(product:, purchase:)
     dispute_evidence.uncategorized_text = DisputeEvidence::GenerateUncategorizedTextService.perform(purchase)
-    dispute_evidence.access_activity_log = DisputeEvidence::GenerateAccessActivityLogsService.perform(purchase)
+    dispute_evidence.access_activity_log = DisputeEvidence::GenerateAccessActivityLogsService.perform(purchase, other_purchases: other_disputed_purchases)
     attach_receipt_image(dispute_evidence, purchase)
 
     dispute_evidence.policy_disclosure = generate_refund_policy_disclosure(purchase, refund_policy_fine_print_view_events)
@@ -61,8 +61,17 @@ class DisputeEvidence::CreateFromDisputeService
     # seller-facing writers mutate these columns afterwards, so a live read presents mutable
     # operational data to a card network as platform-generated evidence. Falls back to the live
     # record when no version covers the purchase, which is today's behaviour.
+    def as_at_checkout(source)
+      @_as_at_checkout ||= {}
+      @_as_at_checkout[source.id] ||= source.paper_trail.version_at(source.created_at) || source
+    end
+
     def purchase_as_at_checkout
-      @_purchase_as_at_checkout ||= purchase.paper_trail.version_at(purchase.created_at) || purchase
+      as_at_checkout(purchase)
+    end
+
+    def other_disputed_purchases
+      @_other_disputed_purchases ||= dispute.disputable.disputed_purchases.reject { _1.id == purchase.id }
     end
 
     def build_shipping_address(source)
@@ -83,8 +92,17 @@ class DisputeEvidence::CreateFromDisputeService
       shipment
     end
 
+    # Fill the shipping slots from whichever constituent purchase actually shipped, independently of
+    # which one `purchase_for_dispute_evidence` picked for identity and refund policy — that ranking
+    # never looks at shipments, so on a combined charge where the representative ships nothing and a
+    # sibling does, all four structured slots went out empty while the sibling's tracking sat in free
+    # text. Stripe reads the structured fields, and we submit once. Representative first so the
+    # single-purchase and already-correct cases are unchanged; ties among siblings break on id.
     def evidence_shipment
-      @_evidence_shipment ||= shipment_for(purchase)
+      return @_evidence_shipment if defined?(@_evidence_shipment)
+
+      @_evidence_shipment = shipment_for(purchase) ||
+        other_disputed_purchases.sort_by(&:id).lazy.filter_map { shipment_for(_1) }.first
     end
 
     # Sellers only ever supply a tracking URL, so derive from it when the columns are blank —
@@ -120,7 +138,7 @@ class DisputeEvidence::CreateFromDisputeService
     # Their own shipping details cannot go in the structured slots: Stripe holds one carrier,
     # one tracking number and one shipping date per dispute, and we submit once.
     def other_disputed_items_rows
-      other_purchases = dispute.disputable.disputed_purchases.reject { _1.id == purchase.id }
+      other_purchases = other_disputed_purchases
       return [] if other_purchases.empty?
 
       rows = ["", "This charge also covers #{other_purchases.size} other #{"item".pluralize(other_purchases.size)}:"]

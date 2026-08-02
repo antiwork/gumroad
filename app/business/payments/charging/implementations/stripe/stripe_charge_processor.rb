@@ -794,34 +794,41 @@ class StripeChargeProcessor
     with_stripe_error_handler do
       charge = Stripe::Charge.retrieve(stripe_charge_id)
 
-      Stripe::Dispute.update(
-        charge.dispute,
-        evidence: {
-          billing_address: dispute_evidence.billing_address,
-          customer_email_address: dispute_evidence.customer_email,
-          customer_name: dispute_evidence.customer_name,
-          customer_purchase_ip: dispute_evidence.customer_purchase_ip,
-          product_description: dispute_evidence.product_description,
-          receipt: create_dispute_evidence_stripe_file(dispute_evidence.receipt_image),
-          service_date: dispute_evidence.purchased_at.to_fs(:formatted_date_full_month),
-          shipping_address: dispute_evidence.shipping_address,
-          shipping_carrier: dispute_evidence.shipping_carrier,
-          shipping_date: dispute_evidence.shipped_at&.to_fs(:formatted_date_full_month),
-          shipping_tracking_number: dispute_evidence.shipping_tracking_number,
-          uncategorized_text: [
-            "The merchant should win the dispute because:\n#{dispute_evidence.reason_for_winning}",
-            dispute_evidence.uncategorized_text
-          ].compact.join("\n\n"),
-          access_activity_log: dispute_evidence.access_activity_log,
-          cancellation_policy: create_dispute_evidence_stripe_file(dispute_evidence.cancellation_policy_image),
-          cancellation_policy_disclosure: dispute_evidence.cancellation_policy_disclosure,
-          refund_policy: create_dispute_evidence_stripe_file(dispute_evidence.refund_policy_image),
-          refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
-          cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
-          refund_refusal_explanation: dispute_evidence.refund_refusal_explanation,
-          customer_communication: create_dispute_evidence_stripe_file(dispute_evidence.customer_communication_file),
-        }
-      )
+      evidence = {
+        billing_address: dispute_evidence.billing_address,
+        customer_email_address: dispute_evidence.customer_email,
+        customer_name: dispute_evidence.customer_name,
+        customer_purchase_ip: dispute_evidence.customer_purchase_ip,
+        product_description: dispute_evidence.product_description,
+        receipt: create_dispute_evidence_stripe_file(dispute_evidence.receipt_image),
+        service_date: dispute_evidence.purchased_at.to_fs(:formatted_date_full_month),
+        shipping_address: dispute_evidence.shipping_address,
+        shipping_carrier: dispute_evidence.shipping_carrier,
+        shipping_date: dispute_evidence.shipped_at&.to_fs(:formatted_date_full_month),
+        shipping_tracking_number: dispute_evidence.shipping_tracking_number,
+        uncategorized_text: [
+          "The merchant should win the dispute because:\n#{dispute_evidence.reason_for_winning}",
+          dispute_evidence.uncategorized_text
+        ].compact.join("\n\n"),
+        access_activity_log: dispute_evidence.access_activity_log,
+        cancellation_policy: create_dispute_evidence_stripe_file(dispute_evidence.cancellation_policy_image),
+        cancellation_policy_disclosure: dispute_evidence.cancellation_policy_disclosure,
+        refund_policy: create_dispute_evidence_stripe_file(dispute_evidence.refund_policy_image),
+        refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
+        cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
+        refund_refusal_explanation: dispute_evidence.refund_refusal_explanation,
+        customer_communication: create_dispute_evidence_stripe_file(dispute_evidence.customer_communication_file),
+      }
+
+      # A dispute accepts evidence once, and FightDisputeJob has five Sidekiq retries: a network
+      # failure on a call that actually landed would otherwise spend the submission a second time.
+      # Keyed on the payload as well as the row so a retry carrying different evidence (the seller
+      # writing a statement between attempts) gets its own key instead of Stripe rejecting the
+      # parameter mismatch.
+      idempotency_key = "dispute_evidence_#{dispute_evidence.external_id}_" \
+                        "#{Digest::SHA256.hexdigest(evidence.sort.to_s)[0, 16]}"
+
+      Stripe::Dispute.update(charge.dispute, { evidence: }, { idempotency_key: })
     end
   end
 
