@@ -21,6 +21,26 @@ describe SubscribePreviewGeneratorService, type: :system, js: true do
       described_class.generate_pngs([@user1])
     end
 
+    it "waits for the avatar to decode before screenshotting" do
+      script_results = []
+      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:execute_script).and_wrap_original do |original, driver, script, *args|
+        script_results << script
+        original.call(driver, script, *args)
+      end
+
+      described_class.generate_pngs([@user1])
+
+      expect(script_results).to include(described_class::AVATAR_READY_SCRIPT)
+    end
+
+    it "still returns a png when the avatar never loads" do
+      allow_any_instance_of(Selenium::WebDriver::Wait).to receive(:until).and_raise(Selenium::WebDriver::Error::TimeoutError)
+
+      images = described_class.generate_pngs([@user1])
+
+      expect(images.first).to start_with("\x89PNG".b)
+    end
+
     it "always quits the webdriver on error" do
       error = "FAILURE"
       expect_any_instance_of(Selenium::WebDriver::Driver).to receive(:quit)

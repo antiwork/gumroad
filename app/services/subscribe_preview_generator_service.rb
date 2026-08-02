@@ -15,6 +15,13 @@ class SubscribePreviewGeneratorService
     "user-data-dir=/tmp/chrome",
   ].freeze
 
+  # Any avatar, including the default one, is an <img>, so this is satisfied on
+  # every profile rather than only on sellers who uploaded a portrait.
+  AVATAR_READY_SCRIPT = <<~JS
+    const img = document.querySelector("img");
+    return !!img && img.complete && img.naturalWidth > 0;
+  JS
+
   def self.generate_pngs(users)
     options = Selenium::WebDriver::Chrome::Options.new(args: CHROME_ARGS)
     driver = Selenium::WebDriver.for(:chrome, options:)
@@ -26,7 +33,16 @@ class SubscribePreviewGeneratorService
       )
       driver.navigate.to url
       wait = Selenium::WebDriver::Wait.new(timeout: 10)
-      wait.until { driver.execute_script("return document.readyState") == "complete" }
+      # readyState goes "complete" before Inertia has mounted the page, so the
+      # avatar <img> does not exist yet and the card screenshots with an empty
+      # circle. Wait for the image itself to be decoded, not for the document.
+      begin
+        wait.until { driver.execute_script(AVATAR_READY_SCRIPT) }
+      rescue Selenium::WebDriver::Error::TimeoutError
+        # A card missing its avatar still beats no card at all, and a broken
+        # avatar would otherwise fail this user forever on every retry.
+        Rails.logger.warn("SubscribePreviewGeneratorService: avatar never loaded for user.id=#{user.id}")
+      end
       driver.manage.window.size = Selenium::WebDriver::Dimension.new(WIDTH, HEIGHT)
       driver.screenshot_as(:png)
     end
