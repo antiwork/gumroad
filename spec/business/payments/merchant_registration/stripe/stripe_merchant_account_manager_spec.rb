@@ -9426,8 +9426,6 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       describe "the phone Stripe validates against the account country" do
-        # A changed phone is what puts it into the diff at all; unchanged it is diffed out and the
-        # rejection never fires, which is why this hid behind the address fix.
         let(:user_compliance_info_2) do
           create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Seoul",
                                         phone: "+821012345678")
@@ -9457,6 +9455,41 @@ describe StripeMerchantAccountManager, :vcr do
           end
 
           expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
+        end
+
+        # The withholding must not be permanent. `company[:phone]` is diff-based, so without the
+        # nil in update_account a phone withheld during the mismatch reads as unchanged forever
+        # and is never sent again — including after the seller fixes their legal-entity country.
+        context "when the seller is a business and the countries later agree" do
+          let(:user_compliance_info_2) do
+            create(:user_compliance_info_business, user:, country: "Korea, Republic of",
+                                                   business_country: "Korea, Republic of",
+                                                   business_phone: "+821012345678")
+          end
+
+          it "still sends the company phone once it can be accepted" do
+            allow(Stripe::Account).to receive(:update)
+            subject.update_account(user, passphrase: "1234")
+            expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
+              expect(attributes.fetch(:company, {})).not_to have_key(:phone)
+            end
+
+            # Advance the marker as the real first call would have: Stripe now points at the
+            # record whose phone was withheld. Without it the phone stays in the diff for the
+            # second call anyway and this example would pass with the fix reverted.
+            stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+            stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info_2.external_id
+            stripe_account["country"] = "KR"
+            allow(Stripe::Account).to receive(:retrieve)
+              .with(merchant_account.charge_processor_merchant_id).and_return(stripe_account)
+            allow(Stripe::Account).to receive(:update)
+
+            subject.update_account(user, passphrase: "1234")
+
+            expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
+              expect(attributes[:company][:phone]).to eq("+821012345678")
+            end
+          end
         end
       end
 

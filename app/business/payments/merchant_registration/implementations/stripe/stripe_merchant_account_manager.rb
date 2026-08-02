@@ -370,6 +370,10 @@ module StripeMerchantAccountManager
     if last_attributes[:company].present?
       last_attributes[:company][:directors_provided] = nil
       last_attributes[:company][:executives_provided] = nil
+      # Mirrors the individual phone above, and load-bearing for the country-mismatch hold-back:
+      # a company phone withheld while the countries disagree would otherwise diff out as
+      # unchanged on every later save and never be sent again, even once they reconcile.
+      last_attributes[:company][:phone] = nil
     end
 
     diff_attributes = get_diff_attributes(current_attributes, last_attributes)
