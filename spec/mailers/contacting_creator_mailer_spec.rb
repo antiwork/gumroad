@@ -1885,7 +1885,7 @@ describe ContactingCreatorMailer do
     # Same shape for the agent exclusion: those subscriptions are token-less by design and their owners
     # have no authorization flow to re-run, so a render must not email them either.
     it "sends nothing for a Store Agent application at render time" do
-      oauth_application.update!(name: Ai::StoreAgentApiClient::AGENT_APP_NAME)
+      oauth_application.update!(is_first_party_agent_app: true)
 
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
 
