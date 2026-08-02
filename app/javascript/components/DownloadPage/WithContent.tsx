@@ -15,7 +15,7 @@ import {
 } from "$app/utils/rich_content_page";
 import { SellerAnalyticsProps, trackSellerPurchaseEvent } from "$app/utils/user_analytics";
 
-import { Button } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
 import { DownloadAllButton } from "$app/components/Download/DownloadAllButton";
 import { FileList as DownloadFileList, FileItem, FolderItem } from "$app/components/Download/FileList";
@@ -33,6 +33,7 @@ import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { showAlert } from "$app/components/server-components/Alert";
 import { LicenseKey } from "$app/components/TiptapExtensions/LicenseKey";
 import { PostsProvider } from "$app/components/TiptapExtensions/Posts";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { Menu, MenuItemRadio } from "$app/components/ui/Menu";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -91,6 +92,7 @@ export type ContentProps = {
   last_content_page_id: string | null;
   license: License | null;
   content_items: (FileItem | FolderItem)[];
+  bundle_products: { id: string; name: string; thumbnail_url: string | null; url: string }[];
   posts: Post[];
   video_transcoding_info: { transcode_on_first_sale: boolean } | null;
   custom_receipt: string | null;
@@ -284,6 +286,25 @@ export const WithContent = ({
       <PurchaseInfoProvider value={purchaseInfo}>
         <MediaUrlsProvider value={mediaUrlsValue}>
           <IsMobileAppViewProvider value={props.is_mobile_app_web_view}>
+            {content.bundle_products.length > 0 ? (
+              <div className="flex flex-col gap-4">
+                {content.bundle_products.map((bundleProduct) => (
+                  <Card key={bundleProduct.id}>
+                    <CardContent>
+                      <div className="flex items-center gap-4">
+                        {bundleProduct.thumbnail_url ? (
+                          <img src={bundleProduct.thumbnail_url} alt="" className="size-16 rounded object-cover" />
+                        ) : null}
+                        <h3>{bundleProduct.name}</h3>
+                      </div>
+                      <NavigationButton href={bundleProduct.url} color="accent">
+                        View content
+                      </NavigationButton>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : null}
             {content.rich_content_pages !== null ? (
               activePage ? (
                 <ContentFilesProvider value={contentFiles}>
