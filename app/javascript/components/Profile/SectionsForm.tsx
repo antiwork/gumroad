@@ -633,10 +633,11 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     ? deletionModalSection.header || SECTION_TYPE_LABELS[deletionModalSection.type]
     : "";
 
-  React.useEffect(
-    () => onChange?.({ sections, tabs: tabsWithoutIds(tabs), selectedTabIndex }),
-    [onChange, sections, selectedTabIndex, tabs],
-  );
+  React.useEffect(() => {
+    // Braces, not a concise body: React reads a returned value as a cleanup function, and `onChange`
+    // is typed `=> void`, which does not stop a caller returning something.
+    onChange?.({ sections, tabs: tabsWithoutIds(tabs), selectedTabIndex });
+  }, [onChange, sections, selectedTabIndex, tabs]);
 
   const updateSection = (updated: Section) => {
     if (disabled) return;
