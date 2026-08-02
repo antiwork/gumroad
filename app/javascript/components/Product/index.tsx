@@ -60,6 +60,7 @@ import {
   PurchasingPowerParityDetails,
   Recurrences,
   Rental,
+  withConfiguredOncePerCartAmount,
 } from "$app/components/Product/ConfigurationSelector";
 import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { CtaButton } from "$app/components/Product/CtaButton";
@@ -216,7 +217,7 @@ export type WishlistForProduct = Wishlist & {
   selections_in_wishlist: { variant_id: string | null; recurrence: string | null; rent: boolean; quantity: number }[];
 };
 
-const formatDiscountAmount = (discount: Discount, buyerLocalContext: BuyerLocalCurrencyContext) => {
+export const formatDiscountAmount = (discount: Discount, buyerLocalContext: BuyerLocalCurrencyContext) => {
   if (discount.type === "percent") {
     return discount.tiered && discount.min_percents !== undefined && discount.max_percents !== undefined
       ? discount.min_percents === discount.max_percents
@@ -225,7 +226,7 @@ const formatDiscountAmount = (discount: Discount, buyerLocalContext: BuyerLocalC
       : `${discount.percents}%`;
   }
 
-  return formatBuyerLocalOrSetPrice(discount.cents, buyerLocalContext, {
+  return formatBuyerLocalOrSetPrice(discount.once_per_cart_amount_cents ?? discount.cents, buyerLocalContext, {
     symbolFormat: "long",
   });
 };
@@ -626,7 +627,7 @@ export const Product = ({
             product={product}
             selection={selection}
             setSelection={setSelection}
-            discount={discountCode?.valid ? discountCode.discount : null}
+            discount={discountCode?.valid ? withConfiguredOncePerCartAmount(discountCode.discount) : null}
             ref={configurationSelectorRef}
           />
           {product.ppp_details && pppDiscounted ? (
