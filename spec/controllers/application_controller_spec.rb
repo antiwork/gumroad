@@ -42,6 +42,15 @@ describe ApplicationController do
       index
       expect(response).to redirect_to(login_path)
     end
+
+    it "signs the user out without redirecting on the API host, where /login does not exist" do
+      sign_in user
+      user.update!(last_active_sessions_invalidated_at: 1.day.from_now)
+      @request.host = VALID_API_REQUEST_HOSTS.first
+      index
+      expect(response).to be_successful
+      expect(controller.send(:current_user)).to be_nil
+    end
   end
 
   describe "includes CustomDomainRouteBuilder" do
