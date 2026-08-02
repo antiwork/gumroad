@@ -75,6 +75,12 @@ module Purchase::Blockable
 
   MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5
 
+  # How many recent failures the velocity counter inspects. Generous next to the threshold of 4,
+  # bounded so an old browser_guid cannot make the counter scan its whole history mid-checkout.
+  CARD_TESTING_COUNT_SCAN_LIMIT = 200
+  private_constant :CARD_TESTING_COUNT_SCAN_LIMIT
+
+
 
   # How many of the buyer's other purchases #unblock_buyer! collects identifiers from. An admin
   # click has to stay bounded, and past a few hundred rows a buyer stops contributing new browser
@@ -605,24 +611,41 @@ module Purchase::Blockable
     # Deliberately NOT scoped to Stripe: PayPal rows still count toward the buyer and IP rules,
     # which are the only thing standing between us and somebody cycling stolen PayPal accounts.
     # Their per-transaction token problem is fixed by counting them per wallet, not by hiding them.
+    #
+    # Restricted to the two processors that write a fingerprint we understand. A row with no
+    # charge_processor_id is not evidence about any card, and counting it made ordinary test and
+    # legacy rows trip the rule.
     def countable_card_testing_failures
       Purchase.failed.with_stripe_fingerprint
+              .where(charge_processor_id: [StripeChargeProcessor.charge_processor_id,
+                                           PaypalChargeProcessor.charge_processor_id])
               .where("(stripe_error_code NOT IN (?) OR stripe_error_code IS NULL)", CARD_TESTING_UNCOUNTED_DECLINE_CODES)
               .where("(error_code NOT IN (?) OR error_code IS NULL)", CARD_TESTING_UNCOUNTED_ERROR_CODES)
     end
 
     # PayPal writes a per-transaction billing-agreement token into stripe_fingerprint, so one
     # wallet mints a fresh "card" on every attempt and four retries on a single funding source
-    # trip a four-card rule. Collapse each PayPal payer to one unit of evidence — a buyer cycling
-    # several stolen PayPal accounts still accumulates one per account — while every Stripe
+    # trip a four-card rule. Collapse each PayPal wallet to one unit of evidence — somebody
+    # cycling several stolen wallets still accumulates one per wallet — while every Stripe
     # fingerprint stays its own card.
+    #
+    # Keyed on card_visual, which holds the payer email PayPal attested for the order, NOT
+    # purchases.email: the buyer types that one, so keying on it would let an attacker cycle any
+    # number of stolen wallets under a single checkout email and count as one forever.
     def distinct_card_count(relation)
-      rows = relation.pluck(:charge_processor_id, :stripe_fingerprint, :email)
-      stripe_cards = rows.reject { |processor, _, _| processor == PaypalChargeProcessor.charge_processor_id }
-                         .map { |_, fingerprint, _| fingerprint }
-      paypal_payers = rows.select { |processor, _, _| processor == PaypalChargeProcessor.charge_processor_id }
-                          .map { |_, _, payer| payer }
-      stripe_cards.uniq.size + paypal_payers.uniq.size
+      # Capped: the guid rule has no time window, so a long-lived guid can match a lot of rows and
+      # this runs inside the purchase state-machine transition. Any window wide enough to hold the
+      # threshold answers the question — we only ever compare against a count of 4.
+      rows = relation.order(created_at: :desc)
+                     .limit(CARD_TESTING_COUNT_SCAN_LIMIT)
+                     .pluck(:charge_processor_id, :stripe_fingerprint, :card_visual)
+      paypal_id = PaypalChargeProcessor.charge_processor_id
+      stripe_cards, paypal_rows = rows.partition { |processor, _, _| processor != paypal_id }
+
+      # A wallet with no attested payer is not provably the same wallet as any other, so count
+      # each such row on its own token rather than merging them into one free unit.
+      wallets = paypal_rows.map { |_, fingerprint, payer| payer.presence || "token:#{fingerprint}" }
+      stripe_cards.map { |_, fingerprint, _| fingerprint }.uniq.size + wallets.uniq.size
     end
 
     # The velocity rules' version of #buyer_has_clean_payment_history?, which cannot be reused here:

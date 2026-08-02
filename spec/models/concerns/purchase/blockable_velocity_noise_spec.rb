@@ -101,25 +101,39 @@ RSpec.describe Purchase::Blockable do
     end
 
     context "with PayPal per-transaction tokens" do
+      # card_visual holds the payer email PayPal attested for the order; purchases.email is typed
+      # by the buyer at checkout. These specs vary them independently on purpose.
+      def paypal_attempt(token:, payer:, checkout_email: email)
+        create(:failed_purchase, email: checkout_email, browser_guid: guid, ip_address: ip,
+                                 charge_processor_id: "paypal",
+                                 stripe_fingerprint: token, card_visual: payer,
+                                 stripe_error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT)
+      end
+
       it "does not treat one wallet's retries as four cards" do
         %w[B-4RX09118X48790402 B-1E323802CG6792744 B-9KL22119Y11002931 B-7PQ55410Z22114882]
-          .each { |token| declined(PurchaseErrorCode::CARD_DECLINED_FRAUDULENT, fingerprint: token, processor: "paypal") }
+          .each { |token| paypal_attempt(token:, payer: "wallet@example.com") }
 
         live_attempt(processor: "paypal", fingerprint: "B-live").send(:ban_fraudulent_buyer_browser_guid!)
 
         expect(PlatformBlock.active.find_by(object_value: guid)).to be_nil
       end
 
-      it "still blocks somebody cycling four different PayPal accounts" do
+      it "blocks four different wallets even when they share one checkout email" do
         4.times do |i|
-          create(:failed_purchase, email: "payer#{i}-#{SecureRandom.hex(3)}@example.com",
-                                   browser_guid: guid, ip_address: ip,
-                                   charge_processor_id: "paypal",
-                                   stripe_fingerprint: "B-#{SecureRandom.hex(8)}",
-                                   stripe_error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT)
+          paypal_attempt(token: "B-#{SecureRandom.hex(8)}", payer: "stolen#{i}@example.com",
+                         checkout_email: email)
         end
 
         live_attempt(processor: "paypal", fingerprint: "B-live2").send(:ban_fraudulent_buyer_browser_guid!)
+
+        expect(PlatformBlock.active.find_by(object_value: guid)).to be_present
+      end
+
+      it "counts wallets with no attested payer on their own token" do
+        4.times { paypal_attempt(token: "B-#{SecureRandom.hex(8)}", payer: nil) }
+
+        live_attempt(processor: "paypal", fingerprint: "B-live3").send(:ban_fraudulent_buyer_browser_guid!)
 
         expect(PlatformBlock.active.find_by(object_value: guid)).to be_present
       end
