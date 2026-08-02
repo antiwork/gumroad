@@ -54,7 +54,7 @@ describe Pages::ProfileData do
         seller_profile = SellerProfile.find_by(seller_id: seller.id)
         key_before = Pages::ProfileData.cache_key(seller.reload, seller_profile)
 
-        create(:product_review, purchase: create(:purchase, link: product), rating: 5)
+        ProductReviewStat.create!(link: product, reviews_count: 1, average_rating: 5, ratings_of_five_count: 1)
 
         expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(key_before)
       end
@@ -391,12 +391,12 @@ describe Pages::ProfileData do
     it "does not serve a v4 payload without the totals" do
       seller_profile = SellerProfile.find_by(seller_id: seller.id)
       current_key = Pages::ProfileData.cache_key(seller, seller_profile)
-      v4_key = current_key.sub("profile_data/v5/", "profile_data/v4/")
+      v4_key = current_key.sub("profile_data/v6/", "profile_data/v4/")
       Rails.cache.write(v4_key, { products: [], posts: [], pages: [] })
 
       data = Pages::ProfileData.build(seller)
 
-      expect(current_key).to start_with("profile_data/v5/")
+      expect(current_key).to start_with("profile_data/v6/")
       expect(data).to include(products_total: 0, posts_total: 0)
     end
 
