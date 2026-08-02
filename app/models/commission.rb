@@ -31,6 +31,7 @@ class Commission < ApplicationRecord
 
   def create_completion_purchase!
     return if is_completed?
+    ensure_deposit_is_chargeable!
 
     completion_purchase_attributes = deposit_purchase.slice(
       :link, :purchaser, :credit_card_id, :email, :full_name, :street_address,
@@ -83,6 +84,27 @@ class Commission < ApplicationRecord
   end
 
   private
+    # The final 50% is charged against the card that paid the deposit, so a deposit that was
+    # refunded or charged back must not fund a further charge — refunding the deposit is what
+    # the Help Center tells sellers to do to reject a commission. Nothing transitions the
+    # commission on refund or dispute, so `in_progress` alone does not imply a live deposit and
+    # this has to be re-read at charge time. Fails closed: an unrecognised deposit state blocks.
+    def ensure_deposit_is_chargeable!
+      return if deposit_is_chargeable?
+
+      errors.add(:base, "This commission's deposit was refunded or disputed, so it can no longer be completed.")
+      raise ActiveRecord::RecordInvalid, self
+    end
+
+    def deposit_is_chargeable?
+      return false unless is_in_progress?
+      return false unless Purchase::ALL_SUCCESS_STATES.include?(deposit_purchase.purchase_state)
+
+      !deposit_purchase.refunded? &&
+        !deposit_purchase.stripe_partially_refunded? &&
+        !deposit_purchase.chargedback_not_reversed?
+    end
+
     def purchases_must_be_different
       return if completion_purchase.nil?
 
