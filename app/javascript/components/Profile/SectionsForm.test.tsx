@@ -15,7 +15,16 @@ import { ProfileSectionsForm, type ProfileSectionsFormProps } from "$app/compone
 
 type FormState = Parameters<NonNullable<ProfileSectionsFormProps["onChange"]>>[0];
 
-vi.stubGlobal("Routes", { root_url: () => "https://creator.gumroad.com/" });
+// A rich text section mounts UpsellSelectModal, which fetches its product list on mount. Both the
+// route helper and the fetch have to exist or vitest reports the rejection as an unhandled error
+// and fails the whole run, even though every assertion passed.
+vi.stubGlobal("Routes", {
+  root_url: () => "https://creator.gumroad.com/",
+  checkout_upsells_products_path: () => "/checkout/upsells/products",
+});
+vi.stubGlobal("fetch", () =>
+  Promise.resolve(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } })),
+);
 // `SSR` is a vite `define`, so it does not exist under vitest; RichTextEditor reads it at render.
 vi.stubGlobal("SSR", false);
 
