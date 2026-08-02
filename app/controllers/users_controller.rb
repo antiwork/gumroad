@@ -7,13 +7,13 @@ class UsersController < ApplicationController
   include PageMeta::Favicon, PageMeta::User
   include RendersCustomHtmlPages
 
-  before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data landing_iframe_content landing_version]
+  before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data landing_iframe_content landing_version landing_products]
 
   after_action :verify_authorized, only: %i[deactivate edit]
 
   before_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
   before_action :set_as_modal, only: %i[show]
-  before_action :set_user_and_custom_domain_config, only: %i[show edit coffee subscribe subscribe_preview landing_iframe_content landing_version]
+  before_action :set_user_and_custom_domain_config, only: %i[show edit coffee subscribe subscribe_preview landing_iframe_content landing_version landing_products]
   before_action :set_page_attributes, only: %i[show]
   before_action :set_user_for_action, only: %i[email_unsubscribe]
   before_action :check_if_needs_redirect, only: %i[show]
@@ -58,6 +58,7 @@ class UsersController < ApplicationController
       live_fields: params[:preview].present? && current_seller_owns_profile?,
       navigation_bridge: custom_html_navigation_bridge_script(allowed_hostnames: profile_store_hostnames(@user)),
       follow_bridge: FOLLOW_BRIDGE_SCRIPT,
+      products_bridge: PRODUCTS_BRIDGE_SCRIPT,
     ).html_safe, layout: false
   end
 
@@ -65,6 +66,38 @@ class UsersController < ApplicationController
     return render_landing_version(visible: false, page: nil) unless current_seller_owns_profile?
     page = @user.page
     render_landing_version(visible: @user.custom_landing_page_visible?, page:)
+  end
+
+  # One slice of the seller's catalogue for the gumroad:products bridge
+  # (gumroad-private#1691). Fetched by the trusted wrapper on the sandboxed
+  # page's behalf — the page itself can't (CUSTOM_HTML_CSP sets connect-src
+  # 'none'), which is why the injected payload alone truncates at MAX_ITEMS.
+  # The seller comes from the request host/path, exactly like the embed
+  # itself; nothing client-supplied picks the account. Everything returned is
+  # data the page 1 payload already exposes publicly.
+  def landing_products
+    return head :not_found unless custom_html_visible?
+
+    offset = Integer(params[:offset], exception: false)
+    limit = Integer(params[:limit], exception: false)
+    return render json: { success: false }, status: :bad_request if offset.nil? || offset.negative? || limit.nil? || limit < 1
+
+    limit = [limit, Pages::ProfileData::MAX_ITEMS].min
+    page = Pages::ProfileData.products_page(@user, offset:, limit:)
+    # The prices half is uncached and derived from the visitor's IP, so this
+    # response must never be shared — same rule as landing_iframe_content.
+    # And same as there, the build is skipped for pages that reference no
+    # price: they cannot consume it.
+    response.cache_control.replace(private: true, no_store: true)
+    prices = Pages::ProductPrices.referenced_in?(@user.custom_html) ? Pages::ProductPrices.build(@user, ip: request.remote_ip, offset:, limit:) : {}
+    render json: {
+      success: true,
+      offset:,
+      limit:,
+      products: page[:products],
+      products_total: page[:products_total],
+      prices:,
+    }
   end
 
   def edit
@@ -350,6 +383,7 @@ class UsersController < ApplicationController
               })();
             </script>
             #{custom_html_follow_wrapper_script(seller_external_id: user.external_id, nonce:)}
+            #{custom_html_products_wrapper_script(products_src: profile_landing_src(user, "products"), nonce:)}
             #{custom_html_background_wrapper_script(nonce:)}
             #{live_reload}
           </body>

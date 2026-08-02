@@ -432,6 +432,69 @@ module RendersCustomHtmlPages
     </script>
   HTML
 
+  # Injected into the sandboxed landing document at serve time (never authored by the
+  # seller). The injected gumroad-data payload carries at most Pages::ProfileData::MAX_ITEMS
+  # products, and the sandbox blocks every direct way to fetch the rest (connect-src 'none',
+  # opaque origin). Instead of widening any of that, this helper asks the trusted parent
+  # wrapper for the next slice: it exposes window.gumroadProducts.request({offset, limit}),
+  # posts a gumroad:products message up, and resolves the returned promise with the wrapper's
+  # reply. Replies are correlated by a per-request id (same convention as the follow bridge)
+  # so overlapping requests can't cross. As with gumroad:navigate and gumroad:follow, nothing
+  # in here is load-bearing for security — a page script could post the same message itself
+  # and listen for the gumroad:products:result window event, and script-driven pages are
+  # welcome to do exactly that.
+  PRODUCTS_BRIDGE_SCRIPT = <<~HTML
+    <script data-cfasync="false" data-gumroad-products-bridge>
+      (function () {
+        // Viewed directly (not framed) there is no trusted parent to ask.
+        if (window.parent === window) return;
+        var pendingRequests = {};
+        var nextRequestId = 0;
+        function request(options) {
+          options = options || {};
+          nextRequestId += 1;
+          var requestId = "gumroad-products-" + nextRequestId;
+          var promise = new Promise(function (resolve) {
+            pendingRequests[requestId] = resolve;
+          });
+          parent.postMessage({
+            type: "gumroad:products",
+            offset: options.offset,
+            limit: options.limit,
+            requestId: requestId
+          }, "*");
+          return promise;
+        }
+        try { window.gumroadProducts = { request: request }; } catch (_err) {}
+        window.addEventListener("message", function (e) {
+          // Only the parent wrapper's reply resolves a request — nested
+          // iframes (e.g. embedded video players) can't spoof it.
+          if (e.source !== window.parent) return;
+          var d = e.data;
+          if (!d || typeof d !== "object" || d.type !== "gumroad:products:result") return;
+          var requestId = typeof d.requestId === "string" ? d.requestId : null;
+          var resolve = requestId && pendingRequests[requestId] ? pendingRequests[requestId] : null;
+          if (requestId) delete pendingRequests[requestId];
+          var detail = {
+            success: d.success === true,
+            products: Array.isArray(d.products) ? d.products : [],
+            productsTotal: typeof d.productsTotal === "number" ? d.productsTotal : null,
+            prices: d.prices && typeof d.prices === "object" && !Array.isArray(d.prices) ? d.prices : {},
+            offset: typeof d.offset === "number" ? d.offset : null,
+            limit: typeof d.limit === "number" ? d.limit : null,
+            requestId: requestId
+          };
+          if (resolve) resolve(detail);
+          // For pages that posted their own message instead of going through
+          // window.gumroadProducts.
+          try {
+            window.dispatchEvent(new CustomEvent("gumroad:products:result", { detail: detail }));
+          } catch (_err) {}
+        });
+      })();
+    </script>
+  HTML
+
   POLL_INTERVAL_MS = 2000
 
   # The HTML comment the agent-preview endpoint splices in front of an edit's replacement so the
@@ -724,6 +787,76 @@ module RendersCustomHtmlPages
       HTML
     end
 
+    # The trusted-wrapper half of the products bridge (gumroad-private#1691). It listens for
+    # gumroad:products messages from the sandboxed landing iframe and fetches the requested
+    # catalogue slice from the profile's landing/products endpoint. The iframe content is
+    # seller-authored and untrusted, so this side is the security boundary:
+    # - only messages from the landing frame's opaque origin are accepted;
+    # - the endpoint URL is baked from this wrapper's render context — nothing in the message
+    #   picks the seller, so the page can never read another seller's catalogue slice;
+    # - offset/limit are validated as non-negative integers and limit is clamped to MAX_ITEMS
+    #   here, and the server re-validates both, so a hostile page can't turn one message into
+    #   an unbounded query.
+    # The reply echoes the child's request id (same convention as the follow bridge) so two
+    # in-flight requests can't cross. Overlapping requests are allowed — abuse is bounded by
+    # the endpoint's Rack::Attack throttle, not by this script. targetOrigin must be "*"
+    # because the sandboxed frame's origin is opaque — the reply carries only the public
+    # catalogue data the page 1 payload already exposes.
+    def custom_html_products_wrapper_script(products_src:, nonce:)
+      endpoint_json = ERB::Util.json_escape(products_src.to_json)
+      <<~HTML
+        <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false" data-gumroad-products-wrapper>
+          (function () {
+            var frame = document.getElementById("gumroad-landing-frame");
+            var ENDPOINT = #{endpoint_json};
+            var MAX_ITEMS = #{Pages::ProfileData::MAX_ITEMS};
+            window.addEventListener("message", function (e) {
+              if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
+              var d = e.data;
+              if (!d || typeof d !== "object" || d.type !== "gumroad:products") return;
+              var requestId = typeof d.requestId === "string" ? d.requestId : null;
+              function reply(payload) {
+                payload.type = "gumroad:products:result";
+                payload.requestId = requestId;
+                frame.contentWindow.postMessage(payload, "*");
+              }
+              var offset = d.offset;
+              var limit = d.limit;
+              if (typeof offset !== "number" || !isFinite(offset) || Math.floor(offset) !== offset || offset < 0) {
+                reply({ success: false });
+                return;
+              }
+              if (limit === undefined || limit === null) limit = MAX_ITEMS;
+              if (typeof limit !== "number" || !isFinite(limit) || Math.floor(limit) !== limit || limit < 1) {
+                reply({ success: false });
+                return;
+              }
+              if (limit > MAX_ITEMS) limit = MAX_ITEMS;
+              fetch(ENDPOINT + "?offset=" + offset + "&limit=" + limit, {
+                headers: { "Accept": "application/json" },
+                credentials: "same-origin"
+              })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                  if (!data || data.success !== true) { reply({ success: false }); return; }
+                  reply({
+                    success: true,
+                    products: data.products,
+                    productsTotal: data.products_total,
+                    prices: data.prices,
+                    offset: data.offset,
+                    limit: data.limit
+                  });
+                })
+                // Network failure, or a non-JSON body such as a Rack::Attack
+                // 429 while throttled.
+                .catch(function () { reply({ success: false }); });
+            });
+          })();
+        </script>
+      HTML
+    end
+
     # Resolve the untrusted report in this document before painting the wrapper
     # and theme-color. A detached probe would accept unresolved var()/keywords;
     # backgroundColor cannot fetch a URL.
@@ -823,7 +956,7 @@ module RendersCustomHtmlPages
     # inline script in the page (a meta CSP tag can't undo that: policies only intersect).
     # `scroll_to_change` adds the preview-only script that jumps to the PREVIEW_CHANGED_MARKER
     # comment, so an edit further down the page opens in view instead of hiding below the fold.
-    def profile_custom_html_document(custom_html, data_json: "{}", prices_json: nil, live_fields: false, navigation_bridge: "", follow_bridge: "", scroll_to_change: false)
+    def profile_custom_html_document(custom_html, data_json: "{}", prices_json: nil, live_fields: false, navigation_bridge: "", follow_bridge: "", products_bridge: "", scroll_to_change: false)
       <<~HTML
         <!doctype html>
         <html>
@@ -840,6 +973,7 @@ module RendersCustomHtmlPages
             #{custom_html}
             #{navigation_bridge}
             #{follow_bridge}
+            #{products_bridge}
             #{BACKGROUND_BRIDGE_SCRIPT}
             #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
             #{scroll_to_change ? PREVIEW_SCROLL_TO_CHANGE_SCRIPT : ""}

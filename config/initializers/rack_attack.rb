@@ -254,6 +254,20 @@ class Rack::Attack
                             period: 60.seconds,
                             throttle_params: Proc.new { |req| req.params["seller_id"] }
 
+  # Catalogue slices for the gumroad:products bridge on custom profile pages
+  # (gumroad-private#1691). The wrapper fetches this GET on the sandboxed
+  # page's behalf; the seller is identified by the request host (subdomain or
+  # custom domain) or the /:username prefix, both part of the identifier here
+  # (the regexp path form prefixes req.path, and req.host is the param). 30/min
+  # covers the largest real catalogue (1,430 products = 14 pages) in one
+  # burst while bounding a hostile page's loop; each slice is served from the
+  # profile-data cache after the first read.
+  throttle_by_ip_and_params path: %r{\A/(?:[^/]+/)?landing/products\z},
+                            requests: 30,
+                            method: :get,
+                            period: 60.seconds,
+                            throttle_params: Proc.new { |req| req.host }
+
   # Initial: 10rpm, Max: 60 requests/3 days (per user)
   throttle_by_params path: "/two-factor",
                      requests: 10,

@@ -166,6 +166,10 @@ class PagesController < Sellers::BaseController
         data_json: ERB::Util.json_escape(Pages::ProfileData.build(current_seller).to_json),
         prices_json: prices_referenced ? ERB::Util.json_escape(prices.to_json) : nil,
         follow_bridge: FOLLOW_BRIDGE_SCRIPT,
+        # The child half only — the editor pane has no products wrapper
+        # listening, so requests never resolve here, but the page's
+        # window.gumroadProducts API exists and page scripts don't throw.
+        products_bridge: PRODUCTS_BRIDGE_SCRIPT,
       ).html_safe, layout: false
     else
       interpolated = Pages::Interpolator.interpolate_profile(custom_html, profile: current_seller)
