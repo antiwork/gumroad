@@ -318,7 +318,6 @@ describe Charge::CreateService, :vcr do
                         price_cents: 18_75,
                         tax_cents: 1_00,
                         was_tax_excluded_from_price: true,
-                        shipping_cents: 2_00,
                         total_transaction_cents: 21_75)
       captured_intent_args = nil
 
@@ -326,14 +325,14 @@ describe Charge::CreateService, :vcr do
       allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*args, **kwargs|
         captured_intent_args = { positional: args, keyword: kwargs }
         expect(ChargePresentment.sole).to have_attributes(presentment_currency: Currency::CAD,
-                                                          presentment_total_cents: 17_40,
+                                                          presentment_total_cents: 15_80,
                                                           presentment_gumroad_amount_cents: 2_40,
                                                           stripe_fx_quote_id: nil)
         expect(purchase.reload.purchase_presentment).to have_attributes(presentment_currency: Currency::CAD,
                                                                         presentment_price_cents: 15_00,
                                                                         presentment_seller_tax_cents: 80,
-                                                                        presentment_shipping_cents: 1_60,
-                                                                        presentment_total_cents: 17_40)
+                                                                        presentment_shipping_cents: 0,
+                                                                        presentment_total_cents: 15_80)
         nil
       end
 
@@ -350,7 +349,7 @@ describe Charge::CreateService, :vcr do
                                 params: {}).perform
 
       expect(captured_intent_args[:positional][2]).to eq(21_75)
-      expect(captured_intent_args[:keyword]).to include(processor_amount_cents: 17_40,
+      expect(captured_intent_args[:keyword]).to include(processor_amount_cents: 15_80,
                                                         processor_currency: Currency::CAD,
                                                         processor_gumroad_amount_cents: 2_40,
                                                         stripe_fx_quote_id: nil)
