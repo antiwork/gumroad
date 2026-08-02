@@ -297,8 +297,134 @@ describe WithProductFiles do
   end
 
   describe "#save_files!" do
+    def stub_s3_etags(etags_by_key)
+      requested_keys = []
+      resource = double("s3 resource")
+      bucket = double("s3 bucket")
+      allow(Aws::S3::Resource).to receive(:new).and_return(resource)
+      allow(resource).to receive(:bucket).with(S3_BUCKET).and_return(bucket)
+      allow(bucket).to receive(:object) do |key|
+        requested_keys << key
+        double("s3 object", etag: etags_by_key.fetch(key))
+      end
+      requested_keys
+    end
+
+    def s3_key_for(url)
+      ProductFile.new(url:).s3_key
+    end
+
     context "when called on a Link record" do
       let(:product) { create(:product_with_pdf_files_with_size) }
+
+      it "reuses the same row across repeated identical editor retry requests" do
+        product = create(:product)
+        url = "#{S3_BASE_URL}attachments/retry/original/guide.pdf"
+
+        5.times do
+          temporary_id = SecureRandom.uuid
+          rich_content_params = [{ "type" => "fileEmbed", "attrs" => { "id" => temporary_id, "uid" => SecureRandom.uuid } }]
+          file_id_mappings = product.save_files!([{ external_id: temporary_id, url:, size: 123 }], rich_content_params, delete_missing: false)
+          product_file = product.product_files.alive.sole
+
+          expect(file_id_mappings).to eq(temporary_id => product_file.external_id)
+          expect(rich_content_params.first.dig("attrs", "id")).to eq(product_file.external_id)
+        end
+
+        expect(product.product_files.alive.count).to eq(1)
+      end
+
+      it "returns file id mappings so consecutive saves reuse the canonical file id without a reload" do
+        product = create(:product)
+        url = "#{S3_BASE_URL}attachments/consecutive/original/guide.pdf"
+        temporary_id = SecureRandom.uuid
+        first_mapping = product.save_files!([{ external_id: temporary_id, url:, size: 123 }], [{ "type" => "fileEmbed", "attrs" => { "id" => temporary_id } }], delete_missing: false)
+        canonical_id = first_mapping.fetch(temporary_id)
+
+        expect do
+          product.save_files!([{ external_id: canonical_id, url:, size: 123 }], [{ "type" => "fileEmbed", "attrs" => { "id" => canonical_id } }], delete_missing: false)
+        end.not_to change { product.product_files.alive.count }
+      end
+
+      it "dedupes files with different urls when their S3 ETag and size match" do
+        product = create(:product)
+        original_url = "#{S3_BASE_URL}attachments/fingerprint/original/guide.pdf"
+        retried_url = "#{S3_BASE_URL}attachments/fingerprint-retry/original/guide.pdf"
+        original_file = create(:product_file, link: product, url: original_url, size: 123)
+        temporary_id = SecureRandom.uuid
+        requested_keys = stub_s3_etags(
+          s3_key_for(original_url) => "\"same-etag\"",
+          s3_key_for(retried_url) => "\"same-etag\"",
+        )
+
+        expect do
+          file_id_mappings = product.save_files!([{ external_id: temporary_id, url: retried_url, size: 123, display_name: "Guide" }], delete_missing: false)
+          expect(file_id_mappings).to eq(temporary_id => original_file.external_id)
+        end.not_to change { product.product_files.alive.count }
+        expect(requested_keys).to include(s3_key_for(original_url), s3_key_for(retried_url))
+      end
+
+      it "keeps same-name same-size files with different S3 fingerprints separate" do
+        product = create(:product)
+        original_url = "#{S3_BASE_URL}attachments/fingerprint-a/original/guide.pdf"
+        new_url = "#{S3_BASE_URL}attachments/fingerprint-b/original/guide.pdf"
+        create(:product_file, link: product, url: original_url, size: 123, display_name: "Guide")
+        requested_keys = stub_s3_etags(
+          s3_key_for(original_url) => "\"first-etag\"",
+          s3_key_for(new_url) => "\"second-etag\"",
+        )
+
+        expect do
+          product.save_files!([{ external_id: SecureRandom.uuid, url: new_url, size: 123, display_name: "Guide" }], delete_missing: false)
+        end.to change { product.product_files.alive.count }.by(1)
+        expect(requested_keys).to include(s3_key_for(original_url), s3_key_for(new_url))
+      end
+
+      it "caps S3 fingerprint lookups when many same-size files share no matching ETag" do
+        product = create(:product)
+        cap = WithProductFiles::FINGERPRINT_MATCH_MAX_CANDIDATES
+        new_url = "#{S3_BASE_URL}attachments/fingerprint-capped/original/guide.pdf"
+        candidate_urls = (1..cap + 2).map { "#{S3_BASE_URL}attachments/fingerprint-candidate-#{_1}/original/guide.pdf" }
+        candidate_urls.each { create(:product_file, link: product, url: _1, size: 123) }
+        requested_keys = stub_s3_etags(
+          candidate_urls.each_with_index.to_h { |url, i| [s3_key_for(url), "\"candidate-etag-#{i}\""] }
+            .merge(s3_key_for(new_url) => "\"submitted-etag\""),
+        )
+
+        expect do
+          product.save_files!([{ external_id: SecureRandom.uuid, url: new_url, size: 123, display_name: "Guide" }], delete_missing: false)
+        end.to change { product.product_files.alive.count }.by(1)
+        expect(requested_keys.size).to eq(cap + 1)
+      end
+
+      it "prefers a referenced duplicate file row before the oldest matching row" do
+        product = create(:product)
+        url = "#{S3_BASE_URL}attachments/referenced/original/guide.pdf"
+        create(:product_file, link: product, url:, size: 123, created_at: 2.days.ago)
+        referenced_file = create(:product_file, link: product, url:, size: 123, created_at: 1.day.ago)
+        create(:rich_content, entity: product, description: [
+                 { "type" => "fileEmbed", "attrs" => { "id" => referenced_file.external_id, "uid" => SecureRandom.uuid } },
+               ])
+        temporary_id = SecureRandom.uuid
+
+        expect do
+          file_id_mappings = product.save_files!([{ external_id: temporary_id, url:, size: 123 }], delete_missing: false)
+          expect(file_id_mappings).to eq(temporary_id => referenced_file.external_id)
+        end.not_to change { product.product_files.alive.count }
+      end
+
+      it "prefers the oldest duplicate file row when none are referenced" do
+        product = create(:product)
+        url = "#{S3_BASE_URL}attachments/oldest/original/guide.pdf"
+        oldest_file = create(:product_file, link: product, url:, size: 123, created_at: 2.days.ago)
+        create(:product_file, link: product, url:, size: 123, created_at: 1.day.ago)
+        temporary_id = SecureRandom.uuid
+
+        expect do
+          file_id_mappings = product.save_files!([{ external_id: temporary_id, url:, size: 123 }], delete_missing: false)
+          expect(file_id_mappings).to eq(temporary_id => oldest_file.external_id)
+        end.not_to change { product.product_files.alive.count }
+      end
 
       it "enqueues a `PdfUnstampableNotifierJob` job when new stampable files are added" do
         product_files_params = product.product_files.each_with_object([]) { |file, params| params << { external_id: file.external_id, url: file.url } }

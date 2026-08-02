@@ -31,6 +31,7 @@ class Commission < ApplicationRecord
 
   def create_completion_purchase!
     return if is_completed?
+    ensure_deposit_is_chargeable!
 
     completion_purchase_attributes = deposit_purchase.slice(
       :link, :purchaser, :credit_card_id, :email, :full_name, :street_address,
@@ -83,6 +84,31 @@ class Commission < ApplicationRecord
   end
 
   private
+    # Refunding the deposit is how the Help Center tells sellers to reject a commission, and
+    # nothing transitions the commission when they do — so the deposit is re-read at charge time.
+    def ensure_deposit_is_chargeable!
+      return if deposit_is_chargeable?
+
+      errors.add(:base, "This commission's deposit is no longer in a completable state, so it can no longer be completed.")
+      raise ActiveRecord::RecordInvalid, self
+    end
+
+    def deposit_is_chargeable?
+      return false unless is_in_progress?
+
+      # A fresh read, not the memoized association — a refund can land through another instance
+      # after this commission was loaded. `find` rather than `reload` because the completion
+      # purchase prices variants from the memoized deposit's loaded association objects.
+      deposit = Purchase.find(deposit_purchase_id)
+      # Including test: a seller buying their own commission product gets a `test_successful`
+      # deposit, and completing it is a supported flow that skips charging entirely.
+      return false unless Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST.include?(deposit.purchase_state)
+
+      !deposit.refunded? &&
+        !deposit.stripe_partially_refunded? &&
+        !deposit.chargedback_not_reversed?
+    end
+
     def purchases_must_be_different
       return if completion_purchase.nil?
 

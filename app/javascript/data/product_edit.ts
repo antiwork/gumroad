@@ -1,4 +1,5 @@
 import { Editor, findChildren } from "@tiptap/core";
+import { type Mark } from "@tiptap/pm/model";
 import { EditorState, Transaction } from "@tiptap/pm/state";
 import typia from "typia";
 
@@ -13,12 +14,13 @@ import { baseEditorOptions } from "$app/components/RichTextEditor";
 
 export type SaveProductResponse = {
   warning_message?: string;
-  // Client-generated id → canonical server id for variants/pages this save
+  // Client-generated id → canonical server id for variants/pages/files this save
   // created. The editor swaps its ids for these so the next save updates the
   // created records instead of re-creating them (re-creation trips the
-  // server's content deletion guard and duplicates variants).
+  // server's content deletion guard, duplicates variants, or re-attaches files).
   variant_id_mappings?: Record<string, string>;
   rich_content_id_mappings?: Record<string, string>;
+  file_id_mappings?: Record<string, string>;
   // Canonical page id → file external ids removed while repairing legacy
   // content. The editor removes the same invisible nodes from its live state,
   // otherwise its next save would resubmit them as newly introduced embeds.
@@ -285,12 +287,40 @@ export const applyRichContentPageSaveResponse = (
     }
   }
 
+  if (response.file_id_mappings && Object.keys(response.file_id_mappings).length > 0) {
+    page.description = applyFileIdMappingsToRichContent(page.description, response.file_id_mappings);
+  }
   const removedIds = removedFileEmbedIdsForPage(page, response.rich_content_removed_file_embed_ids ?? {});
   if (removedIds?.length) {
     page.description = removeFileEmbedsFromRichContent(page.description, new Set(removedIds));
   }
   const timestamp = response.rich_content_updated_at?.[page.id];
   if (timestamp) page.updated_at = timestamp;
+};
+
+const applyFileIdMappings = (value: unknown, fileIdMappings: Record<string, string>): unknown => {
+  if (Array.isArray(value)) return value.map((child) => applyFileIdMappings(child, fileIdMappings));
+  if (!isRecord(value)) return value;
+
+  const mapped = { ...value };
+  if (
+    mapped.type === "fileEmbed" &&
+    isRecord(mapped.attrs) &&
+    typeof mapped.attrs.id === "string" &&
+    fileIdMappings[mapped.attrs.id]
+  ) {
+    mapped.attrs = { ...mapped.attrs, id: fileIdMappings[mapped.attrs.id] };
+  }
+  if ("content" in mapped) mapped.content = applyFileIdMappings(mapped.content, fileIdMappings);
+  return mapped;
+};
+
+export const applyFileIdMappingsToRichContent = (
+  description: object,
+  fileIdMappings: Record<string, string>,
+): object => {
+  const mapped = applyFileIdMappings(description, fileIdMappings);
+  return isRecord(mapped) ? mapped : description;
 };
 
 const removeFileEmbeds = (value: unknown, fileIds: Set<string>): unknown => {
@@ -356,8 +386,35 @@ export const buildRichContentReconciliationTransaction = (
   return transaction;
 };
 
+export const buildRichContentFileIdMappingTransaction = (
+  state: EditorState,
+  fileIdMappings: Record<string, string>,
+): Transaction => {
+  const updates: { pos: number; attrs: Record<string, unknown>; marks: readonly Mark[] }[] = [];
+  state.doc.descendants((node, pos) => {
+    if (node.type.name === FileEmbed.name && typeof node.attrs.id === "string") {
+      const canonicalId = fileIdMappings[node.attrs.id];
+      if (canonicalId) updates.push({ pos, attrs: { ...node.attrs, id: canonicalId }, marks: node.marks });
+    }
+    return true;
+  });
+
+  const transaction = state.tr;
+  for (const update of updates) {
+    transaction.setNodeMarkup(update.pos, undefined, update.attrs, update.marks);
+  }
+  transaction.setMeta("addToHistory", false);
+  transaction.setMeta("preventUpdate", true);
+  return transaction;
+};
+
 export const reconcileMountedEditorFileEmbeds = (editor: Editor, removedFileIds: string[]): void => {
   const transaction = buildRichContentReconciliationTransaction(editor.state, new Set(removedFileIds));
+  if (transaction.docChanged) editor.view.dispatch(transaction);
+};
+
+export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMappings: Record<string, string>): void => {
+  const transaction = buildRichContentFileIdMappingTransaction(editor.state, fileIdMappings);
   if (transaction.docChanged) editor.view.dispatch(transaction);
 };
 

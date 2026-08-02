@@ -309,7 +309,9 @@ export const Checkout = ({
   } | null = presentmentAmounts ?? listedAmounts;
 
   return (
-    <div className="@container mx-auto w-full max-w-400">
+    // data-checkout-scope bounds PaymentForm's scroll-to-first-error scan: wide enough to reach
+    // the tip and gift fields above it, narrow enough to ignore the rest of the page.
+    <div className="@container mx-auto w-full max-w-400" data-checkout-scope>
       <PageHeader
         className="border-none pb-0 md:px-16 md:pb-0 @[64rem]:mb-2"
         title="Checkout"

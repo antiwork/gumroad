@@ -166,6 +166,7 @@ const buildState = (overrides: Partial<State> = {}): State => ({
   requireEmailTypoAcknowledgment: false,
   checkoutPaymentStale: false,
   resumeSubmitAfterCheckoutPayment: false,
+  validationFailedCount: 0,
   ...overrides,
 });
 

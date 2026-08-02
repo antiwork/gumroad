@@ -77,8 +77,8 @@ wait_for_healthcheck() {
 wait_for_healthcheck "Payout batch" "https://gumroad.com/healthcheck/payouts" 15 proceed \
   '[ "$(date -u +%u)" -ge 2 ] && [ "$(date -u +%u)" -le 5 ] && [ "$(date -u +%H)" -eq 10 ]'
 
-# Long-running non-payout jobs — the monthly/quarterly finance and tax reports, sitemap
-# rebuilds, the daily instant payouts (see LongRunningJobTracking). These are NOT safe to
+# Long-running non-payout jobs — the monthly/quarterly finance and tax reports and the
+# daily instant payouts (see LongRunningJobTracking). These are NOT safe to
 # interrupt: they hold no checkpoint, so a recycled worker means the run starts over, and
 # killed runs of these are how finance reports have silently gone missing. So we wait longer
 # (up to 2 hours, the slowest of them is the Canada sales report at well over an hour) and,
@@ -94,7 +94,7 @@ wait_for_healthcheck "Payout batch" "https://gumroad.com/healthcheck/payouts" 15
 # jobs are actually SCHEDULED for, plus ~2h of runtime headroom. Read straight off
 # config/sidekiq_schedule.yml, which is written in UTC — the schedule is not an ET
 # midnight-6am block, so testing ET hours here would leave most of it uncovered:
-#   UTC 00:00 sitemap refresh, outstanding balances CSV
+#   UTC 00:00 outstanding balances CSV
 #   UTC 01:00 monthly financial reports (fans out the Canada sales report, 1-2h)
 #   UTC 02:00 YTD sales report   UTC 03:00 TaxJar upload, India sales report
 #   UTC 08:00 daily instant payouts

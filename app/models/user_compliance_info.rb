@@ -54,6 +54,7 @@ class UserComplianceInfo < ApplicationRecord
 
   after_create_commit :handle_stripe_compliance_info
   after_create_commit :handle_compliance_info_request
+  after_create_commit :detect_legal_entity_country_drift
 
   scope :country, ->(country) { where(country:) }
 
@@ -264,6 +265,16 @@ class UserComplianceInfo < ApplicationRecord
 
     def handle_compliance_info_request
       UserComplianceInfoRequest.handle_new_user_compliance_info(self)
+    end
+
+    # A UserComplianceInfo is immutable, so every edit lands as a new record —
+    # that create is the moment the derived legal-entity country can change, and
+    # the only hook where drift against the Stripe account country is visible.
+    # Deferred to Sidekiq because it reads the Stripe account country off the
+    # merchant account and writes an admin note; neither belongs in the caller's
+    # save transaction. See DetectLegalEntityCountryDriftJob.
+    def detect_legal_entity_country_drift
+      DetectLegalEntityCountryDriftJob.perform_async(id)
     end
 
     def kana_fields_format

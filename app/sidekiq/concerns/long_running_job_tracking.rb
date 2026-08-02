@@ -35,6 +35,8 @@
 #   * SendMembershipsPriceUpdateEmailsJob (UTC 08:10) — claims each notification before
 #     enqueueing a delivery job. Only that job confirms the notification marker after sending,
 #     so a killed scheduler leaves an expiring claim without authorizing the new price.
+#   * RefreshSitemapDailyWorker — regenerating a month overwrites that month's file wholesale,
+#     so a kill loses nothing and Sidekiq re-runs it (retry: 3).
 # PerformDailyInstantPayoutsWorker (UTC 08:00) IS included: it runs with `retry: 0`, so a
 # killed run is never retried and that day's daily-schedule sellers go unpaid.
 #
