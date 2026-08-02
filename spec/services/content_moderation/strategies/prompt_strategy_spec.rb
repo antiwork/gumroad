@@ -88,27 +88,6 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
       expect(result.audit_reasoning).to eq([])
     end
 
-    # The original single-sample rule still governs a flag that actually looked at
-    # an image: no resample, and it blocks immediately.
-    it "does not resample an adult_content flag when an image was sent" do
-      allow(client).to receive(:chat).and_return(
-        json_chat_response(flagged: true, reasoning: "explicit image"),
-        json_chat_response(uncertain: false),
-        json_chat_response(flagged: false, reasoning: "")
-      )
-
-      result = described_class.new(
-        text: "listing copy",
-        image_urls: ["https://example.com/cover.jpg"],
-        corroborate_judgment_flags: true
-      ).perform
-
-      expect(result.status).to eq("flagged")
-      expect(result.reasoning).to eq(["adult_content: explicit image"])
-      expect(result.audit_reasoning).to eq([])
-      expect(client).to have_received(:chat).exactly(3).times
-    end
-
     # An unsupported extension never reaches the model, so the flag was text-only
     # even though the caller passed a URL.
     it "corroborates when the only image URL is an unsupported format" do
@@ -214,14 +193,22 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
       expect(result.audit_reasoning).to eq(["spam (uncorroborated, 1/2 samples flagged): clear spam"])
     end
 
-    it "does not resample adult content flags" do
+    # Superseded by the "adult_content corroboration when no image was sent" group
+    # above: a flag the model reached on text alone IS now resampled. This example
+    # keeps the original no-resample rule pinned for the case it was written for —
+    # a flag that actually saw an image.
+    it "does not resample adult content flags that saw an image" do
       allow(client).to receive(:chat).and_return(
         json_chat_response(flagged: true, reasoning: "clear adult content"),  # adult_content preset
         json_chat_response(uncertain: false),                                 # uncertainty check
         json_chat_response(flagged: false, reasoning: "")                     # spam preset
       )
 
-      result = described_class.new(text: "moderate me", corroborate_judgment_flags: true).perform
+      result = described_class.new(
+        text: "moderate me",
+        image_urls: ["https://example.com/cover.jpg"],
+        corroborate_judgment_flags: true
+      ).perform
 
       expect(result.status).to eq("flagged")
       expect(result.reasoning).to eq(["adult_content: clear adult content"])
