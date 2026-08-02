@@ -471,7 +471,12 @@ class UrlRedirectsController < ApplicationController
         return withdrawn_content_response
       end
 
-      return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !logged_in_user.is_team_member?
+      subscription_owner = purchase&.subscription&.user
+      # The subscription owner can read any purchase in it; transferred memberships can leave
+      # individual renewals attributed to the previous purchaser.
+      viewer_owns_subscription = subscription_owner.present? && logged_in_user == subscription_owner
+
+      return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !viewer_owns_subscription && !logged_in_user.is_team_member?
 
       return redirect_to url_redirect_rental_expired_page_path(@url_redirect.token) if @url_redirect.rental_expired?
 

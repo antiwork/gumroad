@@ -824,10 +824,55 @@ describe UrlRedirectsController, inertia: true do
     end
 
     describe "memberships" do
+      it "allows the subscription owner to view a renewal purchase from another purchaser" do
+        product = create(:membership_product, price_cents: 100)
+        create(:readable_document, link: product)
+        subscription_owner = create(:user)
+        previous_owner = create(:user)
+        subscription = create(:subscription, link: product, user: subscription_owner)
+        # A transferred membership: the signup moved to the new owner, the renewal kept the old one.
+        create(:purchase, price_cents: 100, purchaser: subscription_owner, link: product, subscription:, is_original_subscription_purchase: true)
+        renewal = create(:purchase, price_cents: 100, purchaser: previous_owner, link: product, subscription:)
+        url_redirect = create(:url_redirect, link: product, purchase: renewal)
+
+        sign_in subscription_owner
+        get :download_page, params: { id: url_redirect.token }
+
+        expect(response).to have_http_status(:ok)
+        expect(response).to_not be_redirect
+      end
+
+      it "redirects signed-in users who are neither the purchaser nor subscription owner to check purchaser" do
+        product = create(:membership_product, price_cents: 100)
+        subscription = create(:subscription, link: product, user: create(:user))
+        create(:purchase, price_cents: 100, purchaser: subscription.user, link: product, subscription:, is_original_subscription_purchase: true)
+        renewal = create(:purchase, price_cents: 100, purchaser: create(:user), link: product, subscription:)
+        url_redirect = create(:url_redirect, link: product, purchase: renewal)
+
+        sign_in create(:user)
+        get :download_page, params: { id: url_redirect.token }
+
+        expect(response).to redirect_to "#{url_redirect_check_purchaser_path(url_redirect.token)}?next=#{CGI.escape request.path}"
+      end
+
       it "redirects to the expiration page if the membership inactive" do
         product = create(:membership_product, price_cents: 100)
         subscription = create(:subscription, link: product, user: create(:user), failed_at: Time.current)
         purchase = create(:purchase, price_cents: 100, purchaser: subscription.user, link: product, subscription:, is_original_subscription_purchase: true)
+        product.update_attribute(:block_access_after_membership_cancellation, true)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+
+        sign_in subscription.user
+        get :download_page, params: { id: url_redirect.token }
+        expect(response).to redirect_to(url_redirect_membership_inactive_page_path(id: url_redirect.token))
+      end
+
+      # Pins the ordering: authorizing the subscription owner must not let them past the
+      # membership-inactive branch on a renewal another purchaser paid for.
+      it "redirects the subscription owner to the expiration page when the membership is inactive and the purchase is another purchaser's" do
+        product = create(:membership_product, price_cents: 100)
+        subscription = create(:subscription, link: product, user: create(:user), failed_at: Time.current)
+        purchase = create(:purchase, price_cents: 100, purchaser: create(:user), link: product, subscription:, is_original_subscription_purchase: true)
         product.update_attribute(:block_access_after_membership_cancellation, true)
         url_redirect = create(:url_redirect, link: product, purchase:)
 
