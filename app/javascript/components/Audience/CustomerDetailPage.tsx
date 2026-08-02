@@ -52,7 +52,7 @@ import FileUtils from "$app/utils/file";
 import { priceCentsToUnit } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
-import { assertResponseError } from "$app/utils/request";
+import { assertResponseError, ResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -2224,6 +2224,10 @@ const CommissionSection = ({
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
 
+  // The server refuses file changes once a completion purchase exists, so a commission that is
+  // completed (or whose completion is still settling) must not offer upload/delete affordances.
+  const filesAreEditable = commission.status === "in_progress";
+
   const handleFileChange = asyncVoid(async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files?.length) return;
 
@@ -2264,8 +2268,11 @@ const CommissionSection = ({
       });
 
       showAlert("Uploaded successfully!", "success");
-    } catch {
-      showAlert("Error uploading files. Please try again.", "error");
+    } catch (e) {
+      // DirectUpload rejects with a plain Error, so this cannot use assertResponseError — that
+      // re-throws anything that is not a ResponseError and the seller would see no alert at all.
+      const message = e instanceof ResponseError && e.message ? e.message : "Error uploading files. Please try again.";
+      showAlert(message, "error");
     } finally {
       setIsLoading(false);
     }
@@ -2317,30 +2324,37 @@ const CommissionSection = ({
           <CardContent>
             <Rows role="list">
               {commission.files.map((file) => (
-                <FileRow key={file.id} file={file} onDelete={() => void handleDelete(file.id)} disabled={isLoading} />
+                <FileRow
+                  key={file.id}
+                  file={file}
+                  {...(filesAreEditable ? { onDelete: () => void handleDelete(file.id) } : {})}
+                  disabled={isLoading}
+                />
               ))}
             </Rows>
           </CardContent>
         ) : null}
-        <CardContent>
-          <div className="grid w-full gap-2">
-            <label className={buttonVariants({ className: "w-full" })}>
-              <input
-                type="file"
-                onChange={handleFileChange}
-                disabled={isLoading}
-                multiple
-                style={{ display: "none" }}
-              />
-              <Paperclip className="size-5" /> Upload files
-            </label>
-            {commission.status === "in_progress" ? (
-              <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()} className="w-full">
-                Submit and mark as complete
-              </Button>
-            ) : null}
-          </div>
-        </CardContent>
+        {filesAreEditable ? (
+          <CardContent>
+            <div className="grid w-full gap-2">
+              <label className={buttonVariants({ className: "w-full" })}>
+                <input
+                  type="file"
+                  onChange={handleFileChange}
+                  disabled={isLoading}
+                  multiple
+                  style={{ display: "none" }}
+                />
+                <Paperclip className="size-5" /> Upload files
+              </label>
+              {commission.status === "in_progress" ? (
+                <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()} className="w-full">
+                  Submit and mark as complete
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        ) : null}
       </section>
     </Card>
   );

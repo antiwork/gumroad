@@ -37,7 +37,10 @@ class CommissionsController < ApplicationController
 
   private
     def ensure_files_can_be_changed!(commission)
-      return unless commission.is_completed?
+      # Also keyed on the completion charge, not the status alone: a completion still settling in
+      # the buyer's presentment currency leaves the commission in_progress with the buyer already
+      # charged, and a status-only gate would admit purging every file in that window.
+      return unless commission.is_completed? || commission.completion_purchase.present?
 
       commission.errors.add(:base, "This commission has already been completed, so its files can no longer be changed.")
       raise ActiveRecord::RecordInvalid, commission

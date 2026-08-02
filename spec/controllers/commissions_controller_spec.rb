@@ -48,6 +48,21 @@ describe CommissionsController, :vcr do
       expect(response.parsed_body).to eq({ "errors" => ["This commission has already been completed, so its files can no longer be changed."] })
     end
 
+    it "rejects purging files while the completion charge is still settling" do
+      commission.files.attach(file_fixture("test.png"))
+      commission.update!(
+        completion_purchase: create(:purchase, link: commission.deposit_purchase.link, seller: commission.deposit_purchase.seller, is_commission_completion_purchase: true)
+      )
+
+      expect do
+        put :update, params: { id: commission.external_id, file_signed_ids: [] }, as: :json
+      end.to not_change { commission.reload.files.count }
+
+      expect(commission.reload.status).to eq(Commission::STATUS_IN_PROGRESS)
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ "errors" => ["This commission has already been completed, so its files can no longer be changed."] })
+    end
+
     it "rejects purging files from completed commissions" do
       commission.files.attach(file_fixture("test.png"))
       commission.update!(status: Commission::STATUS_COMPLETED)
