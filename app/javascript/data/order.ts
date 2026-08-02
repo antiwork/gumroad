@@ -103,6 +103,22 @@ const offerCodesForPaymentConfirmationLineItems = (
   return offerCodesForPermalinks(offerCodes, pendingPermalinks);
 };
 
+const offerCodesForSCALineItems = (
+  requestData: StartCartPurchaseRequestPayload,
+  lineItems: Partial<Record<LineItemUid, LineItemResponse>>,
+  offerCodes: OfferCodes,
+) => {
+  const pendingPermalinks = new Set(
+    requestData.lineItems
+      .filter((lineItem) => {
+        const result = lineItems[lineItem.uid];
+        return result ? doesLineItemRequireSCA(result) : false;
+      })
+      .map((lineItem) => lineItem.permalink),
+  );
+  return offerCodesForPermalinks(offerCodes, pendingPermalinks);
+};
+
 const retryOfferCodeCandidates = (requestData: StartCartPurchaseRequestPayload, offerCodes: OfferCodes) =>
   offerCodes.map((offerCode) => ({
     code: offerCode.code,
@@ -116,14 +132,20 @@ const retryOfferCodeCandidates = (requestData: StartCartPurchaseRequestPayload, 
 // Initiates a request to create an order to purchase all the line items in the cart.
 // Handles SCA actions where appropriate.
 // Result object is guaranteed to have a result for each line item in the request.
-export const startOrderCreation = async (requestData: StartCartPurchaseRequestPayload): Promise<CartPurchaseResult> => {
-  let retryOfferCodes: OfferCodes = [];
+export const startOrderCreation = async (
+  requestData: StartCartPurchaseRequestPayload,
+  activeOfferCodes: OfferCodes = [],
+): Promise<CartPurchaseResult> => {
+  let retryOfferCodes = activeOfferCodes;
   try {
     const response = await createOrder(requestData);
     if (!response.success) {
-      return translateOrderFailureResponseIntoLineItemFailures(requestData, response);
+      return translateOrderFailureResponseIntoLineItemFailures(requestData, response, activeOfferCodes);
     }
-    retryOfferCodes = response.offer_codes;
+    retryOfferCodes = mergeOfferCodes(
+      offerCodesForSCALineItems(requestData, response.line_items, activeOfferCodes),
+      response.offer_codes,
+    );
     const lineItemRequiringSCA =
       Object.values(response.line_items).find(
         (lineItem): lineItem is OrderRequiresCardSetupResponse | OrderRequiresCardActionResponse =>
@@ -139,7 +161,7 @@ export const startOrderCreation = async (requestData: StartCartPurchaseRequestPa
         clientSecret,
         stripeConnectAccountId,
         requiresCardAction,
-        retryOfferCodeCandidates(requestData, response.offer_codes),
+        retryOfferCodeCandidates(requestData, retryOfferCodes),
       );
       const lineItemResults = Object.values(orderConfirmResponse.line_items);
       const result = {
@@ -149,7 +171,7 @@ export const startOrderCreation = async (requestData: StartCartPurchaseRequestPa
           return lineItems;
         }, {}),
         canBuyerSignUp: response.can_buyer_sign_up,
-        offerCodes: replaceOncePerCartOfferCodes(response.offer_codes, orderConfirmResponse.offer_codes),
+        offerCodes: replaceOncePerCartOfferCodes(retryOfferCodes, orderConfirmResponse.offer_codes),
       };
       return ensureValidCartResult(requestData, result);
     }

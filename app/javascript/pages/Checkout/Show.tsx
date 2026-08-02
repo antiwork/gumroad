@@ -646,7 +646,7 @@ const CheckoutIndexPage = () => {
               requestData.paymentMethod.selectedMethodType,
               cartForm.data.cart.discountCodes,
             )
-          : await startOrderCreation(requestData);
+          : await startOrderCreation(requestData, cartForm.data.cart.discountCodes);
       const results = Object.entries(result.lineItems).flatMap(([key, result]) => {
         const [permalink, optionId] = key.split(" ");
         const item = cartForm.data.cart.items.find(

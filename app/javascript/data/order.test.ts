@@ -209,6 +209,16 @@ describe("replaceOncePerCartOfferCodes", () => {
 });
 
 describe("startOrderCreation", () => {
+  it("preserves active codes when order creation fails before line results", async () => {
+    vi.stubGlobal("Routes", { orders_path: () => "/orders" });
+    requestMock.mockReset().mockResolvedValueOnce(jsonResponse({ success: false, error_message: "Try again." }));
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100) } }];
+
+    const result = await startOrderCreation(requestData, activeOfferCodes);
+
+    expect(result.offerCodes).toEqual(activeOfferCodes);
+  });
+
   it("sends the client allocation used to order the server split", async () => {
     vi.stubGlobal("Routes", { orders_path: () => "/orders" });
     requestMock.mockReset();
@@ -327,7 +337,7 @@ describe("startOrderCreation", () => {
 
     const lineItem = requestData.lineItems.at(0);
     if (!lineItem) throw new Error("Missing test line item");
-    const recoveredOfferCodes = [{ code: "SAVE", products: { [lineItem.permalink]: oncePerCartDiscount(100) } }];
+    const activeOfferCodes = [{ code: "SAVE", products: { [lineItem.permalink]: oncePerCartDiscount(100) } }];
     requestMock.mockResolvedValueOnce(
       jsonResponse({
         success: true,
@@ -340,13 +350,13 @@ describe("startOrderCreation", () => {
           },
         },
         can_buyer_sign_up: false,
-        offer_codes: recoveredOfferCodes,
+        offer_codes: [],
       }),
     );
 
-    const result = await startOrderCreation(requestData);
+    const result = await startOrderCreation(requestData, activeOfferCodes);
 
-    expect(result.offerCodes).toEqual(recoveredOfferCodes);
+    expect(result.offerCodes).toEqual(activeOfferCodes);
   });
 });
 
