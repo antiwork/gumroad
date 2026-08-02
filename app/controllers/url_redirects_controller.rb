@@ -471,10 +471,12 @@ class UrlRedirectsController < ApplicationController
         return withdrawn_content_response
       end
 
-      subscription_owner = purchase&.subscription&.user
+      subscription_owner = purchase && !purchase.is_gift_receiver_purchase ? purchase.subscription&.user : nil
       # The subscription owner can read any purchase in it; transferred memberships can leave
-      # individual renewals attributed to the previous purchaser.
-      viewer_owns_subscription = subscription_owner.present? && logged_in_user == subscription_owner
+      # individual renewals attributed to the previous purchaser. The gift receiver leg is excluded:
+      # Gift::ConvertToNonGiftService re-points subscription.user at the payer to move BILLING
+      # ownership and says explicitly that the giftee keeps the seat.
+      viewer_owns_subscription = user_signed_in? && subscription_owner.present? && logged_in_user == subscription_owner
 
       return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !viewer_owns_subscription && !logged_in_user.is_team_member?
 
@@ -494,7 +496,10 @@ class UrlRedirectsController < ApplicationController
         end
       end
 
-      if cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
+      # Confirmation asks for the purchase's own email, which a transferred membership's new owner
+      # does not have — so clearing the gate above without clearing this one would only move them
+      # from one dead end to another on any renewal the previous owner had already opened.
+      if cookies.encrypted[:confirmed_redirect] == @url_redirect.token || viewer_owns_subscription ||
          (purchase && ((purchase.purchaser && purchase.purchaser == logged_in_user) || purchase.ip_address == request.remote_ip))
         return
       end

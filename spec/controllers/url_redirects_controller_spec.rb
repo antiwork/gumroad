@@ -855,6 +855,42 @@ describe UrlRedirectsController, inertia: true do
         expect(response).to redirect_to "#{url_redirect_check_purchaser_path(url_redirect.token)}?next=#{CGI.escape request.path}"
       end
 
+      # The email-confirmation gate lower down only accepts the purchase's own email, so a renewal
+      # the previous owner had already opened has to clear both gates or the fix changes nothing.
+      it "allows the subscription owner to view a renewal that has already been seen" do
+        product = create(:membership_product, price_cents: 100)
+        create(:readable_document, link: product)
+        subscription_owner = create(:user)
+        subscription = create(:subscription, link: product, user: subscription_owner)
+        create(:purchase, price_cents: 100, purchaser: subscription_owner, link: product, subscription:, is_original_subscription_purchase: true)
+        renewal = create(:purchase, price_cents: 100, purchaser: create(:user), link: product, subscription:)
+        url_redirect = create(:url_redirect, link: product, purchase: renewal, has_been_seen: true)
+
+        sign_in subscription_owner
+        get :download_page, params: { id: url_redirect.token }
+
+        expect(response).to have_http_status(:ok)
+        expect(response).to_not be_redirect
+      end
+
+      # Gift::ConvertToNonGiftService re-points subscription.user at the payer to move billing
+      # ownership; its scope note is explicit that the giftee keeps the seat.
+      it "does not let a gifted membership's payer open the giftee's purchase after conversion" do
+        product = create(:membership_product, price_cents: 100)
+        create(:readable_document, link: product)
+        giftee = create(:user)
+        payer = create(:user)
+        subscription = create(:subscription, link: product, user: payer)
+        receiver_purchase = create(:purchase, price_cents: 0, purchaser: giftee, link: product, subscription:,
+                                              is_gift_receiver_purchase: true)
+        url_redirect = create(:url_redirect, link: product, purchase: receiver_purchase)
+
+        sign_in payer
+        get :download_page, params: { id: url_redirect.token }
+
+        expect(response).to redirect_to "#{url_redirect_check_purchaser_path(url_redirect.token)}?next=#{CGI.escape request.path}"
+      end
+
       it "redirects to the expiration page if the membership inactive" do
         product = create(:membership_product, price_cents: 100)
         subscription = create(:subscription, link: product, user: create(:user), failed_at: Time.current)
