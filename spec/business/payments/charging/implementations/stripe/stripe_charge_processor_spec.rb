@@ -545,22 +545,22 @@ describe StripeChargeProcessor, :vcr do
       expect(Stripe::Dispute).to receive(:update).with(
         stripe_charge.dispute,
         hash_including(evidence: hash_including({
-                                   billing_address: dispute_evidence.billing_address,
-                                   customer_email_address: dispute_evidence.customer_email,
-                                   customer_name: dispute_evidence.customer_name,
-                                   customer_purchase_ip: dispute_evidence.customer_purchase_ip,
-                                   product_description: dispute_evidence.product_description,
-                                   service_date: dispute_evidence.purchased_at.to_fs(:formatted_date_full_month),
-                                   shipping_address: dispute_evidence.shipping_address,
-                                   shipping_carrier: dispute_evidence.shipping_carrier,
-                                   shipping_date: dispute_evidence.shipped_at&.to_fs(:formatted_date_full_month),
-                                   shipping_tracking_number: dispute_evidence.shipping_tracking_number,
-                                   uncategorized_text: expected_uncategorized_text,
-                                   access_activity_log: dispute_evidence.access_activity_log,
-                                   refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
-                                   cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
-                                   refund_refusal_explanation: dispute_evidence.refund_refusal_explanation
-                                 })),
+                                                  billing_address: dispute_evidence.billing_address,
+                                                  customer_email_address: dispute_evidence.customer_email,
+                                                  customer_name: dispute_evidence.customer_name,
+                                                  customer_purchase_ip: dispute_evidence.customer_purchase_ip,
+                                                  product_description: dispute_evidence.product_description,
+                                                  service_date: dispute_evidence.purchased_at.to_fs(:formatted_date_full_month),
+                                                  shipping_address: dispute_evidence.shipping_address,
+                                                  shipping_carrier: dispute_evidence.shipping_carrier,
+                                                  shipping_date: dispute_evidence.shipped_at&.to_fs(:formatted_date_full_month),
+                                                  shipping_tracking_number: dispute_evidence.shipping_tracking_number,
+                                                  uncategorized_text: expected_uncategorized_text,
+                                                  access_activity_log: dispute_evidence.access_activity_log,
+                                                  refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
+                                                  cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
+                                                  refund_refusal_explanation: dispute_evidence.refund_refusal_explanation
+                                                })),
         hash_including(:idempotency_key)
       ).and_call_original
       subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
