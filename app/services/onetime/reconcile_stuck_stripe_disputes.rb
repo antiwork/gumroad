@@ -86,14 +86,20 @@ module Onetime
         # funds_reinstated, which transfers real money back to the creator's account and builds
         # multi-leg flow of funds. Replaying only the internal booking would credit them on paper
         # with nothing behind it.
-        return "destination_charge_needs_manual_repair" if gumroad_managed_stripe?(dispute)
+        return "destination_charge_needs_manual_repair" if destination_charge?(dispute)
 
         nil
       end
 
-      def gumroad_managed_stripe?(dispute)
+      # A DESTINATION charge is one settled into a seller's own Gumroad-managed Connect account.
+      # `is_a_gumroad_managed_stripe_account?` is also true of Gumroad's platform account
+      # (user_id nil), which carries ordinary direct charges — the bulk of this cohort and exactly
+      # what we are here to book. Require a seller before refusing.
+      def destination_charge?(dispute)
         merchant_account = disputed_purchases(dispute).first&.merchant_account
-        merchant_account&.is_a_gumroad_managed_stripe_account? || false
+        return false if merchant_account.nil? || merchant_account.is_managed_by_gumroad?
+
+        merchant_account.is_a_gumroad_managed_stripe_account?
       end
 
       # Only a dispute Stripe considers finished can be booked. `warning_*` and `needs_response`

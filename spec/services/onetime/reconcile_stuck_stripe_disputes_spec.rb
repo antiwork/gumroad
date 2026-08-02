@@ -140,6 +140,19 @@ describe Onetime::ReconcileStuckStripeDisputes do
       expect(purchase.reload.chargeback_reversed).to be_falsey
     end
 
+    # Gumroad's own platform account is also "Gumroad-managed", but it settles the ordinary direct
+    # charges that are the bulk of this cohort. Refusing those would make the script a no-op.
+    it "does not mistake Gumroad's platform account for a destination charge" do
+      expect(purchase.merchant_account.is_managed_by_gumroad?).to eq(true)
+      expect(purchase.merchant_account.is_a_gumroad_managed_stripe_account?).to eq(true)
+      stub_stripe(stripe_dispute(status: "won"))
+
+      result = described_class.process(dry_run: false)
+
+      expect(result[:stats][:refused_destination_charge_needs_manual_repair]).to eq(0)
+      expect(dispute.reload.state).to eq("won")
+    end
+
     it "records a per-row failure instead of aborting the whole run" do
       other_purchase = create(:purchase, chargeback_date: 1.year.ago)
       create(:dispute, purchase: other_purchase, state: "formalized",
