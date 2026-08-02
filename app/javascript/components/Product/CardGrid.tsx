@@ -335,23 +335,28 @@ export const CardGrid = ({
               </Details>
             </CardContent>
           ) : null}
-          {results?.taxonomy_attributes_data.map((attribute) => (
-            <CardContent key={attribute.name} asChild details>
-              <Details>
-                <DetailsToggle chevronPosition="right" className="grow">
-                  {attribute.label}
-                </DetailsToggle>
-                <Fieldset role="group">
-                  <FilterCheckboxes
-                    filters={concatFoundAndNotFound(attribute.filters, searchParams.taxonomy_attribute_filters)}
-                    selection={searchParams.taxonomy_attribute_filters ?? []}
-                    setSelection={(taxonomy_attribute_filters) => updateParams({ taxonomy_attribute_filters })}
-                    disabled={disableFilters ?? false}
-                  />
-                </Fieldset>
-              </Details>
-            </CardContent>
-          ))}
+          {results?.taxonomy_attributes_data.map((attribute) => {
+            const selectedAttributeFilters = searchParams.taxonomy_attribute_filters?.filter((token) =>
+              token.startsWith(`${attribute.name}:`),
+            );
+            return (
+              <CardContent key={attribute.name} asChild details>
+                <Details>
+                  <DetailsToggle chevronPosition="right" className="grow">
+                    {attribute.label}
+                  </DetailsToggle>
+                  <Fieldset role="group">
+                    <FilterCheckboxes
+                      filters={concatFoundAndNotFound(attribute.filters, selectedAttributeFilters)}
+                      selection={searchParams.taxonomy_attribute_filters ?? []}
+                      setSelection={(taxonomy_attribute_filters) => updateParams({ taxonomy_attribute_filters })}
+                      disabled={disableFilters ?? false}
+                    />
+                  </Fieldset>
+                </Details>
+              </CardContent>
+            );
+          })}
           <CardContent asChild details>
             <Details>
               <DetailsToggle chevronPosition="right" className="grow">
