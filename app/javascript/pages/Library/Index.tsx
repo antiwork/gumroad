@@ -170,7 +170,7 @@ export const DeleteProductModal = ({
   );
 };
 
-type SearchParams = {
+export type SearchParams = {
   sort: "recently_updated" | "purchase_date";
   query: string;
   creators: string[];

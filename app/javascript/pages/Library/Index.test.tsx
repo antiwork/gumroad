@@ -7,7 +7,7 @@ import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { LoggedInUserProvider } from "$app/components/LoggedInUser";
 import { UserAgentProvider } from "$app/components/UserAgent";
 
-import LibraryPage, { Result } from "./Index";
+import LibraryPage, { Result, SearchParams } from "./Index";
 
 const mocks = vi.hoisted(() => ({
   routerGet: vi.fn(),
@@ -49,6 +49,14 @@ const result = (id: string, name: string): Result => ({
   purchase: { id, is_archived: false, download_url: `https://example.com/d/${id}`, variants: null },
 });
 
+const defaultSearch = (): SearchParams => ({
+  sort: "recently_updated",
+  query: "",
+  creators: [],
+  bundles: [],
+  show_archived_only: false,
+});
+
 const defaultProps = () => ({
   results: [result("p1", "Alpha"), result("p2", "Beta")],
   pagination: { page: 1, pages: 3, from: 1, to: 2, count: 6 },
@@ -59,13 +67,7 @@ const defaultProps = () => ({
   bundles: [{ id: "b1", label: "Bundle One" }],
   archived_count: 2,
   unarchived_count: 6,
-  search: {
-    sort: "recently_updated",
-    query: "",
-    creators: [],
-    bundles: [],
-    show_archived_only: false,
-  },
+  search: defaultSearch(),
   purchase_analytics: {},
   receipt_purchases: [],
 });
