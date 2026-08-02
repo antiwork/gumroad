@@ -15,8 +15,9 @@ class SubscribePreviewGeneratorService
     "user-data-dir=/tmp/chrome",
   ].freeze
 
-  # Any avatar, including the default one, is an <img>, so this is satisfied on
-  # every profile rather than only on sellers who uploaded a portrait.
+  # Targeted by attribute rather than by tag: any future <img> added earlier in
+  # the document would otherwise satisfy the wait and silently reopen the
+  # empty-circle bug this guards against.
   #
   # `complete && naturalWidth > 0` only means the bytes arrived; Chromium still
   # decodes afterwards and screenshots taken in that window get an empty circle.
@@ -24,7 +25,7 @@ class SubscribePreviewGeneratorService
   # off once and then reports the flag it sets. A rejected decode counts as done
   # so a permanently broken avatar cannot hold the wait open.
   AVATAR_READY_SCRIPT = <<~JS
-    const img = document.querySelector("img");
+    const img = document.querySelector("[data-subscribe-preview-avatar]");
     if (!img) return false;
     if (window.__gumroadAvatarDecoded) return true;
     if (!window.__gumroadAvatarDecodeStarted) {
@@ -36,7 +37,18 @@ class SubscribePreviewGeneratorService
     return false;
   JS
 
-  def self.generate_pngs(users)
+  # Screenshot whatever is on the page once this elapses, rather than waiting on
+  # an avatar that is never going to arrive.
+  AVATAR_WAIT_SECONDS = 10
+
+  # readyState goes "complete" before Inertia has mounted the page, so the avatar
+  # <img> does not exist yet and the card screenshots with an empty circle.
+  # Waiting on the image itself is the only ordering guarantee available here.
+  #
+  # A timeout raises by default so the job's retries can absorb a slow CDN. Only
+  # the final attempt passes require_avatar: false, trading the avatar for a card
+  # rather than leaving the seller with none at all.
+  def self.generate_pngs(users, require_avatar: true)
     options = Selenium::WebDriver::Chrome::Options.new(args: CHROME_ARGS)
     driver = Selenium::WebDriver.for(:chrome, options:)
     users.map do |user|
@@ -46,16 +58,12 @@ class SubscribePreviewGeneratorService
         protocol: PROTOCOL,
       )
       driver.navigate.to url
-      wait = Selenium::WebDriver::Wait.new(timeout: 10)
-      # readyState goes "complete" before Inertia has mounted the page, so the
-      # avatar <img> does not exist yet and the card screenshots with an empty
-      # circle. Wait for the image itself to be decoded, not for the document.
+      wait = Selenium::WebDriver::Wait.new(timeout: AVATAR_WAIT_SECONDS)
       begin
         wait.until { driver.execute_script(AVATAR_READY_SCRIPT) }
       rescue Selenium::WebDriver::Error::TimeoutError
-        # A card missing its avatar still beats no card at all, and a broken
-        # avatar would otherwise fail this user forever on every retry.
-        Rails.logger.warn("SubscribePreviewGeneratorService: avatar never loaded for user.id=#{user.id}")
+        raise if require_avatar
+        Rails.logger.error("SubscribePreviewGeneratorService: avatar never loaded for user.id=#{user.id}, generating card without it")
       end
       driver.manage.window.size = Selenium::WebDriver::Dimension.new(WIDTH, HEIGHT)
       driver.screenshot_as(:png)
