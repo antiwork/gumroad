@@ -909,6 +909,28 @@ describe UrlRedirectsController, inertia: true do
         expect(response.parsed_body["error"]).to_not eq("Not found")
       end
 
+      # A renewal charged while the membership was still gifted keeps the giftee as purchaser but
+      # carries no gift flag; the conversion clears the sender flag and leaves only the Gift row
+      # on the original purchase to mark the subscription's gift origin.
+      it "does not let a converted gift's payer open a renewal charged while the giftee held the membership" do
+        product = create(:membership_product, price_cents: 100)
+        create(:readable_document, link: product)
+        giftee = create(:user)
+        payer = create(:user)
+        subscription = create(:subscription, link: product, user: payer)
+        original_purchase = create(:purchase, price_cents: 100, purchaser: payer, link: product, subscription:, is_original_subscription_purchase: true)
+        receiver_purchase = create(:purchase, price_cents: 0, purchaser: giftee, link: product, subscription:,
+                                              is_gift_receiver_purchase: true)
+        create(:gift, link: product, gifter_purchase: original_purchase, giftee_purchase: receiver_purchase)
+        renewal = create(:purchase, price_cents: 100, purchaser: giftee, link: product, subscription:)
+        url_redirect = create(:url_redirect, link: product, purchase: renewal, has_been_seen: true)
+
+        sign_in payer
+        get :download_page, params: { id: url_redirect.token }
+
+        expect(response).to redirect_to "#{url_redirect_check_purchaser_path(url_redirect.token)}?next=#{CGI.escape request.path}"
+      end
+
       it "redirects to the expiration page if the membership inactive" do
         product = create(:membership_product, price_cents: 100)
         subscription = create(:subscription, link: product, user: create(:user), failed_at: Time.current)

@@ -460,14 +460,18 @@ class UrlRedirectsController < ApplicationController
     end
 
     # The subscription owner can read any purchase in it; transferred memberships can leave
-    # individual renewals attributed to the previous purchaser. The gift receiver leg is excluded:
-    # Gift::ConvertToNonGiftService re-points subscription.user at the payer to move BILLING
-    # ownership and says explicitly that the giftee keeps the seat.
+    # individual renewals attributed to the previous purchaser. Gift-origin subscriptions get no
+    # bypass at all: Gift::ConvertToNonGiftService re-points subscription.user at the payer to
+    # move BILLING ownership while the giftee keeps the seat, and a renewal charged before the
+    # conversion carries the giftee as purchaser with no gift flag — only the surviving Gift row
+    # on the true original purchase marks it. The gift lookup runs last so its extra queries
+    # only fire for a viewer who actually owns the subscription.
     def viewer_owns_subscription?(purchase)
       return false if purchase.nil? || purchase.is_gift_receiver_purchase
 
-      owner = purchase.subscription&.user
-      user_signed_in? && owner.present? && logged_in_user == owner
+      subscription = purchase.subscription
+      user_signed_in? && subscription&.user.present? && logged_in_user == subscription.user &&
+        subscription.true_original_purchase&.gift_given.nil?
     end
 
     def check_permissions
