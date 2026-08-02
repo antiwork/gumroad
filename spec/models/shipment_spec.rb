@@ -40,6 +40,20 @@ describe Shipment do
       expect(Shipment.new(purchase:)).to be_valid
     end
 
+    it "allows a shipment when the product was saved physical moments after its creation row", :versioning do
+      # purchases.created_at is second-precision, so a product whose create and update versions
+      # straddle a whole second reifies at its pre-physical state without the window widening.
+      product = create(:physical_product)
+      purchase = create(:physical_purchase, link: product)
+      boundary = purchase.created_at.change(usec: 0) + 5.seconds
+      versions = product.versions.reload.to_a
+      versions.first.update_column(:created_at, boundary - 0.05.seconds)
+      versions[1..].each_with_index { |v, i| v.update_column(:created_at, boundary + (0.01 * (i + 1)).seconds) }
+      purchase.update_column(:created_at, boundary)
+
+      expect(Shipment.new(purchase: purchase.reload)).to be_valid
+    end
+
     it "still allows updates to a pre-existing shipment on a non-shipping product" do
       shipment = create(:shipment)
       shipment.purchase.link.update_columns(flags: 0, require_shipping: false)
