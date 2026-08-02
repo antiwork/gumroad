@@ -38,7 +38,7 @@ describe "app/views/home/prohibited.html.erb clarifying notes" do
 
   describe "the fortune teller note" do
     let(:note) do
-      source[/<strong>#{sp}*A#{sp}+note#{sp}+on#{sp}+fortune#{sp}+tellers\.#{sp}*<\/strong>.*?(?=<p><strong>|<\/div>)/om]
+      source[/<strong>#{sp}*A#{sp}+note#{sp}+on#{sp}+fortune#{sp}+tellers\.#{sp}*<\/strong>.*?(?=<p>#{sp}*<strong>|<\/div>)/om]
     end
 
     # Without this the two include examples below would fail on nil rather than on their subject,
@@ -47,20 +47,21 @@ describe "app/views/home/prohibited.html.erb clarifying notes" do
       expect(note).to_not be_nil
     end
 
-    it "is reachable from item 28" do
+    it "is reachable from its list entry" do
       expect(source).to include("<li>fortune tellers. See the note on fortune tellers below.</li>")
     end
 
     # The seller-visible point of the note: the categories we ship in Discover are named as allowed.
+    # "tarot" alone would also be satisfied by the Discover URL inside the slice, so this asserts
+    # prose-only words too.
     it "names the allowed traditions" do
-      expect(note).to include("astrology", "tarot", "divination")
+      expect(note).to include("astrology", "tarot", "divination", "numerology", "birth-chart")
     end
 
-    # A bare slug is NOT a Discover URL — DiscoverTaxonomyConstraint matches the full ancestry path
-    # only, so gumroad.com/tarot falls through to the username subdomain and lands on whichever
-    # creator owns that handle. The link must be generated from the route helper for that reason.
-    it "links the tarot category by its full ancestry path" do
-      expect(note).to include(%(discover_taxonomy_url("self-improvement/spirituality/mysticism/tarot", host: DISCOVER_DOMAIN)))
+    # Guards the slice's lookahead: a widened slice would swallow the next note and every include
+    # above would still pass, so "in the fortune-teller note" would stop meaning anything.
+    it "stops before the gambling note" do
+      expect(note).to_not include("A note on gambling")
     end
 
     it "states what remains prohibited" do
@@ -68,20 +69,26 @@ describe "app/views/home/prohibited.html.erb clarifying notes" do
     end
   end
 
-  # Guards the example above. The test DB has no taxonomy rows, so this reads the ancestry out of
-  # the seed file that defines production's tree instead: a re-parent of tarot reddens here rather
-  # than shipping another link to whichever creator owns the bare slug.
-  it "pins the tarot ancestry the taxonomy seeds define" do
-    seeds = Rails.root.join("db/seeds/010_development_staging_test/taxonomy_create.rb").read
-    parent_of = seeds.scan(/find_or_create_by!\(slug: "([^"]+)"(?:, parent: (\w+))?\)/).to_h
-    var_slug = seeds.scan(/^(\w+) = Taxonomy\.find_or_create_by!\(slug: "([^"]+)"/).to_h
-
-    ancestry = ->(slug) do
-      path = [slug]
-      path.unshift(var_slug.fetch(parent_of.fetch(path.first))) while parent_of[path.first]
-      path
+  # The source scans above cannot see the link: they would stay green if the route helper were
+  # renamed away (page 500s), if `<%=` became `<%` (link silently vanishes), or if DISCOVER_DOMAIN
+  # left view scope. Only rendered output settles whether a reader can click through.
+  describe "the rendered Discover link" do
+    # A bare slug is NOT a Discover URL — DiscoverTaxonomyConstraint matches the full ancestry path
+    # only, so gumroad.com/tarot falls through to the username route and lands on whichever creator
+    # owns that handle. Building the path from the tree keeps the page honest if tarot is reparented.
+    let(:tarot_path) do
+      self_improvement = Taxonomy.find_or_create_by!(slug: "self-improvement")
+      spirituality = Taxonomy.find_or_create_by!(slug: "spirituality", parent: self_improvement)
+      mysticism = Taxonomy.find_or_create_by!(slug: "mysticism", parent: spirituality)
+      tarot = Taxonomy.find_or_create_by!(slug: "tarot", parent: mysticism)
+      tarot.self_and_ancestors.reverse.map(&:slug).join("/")
     end
 
-    expect(ancestry.call("tarot")).to eq(%w[self-improvement spirituality mysticism tarot])
+    let(:rendered) { ApplicationController.render(template: "home/prohibited", layout: false) }
+
+    it "points at the tarot category's full ancestry path" do
+      expect(tarot_path).to eq("self-improvement/spirituality/mysticism/tarot")
+      expect(rendered).to include(%(href="#{UrlService.discover_domain_with_protocol}/#{tarot_path}"))
+    end
   end
 end
