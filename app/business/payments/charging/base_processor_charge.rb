@@ -6,11 +6,6 @@ class BaseProcessorCharge
                 :card_last4, :card_number_length, :card_expiry_month, :card_expiry_year, :card_zip_code,
                 :card_type, :card_country, :zip_check_result,
                 :flow_of_funds, :risk_level, :card_mandate,
-                # Why the processor refused, when it did. `blocked_by_processor_rule` separates a
-                # refusal the processor made on one of our own risk rules — which no change on our
-                # side can lift while its window holds — from an issuer decline, which our records
-                # cannot tell apart. See Purchase::Blockable#processor_rule_refusal.
-                :network_status, :outcome_type, :outcome_reason, :seller_message,
                 # The processor's own name for the payment method family ("card", "upi",
                 # "ideal", ...). Unlike card_type — which mixes card brands and non-card
                 # methods for display — this is the raw classification, recorded so
