@@ -85,6 +85,7 @@ export const CheckoutPreview = ({
         recaptchaScoreBased: false,
         checkoutPaymentStale: false,
         resumeSubmitAfterCheckoutPayment: false,
+        validationFailedCount: 0,
       },
       () => undefined,
     ],

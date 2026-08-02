@@ -61,6 +61,30 @@ describe("Product checkout - custom fields", type: :system, js: true) do
     )
   end
 
+  it "points the buyer at the first unmet required field with a message and focus when Pay is refused" do
+    @product.custom_fields << [
+      create(:custom_field, type: "text", name: "your nickname", required: true),
+      create(:custom_field, type: "checkbox", name: "extras", required: true),
+      create(:custom_field, type: "terms", name: "http://example.com")
+    ]
+    @product.save!
+
+    visit "/l/#{@product.unique_permalink}"
+    add_to_cart(@product)
+    check_out(@product, error: true)
+
+    # The refused Pay click must scroll to and focus the first unmet field — a red border alone
+    # is invisible when the field is above the fold on mobile.
+    expect(page).to have_field("your nickname", focused: true)
+    expect(page).to have_text("This field is required.", count: 2)
+    expect(page).to have_text("Please accept the Terms and Conditions.")
+
+    fill_in "your nickname", with: "test"
+    check_out(@product, error: true)
+    expect(page).to have_field("extras", focused: true)
+    expect(page).to have_text("This field is required.", count: 1)
+  end
+
   it "does not require optional inputs to be filled or optional checkboxes to be checked, purchase goes through" do
     @product.custom_fields << [
       create(:custom_field, type: "text", name: "your nickname"),

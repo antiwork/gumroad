@@ -8,7 +8,7 @@ import { Product, getCustomFieldKey, getErrors, isProcessing, useState } from "$
 import { Avatar } from "$app/components/ui/Avatar";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 
@@ -29,11 +29,13 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
             id={uid}
             type="text"
             aria-invalid={hasError}
+            aria-describedby={hasError ? `${uid}-error` : undefined}
             placeholder={`${field.name}${field.required ? "" : " (optional)"}`}
             value={value ?? ""}
             onChange={(e) => dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.value })}
             disabled={isProcessing(state)}
           />
+          {hasError ? <FieldsetDescription id={`${uid}-error`}>This field is required.</FieldsetDescription> : null}
         </Fieldset>
       );
     }
@@ -44,6 +46,7 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
             <Checkbox
               checked={value === "true"}
               aria-invalid={hasError}
+              aria-describedby={hasError ? `${uid}-error` : undefined}
               onChange={(e) =>
                 dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.checked ? "true" : "" })
               }
@@ -52,6 +55,7 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
             />
             {field.required ? field.name : `${field.name} (optional)`}
           </Label>
+          {hasError ? <FieldsetDescription id={`${uid}-error`}>This field is required.</FieldsetDescription> : null}
         </Fieldset>
       );
     }
@@ -62,6 +66,7 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
             <Checkbox
               checked={value === "true"}
               aria-invalid={hasError}
+              aria-describedby={hasError ? `${uid}-error` : undefined}
               onChange={(e) =>
                 dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.checked ? "true" : "" })
               }
@@ -73,6 +78,9 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
               Terms and Conditions
             </a>
           </Label>
+          {hasError ? (
+            <FieldsetDescription id={`${uid}-error`}>Please accept the Terms and Conditions.</FieldsetDescription>
+          ) : null}
         </Fieldset>
       );
     }
