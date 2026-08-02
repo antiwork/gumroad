@@ -37,6 +37,11 @@ class Purchase::VariantUpdaterService
 
     sync_inventory_counter_cache_for_variant_swap(before_counted, before_variant_ids, before_quantity)
 
+    # Swapping into a variant whose content carries a license-key block flips
+    # uses_license_key? false -> true after the key would normally have been
+    # minted at purchase time, and nothing else backfills it. Idempotent.
+    purchase.create_license!
+
     if purchase.is_gift_sender_purchase?
       Purchase::VariantUpdaterService.new(
         purchase: purchase.gift.giftee_purchase,

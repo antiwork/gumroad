@@ -282,5 +282,61 @@ describe Purchase::VariantUpdaterService do
         end
       end
     end
+    context "when the new variant's content carries a license-key block" do
+      let(:product) { create(:product, is_licensed: true) }
+      let(:category) { create(:variant_category, link: product, title: "Tier") }
+      let(:free_variant) { create(:variant, variant_category: category, name: "Free Version") }
+      let(:full_variant) { create(:variant, variant_category: category, name: "Full Version") }
+
+      before do
+        create(:rich_content, entity: free_variant, description: [{ "type" => "paragraph" }])
+        create(:rich_content, entity: full_variant, description: [{ "type" => RichContent::LICENSE_KEY_NODE_TYPE }])
+      end
+
+      it "mints the license the purchase had suppressed" do
+        purchase = create(:purchase, link: product, variant_attributes: [free_variant])
+        expect(purchase.license).to be_nil
+
+        success = Purchase::VariantUpdaterService.new(
+          purchase:,
+          variant_id: full_variant.external_id,
+          quantity: purchase.quantity,
+        ).perform
+
+        expect(success).to be true
+        expect(purchase.reload.uses_license_key?).to be true
+        expect(purchase.license).to be_present
+        expect(purchase.license.serial).to be_present
+        expect(product.reload.licenses).to include(purchase.license)
+      end
+
+      it "keeps the existing license when the purchase already has one" do
+        purchase = create(:purchase, link: product, variant_attributes: [full_variant])
+        existing = purchase.create_license!
+        expect(existing).to be_present
+
+        Purchase::VariantUpdaterService.new(
+          purchase:,
+          variant_id: free_variant.external_id,
+          quantity: purchase.quantity,
+        ).perform
+
+        expect(purchase.reload.license).to eq(existing)
+      end
+
+      it "does not mint a license when the new variant's content omits the block" do
+        purchase = create(:purchase, link: product, variant_attributes: [full_variant])
+        purchase.license&.destroy!
+
+        Purchase::VariantUpdaterService.new(
+          purchase:,
+          variant_id: free_variant.external_id,
+          quantity: purchase.quantity,
+        ).perform
+
+        expect(purchase.reload.uses_license_key?).to be false
+        expect(purchase.license).to be_nil
+      end
+    end
   end
 end
