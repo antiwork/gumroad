@@ -3,19 +3,8 @@
 # Books Stripe dispute outcomes we never recorded, for disputes stuck non-terminal because the
 # closing webhook was missed. See gumroad-private#1700.
 #
-# Stripe has already settled these at the processor: every sampled won dispute carries a
-# withdrawal AND a reinstatement balance transaction netting to zero, so the disputed money is
-# back on the platform balance. What never happened is the internal booking — the seller's credit
-# and the buyer's access — which is why sellers are short and buyers are locked out of paid
-# products a year later.
-#
-# Two things this deliberately does NOT do:
-#
-# 1. It does not replay the original Stripe events. Stripe retains events for ~30 days and this
-#    cohort is over a year old; a replay-based repair heals exactly zero rows.
-# 2. It does not infer the verdict from age. 35 of 244 sampled disputes are LOST at Stripe, so
-#    anything that treated the backlog as uniformly won would credit sellers for money the bank
-#    kept.
+# Stripe retains events for ~30 days and this cohort is over a year old, so event replay heals
+# nothing; and 184 of the cohort are LOST at Stripe, so the verdict can never be inferred from age.
 module Onetime
   class ReconcileStuckStripeDisputes
     NONTERMINAL_STATES = %w[created initiated formalized].freeze
@@ -35,8 +24,17 @@ module Onetime
 
       scope.find_each do |dispute|
         stats[:scanned] += 1
+        row = { dispute_id: dispute.id, state: dispute.state }
+
+        refusal = internal_refusal(dispute)
+        if refusal
+          stats[:"refused_#{refusal}"] += 1
+          report << row.merge(action: "refused", reason: refusal)
+          next
+        end
+
         outcome = stripe_outcome(dispute)
-        row = { dispute_id: dispute.id, state: dispute.state, stripe_status: outcome[:status] }
+        row = row.merge(stripe_status: outcome[:status])
 
         unless outcome[:ok]
           stats[:"refused_#{outcome[:reason]}"] += 1
@@ -50,19 +48,57 @@ module Onetime
           next
         end
 
-        book!(dispute, outcome)
+        begin
+          book!(dispute, outcome)
+        rescue => e
+          stats[:"failed_#{outcome[:status]}"] += 1
+          report << row.merge(action: "failed", error: "#{e.class}: #{e.message}")
+          next
+        end
+
         dispute.reload
-        stats[:"booked_#{outcome[:status]}"] += 1
-        stats[:still_nonterminal] += 1 if NONTERMINAL_STATES.include?(dispute.state)
-        report << row.merge(action: "booked", end_state: dispute.state)
+        if NONTERMINAL_STATES.include?(dispute.state)
+          # The handler returned early (it notifies and returns when the disputable is not
+          # actually disputed). Booking it as done would put a lie in the audit trail.
+          stats[:book_had_no_effect] += 1
+          report << row.merge(action: "book_had_no_effect", end_state: dispute.state)
+        else
+          stats[:"booked_#{outcome[:status]}"] += 1
+          report << row.merge(action: "booked", end_state: dispute.state)
+        end
       end
 
       { stats: stats.to_h, report: }
     end
 
     private
+      # Everything that makes a row unbookable on OUR side, checked before we spend a Stripe call.
+      def internal_refusal(dispute)
+        return "no_disputable" if dispute.charge.nil? && dispute.purchase.nil?
+
+        # The seller-side debit happens in the FORMALIZED side effects. A row that never got
+        # there has no debit on our books, so booking WON would credit a debit that never
+        # happened and booking LOST would bury an unbooked loss behind a terminal state.
+        return "not_formalized_internally" unless dispute.formalized?
+        return "formalization_incomplete" if dispute.formalized_side_effects_finished_at.nil?
+
+        # Destination (Gumroad-managed Stripe Connect) charges settle a won dispute through
+        # funds_reinstated, which transfers real money back to the creator's account and builds
+        # multi-leg flow of funds. Replaying only the internal booking would credit them on paper
+        # with nothing behind it.
+        return "destination_charge_needs_manual_repair" if gumroad_managed_stripe?(dispute)
+
+        nil
+      end
+
+      def gumroad_managed_stripe?(dispute)
+        merchant_account = disputed_purchases(dispute).first&.merchant_account
+        merchant_account&.is_a_gumroad_managed_stripe_account? || false
+      end
+
       # Only a dispute Stripe considers finished can be booked. `warning_*` and `needs_response`
-      # are live disputes whose webhooks are still coming.
+      # are inquiries and live disputes: `warning_closed` was never withdrawn at Stripe, so the
+      # reinstatement check below cannot clear it and it needs a human.
       def stripe_outcome(dispute)
         processor_id = dispute.charge_processor_dispute_id
         return { ok: false, reason: "no_processor_dispute_id" } if processor_id.blank?
@@ -80,8 +116,10 @@ module Onetime
 
         { ok: true, status:, stripe_dispute: }
       rescue Stripe::InvalidRequestError => e
-        reason = e.message.to_s.include?("No such dispute") ? "unknown_to_stripe" : "stripe_invalid_request"
+        reason = e.message.to_s.include?("No such dispute") ? "not_found_on_account_tried" : "stripe_invalid_request"
         { ok: false, reason: }
+      rescue Stripe::StripeError => e
+        { ok: false, reason: "stripe_error_#{e.class.name.demodulize.underscore}" }
       end
 
       def funds_reinstated?(stripe_dispute)
@@ -96,9 +134,9 @@ module Onetime
         { stripe_account: merchant_account.charge_processor_merchant_id }
       end
 
+      # `Dispute#purchases` returns `[nil]` for a service-charge dispute, so compact before use.
       def disputed_purchases(dispute)
-        purchases = dispute.purchases.to_a
-        purchases.presence || [dispute.purchase].compact
+        Array(dispute.purchases).compact.presence || [dispute.purchase].compact
       end
 
       # Drives the same handlers the webhook would have, so the credit, the access restore and the
@@ -116,10 +154,14 @@ module Onetime
           event.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(
             outcome[:stripe_dispute].currency, outcome[:stripe_dispute].amount
           )
-          disputable.handle_event_dispute_won!(event)
+          # The lost handler wraps itself; the won one does not, and a raise partway through its
+          # per-purchase loop would leave the dispute terminal with some purchases uncredited.
+          dispute.with_lock do
+            ActiveRecord::Base.transaction { disputable.handle_event_dispute_won!(event) }
+          end
         else
           event.type = ChargeEvent::TYPE_DISPUTE_LOST
-          disputable.handle_event_dispute_lost!(event)
+          dispute.with_lock { disputable.handle_event_dispute_lost!(event) }
         end
       end
   end
