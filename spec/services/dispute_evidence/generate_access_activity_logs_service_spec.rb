@@ -381,9 +381,10 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
 
       content = described_class.perform(bundle_purchase)
       rows = content.lines.grep(/10\.0\.0\./).map(&:strip)
-      expected_rows = described_class::LOG_RECORDS_LIMIT.times.map do |i|
+      # Events 0 and 1 are the oldest of the twelve, so the most-recent window is 2..11.
+      expected_rows = (2..11).map do |i|
         product_name = i.even? ? "Member One" : "Member Two"
-        "2024-05-08 00:0#{i}:00 UTC,watch,web,10.0.0.#{i},\"#{product_name}\""
+        "2024-05-08 00:#{format('%02d', i)}:00 UTC,watch,web,10.0.0.#{i},\"#{product_name}\""
       end
 
       expect(content).to include("The customer accessed the product 12 times. Most recent 10 log records:")
