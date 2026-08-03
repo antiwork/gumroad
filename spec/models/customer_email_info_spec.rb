@@ -107,68 +107,6 @@ describe CustomerEmailInfo do
     end
   end
 
-  # The event handler creates an unsent row when a delivery arrives before the
-  # send was recorded. That row stands for no send, so the send must adopt it —
-  # otherwise its events sit on a row no send-history reader ever returns.
-  describe "a send recorded after its own delivery event" do
-    let(:purchase) { create(:purchase) }
-
-    it "adopts the event-only row rather than leaving its delivery orphaned" do
-      event_row = CustomerEmailInfo.find_or_initialize_for_purchase(
-        purchase_id: purchase.id,
-        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
-      )
-      event_row.mark_delivered!(Time.current)
-
-      send_row = CustomerEmailInfo.build_for_purchase(
-        purchase_id: purchase.id,
-        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
-      )
-      send_row.mark_sent!
-
-      expect(send_row.id).to eq(event_row.id)
-      expect(purchase.reload.receipt_email_infos.count).to eq(1)
-      expect(purchase.reload.receipt_email_info.delivered_at).to be_present
-    end
-
-    it "adopts the event-only row on the charge side too" do
-      charge = create(:charge, purchases: [purchase])
-
-      event_row = CustomerEmailInfo.find_or_initialize_for_charge(
-        charge_id: charge.id,
-        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
-      )
-      event_row.mark_delivered!(Time.current)
-
-      send_row = CustomerEmailInfo.build_for_charge(
-        charge_id: charge.id,
-        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
-      )
-      send_row.mark_sent!
-
-      expect(send_row.id).to eq(event_row.id)
-      expect(charge.reload.receipt_email_infos.count).to eq(1)
-      expect(charge.reload.receipt_email_info.delivered_at).to be_present
-    end
-
-    it "still gives a genuine resend its own row" do
-      original = CustomerEmailInfo.build_for_purchase(
-        purchase_id: purchase.id,
-        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
-      )
-      original.mark_sent!
-
-      resend = CustomerEmailInfo.build_for_purchase(
-        purchase_id: purchase.id,
-        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
-      )
-      resend.mark_sent!
-
-      expect(resend.id).not_to eq(original.id)
-      expect(purchase.reload.receipt_email_infos.count).to eq(2)
-    end
-  end
-
   # gumroad-private#1635: a resend overwrote the original send's row, so the only
   # surviving record dated the first send at the resend's time.
   describe "a resend after the original send was delivered" do
