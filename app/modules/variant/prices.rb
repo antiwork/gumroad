@@ -31,6 +31,15 @@ module Variant::Prices
     update_column(:customizable_price, true)
   end
 
+  # A variant save is the other way the product-level PWYW flag goes stale: the editor path
+  # reaches Product::Prices#set_customizable_price because LinksController#update saves the
+  # product after update_variants, but Api::V2::VariantsController#create only saves the
+  # variant — so without this the API can still leave a $0-base product PWYW with a paid
+  # option (gumroad-private#1660).
+  def sync_product_customizable_price
+    link&.set_customizable_price
+  end
+
   def price_must_be_within_range
     return unless variant_category.present? && link.present?
     super
