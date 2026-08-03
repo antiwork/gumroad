@@ -31,6 +31,12 @@ class PagePolicy < ApplicationPolicy
     edit?
   end
 
+  # The catalogue slices that preview's products bridge asks for are the same
+  # data the rendered preview already shows.
+  def products?
+    preview?
+  end
+
   def update?
     create?
   end

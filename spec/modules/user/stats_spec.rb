@@ -1650,6 +1650,42 @@ describe User::Stats, :vcr do
     end
   end
 
+  describe "#lost_chargebacks_for_payout_gate", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+    # The whole point of the windowed variant: an old dispute must stop counting against the seller
+    # once it ages out, so a hold can actually be exited by selling cleanly.
+    it "ignores sales and chargebacks older than the window while #lost_chargebacks still counts them" do
+      product = create(:product, price_cents: 1000, user: @user)
+      travel_to(User::PAYOUT_CHARGEBACK_RATE_WINDOW.ago - 30.days) do
+        create(:disputed_purchase, link: product)
+      end
+      create(:purchase, link: create(:product, price_cents: 9000, user: @user))
+
+      aggregate_failures do
+        # Lifetime still sees the aged dispute: 1000 / (1000 + 9000).
+        expect(@user.lost_chargebacks[:volume]).to eq("10.0%")
+        # The gate does not — the only sale inside the window is the clean one.
+        expect(@user.lost_chargebacks_for_payout_gate[:volume]).to eq("0.0%")
+        expect(@user.lost_chargebacks_for_payout_gate[:count]).to eq("0.0%")
+      end
+    end
+
+    it "still counts a chargeback inside the window" do
+      product = create(:product, price_cents: 1000, user: @user)
+      create(:disputed_purchase, link: product)
+      create(:purchase, link: create(:product, price_cents: 9000, user: @user))
+
+      expect(@user.lost_chargebacks_for_payout_gate[:volume]).to eq("10.0%")
+    end
+
+    it "returns 'NA' when the window holds no paid sales, so the gate leaves the hold alone" do
+      travel_to(User::PAYOUT_CHARGEBACK_RATE_WINDOW.ago - 30.days) do
+        create(:purchase, link: create(:product, price_cents: 5000, user: @user))
+      end
+
+      expect(@user.lost_chargebacks_for_payout_gate[:volume]).to eq("NA")
+    end
+  end
+
   describe "#all_sales_count" do
     it "returns the number of unique customers" do
       product_1 = create(:product, user: @user)

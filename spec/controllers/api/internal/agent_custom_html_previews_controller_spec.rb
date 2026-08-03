@@ -9,6 +9,10 @@ describe Api::Internal::AgentCustomHtmlPreviewsController do
 
   include_context "with user signed in as admin for seller"
 
+  before do
+    allow_any_instance_of(User).to receive(:eligible_for_store_agent?).and_return(true)
+  end
+
   before { Feature.activate_user(:custom_html_pages, seller) }
 
   # POST create stages the computed document in Redis and returns a URL; fetch it through GET show

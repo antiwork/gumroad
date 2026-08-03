@@ -90,6 +90,16 @@ describe Bundles::ContentController, inertia: true do
       expect(new_bundle_products.third.deleted_at).to be_nil
     end
 
+    it "keeps a supplied redirect on the Gumroad host" do
+      put :update, params: {
+        bundle_id: bundle.external_id,
+        redirect_to: "https://evil.example/phish",
+        products: [{ product_id: bundle.bundle_products.first.product.external_id, quantity: 1 }]
+      }
+
+      expect(response).to redirect_to("/phish")
+    end
+
     context "adding a call to a bundle" do
       let(:call_product) { create(:call_product, user: seller) }
 

@@ -253,6 +253,11 @@ module Purchase::Blockable
   PROCESSOR_REFUSAL_MAX_READS = 4
   PROCESSOR_REFUSAL_TIME_BUDGET = 8.seconds
 
+  # Rows to pull before picking the ones to read. A card-testing email can have thousands of attempts
+  # in the window, and loading them all to learn "more than four" is wasted work on a request whose
+  # unblock has already committed. Hitting this bound counts as capped: there may be more behind it.
+  PROCESSOR_REFUSAL_MAX_SCAN = 40
+
   # Both timeout phases spend the same budget, so a read needs a second for each of them to be worth
   # starting; with less left than this the attempt is counted unread instead.
   PROCESSOR_REFUSAL_MIN_READ_SECONDS = 2
@@ -280,16 +285,29 @@ module Purchase::Blockable
   # of reads or budget returns `incomplete` instead, because a nil there is indistinguishable from
   # "clean" to the callers and that silence is the bug this method exists to end.
   def processor_rule_refusal
-    eligible = Purchase.where(email:)
-                       .where(created_at: PROCESSOR_REFUSAL_WINDOW.ago..)
-                       .where(charge_processor_id: StripeChargeProcessor.charge_processor_id)
-                       .where.not(stripe_transaction_id: nil)
-                       .order(created_at: :desc)
-                       .reject { |purchase| purchase.merchant_account&.is_a_stripe_connect_account? }
+    scanned = Purchase.where(email:)
+                      .where(created_at: PROCESSOR_REFUSAL_WINDOW.ago..)
+                      .where(charge_processor_id: StripeChargeProcessor.charge_processor_id)
+                      .where.not(stripe_transaction_id: nil)
+                      .order(created_at: :desc)
+                      .limit(PROCESSOR_REFUSAL_MAX_SCAN)
+                      .includes(:merchant_account)
+                      .to_a
+    eligible = scanned.reject { |purchase| purchase.merchant_account&.is_a_stripe_connect_account? }
     candidates = eligible.first(PROCESSOR_REFUSAL_MAX_READS)
-    return if candidates.empty?
 
-    capped = eligible.size > candidates.size
+    # A full scan may be hiding eligible rows behind the bound, so it counts as capped too.
+    capped = eligible.size > candidates.size || scanned.size == PROCESSOR_REFUSAL_MAX_SCAN
+
+    # Ordered before the empty-candidates exit: a page that is entirely Connect rows leaves every
+    # eligible attempt behind the bound, and a bare nil there is the truncated-scan-reads-as-clean
+    # silence this method exists to end.
+    if candidates.empty?
+      return { incomplete: true, truncated_by: :read_cap } if capped
+
+      return
+    end
+
     ran_out_of_time = false
     deadline = Time.current + PROCESSOR_REFUSAL_TIME_BUDGET
 
@@ -339,10 +357,11 @@ module Purchase::Blockable
     # different copy because the agent's next move differs: a capped scan has attempts we never
     # looked at, a timed-out one may have nothing left to look at and just needs re-running.
     #
-    # The cap wins when a slow scan hits both, and that ordering is the point: re-running a capped
-    # scan reads the same four attempts again, so only "go look in Stripe" is advice that can help.
-    return { incomplete: true, truncated_by: :read_cap } if capped
+    # Time-out wins when a slow scan hits both, because then reads were also left unmade and a
+    # re-run really can read further — and that copy already tells the agent to check Stripe too,
+    # so it loses nothing the cap copy would have said.
     return { incomplete: true, truncated_by: :time_budget } if ran_out_of_time
+    return { incomplete: true, truncated_by: :read_cap } if capped
 
     nil
   rescue StandardError => e
@@ -509,7 +528,7 @@ module Purchase::Blockable
     return unless seller.present?
     return if [User::PAYOUT_PAUSE_SOURCE_ADMIN, User::PAYOUT_PAUSE_SOURCE_SYSTEM].include?(seller.payouts_paused_by_source)
 
-    chargeback_stats = seller.lost_chargebacks
+    chargeback_stats = seller.lost_chargebacks_for_payout_gate
     chargeback_volume_percentage = chargeback_stats[:volume]
     return if chargeback_volume_percentage == "NA"
 
@@ -522,7 +541,7 @@ module Purchase::Blockable
     User.transaction do
       seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       seller.comments.create(
-        content: "Payouts automatically paused due to chargeback rate (#{chargeback_volume_percentage}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume.",
+        content: "Payouts automatically paused due to chargeback rate (#{chargeback_volume_percentage}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume over the last #{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}.",
         comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
         author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
       )

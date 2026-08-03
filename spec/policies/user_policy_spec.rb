@@ -117,6 +117,37 @@ describe UserPolicy do
   end
 
   permissions :use_store_agent? do
+    # Stub the operated seller, never any_instance: the acting team member and the seller are
+    # both Users, and an any_instance stub makes a `user.eligible_for_store_agent?` typo pass.
+    before do
+      allow(seller).to receive(:eligible_for_store_agent?).and_return(true)
+    end
+
+    it "denies access to the owner of a seller that has not earned the agent yet" do
+      allow(seller).to receive(:eligible_for_store_agent?).and_return(false)
+      seller_context = SellerContext.new(user: seller, seller:)
+      expect(subject).to_not permit(seller_context, seller)
+    end
+
+    it "denies access to an admin when the seller has not earned the agent yet" do
+      allow(seller).to receive(:eligible_for_store_agent?).and_return(false)
+      seller_context = SellerContext.new(user: admin_for_seller, seller:)
+      expect(subject).to_not permit(seller_context, seller)
+    end
+
+    it "reads eligibility off the seller, not the acting team member" do
+      allow(seller).to receive(:eligible_for_store_agent?).and_return(false)
+      allow(admin_for_seller).to receive(:eligible_for_store_agent?).and_return(true)
+      seller_context = SellerContext.new(user: admin_for_seller, seller:)
+      expect(subject).to_not permit(seller_context, seller)
+    end
+
+    it "grants an admin acting for an eligible seller who is not themselves eligible" do
+      allow(admin_for_seller).to receive(:eligible_for_store_agent?).and_return(false)
+      seller_context = SellerContext.new(user: admin_for_seller, seller:)
+      expect(subject).to permit(seller_context, seller)
+    end
+
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)
       expect(subject).to permit(seller_context, seller)

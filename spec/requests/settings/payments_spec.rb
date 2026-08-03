@@ -918,15 +918,33 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       expect(page).to have_field("PayPal Email")
       expect(page).to have_content("PayPal does not let accounts registered in Zambia receive money")
-      expect(page).to have_content("Bank payouts are not available in Zambia either")
+      expect(page).to have_content("bank payouts are not available there either")
     end
 
-    it "does not show the Zambia PayPal warning to creators in other countries" do
+    # Zambia used to be the only country this warning knew about. Syria is the regression guard: it
+    # is equally rail-less and must be named by the same copy path.
+    it "warns a Syrian creator with the same copy, naming their own country" do
+      old_user_compliance_info = @user.alive_user_compliance_info
+      new_user_compliance_info = old_user_compliance_info.dup
+      new_user_compliance_info.country = "Syria"
+      ActiveRecord::Base.transaction do
+        old_user_compliance_info.mark_deleted!
+        new_user_compliance_info.save!
+      end
+
+      visit settings_payments_path
+
+      expect(page).to have_field("PayPal Email")
+      expect(page).to have_content("PayPal does not let accounts registered in Syrian Arab Republic receive money")
+      expect(page).to have_content("bank payouts are not available there either")
+    end
+
+    it "does not show the no-payout-rail warning to creators in other countries" do
       @user.update(payment_address: "barny@paypal.com")
       visit settings_payments_path
 
       expect(page).to have_field("PayPal Email")
-      expect(page).to_not have_content("PayPal does not let accounts registered in Zambia receive money")
+      expect(page).to_not have_content("receive money, so a payout to one will fail")
     end
 
     it "allows US creator to switch to ACH" do

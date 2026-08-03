@@ -495,8 +495,16 @@ class SettingsPresenter
         end
       end
 
+      # Stripe interventions never create a UserComplianceInfoRequest row, so an
+      # intervention-only account has something past_due on Stripe's side and
+      # nothing pending on ours. Offering the link off the Stripe-side pause as
+      # well is safe: #remediation re-reads the live requirements and bounces to
+      # "you're all set" when nothing is open, so a stale pause costs one click.
+      paused_by_stripe = seller.payouts_paused_internally? &&
+        seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
+
       compliance_actions = []
-      if pending_compliance && stripe_account.present? && !stripe_rejected && payments_policy.update?
+      if (pending_compliance || paused_by_stripe) && stripe_account.present? && !stripe_rejected && payments_policy.update?
         compliance_actions << { message: "Complete pending verification requirements via Stripe", href: remediation_settings_payments_path }
       end
       if pending_compliance && stripe_account.blank?
@@ -599,6 +607,7 @@ class SettingsPresenter
     def user_details(user_compliance_info)
       {
         country_supports_native_payouts: seller.native_payouts_supported?,
+        no_payout_rail_in_country: seller.no_payout_rail_in_compliance_country?,
         country_supports_iban: seller.country_supports_iban?,
         need_full_ssn: seller.has_ever_been_requested_for_user_compliance_info_field?(UserComplianceInfoFields::Individual::TAX_ID),
         country_code: user_compliance_info.legal_entity_country_code,

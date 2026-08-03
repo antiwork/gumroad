@@ -78,8 +78,6 @@ module Purchase::PingNotification
     payload[:disputed] = chargedback?
     payload[:dispute_won] = chargeback_reversed?
 
-    Rails.logger.info("payload_for_ping_notification #{payload.inspect}")
-
     payload
   end
 end

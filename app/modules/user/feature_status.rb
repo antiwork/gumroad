@@ -72,6 +72,22 @@ class User
       payment_address.present? || invalidated_paypal_payout_address.present? || !native_payouts_supported? || signed_up_from_united_arab_emirates? || signed_up_from_egypt? || signed_up_from_kazakhstan? || signed_up_from_india?
     end
 
+    # True when neither rail can reach the seller's compliance country: we do not offer bank payouts
+    # there, and PayPal will not pay into an account registered there either.
+    #
+    # Messaging only — deliberately gates nothing. A seller here is still payable through a PayPal
+    # account registered elsewhere, which is exactly what can_setup_paypal_payouts? keeps open for
+    # them, so turning this into a block would strand the one cohort that has a way out.
+    def no_payout_rail_in_compliance_country?
+      return false if active_bank_account.present?
+
+      country_code = alive_user_compliance_info&.legal_entity_country_code
+      return false if country_code.blank?
+
+      !native_payouts_supported? &&
+        PaypalPayoutProcessor::PAYOUT_RECEIVING_COUNTRY_CODES.exclude?(country_code)
+    end
+
     def charge_paypal_payout_fee?
       Feature.active?(:paypal_payout_fee, self) &&
         !paypal_payout_fee_waived? &&
