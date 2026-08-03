@@ -660,5 +660,92 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
         expect(dispute_evidence.shipping_tracking_number).to be_nil
       end
     end
+
+    # 110 of the 122 disputed charges holding a shipment select a row the seller created and never
+    # marked shipped, which in production carries no carrier and no tracking either. Filling the
+    # address slot off it asserts delivery to the network with nothing behind it.
+    context "when the only shipment is still pending" do
+      let!(:sibling_shipment) do
+        create(
+          :shipment,
+          carrier: nil,
+          tracking_number: nil,
+          purchase: shipped_sibling,
+          ship_state: "not_shipped",
+          shipped_at: nil
+        )
+      end
+
+      it "leaves every slot empty rather than claiming an unsubstantiated delivery" do
+        dispute_evidence = DisputeEvidence.create_from_dispute!(dispute)
+
+        expect(dispute_evidence.shipping_address).to be_nil
+        expect(dispute_evidence.shipped_at).to be_nil
+        expect(dispute_evidence.shipping_carrier).to be_nil
+        expect(dispute_evidence.shipping_tracking_number).to be_nil
+      end
+    end
+
+    context "when a pending sibling is ordered before one that shipped" do
+      # The outer sibling_shipment is a let!, so shipped_sibling always exists before anything
+      # defined here. Both sibling purchases are therefore built in one hook, in the order the case
+      # needs: the pending row has to sort first for presence-only selection to have preferred it.
+      let(:pending_sibling) { siblings.first }
+      let(:shipped_sibling) { siblings.last }
+
+      let(:siblings) do
+        pending = create(
+          :purchase,
+          total_transaction_cents: 5_00,
+          link: create(:physical_product, name: "Pending sibling"),
+          email: "customer@example.com",
+          full_name: "John Example",
+          street_address: "1 Pending Pl",
+          city: "Fresno",
+          state: "CA",
+          zip_code: "93701",
+          country: "United States"
+        )
+        shipped = create(
+          :purchase,
+          total_transaction_cents: 10_00,
+          link: physical_product,
+          email: "customer@example.com",
+          full_name: "John Example",
+          street_address: "500 Sibling Way",
+          city: "Oakland",
+          state: "CA",
+          zip_code: "94607",
+          country: "United States"
+        )
+        [pending, shipped]
+      end
+
+      let!(:pending_shipment) do
+        create(:shipment, carrier: "USPS", tracking_number: "9400100000000000000000",
+                          purchase: pending_sibling, ship_state: "not_shipped", shipped_at: nil)
+      end
+
+      let(:charge) do
+        charge = create(:charge)
+        charge.purchases << pending_sibling
+        charge.purchases << shipped_sibling
+        charge.purchases << representative
+        charge
+      end
+
+      it "skips the pending row and submits the sibling that actually shipped" do
+        # Without this the case is vacuous: the pending row has to sort first for the old
+        # presence-only selection to have preferred it.
+        expect(pending_sibling.id).to be < shipped_sibling.id
+
+        dispute_evidence = DisputeEvidence.create_from_dispute!(dispute)
+
+        expect(dispute_evidence.shipped_at).to eq(sibling_shipment.shipped_at)
+        expect(dispute_evidence.shipping_carrier).to eq("UPS")
+        expect(dispute_evidence.shipping_tracking_number).to eq("1Z999AA10123456784")
+        expect(dispute_evidence.shipping_address).to eq("500 Sibling Way, Oakland, CA, 94607, United States")
+      end
+    end
   end
 end

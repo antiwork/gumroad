@@ -84,9 +84,15 @@ class DisputeEvidence::CreateFromDisputeService
     # into a digital-product dispute — an assertion the buyer can trivially disprove, on our
     # single submission. Checked as at checkout, not live: a seller disabling shipping later
     # must not erase delivery proof for an order that genuinely shipped.
+    #
+    # `shipped_at` is required for the same reason. A row the seller created but never marked
+    # shipped carries no delivery date and, in production, no carrier or tracking either, so the
+    # structured slots would assert delivery to the network with nothing substantiating it. The
+    # free-text summary already holds this line.
     def shipment_for(purchase)
       shipment = purchase.shipment
       return if shipment.blank?
+      return if shipment.shipped_at.blank?
       return unless purchase.required_delivery_at_checkout?
 
       shipment
