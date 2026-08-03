@@ -80,9 +80,11 @@ describe RepairOrderChargeOutcomesJob do
     described_class.new.perform
     expect(newer.reload).to be_partially_successful
 
-    # Nothing left past the cursor, so the third run wraps to the start rather than stalling there.
+    # Nothing left past the cursor, so the third run wraps rather than stalling there. Both orders
+    # are flagged by now and have left the candidate set, so the wrapped page is empty and the
+    # cursor stays at the start — which is what makes the next lap see a newly-stranded order.
     described_class.new.perform
-    expect($redis.get(RedisKey.order_charge_outcome_repair_cursor).to_i).to eq(older.id)
+    expect($redis.get(RedisKey.order_charge_outcome_repair_cursor).to_i).to eq(0)
   end
 
   it "reads from the primary" do
