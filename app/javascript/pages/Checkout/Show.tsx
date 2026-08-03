@@ -782,7 +782,13 @@ const CheckoutIndexPage = () => {
   // The recovery has to be a save rather than a bare re-request of the configuration: a save sends
   // the cart the client currently holds, so its answer is the configuration for that same cart.
   // Saves also supersede one another, so a recovery cannot race the buyer's next edit.
+  const cartSavesPaused = state.status.type !== "input" && state.status.type !== "offering";
+  const cartSavesPausedRef = React.useRef(cartSavesPaused);
+  cartSavesPausedRef.current = cartSavesPaused;
+
   const saveCart = (callbacks: CartSaveCallbacks) => {
+    if (cartSavesPausedRef.current) return;
+
     cartForm.patch(Routes.checkout_path(), {
       // checkout_payment comes back with the save because it is derived from the cart: which
       // element this checkout mounts, and in which currency, can change when the cart changes.
@@ -792,6 +798,7 @@ const CheckoutIndexPage = () => {
       only: ["cart", "flash", "checkout_payment", "checkout_style"],
       preserveUrl: true,
       preserveScroll: true,
+      onBefore: () => !cartSavesPausedRef.current,
       ...callbacks,
     });
   };
@@ -823,6 +830,10 @@ const CheckoutIndexPage = () => {
     );
   }, cart_save_debounce_ms);
 
+  React.useEffect(() => {
+    if (cartSavesPaused) debouncedSaveCartState.cancel();
+  }, [cartSavesPaused, debouncedSaveCartState]);
+
   // Clean URL params after initial render to avoid stale URL references during Inertia updates
   useRunOnce(() => {
     const url = new URL(window.location.href);
@@ -831,11 +842,11 @@ const CheckoutIndexPage = () => {
     router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
   });
   React.useEffect(() => {
-    debouncedSaveCartState();
+    if (!cartSavesPaused) debouncedSaveCartState();
     if (state.status.type === "input") {
       dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
     }
-  }, [cartForm.data.cart]);
+  }, [cartForm.data.cart, cartSavesPaused]);
   // The cart changed in a way that can move it to a different payment lane, so the configuration
   // on screen was computed for the previous cart. Mark it stale (Pay stays disabled) until the
   // save above returns the recomputed one.
