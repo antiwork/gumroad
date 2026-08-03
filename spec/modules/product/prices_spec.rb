@@ -255,6 +255,39 @@ describe Product::Prices do
 
         expect(product.reload.customizable_price).to be(true)
       end
+
+      it "still re-sets a coffee product whose flag was lost" do
+        seller = create(:user, created_at: 2.months.ago)
+        product = create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 5_00)
+        product.update_column(:customizable_price, false)
+
+        product.save!
+
+        expect(product.reload.customizable_price).to be(true)
+      end
+
+      it "clears the flag when the paid variant is saved without the product" do
+        product = create(:product, price_cents: 0)
+        expect(product.customizable_price).to be(true)
+        category = create(:variant_category, title: "versions", link: product)
+
+        # Api::V2::VariantsController#create saves only the variant.
+        category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+
+        expect(product.reload.customizable_price).to be(false)
+      end
+
+      it "restores the flag when the paid variant is deleted without the product" do
+        product = create(:product, price_cents: 0)
+        category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "Free Version", price_difference_cents: 0)
+        paid = category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+        expect(product.reload.customizable_price).to be(false)
+
+        paid.mark_deleted!
+
+        expect(product.reload.customizable_price).to be(true)
+      end
     end
   end
 
