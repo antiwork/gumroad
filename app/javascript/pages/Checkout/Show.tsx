@@ -716,6 +716,12 @@ const CheckoutIndexPage = () => {
 
       setRedirecting(!!redirectTo);
 
+      // A save scheduled before Pay can still be pending here — an email keystroke's debounce, or
+      // a timer a backgrounded tab (wallet/Link popup flows) held until focus returned. It carries
+      // the pre-purchase cart, so letting it fire now re-persists the items that were just bought;
+      // the buyer sees their cart come back and pays again (gumroad-private#1793).
+      debouncedSaveCartState.cancel();
+
       cartForm.setData((prev) => ({
         cart: {
           ...prev.cart,
@@ -757,6 +763,9 @@ const CheckoutIndexPage = () => {
           "Your payment is being processed — check your email for your receipt. Please do not pay again.",
           "warning",
         );
+        // Same stale-save hazard as the success path above: a pre-purchase save still pending
+        // would re-fill the cart this line just emptied.
+        debouncedSaveCartState.cancel();
         cartForm.setData((prev) => ({ cart: { ...prev.cart, items: [] } }));
         dispatch({ type: "cancel" });
         return;
