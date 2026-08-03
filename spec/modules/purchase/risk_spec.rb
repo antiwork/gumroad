@@ -311,6 +311,16 @@ describe Purchase::Risk do
           .from(nil).to(PurchaseErrorCode::BLOCKED_IP_ADDRESS)
       end
 
+      it "still blocks a buyer sitting on a blocked ip_address the seller also uses" do
+        seller = create(:user, current_sign_in_ip: blocked_ip_address, user_risk_state: "compliant")
+        purchase = build(:purchase, link: create(:product, user: seller), seller:, ip_address: blocked_ip_address)
+
+        expect do
+          purchase.check_for_fraud
+        end.to change { purchase.error_code }
+          .from(nil).to(PurchaseErrorCode::BLOCKED_IP_ADDRESS)
+      end
+
       describe "subscription purchase" do
         let(:subscription) { create(:subscription) }
 
