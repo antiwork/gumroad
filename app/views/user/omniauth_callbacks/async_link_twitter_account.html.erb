@@ -1,9 +1,0 @@
-<% content_for :script do %>
-  <script>
-    if (document.readyState !== 'loading') {
-      window.close();
-    } else {
-      document.addEventListener('DOMContentLoaded', function() { window.close(); });
-    }
-  </script>
-<% end %>
