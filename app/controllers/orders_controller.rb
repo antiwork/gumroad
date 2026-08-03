@@ -145,7 +145,7 @@ class OrdersController < ApplicationController
 
   private
     def release_failed_client_confirmation(order, processor_intent_id:)
-      purchase = order.purchases.in_progress.find do
+      purchase = order.purchases.active_once_per_cart_offer_code_reservations.find do
         intent_ids = [_1.processor_payment_intent_id, _1.processor_setup_intent_id].compact
         intent_ids.any? && (processor_intent_id.nil? || intent_ids.include?(processor_intent_id))
       end

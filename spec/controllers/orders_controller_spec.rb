@@ -2776,6 +2776,28 @@ describe OrdersController, :vcr do
       }
     end
 
+    def add_once_per_cart_reservation(purchase, product:)
+      offer_code = create(
+        :offer_code,
+        user: product.user,
+        products: [product],
+        amount_cents: 1_00,
+        once_per_cart: true,
+        max_purchase_count: 1
+      )
+      purchase.update!(offer_code:)
+      purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 1_00,
+        offer_code_is_percent: false,
+        once_per_cart: true,
+        once_per_cart_allocation_id: SecureRandom.uuid,
+        pre_discount_minimum_price_cents: product.price_cents,
+        pre_discount_displayed_price_cents: product.price_cents
+      )
+      offer_code
+    end
+
     it "reports the browser-side confirm failure to the error notifier" do
       params = { line_items: line_items.map(&:dup) }.merge(common_params)
       order, = Order::CreateService.new(params:).perform
@@ -2803,6 +2825,23 @@ describe OrdersController, :vcr do
       }
 
       expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "leaves attempts without a once-per-cart reservation in progress" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      purchase.create_processor_payment_intent!(intent_id: "pi_without_reservation")
+      expect(ChargeProcessor).not_to receive(:get_charge_intent)
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        processor_intent_id: "pi_without_reservation",
+        stripe_error_code: "card_declined",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
+      expect(purchase.reload).to be_in_progress
     end
 
     it "releases a once-per-cart reservation when Stripe confirms the attempt is still pre-charge" do
@@ -2851,6 +2890,7 @@ describe OrdersController, :vcr do
       params = { line_items: line_items.map(&:dup) }.merge(common_params)
       order, = Order::CreateService.new(params:).perform
       purchase = order.purchases.first
+      add_once_per_cart_reservation(purchase, product:)
       purchase.update!(processor_setup_intent_id: "seti_pre_charge")
       setup_intent = instance_double(
         SetupIntent,
@@ -2872,6 +2912,7 @@ describe OrdersController, :vcr do
       params = { line_items: line_items.map(&:dup) }.merge(common_params)
       order, = Order::CreateService.new(params:).perform
       purchase = order.purchases.first
+      add_once_per_cart_reservation(purchase, product:)
       purchase.create_processor_payment_intent!(intent_id: "pi_processing")
       charge_intent = instance_double(
         ChargeIntent,
@@ -2899,6 +2940,7 @@ describe OrdersController, :vcr do
       }.merge(common_params)
       order, = Order::CreateService.new(params:).perform
       first_purchase, second_purchase = order.purchases.order(:id)
+      add_once_per_cart_reservation(first_purchase, product:)
       first_purchase.create_processor_payment_intent!(intent_id: "pi_failed")
       second_purchase.create_processor_payment_intent!(intent_id: "pi_other")
       charge_intent = instance_double(
@@ -2975,7 +3017,7 @@ describe OrdersController, :vcr do
         payment_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
       )
       allow(ChargeProcessor).to receive(:get_charge_intent).and_return(charge_intent)
-      expect(ChargeProcessor).to receive(:cancel_payment_intent!).with(first_purchase.merchant_account, "pi_failed")
+      expect(ChargeProcessor).not_to receive(:cancel_payment_intent!)
 
       post :confirm_error, params: {
         id: order.secure_external_id(scope: "confirm"),
@@ -2988,7 +3030,7 @@ describe OrdersController, :vcr do
         offer_code.external_id,
         completed_offer_code.external_id
       )
-      expect(first_purchase.reload).to be_failed
+      expect(first_purchase.reload).to be_in_progress
       expect(second_purchase.reload).to be_in_progress
       expect(completed_purchase.reload).to be_successful
       expect(offer_code.quantity_left).to eq(0)
