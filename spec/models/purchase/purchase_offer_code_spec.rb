@@ -69,7 +69,7 @@ describe Purchase, "offer-code capacity" do
     expect(purchase.mandate_maximum_amount_cents).to eq(20_00)
   end
 
-  it "locks a capped cart discount for an updated original subscription purchase" do
+  it "does not reserve capacity for an updated original subscription purchase" do
     product = create(:membership_product)
     offer_code = create(
       :offer_code,
@@ -78,6 +78,9 @@ describe Purchase, "offer-code capacity" do
       once_per_cart: true,
       max_purchase_count: 1
     )
+    # The subscription's original purchase already consumed the use, so a plan
+    # update must go through even when the cap is fully spent.
+    offer_code.update_column(:max_purchase_count, 0)
     purchase = build(
       :purchase_in_progress,
       link: product,
@@ -86,6 +89,7 @@ describe Purchase, "offer-code capacity" do
       is_original_subscription_purchase: true,
       is_updated_original_subscription_purchase: true
     )
+    purchase.variant_attributes << product.tiers.first
     purchase.build_purchase_offer_code_discount(
       offer_code:,
       offer_code_amount: 100,
@@ -96,8 +100,11 @@ describe Purchase, "offer-code capacity" do
     )
     purchase.skip_preparing_for_charge = true
 
-    expect(offer_code).to receive(:with_lock).and_call_original
+    expect(offer_code).not_to receive(:with_lock)
 
     purchase.prepare_for_charge!
+
+    expect(purchase.error_code).to be_nil
+    expect(purchase).to be_persisted
   end
 end
