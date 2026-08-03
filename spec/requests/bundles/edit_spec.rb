@@ -416,8 +416,6 @@ describe("Bundle edit page", type: :system, js: true) do
           select_combo_box_option search: "Test#{index}", from: "Tags"
           expect(page).to have_button("test#{index}")
         end
-        fill_in "Tags", with: "Test6"
-        expect(page).to_not have_combo_box "Tags", expanded: true
         click_on "test2"
         click_on "test3"
         click_on "test4"

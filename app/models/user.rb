@@ -13,7 +13,7 @@ class User < ApplicationRecord
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
           AttributeBlockable, PayoutInfo, EmailNormalization, SingleUseResetPasswordToken,
-          DashboardNavItems
+          DashboardNavItems, ReputationSummary
 
   has_many :user_external_authentications, dependent: :destroy
 
@@ -364,6 +364,7 @@ class User < ApplicationRecord
             54 => :disable_review_reminders, # Seller setting: when enabled, buyers of this seller's products don't receive review reminder emails.
             55 => :ach_payments_enabled, # Seller opt-in (checkout settings page): offers ACH Direct Debit (us_bank_account) at checkout. Off by default — ACH settles in ~4 business days and content only delivers on settlement, which surprises buyers of time-sensitive digital products (gumroad-private#1143).
             56 => :gifting_disabled, # Seller opt-out (checkout settings page): removes the "Give as a gift" option at checkout for all of this seller's products (gumroad-private#1191).
+            57 => :content_moderation_disabled, # Admin-only: exempts every product this seller creates from automated content moderation, including ones that don't exist yet. Link#content_moderation_disabled only covers products that already exist when support grants it (gumroad-private#1742).
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false

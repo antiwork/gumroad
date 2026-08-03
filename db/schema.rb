@@ -2610,6 +2610,20 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_163724) do
     t.index ["parent_id"], name: "index_taxonomies_on_parent_id"
   end
 
+  create_table "taxonomy_attributes", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "taxonomy_id", null: false
+    t.string "name", null: false
+    t.string "label", null: false
+    t.string "value_type", null: false
+    t.json "values"
+    t.integer "position", default: 0, null: false
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["taxonomy_id", "name"], name: "index_taxonomy_attributes_on_taxonomy_id_and_name", unique: true
+    t.index ["taxonomy_id"], name: "index_taxonomy_attributes_on_taxonomy_id"
+  end
+
   create_table "taxonomy_hierarchies", id: false, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "ancestor_id", null: false
     t.bigint "descendant_id", null: false

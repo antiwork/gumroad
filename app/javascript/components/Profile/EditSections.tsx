@@ -675,7 +675,13 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
                 default_product_sort: "page_layout" as const,
                 show_filters: false,
                 add_new_products: true,
-                search_results: { products: [], total: 0, filetypes_data: [], tags_data: [] },
+                search_results: {
+                  products: [],
+                  total: 0,
+                  filetypes_data: [],
+                  tags_data: [],
+                  taxonomy_attributes_data: [],
+                },
               };
             case "SellerProfilePostsSection":
               return { ...commonProps, type, shown_posts: state.posts.map((post) => post.id) };
@@ -685,7 +691,6 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
               return {
                 ...commonProps,
                 type,
-                header: `Subscribe to receive email updates from ${state.creator_profile.name}.`,
                 button_label: "Subscribe",
               };
             case "SellerProfileFeaturedProductSection":

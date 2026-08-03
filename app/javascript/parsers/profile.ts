@@ -11,7 +11,12 @@ export type CreatorProfile = {
   // several previews build a CreatorProfile client-side without one; a missing
   // key and a null key both mean "no challenge".
   follow_recaptcha_site_key?: string | null;
+  // Present only while seller_reputation_summary is enabled for the seller;
+  // null when they miss the display thresholds (10+ reviews across 2+ products).
+  reputation?: SellerReputation | null;
 };
+
+export type SellerReputation = { average: number; count: number; products_count: number };
 
 export type Tab = { name: string; sections: string[] };
 export type ProfileSettings = {

@@ -5,12 +5,12 @@ import { assertResponseError } from "$app/utils/request";
 
 import { showAlert } from "$app/components/server-components/Alert";
 import { TagInput } from "$app/components/TagInput";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
-const MAX_ALLOWED_TAGS = 5;
+const MAX_ALLOWED_TAGS = 10;
 const MIN_TAG_LENGTH = 2;
 const MAX_TAG_LENGTH = 20;
 const clean = (tag: string) => tag.toLowerCase().replace(/^[#\s]+|,/gu, "");
@@ -70,6 +70,10 @@ export const TagSelector = ({ tags, onChange }: { tags: string[]; onChange: (tag
         maxLength={MAX_TAG_LENGTH}
         maxTags={MAX_ALLOWED_TAGS}
       />
+      <FieldsetDescription>
+        The editor supports up to {MAX_ALLOWED_TAGS} tags. Tags must be {MIN_TAG_LENGTH}-{MAX_TAG_LENGTH} characters
+        each.
+      </FieldsetDescription>
     </Fieldset>
   );
 };

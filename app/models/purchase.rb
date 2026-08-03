@@ -93,6 +93,19 @@ class Purchase < ApplicationRecord
   # debit actually booked. Snapshotted at debit time so the dispute-won re-credit books
   # exactly the same amount, even when refunds land between the debit and the win.
   attr_json_data_accessor :presentment_dispute_debited_gross_cents
+  # Why `can_contact` is false. Until now the only way to tell a buyer's own unsubscribe from a
+  # machine-written suppression was `versions.request_path` being non-NULL, which is an audit
+  # side effect with a retention window — see antiwork/gumroad-private#1745, where a restore had
+  # to be reconstructed forensically and anything past retention was unrecoverable.
+  attr_json_data_accessor :can_contact_reason
+
+  # Buyer acted: clicked the receipt-footer unsubscribe, or reported the email as spam. Both are
+  # first-party consent signals and must never be reversed by an automated restore.
+  CAN_CONTACT_REASON_BUYER_UNSUBSCRIBE = "buyer_unsubscribe"
+  CAN_CONTACT_REASON_SPAM_REPORT = "spam_report"
+  # Nobody acted on THIS row: it was born uncontactable because a sibling already was.
+  # Reversing it is safe iff the row it inherited from is reversed.
+  CAN_CONTACT_REASON_INHERITED = "inherited"
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
 
@@ -3280,15 +3293,19 @@ class Purchase < ApplicationRecord
   end
 
   # Unsubscribe the buyer of this purchase from all of the seller's emails
-  def unsubscribe_buyer
+  def unsubscribe_buyer(reason: CAN_CONTACT_REASON_BUYER_UNSUBSCRIBE)
     Purchase.where(email:, seller_id:, can_contact: true).find_each do |purchase|
+      purchase.can_contact_reason = reason
       purchase.update!(can_contact: false)
     rescue ActiveRecord::RecordInvalid
       Rails.logger.info "Could not update purchase (#{purchase.id}) with validations turned on. Unsubscribing the buyer without running validations."
 
       purchase.can_contact = false
+      purchase.can_contact_reason = reason
       purchase.save(validate: false)
     end
+
+    upgrade_reversible_reasons_in_cohort(reason)
 
     Follower.unsubscribe(seller_id, email)
   end
@@ -5641,6 +5658,21 @@ class Purchase < ApplicationRecord
       end
     end
 
+    # First-party consent outranks an inherited or unrecorded suppression. Those rows are
+    # already `can_contact: false` so the loop above skips them, which would leave a
+    # reversible reason standing after the buyer themselves acted -- exactly the misreading
+    # this attribute exists to prevent.
+    def upgrade_reversible_reasons_in_cohort(reason)
+      return if reason == CAN_CONTACT_REASON_INHERITED
+
+      Purchase.where(email:, seller_id:, can_contact: false).find_each do |purchase|
+        next if purchase.can_contact_reason.in?([CAN_CONTACT_REASON_BUYER_UNSUBSCRIBE, CAN_CONTACT_REASON_SPAM_REPORT])
+
+        purchase.can_contact_reason = reason
+        purchase.save(validate: false)
+      end
+    end
+
     def toggle_off_can_contact_if_buyer_has_unsubscribed
       return unless new_record?
       return unless can_contact?
@@ -5654,5 +5686,6 @@ class Purchase < ApplicationRecord
       return if subscription&.original_purchase&.can_contact?
 
       self.can_contact = false
+      self.can_contact_reason = CAN_CONTACT_REASON_INHERITED
     end
 end

@@ -24,6 +24,9 @@ class ProfilePresenter
       # key and FollowersController verifies the resulting token against the
       # same one, since Google ties a token to the key that produced it.
       follow_recaptcha_site_key: FollowRecaptcha.required?(seller) ? FollowRecaptcha.site_key : nil,
+      # Key present only while the flag is on, so flipping it off removes the
+      # surface entirely instead of shipping a null the frontend must know about.
+      **(seller.reputation_summary_enabled? ? { reputation: seller.seller_reputation_summary } : {}),
     }
   end
 

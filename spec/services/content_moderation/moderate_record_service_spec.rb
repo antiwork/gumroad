@@ -60,6 +60,29 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       expect(result.reasons).to eq([])
     end
 
+    it "skips moderation for every product of a seller with account-level content_moderation_disabled" do
+      product.user.update!(content_moderation_disabled: true)
+      expect(ContentModeration::ContentExtractor).not_to receive(:new)
+
+      result = described_class.check(create(:product, user: product.user), :product)
+
+      expect(result.passed).to eq(true)
+      expect(result.reasons).to eq([])
+    end
+
+    # The exemption is granted over a seller's catalogue, so it must not silently also
+    # exempt their posts. A skip would return passed, so a block proves moderation ran.
+    it "still moderates a post by a seller with account-level content_moderation_disabled" do
+      seller.update!(content_moderation_disabled: true)
+      post = create(:installment, seller: seller, name: "Post", message: "<p>Body</p>")
+      allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(
+        instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                        perform: strategy_result.new(status: "flagged", reasoning: ["OpenAI moderation flagged: sexual"]))
+      )
+
+      expect(described_class.check(post, :post).passed).to eq(false)
+    end
+
     it "returns passed when content is empty" do
       allow_any_instance_of(ContentModeration::ContentExtractor).to receive(:extract_from_product)
         .and_return(ContentModeration::ContentExtractor::Result.new(text: "", image_urls: []))
