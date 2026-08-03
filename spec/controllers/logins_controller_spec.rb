@@ -218,14 +218,16 @@ describe LoginsController, type: :controller, inertia: true do
       expect(response).to redirect_to("https://username.test.gumroad.com")
     end
 
-    it "disallows logging in if the user has been deleted" do
+    it "disallows logging in if the user has been deleted, and points them at support" do
       @user.deleted_at = Time.current
       @user.save!
 
       post "create", params: { user: { login_identifier: @user.email, password: "password" } }
 
       expect(response).to redirect_to(login_path)
-      expect(flash[:warning]).to eq("You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!")
+      expect(flash[:warning]).to eq(User::DELETED_ACCOUNT_LOGIN_ERROR)
+      expect(flash[:warning]).to include("support@gumroad.com")
+      expect(flash[:warning]).to_not include("sign up for a new account")
     end
 
     # Login reCAPTCHA was removed with the disable_login_recaptcha flag (100% on in prod

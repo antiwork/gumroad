@@ -138,7 +138,7 @@ class HandleEmailEventInfo::ForInstallmentEmail
       purchase = Purchase.find_by(id: email_event_info.purchase_id)
 
       if purchase.present?
-        purchase.unsubscribe_buyer
+        purchase.unsubscribe_buyer(reason: Purchase::CAN_CONTACT_REASON_SPAM_REPORT)
       else
         # Unsubscribe the follower
         seller_id = Installment.find(email_event_info.installment_id).seller_id
