@@ -110,7 +110,8 @@ describe AlertOnStripeDobDriftJob do
   end
 
   # A failed read establishes nothing. Counting it as agreement hides drift; counting it as drift
-  # invents it.
+  # invents it. And a run whose ONLY outcome is unreadable accounts must still send — otherwise
+  # Stripe being unreachable is indistinguishable from a clean platform.
   it "counts an unreadable Stripe account separately instead of calling it clear or drifted" do
     account = gumroad_managed_account
     compliance_info(birthday: Date.new(2010, 4, 27))
@@ -119,6 +120,8 @@ describe AlertOnStripeDobDriftJob do
 
     body = message
     expect(body).to include("1 more could not be read from Stripe this run")
+    expect(body).to include("1 account could not be read")
+    expect(body).to include("not evidence that none do")
     expect(body).not_to include(seller.email)
   end
 

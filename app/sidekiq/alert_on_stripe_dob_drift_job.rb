@@ -25,9 +25,10 @@ class AlertOnStripeDobDriftJob
 
   def perform
     scan = scan_for_drift
-    # Truncation with nothing qualifying still has to go out: it means the scan bound, not the
-    # platform, decided the report was empty.
-    return if scan[:drifted].empty? && !scan[:truncated]
+    # Nothing qualifying is only silence when the run actually established that. A truncated scan
+    # means the bound decided the report was empty, and unreadable accounts mean Stripe did — both
+    # are results, and neither is evidence the platform is clean.
+    return if scan[:drifted].empty? && !scan[:truncated] && scan[:unreadable].zero?
 
     InternalNotificationWorker.perform_async("payouts", "Stripe date-of-birth drift", message_for(scan))
   end
@@ -156,7 +157,7 @@ class AlertOnStripeDobDriftJob
       omitted = drifted.size - lines.size
 
       [
-        headline(drifted.size, scan[:truncated]),
+        headline(drifted.size, scan[:truncated], scan[:unreadable]),
         (scan[:truncated] ? "The scan stopped at #{MAX_CANDIDATES_SCANNED} accounts, so this is a floor — the population is larger than the count above." : nil),
         (scan[:unreadable].positive? ? "#{scan[:unreadable]} more could not be read from Stripe this run, so they are neither clear nor drifted." : nil),
         "",
@@ -190,8 +191,19 @@ class AlertOnStripeDobDriftJob
         "live compliance record #{entry[:compliance_info_id]}"
     end
 
-    def headline(count, truncated)
-      return "No live Gumroad-managed Stripe account on the scanned page disagrees with our date of birth, but the scan was truncated, so this is not evidence that none do." if count.zero?
+    def headline(count, truncated, unreadable)
+      if count.zero?
+        # Name the reason the page came back empty, because "none found" and "none established" are
+        # different facts and only one of them is reassuring.
+        reason = if truncated && unreadable.positive?
+          "but the scan was truncated and #{unreadable} account#{"s" if unreadable != 1} could not be read"
+        elsif truncated
+          "but the scan was truncated"
+        else
+          "but #{unreadable} account#{"s" if unreadable != 1} could not be read"
+        end
+        return "No live Gumroad-managed Stripe account on the scanned page disagrees with our date of birth, #{reason}, so this is not evidence that none do."
+      end
 
       "#{truncated ? "At least " : ""}#{count} seller#{"s" if count != 1} " \
         "#{count == 1 ? "has" : "have"} a date of birth on Stripe that disagrees with ours."
