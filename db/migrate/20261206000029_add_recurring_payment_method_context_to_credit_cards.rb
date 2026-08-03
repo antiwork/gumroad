@@ -1,16 +1,15 @@
 # frozen_string_literal: true
 
 class AddRecurringPaymentMethodContextToCreditCards < ActiveRecord::Migration[7.1]
-  # Renumbered five times: off 20261206000015 (already in production's schema_migrations, like
-  # 20261206000017 and 20261206000019), then off 20261206000021 when main's
-  # add_notification_claim_to_subscription_plan_changes took that version, then off 20261206000023
-  # when main's create_product_permalink_redirects landed at 20261206000024, then off
-  # 20261206000025 when main's add_is_first_party_agent_app_to_oauth_applications collided outright,
-  # then off 20261206000027 when main's create_taxonomy_attributes took that version
-  # (a duplicate version is a boot-time DuplicateMigrationVersionError, not a silent skip).
-  # At a burned number db:migrate skips this silently and deploys green with the columns absent,
-  # and recurring_upi? reads payment_method_type on every saved-card charge, so the whole renewal
-  # fleet raises.
+  # A recorded superseded version may own these columns, so rollback must preserve them.
+  SUPERSEDED_VERSIONS = %w[
+    20261206000015
+    20261206000021
+    20261206000023
+    20261206000025
+    20261206000027
+  ].freeze
+
   COLUMNS = {
     payment_method_type: :string,
     stripe_account_id: :string,
@@ -31,9 +30,21 @@ class AddRecurringPaymentMethodContextToCreditCards < ActiveRecord::Migration[7.
   def down
     present = COLUMNS.keys.select { |name| column_exists?(:credit_cards, name) }
     return if present.empty?
+    return if superseded_version_applied?
 
     change_table :credit_cards, bulk: true do |t|
       present.each { |name| t.remove name }
     end
   end
+
+  private
+    def superseded_version_applied?
+      SUPERSEDED_VERSIONS.any? do |version|
+        connection.select_value(
+          ActiveRecord::Base.sanitize_sql_array(
+            ["SELECT 1 FROM schema_migrations WHERE version = ? LIMIT 1", version]
+          )
+        ).present?
+      end
+    end
 end
