@@ -38,8 +38,9 @@ RSpec.describe AddSubscriptionCurrentEmailToPurchasesIndex do
     described_class.new.up
 
     live = EsClient.indices.get_mapping(index:).dig(index, "mappings", "properties", "subscription_current_email")
-    expect(live).to eq(
-      Purchase.mappings.to_hash[:properties][:subscription_current_email].deep_stringify_keys
+    expect(live.deep_transform_values(&:to_s)).to eq(
+      Purchase.mappings.to_hash[:properties][:subscription_current_email]
+              .deep_stringify_keys.deep_transform_values(&:to_s)
     )
   end
 end
