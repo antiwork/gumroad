@@ -83,8 +83,8 @@ export type PurchaseLineItemPayload = {
   isPppDiscounted: boolean;
   acceptsPppDiscount?: boolean;
   forceNewSubscription: boolean;
-  // Set once the buyer has explicitly confirmed a same-product repeat charge Purchase#not_double_charged
-  // flagged (gumroad-private#1793) — see confirmedDuplicatePurchasePermalinksRef in Checkout/Show.tsx.
+  // Set once the buyer has explicitly confirmed a same-product repeat charge that
+  // Purchase#not_double_charged flagged — see confirmedDuplicatePurchaseUidsRef in Checkout/Show.tsx.
   confirmedDuplicatePurchase: boolean;
   acceptedOffer: { id: string; original_product_id?: string | null; original_variant_id?: string | null } | null;
   bundleProducts: { productId: string; quantity: number; variantId: string | null; customFields: CustomFields }[];

@@ -5342,11 +5342,9 @@ class Purchase < ApplicationRecord
         end
       end
 
-      # A buyer who explicitly confirmed they want to buy this again (offered after the first
-      # not_double_charged rejection, gumroad-private#1793) gets past a SUCCESSFUL prior purchase
-      # only — not an in_progress/settling one, which isn't something confirming resolves: that
-      # purchase hasn't finished, so letting a second one through would be an actual double
-      # charge rather than a deliberate repeat buy.
+      # An explicit buyer confirmation only gets past a SUCCESSFUL prior purchase — an
+      # in_progress/settling one hasn't finished, so a second charge there would be an actual
+      # double charge rather than a deliberate repeat buy.
       already = already.reject(&:successful?) if confirmed_duplicate_purchase
 
       add_errors_for_existing_purchase(already)

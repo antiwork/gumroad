@@ -460,8 +460,7 @@ const CheckoutIndexPage = () => {
   const largeTipConfirmedRef = React.useRef(false);
 
   // Line-item uids the buyer has explicitly confirmed they want to buy again after
-  // not_double_charged flagged an existing successful purchase of the same product
-  // (gumroad-private#1793). Persists across the retry pay() issues once confirmed.
+  // not_double_charged flagged an existing successful purchase of the same product.
   const confirmedDuplicatePurchaseUidsRef = React.useRef(new Set<string>());
   const [duplicatePurchaseConfirmation, setDuplicatePurchaseConfirmation] = React.useState<{
     uids: string[];
@@ -670,22 +669,21 @@ const CheckoutIndexPage = () => {
         return;
       }
 
-      // Server refused a same-product repeat charge (Purchase#not_double_charged,
-      // gumroad-private#1793) rather than silently double-charging on a resubmit. Offer the
-      // buyer an explicit confirmation instead of the generic error message, and retry only
-      // the flagged lines once they confirm — mirrors the large-tip confirmation below: state
-      // stays "finished" so the retry effect below can resubmit without the buyer pressing Pay.
-      const duplicatePurchaseResults = results.filter(
+      // Server refused a same-product repeat charge (Purchase#not_double_charged) rather than
+      // silently double-charging on a resubmit. Offer an explicit confirmation and retry once
+      // confirmed — mirrors the large-tip confirmation: state stays "finished" so the retry
+      // effect below can resubmit without the buyer pressing Pay. Only offered when EVERY
+      // failure is a confirmable duplicate: "Buy again" resubmits the whole remaining cart, so
+      // a line that failed for any other reason must go back through the normal failure path
+      // for the buyer to re-review before it can be charged.
+      const failedResults = results.filter(({ result }) => !result.success);
+      const duplicatePurchaseResults = failedResults.filter(
         ({ result }) =>
-          !result.success &&
-          "error_code" in result &&
-          result.error_code === DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED_ERROR_CODE,
+          "error_code" in result && result.error_code === DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED_ERROR_CODE,
       );
-      if (duplicatePurchaseResults.length > 0) {
-        // Other lines in this cart may have already succeeded (or failed outright) while this
-        // one needs confirmation. Drop the successful lines from the cart now — same as the
-        // failedItems filter below — so "Buy again" only resubmits what didn't go through, not
-        // an unrelated item that's already been charged.
+      if (duplicatePurchaseResults.length > 0 && duplicatePurchaseResults.length === failedResults.length) {
+        // Drop the successful lines from the cart now — same as the failedItems filter below —
+        // so "Buy again" only resubmits the lines awaiting confirmation.
         const remainingItems = cartForm.data.cart.items.flatMap((item) => {
           const lineItem = result.lineItems[getCartItemUid(item)];
           return lineItem && !lineItem.success
@@ -839,9 +837,8 @@ const CheckoutIndexPage = () => {
       confirmedDuplicatePurchaseUidsRef.current.size > 0 &&
       state.status.type === "finished"
     ) {
-      // One retry attempt is all the confirmation buys; clear it after pay() reads it so a
-      // later, unrelated repeat purchase of the same product gets asked again rather than
-      // sailing through. Cleared once pay() settles rather than immediately: pay()'s first
+      // One retry attempt is all the confirmation buys — a later repeat of the same product
+      // gets asked again. Cleared once pay() settles rather than immediately: pay()'s first
       // await runs before it builds the line items that read this ref.
       void pay().finally(() => {
         confirmedDuplicatePurchaseUidsRef.current = new Set();
