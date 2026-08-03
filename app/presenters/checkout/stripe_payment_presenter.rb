@@ -524,15 +524,16 @@ class Checkout::StripePaymentPresenter
     def direct_listed_card_shape?(items)
       return false unless items.one?
 
+      item = items.first
+      seller = item[:seller]
+      return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+      return false unless Checkout::BuyerCurrencyEligibility.listed_currency_direct_charge_enabled?(seller)
+
       buyer_currency = buyer_currency_for_ip(ip).to_s.downcase
       return false if buyer_currency.blank? || buyer_currency == Currency::USD
       return false unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
 
-      item = items.first
-      seller = item[:seller]
-      Checkout::BuyerCurrencyEligibility.seller_enabled?(seller) &&
-        Checkout::BuyerCurrencyEligibility.listed_currency_direct_charge_enabled?(seller) &&
-        item[:product_currency] == buyer_currency
+      item[:product_currency] == buyer_currency
     end
 
     def method_forced_element_currency

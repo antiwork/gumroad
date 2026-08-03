@@ -128,7 +128,8 @@ describe Checkout::StripePaymentPresenter do
   end
 
   def stub_geoip_country(ip, country_name)
-    allow(GeoIp).to receive(:lookup).with(ip).and_return(double(country_name:))
+    country_code = Compliance::Countries.find_by_name(country_name)&.alpha2
+    allow(GeoIp).to receive(:lookup).with(ip).and_return(double(country_name:, country_code:))
   end
 
   it "selects Stripe Payment Element for a flagged single-seller charged checkout without a saved card" do
