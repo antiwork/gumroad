@@ -140,10 +140,11 @@ class AlertOnStripeDobDriftJob
       ErrorNotifier.notify(e)
     end
 
-    # Stripe's copy as a Date, `nil` when the account holds no date of birth, or `:unreadable` when
-    # the read itself failed. The three are deliberately distinct: a missing dob on Stripe IS drift
-    # against a birthday we hold, while a failed read establishes nothing and must not be reported as
-    # agreement or as drift.
+    # Stripe's copy as a Date; `nil` when the account holds no date of birth; `:unparseable` when it
+    # holds something that is not a date; `:unreadable` when the read itself failed. All four are
+    # deliberately distinct. A missing dob IS drift against a birthday we hold, and so is a garbled
+    # one — but they are different findings, and calling a garbled date "no date of birth on file"
+    # would be a false statement in a report whose only job is to say which copy holds what.
     #
     # Read with `[]` rather than `dig`: `Stripe::Account` is a `Stripe::StripeObject`, which does not
     # implement `dig` at all (it wraps a values hash and exposes `[]`), so `dig` raises NoMethodError
@@ -155,13 +156,14 @@ class AlertOnStripeDobDriftJob
       return nil if dob.nil?
 
       year, month, day = dob["year"], dob["month"], dob["day"]
-      return nil if year.blank? || month.blank? || day.blank?
+      return nil if [year, month, day].all?(&:blank?)
+      # Some parts present and some missing is a date Stripe holds and we cannot compare — not an
+      # absent one.
+      return :unparseable if year.blank? || month.blank? || day.blank?
 
       Date.new(year.to_i, month.to_i, day.to_i)
     rescue Date::Error
-      # A partial or impossible date on Stripe's side is not something this report can resolve into a
-      # comparison, and it is not a read failure either.
-      nil
+      :unparseable
     rescue Stripe::StripeError => e
       Rails.logger.warn "Could not read the Stripe date of birth for merchant account #{merchant_account.id}: #{e.class}: #{e.message}"
       :unreadable
@@ -191,16 +193,21 @@ class AlertOnStripeDobDriftJob
     end
 
     # Under-18-on-our-side first, then widest gap first. What ranks a line is whether money is
-    # already being held on the strength of the disagreement.
+    # already being held on the strength of the disagreement. A date we could not compare at all
+    # sorts as the widest gap: it is the least resolved, not the least important.
     def report_order(drifted)
       drifted.sort_by do |entry|
-        gap = entry[:theirs] ? (entry[:theirs] - entry[:ours]).to_i.abs : Float::INFINITY
+        gap = entry[:theirs].is_a?(Date) ? (entry[:theirs] - entry[:ours]).to_i.abs : Float::INFINITY
         [entry[:ours] > UserComplianceInfo::GUARDIAN_REQUIRED_BELOW_AGE.years.ago.to_date ? 0 : 1, -gap]
       end
     end
 
     def line_for(entry)
-      theirs = entry[:theirs] || "no date of birth on file"
+      theirs = case entry[:theirs]
+               when nil then "no date of birth on file"
+               when :unparseable then "a date of birth we could not read as a date"
+               else entry[:theirs]
+      end
       gated = entry[:ours] > UserComplianceInfo::GUARDIAN_REQUIRED_BELOW_AGE.years.ago.to_date ? " [under 18 on our side — payouts gated]" : ""
       "• #{entry[:user].email} (user #{entry[:user].id}) — we hold #{entry[:ours]}, Stripe holds #{theirs} " \
         "on #{entry[:merchant_account].charge_processor_merchant_id}#{gated}, " \
