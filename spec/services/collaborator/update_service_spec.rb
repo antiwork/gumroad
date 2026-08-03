@@ -80,5 +80,76 @@ describe Collaborator::UpdateService do
         described_class.new(seller:, collaborator_id: collaborator.external_id, params:).process
       end.to raise_error ActiveRecord::RecordNotFound
     end
+
+    context "when one product in the requested set is invalid" do
+      before do
+        params[:products] = [{ id: product2.external_id }, { id: SecureRandom.hex }]
+      end
+
+      it "leaves the existing revenue share untouched" do
+        expect do
+          described_class.new(seller:, collaborator_id: collaborator.external_id, params:).process
+        end.to raise_error ActiveRecord::RecordNotFound
+
+        collaborator.reload
+        expect(collaborator.products).to match_array [product1, product2]
+        expect(collaborator.product_affiliates.find_by(product: product1).affiliate_basis_points).to eq 30_00
+        expect(collaborator.product_affiliates.find_by(product: product2).affiliate_basis_points).to eq 30_00
+        expect(product1.reload.is_collab).to eq true
+      end
+
+      it "does not email the collaborator about a change that did not happen" do
+        expect do
+          described_class.new(seller:, collaborator_id: collaborator.external_id, params:).process
+        rescue ActiveRecord::RecordNotFound
+          nil
+        end.not_to have_enqueued_mail(AffiliateMailer, :collaborator_update)
+      end
+    end
+
+    # The rollback itself, rather than the pre-flight resolve: here every product id is real, so the
+    # destroys and the re-assignment do run, and only `collaborator.save` refuses. Without the
+    # transaction the de-selected row would already be gone by then.
+    context "when the collaborator itself fails validation" do
+      before do
+        params[:percent_commission] = Collaborator::MAX_PERCENT_COMMISSION + 10
+      end
+
+      it "returns the invalid collaborator and leaves the existing revenue share untouched" do
+        result = nil
+
+        expect do
+          result = described_class.new(seller:, collaborator_id: collaborator.external_id, params:).process
+        end.not_to have_enqueued_mail(AffiliateMailer, :collaborator_update)
+
+        expect(result[:success]).to eq false
+        expect(result[:collaborator].errors[:base]).to be_present
+
+        collaborator.reload
+        expect(collaborator.affiliate_basis_points).to eq 40_00
+        expect(collaborator.apply_to_all_products).to eq false
+        expect(collaborator.products).to match_array [product1, product2]
+        expect(collaborator.product_affiliates.find_by(product: product1).affiliate_basis_points).to eq 30_00
+        expect(collaborator.product_affiliates.find_by(product: product2).affiliate_basis_points).to eq 30_00
+        expect(product1.reload.is_collab).to eq true
+      end
+    end
+
+    context "when a product belongs to another seller" do
+      let(:other_sellers_product) { create(:product) }
+
+      before do
+        params[:products] = [{ id: product2.external_id }, { id: other_sellers_product.external_id }]
+      end
+
+      it "leaves the existing revenue share untouched" do
+        expect do
+          described_class.new(seller:, collaborator_id: collaborator.external_id, params:).process
+        end.to raise_error ActiveRecord::RecordNotFound
+
+        collaborator.reload
+        expect(collaborator.products).to match_array [product1, product2]
+      end
+    end
   end
 end
