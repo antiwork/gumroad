@@ -22,8 +22,6 @@ class Order::CreateService
   # giftee purchase that could not be created — rather than only the one the current code paths
   # produce, so that a change elsewhere cannot quietly start destroying carts. See the comment at
   # the cart-cleanup branch in `perform` for which of these are reachable today.
-  CHECKOUT_FAILURE_STATES = %w[failed preorder_authorization_failed gift_receiver_purchase_failed].freeze
-
   def initialize(params:, buyer: nil)
     @params = params
     @buyer = buyer
@@ -31,15 +29,35 @@ class Order::CreateService
 
   def perform
     common_params = params.except(:line_items)
-    line_items = params.fetch(:line_items, [])
+    line_items = params.fetch(:line_items, []).map do |line_item|
+      line_item.key?(:quantity) ? line_item : line_item.merge(quantity: 1)
+    end
+    line_item_uids = line_items.map { _1[:uid] }
+    if line_items.length > Cart::MAX_ALLOWED_CART_PRODUCTS
+      invalid_responses = line_item_uids.uniq.index_with do
+        error_response("You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart.")
+      end
+      return Order.new(purchaser: buyer), invalid_responses, []
+    end
+    if line_item_uids.any?(&:blank?) || line_item_uids.uniq.length != line_item_uids.length
+      invalid_responses = line_item_uids.uniq.index_with do
+        error_response("The cart data is invalid. Please refresh and try again.")
+      end
+      return Order.new(purchaser: buyer), invalid_responses, []
+    end
+
+    discount_allocations = compute_discount_allocations(line_items)
 
     offer_codes = {}
 
     order = Order.new(purchaser: buyer)
     purchase_responses = {}
+    failed_purchases = []
     cart_items = line_items.map { _1.slice(:permalink, :price_cents) }
+    spent_once_per_cart_allocations = Set.new
 
     line_items.each do |line_item_params|
+      submitted_discount_code = line_item_params[:discount_code]
       product = Link.find_by(unique_permalink: line_item_params[:permalink])
       line_item_uid = line_item_params[:uid]
 
@@ -49,6 +67,34 @@ class Order::CreateService
       end
 
       begin
+        allocation = discount_allocations[line_item_uid]
+        allocated_discount = allocation&.dig(
+          :products_data,
+          line_item_uid,
+          :discount
+        )
+        once_per_cart_discount_allocation = nil
+        spends_once_per_cart_use = false
+        if allocated_discount&.[](:once_per_cart)
+          allocation_key = allocation.fetch(:offer_code_ids_by_permalink).fetch(line_item_uid)
+          allocated_cents = allocated_discount[:cents].to_i
+          if allocated_cents.positive?
+            spends_once_per_cart_use = !spent_once_per_cart_allocations.include?(allocation_key)
+            line_item_params = if spends_once_per_cart_use
+              line_item_params.merge(discount_code: allocation.fetch(:submitted_discount_code))
+            else
+              line_item_params.except(:discount_code)
+            end
+            once_per_cart_discount_allocation = {
+              offer_code_id: allocation_key,
+              amount_cents: allocated_cents,
+              allocation_id: allocation.fetch(:allocation_id),
+            }
+          else
+            line_item_params = line_item_params.except(:discount_code)
+          end
+        end
+
         purchase_params = build_purchase_params(
           product,
           common_params
@@ -62,8 +108,19 @@ class Order::CreateService
               # in Purchase::CreateService#build_purchase.
               :payment_element_mount_currency, :payment_method_list_token
             )
-            .merge(line_item_params.except(:uid, :permalink))
+            .merge(line_item_params.except(
+              :uid, :permalink, :once_per_cart_discount_cents, :once_per_cart_discount_rank,
+              :accepts_purchasing_power_parity_discount
+            ))
             .merge({ cart_items: })
+            .merge(
+              offer_code_cart_quantity: line_items
+                .select { _1[:permalink] == product.unique_permalink }
+                .sum { _1[:quantity].to_i }
+            )
+        ).merge(
+          submitted_pre_discount_price_cents: submitted_pre_discount_price_cents(line_item_params, allocated_discount),
+          once_per_cart_discount_allocation:
         )
 
         # Card params are excluded from build_purchase_params (charging is handled by
@@ -83,6 +140,7 @@ class Order::CreateService
           # Subscription restart SCA: add the upgrade purchase to the order so the
           # confirm endpoint can find it, and use the `order` key the frontend expects
           if sca_response[:purchase].is_a?(Hash) && (upgrade_purchase = Purchase.find_by_secure_external_id(sca_response[:purchase][:id], scope: "confirm"))
+            spent_once_per_cart_allocations << allocation_key if spends_once_per_cart_use
             order.purchases << upgrade_purchase
             order.save!
             sca_response = sca_response.except(:purchase).merge(
@@ -98,13 +156,19 @@ class Order::CreateService
 
         if error
           purchase_responses[line_item_uid] = error_response(error, purchase:)
-          if line_item_params[:discount_code].present?
-            offer_codes[line_item_params[:discount_code]] ||= {}
-            offer_codes[line_item_params[:discount_code]][product.unique_permalink] = { permalink: product.unique_permalink, quantity: line_item_params[:quantity], discount_code: line_item_params[:discount_code] }
+          failed_purchases << purchase if purchase&.persisted?
+          recovered_allocations = discount_allocations.values.uniq.select do |candidate|
+            candidate.dig(:products_data, line_item_uid, :discount, :once_per_cart)
+          end
+          recovered_allocations.each { restore_once_per_cart_coverage(offer_codes, _1, line_items) }
+          if submitted_discount_code.present? && !allocated_discount&.[](:once_per_cart)
+            offer_codes[submitted_discount_code] ||= {}
+            offer_codes[submitted_discount_code][line_item_uid] = { permalink: product.unique_permalink, quantity: line_item_params[:quantity], discount_code: submitted_discount_code }
           end
         end
 
         if purchase&.persisted?
+          spent_once_per_cart_allocations << allocation_key if spends_once_per_cart_use && error.blank?
           if Purchase::ALL_SUCCESS_STATES.include?(purchase.purchase_state)
             # Pre-existing purchase from subscription restart — don't add to order
             purchase_responses[line_item_uid] = purchase.purchase_response
@@ -150,7 +214,7 @@ class Order::CreateService
       # Any state not listed counts as surviving, so an unfamiliar state errs towards emptying the
       # cart rather than silently keeping one after a real purchase.
       nothing_survived = order.persisted? && order.purchases.any? &&
-        order.purchases.all? { CHECKOUT_FAILURE_STATES.include?(_1.purchase_state) }
+        order.purchases.all? { Order::OfferCodeRecoveryService::FAILED_PURCHASE_STATES.include?(_1.purchase_state) }
 
       if order.persisted?
         cart.order = order
@@ -161,19 +225,181 @@ class Order::CreateService
       end
     end
 
-    offer_codes = offer_codes
-                    .map { |offer_code, products| { code: offer_code, result: OfferCodeDiscountComputingService.new(offer_code, products, buyer:).process } }
-                    .filter_map do |response|
+    offer_codes = offer_codes.map do |offer_code, products|
+      service = OfferCodeDiscountComputingService.new(
+        normalize_discount_code(offer_code),
+        products,
+        buyer:,
+        key_by_input: true,
+        excluding_order: order
+      )
+      { code: offer_code, products:, result: service.process }
+    end.filter_map do |response|
       {
         code: response[:code],
-        products: response[:result][:products_data].transform_values { _1[:discount] },
+        products: response[:result][:products_data].to_h do |line_item_uid, data|
+          [response[:products].fetch(line_item_uid)[:permalink], data[:discount]]
+        end,
       } if response[:result][:error_code].blank?
     end
+    recovered_offer_codes = Order::OfferCodeRecoveryService.new(order:, failed_purchases:).perform
+    offer_codes = Order::OfferCodeRecoveryService.merge_responses(offer_codes, recovered_offer_codes)
 
     return order, purchase_responses, offer_codes
   end
 
   private
+    def compute_discount_allocations(line_items)
+      links_by_permalink = Link.where(unique_permalink: line_items.map { _1[:permalink] }).index_by(&:unique_permalink)
+      grouped_items = line_items
+        .select { _1[:discount_code].present? }
+        .group_by do |item|
+          normalized_code = normalize_discount_code(item[:discount_code])
+          offer_code = links_by_permalink[item[:permalink]]&.find_offer_code(code: normalized_code)
+          offer_code.present? ? [:offer_code, offer_code.id] : [:discount_code, normalized_code]
+        end
+
+      allocations_by_uid = {}
+      zero_allocations_by_uid = Hash.new { |hash, line_item_uid| hash[line_item_uid] = [] }
+      consider_ppp = allocations_consider_ppp?(line_items)
+      grouped_items.each do |(group_type, group_value), items|
+        items = items.each_with_index.sort_by do |item, index|
+          link = links_by_permalink[item[:permalink]]
+          [allocation_alternative_savings_cents(item, link, consider_ppp:), link&.unique_permalink.to_s, index]
+        end.map(&:first)
+        submitted_uids = items.to_set { _1.fetch(:uid) }
+        ordered_items = items + line_items.reject { submitted_uids.include?(_1.fetch(:uid)) }
+        products = ordered_items.to_h do |item|
+          link = links_by_permalink[item[:permalink]]
+          product = item.slice(:permalink, :quantity).merge(
+            price_cents: submitted_uids.include?(item.fetch(:uid)) ? allocation_capacity_cents(item, link) : 0,
+            tip_cents: 0
+          )
+          [item.fetch(:uid), product]
+        end
+        service = OfferCodeDiscountComputingService.new(
+          normalize_discount_code(items.first[:discount_code]),
+          products,
+          buyer:,
+          key_by_input: true,
+          offer_code_id: group_type == :offer_code ? group_value : nil
+        )
+        allocation = service.process.merge(
+          offer_code_ids_by_permalink: service.offer_code_ids_by_permalink,
+          submitted_discount_code: items.first[:discount_code],
+          allocation_id: SecureRandom.uuid
+        )
+        items.each { allocations_by_uid[_1.fetch(:uid)] = allocation }
+        allocation[:products_data].each do |line_item_uid, product_data|
+          discount = product_data[:discount]
+          if discount&.[](:once_per_cart) && discount[:cents].to_i.zero?
+            zero_allocations_by_uid[line_item_uid] << allocation
+          end
+        end
+      end
+
+      zero_allocations_by_uid.each do |line_item_uid, allocations|
+        next if allocations_by_uid.key?(line_item_uid)
+
+        distinct_allocations = allocations.uniq
+        allocations_by_uid[line_item_uid] = distinct_allocations.first if distinct_allocations.one?
+      end
+      allocations_by_uid
+    end
+
+    def allocations_consider_ppp?(line_items)
+      preferences = line_items
+        .select { _1.key?(:accepts_purchasing_power_parity_discount) }
+        .map { _1[:accepts_purchasing_power_parity_discount] }
+      return true if preferences.empty?
+
+      preferences.any? { ActiveModel::Type::Boolean.new.cast(_1) }
+    end
+
+    def allocation_alternative_savings_cents(line_item, product, consider_ppp:)
+      return 0 unless product
+
+      full_price = allocation_capacity_cents(line_item, product)
+      accepted_offer_savings = accepted_offer_savings_cents(line_item, product, full_price)
+      return accepted_offer_savings unless accepted_offer_savings.nil?
+      return 0 unless consider_ppp
+
+      ppp_details = product.ppp_details(params[:ip_address])
+      return 0 if ppp_details.blank? || full_price.zero?
+
+      discounted_price = [(full_price * ppp_details[:factor]).round, ppp_details[:minimum_price]].max
+      full_price - discounted_price
+    end
+
+    def accepted_offer_savings_cents(line_item, product, full_price)
+      accepted_offer_id = line_item.dig(:accepted_offer, :id)
+      return if accepted_offer_id.blank?
+
+      upsell = Upsell.available_to_customers.includes(:offer_code).find_by_external_id(accepted_offer_id)
+      return unless upsell&.cross_sell? && upsell.product == product
+
+      discount = upsell.offer_code&.evaluate_for_buyer(buyer, product:)
+      return unless discount
+
+      quantity = [Integer(line_item[:quantity], exception: false).to_i, 1].max
+      unit_price = full_price / quantity
+      discounted_unit_price = if discount[:type] == "fixed"
+        [unit_price - discount[:cents].to_i, 0].max
+      else
+        unit_price - (unit_price * discount[:percents].to_i / 100.0).round
+      end
+      full_price - discounted_unit_price * quantity
+    end
+
+    def allocation_capacity_cents(line_item, product)
+      return 0 unless product
+
+      quantity = [Integer(line_item[:quantity], exception: false).to_i, 1].max
+      submitted_total = Integer(line_item[:price_cents], exception: false).to_i
+      tip_cents = Integer(line_item[:tip_cents], exception: false).to_i
+      selected_price = [submitted_total - tip_cents, 0].max / quantity
+      recurrence = product.prices.alive.find_by_external_id(line_item[:price_id])&.recurrence if line_item[:price_id].present?
+      cart_item = product.cart_item(
+        price: selected_price,
+        option: Array(line_item[:variants]).first,
+        rent: line_item[:is_rental],
+        recurrence:,
+        quantity:,
+        pay_in_installments: line_item[:pay_in_installments],
+        force_new_subscription: line_item[:force_new_subscription]
+      )
+      cart_item[:price] * quantity
+    end
+
+    def restore_once_per_cart_coverage(offer_codes, allocation, line_items)
+      submitted_discount_code = allocation.fetch(:submitted_discount_code)
+      offer_codes[submitted_discount_code] ||= {}
+      allocation[:products_data].each_key do |line_item_uid|
+        retry_line = line_items.find { _1[:uid] == line_item_uid }
+        next unless retry_line
+
+        offer_codes[submitted_discount_code][line_item_uid] = {
+          permalink: retry_line[:permalink],
+          quantity: retry_line[:quantity],
+          discount_code: submitted_discount_code,
+        }
+      end
+    end
+
+    def submitted_pre_discount_price_cents(line_item, discount)
+      return unless discount&.[](:once_per_cart) && discount[:type] == "fixed"
+
+      submitted_total = Integer(line_item[:price_cents], exception: false)
+      tip_cents = Integer(line_item[:tip_cents], exception: false) || 0
+      return if submitted_total.nil? || submitted_total < tip_cents
+
+      submitted_total - tip_cents
+    end
+
+    def normalize_discount_code(code)
+      OfferCode.normalize_code(code)
+    end
+
     def build_purchase_params(product, purchase_params)
       purchase_params = purchase_params.to_hash.symbolize_keys
 

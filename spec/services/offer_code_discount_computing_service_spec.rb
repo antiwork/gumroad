@@ -42,6 +42,23 @@ describe OfferCodeDiscountComputingService do
     expect(result[:error_code]).to eq(:insufficient_times_of_use)
   end
 
+  it "keeps duplicate checkout lines separate after applying the aggregate cap" do
+    universal_offer_code.update!(max_purchase_count: 3)
+    duplicate_lines = {
+      "first" => { quantity: "2", permalink: product.unique_permalink },
+      "second" => { quantity: "1", permalink: product.unique_permalink }
+    }
+
+    result = OfferCodeDiscountComputingService.new(
+      universal_offer_code.code,
+      duplicate_lines,
+      key_by_input: true
+    ).process
+
+    expect(result[:error_code]).to be_nil
+    expect(result[:products_data].keys).to eq(["first", "second"])
+  end
+
   it "sums duplicate lines of one product toward the code's minimum quantity" do
     offer_code.update!(minimum_quantity: 3)
     duplicate_lines = {
@@ -61,11 +78,29 @@ describe OfferCodeDiscountComputingService do
     expect(result[:error_code]).to eq(:invalid_offer)
   end
 
+  it "matches a code submitted in decomposed unicode form, as checkout passes it unnormalized" do
+    offer_code.update!(code: "caf\u00E9")
+
+    result = OfferCodeDiscountComputingService.new("cafe\u0301", products_data).process
+
+    expect(result[:error_code]).to be_nil
+    expect(result[:products_data][product.unique_permalink][:discount]).to include(type: "percent", percents: 100)
+  end
+
   it "returns invalid error_code in result when products is nil" do
     result = OfferCodeDiscountComputingService.new(offer_code.code, nil).process
 
     expect(result[:products_data]).to eq({})
     expect(result[:error_code]).to eq(:invalid_offer)
+  end
+
+  it "accepts controller parameters from the discount endpoint" do
+    products = ActionController::Parameters.new(products_data)
+
+    result = OfferCodeDiscountComputingService.new(offer_code.code, products).process
+
+    expect(result[:products_data]).to have_key(product.unique_permalink)
+    expect(result[:error_code]).to be_nil
   end
 
   it "does not return an invalid error_code in result when offer code amount is 0 cents" do
@@ -78,6 +113,197 @@ describe OfferCodeDiscountComputingService do
     result = OfferCodeDiscountComputingService.new(zero_percent_discount_code.code, products_data).process
 
     expect(result[:error_code]).to be_nil
+  end
+
+  describe "fixed-amount codes apply once per cart" do
+    let(:fixed_code) do
+      create(:universal_offer_code, user: seller, amount_percentage: nil, once_per_cart: true,
+                                    amount_cents: 500, currency_type: product.price_currency_type)
+    end
+
+    # The flag is the whole compatibility story: every fixed-amount code that exists today
+    # is off, so nothing an existing seller has configured changes behaviour on deploy.
+    it "leaves an opted-out fixed-amount code deducting on every line" do
+      opted_out = create(:universal_offer_code, user: seller, amount_percentage: nil,
+                                                amount_cents: 500, currency_type: product.price_currency_type)
+      expect(opted_out.once_per_cart?).to be(false)
+
+      result = OfferCodeDiscountComputingService.new(opted_out.code, products_data).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(2)
+    end
+
+    # Keep the configured amount with every covered line so a cart edit can move the allocation.
+    # `cents` still marks the original winner for clients that have not learned that rule yet.
+    it "charges the discount on one line but reports coverage for every eligible line" do
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].size).to eq(2)
+      expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
+      expect(result[:products_data].values.count { _1[:discount][:cents].zero? }).to eq(1)
+      expect(result[:products_data].values).to all(satisfy { _1[:discount][:once_per_cart] })
+      expect(result[:products_data].values).to all(satisfy { _1[:discount][:once_per_cart_amount_cents] == 500 })
+    end
+
+    it "spends one use regardless of cart breadth, so a capped code survives a wide cart" do
+      # The reported bug: cap 6, 18 cart lines -> whole cart rejected as "expired".
+      fixed_code.update_attribute(:max_purchase_count, 1)
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
+    end
+
+    it "still reports sold_out when no uses remain at all" do
+      fixed_code.update_attribute(:max_purchase_count, 0)
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
+
+      expect(result[:error_code]).to eq(:sold_out)
+    end
+
+    it "leaves percentage codes applying per line" do
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, products_data).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].size).to eq(2)
+    end
+
+    # The covered-at-zero branch must still walk cross-sells: an upsell hanging off the
+    # skipped line would otherwise vanish from products_data and render at full price.
+    it "surfaces cross-sells for lines covered at zero" do
+      cross_sell_product1 = create(:product, user: seller, price_cents: 3000)
+      cross_sell_product2 = create(:product, user: seller, price_cents: 4000)
+      create(:upsell, seller:, product: cross_sell_product1, cross_sell: true, selected_products: [product])
+      create(:upsell, seller:, product: cross_sell_product2, cross_sell: true, selected_products: [product2])
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data]).to include(cross_sell_product1.unique_permalink, cross_sell_product2.unique_permalink)
+    end
+
+    # The spent code covers cross-sells at zero too. Its allocation metadata lets checkout
+    # move the amount if the original line leaves without deducting it twice while both remain.
+    it "does not grant the fixed amount again on cross-sells once it is spent" do
+      cross_sell_product1 = create(:product, user: seller, price_cents: 3000)
+      cross_sell_product2 = create(:product, user: seller, price_cents: 4000)
+      create(:upsell, seller:, product: cross_sell_product1, cross_sell: true, selected_products: [product])
+      create(:upsell, seller:, product: cross_sell_product2, cross_sell: true, selected_products: [product2])
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
+
+      expect(result[:products_data].size).to eq(4)
+      expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
+      expect(result[:products_data].values).to all(satisfy { _1[:discount][:once_per_cart_amount_cents] == 500 })
+    end
+
+    # The winning line can itself be a cross-sell of a later line. The later line's
+    # cross-sell pass must not rewrite its allocation, or the cart loses the discount.
+    it "keeps the winning line's discount when it is also a cross-sell of a later line" do
+      cross_sell_line = create(:product, user: seller, price_cents: 3000)
+      create(:upsell, seller:, product: cross_sell_line, cross_sell: true, selected_products: [product])
+      products = {
+        cross_sell_line.unique_permalink => { quantity: "1", permalink: cross_sell_line.unique_permalink },
+        product.unique_permalink => { quantity: "1", permalink: product.unique_permalink },
+      }
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data][cross_sell_line.unique_permalink][:discount][:cents]).to eq(500)
+      expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
+    end
+
+    # Coverage at zero is not a free pass on line-level eligibility: a later line that
+    # doesn't meet minimum_quantity must error as it would if the code weren't spent yet.
+    it "enforces minimum quantity on lines covered at zero" do
+      fixed_code.update!(minimum_quantity: 2)
+      products = {
+        product.unique_permalink => { quantity: "2", permalink: product.unique_permalink },
+        product2.unique_permalink => { quantity: "1", permalink: product2.unique_permalink },
+      }
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
+
+      # A surviving line makes this a partial application, not a fatal error.
+      expect(result[:error_code]).to be_nil
+      expect(result[:partial_ineligibility_code]).to eq(:unmet_minimum_purchase_quantity)
+      expect(result[:products_data].size).to eq(1)
+      expect(result[:products_data][product.unique_permalink][:discount][:cents]).to eq(500)
+    end
+
+    it "carries the remainder when the first discounted line costs less than the code" do
+      cheap = create(:product, user: seller, price_cents: 300)
+      dearer = create(:product, user: seller, price_cents: 400)
+      products = {
+        cheap.unique_permalink => { quantity: "1", permalink: cheap.unique_permalink },
+        dearer.unique_permalink => { quantity: "1", permalink: dearer.unique_permalink },
+      }
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].size).to eq(2)
+      expect(result[:products_data].values.map { _1[:discount][:cents] }).to eq([300, 200])
+      expect(result[:products_data].values).to all(satisfy { _1[:discount][:once_per_cart_amount_cents] == 500 })
+    end
+
+    it "carries the amount that would leave a line below the currency minimum" do
+      fixed_code.update!(amount_cents: 199)
+      cheap = create(:product, user: seller, price_cents: 100)
+      dearer = create(:product, user: seller, price_cents: 1000)
+      products = {
+        cheap.unique_permalink => { quantity: "2", permalink: cheap.unique_permalink, price_cents: 200 },
+        dearer.unique_permalink => { quantity: "1", permalink: dearer.unique_permalink, price_cents: 1000 },
+      }
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].values.map { _1[:discount][:cents] }).to eq([101, 98])
+    end
+
+    it "splits the amount across duplicate checkout lines after aggregate eligibility" do
+      duplicate_lines = {
+        "first" => { quantity: "1", permalink: product.unique_permalink, price_cents: 300 },
+        "second" => { quantity: "1", permalink: product.unique_permalink, price_cents: 400 }
+      }
+
+      result = OfferCodeDiscountComputingService.new(
+        fixed_code.code,
+        duplicate_lines,
+        key_by_input: true
+      ).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].transform_values { _1[:discount][:cents] }).to eq("first" => 300, "second" => 200)
+    end
+
+    it "allocates duplicate products in checkout input order" do
+      fixed_code.update!(amount_cents: 700)
+      interleaved_lines = {
+        "first" => { quantity: "1", permalink: product.unique_permalink, price_cents: 300 },
+        "middle" => { quantity: "1", permalink: product2.unique_permalink, price_cents: 400 },
+        "last" => { quantity: "1", permalink: product.unique_permalink, price_cents: 500 }
+      }
+
+      result = OfferCodeDiscountComputingService.new(
+        fixed_code.code,
+        interleaved_lines,
+        key_by_input: true
+      ).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].transform_values { _1[:discount][:cents] }).to eq(
+        "first" => 300,
+        "middle" => 400,
+        "last" => 0
+      )
+    end
   end
 
   it "returns sold_out error_code in result when offer code is sold out" do
@@ -487,6 +713,20 @@ describe OfferCodeDiscountComputingService do
 
     context "universal offer code" do
       let(:universal_offer_code_for_cross_sells) { create(:universal_offer_code, user: seller, amount_percentage: 50, amount_cents: nil, currency_type: "usd") }
+
+      it "keeps checkout allocations keyed only by submitted lines" do
+        products = {
+          "line-item" => { quantity: "1", permalink: product.unique_permalink },
+        }
+
+        result = OfferCodeDiscountComputingService.new(
+          universal_offer_code_for_cross_sells.code,
+          products,
+          key_by_input: true
+        ).process
+
+        expect(result[:products_data].keys).to eq(["line-item"])
+      end
 
       it "applies discount to main product and all applicable cross-sells" do
         result = OfferCodeDiscountComputingService.new(universal_offer_code_for_cross_sells.code, products_data).process

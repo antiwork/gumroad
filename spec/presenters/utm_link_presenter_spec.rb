@@ -81,6 +81,19 @@ describe UtmLinkPresenter do
                                                                                                   url: seller.profile_url
                                                                                                 })
     end
+
+    it "falls back to a 'deleted' placeholder when the target resource has been hard-deleted" do
+      product = create(:product, user: seller, name: "Product A")
+      utm_link.update!(target_resource_type: "product_page", target_resource_id: product.id)
+      product.destroy!
+
+      expect { described_class.new(seller:, utm_link:).utm_link_props }.not_to raise_error
+      expect(described_class.new(seller:, utm_link:).utm_link_props[:destination_option]).to eq({
+                                                                                                  id: "product_page",
+                                                                                                  label: "deleted",
+                                                                                                  url: nil
+                                                                                                })
+    end
   end
 
   describe "#new_page_react_props" do

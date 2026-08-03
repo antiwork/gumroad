@@ -60,10 +60,13 @@ describe PostToIndividualPingEndpointWorker do
 
   it "does not raise when it encounters an internet error" do
     allow(HTTParty).to receive(:post).and_raise(SocketError.new("socket error message"))
-    expect(Rails.logger).to receive(:info).with("[SocketError] PostToIndividualPingEndpointWorker error=\"socket error message\" url=http://example.com content_type=#{Mime[:url_encoded_form]} params={\"q\" => 47}")
+    messages = []
+    allow(Rails.logger).to receive(:info) { |message| messages << message }
     expect(HTTParty).to receive(:post).exactly(1).times
 
     PostToIndividualPingEndpointWorker.new.perform("http://example.com", { "q" => 47 })
+
+    expect(messages).to include("[SocketError] PostToIndividualPingEndpointWorker error content_type=#{Mime[:url_encoded_form]} user_id=")
   end
 
   it "re-raises a non-internet error" do
@@ -91,11 +94,27 @@ describe PostToIndividualPingEndpointWorker do
   end
 
   describe "logging" do
-    it "logs url, response code and params" do
+    it "does not log the endpoint URL or payload" do
       expect(HTTParty).to receive(:post).with("https://notification.com", timeout: 5, body: { "a" => 1 }, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
-      expect(Rails.logger).to receive(:info).with("PostToIndividualPingEndpointWorker response=200 url=https://notification.com content_type=#{Mime[:url_encoded_form]} params={\"a\" => 1}")
+      messages = []
+      allow(Rails.logger).to receive(:info) { |message| messages << message }
 
       PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 })
+
+      expect(messages.join("\n")).not_to include("https://notification.com", '"a" => 1')
+    end
+
+    it "does not log license keys or webhook credentials" do
+      endpoint = "https://notification.com/webhook?token=endpoint-secret"
+      payload = { "license_key" => "license-secret", "email" => "buyer@example.com" }
+      expect(HTTParty).to receive(:post).with(endpoint, timeout: 5, body: payload, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
+      messages = []
+      allow(Rails.logger).to receive(:info) { |message| messages << message }
+
+      PostToIndividualPingEndpointWorker.new.perform(endpoint, payload)
+
+      logged = messages.join("\n")
+      expect(logged).not_to include(endpoint, "endpoint-secret", "license-secret", "buyer@example.com")
     end
   end
 end

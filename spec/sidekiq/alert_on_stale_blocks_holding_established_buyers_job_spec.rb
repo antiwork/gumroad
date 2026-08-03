@@ -39,11 +39,12 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
 
   # The whole point of this job: no failure row anywhere, so the failure-keyed report cannot see this
   # buyer at all.
-  it "reports a buyer who has never attempted a blocked checkout" do
+  it "clears and reports a buyer who has never attempted a blocked checkout" do
     settled_purchases(established_count)
-    block_email
+    block = block_email
 
-    expect(message).to include(email, "#{established_count} settled purchases")
+    expect(message).to include(email, "#{established_count} settled purchases", "cleared")
+    expect(block.reload.blocked_at).to be_nil
   end
 
   it "names the date the block was written" do
@@ -55,55 +56,61 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
 
   it "ignores a buyer without enough settled purchases" do
     settled_purchases(established_count - 1)
-    block_email
+    block = block_email
 
     expect(InternalNotificationWorker).not_to receive(:perform_async)
     described_class.new.perform
+    expect(block.reload.blocked_at).to be_present
   end
 
   it "ignores purchases too recent to have been disputed" do
     settled_purchases(established_count, created_at: 1.day.ago)
-    block_email
+    block = block_email
 
     expect(InternalNotificationWorker).not_to receive(:perform_async)
     described_class.new.perform
+    expect(block.reload.blocked_at).to be_present
   end
 
   it "ignores free purchases, which cost a card tester nothing" do
     settled_purchases(established_count, price_cents: 0)
-    block_email
+    block = block_email
 
     expect(InternalNotificationWorker).not_to receive(:perform_async)
     described_class.new.perform
+    expect(block.reload.blocked_at).to be_present
   end
 
   it "ignores a buyer carrying a chargeback on another purchase" do
     settled_purchases(established_count)
     create(:purchase, email:, purchase_state: "successful", price_cents: 500,
                       created_at: history_starts_at, chargeback_date: 1.month.ago)
-    block_email
+    block = block_email
 
     expect(InternalNotificationWorker).not_to receive(:perform_async)
     described_class.new.perform
+    expect(block.reload.blocked_at).to be_present
   end
 
-  it "still reports a buyer whose only chargeback was reversed" do
+  it "still clears a buyer whose only chargeback was reversed" do
     settled_purchases(established_count)
     create(:purchase, email:, purchase_state: "successful", price_cents: 500,
                       created_at: history_starts_at, chargeback_date: 1.month.ago,
                       flags: Purchase.flag_mapping["flags"][:chargeback_reversed])
-    block_email
+    block = block_email
 
-    expect(message).to include(email)
+    expect(message).to include(email, "cleared")
+    expect(block.reload.blocked_at).to be_nil
   end
 
   # A named block is somebody's decision about this buyer, not a rule that outlived itself.
   it "ignores a block a human wrote" do
     settled_purchases(established_count)
-    block_email(by: create(:admin_user).id)
+    block = block_email(by: create(:admin_user).id)
 
     expect(InternalNotificationWorker).not_to receive(:perform_async)
     described_class.new.perform
+    expect(block.reload.blocked_at).to be_present
   end
 
   it "ignores a block that was already cleared" do
@@ -171,6 +178,98 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
     expect(lines.second).to include("newer@example.com")
   end
 
+  describe "the account-suspension veto (Sahil, gumroad-private#1746)" do
+    # The whole reason this job holds rather than clears: a block tied to a suspended account is a
+    # fraud call, not staleness, even though the block row itself carries blocked_by: nil.
+    it "holds a block whose email is a suspended account's own login email" do
+      create(:user, email:, user_risk_state: "suspended_for_fraud")
+      settled_purchases(established_count)
+      block = block_email
+
+      expect(message).to include(email, "held", "linked to a suspended account")
+      expect(block.reload.blocked_at).to be_present
+    end
+
+    it "holds a block whose purchases resolve to a suspended account as purchaser" do
+      suspended_user = create(:user, user_risk_state: "suspended_for_tos_violation")
+      settled_purchases(established_count, purchaser_id: suspended_user.id)
+      block = block_email
+
+      expect(message).to include(email, "held", "linked to a suspended account")
+      expect(block.reload.blocked_at).to be_present
+    end
+
+    it "clears a block whose account is merely flagged, not suspended" do
+      create(:user, email:, user_risk_state: "flagged_for_fraud")
+      settled_purchases(established_count)
+      block = block_email
+
+      expect(message).to include(email, "cleared")
+      expect(block.reload.blocked_at).to be_nil
+    end
+
+    it "clears a block with no linked account at all" do
+      settled_purchases(established_count)
+      block = block_email
+
+      expect(message).to include(email, "cleared")
+      expect(block.reload.blocked_at).to be_nil
+    end
+  end
+
+  describe "re-checking the block immediately before writing" do
+    # The candidate query's snapshot can go stale between enumeration and the write — a concurrent
+    # admin block is exactly the case blocked_by: nil is supposed to protect, so re-reading the row
+    # right before unblock! is what keeps a race from clearing a human's decision.
+    it "does not clear a block that was attended to after this run's candidate scan" do
+      settled_purchases(established_count)
+      block = block_email
+
+      admin_id = create(:admin_user).id
+      original_reload = PlatformBlock.instance_method(:reload)
+      allow_any_instance_of(PlatformBlock).to receive(:reload) do |instance|
+        instance.update_column(:blocked_by, admin_id) if instance.id == block.id && instance.blocked_by.nil?
+        original_reload.bind_call(instance)
+      end
+
+      expect(message).to include(email, "held")
+      expect(block.reload.blocked_by).to eq(admin_id)
+    end
+
+    # reject_disputed and linked_to_suspended_account both run once per batch, before any row's
+    # write — a chargeback recorded (or an account suspended) in that gap must still be caught at
+    # the write, not just at enumeration time.
+    it "does not clear a block whose buyer got a chargeback after the batch's dispute check ran" do
+      purchases = settled_purchases(established_count)
+      block = block_email
+
+      original_reload = PlatformBlock.instance_method(:reload)
+      allow_any_instance_of(PlatformBlock).to receive(:reload) do |instance|
+        purchases.first.update!(chargeback_date: Time.current) if instance.id == block.id
+        original_reload.bind_call(instance)
+      end
+
+      expect(message).to include(email, "held")
+      expect(block.reload.blocked_at).to be_present
+    end
+
+    it "does not clear a block whose account got suspended after the batch's suspension check ran" do
+      settled_purchases(established_count)
+      block = block_email
+
+      original_reload = PlatformBlock.instance_method(:reload)
+      allow_any_instance_of(PlatformBlock).to receive(:reload) do |instance|
+        if instance.id == block.id && !User.exists?(email:)
+          create(:user, email:, user_risk_state: "suspended_for_fraud")
+        end
+        original_reload.bind_call(instance)
+      end
+
+      expect(message).to include(email, "held")
+      expect(block.reload.blocked_at).to be_present
+    end
+  end
+
   describe "sweeping the backlog across runs" do
     # The whole point of gp#1746: a fixed page re-reports the same blocks forever and never reaches
     # the rest. Each run must resume past what the previous one judged.
@@ -201,19 +300,6 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
     end
   end
 
-  # The report must not claim these buyers stopped retrying: it never queries attempts, so that
-  # state is unknown to it. Saying it anyway sent a reader looking for a fact the job cannot supply.
-  it "does not claim anything about recent checkout attempts" do
-    settled_purchases(established_count)
-    block_email
-
-    body = message
-    expect(body).to include("does NOT query attempts")
-    expect(body).not_to include("have NOT tried recently")
-    expect(body).not_to include("has not tried to check out recently")
-    expect(body).not_to include("no recent attempt")
-  end
-
   # A truncated scan that found nothing must still report: otherwise the bound, not the platform,
   # decided the report was empty and nobody knows.
   it "reports truncation even when nothing on the page qualified" do
@@ -230,7 +316,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
     block_email(blocked_at: 3.years.ago)
     block_email("other@example.com", blocked_at: 2.years.ago)
 
-    expect(message).to include("At least 1 active email block", "floor")
+    expect(message).to include("cleared", "floor")
   end
 
   it "sends nothing when no block qualifies and the scan was not truncated" do

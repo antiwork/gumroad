@@ -188,6 +188,15 @@ export const getMaxQuantity = (product: Product, option: Option | null) =>
 export const hasMetDiscountConditions = (discount: Discount | null, quantity: number) =>
   quantity >= (discount?.minimum_quantity ?? 0);
 
+export const buyerLocalPriceCentsForSelection = (
+  buyerLocalPriceCents: number | null | undefined,
+  discount: Discount | null,
+  quantity: number,
+) =>
+  discount?.type === "fixed" && discount.once_per_cart && hasMetDiscountConditions(discount, quantity) && quantity > 1
+    ? null
+    : buyerLocalPriceCents;
+
 export const computeDiscountedPrice = (
   priceCents: number,
   discount: Discount | null,
@@ -204,7 +213,44 @@ export const computeDiscountedPrice = (
   return discountedPrice;
 };
 
-export const applySelection = (product: Product, discount: Discount | null, selection: PriceSelection) => {
+const applyOncePerCartDiscountToTotal = (priceCents: number, discount: Discount, currencyCode: CurrencyCode) => {
+  const discountedTotal = applyOfferCodeToCents(discount, priceCents);
+  return discountedTotal > 0 ? Math.max(discountedTotal, getMinPriceCents(currencyCode)) : 0;
+};
+
+export const computeSelectionDiscountedPrice = (
+  priceCents: number,
+  discount: Discount | null,
+  product: Product,
+  quantity: number,
+) => {
+  if (discount?.type !== "fixed" || !discount.once_per_cart) {
+    return computeDiscountedPrice(priceCents, discount, product);
+  }
+
+  const pppDiscountedPrice = computeDiscountedPrice(priceCents, null, product);
+  const discountTotal = applyOncePerCartDiscountToTotal(priceCents * quantity, discount, product.currency_code);
+  if (pppDiscountedPrice.ppp && pppDiscountedPrice.value * quantity < discountTotal) {
+    return pppDiscountedPrice;
+  }
+
+  if (quantity === 1) return { value: discountTotal, ppp: false };
+
+  // The product page quotes one unit, while this discount applies to the cart total.
+  return { value: priceCents, ppp: false };
+};
+
+export const withConfiguredOncePerCartAmount = (discount: Discount): Discount =>
+  discount.type === "fixed" && discount.once_per_cart
+    ? { ...discount, cents: discount.once_per_cart_amount_cents ?? discount.cents }
+    : discount;
+
+export const applySelection = (
+  product: Product,
+  discount: Discount | null,
+  selection: PriceSelection,
+  { preserveOncePerCartAllocation = false }: { preserveOncePerCartAllocation?: boolean } = {},
+) => {
   const basePriceCents = !product.is_legacy_subscription
     ? selection.rent && product.rental
       ? product.rental.price_cents
@@ -213,16 +259,23 @@ export const applySelection = (product: Product, discount: Discount | null, sele
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;
   const maxQuantity = getMaxQuantity(product, selectedOption);
   const priceCents = basePriceCents + (selectedOption ? computeOptionPrice(selectedOption, selection.recurrence) : 0);
-  const discountedPrice = computeDiscountedPrice(
-    priceCents,
-    hasMetDiscountConditions(discount, selection.quantity) ? discount : null,
-    product,
-  );
+  const applicableDiscount =
+    discount && hasMetDiscountConditions(discount, selection.quantity)
+      ? preserveOncePerCartAllocation
+        ? discount
+        : withConfiguredOncePerCartAmount(discount)
+      : null;
+  const discountedPrice = computeSelectionDiscountedPrice(priceCents, applicableDiscount, product, selection.quantity);
+  const discountedTotalCents =
+    applicableDiscount?.type === "fixed" && applicableDiscount.once_per_cart && !discountedPrice.ppp
+      ? applyOncePerCartDiscountToTotal(priceCents * selection.quantity, applicableDiscount, product.currency_code)
+      : discountedPrice.value * selection.quantity;
   return {
     selectedOption,
     basePriceCents,
     priceCents,
     discountedPriceCents: discountedPrice.value,
+    discountedTotalCents,
     pppDiscounted: discountedPrice.ppp,
     isPWYW: product.is_tiered_membership ? (selectedOption?.is_pwyw ?? false) : !!product.pwyw,
     maxQuantity,
@@ -252,6 +305,7 @@ export const OptionRadioButton = ({
   discount,
   recurrence,
   product,
+  quantity = 1,
   hidePrice,
 }: {
   disabled?: boolean;
@@ -267,10 +321,11 @@ export const OptionRadioButton = ({
   discount: Discount | null;
   recurrence?: RecurrenceId | null;
   product: Product;
+  quantity?: number;
   hidePrice?: boolean | undefined;
 }) => {
   priceCents ??= 0;
-  const { value: discountedPriceCents } = computeDiscountedPrice(priceCents, discount, product);
+  const { value: discountedPriceCents } = computeSelectionDiscountedPrice(priceCents, discount, product, quantity);
   const buyerLocalContext = buyerLocalContextFor(product);
   return (
     <Tab isSelected={selected} asChild className={recurrence ? "flex-col" : undefined}>
@@ -590,16 +645,31 @@ export const ConfigurationSelector = React.forwardRef<
     selection: PriceSelection;
     setSelection?: React.Dispatch<React.SetStateAction<PriceSelection>> | undefined;
     discount: Discount | null;
+    discountForSelection?: ((selection: PriceSelection) => Discount | null) | undefined;
     hidePrices?: boolean;
     initialSelection?: PriceSelection;
+    pwywMinimumPriceCents?: number;
     showInstallmentPlan?: boolean;
   }
->(({ product, selection, setSelection, discount, hidePrices, initialSelection, showInstallmentPlan = false }, ref) => {
+>((props, ref) => {
+  const {
+    product,
+    selection,
+    setSelection,
+    discount,
+    discountForSelection,
+    hidePrices,
+    initialSelection,
+    pwywMinimumPriceCents,
+    showInstallmentPlan = false,
+  } = props;
   const update = (update: Partial<PriceSelection> | ((selection: PriceSelection) => Partial<PriceSelection>)) =>
     setSelection?.((prevSelection) => ({
       ...prevSelection,
       ...(typeof update === "function" ? update(prevSelection) : update),
     }));
+  const previewDiscount = (previewSelection: PriceSelection) =>
+    discountForSelection ? discountForSelection(previewSelection) : discount;
 
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;
   const {
@@ -616,7 +686,7 @@ export const ConfigurationSelector = React.forwardRef<
     (selectedOption && selection.recurrence
       ? selectedOption.recurrence_price_values?.[selection.recurrence]?.suggested_price_cents
       : product.pwyw?.suggested_price_cents) ?? 0,
-    discountedPriceCents,
+    pwywMinimumPriceCents ?? discountedPriceCents,
   );
   const usePreexistingPrice =
     initialSelection &&
@@ -636,7 +706,11 @@ export const ConfigurationSelector = React.forwardRef<
       currencyCode={product.currency_code}
       cents={usePreexistingPrice ? initialSelection.price.value : selection.price.value}
       onChange={(newPriceCents) => update({ price: { value: newPriceCents, error: false } })}
-      onBlur={() => update(({ price }) => ({ price: { ...price, error: (price.value ?? 0) < discountedPriceCents } }))}
+      onBlur={() =>
+        update(({ price }) => ({
+          price: { ...price, error: (price.value ?? 0) < (pwywMinimumPriceCents ?? discountedPriceCents) },
+        }))
+      }
       suggestedPriceCents={suggestedPriceCents}
       hasError={selection.price.error}
       hideLabel={product.native_type === "coffee"}
@@ -729,8 +803,9 @@ export const ConfigurationSelector = React.forwardRef<
             description="Your rental will be available for 30 days. Once started, you’ll have 72 hours to watch it as much as you’d like!"
             currencyCode={product.currency_code}
             isPWYW={!!product.pwyw}
-            discount={discount}
+            discount={previewDiscount({ ...selection, rent: true })}
             product={product}
+            quantity={selection.quantity}
             hidePrice={hidePrices}
           />
           <OptionRadioButton
@@ -741,8 +816,9 @@ export const ConfigurationSelector = React.forwardRef<
             description="Watch as many times as you want, forever."
             currencyCode={product.currency_code}
             isPWYW={!!product.pwyw}
-            discount={discount}
+            discount={previewDiscount({ ...selection, rent: false })}
             product={product}
+            quantity={selection.quantity}
             hidePrice={hidePrices}
           />
         </Tabs>
@@ -781,9 +857,14 @@ export const ConfigurationSelector = React.forwardRef<
                 currencyCode={product.currency_code}
                 isPWYW={product.is_tiered_membership ? option.is_pwyw : !!product.pwyw}
                 status={option.status}
-                discount={discount}
+                discount={previewDiscount({
+                  ...selection,
+                  optionId: option.id,
+                  price: { value: null, error: false },
+                })}
                 recurrence={selection.recurrence}
                 product={product}
+                quantity={selection.quantity}
                 hidePrice={hidePrices}
               />
             ))}

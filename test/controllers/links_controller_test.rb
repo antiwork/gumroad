@@ -6611,10 +6611,11 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
   # --- the outer category sweep (Product::VariantsUpdaterService) ---
   #
   # A whole grouping absent from the payload is swept after each submitted
-  # grouping is processed. Marking it deleted does NOT soft-delete its versions,
-  # so intent must be judged against the versions the sweep authorised removing.
-  # Judging it from the (empty) deleted set reported every sweep as
-  # omission-driven, including fully confirmed ones.
+  # grouping is processed. The sweep soft-deletes the grouping's versions with
+  # it (gumroad-private#1784 — leaving them alive under a deleted grouping is a
+  # state the editor cannot load or save back). Intent is still judged against
+  # the versions the sweep authorised removing: judging it from the deleted set
+  # would misreport a version an earlier save had already removed.
 
   test "a swept category whose children were all confirmed records intent as confirmed ids" do
     swept = create_variant_category(link: @product, title: "Swept")
@@ -6631,10 +6632,12 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     assert_not_nil audit, "expected an audit for the swept category"
     assert_equal [swept.external_id], audit.deleted_variant_category_external_ids
     assert_equal [child.external_id], audit.affected_variant_external_ids
+    assert_equal [child.external_id], audit.deleted_variant_external_ids
     assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
     assert_equal 0, audit.unconfirmed_affected_variant_count
-    # The no-cascade behaviour is recorded rather than left to be discovered.
-    assert_equal 1, audit.alive_child_variant_count
+    # The sweep takes the versions with the grouping, so none stay alive under it.
+    assert_equal 0, audit.alive_child_variant_count
+    assert_equal true, child.reload.deleted?
   end
 
   test "a swept category with some children confirmed records intent as mixed" do
@@ -7212,9 +7215,8 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     assert_not other_category.reload.alive?
     assert kept.reload.alive?
-    # Sweeping a grouping does not cascade to its versions (VariantCategory's
-    # `has_many :variants` has no `dependent:` option), so aliveness alone cannot
-    # say WHICH route deleted the grouping. The audit row names it.
+    # Aliveness alone cannot say WHICH route deleted the grouping; the audit
+    # row names it.
     audit = ProductVariantDeletionAudit.where(route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT).last
     assert_not_nil audit, "the grouping should have been deleted by the named-grouping sweep"
     assert_includes audit.deleted_variant_category_external_ids, other_category.external_id
@@ -8485,5 +8487,97 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     # Confirmed in the payload, so the audit must not read as an omission — that
     # is the distinction the table exists to make.
     assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
+  end
+
+  # --- a save that confirmed a removal it never named (gumroad-private#1508)
+  #
+  # The report above is gated on requested_deletion?, so it is blind to the
+  # shape actually reported: a payload naming NO deletion. The confirmed ids
+  # are the witness, because the editor derives both lists from the same
+  # in-session state.
+
+  test "flag on: a confirmed removal the deletion operations never named is reported" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    survivor = create_variant(variant_category: @category, name: "Confirmed but unnamed")
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      confirmed_removed_variant_ids: [survivor.external_id],
+      deletion_operations: { deleted_ids: {} },
+    ), format: :json
+    assert_response :success
+
+    assert survivor.reload.alive?, "precondition: nothing was named, so the row must still be alive"
+    report = notified.find { |message, _| message == "Product save confirmed a removal its deletion operations never named" }
+    assert report, "expected the unstated-confirmed-removal report (got: #{notified.inspect})"
+    assert_equal [survivor.external_id], report.last[:unstated_variant_ids]
+    assert_empty report.last[:named_variant_ids]
+  end
+
+  test "flag on: a confirmed removal the payload did name reports nothing" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      confirmed_removed_variant_ids: [removed.external_id],
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert_empty notified.select { |message, _| message == "Product save confirmed a removal its deletion operations never named" }
+  end
+
+  # A resent payload naming an already-deleted row is not a live defect: the
+  # editor clears its confirmed ids after a successful save, so reporting this
+  # would be noise on every duplicate submit.
+  test "flag on: a confirmed id whose row is already deleted is not reported" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    already_gone = create_variant(variant_category: @category, name: "Already gone")
+    already_gone.mark_deleted!
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      confirmed_removed_variant_ids: [already_gone.external_id],
+      deletion_operations: { deleted_ids: {} },
+    ), format: :json
+    assert_response :success
+
+    assert_empty notified.select { |message, _| message == "Product save confirmed a removal its deletion operations never named" }
+  end
+
+  # A tab predating the contract sends neither key, so its confirmed ids carry
+  # no contradiction — it has no way to state a deletion.
+  test "flag on: a payload with no contract keys is not reported" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    survivor = create_variant(variant_category: @category, name: "Survivor")
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      confirmed_removed_variant_ids: [survivor.external_id],
+    ), format: :json
+    assert_response :success
+
+    assert_empty notified.select { |message, _| message == "Product save confirmed a removal its deletion operations never named" }
   end
 end

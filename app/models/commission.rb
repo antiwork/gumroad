@@ -50,10 +50,9 @@ class Commission < ApplicationRecord
     )
 
     completion_purchase = build_completion_purchase(completion_purchase_attributes)
+    completion_purchase.inherit_offer_code_from(deposit_purchase)
 
-    deposit_tip = deposit_purchase.tip
-    if deposit_tip.present?
-      completion_tip_value_cents = (deposit_tip.value_cents / COMMISSION_DEPOSIT_PROPORTION) - deposit_tip.value_cents
+    if completion_tip_value_cents.positive?
       completion_purchase.build_tip(value_cents: completion_tip_value_cents)
     end
 
@@ -81,10 +80,25 @@ class Commission < ApplicationRecord
   end
 
   def completion_price_cents
+    if (discounted_total = once_per_cart_discounted_display_price_cents)
+      total_price_cents = deposit_purchase.get_usd_cents(
+        deposit_purchase.displayed_price_currency_type,
+        discounted_total,
+        rate: deposit_purchase.rate_converted_to_usd
+      )
+      deposit_principal_cents = deposit_purchase.price_cents - deposit_purchase.tip&.value_usd_cents.to_i
+      return [total_price_cents - deposit_principal_cents, 0].max + completion_tip_value_usd_cents
+    end
+
     (deposit_purchase.price_cents / COMMISSION_DEPOSIT_PROPORTION) - deposit_purchase.price_cents
   end
 
   def completion_display_price_cents
+    if (discounted_total = once_per_cart_discounted_display_price_cents)
+      deposit_principal_cents = deposit_purchase.displayed_price_cents - deposit_purchase.tip&.value_cents.to_i
+      return [discounted_total - deposit_principal_cents, 0].max + completion_tip_value_cents
+    end
+
     (deposit_purchase.displayed_price_cents / COMMISSION_DEPOSIT_PROPORTION) - deposit_purchase.displayed_price_cents
   end
 
@@ -97,6 +111,31 @@ class Commission < ApplicationRecord
   end
 
   private
+    def completion_tip_value_cents
+      deposit_tip_cents = deposit_purchase.tip&.value_cents.to_i
+      return 0 if deposit_tip_cents.zero?
+
+      (deposit_tip_cents / COMMISSION_DEPOSIT_PROPORTION) - deposit_tip_cents
+    end
+
+    def completion_tip_value_usd_cents
+      deposit_tip_cents = deposit_purchase.tip&.value_usd_cents.to_i
+      return 0 if deposit_tip_cents.zero?
+
+      (deposit_tip_cents / COMMISSION_DEPOSIT_PROPORTION) - deposit_tip_cents
+    end
+
+    def once_per_cart_discounted_display_price_cents
+      discount = deposit_purchase.purchase_offer_code_discount
+      return unless discount&.once_per_cart? && !discount.offer_code_is_percent
+      return if discount.pre_discount_displayed_price_cents.blank?
+
+      total = [discount.pre_discount_displayed_price_cents - discount.offer_code_amount, 0].max
+      minimum = deposit_purchase.link.currency["min_price"]
+      total = minimum if total.positive? && total < minimum
+      total
+    end
+
     # Refunding the deposit is how the Help Center tells sellers to reject a commission, and
     # nothing transitions the commission when they do — so the deposit is re-read at charge time.
     def ensure_deposit_is_chargeable!

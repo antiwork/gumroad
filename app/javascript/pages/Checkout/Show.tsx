@@ -1,5 +1,6 @@
 import { Head, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
+import { flushSync } from "react-dom";
 import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
@@ -118,6 +119,7 @@ type CheckoutIndexPageProps = {
 const BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE = "buyer_currency_quote_invalid";
 const BUYER_CURRENCY_QUOTE_INVALID_MESSAGE =
   "The local-currency price changed or expired. Please review the updated total and try again.";
+const DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED_ERROR_CODE = "duplicate_purchase_confirmation_required";
 
 function getCartItemUid(item: CartItem) {
   return `${item.product.permalink} ${item.option_id ?? ""}`;
@@ -251,7 +253,7 @@ const CheckoutIndexPage = () => {
       paymentMethod: state.paymentMethod,
     },
   );
-  // The method-forced listed-currency lane, for the large-tip confirmation below and for the tip
+  // The direct-listed currency lane, for the large-tip confirmation below and for the tip
   // basis the order submits. Suppressed whenever the FX-quoted buyer-currency lane is displaying,
   // exactly as the checkout summary's precedence does (`buyerCurrencyDisplay ?? listedCurrency`):
   // the two lanes are near-mutually-exclusive, but a non-USD buyer of a non-USD-priced product can
@@ -269,6 +271,8 @@ const CheckoutIndexPage = () => {
       : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items, {
           usingSavedCard: state.usingSavedCard,
           paymentMethod: state.paymentMethod,
+          hasTip: computeTip(state) > 0,
+          hasShipping: cartForm.data.cart.items.some((item) => item.product.require_shipping),
         });
   // The tip and cart total the confirmation modal quotes, in listed minor units. The tip runs
   // through the submission's own per-line allocation (see computeTipForListedLines) so the modal
@@ -339,7 +343,7 @@ const CheckoutIndexPage = () => {
   };
   const acceptOffer = () => {
     const newCart = getCartIfAccepted();
-    cartForm.setData({ cart: newCart });
+    flushSync(() => cartForm.setData({ cart: newCart }));
     // Synchronously, not via the passive effect below: completeOffer can dispatch "validate" in
     // the same tick, and a passive invalidation would run after it — submitting through a payment
     // configuration computed for the pre-offer cart. An accepted offer changes the cart's items,
@@ -454,6 +458,14 @@ const CheckoutIndexPage = () => {
 
   const [showLargeTipConfirmation, setShowLargeTipConfirmation] = React.useState(false);
   const largeTipConfirmedRef = React.useRef(false);
+
+  // Line-item uids the buyer has explicitly confirmed they want to buy again after
+  // not_double_charged flagged an existing successful purchase of the same product.
+  const confirmedDuplicatePurchaseUidsRef = React.useRef(new Set<string>());
+  const [duplicatePurchaseConfirmation, setDuplicatePurchaseConfirmation] = React.useState<{
+    uids: string[];
+    productNames: string[];
+  } | null>(null);
 
   // The cart stays editable while the charge request is in flight — the Edit and Remove
   // controls in the cart rows are not disabled during processing — so the buyer can change a
@@ -580,7 +592,6 @@ const CheckoutIndexPage = () => {
 
           return linePricing.map(({ item, discounted, discountedPriceToChargeNow }, index) => {
             const tipCents = lineTips[index] ?? null;
-
             return {
               permalink: item.product.permalink,
               uid: getCartItemUid(item),
@@ -604,7 +615,9 @@ const CheckoutIndexPage = () => {
                 !cartForm.data.cart.rejectPppDiscount &&
                 discounted.discount?.type === "ppp" &&
                 item.price !== 0,
+              acceptsPppDiscount: !!item.product.ppp_details && !cartForm.data.cart.rejectPppDiscount,
               forceNewSubscription: item.force_new_subscription,
+              confirmedDuplicatePurchase: confirmedDuplicatePurchaseUidsRef.current.has(getCartItemUid(item)),
               acceptedOffer: item.accepted_offer ?? null,
               bundleProducts: item.product.bundle_products.map((bundleProduct) => ({
                 productId: bundleProduct.product_id,
@@ -632,8 +645,9 @@ const CheckoutIndexPage = () => {
               requestData,
               requestData.paymentMethod.confirmationTokenId,
               requestData.paymentMethod.selectedMethodType,
+              cartForm.data.cart.discountCodes,
             )
-          : await startOrderCreation(requestData);
+          : await startOrderCreation(requestData, cartForm.data.cart.discountCodes);
       const results = Object.entries(result.lineItems).flatMap(([key, result]) => {
         const [permalink, optionId] = key.split(" ");
         const item = cartForm.data.cart.items.find(
@@ -652,6 +666,41 @@ const CheckoutIndexPage = () => {
         showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
         dispatch({ type: "cancel" });
         recoverFromInvalidBuyerCurrencyQuote(result.lineItems);
+        return;
+      }
+
+      // Server refused a same-product repeat charge (Purchase#not_double_charged) rather than
+      // silently double-charging on a resubmit. Offer an explicit confirmation and retry once
+      // confirmed — mirrors the large-tip confirmation: state stays "finished" so the retry
+      // effect below can resubmit without the buyer pressing Pay. Only offered when EVERY
+      // failure is a confirmable duplicate: "Buy again" resubmits the whole remaining cart, so
+      // a line that failed for any other reason must go back through the normal failure path
+      // for the buyer to re-review before it can be charged.
+      const failedResults = results.filter(({ result }) => !result.success);
+      const duplicatePurchaseResults = failedResults.filter(
+        ({ result }) =>
+          "error_code" in result && result.error_code === DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED_ERROR_CODE,
+      );
+      if (duplicatePurchaseResults.length > 0 && duplicatePurchaseResults.length === failedResults.length) {
+        // Drop the successful lines from the cart now — same as the failedItems filter below —
+        // so "Buy again" only resubmits the lines awaiting confirmation.
+        const remainingItems = cartForm.data.cart.items.flatMap((item) => {
+          const lineItem = result.lineItems[getCartItemUid(item)];
+          return lineItem && !lineItem.success
+            ? {
+                ...item,
+                ...lineItem.updated_product,
+                quantity: lineItem.updated_product?.quantity || item.quantity,
+                accepted_offer: null,
+              }
+            : [];
+        });
+        debouncedSaveCartState.cancel();
+        cartForm.setData((prev) => ({ cart: { ...prev.cart, items: remainingItems } }));
+        setDuplicatePurchaseConfirmation({
+          uids: duplicatePurchaseResults.map(({ item }) => getCartItemUid(item)),
+          productNames: duplicatePurchaseResults.map(({ item }) => item.product.name),
+        });
         return;
       }
 
@@ -716,6 +765,12 @@ const CheckoutIndexPage = () => {
 
       setRedirecting(!!redirectTo);
 
+      // A save scheduled before Pay can still be pending here — an email keystroke's debounce, or
+      // a timer a backgrounded tab (wallet/Link popup flows) held until focus returned. It carries
+      // the pre-purchase cart, so letting it fire now re-persists the items that were just bought;
+      // the buyer sees their cart come back and pays again (gumroad-private#1793).
+      debouncedSaveCartState.cancel();
+
       cartForm.setData((prev) => ({
         cart: {
           ...prev.cart,
@@ -757,6 +812,9 @@ const CheckoutIndexPage = () => {
           "Your payment is being processed — check your email for your receipt. Please do not pay again.",
           "warning",
         );
+        // Same stale-save hazard as the success path above: a pre-purchase save still pending
+        // would re-fill the cart this line just emptied.
+        debouncedSaveCartState.cancel();
         cartForm.setData((prev) => ({ cart: { ...prev.cart, items: [] } }));
         dispatch({ type: "cancel" });
         return;
@@ -773,6 +831,20 @@ const CheckoutIndexPage = () => {
   React.useEffect(() => {
     largeTipConfirmedRef.current = false;
   }, [state.tip]);
+  React.useEffect(() => {
+    if (
+      duplicatePurchaseConfirmation === null &&
+      confirmedDuplicatePurchaseUidsRef.current.size > 0 &&
+      state.status.type === "finished"
+    ) {
+      // One retry attempt is all the confirmation buys — a later repeat of the same product
+      // gets asked again. Cleared once pay() settles rather than immediately: pay()'s first
+      // await runs before it builds the line items that read this ref.
+      void pay().finally(() => {
+        confirmedDuplicatePurchaseUidsRef.current = new Set();
+      });
+    }
+  }, [duplicatePurchaseConfirmation]);
 
   // A save can finish without delivering a recomputed configuration (dropped connection, timeout,
   // 500). The hold on Pay is NOT released in that case — see checkoutPaymentRefresh for why a lost
@@ -782,7 +854,34 @@ const CheckoutIndexPage = () => {
   // The recovery has to be a save rather than a bare re-request of the configuration: a save sends
   // the cart the client currently holds, so its answer is the configuration for that same cart.
   // Saves also supersede one another, so a recovery cannot race the buyer's next edit.
+  //
+  // Once payment starts, the cart the buyer edited is no longer the cart that matters, and a save
+  // still carrying it must not be allowed to answer: its response re-renders `cart` from the
+  // pre-payment state, putting the purchased items and the checkout form back over the receipt
+  // (gumroad-private#1793). What cannot be blocked is the save *after* checkout, which persists the
+  // failed items into a fresh cart — so this is a staleness test, not a pause. Saves issued before
+  // payment started are dropped; saves issued from the trimmed post-checkout cart are the current
+  // generation and go through.
+  const cartSaveGenerationRef = React.useRef(0);
+  const paymentStarted = state.status.type !== "input" && state.status.type !== "offering";
+  React.useEffect(() => {
+    if (!paymentStarted) return;
+    // Anything already queued was built from the pre-payment cart; a queued save has not been
+    // issued yet, so cancelling is strictly better than letting it start and be discarded.
+    debouncedSaveCartStateRef.current.cancel();
+    // `onBefore` only gates a save before it is sent. A save that had already been dispatched
+    // (and so already passed that gate) when payment started is still in flight here, and its
+    // response would otherwise repaint the receipt with the pre-payment cart. Cancelling the
+    // Inertia visit itself marks it `cancelled`, which the recovery callbacks in
+    // checkoutPaymentRefresh already treat as a no-op — see the `visit?.cancelled` guard in
+    // `onFinish` — so this cannot race a later, legitimate save.
+    cartForm.cancel();
+    cartSaveGenerationRef.current += 1;
+  }, [paymentStarted]);
+
   const saveCart = (callbacks: CartSaveCallbacks) => {
+    const generation = cartSaveGenerationRef.current;
+
     cartForm.patch(Routes.checkout_path(), {
       // checkout_payment comes back with the save because it is derived from the cart: which
       // element this checkout mounts, and in which currency, can change when the cart changes.
@@ -792,6 +891,9 @@ const CheckoutIndexPage = () => {
       only: ["cart", "flash", "checkout_payment", "checkout_style"],
       preserveUrl: true,
       preserveScroll: true,
+      // The generation is captured when the save is issued, so this refuses exactly the saves that
+      // were built from a cart payment has since moved past — and lets a post-checkout save through.
+      onBefore: () => generation === cartSaveGenerationRef.current,
       ...callbacks,
     });
   };
@@ -822,6 +924,10 @@ const CheckoutIndexPage = () => {
       }),
     );
   }, cart_save_debounce_ms);
+  // The pre-payment cancel above runs in an effect declared before this callback exists, so it
+  // reaches it through a ref rather than by ordering the declarations around each other.
+  const debouncedSaveCartStateRef = React.useRef(debouncedSaveCartState);
+  debouncedSaveCartStateRef.current = debouncedSaveCartState;
 
   // Clean URL params after initial render to avoid stale URL references during Inertia updates
   useRunOnce(() => {
@@ -978,7 +1084,7 @@ const CheckoutIndexPage = () => {
               crossSell={currentOffer}
               accept={acceptOffer}
               decline={completeOffer}
-              cart={cartForm.data.cart}
+              cart={getCartIfAccepted()}
             />
           ) : (
             <UpsellModal cart={cartForm.data.cart} upsell={currentOffer} accept={acceptOffer} decline={completeOffer} />
@@ -1030,6 +1136,42 @@ const CheckoutIndexPage = () => {
                 noCentsIfWhole: true,
               })}{" "}
           purchase. Are you sure?
+        </p>
+      </Modal>
+      <Modal
+        open={duplicatePurchaseConfirmation !== null}
+        onClose={() => {
+          setDuplicatePurchaseConfirmation(null);
+          dispatch({ type: "cancel" });
+        }}
+        title="You already own this"
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                setDuplicatePurchaseConfirmation(null);
+                dispatch({ type: "cancel" });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="primary"
+              onClick={() => {
+                if (duplicatePurchaseConfirmation)
+                  for (const uid of duplicatePurchaseConfirmation.uids)
+                    confirmedDuplicatePurchaseUidsRef.current.add(uid);
+                setDuplicatePurchaseConfirmation(null);
+              }}
+            >
+              Buy again
+            </Button>
+          </>
+        }
+      >
+        <p>
+          You already paid for {duplicatePurchaseConfirmation?.productNames.join(", ") ?? ""}. Do you want to buy{" "}
+          {(duplicatePurchaseConfirmation?.productNames.length ?? 0) > 1 ? "them" : "it"} again?
         </p>
       </Modal>
     </StateContext.Provider>

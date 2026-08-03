@@ -35,7 +35,8 @@ import {
   applySelection,
   ConfigurationSelector,
   PriceSelection,
-  computeDiscountedPrice,
+  computeSelectionDiscountedPrice,
+  withConfiguredOncePerCartAmount,
 } from "$app/components/Product/ConfigurationSelector";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -142,7 +143,10 @@ export const Checkout = ({
       const entries = Object.entries(discount.products_data);
       const pppDiscountGreaterCount = entries.reduce((acc, [permalink, discount]) => {
         const item = cart.items.find(({ product }) => product.permalink === permalink);
-        return item && computeDiscountedPrice(item.price, discount, item.product).ppp ? acc + 1 : acc;
+        const configuredDiscount = withConfiguredOncePerCartAmount(discount);
+        return item && computeSelectionDiscountedPrice(item.price, configuredDiscount, item.product, item.quantity).ppp
+          ? acc + 1
+          : acc;
       }, 0);
       if (pppDiscountGreaterCount === entries.length) {
         showAlert(
@@ -215,7 +219,7 @@ export const Checkout = ({
     (code) =>
       !code.fromUrl ||
       Object.values(code.products).some((discount) =>
-        discount.type === "fixed" ? discount.cents > 0 : discount.percents > 0,
+        discount.type === "fixed" ? (discount.once_per_cart_amount_cents ?? discount.cents) > 0 : discount.percents > 0,
       ),
   );
 
@@ -251,8 +255,7 @@ export const Checkout = ({
       ),
     })),
   );
-  // The method-forced local-method lane (a BRL product paid with Pix, an EUR product with iDEAL,
-  // an INR product with UPI): the buyer is charged the listed price as-is, so the summary shows
+  // The direct-listed lane: the buyer is charged the listed price as-is, so the summary shows
   // the listed currency rather than dividing that price by our USD exchange rate. Null on every
   // other checkout, which keeps the canonical USD rendering below.
   //
@@ -269,6 +272,8 @@ export const Checkout = ({
       : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cart.items, {
           usingSavedCard: state.usingSavedCard,
           paymentMethod: state.paymentMethod,
+          hasTip: computeTip(state) > 0,
+          hasShipping: cart.items.some((item) => item.product.require_shipping),
         });
   // The per-line bases the ORDER submits its tip from: Show.tsx hands computeTipsForLines each
   // line's `getDiscountedPrice(...)`, in the product's own minor units. Passing the same bases to
@@ -550,8 +555,8 @@ const TipSelector = ({
 }: {
   buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
   presentmentTipCents?: number | null;
-  // True only on the method-forced listed-currency lane, where the charge bills the listed amount
-  // directly and so a typed tip must be preserved exactly as typed (see `Tip.listedAmount`).
+  // True while checkout displays the listed-currency lane. A positive tip moves the direct-card
+  // ramp back to USD; the method-forced lane preserves the listed tip exactly as typed.
   isListedCurrency?: boolean;
 }) => {
   const [state, dispatch] = useState();
@@ -719,12 +724,33 @@ const CartItemComponent = ({
   });
   const [error, setError] = React.useState<null | string>(null);
 
-  const discount = getDiscountedPrice(cart, item);
+  const discountForSelection = (candidateSelection: PriceSelection) => {
+    const selectionWithoutDiscount = applySelection(item.product, null, candidateSelection);
+    const provisionalItem = {
+      ...item,
+      price: selectionWithoutDiscount.isPWYW
+        ? (candidateSelection.price.value ?? selectionWithoutDiscount.priceCents)
+        : selectionWithoutDiscount.priceCents,
+      quantity: candidateSelection.quantity,
+      option_id: candidateSelection.optionId,
+      recurrence: candidateSelection.recurrence,
+      rent: candidateSelection.rent,
+      call_start_time: candidateSelection.callStartTime,
+      pay_in_installments: candidateSelection.payInInstallments,
+    };
+    const provisionalCart = {
+      ...cart,
+      items: cart.items.map((candidate) => (candidate === item ? provisionalItem : candidate)),
+    };
+    return getDiscountedPrice(provisionalCart, provisionalItem);
+  };
+  const discount = discountForSelection(selection);
 
   const { priceCents, isPWYW } = applySelection(
     item.product,
     discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null,
     selection,
+    { preserveOncePerCartAllocation: true },
   );
 
   const saveChanges = () => {
@@ -841,6 +867,10 @@ const CartItemComponent = ({
                       }}
                       product={item.product}
                       discount={discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null}
+                      discountForSelection={(candidateSelection) => {
+                        const candidateDiscount = discountForSelection(candidateSelection).discount;
+                        return candidateDiscount && candidateDiscount.type !== "ppp" ? candidateDiscount.value : null;
+                      }}
                       showInstallmentPlan
                     />
                     {error ? <Alert variant="danger">{error}</Alert> : null}

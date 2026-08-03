@@ -1492,6 +1492,7 @@ export default function PaymentsPage() {
                 updatePayoutMethod={updatePayoutMethod}
                 errorFieldNames={errorFieldNames}
                 user={props.user}
+                countryName={props.payout_country_name}
               />
             ) : null}
             {selectedPayoutMethod !== "stripe" ? (

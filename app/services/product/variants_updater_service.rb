@@ -101,35 +101,39 @@ class Product::VariantsUpdaterService
       next if grouping_protected_from_sweep?(variant_category)
 
       # Captured before the sweep: these are the versions whose removal this
-      # operation authorises, and the same list the guard checks. Read afterwards
-      # it would still be accurate today (the sweep does not soft-delete them)
-      # but that is an accident of the missing `dependent:` option, not something
-      # the audit should rely on.
-      affected_variant_external_ids = variant_category.alive_variants.map(&:external_id)
+      # operation authorises, and the same list the guard checks.
+      variants_to_sweep = variant_category.alive_variants.to_a
+      affected_variant_external_ids = variants_to_sweep.map(&:external_id)
 
       Product::VariantCategoryUpdaterService.ensure_deletion_intent!(
         product:,
-        variants: variant_category.alive_variants.to_a,
+        variants: variants_to_sweep,
         confirmed_removed_variant_ids:,
         diagnostics: deletion_guard_diagnostics
       )
+      # The versions go with their grouping. VariantCategory's `has_many
+      # :variants` has no `dependent:` option, so `mark_deleted!` alone leaves
+      # them alive under a deleted grouping — a state no editor query expects,
+      # which broke both loading and saving the product carrying it
+      # (gumroad-private#1784). The guard above authorised removing exactly
+      # this list, and the shared deletion path also schedules the cleanup of
+      # their pages, so nothing live is left hanging off the dead grouping.
+      deleted_variant_external_ids = Product::VariantCategoryUpdaterService.batch_delete_variants(
+        product:,
+        variants: variants_to_sweep
+      )
       variant_category.mark_deleted!
 
-      # Marking the grouping deleted does NOT soft-delete its versions —
-      # VariantCategory's `has_many :variants` has no `dependent:` option — so
-      # any versions alive here stay alive under a deleted grouping. Two
-      # consequences for the audit:
-      #
-      # 1. `alive_child_variant_count` records that, so the no-cascade behaviour
-      #    is visible in data rather than something you have to know to look for.
-      # 2. Intent has to be judged against the versions this sweep AUTHORISED
-      #    removing (`affected_variant_external_ids`), not against soft-deleted
-      #    rows — there are none here. Judging it from the deleted set would
-      #    report a sweep the seller explicitly confirmed as omission-driven.
+      # `alive_child_variant_count` predates the version sweep above and now
+      # records 0 for new rows; kept so old audit rows stay interpretable.
+      # Intent is judged against the versions this sweep AUTHORISED removing
+      # (`affected_variant_external_ids`) — a version an earlier save already
+      # deleted is not attributed to this request.
       ProductVariantDeletionAudit.record_deletion(
         actor_user_id: deletion_audit_context[:actor_user_id],
         product_id: product.id,
         route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT,
+        deleted_variant_external_ids:,
         deleted_variant_category_external_ids: [variant_category.external_id],
         affected_variant_external_ids: affected_variant_external_ids,
         confirmed_removed_variant_ids:,

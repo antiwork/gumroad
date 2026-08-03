@@ -12,6 +12,10 @@ update_purchase_healthcheck_threshold:
   description: Recomputes the /healthcheck/purchases threshold from the prior 7 days' purchase rate
 
 # Hourly
+repair_order_charge_outcomes:
+  cron: "20 * * * *" # Every hour
+  class: RepairOrderChargeOutcomesJob
+  description: Re-derives Order#partially_successful for recent orders whose after-commit enqueue was lost
 cache_unreviewed_users_data:
   cron: "0 * * * *" # Every hour
   class: CacheUnreviewedUsersDataWorker
@@ -187,6 +191,16 @@ alert_on_negative_destination_balances:
   class: AlertOnNegativeDestinationBalancesJob
   queue: low
   description: Reports payable sellers whose Gumroad-managed Stripe account carries a negative destination ledger from FX residue
+alert_on_stalled_post_email_blasts:
+  cron: "40 11 * * *" # UTC 11:40
+  class: AlertOnStalledPostEmailBlastsJob
+  queue: low
+  description: Reports email blasts that started sending hours ago and never completed, so a killed blast job is found before a seller writes in
+alert_on_stripe_dob_drift:
+  cron: "30 12 * * 1" # UTC 12:30 Monday
+  class: AlertOnStripeDobDriftJob
+  queue: low
+  description: Reports sellers whose date of birth on Stripe disagrees with the one the under-18 payout gate reads
 alert_sellers_of_undelivered_receipts:
   cron: "30 11 * * *" # UTC 11:30
   class: AlertSellersOfUndeliveredReceiptsJob

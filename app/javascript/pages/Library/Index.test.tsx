@@ -101,8 +101,7 @@ const creatorCheckbox = (name: string): HTMLInputElement => {
   return input;
 };
 
-type VisitOutcome = { cancelled: boolean; interrupted: boolean };
-type OnFinish = (visit: VisitOutcome) => void;
+type OnFinish = () => void;
 
 // router.get is a vi.fn, so its recorded options are untyped; narrow rather than assert.
 const isOnFinish = (value: unknown): value is OnFinish => typeof value === "function";
@@ -118,8 +117,8 @@ const lastOnFinish = (): OnFinish => {
   return onFinish;
 };
 
-const settleLastVisit = (visit: VisitOutcome = { cancelled: false, interrupted: false }) => {
-  lastOnFinish()(visit);
+const settleLastVisit = () => {
+  lastOnFinish()();
 };
 
 const lastGetParams = (): Record<string, string> => {
@@ -215,6 +214,32 @@ describe("LibraryPage", () => {
     expect(creatorCheckbox("Zoe").checked).toBe(false);
   });
 
+  it("releases the optimistic filter state when an archive reload displaces the visit", () => {
+    renderPage();
+
+    fireEvent.click(creatorCheckbox("Zoe"));
+    expect(creatorCheckbox("Zoe").checked).toBe(true);
+
+    // router.reload() from an archive/delete interrupts the filter visit and echoes the old
+    // search, so the only settle signal is this one — the checkbox must not stay stranded.
+    act(() => settleLastVisit());
+    expect(creatorCheckbox("Zoe").checked).toBe(false);
+  });
+
+  it("hides the archived-purchases banner as soon as the archived filter is clicked", () => {
+    renderPage();
+
+    expect(screen.getByRole("status").textContent).toContain("You have 2 archived purchases");
+
+    const archivedLabel = screen.getByText("Show archived only").closest("label");
+    if (!archivedLabel) throw new Error("expected the archived filter label");
+    fireEvent.click(archivedLabel.querySelector("input") ?? archivedLabel);
+
+    // The banner invites you into the archive, so it must not survive alongside a ticked
+    // "Show archived only" while the request is in flight.
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("keeps the newer click's params when a superseded visit settles", () => {
     renderPage();
 
@@ -224,7 +249,7 @@ describe("LibraryPage", () => {
 
     // Inertia fires onFinish for the visit the second click interrupted; honouring it would
     // discard Ann and put us back at the bug.
-    act(() => supersededVisit({ cancelled: false, interrupted: true }));
+    act(() => supersededVisit());
     expect(creatorCheckbox("Ann").checked).toBe(true);
 
     fireEvent.click(creatorCheckbox("Zoe"));
@@ -257,5 +282,24 @@ describe("LibraryPage", () => {
     // A filter change navigates without a page param, i.e. back to page 1.
     fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "purchase_date" } });
     expect(lastGetParams()).toEqual({ sort: "purchase_date" });
+  });
+});
+
+describe("removal copy", () => {
+  it("offers removal rather than permanent deletion, and says the card can come back", () => {
+    renderPage();
+
+    const card = screen.getAllByRole("button", { name: "Open product action menu" })[0];
+    if (!card) throw new Error("expected a product card menu");
+    fireEvent.click(card);
+
+    fireEvent.click(screen.getByText("Remove from library"));
+
+    expect(screen.getByText(/from your library\?/u)).toBeTruthy();
+    expect(screen.getByText(/our support team can put the card back/u)).toBeTruthy();
+    // `is_deleted_by_buyer` is reversible, so copy claiming otherwise is the defect
+    // (gumroad-private#1762).
+    expect(screen.queryByText(/permanently/iu)).toBeNull();
+    expect(screen.queryByText(/cannot be undone/iu)).toBeNull();
   });
 });

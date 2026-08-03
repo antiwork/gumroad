@@ -22,6 +22,7 @@ export const Covers = ({
   closeButton,
   className,
   isThumbnail,
+  productName,
 }: {
   covers: AssetPreview[];
   activeCoverId: string | null;
@@ -29,6 +30,9 @@ export const Covers = ({
   closeButton?: React.ReactNode;
   className?: string;
   isThumbnail?: boolean;
+  // Only the product page has a name to give; the editor's preview renders the same carousel with
+  // no product context, and an empty alt is correct there.
+  productName?: string | undefined;
 }) => {
   useOnChange(() => {
     if (!covers.some((cover) => cover.id === activeCoverId)) setActiveCoverId(covers[0]?.id ?? null);
@@ -112,7 +116,7 @@ export const Covers = ({
         onScroll={handleScroll}
       >
         {covers.map((cover) => (
-          <CoverItem cover={cover} frameIsShaped={frameIsShaped} key={cover.id} />
+          <CoverItem cover={cover} frameIsShaped={frameIsShaped} productName={productName} key={cover.id} />
         ))}
       </div>
       {covers.length > 1 && activeCover?.type !== "oembed" && activeCover?.type !== "video" ? (
@@ -166,14 +170,22 @@ const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; 
   );
 };
 
-const CoverItem = ({ cover, frameIsShaped }: { cover: AssetPreview; frameIsShaped: boolean }) => {
+const CoverItem = ({
+  cover,
+  frameIsShaped,
+  productName,
+}: {
+  cover: AssetPreview;
+  frameIsShaped: boolean;
+  productName?: string | undefined;
+}) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dimensions = useElementDimensions(containerRef);
   const width = dimensions?.width;
 
   let coverComponent: React.ReactNode;
   if (cover.type === "unsplash") {
-    coverComponent = <img src={cover.url} />;
+    coverComponent = <img src={cover.url} alt={productName ?? ""} />;
   } else if (
     width &&
     cover.width !== null &&
@@ -193,7 +205,9 @@ const CoverItem = ({ cover, frameIsShaped }: { cover: AssetPreview; frameIsShape
             height: cover.native_height * ratio,
           };
     if (cover.type === "image") {
-      coverComponent = <Image cover={cover} dimensions={dimensions} frameIsShaped={frameIsShaped} />;
+      coverComponent = (
+        <Image cover={cover} dimensions={dimensions} frameIsShaped={frameIsShaped} productName={productName} />
+      );
     } else if (cover.type === "oembed") {
       coverComponent = <Embed cover={cover} dimensions={dimensions} frameIsShaped={frameIsShaped} />;
     } else {

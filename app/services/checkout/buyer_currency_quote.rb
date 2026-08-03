@@ -318,11 +318,6 @@ class Checkout::BuyerCurrencyQuote
 
     sellers = line_items_by_seller.keys.map { sellers_by_id.fetch(_1) }
     return unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
-    # Multi-seller carts have their own ramp on top of the buyer-currency flags, so this
-    # lane can be turned on and rolled back without touching single-seller checkouts. A
-    # cart falls back unless EVERY seller in it is ramped: one seller opting in must not
-    # change how another seller's items are priced.
-    return if sellers.many? && !Checkout::BuyerCurrencyEligibility.multi_seller_enabled?(sellers)
 
     buyer_currency = buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
@@ -533,12 +528,13 @@ class Checkout::BuyerCurrencyQuote
       charge_canonical_total_cents = charge_line_items.sum(&:canonical_total_cents)
       # A seller whose lines are all free gets no quote, which nils the quote for the whole
       # cart. That is deliberate rather than a gap: Order::ChargeService creates no charge for
-      # such a seller, so there is nothing to lock, and quoting the rest of the cart while
-      # ignoring them would mean the quote's seller set no longer matches the set the
-      # eligibility gate ramped on. If that is ever loosened to skip zero-total sellers here,
-      # `BuyerCurrencyEligibility#order_sellers` has to be narrowed to chargeable purchases in
-      # the same change — otherwise one unramped seller of a free item fails the paid seller's
-      # charge closed, with a token already in the buyer's hands.
+      # such a seller, so there is nothing to lock. It also keeps `off_session` honest — the
+      # charge service derives it from non-free sellers while
+      # `BuyerCurrencyEligibility#multi_seller_order?` counts every purchase, and withholding
+      # the quote here is what stops those two reads from disagreeing on a paid-plus-free
+      # cart. Loosening this to skip zero-total sellers must reconcile that pair in the same
+      # change, or such a cart fails the paid seller's charge closed with a token already in
+      # the buyer's hands.
       return unless charge_canonical_total_cents.positive?
 
       quote = begin
@@ -718,9 +714,8 @@ class Checkout::BuyerCurrencyQuote
     # something near but not equal to R$49.90 (two conversions, two rates, two
     # roundings), so the buyer would be charged an amount that differs from the price
     # on the page. That cart is withheld from quoting so it is never mispriced by the
-    # round trip. It only pays its listed price on the method-forced local-method lane
-    # (Charge::MethodForcedPresentment, for EUR/INR listings paid via iDEAL, Bancontact
-    # or UPI); a plain card checkout for that cart falls back to canonical USD today.
+    # round trip. Eligible client-confirm cards and method-forced local methods instead
+    # charge the listed amount directly, without an FX quote.
     def quotable_line_item?(line_item, buyer_currency:)
       product = line_item.product
       return false if product.price_currency_type.to_s.downcase == buyer_currency.to_s.downcase
@@ -755,13 +750,12 @@ class Checkout::BuyerCurrencyQuote
     # A single-charge cart ALSO repeats its one entry's fields at the top level — the shape
     # this token had before multi-seller quoting. Required for the deploy/rollback windows in
     # both directions: older code reads those fields flat and fails the payment outright if
-    # they are missing, and single-seller carts are all of today's buyer-currency traffic, so
-    # omitting them would break live checkouts on rollback. Removable once the ramp completes.
+    # they are missing, so omitting them would break live single-seller checkouts on rollback.
     #
-    # A MULTI-charge cart needs no flat shape: rolled-back code rejects any multi-seller order
-    # with `:multi_seller_checkout` before verification runs, and Charge::CreateService fails
-    # the charge closed, so an in-flight checkout gets the "price changed or expired" message
-    # (which re-quotes into canonical USD) rather than a payment at the wrong amount.
+    # A MULTI-charge cart needs no flat shape: a token with no flat amount is unreadable by
+    # pre-multi-seller code, and Charge::CreateService fails the charge closed when a token it
+    # cannot verify is submitted, so an in-flight checkout gets the "price changed or expired"
+    # message (which re-quotes into canonical USD) rather than a payment at the wrong amount.
     def signed_token(buyer_currency:, charge_quotes:)
       charges = charge_quotes.map do |charge_quote|
         {

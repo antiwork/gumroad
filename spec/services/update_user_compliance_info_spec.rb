@@ -1042,12 +1042,26 @@ describe UpdateUserComplianceInfo do
 
         expect(result[:success]).to be false
 
-        note = user.reload.comments.with_type_payout_note.alive.last
+        note = user.reload.comments.with_type_payout_note.alive.find { |c| c.content.include?("Stripe rejected payout setup") }
         expect(note).to be_present
-        expect(note.content).to include("Stripe rejected payout setup")
         expect(note.content).to include("code=invalid_request_error")
         expect(note.content).to include("param=individual[id_number]")
         expect(note.content).to include("Invalid value for individual[id_number]")
+      end
+
+      it "also tells the seller which field was refused, in a note they can read later" do
+        # The internal breadcrumb is support-only, so before this a seller who left the page had no
+        # way to find out why they had no payout rail (gumroad-private#1777).
+        error = Stripe::InvalidRequestError.new("Invalid value for individual[id_number]", "individual[id_number]", code: "invalid_request_error")
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info).and_raise(error)
+
+        described_class.new(compliance_params: params, user:).process
+
+        note = user.reload.latest_payout_setup_rejection_note
+        expect(note).to be_present
+        expect(PayoutNoteVisibility.seller_visible?(note)).to be true
+        expect(note.content).to include("couldn't accept the Tax ID you entered")
+        expect(note.content).not_to include("individual[id_number]")
       end
 
       it "still returns Stripe's message to the seller" do

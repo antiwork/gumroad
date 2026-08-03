@@ -12,6 +12,8 @@ class OfferCode < ApplicationRecord
 
   has_flags 1 => :is_cancellation_discount,
             2 => :created_via_cli,
+            # Keep legacy fixed discounts per-item unless the seller opts into order-level pricing.
+            3 => :once_per_cart,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -24,6 +26,7 @@ class OfferCode < ApplicationRecord
   belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
+  has_many :purchases_that_count_towards_offer_code_revenue, -> { offer_code_statistics }, class_name: "Purchase"
   has_one :upsell
 
   alias_attribute :duration_in_billing_cycles, :duration_in_months
@@ -75,14 +78,29 @@ class OfferCode < ApplicationRecord
     where("NOT EXISTS (SELECT 1 FROM offer_codes_excluded_products WHERE offer_codes_excluded_products.offer_code_id = offer_codes.id AND offer_codes_excluded_products.product_id = ?)", product.id)
   }
 
-  def is_valid_for_purchase?(purchase_quantity: 1)
-    return true if max_purchase_count.nil?
-
-    quantity_left >= purchase_quantity
+  # Codes may contain accented Latin characters (see the format validation above), so NFC-normalize
+  # before comparing — a decomposed client submission must match its precomposed stored form. For
+  # DB lookups the collation forgives everything here except leading whitespace.
+  def self.normalize_code(code)
+    code.to_s.unicode_normalize(:nfc).strip.downcase
   end
 
-  def quantity_left
-    max_purchase_count - times_used
+  def is_valid_for_purchase?(purchase_quantity: 1, excluding_purchase: nil)
+    return true if max_purchase_count.nil?
+
+    quantity_left(excluding_purchase:) >= (is_cents? && once_per_cart? ? 1 : purchase_quantity)
+  end
+
+  def quantity_left(excluding_purchase: nil, excluding_purchases: nil, excluding_order: nil, excluding_once_per_cart_allocation_ids: nil, lock: false)
+    max_purchase_count -
+      times_used(excluding_once_per_cart_allocation_ids:, lock:) -
+      active_once_per_cart_reservations(
+        excluding_purchase:,
+        excluding_purchases:,
+        excluding_order:,
+        excluding_once_per_cart_allocation_ids:,
+        lock:
+      )
   end
 
   def is_percent?
@@ -171,18 +189,87 @@ class OfferCode < ApplicationRecord
     json
   end
 
-  # Batched uses-left for capped codes, for surfaces that price many products in one request:
-  # one grouped aggregate where per-code times_used would issue one SUM each. Returns
-  # id => whether one more purchase still fits under the cap.
+  # Batched uses-left for capped codes, preserving the usage mode recorded at checkout.
   def self.uses_left_by_id(codes)
-    used = Purchase.counts_towards_offer_code_uses
-                   .where(offer_code_id: codes.map(&:id))
-                   .group(:offer_code_id).sum(:quantity)
+    code_ids = codes.map(&:id)
+    purchases = Purchase.counts_towards_offer_code_uses.where(offer_code_id: code_ids)
+    per_item = purchases.left_joins(:purchase_offer_code_discount)
+                        .where(purchase_offer_code_discounts: { once_per_cart: [false, nil] })
+                        .group(:offer_code_id).sum(:quantity)
+    legacy_per_cart = purchases.joins(:purchase_offer_code_discount)
+                               .where(purchase_offer_code_discounts: { once_per_cart: true, once_per_cart_allocation_id: nil })
+                               .group(:offer_code_id).count
+    reservations = Purchase.active_once_per_cart_offer_code_reservations
+                           .where(offer_code_id: code_ids)
+                           .where(purchase_offer_code_discounts: { once_per_cart_allocation_id: nil })
+                           .group(:offer_code_id).count
+    completed_allocations = Purchase.completed_once_per_cart_allocation_uses.where(offer_code_id: code_ids)
+    allocation_uses = completed_allocations.group(:offer_code_id)
+                                           .distinct.count("purchase_offer_code_discounts.once_per_cart_allocation_id")
+    active_allocations = Purchase.active_once_per_cart_allocation_uses.where(offer_code_id: code_ids)
+    allocation_reservations = active_allocations
+      .where.not(purchase_offer_code_discounts: {
+                   once_per_cart_allocation_id: completed_allocations.select("purchase_offer_code_discounts.once_per_cart_allocation_id")
+                 })
+      .group(:offer_code_id)
+      .distinct.count("purchase_offer_code_discounts.once_per_cart_allocation_id")
+    used = per_item.merge(legacy_per_cart) { |_id, item_uses, cart_uses| item_uses + cart_uses }
+                   .merge(reservations) { |_id, completed_uses, reserved_uses| completed_uses + reserved_uses }
+                   .merge(allocation_uses) { |_id, legacy_uses, allocation_count| legacy_uses + allocation_count }
+                   .merge(allocation_reservations) { |_id, completed_uses, reserved_uses| completed_uses + reserved_uses }
     codes.to_h { |code| [code.id, (code.max_purchase_count - used.fetch(code.id, 0)) >= 1] }
   end
 
-  def times_used
-    purchases.counts_towards_offer_code_uses.sum(:quantity)
+  def times_used(excluding_once_per_cart_allocation_ids: nil, lock: false)
+    uses = purchases.counts_towards_offer_code_uses
+    uses = uses.lock if lock
+    per_item = uses.left_joins(:purchase_offer_code_discount)
+                   .where(purchase_offer_code_discounts: { once_per_cart: [false, nil] }).sum(:quantity)
+    legacy_per_cart = uses.joins(:purchase_offer_code_discount)
+                          .where(purchase_offer_code_discounts: { once_per_cart: true, once_per_cart_allocation_id: nil }).count
+    allocation_uses = purchases.merge(Purchase.completed_once_per_cart_allocation_uses)
+    allocation_uses = allocation_uses.lock if lock
+    allocation_uses = allocation_uses.where.not(
+      purchase_offer_code_discounts: { once_per_cart_allocation_id: excluding_once_per_cart_allocation_ids }
+    ) if excluding_once_per_cart_allocation_ids.present?
+    allocation_uses = allocation_uses.distinct.count("purchase_offer_code_discounts.once_per_cart_allocation_id")
+    per_item + legacy_per_cart + allocation_uses
+  end
+
+  def active_once_per_cart_reservations(excluding_purchase: nil, excluding_purchases: nil, excluding_order: nil, excluding_once_per_cart_allocation_ids: nil, lock: false)
+    reservations = purchases.merge(Purchase.active_once_per_cart_offer_code_reservations)
+    completed_allocations = purchases.merge(Purchase.completed_once_per_cart_allocation_uses)
+    active_allocations = purchases.merge(Purchase.active_once_per_cart_allocation_uses)
+    if lock
+      reservations = reservations.lock
+      completed_allocations = completed_allocations.lock
+      active_allocations = active_allocations.lock
+    end
+    excluded_purchase_ids = Array(excluding_purchases).filter_map { _1.id if _1.persisted? }
+    excluded_purchase_ids << excluding_purchase.id if excluding_purchase&.persisted?
+    if excluded_purchase_ids.any?
+      reservations = reservations.where.not(id: excluded_purchase_ids)
+      completed_allocations = completed_allocations.where.not(id: excluded_purchase_ids)
+      active_allocations = active_allocations.where.not(id: excluded_purchase_ids)
+    end
+    if excluding_order&.persisted?
+      excluded_purchase_ids = excluding_order.order_purchases.select(:purchase_id)
+      reservations = reservations.where.not(id: excluded_purchase_ids)
+      completed_allocations = completed_allocations.where.not(id: excluded_purchase_ids)
+      active_allocations = active_allocations.where.not(id: excluded_purchase_ids)
+    end
+    if excluding_once_per_cart_allocation_ids.present?
+      excluded_allocations = { purchase_offer_code_discounts: { once_per_cart_allocation_id: excluding_once_per_cart_allocation_ids } }
+      completed_allocations = completed_allocations.where.not(excluded_allocations)
+      active_allocations = active_allocations.where.not(excluded_allocations)
+    end
+    legacy_reservations = reservations.where(purchase_offer_code_discounts: { once_per_cart_allocation_id: nil }).count
+    allocation_reservations = active_allocations
+      .where.not(purchase_offer_code_discounts: {
+                   once_per_cart_allocation_id: completed_allocations.select("purchase_offer_code_discounts.once_per_cart_allocation_id")
+                 })
+      .distinct.count("purchase_offer_code_discounts.once_per_cart_allocation_id")
+    legacy_reservations + allocation_reservations
   end
 
   def auto_delete_if_single_use_exhausted!
@@ -243,6 +330,12 @@ class OfferCode < ApplicationRecord
       }
     )
     json[:excluded_product_ids] = excluded_products.map(&:external_id) if universal? && excluded_products.present?
+    if is_cents? && once_per_cart?
+      json[:once_per_cart] = true
+      json[:once_per_cart_id] = external_id
+      json[:once_per_cart_amount_cents] = amount_cents
+      json[:once_per_cart_has_usage_limit] = max_purchase_count.present?
+    end
     json
   end
 
@@ -352,8 +445,9 @@ class OfferCode < ApplicationRecord
       return normalized_ownership_duration_tiers.all? { is_percentage_amount_valid?(product, it["amount_percentage"]) }
     end
 
-    product.available_price_cents.all? do |price_cents|
-      price_after_code = price_cents - amount_off(price_cents)
+    product.available_price_cents.all? do |unit_price_cents|
+      eligible_price_cents = unit_price_cents * once_per_cart_eligible_quantity
+      price_after_code = eligible_price_cents - amount_off(eligible_price_cents)
       price_after_code <= 0 || price_after_code >= product.currency["min_price"]
     end
   end
@@ -412,8 +506,16 @@ class OfferCode < ApplicationRecord
     def validate_membership_price_after_discount(product)
       return unless product.is_tiered_membership? && duration_in_billing_cycles.present?
 
-      return if product.available_price_cents.none? { _1 - amount_off(_1) <= 0 }
+      return if product.available_price_cents.none? do |price_cents|
+        eligible_price_cents = price_cents * once_per_cart_eligible_quantity
+        eligible_price_cents - amount_off(eligible_price_cents) <= 0
+      end
+
       errors.add(:base, "A fixed-duration discount code cannot be used to make a membership product temporarily free. Please add a free trial to your membership instead.")
+    end
+
+    def once_per_cart_eligible_quantity
+      is_cents? && once_per_cart? ? [minimum_quantity.to_i, 1].max : 1
     end
 
     def code_validation

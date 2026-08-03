@@ -10,10 +10,12 @@ import { Switch } from "$app/components/ui/Switch";
 export const TaxonomyAttributesEditor = ({
   attributes,
   values,
+  inferredValues,
   setValues,
 }: {
   attributes: TaxonomyAttribute[];
   values: Record<string, TaxonomyAttributeValue>;
+  inferredValues: Record<string, TaxonomyAttributeValue>;
   setValues: (values: Record<string, TaxonomyAttributeValue>) => void;
 }) => {
   if (attributes.length === 0) return null;
@@ -28,14 +30,23 @@ export const TaxonomyAttributesEditor = ({
     <Fieldset>
       <FieldsetTitle>Structured attributes</FieldsetTitle>
       <FieldsetDescription>These power category-specific filters in Discover.</FieldsetDescription>
-      {attributes.map((attribute) => (
-        <AttributeField
-          key={attribute.name}
-          attribute={attribute}
-          value={values[attribute.name]}
-          onChange={(value) => updateValue(attribute.name, value)}
-        />
-      ))}
+      {attributes.map((attribute) => {
+        // An inferred value with no explicit seller answer is displayed but not yet "theirs" —
+        // editing it here writes to `values`, which always wins over the inferred one server-side
+        // (gumroad-private#1788: "seller-visible and correctable").
+        const hasExplicitValue = values[attribute.name] !== undefined;
+        const displayValue = hasExplicitValue ? values[attribute.name] : inferredValues[attribute.name];
+
+        return (
+          <AttributeField
+            key={attribute.name}
+            attribute={attribute}
+            value={displayValue}
+            isInferred={!hasExplicitValue && inferredValues[attribute.name] !== undefined}
+            onChange={(value) => updateValue(attribute.name, value)}
+          />
+        );
+      })}
     </Fieldset>
   );
 };
@@ -43,22 +54,30 @@ export const TaxonomyAttributesEditor = ({
 const AttributeField = ({
   attribute,
   value,
+  isInferred,
   onChange,
 }: {
   attribute: TaxonomyAttribute;
   value: TaxonomyAttributeValue | undefined;
+  isInferred: boolean;
   onChange: (value: TaxonomyAttributeValue) => void;
 }) => {
   const uid = React.useId();
+  const inferredNote = isInferred ? (
+    <span className="text-muted-foreground text-sm">Detected automatically — edit to correct it</span>
+  ) : null;
 
   // A Switch carries its own label, so wrapping it in a Label would nest two labels for one control.
   if (attribute.value_type === "boolean") {
     return (
-      <Switch
-        checked={value === true || value === "true"}
-        onChange={(event) => onChange(event.target.checked)}
-        label={attribute.label}
-      />
+      <div className="grid gap-1">
+        <Switch
+          checked={value === true || value === "true"}
+          onChange={(event) => onChange(event.target.checked)}
+          label={attribute.label}
+        />
+        {inferredNote}
+      </div>
     );
   }
 
@@ -89,6 +108,7 @@ const AttributeField = ({
           onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}
         />
       )}
+      {inferredNote}
     </div>
   );
 };

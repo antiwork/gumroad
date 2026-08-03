@@ -1,24 +1,31 @@
 # frozen_string_literal: true
 
-# Reports buyers with settled payment history sitting behind an active platform block, keyed on the
-# BLOCKS rather than on recent checkout failures (gumroad-private#1746).
+# Clears active platform blocks standing in front of buyers with settled payment history, keyed on
+# the BLOCKS rather than on recent checkout failures (gumroad-private#1746).
 #
 # AlertOnBlockedEstablishedBuyersJob keys on recent failures, so it only sees buyers who tried
 # lately. A block is not retryable, so a buyer refused once may never generate another failure row
 # and stays outside that job's reach no matter how long the block stands. Keying on the blocks is
 # what reaches them.
 #
-# Reports only; clearing a block stays a human decision.
+# Auto-clears a block when the buyer clears the clean-history gate AND the email is not linked to a
+# suspended account — Sahil, gumroad-private#1746: "Auto clear if not linked to suspended accounts
+# i.e fraud." Anything linked to a suspension is held and reported for a human instead.
 class AlertOnStaleBlocksHoldingEstablishedBuyersJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
 
   # Only `email` blocks. Their object_value IS the buyer's identity, so history joins to the block
-  # directly. The other types cannot be resolved from the block alone: a browser_guid or card
+  # directly. The other types cannot be resolved from a block alone: a browser_guid or card
   # fingerprint names a device rather than a person, and an email_domain covers everyone on that
   # domain, so "the buyer behind this block" is not a question those rows can answer without a
   # failure row to anchor on — which is exactly what the failure-keyed job already has.
   BLOCK_TYPE = PlatformBlock::TYPES[:email]
+
+  # The account-side veto: a suspension is a decision about this person, independent of whether
+  # the block row itself carries `blocked_by`. Same states User.not_suspended excludes, so this
+  # cannot drift from what the rest of the app calls "suspended".
+  SUSPENDED_RISK_STATES = %w[suspended_for_fraud suspended_for_tos_violation].freeze
 
   # Report at most this many. The alert exists to be read.
   MAX_REPORTED = 25
@@ -37,14 +44,15 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     scan = scan_for_stale_blocks
     # Truncation with nothing qualifying still has to go out: it means the scan bound, not the
     # platform, decided the report was empty.
-    return if scan[:stale].empty? && !scan[:truncated]
+    return if scan[:cleared].empty? && scan[:held].empty? && !scan[:truncated]
 
     InternalNotificationWorker.perform_async("risk", "Stale blocks holding established buyers", message_for(scan))
   end
 
   private
-    # One entry per active block standing in front of a buyer with settled history, in the report's
-    # own ranking. `truncated` means the candidate window was cut short, so the counts are floors.
+    # Clears every active block standing in front of a buyer with settled history whose email is not
+    # linked to a suspended account, and reports the rest. `truncated` means the candidate window was
+    # cut short, so the counts are floors.
     def scan_for_stale_blocks
       after_id = current_cursor
       candidates = candidate_blocks(after_id)
@@ -57,11 +65,12 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
       truncated = candidates.size > MAX_CANDIDATES_SCANNED
       candidates = candidates.first(MAX_CANDIDATES_SCANNED)
-      # Advance past what this run judged. Saved before the counting work so a later failure cannot
+      # Advance past what this run judged. Saved before the clearing work so a later failure cannot
       # pin the cursor and re-report the same page forever.
       save_cursor(candidates.last.id) if candidates.any?
 
-      stale = []
+      cleared = []
+      held = []
       candidates.each_slice(HISTORY_COUNT_BATCH) do |batch|
         emails = batch.map { |block| block.object_value.downcase }
 
@@ -71,20 +80,35 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
         settled = reject_disputed(settled)
         next if settled.empty?
 
+        suspended = linked_to_suspended_account(settled.keys)
+
         batch.each do |block|
           email = block.object_value.downcase
           count = settled[email]
           next if count.nil?
 
-          stale << {
-            email: block.object_value,
-            settled_purchases: count,
-            blocked_at: block.blocked_at,
-          }
+          entry = { email: block.object_value, settled_purchases: count, blocked_at: block.blocked_at }
+
+          if suspended.include?(email)
+            held << entry
+          else
+            # Re-checked here, immediately before the write, rather than trusting the batch's
+            # snapshot — a concurrent admin block, a newly-suspended account, or a chargeback
+            # recorded after the batch queries ran would otherwise get cleared by a decision that
+            # was already stale by the time it reached this line.
+            block.reload
+            still_active = block.blocked_at.present? && (block.expires_at.nil? || block.expires_at > Time.current)
+            if still_active && block.blocked_by.nil? && !newly_disputed_or_suspended?(email)
+              block.unblock!
+              cleared << entry
+            else
+              held << entry.merge(reason: :changed_since_scan)
+            end
+          end
         end
       end
 
-      { stale: report_order(stale), truncated: }
+      { cleared: report_order(cleared), held: report_order(held), truncated: }
     end
 
     # Active email blocks nobody is named on, one over the candidate budget so that exhausting it is
@@ -98,7 +122,8 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     # `blocked_by: nil` keeps this to unattended rows. A named block is a decision about this buyer,
     # not a rule that outlived itself. Not airtight — PlatformBlock.add! overwrites blocked_by on
     # every re-block, so a human's row a rule later re-triggered arrives here as unattended, which is
-    # why the report tells its reader to re-check rather than presenting a line as proof.
+    # why the account-suspension veto below is a second, independent check rather than trusting this
+    # column alone.
     def candidate_blocks(after_id)
       PlatformBlock.active
                    .where(object_type: BLOCK_TYPE, blocked_by: nil)
@@ -134,8 +159,8 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     # there is no card in hand to key on. So this is deliberately WIDER: three settled PayPal
     # purchases, or three on three different one-use cards, clear here and would not clear there.
     # Email is also a weaker identity than a card — a line here can pair one person's block with
-    # another's history. Both are why the report asks its reader to re-check before clearing anything
-    # and why nothing here writes.
+    # another's history. That is exactly why the account-suspension check below re-derives from the
+    # purchases and the User row rather than trusting this grouping alone.
     #
     # Keyed on the downcased address for the same reason DecliningPlatformBlocks does it: the column
     # collates ci, so a mixed-case legacy row comes back under an arbitrary member's casing and would
@@ -167,44 +192,78 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       settled.reject { |email, _| disputed.include?(email) }
     end
 
+    # Downcased emails whose account side is linked to a suspension — either the email IS a
+    # suspended account's own login email, or it appears as a purchaser/typed-in address on a
+    # purchase whose account is suspended. Both directions matter: a suspended seller checking out
+    # as a buyer under their own account, and a suspended account's owner typing that address into a
+    # guest checkout, are both "linked to a suspended account" in Sahil's sense, and neither is
+    # caught by the other query alone.
+    def linked_to_suspended_account(emails)
+      by_login = User.where(email: emails).where(user_risk_state: SUSPENDED_RISK_STATES)
+                     .pluck(:email).map(&:downcase).to_set
+
+      by_purchaser = Purchase.where(email: emails).where.not(purchaser_id: nil)
+                            .joins(:purchaser).merge(User.where(user_risk_state: SUSPENDED_RISK_STATES))
+                            .distinct.pluck(:email).map(&:downcase).to_set
+
+      by_login | by_purchaser
+    end
+
+    # The batch-level `reject_disputed` and `linked_to_suspended_account` queries ran once, before
+    # this row's write. A chargeback recorded, or an account suspended, in the gap between that
+    # query and this `unblock!` would otherwise slip through unnoticed — re-deriving both from a
+    # single email, right at the write, is what closes that gap rather than trusting a snapshot the
+    # rest of the batch already moved past.
+    def newly_disputed_or_suspended?(email)
+      reject_disputed({ email => 1 }).empty? || linked_to_suspended_account([email]).any?
+    end
+
     def message_for(scan)
-      stale = scan[:stale]
-      lines = stale.first(MAX_REPORTED).map { |entry| line_for(entry) }
-      omitted = stale.size - lines.size
+      cleared = scan[:cleared]
+      held = scan[:held]
+      lines = cleared.first(MAX_REPORTED).map { |entry| line_for(entry, cleared: true) }
+      held_lines = held.first(MAX_REPORTED - lines.size).map { |entry| line_for(entry, cleared: false) }
+      omitted = (cleared.size - lines.size) + (held.size - held_lines.size)
 
       [
-        headline(stale.size, scan[:truncated]),
+        headline(cleared.size, held.size, scan[:truncated]),
         (scan[:truncated] ? "The scan stopped at #{MAX_CANDIDATES_SCANNED} active blocks, so this is a floor — the backlog is larger than the count above." : nil),
         "",
         *lines,
+        *held_lines,
         (omitted.positive? ? "…and #{omitted} more." : nil),
         "",
-        "This scan keys on active blocks, not on recent checkout failures — so unlike the " \
-          "failure-keyed report it reaches buyers who never retried. It does NOT query attempts, so " \
-          "a line here may or may not have tried recently. " \
-          "A line is also not proof the block is stale: a velocity rule writes `blocked_by` nil too, so " \
-          "check the rules before unblocking, and remember `unblock_buyer!` clears the buyer's whole " \
-          "identifier set rather than one row (see gumroad-private#1746).",
+        "Cleared lines were unblocked automatically: settled history, no unreversed chargeback, " \
+          "and the email is not linked to a suspended account (Sahil, gumroad-private#1746). Held " \
+          "lines qualified on history but are linked to a suspended account, or changed underneath " \
+          "this run, so they were left blocked for a human to judge — remember `unblock_buyer!` " \
+          "clears the buyer's whole identifier set rather than one row (see gumroad-private#1746).",
       ].compact.join("\n")
     end
 
     # Oldest block first. Age is what makes a line worth reading here: unlike the failure-keyed
     # report there is no attempt recency to rank by, and the buyer stuck since 2021 is the one whose
     # block is least likely to still be justified.
-    def report_order(stale)
-      stale.sort_by { |entry| [entry[:blocked_at].to_i, -entry[:settled_purchases]] }
+    def report_order(entries)
+      entries.sort_by { |entry| [entry[:blocked_at].to_i, -entry[:settled_purchases]] }
     end
 
-    def line_for(entry)
-      "• #{entry[:email]} — #{entry[:settled_purchases]} settled purchases, " \
+    def line_for(entry, cleared:)
+      verb = cleared ? "cleared" : "held — linked to a suspended account"
+      "• #{entry[:email]} — #{entry[:settled_purchases]} settled purchases, #{verb}, " \
         "blocked by email since #{entry[:blocked_at].to_date}"
     end
 
-    def headline(count, truncated)
-      return "No active email block on the scanned page stands in front of an established buyer, but the scan was truncated, so this is not evidence that none do." if count.zero?
+    def headline(cleared_count, held_count, truncated)
+      if cleared_count.zero? && held_count.zero?
+        return "No active email block on the scanned page stands in front of an established buyer, but the scan was truncated, so this is not evidence that none do." if truncated
 
-      "#{truncated ? "At least " : ""}#{count} active email block#{"s" if count != 1} " \
-        "#{count == 1 ? "is" : "are"} holding a buyer with " \
-        "#{Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY}+ settled purchases."
+        return "No active email block on the scanned page stands in front of an established buyer."
+      end
+
+      prefix = truncated ? "At least " : ""
+      "#{prefix}#{cleared_count} active email block#{"s" if cleared_count != 1} holding a buyer with " \
+        "#{Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY}+ settled purchases " \
+        "#{cleared_count == 1 ? "was" : "were"} cleared; #{held_count} more #{held_count == 1 ? "was" : "were"} held for review."
     end
 end

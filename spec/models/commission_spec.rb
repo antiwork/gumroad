@@ -342,11 +342,16 @@ describe Commission, :vcr do
 
       it "creates a completion purchase with the original price" do
         expect(deposit_purchase.price_cents).to eq(500)
+        offer_code.update!(max_purchase_count: 10, once_per_cart: true)
+        deposit_purchase.purchase_offer_code_discount.update!(once_per_cart: true)
+        offer_code.update!(once_per_cart: false)
 
         expect { commission.create_completion_purchase! }.to change { Purchase.count }.by(1)
 
         completion_purchase = commission.reload.completion_purchase
         expect(completion_purchase.price_cents).to eq(500)
+        expect(completion_purchase.purchase_offer_code_discount.once_per_cart).to be(true)
+        expect(offer_code.reload.times_used).to eq(1)
       end
 
       context "offer code has been soft deleted" do

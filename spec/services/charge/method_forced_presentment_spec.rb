@@ -351,7 +351,7 @@ describe Charge::MethodForcedPresentment do
     # the flag off this lane withholds the quote without calling Stripe at all.
     #
     # Returning nil is NOT the card lane's quiet canonical-USD fallback: this is the quoted
-    # case, whose caller (Order::PreparePaymentIntentService#method_forced_presentment_required?)
+    # case, whose caller (Order::PreparePaymentIntentService#client_confirm_presentment_required?)
     # turns a nil presentment into a clean synchronous failure, because the buyer's token was
     # minted on a forced-currency element and could never confirm a USD intent. That end of the
     # contract is pinned in the prepare-service spec; here we only pin that no quote is minted.

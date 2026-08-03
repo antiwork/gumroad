@@ -426,6 +426,12 @@ export const SALE_FIELDS: FieldDefinition[] = [
   { name: "formatted_total_price", type: "string", description: "Human-readable total price" },
   { name: "currency_symbol", type: "string", description: 'Currency symbol (e.g. "$")' },
   {
+    name: "currency",
+    type: "string",
+    description:
+      'ISO code of the currency the sale is denominated in (e.g. "usd", "jpy"). This is the currency `amount_cents` is read in when refunding, so it also tells you how many minor units an amount has — JPY has none, so `amount_cents=25` refunds ¥25.',
+  },
+  {
     name: "amount_refundable_in_currency",
     type: "string",
     description: "Amount still refundable in the sale's currency",

@@ -96,6 +96,7 @@ export const GetSales = () => (
       "formatted_display_price": "$10 a month",
       "formatted_total_price": "$10 a month",
       "currency_symbol": "$",
+      "currency": "usd",
       "amount_refundable_in_currency": "0",
       "product_id": "32-nPainqpLj1B_WIwVlMw==",
       "product_permalink": "XCBbJ",
@@ -209,6 +210,7 @@ export const GetSale = () => (
     "formatted_display_price": "$10 a month",
     "formatted_total_price": "$10 a month",
     "currency_symbol": "$",
+    "currency": "usd",
     "amount_refundable_in_currency": "0",
     "product_id": "32-nPainqpLj1B_WIwVlMw==",
     "product_permalink": "XCBbJ",
@@ -304,6 +306,7 @@ export const MarkSaleAsShipped = () => (
     "formatted_display_price": "$22",
     "formatted_total_price": "$22",
     "currency_symbol": "$",
+    "currency": "usd",
     "amount_refundable_in_currency": "22",
     "product_id": "CCQadnagaqfmKxdHaG5AKQ==",
     "product_permalink": "KHc",
@@ -374,7 +377,7 @@ export const RefundSale = () => (
     <ApiParameters>
       <ApiParameter
         name="amount_cents"
-        description="(optional) - Amount in cents (in currency of the sale) to be refunded. If set, issue partial refund by this amount. If not set, issue full refund. You can issue multiple partial refunds per sale until it is fully refunded."
+        description="(optional) - Amount to refund, in minor units of the sale's listed currency — the `currency` field on the sale object, not the buyer's local currency. Every listed currency has 100 minor units except `jpy`, which has none (whole yen), so for most sales 200 means 2.00 of that currency, but for a JPY sale 200 means ¥200. If set, issue partial refund by this amount. If not set, issue full refund. You can issue multiple partial refunds per sale until it is fully refunded."
       />
     </ApiParameters>
     <SaleResponseFields />
@@ -402,6 +405,7 @@ export const RefundSale = () => (
     "formatted_display_price": "$10",
     "formatted_total_price": "$10",
     "currency_symbol": "$",
+    "currency": "usd",
     "amount_refundable_in_currency": "8",
     "product_id": "e7xqFa2WL0E-qJlQ4WYJxA==",
     "product_permalink": "RSE",

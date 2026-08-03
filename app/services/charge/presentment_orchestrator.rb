@@ -35,11 +35,10 @@ class Charge::PresentmentOrchestrator
     @locked_quote = locked_quote
   end
 
-  # Shared presentment persistence, also used by the method-forced intent-prepare path
-  # (Charge::MethodForcedPresentment). Takes precomputed per-purchase allocations so
-  # callers control the component split: the card path splits proportionally via
-  # Charge::PresentmentAllocator, while the method-forced direct-listed-amount path
-  # supplies exact components (the tip the buyer picked in the product's own currency
+  # Shared presentment persistence, also used by the client-confirm intent-prepare paths.
+  # Takes precomputed per-purchase allocations so callers control the component split:
+  # the quote-backed path splits proportionally via Charge::PresentmentAllocator, while direct-listed
+  # paths supply exact components (the tip the buyer picked in the product's own currency
   # must not be re-derived by proportional rounding). Quote fields are nullable because
   # a direct-listed-amount presentment has no FX quote by design.
   #

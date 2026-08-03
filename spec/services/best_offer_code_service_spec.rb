@@ -36,8 +36,11 @@ describe BestOfferCodeService do
         let(:url_code) { url_offer_code.code }
 
         it "returns the url_code" do
-          expect(subject.result&.dig(:code)).to eq(url_offer_code.code)
-          expect(subject.result&.dig(:valid)).to be(true)
+          result = subject.result
+
+          expect(result&.dig(:code)).to eq(url_offer_code.code)
+          expect(result&.dig(:valid)).to be(true)
+          expect(result).not_to have_key(:offer_code)
         end
       end
 
@@ -46,6 +49,17 @@ describe BestOfferCodeService do
 
         it "returns error result" do
           expect(subject.result).to eq({ valid: false, error_code: :invalid_offer })
+        end
+      end
+
+      context "and it has leading whitespace" do
+        let(:url_code) { " #{url_offer_code.code}" }
+
+        it "matches the code and echoes it as submitted" do
+          result = subject.result
+
+          expect(result&.dig(:valid)).to be(true)
+          expect(result&.dig(:code)).to eq(" URL10")
         end
       end
     end
@@ -133,6 +147,42 @@ describe BestOfferCodeService do
           it "returns the default_code" do
             expect(subject.result&.dig(:code)).to eq(default_offer_code.code)
             expect(subject.result&.dig(:valid)).to be(true)
+          end
+        end
+
+        context "when the buyer qualifies for a better ownership tier" do
+          let(:buyer) { create(:user) }
+          let(:url_offer_code) do
+            create(
+              :tiered_offer_code,
+              user: seller,
+              products: [product],
+              code: "URL_TIERED"
+            )
+          end
+          let(:default_offer_code) do
+            create(
+              :offer_code,
+              products: [product],
+              code: "DEFAULT20",
+              amount_cents: nil,
+              amount_percentage: 20,
+              currency_type: product.price_currency_type
+            )
+          end
+          let(:url_code) { url_offer_code.code }
+
+          subject { described_class.new(product:, url_code:, quantity:, buyer:) }
+
+          before do
+            create(:purchase, purchaser: buyer, link: product, seller:, created_at: 13.months.ago)
+          end
+
+          it "compares the percentage resolved for the buyer" do
+            expect(subject.result).to include(
+              code: url_offer_code.code,
+              discount: include(percents: 50)
+            )
           end
         end
 
@@ -229,6 +279,39 @@ describe BestOfferCodeService do
         it "returns default_code" do
           expect(subject.result&.dig(:code)).to eq(default_offer_code.code)
           expect(subject.result&.dig(:valid)).to be(true)
+        end
+      end
+
+      context "when comparing a once-per-cart fixed code with a percentage code" do
+        let(:quantity) { 10 }
+        let(:url_offer_code) do
+          create(:offer_code, products: [product], code: "URL_FIXED", amount_cents: 1000, currency_type: product.price_currency_type,
+                              once_per_cart: true)
+        end
+        let(:default_offer_code) do
+          create(:offer_code, products: [product], code: "DEFAULT_PERCENT", amount_cents: nil, amount_percentage: 20,
+                              currency_type: product.price_currency_type)
+        end
+
+        it "chooses the code that saves more across the full quantity" do
+          expect(subject.result&.dig(:code)).to eq(default_offer_code.code)
+        end
+      end
+
+      context "when percentage rounding differs between one unit and the total" do
+        let(:product) { create(:product, user: seller, price_cents: 199, price_currency_type: "usd") }
+        let(:quantity) { 2 }
+        let(:url_offer_code) do
+          create(:offer_code, products: [product], code: "URL_PERCENT", amount_cents: nil, amount_percentage: 50,
+                              currency_type: product.price_currency_type)
+        end
+        let(:default_offer_code) do
+          create(:offer_code, products: [product], code: "DEFAULT_FIXED", amount_cents: 199,
+                              currency_type: product.price_currency_type, once_per_cart: true)
+        end
+
+        it "uses the same per-unit rounding as checkout" do
+          expect(subject.result&.dig(:code)).to eq(url_offer_code.code)
         end
       end
     end

@@ -4,7 +4,20 @@ class User < ApplicationRecord
   devise :database_authenticatable, :registerable, :confirmable, :omniauthable,
          :recoverable, :rememberable, :trackable, :pwned_password
 
-  has_paper_trail
+  # Every save that touches these writes them verbatim into `versions.object_changes`, where GDPR
+  # erasure does not reach and rows survive ~10 weeks (gumroad-private#1781). `otp_secret_key` is the
+  # plaintext TOTP shared secret and `confirmation_token` is stored raw, so a retained diff
+  # reproduces a second factor. `email` is deliberately NOT excluded — `versions_for(:email,
+  # :payment_address)` is a live admin consumer (Admin::Users::EmailChangesController).
+  has_paper_trail skip: %w[
+    encrypted_password
+    reset_password_token
+    confirmation_token
+    otp_secret_key
+    twitter_oauth_token
+    twitter_oauth_secret
+    facebook_access_token
+  ]
   has_one_time_password
   include Flipper::Identifier, FlagShihTzu, CurrencyHelper, JsonData, Deletable, MoneyBalance,
           DeviseInternal, PayoutSchedule, SocialTwitter, SocialGoogle, SocialApple, SocialGoogleMobile,
@@ -14,6 +27,7 @@ class User < ApplicationRecord
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
           AttributeBlockable, PayoutInfo, EmailNormalization, SingleUseResetPasswordToken,
           DashboardNavItems, ReputationSummary
+  include Purchase::Searchable::BuyerEmailCallbacks
 
   has_many :user_external_authentications, dependent: :destroy
 
@@ -49,6 +63,8 @@ class User < ApplicationRecord
   MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS = 60.days
 
   MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
+
+  MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT = 10_000
 
   # How long a resolved avatar variant URL stays cached. Avatar URLs are stable
   # for as long as the seller keeps the same picture, so this is only about
@@ -748,7 +764,7 @@ class User < ApplicationRecord
   def valid_password?(password)
     super(password)
   rescue BCrypt::Errors::InvalidHash
-    logger.info "Account with sha256 password: #{inspect}"
+    logger.info "Account with legacy sha256 password user_id=#{id}"
     false
   end
 
@@ -1374,6 +1390,25 @@ class User < ApplicationRecord
     return false if sales_cents_total < MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION
 
     has_completed_payouts?
+  end
+
+  # The store Agent can rewrite a seller's live storefront, so it stays behind the same
+  # earned-your-way-in bar as AI product generation: real money in, and a payout that
+  # proves the account is a going concern rather than a fresh signup experimenting.
+  #
+  # Never memoize: this backs an authorization check on a long-lived SSE stream, so a
+  # suspension mid-conversation has to revoke access on the next check rather than at the
+  # next object load.
+  #
+  # The ordering is what keeps it cheap. sales_cents_total is an Elasticsearch aggregation
+  # while has_completed_payouts? is an indexed exists?, so testing the payout first means a
+  # seller who has never been paid out short-circuits without touching ES — exactly the
+  # pre-launch account this gate exists to stop.
+  def eligible_for_store_agent?
+    return true if Rails.env.development?
+    return false if !confirmed? || suspended? || !has_completed_payouts?
+
+    sales_cents_total >= MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT
   end
 
   # Devise routes every confirmation *resend* through this method — the public

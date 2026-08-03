@@ -51,6 +51,7 @@ class Checkout::DiscountsPresenter
       minimum_quantity: offer_code.minimum_quantity,
       duration_in_billing_cycles: offer_code.duration_in_billing_cycles,
       minimum_amount_cents: offer_code.minimum_amount_cents,
+      once_per_cart: offer_code.is_cents? && offer_code.once_per_cart?,
       existing_customers_only: offer_code.existing_customers_only?,
       ownership_products: offer_code.ownership_products.map { product_props_for(_1) },
       ownership_duration_tiers: offer_code.normalized_ownership_duration_tiers,

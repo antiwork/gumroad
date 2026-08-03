@@ -39,11 +39,9 @@ module RendersCustomHtmlPages
   # those pages would keep rendering transparent gradients.
   TAILWIND_V3_CDN_HOST_PATTERN = /#{Regexp.escape(TAILWIND_V3_CDN_HOST)}/i
 
-  # Re-registers Tailwind's gradient custom properties with the universal
-  # syntax so a Tailwind v3 page can coexist with our injected v4 build.
-  # See tailwind_v3_gradient_compat_head for why this is needed and why the
-  # position in <head> matters.
-  #
+  # Re-registers Tailwind's gradient custom properties with the universal syntax
+  # so a v3 page can coexist with our injected v4 build — see
+  # tailwind_v3_gradient_compat_head for the mechanism and the ordering rule.
   # The `-position` variables are included because v3 also writes an *empty*
   # value into them (`--tw-gradient-from-position: ;` for an unpositioned stop),
   # which fails v4's <length-percentage> registration the same way.
@@ -152,32 +150,22 @@ module RendersCustomHtmlPages
     </script>
   HTML
 
-  # Injected into the sandboxed landing document at serve time (never authored
-  # by the seller), alongside the navigation bridge below. The sandbox blocks
-  # every direct path to the follow endpoint on purpose — the sanitizer strips
-  # form actions and the CSP sets connect-src 'none' — so an email-capture
-  # form inside the page can't reach gumroad.com on its own. Instead of
-  # weakening any of that, this helper asks the trusted parent wrapper to do
-  # the follow: it intercepts submits of forms the seller marks with
-  # data-gumroad-follow, posts the typed email up as a gumroad:follow message,
-  # and reflects the wrapper's success/failure reply back into the page. The
-  # parent supplies the seller id from its own context and re-validates
-  # everything, so (as with gumroad:navigate) nothing in here is load-bearing
-  # for security — a page script could post the same message itself, and
-  # script-driven pages are welcome to do exactly that and listen for the
-  # gumroad:follow:result window event.
+  # Injected at serve time, never seller-authored. The sandbox blocks every
+  # direct path to the follow endpoint (sanitizer strips form actions, CSP sets
+  # connect-src 'none'), so instead of widening it, submits of
+  # data-gumroad-follow forms are handed up as gumroad:follow messages and the
+  # wrapper's reply is reflected back. The parent supplies the seller id and
+  # re-validates, so nothing here is load-bearing for security — a page script
+  # may post the same message and listen for gumroad:follow:result.
   FOLLOW_BRIDGE_SCRIPT = <<~HTML
     <script data-cfasync="false" data-gumroad-follow-bridge>
       (function () {
         // Viewed directly (not framed) there is no trusted parent to ask,
         // so leave forms alone.
         if (window.parent === window) return;
-        // Each submit gets its own request id, and the wrapper echoes the id
-        // back in its reply. That correlation is what lets two forms on the
-        // same page (hero + footer) be submitted in quick succession without
-        // the first reply landing on the second form — a single "active form"
-        // slot would be overwritten by the second submit before the first
-        // reply arrives.
+        // Per-submit request id, echoed back by the wrapper: a single "active
+        // form" slot would be overwritten by a second submit before the first
+        // reply arrived, landing that reply on the wrong form.
         var pendingForms = {};
         var nextRequestId = 0;
         document.addEventListener("submit", function (e) {
@@ -203,14 +191,10 @@ module RendersCustomHtmlPages
           if (!d || typeof d !== "object" || d.type !== "gumroad:follow:result") return;
           var success = d.success === true;
           var message = typeof d.message === "string" ? d.message : "";
-          // Scope the outcome to the form whose submit produced this reply
-          // (matched by the echoed request id), so a page with two signup
-          // forms (hero + footer) doesn't flip both — even when they're
-          // submitted while another request is still in flight. When the
-          // message came from a page script instead of a tracked form submit,
-          // fall back to every marked form. Message slots inside the matched
-          // form win; a page whose slot lives elsewhere (e.g. a paragraph
-          // after the form) still gets the document-wide slots.
+          // Untracked request ids come from page scripts posting the message
+          // themselves; those fall back to every marked form. Slots inside the
+          // matched form win, but a page whose slot lives elsewhere (e.g. a
+          // paragraph after the form) still gets the document-wide slots.
           var requestId = typeof d.requestId === "string" ? d.requestId : null;
           var matchedForm = requestId && pendingForms[requestId] ? pendingForms[requestId] : null;
           if (requestId) delete pendingForms[requestId];
@@ -432,6 +416,64 @@ module RendersCustomHtmlPages
     </script>
   HTML
 
+  # Injected at serve time, never seller-authored. The gumroad-data payload
+  # carries at most Pages::ProfileData::MAX_ITEMS products and the sandbox blocks
+  # fetching the rest, so window.gumroadProducts.request({offset, limit}) asks the
+  # wrapper for the next slice, correlated by request id like the follow bridge.
+  # Not load-bearing for security — a page script may post gumroad:products
+  # itself and listen for gumroad:products:result.
+  PRODUCTS_BRIDGE_SCRIPT = <<~HTML
+    <script data-cfasync="false" data-gumroad-products-bridge>
+      (function () {
+        // Viewed directly (not framed) there is no trusted parent to ask.
+        if (window.parent === window) return;
+        var pendingRequests = {};
+        var nextRequestId = 0;
+        function request(options) {
+          options = options || {};
+          nextRequestId += 1;
+          var requestId = "gumroad-products-" + nextRequestId;
+          var promise = new Promise(function (resolve) {
+            pendingRequests[requestId] = resolve;
+          });
+          parent.postMessage({
+            type: "gumroad:products",
+            offset: options.offset,
+            limit: options.limit,
+            requestId: requestId
+          }, "*");
+          return promise;
+        }
+        try { window.gumroadProducts = { request: request }; } catch (_err) {}
+        window.addEventListener("message", function (e) {
+          // Only the parent wrapper's reply resolves a request — nested
+          // iframes (e.g. embedded video players) can't spoof it.
+          if (e.source !== window.parent) return;
+          var d = e.data;
+          if (!d || typeof d !== "object" || d.type !== "gumroad:products:result") return;
+          var requestId = typeof d.requestId === "string" ? d.requestId : null;
+          var resolve = requestId && pendingRequests[requestId] ? pendingRequests[requestId] : null;
+          if (requestId) delete pendingRequests[requestId];
+          var detail = {
+            success: d.success === true,
+            products: Array.isArray(d.products) ? d.products : [],
+            productsTotal: typeof d.productsTotal === "number" ? d.productsTotal : null,
+            prices: d.prices && typeof d.prices === "object" && !Array.isArray(d.prices) ? d.prices : {},
+            offset: typeof d.offset === "number" ? d.offset : null,
+            limit: typeof d.limit === "number" ? d.limit : null,
+            requestId: requestId
+          };
+          if (resolve) resolve(detail);
+          // For pages that posted their own message instead of going through
+          // window.gumroadProducts.
+          try {
+            window.dispatchEvent(new CustomEvent("gumroad:products:result", { detail: detail }));
+          } catch (_err) {}
+        });
+      })();
+    </script>
+  HTML
+
   POLL_INTERVAL_MS = 2000
 
   # The HTML comment the agent-preview endpoint splices in front of an edit's replacement so the
@@ -515,38 +557,20 @@ module RendersCustomHtmlPages
       end
     end
 
-    # Extra <head> CSS that lets a seller page load Tailwind v3 from the CDN
-    # without its gradients silently rendering as fully transparent.
+    # A page loading Tailwind v3 from the CDN ends up with two Tailwind majors on
+    # one document (we always inject v4, see pages_tailwind_head), and they
+    # disagree about what a gradient variable holds. v4 registers it as strictly a
+    # <color>, and @property registration is document-global:
+    #   @property --tw-gradient-from{syntax:"<color>";initial-value:#0000}
+    # v3 writes a color AND a position into that same variable:
+    #   .from-navy-700{--tw-gradient-from:#173a70 var(--tw-gradient-from-position)}
+    # "#173a70 0%" is not a <color>, so the browser silently substitutes the
+    # registered initial-value #0000 and every v3 gradient renders transparent.
     #
-    # The problem: we inject our own Tailwind *v4* build into every custom page
-    # (see pages_tailwind_head), and the sanitizer + CSP also allow
-    # cdn.tailwindcss.com, which serves Tailwind *v3*. Agent-generated pages use
-    # the v3 CDN routinely, so two Tailwind majors end up on one document, and
-    # they disagree about what a gradient variable holds:
-    #
-    #   v4 registers it as strictly a color, and CSS @property registration is
-    #   document-global, so it applies to the whole page:
-    #     @property --tw-gradient-from{syntax:"<color>";inherits:false;initial-value:#0000}
-    #
-    #   v3 writes a color AND a position into that same variable:
-    #     .from-navy-700{--tw-gradient-from:#173a70 var(--tw-gradient-from-position)}
-    #
-    # "#173a70 0%" is not a <color>, so the browser rejects the declaration and
-    # substitutes the registered initial-value, #0000 — transparent. Every v3
-    # gradient on the page quietly becomes transparent-to-transparent. Nothing
-    # errors and no warning appears; the utilities just stop working, which is
-    # why sellers cannot diagnose it (they report their *text* as invisible,
-    # because light text designed to sit on the missing panel now sits on the
-    # white page background instead).
-    #
-    # The fix is to re-register those variables with the universal syntax "*",
-    # which accepts any token sequence, so v3's "color position" value survives.
-    # This must come AFTER our v4 stylesheet: for duplicate @property rules the
-    # last registration wins, so emitting it earlier has no effect at all
-    # (verified in a browser — see the PR for the before/after computed values).
-    #
-    # Only emitted for pages that actually load the v3 CDN, so pages using our
-    # v4 build alone keep v4's exact registrations and are untouched.
+    # Re-registering with the universal syntax "*" accepts v3's value. It must be
+    # emitted AFTER our v4 stylesheet — for duplicate @property rules the last
+    # registration wins — and only for pages that load the v3 CDN, so v4-only
+    # pages keep v4's exact registrations.
     def tailwind_v3_gradient_compat_head(custom_html)
       return "" unless custom_html.to_s.match?(TAILWIND_V3_CDN_HOST_PATTERN)
 
@@ -599,19 +623,14 @@ module RendersCustomHtmlPages
       JS
     end
 
-    # Injected into the sandboxed landing document at serve time (never authored
-    # by the seller) so plain store links work without any seller HTML changes.
-    # Clicking a link inside the sandboxed iframe would otherwise navigate the
-    # IFRAME itself: the destination page then renders on the opaque origin,
-    # where cookies and storage are unavailable, so checkout hangs or the page
-    # fails to render entirely. The sandbox deliberately omits
-    # allow-top-navigation (and the sanitizer strips target="_top"), so the only
-    # safe way out is this bridge: intercept clicks on the store's own links and
-    # ask the trusted parent wrapper to navigate the top-level window instead.
-    # The parent re-validates the URL against the same hostname allowlist — the
-    # iframe content is untrusted, so nothing here is load-bearing for security.
-    # Links to foreign hosts and target="_blank" links keep their default
-    # behavior.
+    # Injected at serve time so plain store links work without seller HTML
+    # changes. A link click would otherwise navigate the IFRAME, rendering the
+    # destination on the opaque origin where cookies and storage are unavailable —
+    # checkout hangs or the page fails outright. The sandbox deliberately omits
+    # allow-top-navigation (and the sanitizer strips target="_top"), so store links
+    # are handed to the parent instead. The parent re-validates against the same
+    # hostname allowlist, so nothing here is load-bearing for security. Foreign
+    # hosts and target="_blank" keep their default behavior.
     def custom_html_navigation_bridge_script(allowed_hostnames:)
       hostnames_json = ERB::Util.json_escape(allowed_hostnames.to_json)
       <<~HTML
@@ -648,30 +667,22 @@ module RendersCustomHtmlPages
       HTML
     end
 
-    # The trusted-wrapper half of the follow bridge, shared by the profile
-    # wrapper (UsersController) and the slugged-page wrapper
-    # (UserPagesController) so the two surfaces can't drift. It listens for
-    # gumroad:follow messages from the sandboxed landing iframe and POSTs the
-    # email to the public follow endpoint. The iframe content is seller-authored
-    # and untrusted, so this side is the security boundary:
-    # - only messages from the landing frame's opaque origin are accepted;
-    # - the seller id comes exclusively from this wrapper's render context —
-    #   a seller_id in the message is ignored, so the page can never subscribe
-    #   a visitor to someone else's audience;
-    # - the email is treated as an opaque string and validated server-side
-    #   (the endpoint already serves third-party embed forms and is throttled
-    #   by Rack::Attack; follows still require email confirmation).
-    # The body is form-encoded, not JSON: the endpoint's per-(IP, seller)
-    # Rack::Attack throttle keys on req.params["seller_id"], and Rack only
-    # parses form bodies — a JSON body would collapse the throttle into one
-    # shared per-IP bucket across all sellers. The CSRF token comes from the
-    # placeholder meta tag CsrfTokenInjector fills in after render; with a
-    # valid token the visitor's session survives forgery protection, so a
-    # signed-in visitor following with their own verified email is confirmed
-    # instantly instead of being asked to click a confirmation email.
-    # The outcome is posted back into the frame so the page can show a
-    # confirmation. targetOrigin must be "*" because the sandboxed frame's
-    # origin is opaque — the reply carries only a boolean and a public message.
+    # The trusted-wrapper half of the follow bridge, shared by UsersController and
+    # UserPagesController so the two surfaces can't drift. The iframe content is
+    # untrusted, so this side is the security boundary: the seller id comes only
+    # from this wrapper's render context (a seller_id in the message is ignored, so
+    # a page can never subscribe a visitor to someone else's audience) and the
+    # email is validated server-side.
+    #
+    # The body must be form-encoded, not JSON: the endpoint's per-(IP, seller)
+    # Rack::Attack throttle keys on req.params["seller_id"] and Rack only parses
+    # form bodies, so JSON would collapse it into one per-IP bucket across all
+    # sellers. The CSRF token comes from the placeholder meta tag CsrfTokenInjector
+    # fills in after render; with a valid token the visitor's session survives
+    # forgery protection, so a signed-in visitor following with their own verified
+    # email is confirmed instantly instead of by email. targetOrigin must be "*"
+    # because the frame's origin is opaque — the reply carries only a boolean and
+    # a public message.
     def custom_html_follow_wrapper_script(seller_external_id:, nonce:)
       seller_id_json = ERB::Util.json_escape(seller_external_id.to_json)
       endpoint_json = ERB::Util.json_escape(follow_user_from_embed_form_path.to_json)
@@ -686,12 +697,9 @@ module RendersCustomHtmlPages
               if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
               var d = e.data;
               if (!d || typeof d !== "object" || d.type !== "gumroad:follow") return;
-              // The child sends a per-submit request id; echoing it back is
-              // what lets the child route each reply to the form that asked,
-              // so two forms submitted in quick succession each get their own
-              // outcome instead of the first reply landing on the second
-              // form. Requests are allowed to overlap — abuse is bounded by
-              // the endpoint's Rack::Attack throttle, not by this script.
+              // Echoed back so the child can route each reply to the form that
+              // asked. Requests may overlap — abuse is bounded by the endpoint's
+              // Rack::Attack throttle, not by this script.
               var requestId = typeof d.requestId === "string" ? d.requestId : null;
               function reply(success, message) {
                 frame.contentWindow.postMessage({ type: "gumroad:follow:result", success: success, message: message, requestId: requestId }, "*");
@@ -718,6 +726,76 @@ module RendersCustomHtmlPages
                 // Network failure, or a non-JSON body such as a Rack::Attack
                 // 429 while throttled.
                 .catch(function () { reply(false, GENERIC_ERROR); });
+            });
+          })();
+        </script>
+      HTML
+    end
+
+    # The trusted-wrapper half of the products bridge (gumroad-private#1691). It listens for
+    # gumroad:products messages from the sandboxed landing iframe and fetches the requested
+    # catalogue slice from the profile's landing/products endpoint. The iframe content is
+    # seller-authored and untrusted, so this side is the security boundary:
+    # - only messages from the landing frame's opaque origin are accepted;
+    # - the endpoint URL is baked from this wrapper's render context — nothing in the message
+    #   picks the seller, so the page can never read another seller's catalogue slice;
+    # - offset/limit are validated as non-negative integers and limit is clamped to MAX_ITEMS
+    #   here, and the server re-validates both, so a hostile page can't turn one message into
+    #   an unbounded query.
+    # The reply echoes the child's request id (same convention as the follow bridge) so two
+    # in-flight requests can't cross. Overlapping requests are allowed — abuse is bounded by
+    # the endpoint's Rack::Attack throttle, not by this script. targetOrigin must be "*"
+    # because the sandboxed frame's origin is opaque — the reply carries only the public
+    # catalogue data the page 1 payload already exposes.
+    def custom_html_products_wrapper_script(products_src:, nonce:)
+      endpoint_json = ERB::Util.json_escape(products_src.to_json)
+      <<~HTML
+        <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false" data-gumroad-products-wrapper>
+          (function () {
+            var frame = document.getElementById("gumroad-landing-frame");
+            var ENDPOINT = #{endpoint_json};
+            var MAX_ITEMS = #{Pages::ProfileData::MAX_ITEMS};
+            window.addEventListener("message", function (e) {
+              if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
+              var d = e.data;
+              if (!d || typeof d !== "object" || d.type !== "gumroad:products") return;
+              var requestId = typeof d.requestId === "string" ? d.requestId : null;
+              function reply(payload) {
+                payload.type = "gumroad:products:result";
+                payload.requestId = requestId;
+                frame.contentWindow.postMessage(payload, "*");
+              }
+              var offset = d.offset;
+              var limit = d.limit;
+              if (typeof offset !== "number" || !isFinite(offset) || Math.floor(offset) !== offset || offset < 0) {
+                reply({ success: false });
+                return;
+              }
+              if (limit === undefined || limit === null) limit = MAX_ITEMS;
+              if (typeof limit !== "number" || !isFinite(limit) || Math.floor(limit) !== limit || limit < 1) {
+                reply({ success: false });
+                return;
+              }
+              if (limit > MAX_ITEMS) limit = MAX_ITEMS;
+              fetch(ENDPOINT + "?offset=" + offset + "&limit=" + limit, {
+                headers: { "Accept": "application/json" },
+                credentials: "same-origin"
+              })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                  if (!data || data.success !== true) { reply({ success: false }); return; }
+                  reply({
+                    success: true,
+                    products: data.products,
+                    productsTotal: data.products_total,
+                    prices: data.prices,
+                    offset: data.offset,
+                    limit: data.limit
+                  });
+                })
+                // Network failure, or a non-JSON body such as a Rack::Attack
+                // 429 while throttled.
+                .catch(function () { reply({ success: false }); });
             });
           })();
         </script>
@@ -815,6 +893,38 @@ module RendersCustomHtmlPages
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
     end
 
+    # One catalogue slice for the gumroad:products bridge (gumroad-private#1691). Shared by the
+    # public endpoint (UsersController#landing_products) and the editor preview's responder
+    # (PagesController#products) so a page paginates identically in both, and renders the
+    # JSON itself because the two differ only in how they resolve and authorize the seller.
+    # Everything returned is data the page 1 payload already exposes.
+    def render_custom_html_products_slice(seller)
+      offset = Integer(params[:offset], exception: false)
+      limit = Integer(params[:limit], exception: false)
+      return render json: { success: false }, status: :bad_request if offset.nil? || offset.negative? || limit.nil? || limit < 1
+
+      limit = [limit, Pages::ProfileData::MAX_ITEMS].min
+      # Rejected against the count BEFORE paging: MySQL walks and discards every row preceding a
+      # large OFFSET, so an unbounded one is a cheap way to make this endpoint expensive from
+      # outside, and each distinct offset would also take its own cache entry.
+      return render json: { success: false }, status: :bad_request if offset > Pages::ProfileData.products_total(seller)
+
+      page = Pages::ProfileData.products_page(seller, offset:, limit:)
+      # The prices half is uncached and derived from the visitor's IP, so this response must
+      # never be shared — same rule as landing_iframe_content. And same as there, the build is
+      # skipped for pages that reference no price: they cannot consume it.
+      response.cache_control.replace(private: true, no_store: true)
+      prices = Pages::ProductPrices.referenced_in?(seller.custom_html) ? Pages::ProductPrices.build(seller, ip: request.remote_ip, offset:, limit:) : {}
+      render json: {
+        success: true,
+        offset:,
+        limit:,
+        products: page[:products],
+        products_total: page[:products_total],
+        prices:,
+      }
+    end
+
     # The full sandboxed document for a profile custom-HTML page. Shared by the live
     # /landing/embed endpoint (UsersController) and the agent's proposed-change preview
     # (Api::Internal::AgentCustomHtmlPreviewsController) so a preview can never drift from what
@@ -823,7 +933,7 @@ module RendersCustomHtmlPages
     # inline script in the page (a meta CSP tag can't undo that: policies only intersect).
     # `scroll_to_change` adds the preview-only script that jumps to the PREVIEW_CHANGED_MARKER
     # comment, so an edit further down the page opens in view instead of hiding below the fold.
-    def profile_custom_html_document(custom_html, data_json: "{}", prices_json: nil, live_fields: false, navigation_bridge: "", follow_bridge: "", scroll_to_change: false)
+    def profile_custom_html_document(custom_html, data_json: "{}", prices_json: nil, live_fields: false, navigation_bridge: "", follow_bridge: "", products_bridge: "", scroll_to_change: false)
       <<~HTML
         <!doctype html>
         <html>
@@ -840,6 +950,7 @@ module RendersCustomHtmlPages
             #{custom_html}
             #{navigation_bridge}
             #{follow_bridge}
+            #{products_bridge}
             #{BACKGROUND_BRIDGE_SCRIPT}
             #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
             #{scroll_to_change ? PREVIEW_SCROLL_TO_CHANGE_SCRIPT : ""}

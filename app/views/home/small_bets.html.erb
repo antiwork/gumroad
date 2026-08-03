@@ -240,7 +240,8 @@
 <section class="border-t border-black dark:border-white/35 bg-pink dark:text-black px-8 py-16 lg:px-[4vw] lg:py-24">
   <div class="flex flex-col gap-8 max-w-5xl mx-auto lg:items-center">
     <h1 class="font-medium text-center text-4xl sm:text-5xl lg:text-7xl"> Ready to turn that <br> $1 into $1000?</h1>
-    <%= render "home/shared/button", text: "Join Small Bets", url: "https://smallbets.com/join" %>
+    <%# Pink section background — "dark" variant (white surface) stays distinct in both light and dark mode, unlike the default which fades to pink-on-pink. %>
+    <%= render "home/shared/button", text: "Join Small Bets", url: "https://smallbets.com/join", variant: "dark" %>
     <div class="text-lg text-dark-gray dark:text-black/70 text-center">
     Join <span class="font-semibold">6,947 amazing people</span> and get immediate access to our support network.
     </div>

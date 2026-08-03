@@ -887,7 +887,10 @@ const CreditCardContent = ({
           confirmationTokenId: tokenResult.confirmationTokenId,
           cardCountry: tokenResult.cardCountry,
           walletType: tokenResult.wallet?.type ?? null,
-          mountCurrency: mountedElementConfig.currency,
+          mountCurrency: assertDefined(
+            stripePaymentElementMountCurrency,
+            "`stripePaymentElementMountCurrency` should be defined when confirming via the Payment Element",
+          ),
           // Same config object the Element was mounted from, so the token always describes the
           // mounted method list rather than whatever the current props say.
           methodListToken:

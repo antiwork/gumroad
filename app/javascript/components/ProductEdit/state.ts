@@ -140,6 +140,7 @@ export type Product = {
   custom_receipt_text_max_length: number;
   custom_attributes: Attribute[];
   taxonomy_attribute_values: Record<string, TaxonomyAttributeValue>;
+  inferred_taxonomy_attribute_values: Record<string, TaxonomyAttributeValue>;
   file_attributes: Attribute[];
   max_purchase_count: number | null;
   quantity_enabled: boolean;
@@ -212,9 +213,10 @@ export type Product = {
   // Under the contract an absent or empty collection means "no changes", so
   // omitting a record no longer deletes it — the seller's removals have to be
   // stated explicitly, which is what makes an accidental wipe impossible rather
-  // than merely unlikely.
+  // than merely unlikely. Derived from the confirmed-removal lists at send time
+  // (see buildDeletionOperations); deliberately not a field on this type, so
+  // nothing can pre-set it and outrank them.
   editor_revision?: string | null;
-  deletion_operations?: DeletionOperations;
 } & (
   | { native_type: "call"; variants: Duration[] }
   | { native_type: "membership"; variants: Tier[] }

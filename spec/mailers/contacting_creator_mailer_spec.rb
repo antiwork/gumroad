@@ -383,18 +383,19 @@ describe ContactingCreatorMailer do
         end
 
         # The mailer renders whenever the queue gets to it, so the seller may have answered the ask —
-        # or the row may have been resolved — after the notice was enqueued. Both states make
-        # Purchases::DisputeEvidenceController redirect away, so the button would go nowhere.
-        context "when the seller has already submitted evidence by the time the mail renders" do
+        # or the row may have been resolved — after the notice was enqueued. Only resolution closes
+        # the form now: nothing is forwarded until the window elapses, so a seller who saved early
+        # may still revise, and the notice must keep linking them back.
+        context "when the seller has already saved a response by the time the mail renders" do
           before { dispute_evidence.update!(seller_submitted_at: Time.current) }
 
-          it "does not ask again for evidence the submission page will not accept" do
+          it "still links the seller back to the form they can keep revising" do
             mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
-            expect(mail.body.encoded).not_to include "Any additional information you can provide"
-            expect(mail.body.encoded).not_to include "Submit additional information"
-            expect(mail.subject).to eq "A sale has been disputed"
-            expect(mail.body.encoded).to include "We fight every dispute."
+            expect(dispute_evidence.accepting_evidence?).to be(true)
+            expect(mail.body.encoded).to include "Any additional information you can provide"
+            expect(mail.body.encoded).to include "Submit additional information"
+            expect(mail.subject).to eq "🚨 Urgent: Action required for resolving disputed sale"
           end
         end
 
@@ -411,12 +412,13 @@ describe ContactingCreatorMailer do
             expect(mail.body.encoded).to include "Submit additional information"
           end
 
-          it "does not send once the seller has already submitted" do
-            dispute_evidence.update!(seller_submitted_at: Time.current)
+          it "still reminds a seller who saved early, since they may keep revising" do
+            dispute_evidence.update!(seller_contacted_at: 49.hours.ago, seller_submitted_at: Time.current)
 
             mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
 
-            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+            expect(mail.subject).to eq "Reminder: Submit dispute evidence within 24 hours"
+            expect(mail.body.encoded).to include "You have 23 hours left."
           end
 
           it "does not send once the evidence has been resolved" do
@@ -2693,6 +2695,73 @@ describe ContactingCreatorMailer do
         mail = ContactingCreatorMailer.review_submitted(review.id)
         expect(mail.body.encoded).to_not have_text('""')
       end
+    end
+
+    context "the seller's notification claim" do
+      it "does not send when another render already claimed the notification" do
+        RedisKey.product_review_seller_notified(review.id).then { |key| $redis.set(key, Time.current.to_i) }
+
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "still sends the first time nothing has claimed it" do
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.to).to eq([review.link.user.email])
+      end
+
+      it "does not send once a delivered render has recorded the seller as notified" do
+        review.update_columns(seller_notified_at: Time.current)
+
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "does not send again once the claim has expired, because the record of the send outlives it" do
+        ContactingCreatorMailer.review_submitted(review.id).deliver_now
+        $redis.del(RedisKey.product_review_seller_notified(review.id))
+
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "records the seller as notified once the message is delivered" do
+        expect do
+          ContactingCreatorMailer.review_submitted(review.id).deliver_now
+        end.to change { review.reload.seller_notified_at }.from(nil)
+      end
+
+      it "gives the claim back when delivery raises, so the retry still sends" do
+        allow_any_instance_of(Mail::Message).to receive(:do_delivery).and_raise(Net::SMTPServerBusy, "451 try again later")
+
+        expect do
+          ContactingCreatorMailer.review_submitted(review.id).deliver_now
+        end.to raise_error(Net::SMTPServerBusy)
+
+        expect(review.reload.seller_notified_at).to be_nil
+        expect($redis.get(RedisKey.product_review_seller_notified(review.id))).to be_nil
+      end
+
+      it "leaves nothing claimed when the render decides not to send" do
+        review.link.user.update!(disable_reviews_email: true)
+
+        ContactingCreatorMailer.review_submitted(review.id).deliver_now
+
+        expect($redis.get(RedisKey.product_review_seller_notified(review.id))).to be_nil
+        expect(review.reload.seller_notified_at).to be_nil
+      end
+    end
+
+    it "does not send for a deleted review" do
+      review.mark_deleted!
+      mail = ContactingCreatorMailer.review_submitted(review.id)
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+
+    it "does not send if the seller turned off review emails after the job was enqueued" do
+      review.link.user.update!(disable_reviews_email: true)
+      mail = ContactingCreatorMailer.review_submitted(review.id)
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
     end
 
     context "when the review has a pending video" do

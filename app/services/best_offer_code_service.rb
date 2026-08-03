@@ -35,11 +35,14 @@ class BestOfferCodeService
     def evaluate_code(code)
       return { valid: false, error_code: :missing_code } if code.blank?
 
-      offer_code = @product.find_offer_code(code: code)
+      # Normalize for the lookups only; the result echoes the code as submitted
+      # so URL and display state keep the buyer's original string.
+      normalized_code = OfferCode.normalize_code(code)
+      offer_code = @product.find_offer_code(code: normalized_code)
       return { valid: false, error_code: :invalid_offer } unless offer_code
 
       response = OfferCodeDiscountComputingService.new(
-        code,
+        normalized_code,
         {
           @product.unique_permalink => {
             permalink: @product.unique_permalink,
@@ -62,9 +65,10 @@ class BestOfferCodeService
 
     def amount_off_from_discount(discount)
       return 0 unless discount
-      transient = discount[:type] == "fixed" ?
-        OfferCode.new(amount_cents: discount[:cents]) :
-        OfferCode.new(amount_percentage: discount[:percents])
-      transient.amount_off(@product.price_cents)
+      if discount[:type] == "fixed"
+        discount[:cents] * (discount[:once_per_cart] ? 1 : @quantity)
+      else
+        (@product.price_cents * discount[:percents] / 100.0).round * @quantity
+      end
     end
 end

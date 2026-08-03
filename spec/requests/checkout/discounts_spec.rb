@@ -301,6 +301,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         check "All products"
         choose "Fixed amount"
         fill_in "Fixed amount", with: "10"
+        check "Apply once per cart"
 
         check "Limit validity period"
         fill_in_datetime "Valid from", with: "2022-11-02T23:00"
@@ -329,6 +330,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         expect(offer_code.currency_type).to eq("eur")
         expect(offer_code.amount_cents).to eq(1000)
         expect(offer_code.amount_percentage).to eq(nil)
+        expect(offer_code.once_per_cart?).to be(true)
         expect(offer_code.max_purchase_count).to eq(nil)
         expect(offer_code.universal).to eq(true)
         expect(offer_code.valid_at).to eq(ActiveSupport::TimeZone[seller.timezone].local(2022, 11, 2, 23))

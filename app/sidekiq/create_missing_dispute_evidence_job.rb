@@ -194,7 +194,6 @@ class CreateMissingDisputeEvidenceJob
       DisputeEvidence.schedule_due_soon_reminder(
         dispute_id: dispute.id,
         seller_contacted_at: window_start,
-        seller_submitted_at: nil,
         resolved_at: nil
       )
 

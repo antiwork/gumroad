@@ -147,6 +147,11 @@ class Settings::PaymentsController < Settings::BaseController
         # came from, and this is the path a first-time payout setup fails on.
         directory_miss = StripeMerchantAccountManager.bank_directory_miss_seller_message(e, current_seller.active_bank_account)
         return redirect_with_error(directory_miss) if directory_miss
+        # Everything else Stripe refuses at account-creation time used to fall through to its raw
+        # message, which quotes the value without naming the rule — or to nothing at all, leaving a
+        # "Thanks! You're all set." page with no payout rail behind it (gumroad-private#1777).
+        rejection_message = StripeMerchantAccountManager.payout_setup_rejection_seller_message(e, current_seller)
+        return redirect_with_error(rejection_message) if rejection_message
         return redirect_with_error(e.try(:message) || "Something went wrong.")
       end
     end

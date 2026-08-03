@@ -123,6 +123,42 @@ class Product::VariantCategoryUpdaterService
       (variant.respond_to?(:prices) && variant.prices.alive.where("price_cents > 0").exists?)
   end
 
+  # Soft-deletes variants and schedules the cleanup of their pages and
+  # archives. Returns the external ids of the variants this call actually
+  # deleted — narrower than +variants+, because a variant an earlier save
+  # already deleted keeps its original deletion timestamp (support uses that
+  # timestamp to find which rows a bad save wiped).
+  #
+  # A class method because both this service (versions omitted from a
+  # submitted grouping) and Product::VariantsUpdaterService (a whole grouping
+  # swept because the payload never mentioned it) delete versions and must do
+  # it the same way — the sweep used to mark only the grouping deleted, which
+  # left its versions alive under a deleted parent (gumroad-private#1784).
+  def self.batch_delete_variants(product:, variants:)
+    variant_ids = variants.respond_to?(:pluck) ? variants.pluck(:id) : variants.map(&:id)
+    return [] if variant_ids.empty?
+
+    now = Time.current
+    newly_deleted = BaseVariant.where(id: variant_ids).alive.to_a
+    BaseVariant.where(id: newly_deleted.map(&:id)).update_all(deleted_at: now, updated_at: now) if newly_deleted.any?
+
+    # Cleanup runs for every id, including ones deleted earlier: an earlier
+    # delete may not have finished cleaning up, and both workers are safe to
+    # run twice.
+    variant_ids.each do |variant_id|
+      DeleteProductRichContentWorker.perform_async(product.id, variant_id)
+      DeleteProductFilesArchivesWorker.perform_async(product.id, variant_id)
+    end
+
+    product.invalidate_cache
+    # `update_all` above skips callbacks, so TouchesProductForPriceCache never fires and
+    # `invalidate_cache` does not write `links`. Deleting the cheapest tier would otherwise
+    # leave the storefront advertising its price (Pages::ProfileData keys on links.updated_at).
+    product.touch if newly_deleted.any?
+
+    newly_deleted.map(&:external_id)
+  end
+
   def perform
     if category_params[:id].present?
       self.variant_category = variant_categories.find_by_external_id(category_params[:id])
@@ -314,37 +350,8 @@ class Product::VariantCategoryUpdaterService
       )
     end
 
-    # Returns the external ids of the variants this call actually soft-deleted,
-    # which the deletion audit records. That is narrower than `variants`: a
-    # variant an earlier save already deleted stays deleted with its original
-    # timestamp (see below), and attributing it to this request would overstate
-    # what this save removed.
     def batch_delete_variants(variants)
-      variant_ids = variants.respond_to?(:pluck) ? variants.pluck(:id) : variants.map(&:id)
-      return [] if variant_ids.empty?
-
-      # Only stamp variants that aren't already deleted, so a variant keeps the
-      # timestamp from the save that actually deleted it. Support uses that
-      # timestamp to find which rows a bad save wiped.
-      now = Time.current
-      newly_deleted = BaseVariant.where(id: variant_ids).alive.to_a
-      BaseVariant.where(id: newly_deleted.map(&:id)).update_all(deleted_at: now, updated_at: now) if newly_deleted.any?
-
-      # Cleanup runs for every id, including ones deleted earlier: an earlier
-      # delete may not have finished cleaning up, and both workers are safe to
-      # run twice.
-      variant_ids.each do |variant_id|
-        DeleteProductRichContentWorker.perform_async(product.id, variant_id)
-        DeleteProductFilesArchivesWorker.perform_async(product.id, variant_id)
-      end
-
-      product.invalidate_cache
-      # `update_all` above skips callbacks, so TouchesProductForPriceCache never fires and
-      # `invalidate_cache` does not write `links`. Deleting the cheapest tier would otherwise
-      # leave the storefront advertising its price (Pages::ProfileData keys on links.updated_at).
-      product.touch if newly_deleted.any?
-
-      newly_deleted.map(&:external_id)
+      self.class.batch_delete_variants(product:, variants:)
     end
 
     def create_or_update_variant!(external_id, params)

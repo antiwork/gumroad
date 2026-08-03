@@ -2,6 +2,7 @@ import { StripeCardElement } from "@stripe/stripe-js";
 
 export type User = {
   country_supports_native_payouts: boolean;
+  no_payout_rail_in_country: boolean;
   country_supports_iban: boolean;
   need_full_ssn: boolean;
   country_code: string | null;

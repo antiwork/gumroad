@@ -526,12 +526,16 @@ describe("Library Scenario", type: :system, js: true) do
     within find_product_card(purchase.link).hover do
       find_and_click "[aria-label='Open product action menu']"
     end
-    click_on "Delete permanently"
-    expect(page).to have_text("Are you sure you want to delete #{purchase.link_name}?")
+    click_on "Remove from library"
+    expect(page).to have_text("Remove #{purchase.link_name} from your library?")
+    # The buyer is told removal is reversible, because it is: the row survives and support can
+    # clear the flag (gumroad-private#1762).
+    expect(page).to have_text("our support team can put the card back")
     click_on "Confirm"
 
     wait_for_ajax
     expect(page).to_not have_product_card(purchase.link)
+    expect(purchase.reload.is_deleted_by_buyer).to be(true)
   end
 
   it "paginates results and shows the next page when a page link is clicked" do

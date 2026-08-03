@@ -38,6 +38,11 @@ class Purchase::CreateService < Purchase::BaseService
 
       # build primary (non-gift) purchase
       self.purchase = build_purchase(purchase_params.merge(gift_given: gift))
+      purchase.submitted_pre_discount_price_cents = params[:submitted_pre_discount_price_cents]
+      purchase.once_per_cart_discount_allocation = params[:once_per_cart_discount_allocation]
+      if purchase.once_per_cart_discount_allocation.present?
+        purchase.offer_code = OfferCode.find_by(id: purchase.once_per_cart_discount_allocation[:offer_code_id])
+      end
       purchase.is_part_of_combined_charge = params[:is_part_of_combined_charge]
 
       # run post-build validations (to ensure a purchase is present along with the
@@ -118,7 +123,8 @@ class Purchase::CreateService < Purchase::BaseService
           # discount. The client can't automatically set the upsell discount
           # because it doesn't have a "code". Thus, upsell discount should only
           # be applied when the purchase does not already have a discount code.
-          if !params[:is_purchasing_power_parity_discounted] && purchase.offer_code.blank? && upsell.offer_code&.evaluate_for_buyer(buyer, product: purchase.link).present?
+          if purchase.offer_code.blank? && upsell.offer_code&.evaluate_for_buyer(buyer, product: purchase.link).present? &&
+             (!params[:is_purchasing_power_parity_discounted] || perceived_price_matches_accepted_offer?(upsell.offer_code))
             purchase.offer_code = upsell.offer_code
           end
         end
@@ -327,6 +333,16 @@ class Purchase::CreateService < Purchase::BaseService
       end
     end
 
+    def perceived_price_matches_accepted_offer?(offer_code)
+      return false unless offer_code
+
+      original_offer_code = purchase.offer_code
+      purchase.offer_code = offer_code
+      purchase.minimum_paid_price_cents + params[:tip_cents].to_i == purchase_params[:perceived_price_cents].to_i
+    ensure
+      purchase.offer_code = original_offer_code if purchase
+    end
+
     def validate_perceived_free_trial_params
       return if is_gift?
 
@@ -349,7 +365,37 @@ class Purchase::CreateService < Purchase::BaseService
         if params[:bundle_products].none? { _1[:product_id] == bundle_product.product.external_id && _1[:variant_id] == bundle_product.variant&.external_id && _1[:quantity].to_i == bundle_product.quantity }
           raise Purchase::PurchaseInvalid, "The bundle's contents have changed. Please refresh the page!"
         end
+
+        validate_bundle_component_inventory(bundle_product)
       end
+    end
+
+    # The child purchases run `sold_out`/`variants_available` too, but as before_create hooks that
+    # only stamp an error_code — Purchase::CreateBundleProductPurchaseService never inspects it, and
+    # by the time it runs the parent has already been charged and marked successful. So the cap has
+    # to be enforced here: before `purchase.charge!`, and inside the product_inventory semaphore the
+    # caller holds, which is the only point where refusing costs the buyer nothing.
+    #
+    # Note the lock is the BUNDLE's, not each component's, so this does not close the
+    # direct-vs-bundle or bundle-vs-bundle races (gumroad-private#1786 items 2-4 — those need the
+    # multi-lock). It does close the far larger non-concurrent hole where the verdict was computed
+    # and discarded.
+    def validate_bundle_component_inventory(bundle_product)
+      requested_quantity = bundle_product.quantity * purchase.quantity
+      component = bundle_product.product.reload
+
+      remaining = if bundle_product.variant.present?
+        bundle_product.variant.reload.quantity_left
+      else
+        component.remaining_for_sale_count
+      end
+
+      # nil means uncapped, so there is nothing to enforce.
+      return if remaining.nil?
+      return if remaining >= requested_quantity
+
+      raise Purchase::PurchaseInvalid,
+            "#{component.name} is no longer available in the quantity this bundle includes. Please refresh the page!"
     end
 
     def build_purchase(params_for_purchase)

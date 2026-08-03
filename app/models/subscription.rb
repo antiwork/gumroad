@@ -221,7 +221,13 @@ class Subscription < ApplicationRecord
     auto = auto_renewal_offer_code(authenticated_offer_code_buyer:)
     return pre_discount unless auto
 
-    [pre_discount - auto_renewal_discount_amount_off_cents(auto, pre_discount), 0].max
+    auto_renewal_discounted_total_cents(auto, pre_discount)
+  end
+
+  def renewal_pre_discount_total_cents
+    return cached_tiered_pwyw_renewal_pre_discount_total_cents if cached_tiered_pwyw_renewal_pre_discount_total_cents.present?
+
+    original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
   end
 
   def auto_renewal_offer_code(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
@@ -304,7 +310,10 @@ class Subscription < ApplicationRecord
         offer_code: original_discount.offer_code,
         offer_code_amount: original_discount.offer_code_amount,
         offer_code_is_percent: original_discount.offer_code_is_percent,
+        once_per_cart: original_discount.once_per_cart,
+        once_per_cart_allocation_id: original_discount.once_per_cart_allocation_id,
         pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
+        pre_discount_displayed_price_cents: original_discount.pre_discount_displayed_price_cents,
         duration_in_months: original_discount.duration_in_months
       )
     elsif reuse_original_discount && original_purchase.offer_code.present?
@@ -313,11 +322,14 @@ class Subscription < ApplicationRecord
       pre_discount = original_purchase.minimum_paid_price_cents_per_unit_before_discount
       purchase.offer_code = auto.offer_code
       if auto.offer_code_amount.positive?
+        once_per_cart = auto.offer_code.is_cents? && auto.offer_code.once_per_cart?
         purchase.build_purchase_offer_code_discount(
           offer_code: auto.offer_code,
           offer_code_amount: auto.offer_code_amount,
           offer_code_is_percent: auto.offer_code_is_percent,
+          once_per_cart:,
           pre_discount_minimum_price_cents: pre_discount,
+          pre_discount_displayed_price_cents: once_per_cart ? renewal_pre_discount_total_cents : nil,
           duration_in_months: nil
         )
       end
@@ -518,7 +530,7 @@ class Subscription < ApplicationRecord
 
   # creates a new original subscription purchase & archives the existing one.
   # Any changes to the subscription made here must be reverted in `Subscription::UpdaterService#restore_original_purchase`
-  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false, clear_deleted_discount: false, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false, clear_deleted_discount: false, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED, submitted_pre_discount_price_cents: nil, once_per_cart_discount_allocation: nil)
     raise Subscription::UpdateFailed, "Installment plans cannot be updated." if is_installment_plan?
     raise Subscription::UpdateFailed, "Changing plans for fixed-length subscriptions is not currently supported." if has_fixed_length?
 
@@ -543,6 +555,8 @@ class Subscription < ApplicationRecord
       new_purchase.variant_attributes = link.is_tiered_membership? ? new_variants : original_purchase.variant_attributes
       new_purchase.is_original_subscription_purchase = true
       new_purchase.perceived_price_cents = perceived_price_cents
+      new_purchase.submitted_pre_discount_price_cents = submitted_pre_discount_price_cents
+      new_purchase.once_per_cart_discount_allocation = once_per_cart_discount_allocation
       new_purchase.price_range = perceived_price_cents.present? ? perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0) : nil
       new_purchase.business_vat_id = business_vat_id.presence || original_purchase.purchase_sales_tax_info&.business_vat_id
       new_purchase.quantity = new_quantity if new_quantity.present?
@@ -560,7 +574,10 @@ class Subscription < ApplicationRecord
       original_purchase.is_archived_original_subscription_purchase = true
       original_purchase.save!
 
-      if offer_code.present?
+      if once_per_cart_discount_allocation.present?
+        new_purchase.offer_code = offer_code
+        new_purchase.purchase_offer_code_discount = nil
+      elsif offer_code.present?
         new_purchase.offer_code = offer_code
         new_purchase.purchase_offer_code_discount = nil
       elsif clear_discount && new_purchase.offer_code == original_purchase.offer_code && !new_purchase.offer_code&.tiered?
@@ -573,22 +590,31 @@ class Subscription < ApplicationRecord
           pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
           offer_code_amount: 0,
           offer_code_is_percent: false,
+          once_per_cart: false,
           duration_in_months: nil
         )
       elsif new_purchase.offer_code.present? && (copied_discount = new_purchase.purchase_offer_code_discount)
+        pre_discount_displayed_price_cents = new_purchase.verified_pre_discount_displayed_price_cents
         new_purchase.build_purchase_offer_code_discount(
           offer_code: new_purchase.offer_code,
           pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          pre_discount_displayed_price_cents:,
           offer_code_amount: copied_discount.offer_code_amount,
           offer_code_is_percent: copied_discount.offer_code_is_percent,
+          once_per_cart: copied_discount.once_per_cart,
+          once_per_cart_allocation_id: copied_discount.once_per_cart_allocation_id,
           duration_in_months: copied_discount.duration_in_months
         )
       elsif new_purchase.offer_code.present? && new_purchase.offer_code == original_purchase.offer_code && (original_discount = original_purchase.purchase_offer_code_discount)
+        pre_discount_displayed_price_cents = new_purchase.verified_pre_discount_displayed_price_cents
         new_purchase.build_purchase_offer_code_discount(
           offer_code: new_purchase.offer_code,
           pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          pre_discount_displayed_price_cents:,
           offer_code_amount: original_discount.offer_code_amount,
           offer_code_is_percent: original_discount.offer_code_is_percent,
+          once_per_cart: original_discount.once_per_cart,
+          once_per_cart_allocation_id: original_discount.once_per_cart_allocation_id,
           duration_in_months: original_discount.duration_in_months
         )
       end
@@ -1139,7 +1165,8 @@ class Subscription < ApplicationRecord
           resolved = offer_code.evaluate_for_buyer(offer_code_buyer, product: link, fallback_purchase: original_purchase)
           auto_discount = auto_renewal_discount_for(offer_code, resolved)
           next if auto_discount.nil?
-          [auto_discount, auto_renewal_discount_amount_off_cents(auto_discount, renewal_pre_discount_total_cents)]
+          discounted_total = auto_renewal_discounted_total_cents(auto_discount, renewal_pre_discount_total_cents)
+          [auto_discount, renewal_pre_discount_total_cents - discounted_total]
         end
         .max_by(&:last)
         &.first
@@ -1174,15 +1201,19 @@ class Subscription < ApplicationRecord
     def auto_renewal_discount_amount_off_cents(auto_discount, pre_discount_total_cents)
       if auto_discount.offer_code_is_percent
         OfferCode.new(amount_percentage: auto_discount.offer_code_amount).amount_off(pre_discount_total_cents)
+      elsif auto_discount.offer_code.once_per_cart?
+        auto_discount.offer_code_amount
       else
         OfferCode.new(amount_cents: auto_discount.offer_code_amount).amount_off(renewal_pre_discount_price_cents) * renewal_purchase_quantity
       end
     end
 
-    def renewal_pre_discount_total_cents
-      return cached_tiered_pwyw_renewal_pre_discount_total_cents if cached_tiered_pwyw_renewal_pre_discount_total_cents.present?
-
-      original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
+    def auto_renewal_discounted_total_cents(auto_discount, pre_discount_total_cents)
+      discounted_total = [pre_discount_total_cents - auto_renewal_discount_amount_off_cents(auto_discount, pre_discount_total_cents), 0].max
+      if auto_discount.offer_code.is_cents? && auto_discount.offer_code.once_per_cart? && discounted_total.positive?
+        discounted_total = [discounted_total, link.currency["min_price"]].max
+      end
+      discounted_total
     end
 
     def cached_tiered_pwyw_renewal_pre_discount_total_cents

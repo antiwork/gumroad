@@ -440,14 +440,14 @@ module Charge::Disputable
       # Read the columns rather than #reload: claim_seller_contacted_window! writes through
       # update_all and leaves this object stale, and reloading it here would reset the attachment
       # associations the evidence row was just built with.
-      stamped_at, submitted_at, resolved_at =
+      stamped_at, resolved_at =
         dispute_evidence && DisputeEvidence.where(id: dispute_evidence.id)
-                                           .pick(:seller_contacted_at, :seller_submitted_at, :resolved_at)
+                                           .pick(:seller_contacted_at, :resolved_at)
       notice_worth_sending = DisputeEvidence.notice_worth_sending?(
-        seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
+        seller_contacted_at: stamped_at, resolved_at:
       )
       reminder_worth_scheduling = DisputeEvidence.accepting_evidence?(
-        seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
+        seller_contacted_at: stamped_at, resolved_at:
       )
 
       # No per-step guards from here down: the completion marker written at the end prevents
@@ -458,7 +458,6 @@ module Charge::Disputable
       DisputeEvidence.schedule_due_soon_reminder(
         dispute_id: dispute.id,
         seller_contacted_at: stamped_at,
-        seller_submitted_at: submitted_at,
         resolved_at:
       ) if reminder_worth_scheduling
       AdminMailer.chargeback_notify(dispute.id).deliver_later
