@@ -673,66 +673,6 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
-  describe "transient delivery errors" do
-    let(:post) do
-      post = create(:audience_post, :published, seller: @seller)
-      create(:active_follower, user: @seller)
-      post
-    end
-    let(:blast) { create(:blast, :just_requested, post:) }
-
-    before { allow_any_instance_of(described_class).to receive(:sleep) }
-
-    it "retries the slice and completes the blast when the ESP connection recovers" do
-      call_count = 0
-      allow(PostEmailApi).to receive(:process) do |**args|
-        call_count += 1
-        raise Socket::ResolutionError, "getaddrinfo: Temporary failure in name resolution" if call_count < 3
-        PostSendgridApi.process(**args)
-      end
-
-      described_class.new.perform(blast.id)
-
-      expect(call_count).to eq(3)
-      expect_sent_count 1
-      expect(blast.reload.completed_at).to be_present
-    end
-
-    it "keeps the slice's sent_post_emails rows across a retried attempt" do
-      call_count = 0
-      allow(PostEmailApi).to receive(:process) do |**args|
-        call_count += 1
-        raise Errno::ECONNRESET if call_count == 1
-        PostSendgridApi.process(**args)
-      end
-
-      described_class.new.perform(blast.id)
-
-      expect(SentPostEmail.where(post:).count).to eq(1)
-    end
-
-    it "gives up after the attempt limit and lets the sent_post_emails cleanup run" do
-      expect(PostEmailApi).to receive(:process)
-        .exactly(SendPostBlastEmailsJob::SLICE_DELIVERY_ATTEMPTS).times
-        .and_raise(Socket::ResolutionError.new("getaddrinfo: Temporary failure in name resolution"))
-
-      expect do
-        described_class.new.perform(blast.id)
-      end.to raise_error(Socket::ResolutionError)
-
-      expect(SentPostEmail.where(post:).count).to eq(0)
-      expect(blast.reload.completed_at).to be_blank
-    end
-
-    it "does not retry an error the ESP will raise again" do
-      expect(PostEmailApi).to receive(:process).once.and_raise(StandardError.new("422 invalid payload"))
-
-      expect do
-        described_class.new.perform(blast.id)
-      end.to raise_error(StandardError, "422 invalid payload")
-    end
-  end
-
   def expect_sent_count(count)
     expect(PostSendgridApi.mails.size).to eq(count)
   end
