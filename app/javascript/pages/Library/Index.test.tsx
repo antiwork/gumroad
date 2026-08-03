@@ -284,3 +284,22 @@ describe("LibraryPage", () => {
     expect(lastGetParams()).toEqual({ sort: "purchase_date" });
   });
 });
+
+describe("removal copy", () => {
+  it("offers removal rather than permanent deletion, and says the card can come back", () => {
+    renderPage();
+
+    const card = screen.getAllByRole("button", { name: "Open product action menu" })[0];
+    if (!card) throw new Error("expected a product card menu");
+    fireEvent.click(card);
+
+    fireEvent.click(screen.getByText("Remove from library"));
+
+    expect(screen.getByText(/from your library\?/u)).toBeTruthy();
+    expect(screen.getByText(/our support team can put the card back/u)).toBeTruthy();
+    // `is_deleted_by_buyer` is reversible, so copy claiming otherwise is the defect
+    // (gumroad-private#1762).
+    expect(screen.queryByText(/permanently/iu)).toBeNull();
+    expect(screen.queryByText(/cannot be undone/iu)).toBeNull();
+  });
+});
