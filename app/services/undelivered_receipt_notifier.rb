@@ -119,11 +119,21 @@ class UndeliveredReceiptNotifier
   # later. Together they are the cohort with two independent signals of not having received anything.
   #
   # Re-resolved at render, not trusted from the sweep: the buyer can open their content in the gap.
+  #
+  # Judged over the whole send history, not just the newest row. A resend adds a row rather than
+  # overwriting the last one (gumroad-private#1635), so reading only `receipt_email_info` would let a
+  # bounced resend report a receipt the buyer demonstrably already got — delivery evidence on ANY send
+  # of this receipt means it reached them, and it cannot un-arrive.
   def self.undelivered?(purchase)
-    email_info = purchase.receipt_email_info
-    return false if email_info.nil?
+    email_infos = purchase.receipt_email_infos.to_a
+    email_infos = [purchase.receipt_email_info].compact if email_infos.empty?
+    return false if email_infos.empty?
+    return false if email_infos.any? { _1.delivered_at.present? || _1.opened_at.present? }
+
+    # The newest send decides timing and state: an older settled send must not make a resend that is
+    # still inside its grace window reportable, and the seller acts on the latest attempt.
+    email_info = email_infos.max_by(&:id)
     return false if email_info.sent_at.blank? || email_info.sent_at > SETTLE_GRACE.ago
-    return false if email_info.delivered_at.present? || email_info.opened_at.present?
     return false unless %w[sent bounced].include?(email_info.state)
 
     !accessed_content?(purchase)

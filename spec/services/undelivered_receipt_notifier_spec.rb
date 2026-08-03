@@ -68,6 +68,41 @@ describe UndeliveredReceiptNotifier do
       expect(described_class.undelivered?(purchase)).to eq(true)
     end
 
+    # This PR gives every send its own row, which put the newest row in `receipt_email_info`. Judging
+    # that row alone made a bounced or unconfirmed RESEND report a receipt the buyer already got, so
+    # the seller was told a delivered receipt was undelivered.
+    context "with more than one send on the same receipt" do
+      it "is false when an earlier send was delivered and the resend bounced" do
+        settled_receipt("delivered", delivered_at: 4.days.ago)
+        settled_receipt("bounced")
+
+        expect(described_class.undelivered?(purchase)).to eq(false)
+      end
+
+      it "is false when an earlier send was opened and the resend is still only sent" do
+        settled_receipt("opened", opened_at: 4.days.ago)
+        settled_receipt("sent")
+
+        expect(described_class.undelivered?(purchase)).to eq(false)
+      end
+
+      it "is true when no send in the history was ever confirmed" do
+        settled_receipt("sent")
+        settled_receipt("bounced")
+
+        expect(described_class.undelivered?(purchase)).to eq(true)
+      end
+
+      # The newest send still decides timing: a resend inside its grace window is not yet judgeable
+      # even though the original settled days ago.
+      it "is false while the newest send is still inside the settle grace" do
+        settled_receipt("bounced")
+        create(:customer_email_info, purchase:, state: "sent", sent_at: 1.hour.ago)
+
+        expect(described_class.undelivered?(purchase)).to eq(false)
+      end
+    end
+
     context "with a charge receipt covering several purchases" do
       let(:seller) { create(:user) }
       let(:charge) { create(:charge, seller:) }
