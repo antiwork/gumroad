@@ -87,6 +87,22 @@ type FormData = {
   };
 };
 
+// We store the display text of the chosen radio, not the option key, so restoring a saved answer
+// means matching that text back against the options this dispute reason offers. Anything that does
+// not match was typed into "Other", which is also where an option retired since the seller answered
+// lands — a stored string with no live radio still has to be editable.
+const restoreChoice = <T extends string>(
+  savedText: string | null,
+  options: Record<string, string>,
+  available: readonly T[],
+): { option: T | "other" | null; text: string } => {
+  if (savedText === null || savedText === "") return { option: null, text: "" };
+  const matched = available.find((option) => options[option] === savedText);
+  return matched !== undefined && matched !== "other"
+    ? { option: matched, text: "" }
+    : { option: "other", text: savedText };
+};
+
 export default function Show() {
   const { dispute_evidence, disputable, products } = typia.assert<Props>(usePage().props);
 
@@ -95,31 +111,37 @@ export default function Show() {
   const refundRefusalExplanationUID = React.useId();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const userAgentInfo = useUserAgentInfo();
-  const [reasonForWinningOption, setReasonForWinningOption] = React.useState<ReasonForWinningOption | null>(null);
+  const saved = dispute_evidence.saved;
+  const savedReasonForWinning = restoreChoice(
+    saved.reason_for_winning,
+    reasonForWinningOptions,
+    disputeReasons[dispute_evidence.dispute_reason].reasonsForWinning,
+  );
+  const savedCancellationRebuttal = restoreChoice(
+    saved.cancellation_rebuttal,
+    cancellationRebuttalOptions,
+    Object.keys(cancellationRebuttalOptions) as CancellationRebuttalOption[],
+  );
+  const [reasonForWinningOption, setReasonForWinningOption] = React.useState<ReasonForWinningOption | null>(
+    savedReasonForWinning.option,
+  );
   const [cancellationRebuttalOption, setCancellationRebuttalOption] = React.useState<CancellationRebuttalOption | null>(
-    null,
+    savedCancellationRebuttal.option,
   );
   const blobs = dispute_evidence.blobs;
   const [isUploading, setIsUploading] = React.useState(false);
   const [uploadedFiles, setUploadedFiles] = React.useState<UploadedFile[]>([]);
   const [isConfirming, setIsConfirming] = React.useState(false);
-  // Shown back rather than loaded into the form: the stored values are the display text of the
-  // radio choices, so there is no option to re-select from them. Saving again replaces whichever
-  // fields the seller fills in this time.
-  const saved = dispute_evidence.saved;
-  const savedEntries = (
-    [
-      ["Why you should win", saved.reason_for_winning],
-      ["Why the subscription was not canceled", saved.cancellation_rebuttal],
-      ["Why a refund was refused", saved.refund_refusal_explanation],
-    ] as const
-  ).filter(([, value]) => value !== null && value !== "");
+  const hasSavedResponse =
+    savedReasonForWinning.option !== null ||
+    savedCancellationRebuttal.option !== null ||
+    (saved.refund_refusal_explanation ?? "") !== "";
 
   const form = useForm<FormData>({
     dispute_evidence: {
-      reason_for_winning: "",
-      cancellation_rebuttal: "",
-      refund_refusal_explanation: "",
+      reason_for_winning: savedReasonForWinning.text,
+      cancellation_rebuttal: savedCancellationRebuttal.text,
+      refund_refusal_explanation: saved.refund_refusal_explanation ?? "",
       customer_communication_file_signed_blob_ids: [],
     },
   });
@@ -296,20 +318,10 @@ export default function Show() {
           per dispute, so we hold your response and send it at the deadline. Come back any time before then to add files
           or revise what you wrote — after the deadline nothing more can be added, not even by contacting support.
         </Alert>
-        {savedEntries.length > 0 ? (
+        {hasSavedResponse ? (
           <Alert variant="info">
-            <strong>What you have saved so far.</strong> Saving again replaces the fields you fill in below and leaves
-            the rest as they are.
-            <Rows>
-              {savedEntries.map(([label, value]) => (
-                <Row key={label}>
-                  <RowContent>
-                    <h4>{label}</h4>
-                    <p>{value}</p>
-                  </RowContent>
-                </Row>
-              ))}
-            </Rows>
+            <strong>Your saved response is filled in below.</strong> Change whatever you want and save again — saving
+            replaces the fields you fill in and leaves the rest as they are.
           </Alert>
         ) : null}
       </CardContent>
@@ -323,6 +335,7 @@ export default function Show() {
               <Radio
                 name="reasonForWinning"
                 value={option}
+                checked={reasonForWinningOption === option}
                 onChange={(evt) => setReasonForWinningOption(typia.assert<ReasonForWinningOption>(evt.target.value))}
               />
               {reasonForWinningOptions[option]}
@@ -350,6 +363,7 @@ export default function Show() {
                 <Radio
                   name="cancellationRebuttal"
                   value={option}
+                  checked={cancellationRebuttalOption === option}
                   onChange={(evt) =>
                     setCancellationRebuttalOption(typia.assert<CancellationRebuttalOption>(evt.target.value))
                   }

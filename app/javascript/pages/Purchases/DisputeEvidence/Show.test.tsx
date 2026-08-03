@@ -148,16 +148,15 @@ describe("DisputeEvidence Show", () => {
     });
   });
 
-  // A seller returning mid-window must see what they already saved. The stored values are the
-  // display text of the radio choices, so they are shown back rather than loaded into the form.
-  it("shows a previously saved response back to the seller", async () => {
+  // A seller returning mid-window must be able to revise what they saved, not just read it back.
+  it("restores a saved radio choice into the form and resends it untouched", async () => {
     mocks.usePage.mockReturnValue({
       props: {
         ...pageProps,
         dispute_evidence: {
           ...pageProps.dispute_evidence,
           saved: {
-            reason_for_winning: "The buyer downloaded the file",
+            reason_for_winning: "The cardholder received the product or service",
             cancellation_rebuttal: null,
             refund_refusal_explanation: null,
           },
@@ -166,13 +165,48 @@ describe("DisputeEvidence Show", () => {
     });
     renderPage();
 
-    expect(await screen.findByText("The buyer downloaded the file")).toBeTruthy();
-    expect(screen.queryByText("Why a refund was refused")).toBe(null);
+    const restored = await screen.findByRole("radio", { name: "The cardholder received the product or service" });
+    expect((restored as HTMLInputElement).checked).toBe(true);
+    expect(
+      (screen.getByRole("radio", { name: "The cardholder withdrew the dispute" }) as HTMLInputElement).checked,
+    ).toBe(false);
+
+    act(() => submitButton().click());
+    act(() => screen.getByRole("button", { name: "Confirm and save" }).click());
+
+    await waitFor(() => expect(mocks.put).toHaveBeenCalledTimes(1));
+    expect(mocks.put.mock.calls[0]?.[1]).toMatchObject({
+      dispute_evidence: { reason_for_winning: "The cardholder received the product or service" },
+    });
   });
 
-  it("shows nothing saved when the seller has not answered yet", () => {
+  // Free text and text with no matching radio both have to land in the editable "Other" textarea:
+  // an option retired since the seller answered would otherwise strand their statement.
+  it("restores unmatched saved text into the Other textarea", async () => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps,
+        dispute_evidence: {
+          ...pageProps.dispute_evidence,
+          saved: {
+            reason_for_winning: "The buyer downloaded the file twice",
+            cancellation_rebuttal: null,
+            refund_refusal_explanation: null,
+          },
+        },
+      },
+    });
     renderPage();
 
-    expect(screen.queryByText("What you have saved so far.")).toBe(null);
+    expect(((await screen.findByRole("radio", { name: "Other" })) as HTMLInputElement).checked).toBe(true);
+    const textarea = screen.getByRole("textbox");
+    expect((textarea as HTMLTextAreaElement).value).toBe("The buyer downloaded the file twice");
+  });
+
+  it("preselects nothing when the seller has not answered yet", () => {
+    renderPage();
+
+    expect(screen.queryAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
+    expect(screen.queryByText("Your saved response is filled in below.")).toBe(null);
   });
 });
