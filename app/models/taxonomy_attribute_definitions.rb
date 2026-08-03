@@ -12,7 +12,20 @@
 # permanent once products carry values for it; `label` and `values` are display-side and may
 # be edited freely.
 class TaxonomyAttributeDefinitions
+  THREE_D_DEFINITIONS = [
+    { name: "file_format", label: "File format", value_type: "enum", values: ["FBX", "OBJ", "BLEND", "GLB", "VRM", "UnityPackage"], position: 0 },
+    { name: "engine", label: "Engine / software", value_type: "enum", values: ["Unity", "Unreal", "Blender", "Maya", "Cinema 4D"], position: 1 },
+    { name: "rigged", label: "Rigged", value_type: "boolean", values: [], position: 2 },
+    { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 3 },
+  ].freeze
+
   DEFINITIONS = {
+    # The same definitions hang off each leaf buyers browse (gumroad-private#1796): attributes do
+    # not inherit down the tree, and sharing `name`s across the leaves keeps the ES tokens
+    # identical, so a future entry on the `3d` root would aggregate these values, not orphan them.
+    "3d/3d-assets" => THREE_D_DEFINITIONS,
+    "3d/avatars" => THREE_D_DEFINITIONS,
+    "3d/vrchat" => THREE_D_DEFINITIONS,
     "design/fonts" => [
       { name: "format", label: "Format", value_type: "enum", values: ["OTF", "TTF", "WOFF2"], position: 0 },
       { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "App embedding"], position: 1 },
