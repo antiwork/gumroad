@@ -55,6 +55,11 @@ const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=L
 // invalid." from the server.
 const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
 
+// Same reason as Gambia above: the input's `pattern` is never enforced, and `maxLength` cannot see
+// the difference between `014` and `BCA`. Stripe resolves the ID bank from its 3-digit Sandi Bank
+// directory, so a letter code saves here and then fails bank-sync with routing_number_invalid.
+const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
+
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
 
@@ -526,8 +531,13 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "TaiwanBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (form.data.bank_account.type === "IndonesiaBankAccount" && !form.data.bank_account.bank_code) {
-      markFieldInvalid("bank_code");
+    if (form.data.bank_account.type === "IndonesiaBankAccount") {
+      if (!form.data.bank_account.bank_code) {
+        markFieldInvalid("bank_code");
+      } else if (!INDONESIA_BANK_CODE_REGEX.test(form.data.bank_account.bank_code)) {
+        markFieldInvalid("bank_code");
+        setClientErrorMessage({ message: "Enter your bank's 3-digit Indonesian bank code, digits only." });
+      }
     }
     if (form.data.bank_account.type === "ChileBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");

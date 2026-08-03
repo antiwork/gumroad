@@ -25,5 +25,19 @@ describe ChargeProcessorInvalidRequestError do
 
       expect(error.processor_error_code).to be_nil
     end
+
+    it "returns the code passed in directly" do
+      # PayPal has no exception object to wrap; its issue string arrives as a response body.
+      error = described_class.new("Failed PayPal create order: |nope", processor_error_code: "COMPLIANCE_VIOLATION")
+
+      expect(error.processor_error_code).to eq("COMPLIANCE_VIOLATION")
+    end
+
+    it "prefers a directly passed code over the wrapped error's" do
+      stripe_error = Stripe::InvalidRequestError.new("Invalid parameter.", nil, code: "payment_intent_invalid_parameter")
+      error = described_class.new(original_error: stripe_error, processor_error_code: "COMPLIANCE_VIOLATION")
+
+      expect(error.processor_error_code).to eq("COMPLIANCE_VIOLATION")
+    end
   end
 end

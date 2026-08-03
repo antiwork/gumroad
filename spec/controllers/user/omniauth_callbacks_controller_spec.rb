@@ -3,8 +3,7 @@
 require "spec_helper"
 
 describe User::OmniauthCallbacksController do
-  ACCOUNT_DELETION_ERROR_MSG = "You cannot log in because your account was permanently deleted. "\
-                               "Please sign up for a new account to start selling!"
+  ACCOUNT_DELETION_ERROR_MSG = User::DELETED_ACCOUNT_LOGIN_ERROR
 
   before do
     request.env["devise.mapping"] = Devise.mappings[:user]

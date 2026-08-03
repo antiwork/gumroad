@@ -10,6 +10,7 @@ import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { LandingPageEditor } from "$app/components/ProductEdit/ShareTab/LandingPageEditor";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
+import { TaxonomyAttributesEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyAttributesEditor";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ShareButtons } from "$app/components/ShareButtons";
@@ -23,7 +24,8 @@ import hands from "$assets/images/illustrations/hands.png";
 export const ShareTab = () => {
   const currentSeller = useCurrentSeller();
 
-  const { product, updateProduct, profileSections, taxonomies, isListedOnDiscover } = useProductEditContext();
+  const { product, updateProduct, profileSections, taxonomies, taxonomyAttributes, isListedOnDiscover } =
+    useProductEditContext();
 
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
@@ -85,6 +87,11 @@ export const ShareTab = () => {
               taxonomyId={product.taxonomy_id}
               onChange={(taxonomy_id) => updateProduct({ taxonomy_id })}
               taxonomies={taxonomies}
+            />
+            <TaxonomyAttributesEditor
+              attributes={taxonomyAttributes.filter((attribute) => attribute.taxonomy_id === product.taxonomy_id)}
+              values={product.taxonomy_attribute_values}
+              setValues={(taxonomy_attribute_values) => updateProduct({ taxonomy_attribute_values })}
             />
             <TagSelector tags={product.tags} onChange={(tags) => updateProduct({ tags })} />
             <Fieldset>

@@ -334,16 +334,16 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
         @non_existent_purchase_id = 999_999_999
       end
 
-      it "cancels the follower on bounce event" do
+      it "does not cancel the follower on bounce event" do
         follower = create(:active_follower, email: "test@example.com", followed_id: @installment.seller_id)
 
         params = { "_json" => [{ "event" => "bounce", "type" => "bounce", "email" => "test@example.com",
                                  "identifier" => "[#{@non_existent_purchase_id}, #{@installment.id}]", "installment_id" => @installment.id }] }
-        travel_to(Time.current) do
-          HandleSendgridEventJob.new.perform(params)
-        end
-
-        expect(follower.reload).to be_deleted
+        expect do
+          travel_to(Time.current) do
+            HandleSendgridEventJob.new.perform(params)
+          end
+        end.not_to change { follower.reload.alive? }
       end
 
       it "cancels the follower on spamreport event" do
@@ -366,18 +366,21 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
             @email_info = create(:creator_contacting_customers_email_info, installment: @installment, purchase: @purchase)
           end
 
-          it "marks it as bounced and cancel the follower" do
+          it "marks it as bounced without changing contact consent" do
             follower = create(:active_follower, email: @purchase.email, followed_id: @purchase.seller_id)
+            another_product = create(:product, user: @purchase.seller)
+            another_purchase = create(:purchase, link: another_product, email: @purchase.email)
 
             params = { "_json" => [{ "event" => "bounce", "type" => "CreatorContactingCustomersMailer.purchase_installment",
                                      "identifier" => @identifier, "installment_id" => @installment.id }] }
-            travel_to(Time.current) do
-              HandleSendgridEventJob.new.perform(params)
-            end
+            expect do
+              travel_to(Time.current) do
+                HandleSendgridEventJob.new.perform(params)
+              end
+            end.not_to change { [@purchase.reload.can_contact, another_purchase.reload.can_contact, follower.reload.alive?] }
 
             expect(CreatorContactingCustomersEmailInfo.count).to eq 1
             expect(@email_info.reload.state).to eq "bounced"
-            expect(follower.reload).to be_deleted
           end
 
           it "marks it as delivered" do

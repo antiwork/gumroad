@@ -375,6 +375,10 @@ class UrlRedirectsController < ApplicationController
     def redirect_bundle_purchase_to_library_if_needed
       purchase = @url_redirect.purchase
       return unless purchase&.is_bundle_purchase?
+      # A guest checkout mints no account, so /library — which requires one — offers a login for an
+      # account that never existed. Every other guest purchase renders `/d/<token>` directly; the
+      # bundle's own download page lists the members instead (gumroad-private#1720).
+      return if purchase.purchaser_id.nil?
       # The library filters by `bundle_id`, which only the member purchases carry, so a bundle
       # whose members can't render there would land the buyer on an empty filtered library. Let
       # the download page render the bundle's own content instead — LibraryPresenter shows the

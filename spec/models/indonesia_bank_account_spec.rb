@@ -20,7 +20,7 @@ describe IndonesiaBankAccount do
   end
 
   describe "#routing_number" do
-    it "returns valid for 4 characters" do
+    it "returns the 3-digit bank code" do
       ba = create(:indonesia_bank_account)
       expect(ba).to be_valid
       expect(ba.routing_number).to eq("000")
@@ -34,13 +34,44 @@ describe IndonesiaBankAccount do
   end
 
   describe "#validate_bank_code" do
-    it "allows 3 to 4 alphanumeric characters only" do
-      expect(build(:indonesia_bank_account, bank_code: "123")).to be_valid
-      expect(build(:indonesia_bank_account, bank_code: "1234")).to be_valid
-      expect(build(:indonesia_bank_account, bank_code: "12AB")).to be_valid
+    it "allows exactly 3 digits" do
+      expect(build(:indonesia_bank_account, bank_code: "014")).to be_valid
+      expect(build(:indonesia_bank_account, bank_code: "008")).to be_valid
+    end
+
+    it "rejects the shapes Stripe's ID directory refuses" do
+      expect(build(:indonesia_bank_account, bank_code: "BBSB")).not_to be_valid
+      expect(build(:indonesia_bank_account, bank_code: "BCA")).not_to be_valid
+      expect(build(:indonesia_bank_account, bank_code: "0140")).not_to be_valid
       expect(build(:indonesia_bank_account, bank_code: "12")).not_to be_valid
       expect(build(:indonesia_bank_account, bank_code: "12345")).not_to be_valid
       expect(build(:indonesia_bank_account, bank_code: "12@#")).not_to be_valid
+    end
+
+    it "names the expected format in the error" do
+      ba = build(:indonesia_bank_account, bank_code: "BBSB")
+      ba.valid?
+      expect(ba.errors.full_messages).to include("Enter your bank's 3-digit Indonesian bank code, digits only.")
+    end
+
+    it "rejects a new row with no bank code at all" do
+      expect(build(:indonesia_bank_account, bank_code: nil)).not_to be_valid
+    end
+
+    it "does not re-validate a pre-existing bad code on an unrelated save" do
+      ba = build(:indonesia_bank_account, bank_code: "BBSB")
+      ba.save!(validate: false)
+
+      expect(ba.mark_deleted!).to be_truthy
+      expect(ba.reload).to be_deleted
+    end
+
+    it "still rejects a bad code when the code itself is being changed" do
+      ba = build(:indonesia_bank_account, bank_code: "BBSB")
+      ba.save!(validate: false)
+
+      ba.bank_code = "CENA"
+      expect(ba).not_to be_valid
     end
   end
 end
