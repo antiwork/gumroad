@@ -727,7 +727,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
           default_product_sort: "page_layout",
           show_filters: false,
           add_new_products: true,
-          search_results: { products: [], total: 0, filetypes_data: [], tags_data: [] },
+          search_results: { products: [], total: 0, filetypes_data: [], tags_data: [], taxonomy_attributes_data: [] },
         };
       case "SellerProfilePostsSection":
         return {
