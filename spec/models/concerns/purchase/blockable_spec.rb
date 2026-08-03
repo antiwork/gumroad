@@ -685,6 +685,23 @@ describe Purchase::Blockable do
         expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("more attempts in the last day")
       end
 
+      # The same silence, reached without a single read: when a full page of scanned attempts is all
+      # Connect charges there is nothing eligible to read, and the eligible attempts that would have
+      # answered the question sit behind the bound.
+      it "reports an incomplete scan when a full page of scanned attempts is all Connect charges" do
+        connect_account = create(:merchant_account, user: create(:user), charge_processor_id: StripeChargeProcessor.charge_processor_id)
+        connect_account.update!(json_data: { "meta" => { "stripe_connect" => "true" } })
+        create_list(:purchase, Purchase::Blockable::PROCESSOR_REFUSAL_MAX_SCAN, link: product, email: buyer_email, purchaser: buyer, created_at: 1.hour.ago)
+          .each { |record| record.update_columns(stripe_transaction_id: "ch_connect", merchant_account_id: connect_account.id) }
+        refused_purchase.update_column(:created_at, 3.hours.ago)
+        expect(Stripe::Charge).not_to receive(:retrieve)
+
+        refusal = refused_purchase.processor_rule_refusal
+
+        expect(refusal).to eq({ incomplete: true, truncated_by: :read_cap })
+        expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("more attempts in the last day")
+      end
+
       # The two truncation exits are not interchangeable: telling the agent there were more attempts
       # than we read, when the scan actually timed out, is a reason they cannot act on.
       it "reports an incomplete scan when the time budget runs out before every attempt is read" do
