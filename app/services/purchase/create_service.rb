@@ -349,7 +349,37 @@ class Purchase::CreateService < Purchase::BaseService
         if params[:bundle_products].none? { _1[:product_id] == bundle_product.product.external_id && _1[:variant_id] == bundle_product.variant&.external_id && _1[:quantity].to_i == bundle_product.quantity }
           raise Purchase::PurchaseInvalid, "The bundle's contents have changed. Please refresh the page!"
         end
+
+        validate_bundle_component_inventory(bundle_product)
       end
+    end
+
+    # The child purchases run `sold_out`/`variants_available` too, but as before_create hooks that
+    # only stamp an error_code — Purchase::CreateBundleProductPurchaseService never inspects it, and
+    # by the time it runs the parent has already been charged and marked successful. So the cap has
+    # to be enforced here: before `purchase.charge!`, and inside the product_inventory semaphore the
+    # caller holds, which is the only point where refusing costs the buyer nothing.
+    #
+    # Note the lock is the BUNDLE's, not each component's, so this does not close the
+    # direct-vs-bundle or bundle-vs-bundle races (gumroad-private#1786 items 2-4 — those need the
+    # multi-lock). It does close the far larger non-concurrent hole where the verdict was computed
+    # and discarded.
+    def validate_bundle_component_inventory(bundle_product)
+      requested_quantity = bundle_product.quantity * purchase.quantity
+      component = bundle_product.product
+
+      remaining = if bundle_product.variant.present?
+        bundle_product.variant.quantity_left
+      else
+        component.remaining_for_sale_count
+      end
+
+      # nil means uncapped, so there is nothing to enforce.
+      return if remaining.nil?
+      return if remaining >= requested_quantity
+
+      raise Purchase::PurchaseInvalid,
+            "#{component.name} is no longer available in the quantity this bundle includes. Please refresh the page!"
     end
 
     def build_purchase(params_for_purchase)
