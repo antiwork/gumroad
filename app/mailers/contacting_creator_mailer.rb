@@ -24,6 +24,7 @@ class ContactingCreatorMailer < ApplicationMailer
   # here would be accepted and silently ignored, since deliver callbacks take `:if`/`:unless` only.
   around_deliver :settle_undeliverable_ping_subscription_notice
   around_deliver :settle_undelivered_receipts_notice
+  around_deliver :settle_review_notification
 
   layout "layouts/email"
 
@@ -689,12 +690,16 @@ class ContactingCreatorMailer < ApplicationMailer
 
   # A review notifies the seller at most once (immediately if the buyer typed before submitting,
   # otherwise via whichever of the delayed message-less render or the blank→present arrival fires
-  # first). The claim is the enforcement: without it, the delayed job's read of `message` and its
-  # eventual delivery straddle the buyer's commit, so both paths can decide to send.
+  # first). Two things enforce that: `seller_notified_at` for a send that already happened, however
+  # long ago, and the claim for the overlap the marker cannot see — the delayed job's read of
+  # `message` and its eventual delivery straddle the buyer's commit, so without it both paths can
+  # decide to send before either has recorded one.
+  #
+  # The claim is taken last, so an ordinary rejection does not have to give one back.
   def review_submitted(review_id)
     @review = ProductReview.includes(:purchase, link: :user).find(review_id)
     return do_not_send if @review.deleted?
-    return do_not_send unless claim_review_notification(@review.id)
+    return do_not_send if @review.seller_notified?
 
     @product = @review.link
     @seller = @product.user
@@ -702,6 +707,9 @@ class ContactingCreatorMailer < ApplicationMailer
     # sitting in the queue when the seller flips this off, and the job's own preference
     # check at enqueue time can't see a later change.
     return do_not_send if @seller.disable_reviews_email?
+    @review_notification_claim = @review.claim_seller_notification
+    return do_not_send if @review_notification_claim.nil?
+
     full_name = @review.purchase.full_name
     email = @review.purchase.email
     @buyer = full_name.present? ? "#{full_name} (#{email})" : email
@@ -793,16 +801,6 @@ class ContactingCreatorMailer < ApplicationMailer
       @do_not_send = true
     end
 
-    # Atomic claim so the delayed message-less render and the blank→present arrival notify can't
-    # both win: whichever commits its render first (not whichever fires first) gets the seller's
-    # one email. TTL covers rendering + delivery, not the review's whole life — a lost claim after
-    # that just means a review-created-then-immediately-deleted row leaves no dangling key.
-    REVIEW_NOTIFICATION_CLAIM_TTL = 1.hour
-
-    def claim_review_notification(review_id)
-      $redis.set(RedisKey.product_review_seller_notified(review_id), Time.current.to_i, nx: true, ex: REVIEW_NOTIFICATION_CLAIM_TTL.to_i)
-    end
-
     def format_dispute_evidence_due_at(due_at)
       due_at.in_time_zone(@seller.timezone.presence || Time.zone).strftime("%B %-d, %Y at %-l:%M %p %Z")
     end
@@ -865,6 +863,26 @@ class ContactingCreatorMailer < ApplicationMailer
           settle, @resource_subscription.id, @undeliverable_ping_subscription_reason,
           @undeliverable_ping_subscription_claim_token
         )
+      end
+    end
+
+    # The render claimed the seller's one notice for a review; this decides whether it was spent.
+    # Mirrors `settle_undeliverable_ping_subscription_notice`, including why the claim has to be
+    # given back rather than left to expire: `MailDeliveryJob` retries a transient SMTP failure by
+    # re-rendering the same mailer action, so a claim still held on the retry turns a delivery worth
+    # retrying into a notice the seller never gets.
+    def settle_review_notification
+      delivered = false
+      yield
+      delivered = message.to.present? && message.perform_deliveries
+    ensure
+      # `ensure` rather than an after callback, so a raised delivery settles too.
+      unless @review_notification_claim.nil?
+        if delivered
+          @review.record_seller_notified!
+        else
+          @review.release_seller_notification_claim(@review_notification_claim)
+        end
       end
     end
 

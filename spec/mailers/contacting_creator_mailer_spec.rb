@@ -2709,6 +2709,47 @@ describe ContactingCreatorMailer do
         mail = ContactingCreatorMailer.review_submitted(review.id)
         expect(mail.to).to eq([review.link.user.email])
       end
+
+      it "does not send once a delivered render has recorded the seller as notified" do
+        review.update_columns(seller_notified_at: Time.current)
+
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "does not send again once the claim has expired, because the record of the send outlives it" do
+        ContactingCreatorMailer.review_submitted(review.id).deliver_now
+        $redis.del(RedisKey.product_review_seller_notified(review.id))
+
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "records the seller as notified once the message is delivered" do
+        expect do
+          ContactingCreatorMailer.review_submitted(review.id).deliver_now
+        end.to change { review.reload.seller_notified_at }.from(nil)
+      end
+
+      it "gives the claim back when delivery raises, so the retry still sends" do
+        allow_any_instance_of(Mail::Message).to receive(:do_delivery).and_raise(Net::SMTPServerBusy, "451 try again later")
+
+        expect do
+          ContactingCreatorMailer.review_submitted(review.id).deliver_now
+        end.to raise_error(Net::SMTPServerBusy)
+
+        expect(review.reload.seller_notified_at).to be_nil
+        expect($redis.get(RedisKey.product_review_seller_notified(review.id))).to be_nil
+      end
+
+      it "leaves nothing claimed when the render decides not to send" do
+        review.link.user.update!(disable_reviews_email: true)
+
+        ContactingCreatorMailer.review_submitted(review.id).deliver_now
+
+        expect($redis.get(RedisKey.product_review_seller_notified(review.id))).to be_nil
+        expect(review.reload.seller_notified_at).to be_nil
+      end
     end
 
     it "does not send for a deleted review" do

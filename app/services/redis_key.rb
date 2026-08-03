@@ -95,8 +95,9 @@ class RedisKey
     # email_infos rows, so this set is the only thing that brings them back.
     def undelivered_receipt_pending_retry = "undelivered_receipt_sweep:pending_retry"
     # Claims the seller notification for a review so the message-less delayed render and the
-    # blank→present immediate send can't both deliver when the buyer's text lands mid-flight.
-    # See ContactingCreatorMailer#review_submitted.
+    # blank→present immediate send can't both deliver when the buyer's text lands mid-flight. Held
+    # only for the length of one render; `product_reviews.seller_notified_at` is what records that
+    # the seller was told. See ContactingCreatorMailer#review_submitted.
     def product_review_seller_notified(review_id) = "product_review_seller_notified:#{review_id}"
   end
 end

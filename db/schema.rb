@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_163724) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_171842) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1820,6 +1820,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_163724) do
     t.text "message"
     t.virtual "has_message", type: :boolean, null: false, as: "if((`message` is null),false,true)", stored: true
     t.datetime "deleted_at"
+    t.datetime "seller_notified_at"
     t.index ["link_id", "has_message", "created_at"], name: "idx_on_link_id_has_message_created_at_2fcf6c0c64"
     t.index ["purchase_id"], name: "index_product_reviews_on_purchase_id", unique: true
   end
