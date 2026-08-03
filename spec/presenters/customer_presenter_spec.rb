@@ -302,6 +302,7 @@ describe CustomerPresenter do
               }
             ],
             status: "in_progress",
+            files_are_editable: true,
           }
         )
         expect(props[:custom_fields]).to eq(
@@ -333,6 +334,15 @@ describe CustomerPresenter do
             },
           ]
         )
+      end
+
+      it "marks the files as non-editable while the completion charge is still settling" do
+        commission.update!(completion_purchase: create(:purchase, link: commission.deposit_purchase.link, seller: commission.deposit_purchase.seller, is_commission_completion_purchase: true))
+
+        props = described_class.new(purchase: commission.deposit_purchase).customer(pundit_user:)
+
+        expect(props[:commission][:status]).to eq("in_progress")
+        expect(props[:commission][:files_are_editable]).to be false
       end
     end
 

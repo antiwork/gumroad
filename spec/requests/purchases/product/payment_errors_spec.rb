@@ -135,6 +135,12 @@ describe("Purchase from a product page", type: :system, js: true) do
 
     fill_in "City", with: "San Francisco"
     click_on "Pay"
+    # State is a native select with no blank option, so it *looks* filled while its value is
+    # still "" — before this scan learned to see selects, an unmet State was a silent dead end.
+    expect_focused find_field("State")
+
+    select "CA", from: "State"
+    click_on "Pay"
     expect_focused find_field("ZIP code")
 
     fill_in "ZIP code", with: "94103"

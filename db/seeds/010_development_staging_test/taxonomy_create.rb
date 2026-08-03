@@ -103,6 +103,11 @@ Taxonomy.find_or_create_by!(slug: "wordpress", parent: software)
 Taxonomy.find_or_create_by!(slug: "vscode", parent: software)
 hardware = Taxonomy.find_or_create_by!(slug: "hardware", parent: software_development)
 Taxonomy.find_or_create_by!(slug: "raspberry-pi", parent: hardware)
+cybersecurity = Taxonomy.find_or_create_by!(slug: "cybersecurity", parent: software_development)
+Taxonomy.find_or_create_by!(slug: "network-security", parent: cybersecurity)
+Taxonomy.find_or_create_by!(slug: "penetration-testing", parent: cybersecurity)
+Taxonomy.find_or_create_by!(slug: "security-and-compliance", parent: cybersecurity)
+Taxonomy.find_or_create_by!(slug: "privacy-and-encryption", parent: cybersecurity)
 
 self_improvement = Taxonomy.find_or_create_by!(slug: "self-improvement")
 Taxonomy.find_or_create_by!(slug: "psychology", parent: self_improvement)
@@ -395,3 +400,6 @@ Taxonomy.find_or_create_by!(slug: "pbr", parent: textures)
 Taxonomy.find_or_create_by!(slug: "tattoos", parent: textures)
 
 Taxonomy.find_or_create_by!(slug: "other")
+
+# Same registry the production backfill applies, so the two cannot drift.
+Onetime::SeedTaxonomyAttributes.process(dry_run: false)

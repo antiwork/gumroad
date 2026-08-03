@@ -111,6 +111,16 @@ export type OfferCode = {
   discount: Discount;
 };
 
+export type TaxonomyAttribute = {
+  taxonomy_id: string;
+  name: string;
+  label: string;
+  value_type: "enum" | "boolean" | "number";
+  values: string[];
+};
+
+export type TaxonomyAttributeValue = string | boolean | number | null;
+
 export type Product = {
   name: string;
   description: string;
@@ -129,6 +139,7 @@ export type Product = {
   custom_receipt_text: string | null;
   custom_receipt_text_max_length: number;
   custom_attributes: Attribute[];
+  taxonomy_attribute_values: Record<string, TaxonomyAttributeValue>;
   file_attributes: Attribute[];
   max_purchase_count: number | null;
   quantity_enabled: boolean;
@@ -254,6 +265,7 @@ export const ProductEditContext = React.createContext<{
   isPhysical: boolean;
   profileSections: ProfileSection[];
   taxonomies: Taxonomy[];
+  taxonomyAttributes: TaxonomyAttribute[];
   earliestMembershipPriceChangeDate: Date;
   customDomainVerificationStatus: { success: boolean; message: string } | null;
   salesCountForInventory: number;
@@ -275,6 +287,7 @@ export const ProductEditContext = React.createContext<{
   // a numeric database id, so a shared map cannot safely follow mapping chains.
   variantIdMappings: Record<string, string>;
   richContentIdMappings: Record<string, string>;
+  fileIdMappings: Record<string, string>;
   // Canonical page id → file ids removed by the last successful save. The
   // content tab uses this one-shot response signal to reconcile its mounted
   // TipTap document; changing product state alone does not update that editor.

@@ -136,7 +136,7 @@ class PostResendApi
 
       content = content.dup
       substitutions.each { |key, value| content.gsub!(key, value.to_s) }
-      content
+      PostEmailPersonalization.apply(content, PostEmailPersonalization.resolve(recipient))
     end
 
     def build_unsubscribe_url(recipient)

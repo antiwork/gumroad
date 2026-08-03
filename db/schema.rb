@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000024) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000028) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1408,6 +1408,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000024) do
     t.string "scopes", default: "", null: false
     t.boolean "confidential", default: false, null: false
     t.boolean "device_authorization_enabled", default: false, null: false
+    t.boolean "is_first_party_agent_app", default: false, null: false
+    t.index ["owner_id", "owner_type", "is_first_party_agent_app"], name: "index_oauth_applications_on_owner_and_first_party_agent"
     t.index ["owner_id", "owner_type"], name: "index_oauth_applications_on_owner_id_and_owner_type"
     t.index ["uid"], name: "index_oauth_applications_on_uid", unique: true
   end
@@ -2602,6 +2604,20 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000024) do
     t.string "slug", null: false
     t.index "(ifnull(`parent_id`,0)), `slug`", name: "index_taxonomies_on_parent_id_and_slug", unique: true
     t.index ["parent_id"], name: "index_taxonomies_on_parent_id"
+  end
+
+  create_table "taxonomy_attributes", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "taxonomy_id", null: false
+    t.string "name", null: false
+    t.string "label", null: false
+    t.string "value_type", null: false
+    t.json "values"
+    t.integer "position", default: 0, null: false
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["taxonomy_id", "name"], name: "index_taxonomy_attributes_on_taxonomy_id_and_name", unique: true
+    t.index ["taxonomy_id"], name: "index_taxonomy_attributes_on_taxonomy_id"
   end
 
   create_table "taxonomy_hierarchies", id: false, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

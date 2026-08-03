@@ -1,6 +1,5 @@
 import { Archive, DotsHorizontalRounded, Search, Trash } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
-import { produce } from "immer";
 import * as React from "react";
 import typia from "typia";
 
@@ -10,7 +9,6 @@ import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { writeQueryParams } from "$app/utils/url";
 import { SellerAnalyticsProps, trackSellerPurchaseEvent } from "$app/utils/user_analytics";
 
 import { Button } from "$app/components/Button";
@@ -37,7 +35,6 @@ import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { Select as FormSelect } from "$app/components/ui/Select";
 import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
-import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -47,22 +44,15 @@ import placeholder from "$assets/images/placeholders/library.png";
 export type Result = {
   product: {
     name: string;
-    creator_id: string;
     creator: { name: string; profile_url: string; avatar_url: string | null } | null;
     thumbnail_url: string | null;
-    updated_at: string;
     native_type: ProductNativeType;
-    permalink: string;
-    has_third_party_analytics: boolean;
   };
   purchase: {
     id: string;
-    email: string;
     is_archived: boolean;
     download_url: string | null;
     variants: string | null;
-    bundle_id: string | null;
-    is_bundle_purchase: boolean;
   };
 };
 
@@ -180,172 +170,118 @@ export const DeleteProductModal = ({
   );
 };
 
-type Props = {
-  results: Result[];
-  creators: { id: string; name: string }[];
-  bundles: { id: string; label: string }[];
-  purchase_analytics: Record<string, SellerAnalyticsProps>;
-};
-
-type Params = {
+export type SearchParams = {
   sort: "recently_updated" | "purchase_date";
   query: string;
   creators: string[];
-  showArchivedOnly: boolean;
   bundles: string[];
+  show_archived_only: boolean;
 };
 
-type State = {
+type Props = {
   results: Result[];
-  search: Params;
+  pagination: { page: number; pages: number; from: number; to: number; count: number };
+  creators: { id: string; name: string; count: number }[];
+  bundles: { id: string; label: string }[];
+  archived_count: number;
+  unarchived_count: number;
+  search: SearchParams;
+  purchase_analytics: Record<string, SellerAnalyticsProps>;
+  receipt_purchases: { id: string; email: string; permalink: string; has_third_party_analytics: boolean }[];
 };
-
-type Action =
-  | { type: "set-search"; search: Partial<Params> }
-  | { type: "update-search"; search: Partial<Params> }
-  | { type: "set-archived"; purchaseId: string; isArchived: boolean }
-  | { type: "delete-purchase"; id: string };
-
-const reducer: React.Reducer<State, Action> = produce((state, action) => {
-  switch (action.type) {
-    case "set-search":
-      state.search = { ...state.search, ...action.search };
-      break;
-    case "update-search":
-      state.search = { ...state.search, ...action.search };
-      updateUrl(state.search);
-      break;
-    case "set-archived": {
-      const result = state.results.find((result) => result.purchase.id === action.purchaseId);
-      if (result) result.purchase.is_archived = action.isArchived;
-      if (!state.results.some((result) => result.purchase.is_archived && state.search.showArchivedOnly))
-        state.search.showArchivedOnly = false;
-      updateUrl(state.search);
-      break;
-    }
-    case "delete-purchase": {
-      const index = state.results.findIndex((result) => result.purchase.id === action.id);
-      if (index !== -1) state.results.splice(index, 1);
-      break;
-    }
-  }
-});
-
-const updateUrl = (search: Partial<Params>) => {
-  const currentUrl = new URL(window.location.href);
-  const newParams = {
-    sort: search.sort || null,
-    query: search.query || null,
-    creators: search.creators?.join(",") || null,
-    bundles: search.bundles?.join(",") || null,
-    show_archived_only: search.showArchivedOnly ? "true" : null,
-  };
-  const newUrl = writeQueryParams(currentUrl, newParams);
-  if (newUrl.toString() !== window.location.href)
-    window.history.pushState(newParams, document.title, newUrl.toString());
-};
-
-const extractParams = (rawParams: URLSearchParams): Params => ({
-  sort: rawParams.get("sort") === "purchase_date" ? "purchase_date" : "recently_updated",
-  query: rawParams.get("query") ?? "",
-  creators: rawParams.get("creators")?.split(",") ?? [],
-  bundles: rawParams.get("bundles")?.split(",") ?? [],
-  showArchivedOnly: rawParams.get("show_archived_only") === "true",
-});
 
 export default function LibraryPage() {
-  const { results, creators, bundles, purchase_analytics } = typia.assert<Props>(usePage().props);
-
-  const originalLocation = useOriginalLocation();
-  const discoverUrl = useDiscoverUrl();
-  const [state, dispatch] = React.useReducer(reducer, null, () => ({
-    search: extractParams(new URL(originalLocation).searchParams),
+  const {
     results,
-  }));
-  const [enteredQuery, setEnteredQuery] = React.useState(state.search.query);
-  useGlobalEventListener("popstate", (e: PopStateEvent) => {
-    const search = typia.is<Params>(e.state) ? e.state : extractParams(new URLSearchParams(window.location.search));
-    dispatch({ type: "set-search", search });
+    pagination,
+    creators,
+    bundles,
+    archived_count: archivedCount,
+    unarchived_count: unarchivedCount,
+    search,
+    purchase_analytics,
+    receipt_purchases,
+  } = typia.assert<Props>(usePage().props);
+
+  const discoverUrl = useDiscoverUrl();
+  const [enteredQuery, setEnteredQuery] = React.useState(search.query);
+  // Back/forward navigation swaps props without remounting; realign the input with the
+  // committed query so a stale draft doesn't survive the history jump.
+  const [prevQuery, setPrevQuery] = React.useState(search.query);
+  if (search.query !== prevQuery) {
+    setPrevQuery(search.query);
     setEnteredQuery(search.query);
-  });
-  const filteredResults = React.useMemo(() => {
-    const filtered = state.results.filter(
-      (result) =>
-        !result.purchase.is_bundle_purchase &&
-        result.purchase.is_archived === state.search.showArchivedOnly &&
-        (state.search.creators.length === 0 || state.search.creators.includes(result.product.creator_id)) &&
-        (state.search.bundles.length === 0 ||
-          (result.purchase.bundle_id && state.search.bundles.includes(result.purchase.bundle_id))) &&
-        (!state.search.query ||
-          result.product.name.toLowerCase().includes(state.search.query.toLowerCase()) ||
-          (result.product.creator?.name.toLowerCase().includes(state.search.query.toLowerCase()) ?? false)),
-    );
-    if (state.search.sort !== "purchase_date")
-      filtered.sort((a, b) => b.product.updated_at.localeCompare(a.product.updated_at));
-    return filtered;
-  }, [state.results, state.search]);
-
-  const creatorsWithProductCounts = React.useMemo(() => {
-    const productCountByCreatorId = state.results.reduce((counts, result) => {
-      if (result.purchase.is_archived === state.search.showArchivedOnly && !result.purchase.is_bundle_purchase) {
-        const creatorId = result.product.creator_id;
-        counts.set(creatorId, (counts.get(creatorId) ?? 0) + 1);
-      }
-      return counts;
-    }, new Map<string, number>());
-
-    return (
-      creators
-        .map((creator) => ({
-          ...creator,
-          count: productCountByCreatorId.get(creator.id) ?? 0,
-        }))
-        .filter((creator) => creator.count > 0)
-        // Alphabetical order makes a long creator list scannable — buyers with large
-        // libraries look for a specific creator by name, not by how many products they
-        // own from them (see gumroad-private#1177).
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
-    );
-  }, [creators, state.results, state.search.showArchivedOnly]);
-
-  const RESULTS_PER_PAGE = 15;
-  const [currentPage, setCurrentPage] = React.useState(1);
-  const pageCount = Math.max(1, Math.ceil(filteredResults.length / RESULTS_PER_PAGE));
-  // Any change to the filtered results (search, filters, archiving, deleting)
-  // sends the buyer back to page 1. This happens synchronously during render —
-  // not in an effect — so a later page never briefly renders against a smaller
-  // result set (which would show an empty grid and a range like "31-15 of 15").
-  const [prevFilteredResults, setPrevFilteredResults] = React.useState(filteredResults);
-  if (filteredResults !== prevFilteredResults) {
-    setPrevFilteredResults(filteredResults);
-    setCurrentPage(1);
   }
-  const pagedResults = React.useMemo(
-    () => filteredResults.slice((currentPage - 1) * RESULTS_PER_PAGE, currentPage * RESULTS_PER_PAGE),
-    [filteredResults, currentPage],
-  );
-  const handleChangePage = (page: number) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0 });
+
+  // Two quick filter clicks would otherwise both build on the props of the page they were
+  // clicked from, so the second visit silently reverts the first. Base each navigation and
+  // every control's rendered state on the last requested params until that request settles
+  // — a ref would fix the request but leave the checkboxes showing stale state, and the
+  // toggles derive their next value from what is rendered.
+  const [pendingSearch, setPendingSearch] = React.useState<SearchParams | null>(null);
+  const activeSearch = pendingSearch ?? search;
+
+  const navigate = ({ page, ...updates }: Partial<SearchParams> & { page?: number }) => {
+    const next = { ...activeSearch, ...updates };
+    setPendingSearch(next);
+    const data: Record<string, string> = { sort: next.sort };
+    if (next.query) data.query = next.query;
+    if (next.creators.length > 0) data.creators = next.creators.join(",");
+    if (next.bundles.length > 0) data.bundles = next.bundles.join(",");
+    if (next.show_archived_only) data.show_archived_only = "true";
+    if (page !== undefined && page > 1) data.page = page.toString();
+    router.get(Routes.library_path(), data, {
+      preserveState: true,
+      preserveScroll: page === undefined,
+      onFinish: (visit) => {
+        // Inertia fires this for superseded visits too. Clearing there would drop a newer
+        // click's params and reinstate exactly the bug this fixes, so only a visit that
+        // ran to its own end hands control back to the server's props — which is also what
+        // snaps the controls back when the request failed.
+        if (visit.cancelled || visit.interrupted) return;
+        setPendingSearch(null);
+      },
+    });
+  };
+
+  // Unarchiving the only archived purchase leaves the archived tab empty, so drop back to
+  // the main library, like the pre-pagination page did.
+  const refreshAfterArchiveChange = () => {
+    if (search.show_archived_only && archivedCount === 1) {
+      navigate({ show_archived_only: false });
+    } else {
+      router.reload();
+    }
   };
 
   const isDesktop = useIsAboveBreakpoint("lg");
   const [mobileFiltersExpanded, setMobileFiltersExpanded] = React.useState(false);
   const [showingAllCreators, setShowingAllCreators] = React.useState(false);
-  const archivedCount = state.results.filter((result) => result.purchase.is_archived).length;
-  const showArchivedNotice =
-    !state.search.showArchivedOnly && !state.results.some((result) => !result.purchase.is_archived);
+  const isLibraryEmpty = archivedCount + unarchivedCount === 0;
+  const showArchivedNotice = !isLibraryEmpty && !search.show_archived_only && unarchivedCount === 0;
   const hasParams =
-    state.search.showArchivedOnly || state.search.query || state.search.creators.length || state.search.bundles.length;
+    activeSearch.show_archived_only ||
+    activeSearch.query !== "" ||
+    activeSearch.creators.length > 0 ||
+    activeSearch.bundles.length > 0;
   const [deleting, setDeleting] = React.useState<Result | null>(null);
 
   const sortUid = React.useId();
   const bundlesUid = React.useId();
 
+  const creatorsSortedByName = React.useMemo(
+    () =>
+      // Alphabetical order makes a long creator list scannable — buyers with large
+      // libraries look for a specific creator by name, not by how many products they
+      // own from them (see gumroad-private#1177).
+      [...creators].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
+    [creators],
+  );
+
   const deletePurchase = asyncVoid(async (result: Result) => {
     try {
       await deletePurchasedProduct({ purchase_id: result.purchase.id });
-      dispatch({ type: "delete-purchase", id: result.purchase.id });
+      router.reload();
       showAlert("Product deleted!", "success");
     } catch (e) {
       assertResponseError(e);
@@ -365,44 +301,40 @@ export default function LibraryPage() {
     url.searchParams.delete("purchase_id");
     router.replace({ url: url.pathname + url.search, preserveState: true, preserveScroll: true });
 
-    const email = results.find(({ purchase }) => purchase.id === purchaseIds[0])?.purchase.email;
+    const email = receipt_purchases.find((purchase) => purchase.id === purchaseIds[0])?.email;
     if (email) showAlert(`Your purchase was successful! We sent a receipt to ${email}.`, "success");
 
     for (const purchaseId of purchaseIds) {
       const analytics = purchase_analytics[purchaseId];
       if (analytics) trackSellerPurchaseEvent(analytics);
 
-      const product = results.find(({ purchase }) => purchase.id === purchaseId)?.product;
-      if (product?.has_third_party_analytics)
+      const receiptPurchase = receipt_purchases.find((purchase) => purchase.id === purchaseId);
+      if (receiptPurchase?.has_third_party_analytics)
         addThirdPartyAnalytics({
-          permalink: product.permalink,
+          permalink: receiptPurchase.permalink,
           location: "receipt",
           purchaseId,
         });
     }
   });
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEnteredQuery(e.target.value);
-    dispatch({ type: "set-search", search: { query: e.target.value } });
-  };
-
-  const handleSearchBlur = () => {
-    dispatch({ type: "update-search", search: { query: enteredQuery } });
+  const commitQuery = () => {
+    if (enteredQuery !== activeSearch.query) navigate({ query: enteredQuery });
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") dispatch({ type: "update-search", search: { query: enteredQuery } });
+    if (e.key === "Enter") commitQuery();
   };
 
-  const shouldShowFilter = !showArchivedNotice && (hasParams || archivedCount > 0 || state.results.length > 9);
+  const shouldShowFilter =
+    !showArchivedNotice && (hasParams || archivedCount > 0 || archivedCount + unarchivedCount > 9);
 
   return (
     <Layout selectedTab="purchases">
       <section className="space-y-4 p-4 md:p-8">
-        {state.results.length === 0 || showArchivedNotice ? (
+        {isLibraryEmpty || showArchivedNotice ? (
           <Placeholder>
-            {state.results.length === 0 ? (
+            {isLibraryEmpty ? (
               <>
                 <PlaceholderImage src={placeholder} />
                 <h2 className="library-header">You haven't bought anything... yet!</h2>
@@ -418,7 +350,7 @@ export default function LibraryPage() {
                   color="accent"
                   onClick={(e) => {
                     e.preventDefault();
-                    dispatch({ type: "update-search", search: { showArchivedOnly: true } });
+                    navigate({ show_archived_only: true });
                   }}
                 >
                   See archive
@@ -427,13 +359,13 @@ export default function LibraryPage() {
             )}
           </Placeholder>
         ) : null}
-        {archivedCount > 0 && !state.search.showArchivedOnly && !showArchivedNotice ? (
+        {archivedCount > 0 && !search.show_archived_only && !showArchivedNotice ? (
           <Alert role="status" variant="info" className="mb-5">
             You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
             <button
               type="button"
               className="cursor-pointer underline all-unset"
-              onClick={() => dispatch({ type: "update-search", search: { showArchivedOnly: true } })}
+              onClick={() => navigate({ show_archived_only: true })}
             >
               Click here to view
             </button>
@@ -450,8 +382,8 @@ export default function LibraryPage() {
               <CardContent asChild>
                 <header>
                   <div className="grow">
-                    {filteredResults.length
-                      ? `Showing ${(currentPage - 1) * RESULTS_PER_PAGE + 1}-${Math.min(filteredResults.length, currentPage * RESULTS_PER_PAGE)} of ${filteredResults.length} products`
+                    {pagination.count
+                      ? `Showing ${pagination.from}-${pagination.to} of ${pagination.count} products`
                       : "No products found"}
                   </div>
                   {isDesktop ? null : (
@@ -473,8 +405,8 @@ export default function LibraryPage() {
                         className="search-products"
                         placeholder="Search products"
                         value={enteredQuery}
-                        onChange={handleSearchChange}
-                        onBlur={handleSearchBlur}
+                        onChange={(e) => setEnteredQuery(e.target.value)}
+                        onBlur={commitQuery}
                         onKeyDown={handleSearchKeyDown}
                       />
                     </InputGroup>
@@ -488,12 +420,9 @@ export default function LibraryPage() {
                       </FieldsetTitle>
                       <FormSelect
                         id={sortUid}
-                        value={state.search.sort}
+                        value={activeSearch.sort}
                         onChange={(e) =>
-                          dispatch({
-                            type: "update-search",
-                            search: { sort: e.target.value === "purchase_date" ? "purchase_date" : "recently_updated" },
-                          })
+                          navigate({ sort: e.target.value === "purchase_date" ? "purchase_date" : "recently_updated" })
                         }
                       >
                         <option value="recently_updated">Recently Updated</option>
@@ -511,13 +440,8 @@ export default function LibraryPage() {
                           inputId={bundlesUid}
                           instanceId={bundlesUid}
                           options={bundles}
-                          value={bundles.filter(({ id }) => state.search.bundles.includes(id))}
-                          onChange={(selectedOptions) =>
-                            dispatch({
-                              type: "update-search",
-                              search: { bundles: selectedOptions.map(({ id }) => id) },
-                            })
-                          }
+                          value={bundles.filter(({ id }) => activeSearch.bundles.includes(id))}
+                          onChange={(selectedOptions) => navigate({ bundles: selectedOptions.map(({ id }) => id) })}
                           isMulti
                           isClearable
                         />
@@ -531,36 +455,31 @@ export default function LibraryPage() {
                         All Creators
                         <Checkbox
                           wrapperClassName="ml-auto"
-                          checked={state.search.creators.length === 0}
-                          onClick={() => dispatch({ type: "update-search", search: { creators: [] } })}
+                          checked={activeSearch.creators.length === 0}
+                          onClick={() => navigate({ creators: [] })}
                           readOnly
                         />
                       </Label>
-                      {(showingAllCreators ? creatorsWithProductCounts : creatorsWithProductCounts.slice(0, 5)).map(
-                        (creator) => (
-                          <Label key={creator.id} className="w-full">
-                            {creator.name}
-                            <span className="shrink-0 text-muted">{`(${creator.count})`}</span>
-                            <Checkbox
-                              wrapperClassName="ml-auto"
-                              checked={state.search.creators.includes(creator.id)}
-                              onClick={() =>
-                                dispatch({
-                                  type: "update-search",
-                                  search: {
-                                    creators: state.search.creators.includes(creator.id)
-                                      ? state.search.creators.filter((id) => id !== creator.id)
-                                      : [...state.search.creators, creator.id],
-                                  },
-                                })
-                              }
-                              readOnly
-                            />
-                          </Label>
-                        ),
-                      )}
+                      {(showingAllCreators ? creatorsSortedByName : creatorsSortedByName.slice(0, 5)).map((creator) => (
+                        <Label key={creator.id} className="w-full">
+                          {creator.name}
+                          <span className="shrink-0 text-muted">{`(${creator.count})`}</span>
+                          <Checkbox
+                            wrapperClassName="ml-auto"
+                            checked={activeSearch.creators.includes(creator.id)}
+                            onClick={() =>
+                              navigate({
+                                creators: activeSearch.creators.includes(creator.id)
+                                  ? activeSearch.creators.filter((id) => id !== creator.id)
+                                  : [...activeSearch.creators, creator.id],
+                              })
+                            }
+                            readOnly
+                          />
+                        </Label>
+                      ))}
                       <div>
-                        {creatorsWithProductCounts.length > 5 && !showingAllCreators ? (
+                        {creatorsSortedByName.length > 5 && !showingAllCreators ? (
                           <button
                             className="cursor-pointer underline all-unset"
                             onClick={() => setShowingAllCreators(true)}
@@ -577,14 +496,9 @@ export default function LibraryPage() {
                         <Label className="justify-between">
                           Show archived only
                           <Checkbox
-                            checked={state.search.showArchivedOnly}
+                            checked={activeSearch.show_archived_only}
                             readOnly
-                            onClick={() =>
-                              dispatch({
-                                type: "update-search",
-                                search: { showArchivedOnly: !state.search.showArchivedOnly },
-                              })
-                            }
+                            onClick={() => navigate({ show_archived_only: !activeSearch.show_archived_only })}
                           />
                         </Label>
                       </Fieldset>
@@ -595,23 +509,20 @@ export default function LibraryPage() {
             </UICard>
           ) : null}
           <ProductCardGrid>
-            {pagedResults.map((result) => (
+            {results.map((result) => (
               <Card
                 key={result.purchase.id}
                 result={result}
-                onArchive={() =>
-                  dispatch({
-                    type: "set-archived",
-                    purchaseId: result.purchase.id,
-                    isArchived: !result.purchase.is_archived,
-                  })
-                }
+                onArchive={refreshAfterArchiveChange}
                 onDelete={(confirm = true) => (confirm ? setDeleting(result) : deletePurchase(result))}
               />
             ))}
-            {pageCount > 1 ? (
+            {pagination.pages > 1 ? (
               <div className="col-[1/-1]">
-                <Pagination pagination={{ pages: pageCount, page: currentPage }} onChangePage={handleChangePage} />
+                <Pagination
+                  pagination={{ pages: pagination.pages, page: pagination.page }}
+                  onChangePage={(page) => navigate({ page })}
+                />
               </div>
             ) : null}
           </ProductCardGrid>
@@ -619,8 +530,8 @@ export default function LibraryPage() {
         <DeleteProductModal
           deleting={deleting}
           onCancel={() => setDeleting(null)}
-          onDelete={(deleting) => {
-            dispatch({ type: "delete-purchase", id: deleting.purchase.id });
+          onDelete={() => {
+            router.reload();
             setDeleting(null);
           }}
         />

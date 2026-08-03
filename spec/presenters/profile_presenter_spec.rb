@@ -68,6 +68,26 @@ describe ProfilePresenter do
       expect(described_class.new(pundit_user:, seller:).creator_profile[:can_edit]).to eq(false)
     end
 
+    describe "reputation" do
+      it "omits the key when the seller_reputation_summary flag is off" do
+        expect(presenter.creator_profile).not_to have_key(:reputation)
+      end
+
+      it "includes the summary when the flag is on" do
+        Feature.activate_user(:seller_reputation_summary, seller)
+        summary = { average: 4.8, count: 12, products_count: 2 }
+        allow(seller).to receive(:seller_reputation_summary).and_return(summary)
+
+        expect(presenter.creator_profile[:reputation]).to eq(summary)
+      end
+
+      it "includes a nil summary when the flag is on but thresholds are unmet" do
+        Feature.activate_user(:seller_reputation_summary, seller)
+
+        expect(presenter.creator_profile[:reputation]).to be_nil
+      end
+    end
+
     it "sets can_edit to false for profile view-only team members" do
       support_user = create(:user)
       create(:team_membership, user: support_user, seller:, role: TeamMembership::ROLE_SUPPORT)
@@ -164,6 +184,66 @@ describe ProfilePresenter do
         props = described_class.new(pundit_user:, seller: new_seller).profile_settings_props(request:)
 
         expect(props[:editable_profile][:sections]).to eq([])
+      end
+    end
+
+    context "when the seller's tabs reference none of their saved sections" do
+      let(:broken_seller) { create(:user, name: "Broken Seller") }
+      let!(:broken_seller_product) { create(:product, user: broken_seller) }
+      let!(:text_section) { create(:seller_profile_rich_text_section, seller: broken_seller) }
+      let!(:products_section) { create(:seller_profile_products_section, seller: broken_seller, header: "Products") }
+      let(:visitor_pundit_user) { SellerContext.new(user: logged_in_user, seller: logged_in_user) }
+
+      before do
+        broken_seller.seller_profile.update!(json_data: { tabs: [{ name: "New page", sections: [] }] })
+        Link.import(force: true, refresh: true)
+      end
+
+      it "serves a single tab pointing at every saved section instead of the empty saved tab" do
+        props = described_class.new(pundit_user: visitor_pundit_user, seller: broken_seller).profile_props(seller_custom_domain_url: nil, request:)
+
+        expect(props[:sections].map { _1[:id] }).to match_array([text_section.external_id, products_section.external_id])
+        expect(props[:tabs]).to eq([{ name: "New page", sections: [text_section.external_id, products_section.external_id] }])
+      end
+
+      it "orders the fallback tab's sections by id regardless of the query's return order" do
+        # The sections query has no ORDER BY; simulate the database returning rows in a
+        # different plan-dependent order.
+        allow_any_instance_of(ProfileSectionsPresenter).to receive(:props).and_wrap_original do |original, **kwargs|
+          original.call(**kwargs).tap { _1[:sections] = _1[:sections].reverse }
+        end
+
+        props = described_class.new(pundit_user: visitor_pundit_user, seller: broken_seller).profile_props(seller_custom_domain_url: nil, request:)
+
+        expect(props[:tabs]).to eq([{ name: "New page", sections: [text_section.external_id, products_section.external_id] }])
+      end
+
+      it "repairs tabs whose only references point at sections that no longer exist" do
+        broken_seller.seller_profile.update!(json_data: { tabs: [{ name: "New page", sections: [products_section.id + 100] }] })
+
+        props = described_class.new(pundit_user: visitor_pundit_user, seller: broken_seller).profile_props(seller_custom_domain_url: nil, request:)
+
+        expect(props[:tabs]).to eq([{ name: "New page", sections: [text_section.external_id, products_section.external_id] }])
+      end
+
+      it "leaves the saved tabs alone when any tab references a saved section" do
+        broken_seller.seller_profile.update!(json_data: { tabs: [{ name: "Empty page", sections: [] }, { name: "Store", sections: [products_section.id] }] })
+
+        props = described_class.new(pundit_user: visitor_pundit_user, seller: broken_seller).profile_props(seller_custom_domain_url: nil, request:)
+
+        expect(props[:tabs]).to eq(
+          [
+            { name: "Empty page", sections: [] },
+            { name: "Store", sections: [products_section.external_id] },
+          ]
+        )
+      end
+
+      it "does not repair the profile editor payload" do
+        pundit_user = SellerContext.new(user: broken_seller, seller: broken_seller)
+        props = described_class.new(pundit_user:, seller: broken_seller).profile_settings_props(request:)
+
+        expect(props[:editable_profile][:tabs]).to eq([{ name: "New page", sections: [] }])
       end
     end
 

@@ -752,6 +752,24 @@ describe Variant do
       expect(yearly_price.suggested_price_cents).to be_nil
     end
 
+    it "retires price rows left in a currency the product no longer uses" do
+      @variant.save_recurring_prices!(@recurrence_price_values)
+      expect(@variant.prices.alive.pluck(:currency).uniq).to eq ["usd"]
+
+      # update_column, not update!: the bare :variant factory's product has no
+      # default_price_cents, and that unrelated validation is not what this pins.
+      @variant.link.update_column(:price_currency_type, "gbp")
+      @variant.link.reload
+      @variant.save_recurring_prices!(@recurrence_price_values)
+
+      # The upsert is scoped by currency, so the GBP save writes new rows rather than
+      # rewriting the USD ones. Both denominations must not stay alive: available_price_cents
+      # plucks every alive tier price into the search index.
+      expect(@variant.prices.alive.pluck(:currency).uniq).to eq ["gbp"]
+      expect(@variant.prices.alive.count).to eq 2
+      expect(@variant.prices.where(currency: "usd")).to all(be_deleted)
+    end
+
     it "saves product prices with price_cents 0" do
       @variant.save_recurring_prices!(@recurrence_price_values)
 

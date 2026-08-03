@@ -90,6 +90,33 @@ describe SearchProducts do
       end
     end
 
+    context "with taxonomy attribute filter parameters" do
+      before do
+        routes.draw { get "index" => "anonymous#index" }
+      end
+
+      it "coerces nested taxonomy attribute filter params into scalar tokens" do
+        get :index, params: { taxonomy_attribute_filters: { "0" => "format:otf", "1" => ["license:commercial"] } }
+
+        expect(JSON.parse(response.body)["taxonomy_attribute_filters"]).to eq(["format:otf", "license:commercial"])
+      end
+
+      it "caps the number of tokens so a crafted URL cannot emit an unbounded number of ES clauses" do
+        tokens = (1..50).map { |i| "attr#{i}:value" }
+        get :index, params: { taxonomy_attribute_filters: tokens.join(",") }
+
+        parsed = JSON.parse(response.body)["taxonomy_attribute_filters"]
+        expect(parsed.size).to eq(Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS)
+        expect(parsed).to eq(tokens.first(Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS))
+      end
+
+      it "drops duplicate tokens before applying the cap" do
+        get :index, params: { taxonomy_attribute_filters: "format:otf,format:otf,license:commercial" }
+
+        expect(JSON.parse(response.body)["taxonomy_attribute_filters"]).to eq(["format:otf", "license:commercial"])
+      end
+    end
+
     context "with other parameters" do
       before do
         routes.draw { get "index" => "anonymous#index" }

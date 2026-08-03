@@ -145,7 +145,7 @@ const FilterCheckboxes = ({
     <>
       {(showingAll ? filters : filters.slice(0, 5)).map((option) => (
         <Label key={option.key} className="w-full">
-          {option.key} ({option.doc_count})
+          {option.label ?? option.key} ({option.doc_count})
           <Checkbox
             wrapperClassName="ml-auto"
             checked={selection.includes(option.key)}
@@ -335,6 +335,28 @@ export const CardGrid = ({
               </Details>
             </CardContent>
           ) : null}
+          {results?.taxonomy_attributes_data.map((attribute) => {
+            const selectedAttributeFilters = searchParams.taxonomy_attribute_filters?.filter((token) =>
+              token.startsWith(`${attribute.name}:`),
+            );
+            return (
+              <CardContent key={attribute.name} asChild details>
+                <Details>
+                  <DetailsToggle chevronPosition="right" className="grow">
+                    {attribute.label}
+                  </DetailsToggle>
+                  <Fieldset role="group">
+                    <FilterCheckboxes
+                      filters={concatFoundAndNotFound(attribute.filters, selectedAttributeFilters)}
+                      selection={searchParams.taxonomy_attribute_filters ?? []}
+                      setSelection={(taxonomy_attribute_filters) => updateParams({ taxonomy_attribute_filters })}
+                      disabled={disableFilters ?? false}
+                    />
+                  </Fieldset>
+                </Details>
+              </CardContent>
+            );
+          })}
           <CardContent asChild details>
             <Details>
               <DetailsToggle chevronPosition="right" className="grow">

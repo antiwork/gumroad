@@ -89,11 +89,14 @@ describe MerchantRegistrationMailer do
       expect(mail.subject).to eq("Action required: Your payouts are paused")
       expect(mail.to).to include(user.email)
       expect(mail.from).to eq([ApplicationMailer::NOREPLY_EMAIL])
+      expect(mail.reply_to).to eq([ApplicationMailer::SUPPORT_EMAIL])
       expect(mail.body.encoded).to include("We have temporarily paused payouts on your account because our payments processor requires more information about you.")
       expect(mail.body.encoded).to include("To resume payouts:")
       expect(mail.body.encoded).to include("Submit the required documentation")
       expect(mail.body.encoded).to include("We'll review your information")
       expect(mail.body.encoded).to include("Once the verification is successful, we'll immediately start processing your payouts again.")
+      expect(mail.body.encoded).to include("reply to this email")
+      expect(mail.body.encoded).to include(ApplicationMailer::SUPPORT_EMAIL)
       expect(mail.body.encoded).to include("Thank you for your patience and understanding.")
     end
   end
@@ -106,8 +109,11 @@ describe MerchantRegistrationMailer do
       expect(mail.subject).to eq("Your payouts are temporarily paused")
       expect(mail.to).to include(user.email)
       expect(mail.from).to eq([ApplicationMailer::NOREPLY_EMAIL])
+      expect(mail.reply_to).to eq([ApplicationMailer::SUPPORT_EMAIL])
       expect(mail.body.encoded).to include("temporarily paused payouts on your account while it completes a review")
       expect(mail.body.encoded).to include("There's nothing you need to do right now.")
+      expect(mail.body.encoded).to include("reply to this email")
+      expect(mail.body.encoded).to include(ApplicationMailer::SUPPORT_EMAIL)
       expect(mail.body.encoded).to include("Thank you for your patience and understanding.")
     end
   end

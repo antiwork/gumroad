@@ -40,6 +40,7 @@ import {
   ProductEditContext,
   ProfileSection,
   ShippingCountry,
+  TaxonomyAttribute,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -79,6 +80,7 @@ type Props = {
   is_physical: boolean;
   profile_sections: ProfileSection[];
   taxonomies: Taxonomy[];
+  taxonomy_attributes: TaxonomyAttribute[];
   earliest_membership_price_change_date: string;
   custom_domain_verification_status: { success: boolean; message: string } | null;
   sales_count_for_inventory: number;
@@ -118,6 +120,7 @@ const createContextValue = (props: Props) => ({
   isPhysical: props.is_physical,
   profileSections: props.profile_sections,
   taxonomies: props.taxonomies,
+  taxonomyAttributes: props.taxonomy_attributes,
   earliestMembershipPriceChangeDate: new Date(props.earliest_membership_price_change_date),
   customDomainVerificationStatus: props.custom_domain_verification_status,
   salesCountForInventory: props.sales_count_for_inventory,
@@ -133,6 +136,7 @@ const createContextValue = (props: Props) => ({
   save: () => Promise.resolve(false),
   variantIdMappings: {},
   richContentIdMappings: {},
+  fileIdMappings: {},
   richContentRemovedFileEmbedIds: {},
   googleClientId: props.google_client_id,
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
@@ -245,6 +249,7 @@ const applyCanonicalIds = (
   sentPagesById: ReadonlyMap<string, ScopedPage> = new Map(),
 ) => {
   const variantMappings = response.variant_id_mappings ?? {};
+  const fileMappings = response.file_id_mappings ?? {};
   const variantTimestamps = response.variant_updated_at ?? {};
   const variantBaselines = response.variant_loaded_integrations ?? {};
   // Adopt the revision token for the state this save committed. The token the
@@ -259,6 +264,14 @@ const applyCanonicalIds = (
   // connect -> save -> disconnect -> save (no reload) emits no deletion,
   // because the stale baseline still says the integration was never on.
   if (response.loaded_integrations) product.loaded_integrations = response.loaded_integrations;
+  // Replace the array, don't mutate entries: `filesById` memoizes on
+  // `product.files` identity, and the mounted editor's node ids are remapped to
+  // the canonical ids in the same commit. A stale Map misses every lookup and
+  // the embed renders blank.
+  product.files = product.files.map((file) => {
+    const canonicalId = fileMappings[file.id];
+    return canonicalId ? { ...file, id: canonicalId } : file;
+  });
   for (const variant of product.variants) {
     const canonicalId = variantMappings[variant.id];
     if (canonicalId) {
@@ -364,6 +377,7 @@ const ProductEditPage = (props: Props) => {
   // variant and page external ids are not distinct namespaces.
   const [variantIdMappings, setVariantIdMappings] = React.useState<Record<string, string>>({});
   const [richContentIdMappings, setRichContentIdMappings] = React.useState<Record<string, string>>({});
+  const [fileIdMappings, setFileIdMappings] = React.useState<Record<string, string>>({});
   const [richContentRemovedFileEmbedIds, setRichContentRemovedFileEmbedIds] = React.useState<Record<string, string[]>>(
     {},
   );
@@ -451,6 +465,7 @@ const ProductEditPage = (props: Props) => {
       lastSavedProductRef.current = reconciled;
       setVariantIdMappings((previous) => ({ ...previous, ...response.variant_id_mappings }));
       setRichContentIdMappings((previous) => ({ ...previous, ...response.rich_content_id_mappings }));
+      setFileIdMappings((previous) => ({ ...previous, ...response.file_id_mappings }));
       setRichContentRemovedFileEmbedIds(response.rich_content_removed_file_embed_ids ?? {});
       updateProduct((current) => {
         applyCanonicalIds(current, response, sentPagesById);
@@ -551,6 +566,7 @@ const ProductEditPage = (props: Props) => {
       saving,
       variantIdMappings,
       richContentIdMappings,
+      fileIdMappings,
       richContentRemovedFileEmbedIds,
       contentUpdates,
       setContentUpdates,
@@ -564,6 +580,7 @@ const ProductEditPage = (props: Props) => {
       filesById,
       variantIdMappings,
       richContentIdMappings,
+      fileIdMappings,
       richContentRemovedFileEmbedIds,
     ],
   );

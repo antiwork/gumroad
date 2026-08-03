@@ -234,7 +234,7 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to have_status(text: "You have 2 archived purchases. Click here to view")
 
     click_on "Click here to view"
-    expect(page.current_url).to include("show_archived_only=true")
+    expect(page).to have_current_path(/show_archived_only=true/)
     expect(page).to have_checked_field("Show archived only")
 
     expect(page).to have_product_card(purchase1.link)
@@ -247,7 +247,7 @@ describe("Library Scenario", type: :system, js: true) do
     end
     click_on "Unarchive"
 
-    expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
+    expect(page).to have_current_path("/library?sort=recently_updated&show_archived_only=true")
     expect(page).to have_product_card(purchase3.link)
     expect(page).to_not have_product_card(purchase1.link)
 
@@ -279,7 +279,7 @@ describe("Library Scenario", type: :system, js: true) do
     click_on "Unarchive"
     wait_for_ajax
 
-    expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
+    expect(page).to have_current_path("/library?sort=recently_updated&show_archived_only=true")
 
     visit "/library"
     wait_for_ajax
@@ -387,28 +387,31 @@ describe("Library Scenario", type: :system, js: true) do
 
       expect(find_field("All Creators", visible: false).checked?).to eq(true)
       find_and_click("label", text: @creator.name)
+      # The filter now applies on the server, so wait for the refreshed page before
+      # reading checkbox state, which Capybara does not retry.
+      expect(page).to have_text("Showing 1-10 of 10")
       expect(find_field("All Creators", visible: false).checked?).to eq(false)
       expect(find_field(@creator.name, visible: false).checked?).to eq(true)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-10 of 10")
       scroll_to find_product_card(@b.link)
       expect(page).to have_product_card(count: 10)
       expect_to_show_purchases_in_order([@j, @i, @h, @g, @f, @e, @d, @c, @b, @a])
 
       find_and_click("label", text: @creator.name)
+      expect(page).to have_text("Showing 1-12 of 12")
       find_and_click("label", text: @another_creator.name)
+      expect(page).to have_text("Showing 1-2 of 2")
       expect(find_field(@creator.name, visible: false).checked?).to eq(false)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(true)
       expect(find_field("All Creators", visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-2 of 2")
       expect(page).to have_product_card(count: 2)
       expect_to_show_purchases_in_order([another_b, another_a])
 
       find_and_click("label", text: "All Creators")
+      expect(page).to have_text("Showing 1-12 of 12")
       expect(find_field("All Creators", visible: false).checked?).to eq(true)
       expect(find_field(@creator.name, visible: false).checked?).to eq(false)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-12 of 12")
       scroll_to find_product_card(@d.link)
       expect_to_show_purchases_in_order([another_b, another_a, @j, @i, @h, @g, @f, @e, @d, @c, @b, @a])
     end
@@ -579,6 +582,45 @@ describe("Library Scenario", type: :system, js: true) do
 
     expect(page).to have_text("Showing 1-10 of 10 products")
     expect(page).to_not have_selector("[role='navigation'][aria-label='Pagination']")
+  end
+
+  describe "server-side pagination" do
+    before do
+      @solo_creator = create(:user, name: "Solo creator")
+      @solo = create(:purchase, link: create(:product, user: @solo_creator, name: "Solo Product", price_cents: 0), purchaser: @user)
+      20.times { |n| create(:purchase, link: create(:product, name: "Bulk Product #{n}", price_cents: 0), purchaser: @user) }
+
+      Link.import(refresh: true, force: true)
+    end
+
+    it "serves the last page when the requested page is past the end" do
+      visit "/library?page=99"
+
+      expect(page).to have_text("Showing 16-21 of 21 products")
+      expect(page).to have_product_card(count: 6)
+    end
+
+    it "goes back to the first page of the narrowed set when a filter is applied from a deep page" do
+      visit "/library?page=2"
+      expect(page).to have_text("Showing 16-21 of 21 products")
+
+      # 21 distinct creators, so the facet list is truncated to 5 until this is clicked.
+      find_and_click("button", text: "Show more")
+      find_and_click("label", text: @solo_creator.name)
+
+      expect(page).to have_text("Showing 1-1 of 1 products")
+      expect(page).to have_product_card(@solo.link)
+      expect(page).to_not have_selector("[role='navigation'][aria-label='Pagination']")
+    end
+
+    it "restores a sorted, paged view from its URL alone" do
+      visit "/library?sort=purchase_date&page=2"
+
+      expect(page).to have_text("Showing 16-21 of 21 products")
+      expect(page).to have_field("Sort by", text: "Purchase Date")
+      # The bookmarked page must be the one highlighted, not just the one rendered.
+      expect(page).to have_selector("[role='navigation'][aria-label='Pagination'] [aria-current='page']", text: "2")
+    end
   end
 
   describe "bundle purchases" do

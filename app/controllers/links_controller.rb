@@ -169,8 +169,12 @@ class LinksController < ApplicationController
     @body_class = "iframe" if params[:overlay] || params[:embed]
 
     if ["search", "discover"].include?(params[:recommended_by])
+      # The clicked product's own category, not the browsed one: Discover click-throughs land here
+      # without the taxonomy params the results page had, so this is the only side that can attribute
+      # a click to a category at all.
       create_discover_search!(
         clicked_resource: @product,
+        taxonomy_id: @product.taxonomy_id,
         query: params[:query],
         autocomplete: params[:autocomplete] == "true"
       )
@@ -246,7 +250,7 @@ class LinksController < ApplicationController
         user.present? &&
         search_params[:section_id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID &&
         user.seller_profile_sections.on_profile.none?
-      return render json: { total: 0, filetypes_data: [], tags_data: [], products: [] } if user.nil? || (section.nil? && !searching_default_products_section && search_params[:ids].blank?)
+      return render json: { total: 0, filetypes_data: [], tags_data: [], taxonomy_attributes_data: [], products: [] } if user.nil? || (section.nil? && !searching_default_products_section && search_params[:ids].blank?)
       search_params[:section] = section if section
       search_params[:is_alive_on_profile] = true
       search_params[:user_id] = user.id
@@ -476,6 +480,7 @@ class LinksController < ApplicationController
           :custom_button_text_option,
           :custom_summary,
           :custom_attributes,
+          :taxonomy_attribute_values,
           :file_attributes,
           :covers,
           :refund_policy,
@@ -505,6 +510,7 @@ class LinksController < ApplicationController
         @product.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
         @product.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
         @product.save_custom_attributes((product_permitted_params[:custom_attributes] || []).filter { _1[:name].present? || _1[:description].present? })
+        @product.save_taxonomy_attribute_values(product_permitted_params[:taxonomy_attribute_values]) unless product_permitted_params[:taxonomy_attribute_values].nil?
         @product.save_tags!(product_permitted_params[:tags] || [])
         @product.reorder_previews((product_permitted_params[:covers] || []).map.with_index.to_h)
         if !current_seller.account_level_refund_policy_enabled?
@@ -539,7 +545,8 @@ class LinksController < ApplicationController
         product_permitted_params[:variants].each { rich_content_params.push(*_1[:rich_content]) } if product_permitted_params[:variants].present?
         rich_content_params = rich_content_params.flat_map { _1[:description] = _1.dig(:description, :content) }
         rich_contents_to_keep = []
-        SaveFilesService.perform(@product, product_permitted_params, rich_content_params, contract: product_save_contract)
+        file_id_mappings = SaveFilesService.perform(@product, product_permitted_params, rich_content_params, contract: product_save_contract)
+        save_id_mappings[:files].merge!(file_id_mappings) if file_id_mappings.present?
         existing_rich_contents = @product.alive_rich_contents.to_a
         rich_content.each.with_index do |product_rich_content, index|
           rich_content = existing_rich_contents.find { |c| c.external_id === product_rich_content[:id] } || @product.alive_rich_contents.build
@@ -689,10 +696,10 @@ class LinksController < ApplicationController
       }
     end
 
-    # The editor needs the canonical ids of records this save created (pages
-    # and variants submitted under client-generated ids) so its next save
+    # The editor needs the canonical ids of records this save created (pages,
+    # variants, and files submitted under client-generated ids) so its next save
     # addresses them instead of re-creating them — without this, saving twice
-    # without a reload trips the content deletion guard.
+    # without a reload trips the content deletion guard or re-attaches files.
     render json: save_id_mappings_response
   end
 
@@ -1438,11 +1445,11 @@ class LinksController < ApplicationController
     end
 
     # Accumulates client id → canonical server id for records this save
-    # creates (pages and variants submitted under client-generated ids).
+    # creates (pages, variants, and files submitted under client-generated ids).
     # Returned to the editor so its next save addresses the created records
     # instead of re-creating them (which would trip the deletion guards).
     def save_id_mappings
-      @_save_id_mappings ||= { variants: {}, rich_content: {}, removed_file_embeds: {} }
+      @_save_id_mappings ||= { variants: {}, rich_content: {}, files: {}, removed_file_embeds: {} }
     end
 
     # Snapshot stored move/copy provenance before this save can repair or
@@ -1635,6 +1642,7 @@ class LinksController < ApplicationController
       {
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
+        file_id_mappings: save_id_mappings[:files],
         rich_content_removed_file_embed_ids: save_id_mappings[:removed_file_embeds],
         **content_updated_at_response,
         # The revision token for the state this save just committed
@@ -1967,7 +1975,7 @@ class LinksController < ApplicationController
       checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?#{Rack::Utils.build_query(checkout_params)}".to_json)
       store_hostnames_js = ERB::Util.json_escape(product_store_hostnames.to_json)
       title = ERB::Util.h(product.name.to_s)
-      canonical = ERB::Util.h(product.long_url.to_s)
+      canonical = ERB::Util.h(product.long_url(host: custom_domain_host_for_meta(product)).to_s)
       # The wrapper is what search engines see at the canonical /l/<permalink>
       # URL — the seller's HTML lives in a sandboxed, opaque-origin iframe whose
       # content crawlers generally do NOT attribute to this page. Without the
@@ -1987,7 +1995,7 @@ class LinksController < ApplicationController
       # untouched. Escape quotes explicitly so a description containing `"`
       # can't break out of the meta tag's attribute value.
       description_attr = description.gsub('"', "&quot;")
-      structured_data = product.structured_data
+      structured_data = product.structured_data(host: custom_domain_host_for_meta(product))
       # json_escape keeps the JSON valid while escaping <, >, & so a
       # description containing "</script>" can't break out of the script tag.
       structured_data_tag = if structured_data.any?

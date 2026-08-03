@@ -16,6 +16,12 @@ class PaypalChargeProcessor
   DISPUTE_OUTCOME_SELLER_FAVOUR = %w[RESOLVED_SELLER_FAVOUR CANCELED_BY_BUYER DENIED].freeze
   private_constant :DISPUTE_OUTCOME_SELLER_FAVOUR
 
+  DISPUTE_OUTCOME_BUYER_FAVOUR = %w[RESOLVED_BUYER_FAVOUR RESOLVED_WITH_PAYOUT ACCEPTED].freeze
+  private_constant :DISPUTE_OUTCOME_BUYER_FAVOUR
+
+  DISPUTE_OUTCOME_NO_DECISION = %w[NONE].freeze
+  private_constant :DISPUTE_OUTCOME_NO_DECISION
+
   # https://developer.paypal.com/docs/api/orders/v1/
   VALID_TRANSACTION_STATUSES = %w(created approved completed)
 
@@ -87,8 +93,39 @@ class PaypalChargeProcessor
   private_class_method :handle_dispute_created_event
 
   def self.handle_dispute_resolved_event(event_info)
-    dispute_outcome = event_info["resource"]["dispute_outcome"]["outcome_code"]
-    event_type = determine_resolved_dispute_event_type(dispute_outcome)
+    resource = event_info.fetch("resource")
+    outcome = resource["dispute_outcome"]
+    raw_outcome_code = outcome.is_a?(Hash) ? outcome["outcome_code"] : nil
+    outcome_code = raw_outcome_code.to_s.upcase
+
+    # An absent outcome_code means PayPal did not report a decision, and a code outside the
+    # documented set (see determine_resolved_dispute_event_type) is one we cannot classify.
+    # Falling through classifies either as LOST, which permanently withholds the dispute-won
+    # credit reversing the debit taken at formalization, and emails the seller that they
+    # lost — PayPal does not re-send, so no later webhook undoes either. A dispute left
+    # `formalized` can still resolve either way.
+    unless DISPUTE_OUTCOME_SELLER_FAVOUR.include?(outcome_code) || DISPUTE_OUTCOME_BUYER_FAVOUR.include?(outcome_code)
+      # NONE is a documented code, not an unknown one — give it its own monitoring
+      # fingerprint so an alert on unrecognized codes stays meaningful.
+      outcome_descriptor = if outcome_code.blank?
+        "no outcome_code"
+      elsif DISPUTE_OUTCOME_NO_DECISION.include?(outcome_code)
+        "outcome_code NONE (closed without a decision)"
+      else
+        "unrecognized outcome_code"
+      end
+      ErrorNotifier.notify(
+        "PayPal CUSTOMER.DISPUTE.RESOLVED with #{outcome_descriptor}; dispute left unresolved",
+        outcome_code: raw_outcome_code,
+        paypal_dispute_id: resource["dispute_id"],
+        dispute_status: resource["status"],
+        seller_transaction_id: resource.dig("disputed_transactions", 0, "seller_transaction_id"),
+        webhook_event_id: event_info["id"]
+      )
+      return
+    end
+
+    event_type = determine_resolved_dispute_event_type(outcome_code)
     handle_dispute_event(event_info, event_type)
   rescue StandardError => e
     raise ChargeProcessorError, build_error_message(e.message, event_info)
@@ -317,6 +354,7 @@ class PaypalChargeProcessor
   # CANCELED_BY_BUYER - The customer canceled the dispute.
   # ACCEPTED - The dispute was accepted.
   # DENIED - The dispute was denied.
+  # NONE - The dispute was closed without a decision.
   # Empty - The dispute was not resolved.
   def self.determine_resolved_dispute_event_type(dispute_outcome)
     if DISPUTE_OUTCOME_SELLER_FAVOUR.include? dispute_outcome.upcase
@@ -585,8 +623,8 @@ class PaypalChargeProcessor
     if paypal_rest_api.successful_response?(api_response) && api_response.result.id.present?
       api_response.result.id
     else
-      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal create order: ", api_response.result.details&.first&.description)
-      raise determine_create_order_error(api_response), error_message
+      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal create order: ", paypal_rejection_description(api_response))
+      raise build_paypal_rejection(determine_create_order_error(api_response), error_message, api_response)
     end
   end
 
@@ -606,8 +644,8 @@ class PaypalChargeProcessor
     if paypal_rest_api.successful_response?(api_response) && api_response.result.id.present?
       api_response.result
     else
-      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal capture order: ", api_response.result.details[0].description)
-      raise determine_capture_order_error(api_response), error_message
+      error_message = PaypalChargeProcessor.build_error_message("Failed PayPal capture order: ", paypal_rejection_description(api_response))
+      raise build_paypal_rejection(determine_capture_order_error(api_response), error_message, api_response)
     end
   end
 
@@ -759,6 +797,38 @@ class PaypalChargeProcessor
   private_class_method
   def self.build_error_message(error_code, error_message)
     "#{error_code}|#{error_message}"
+  end
+
+  # PayPal's rejection arrives as a parsed response body, not an exception object, so the
+  # `issue` string is the only thing that says WHY it refused — and every unnamed issue maps
+  # to one ChargeProcessorInvalidRequestError. Carrying it into processor_error_code is what
+  # puts it on the failed purchase's stripe_error_code instead of discarding it here
+  # (gumroad-private#1715: 912 failures in 14 days, all indistinguishable).
+  def self.build_paypal_rejection(error_class, message, api_response)
+    return error_class.new(message) unless error_class == ChargeProcessorInvalidRequestError
+    error_class.new(message, processor_error_code: paypal_rejection_issue(api_response))
+  end
+
+  # Falls back to the response's top-level name (INSTRUMENT_DECLINED, UNPROCESSABLE_ENTITY)
+  # when PayPal sends no details array — that is still more than the blank column we have now.
+  def self.paypal_rejection_issue(api_response)
+    detail = paypal_rejection_detail(api_response)
+    issue = detail.issue if detail.respond_to?(:issue)
+    return issue if issue.present?
+    api_response.result.name.presence if api_response.result.respond_to?(:name)
+  end
+
+  def self.paypal_rejection_description(api_response)
+    detail = paypal_rejection_detail(api_response)
+    detail.description if detail.respond_to?(:description)
+  end
+
+  # Shapes vary by endpoint and error class, and this runs while a failure is already being
+  # raised: a NoMethodError here would replace the real charge error with a crash.
+  def self.paypal_rejection_detail(api_response)
+    api_response.result.details&.first
+  rescue StandardError
+    nil
   end
 
   private_class_method

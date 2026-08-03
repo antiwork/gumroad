@@ -189,6 +189,25 @@ describe "User profile page", type: :system, js: true do
         expect_product_cards_in_order([@product4, @product3, @product2, @product1])
       end
 
+      it "renders the saved sections when the only tab references none of them" do
+        Link.import(force: true, refresh: true)
+        create(:seller_profile_rich_text_section, seller:, header: "About", text: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Welcome to my store" }] }] })
+        create(:seller_profile_products_section, seller:, header: "My products", shown_products: [@product1.id, @product2.id, @product3.id, @product4.id], add_new_products: false)
+        # The editor can persist a tab that references no sections while the section rows
+        # survive; the storefront must still render them instead of only the follow form.
+        create(:seller_profile, seller:, json_data: { tabs: [{ name: "New page", sections: [] }] })
+
+        visit seller.subdomain_with_protocol
+
+        expect(page).to_not have_text "Subscribe to receive email updates from #{seller.name}"
+        within_section "About", section_element: :section do
+          expect(page).to have_text "Welcome to my store"
+        end
+        within_section "My products", section_element: :section do
+          expect_product_cards_in_order([@product1, @product2, @product3, @product4])
+        end
+      end
+
       it "shows the subscribe block when there are no sections and no products" do
         # The subscribe form only takes a follow with no challenge for a seller we
         # have reviewed and marked compliant (see FollowRecaptcha); a headless
@@ -670,16 +689,17 @@ describe "User profile page", type: :system, js: true do
 
         add_section "Subscribe"
 
+        # A new subscribe section starts unnamed, like every other section type: no heading in the
+        # preview, and an empty Section name to fill in. The header follow form also renders an
+        # email field, so assert on the section's own name field rather than the preview's inputs.
         within_profile_editor_preview do
-          within_section "Subscribe to receive email updates from Gumbot.", section_element: :section do
-            expect(page).to have_field("Your email address")
-            expect(page).to have_button("Subscribe")
-          end
+          expect(page).to_not have_text("Subscribe to receive email updates from Gumbot.")
         end
 
         expect(seller.seller_profile_sections.count).to eq 0
 
-        within_section_form "Subscribe to receive email updates from Gumbot." do
+        within_section_form "Subscribe" do
+          expect(page).to have_field("Section name", with: "")
           fill_in "Section name", with: "Subscribe now or else"
           fill_in "Button label", with: "Follow"
         end

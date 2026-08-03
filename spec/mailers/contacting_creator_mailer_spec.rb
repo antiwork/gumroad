@@ -103,6 +103,42 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
     end
 
+    # gumroad-private#1661. A locked receiving account is not a country problem, so the old copy
+    # sent this seller after a PayPal account "registered in a country that can receive PayPal
+    # payments" — the wrong diagnosis, and for the 2,152 Russia-KYC sellers in that issue an
+    # instruction with no action behind it.
+    context "when PayPal has locked the receiving account" do
+      before { payment.update!(failure_reason: "PAYPAL 3015") }
+
+      it "names the lock and points the seller at PayPal, not at their country" do
+        mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+        expect(mail.body.encoded).to include("your PayPal account is locked or inactive")
+        expect(mail.body.encoded).to include("contact PayPal to have them lifted")
+        expect(mail.body.encoded).to_not include("registered in a country that can receive PayPal payments")
+      end
+
+      it "tells a seller with no bank rail plainly that we may have no way to pay them" do
+        payment.user.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info, user: payment.user, country: "Ukraine")
+        expect(payment.user.reload.can_setup_bank_payouts?).to be(false)
+
+        mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+        expect(mail.body.encoded).to include("we have no way to pay you right now")
+        expect(mail.body.encoded).to include("We hope to have a way to pay out your balance in the future")
+      end
+
+      # Only PayPal can unlock it, so an address-keyed block would freeze out a seller the moment
+      # PayPal restores them. The retries continue and the copy must not claim otherwise.
+      it "does not claim the retries stopped" do
+        mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+        expect(mail.body.encoded).to_not include("stopped retrying")
+        expect(mail.body.encoded).to include("keep trying on your usual payout schedule")
+      end
+    end
+
     # The payout gate exits on payouts_paused? before any processor runs, so a paused seller is not
     # being retried on schedule whatever the rejection code says. Promising it contradicts the pause
     # this same email describes further down. Reviewer finding on #6526.
@@ -1885,7 +1921,7 @@ describe ContactingCreatorMailer do
     # Same shape for the agent exclusion: those subscriptions are token-less by design and their owners
     # have no authorization flow to re-run, so a render must not email them either.
     it "sends nothing for a Store Agent application at render time" do
-      oauth_application.update!(name: Ai::StoreAgentApiClient::AGENT_APP_NAME)
+      oauth_application.update!(is_first_party_agent_app: true)
 
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
 

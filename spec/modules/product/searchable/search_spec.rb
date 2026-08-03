@@ -132,6 +132,22 @@ describe "Product::Searchable - Search scenarios" do
         expect(records).to be_an(Elasticsearch::Model::Response::Records)
       end
 
+      it "ignores a non-Hash :search param instead of injecting it into the bool query" do
+        params = { search: "gnomes png file" }
+        search_options = Link.search_options(params)
+
+        expect(search_options[:query][:bool][:must]).to all(be_a(Hash))
+        records = Link.search(search_options).records
+        expect(records).to be_an(Elasticsearch::Model::Response::Records)
+      end
+
+      it "still appends a Hash :search param as a query clause" do
+        params = { search: { term: { is_recommendable: true } } }
+        search_options = Link.search_options(params)
+
+        expect(search_options[:query][:bool][:must]).to include({ term: { is_recommendable: true } })
+      end
+
       describe "is_alive_on_profile" do
         let(:seller) { create(:user) }
         let!(:product) { create(:product, user: seller) }

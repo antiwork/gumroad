@@ -18,15 +18,18 @@ type SearchRequestType = {
   query: string;
   taxonomy: string;
   curated_product_ids: string[];
+  taxonomy_attribute_filters: string[];
 };
 export type SearchRequest = { [key in keyof SearchRequestType]?: SearchRequestType[key] | undefined };
 
-export type ProductFilter = { key: string; doc_count: number };
+export type ProductFilter = { key: string; doc_count: number; label?: string };
+export type TaxonomyAttributeFilterGroup = { name: string; label: string; filters: ProductFilter[] };
 
 export type SearchResults = {
   products: CardProduct[];
   filetypes_data: ProductFilter[];
   tags_data: ProductFilter[];
+  taxonomy_attributes_data: TaxonomyAttributeFilterGroup[];
   total: number;
 };
 

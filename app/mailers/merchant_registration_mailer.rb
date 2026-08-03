@@ -41,12 +41,12 @@ class MerchantRegistrationMailer < ApplicationMailer
 
   def stripe_payouts_disabled(user_id)
     user = User.find(user_id)
-    mail(subject: "Action required: Your payouts are paused", from: NOREPLY_EMAIL_WITH_NAME, to: user.email)
+    mail(subject: "Action required: Your payouts are paused", from: NOREPLY_EMAIL_WITH_NAME, reply_to: SUPPORT_EMAIL, to: user.email)
   end
 
   def stripe_payouts_under_review(user_id)
     user = User.find(user_id)
-    mail(subject: "Your payouts are temporarily paused", from: NOREPLY_EMAIL_WITH_NAME, to: user.email)
+    mail(subject: "Your payouts are temporarily paused", from: NOREPLY_EMAIL_WITH_NAME, reply_to: SUPPORT_EMAIL, to: user.email)
   end
 
   def stripe_account_rejected(user_id)

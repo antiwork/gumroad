@@ -87,6 +87,7 @@ class RedisKey
     def undelivered_receipt_notified(purchase_id) = "undelivered_receipt_notified:#{purchase_id}"
     # High-water mark for AlertSellersOfUndeliveredReceiptsJob: the last email_infos id it judged.
     def undelivered_receipt_sweep_cursor = "undelivered_receipt_sweep:cursor"
+    def stale_block_sweep_cursor = "stale_block_sweep:cursor"
     # Purchases whose notice was claimed but never transmitted. The cursor is already past their
     # email_infos rows, so this set is the only thing that brings them back.
     def undelivered_receipt_pending_retry = "undelivered_receipt_sweep:pending_retry"

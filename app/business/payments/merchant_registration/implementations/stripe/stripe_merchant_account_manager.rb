@@ -100,8 +100,10 @@ module StripeMerchantAccountManager
   private_class_method :stripe_payouts_pause_email_type
 
   # Claims (at most one of each) pause email per Stripe-disabled episode,
-  # surviving admin/payout-method resumes (the marker is cleared only when
-  # Stripe re-enables payouts). Action-required is claimed on first notice or on
+  # surviving admin/payout-method resumes. The marker is cleared when Stripe
+  # re-enables payouts, and also by StripePayoutsPausedEmailJob when it declines
+  # to send (see its nothing_at_stake?) so a later webhook can re-claim — an
+  # episode can therefore claim more than once. Action-required is claimed on first notice or on
   # escalation from under-review; under-review is claimed as the first notice or
   # on de-escalation from action-required (the seller satisfied the outstanding
   # requirements but payouts stay paused pending Stripe's review). Updates the
@@ -368,6 +370,10 @@ module StripeMerchantAccountManager
     if last_attributes[:company].present?
       last_attributes[:company][:directors_provided] = nil
       last_attributes[:company][:executives_provided] = nil
+      # Mirrors the individual phone above, and load-bearing for the country-mismatch hold-back:
+      # a company phone withheld while the countries disagree would otherwise diff out as
+      # unchanged on every later save and never be sent again, even once they reconcile.
+      last_attributes[:company][:phone] = nil
     end
 
     diff_attributes = get_diff_attributes(current_attributes, last_attributes)
@@ -634,6 +640,16 @@ module StripeMerchantAccountManager
   ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS = %i[individual company].freeze
   private_constant :ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS
 
+  # Stripe validates the phone against the account's country the same way it validates the
+  # address, so a foreign number on a mismatched account is refused as "not a valid phone
+  # number" — wording that reads like bad seller input and is not. Measured on the
+  # gumroad-private#1512 cohort: 12 of 23 resyncs died here, 9 of those numbers already valid
+  # E.164, while every country-MATCHED account in the same population holds a foreign number
+  # fine. Unlike an identifier there is nothing to gain from an isolated retry: the value can
+  # never be accepted while the countries disagree, and withholding it strands no verification.
+  COUNTRY_VALIDATED_CONTACT_KEYS = %i[phone].freeze
+  private_constant :COUNTRY_VALIDATED_CONTACT_KEYS
+
   private_class_method
   def self.without_account_country_validated_fields(diff_attributes)
     attributes = diff_attributes.except(:tos_acceptance)
@@ -642,7 +658,7 @@ module StripeMerchantAccountManager
       entity = attributes[entity_key]
       next unless entity.is_a?(Hash)
 
-      remaining = entity.except(*ADDRESS_SUBHASH_KEYS)
+      remaining = entity.except(*ADDRESS_SUBHASH_KEYS, *COUNTRY_VALIDATED_CONTACT_KEYS)
       if remaining.empty?
         attributes = attributes.except(entity_key)
       else

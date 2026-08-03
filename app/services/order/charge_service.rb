@@ -85,7 +85,15 @@ class Order::ChargeService
         create_charge_for_seller_purchases(non_free_seller_purchases, chargeable, off_session, setup_future_charges)
       end
     rescue => e
+      # Per seller group: earlier groups' charges are already captured and the loop carries
+      # on, so this is the partial-order path, not an aborted checkout.
       Rails.logger.error("Error charging order (#{order.id}):: #{e.class} => #{e.message} => #{e.backtrace}")
+      begin
+        ErrorNotifier.notify(e, order_id: order.id, seller_id:)
+      rescue => notify_error
+        # A raising notifier must not stop the remaining seller groups from being charged.
+        Rails.logger.error("Error reporting charge failure for order (#{order.id}):: #{notify_error.class} => #{notify_error.message}")
+      end
     ensure
       # Ensure all purchases of the charge are transitioned to a terminal state
       # and each line item has a response. Include purchases rejected by
