@@ -1677,6 +1677,46 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include purchase.email
       expect(mail.body.encoded).to include "Terraforming Guide"
       expect(mail.body.encoded).to include "A buyer paid you and we have no confirmation"
+      expect(mail.body.encoded).to include "or refunding,"
+    end
+
+    # A free download generates the same receipt row as a paid sale, so it enters the sweep — but
+    # "paid you" and "or refunding" are false for it, and a free-catalogue seller reads the notice
+    # as phishing (gumroad-private#1780).
+    it "does not claim payment or offer a refund for a free download" do
+      purchase = create(:free_purchase, seller:, link: product)
+      create(:customer_email_info, purchase:, state: "sent", sent_at: 3.days.ago)
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
+
+      expect(mail.body.encoded).to include "A buyer picked up one of your free products"
+      expect(mail.body.encoded).not_to include "paid you"
+      expect(mail.body.encoded).not_to include "refunding"
+    end
+
+    it "uses payment-neutral wording for a mixed paid and free digest" do
+      paid = undelivered_purchase
+      free = create(:free_purchase, seller:, link: product)
+      create(:customer_email_info, purchase: free, state: "sent", sent_at: 3.days.ago)
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [paid.id, free.id])
+
+      expect(mail.body.encoded).to include "2 of your buyers completed a purchase"
+      expect(mail.body.encoded).not_to include "paid you"
+      expect(mail.body.encoded).to include "or refunding,"
+    end
+
+    it "uses free wording when every affected sale is free" do
+      purchases = Array.new(2) do
+        purchase = create(:free_purchase, seller:, link: product)
+        create(:customer_email_info, purchase:, state: "sent", sent_at: 3.days.ago)
+        purchase
+      end
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, purchases.map(&:id))
+
+      expect(mail.body.encoded).to include "2 of your buyers picked up free products"
+      expect(mail.body.encoded).not_to include "refunding"
     end
 
     it "pluralizes the subject and body for several affected sales" do

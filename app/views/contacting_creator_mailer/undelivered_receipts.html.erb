@@ -2,12 +2,26 @@
 <div>
   <p>
     <% if @total == 1 %>
-      A buyer paid you and we have no confirmation that their receipt reached them. They have not
-      opened what they bought either, so they may be waiting on you without knowing to ask.
-    <% else %>
+      <% if @paid_count == 1 %>
+        A buyer paid you and we have no confirmation that their receipt reached them. They have not
+        opened what they bought either, so they may be waiting on you without knowing to ask.
+      <% else %>
+        A buyer picked up one of your free products and we have no confirmation that their receipt
+        reached them. They have not opened what they got either, so they may be waiting on you
+        without knowing to ask.
+      <% end %>
+    <% elsif @paid_count == @total %>
       <%= @total %> of your buyers paid you and we have no confirmation that their receipts reached
       them. None of them have opened what they bought either, so they may be waiting on you without
       knowing to ask.
+    <% elsif @paid_count.zero? %>
+      <%= @total %> of your buyers picked up free products and we have no confirmation that their
+      receipts reached them. None of them have opened what they got either, so they may be waiting
+      on you without knowing to ask.
+    <% else %>
+      <%= @total %> of your buyers completed a purchase and we have no confirmation that their
+      receipts reached them. None of them have opened what they got either, so they may be waiting
+      on you without knowing to ask.
     <% end %>
   </p>
   <%# The email layout collapses a bare table to display:block, which stacks every cell into its own
@@ -38,8 +52,8 @@
   <% end %>
   <p>
     You can resend a receipt from that buyer's sale page. If a resend does not reach them either, the
-    address is likely wrong or their mail provider is refusing our mail — reaching them another way,
-    or refunding, is the only thing that will resolve it.
+    address is likely wrong or their mail provider is refusing our mail — reaching them another
+    way<%= ", or refunding," if @paid_count.positive? %> is the only thing that will resolve it.
   </p>
   <p>
     We send this once per buyer, so you will not hear about these again.

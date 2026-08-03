@@ -447,6 +447,10 @@ class ContactingCreatorMailer < ApplicationMailer
     # The count is what the seller acts on: it counts everyone this email stands behind, listed or
     # summarized, and never the sweep's figure from before the recheck.
     @total = still_affected.size
+    # Free downloads enter the sweep on equal footing with paid sales, and the paid framing
+    # ("paid you", "or refunding") is false for them — a free-catalogue seller reads the notice
+    # as phishing (gumroad-private#1780). The copy branches on this count.
+    @paid_count = still_affected.count { _1.price_cents.positive? }
     @purchases = still_affected.first(UndeliveredReceiptNotifier::MAX_LISTED_PER_SELLER)
     @undisclosed_count = @total - @purchases.size
     @subject = "#{@total == 1 ? "A buyer" : "#{@total} buyers"} may not have received their receipt"
