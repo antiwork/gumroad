@@ -134,12 +134,12 @@ class OrdersController < ApplicationController
       order,
       processor_intent_id: params[:processor_intent_id].to_s.first(100).presence
     )
-    reserved_once_per_cart_ids = reserved_once_per_cart_offer_code_ids(order)
+    unavailable_once_per_cart_ids = unavailable_once_per_cart_offer_code_ids(order)
 
     render json: {
       success: true,
-      reservations_released: cleanup_succeeded && reserved_once_per_cart_ids.empty?,
-      reserved_once_per_cart_ids:,
+      reservations_released: cleanup_succeeded && unavailable_once_per_cart_ids.empty?,
+      unavailable_once_per_cart_ids:,
     }
   end
 
@@ -184,9 +184,12 @@ class OrdersController < ApplicationController
       false
     end
 
-    def reserved_once_per_cart_offer_code_ids(order)
-      order.purchases.active_once_per_cart_offer_code_reservations
-        .includes(purchase_offer_code_discount: :offer_code)
+    def unavailable_once_per_cart_offer_code_ids(order)
+      associations = { purchase_offer_code_discount: :offer_code }
+      active_reservations = order.purchases.active_once_per_cart_offer_code_reservations.includes(associations)
+      completed_uses = order.purchases.completed_once_per_cart_allocation_uses.includes(associations)
+      (active_reservations + completed_uses)
+        .uniq
         .filter_map do |purchase|
           offer_code = purchase.purchase_offer_code_discount.offer_code
           offer_code.external_id if offer_code.max_purchase_count.present?

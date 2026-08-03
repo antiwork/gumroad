@@ -2842,7 +2842,7 @@ describe OrdersController, :vcr do
       }
 
       expect(response.parsed_body).to include("success" => true, "reservations_released" => true)
-      expect(response.parsed_body["reserved_once_per_cart_ids"]).to eq([])
+      expect(response.parsed_body["unavailable_once_per_cart_ids"]).to eq([])
       expect(purchase.reload).to be_failed
       expect(offer_code.quantity_left).to eq(1)
     end
@@ -2919,8 +2919,9 @@ describe OrdersController, :vcr do
       expect(second_purchase.reload).to be_in_progress
     end
 
-    it "does not claim all reservations were released while another intent remains pending" do
+    it "reports once-per-cart codes that are still reserved or already used" do
       second_product = create(:product, user: seller, price_cents: 10_00)
+      completed_product = create(:product, user: seller, price_cents: 10_00)
       offer_code = create(
         :offer_code,
         user: seller,
@@ -2929,14 +2930,23 @@ describe OrdersController, :vcr do
         once_per_cart: true,
         max_purchase_count: 1
       )
+      completed_offer_code = create(
+        :offer_code,
+        user: seller,
+        products: [completed_product],
+        amount_cents: 1_00,
+        once_per_cart: true,
+        max_purchase_count: 1
+      )
       params = {
         line_items: [
           line_items.first,
           { uid: "unique-id-1", permalink: second_product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 },
+          { uid: "unique-id-2", permalink: completed_product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 },
         ],
       }.merge(common_params)
       order, = Order::CreateService.new(params:).perform
-      first_purchase, second_purchase = order.purchases.order(:id)
+      first_purchase, second_purchase, completed_purchase = order.purchases.order(:id)
       first_purchase.create_processor_payment_intent!(intent_id: "pi_failed")
       second_purchase.create_processor_payment_intent!(intent_id: "pi_pending")
       second_purchase.update!(offer_code:)
@@ -2949,6 +2959,17 @@ describe OrdersController, :vcr do
         pre_discount_minimum_price_cents: second_product.price_cents,
         pre_discount_displayed_price_cents: second_product.price_cents
       )
+      completed_purchase.update!(offer_code: completed_offer_code)
+      completed_purchase.create_purchase_offer_code_discount!(
+        offer_code: completed_offer_code,
+        offer_code_amount: 1_00,
+        offer_code_is_percent: false,
+        once_per_cart: true,
+        once_per_cart_allocation_id: SecureRandom.uuid,
+        pre_discount_minimum_price_cents: completed_product.price_cents,
+        pre_discount_displayed_price_cents: completed_product.price_cents
+      )
+      completed_purchase.update_column(:purchase_state, "successful")
       charge_intent = instance_double(
         ChargeIntent,
         payment_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
@@ -2963,9 +2984,13 @@ describe OrdersController, :vcr do
       }
 
       expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
-      expect(response.parsed_body["reserved_once_per_cart_ids"]).to eq([offer_code.external_id])
+      expect(response.parsed_body["unavailable_once_per_cart_ids"]).to contain_exactly(
+        offer_code.external_id,
+        completed_offer_code.external_id
+      )
       expect(first_purchase.reload).to be_failed
       expect(second_purchase.reload).to be_in_progress
+      expect(completed_purchase.reload).to be_successful
       expect(offer_code.quantity_left).to eq(0)
     end
 

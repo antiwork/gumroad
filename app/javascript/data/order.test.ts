@@ -339,7 +339,7 @@ describe("startOrderCreation", () => {
           offer_codes: [],
         }),
       )
-      .mockResolvedValueOnce(jsonResponse({ success: true, reserved_once_per_cart_ids: [] }));
+      .mockResolvedValueOnce(jsonResponse({ success: true, unavailable_once_per_cart_ids: [] }));
 
     const result = await startOrderCreation(requestData, activeOfferCodes);
 
@@ -374,7 +374,7 @@ describe("startOrderCreation", () => {
           offer_codes: [],
         }),
       )
-      .mockResolvedValueOnce(jsonResponse({ success: true, reserved_once_per_cart_ids: ["offer-code-1"] }));
+      .mockResolvedValueOnce(jsonResponse({ success: true, unavailable_once_per_cart_ids: ["offer-code-1"] }));
 
     const result = await startOrderCreation(requestData, activeOfferCodes);
 
@@ -727,7 +727,7 @@ describe("startClientConfirmOrderCreation", () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": fixedDiscount(100) } }];
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
-      .mockResolvedValueOnce(jsonResponse({ success: true, reserved_once_per_cart_ids: [] }));
+      .mockResolvedValueOnce(jsonResponse({ success: true, unavailable_once_per_cart_ids: [] }));
     const stripe = typia.assert<Stripe>({});
     stripe.confirmPayment = vi.fn().mockResolvedValue({
       error: { type: "invalid_request_error", code: "payment_intent_unexpected_state", message: "Bad state." },
@@ -758,7 +758,7 @@ describe("startClientConfirmOrderCreation", () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100) } }];
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
-      .mockResolvedValueOnce(jsonResponse({ success: true, reserved_once_per_cart_ids: ["offer-code-1"] }));
+      .mockResolvedValueOnce(jsonResponse({ success: true, unavailable_once_per_cart_ids: ["offer-code-1"] }));
     confirmPaymentMock.mockResolvedValueOnce({ error: { message: "Card failed." } });
 
     const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
@@ -770,7 +770,7 @@ describe("startClientConfirmOrderCreation", () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100) } }];
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
-      .mockResolvedValueOnce(jsonResponse({ success: true, reserved_once_per_cart_ids: [] }));
+      .mockResolvedValueOnce(jsonResponse({ success: true, unavailable_once_per_cart_ids: [] }));
     confirmPaymentMock.mockResolvedValueOnce({ error: { message: "Card failed." } });
 
     const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
@@ -782,7 +782,7 @@ describe("startClientConfirmOrderCreation", () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100, false) } }];
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
-      .mockResolvedValueOnce(jsonResponse({ success: true, reserved_once_per_cart_ids: ["offer-code-1"] }));
+      .mockResolvedValueOnce(jsonResponse({ success: true, unavailable_once_per_cart_ids: ["offer-code-1"] }));
     confirmPaymentMock.mockResolvedValueOnce({ error: { message: "Card failed." } });
 
     const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
@@ -828,7 +828,7 @@ describe("startClientConfirmOrderCreation", () => {
       .mockResolvedValueOnce(
         jsonResponse({
           success: true,
-          reserved_once_per_cart_ids: ["reserved-code"],
+          unavailable_once_per_cart_ids: ["reserved-code"],
         }),
       );
     confirmPaymentMock.mockResolvedValueOnce({ error: { message: "Card failed." } });
@@ -845,7 +845,7 @@ describe("startClientConfirmOrderCreation", () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": fixedDiscount(100) } }];
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
-      .mockResolvedValueOnce(jsonResponse({ success: true, reserved_once_per_cart_ids: [] }));
+      .mockResolvedValueOnce(jsonResponse({ success: true, unavailable_once_per_cart_ids: [] }));
     confirmPaymentMock.mockRejectedValueOnce(new Error("network down"));
 
     const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
@@ -858,7 +858,7 @@ describe("startClientConfirmOrderCreation", () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100) } }];
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
-      .mockResolvedValueOnce(jsonResponse({ success: true, reserved_once_per_cart_ids: ["offer-code-1"] }));
+      .mockResolvedValueOnce(jsonResponse({ success: true, unavailable_once_per_cart_ids: ["offer-code-1"] }));
     confirmPaymentMock.mockRejectedValueOnce(new Error("network down"));
 
     const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);

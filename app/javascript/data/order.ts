@@ -173,14 +173,14 @@ export const startOrderCreation = async (
     // eslint-disable-next-line no-console
     console.error("Error occurred processing order", error);
     if (pendingOrderId) {
-      const reservedOncePerCartIds = await reportClientConfirmError(
+      const unavailableOncePerCartIds = await reportClientConfirmError(
         pendingOrderId,
         "confirm",
         error instanceof Error ? error : new Error("Unknown confirmation error"),
         null,
         pendingProcessorIntentId,
       );
-      retryOfferCodes = withoutReservedOncePerCartOfferCodes(retryOfferCodes, reservedOncePerCartIds);
+      retryOfferCodes = withoutUnavailableOncePerCartOfferCodes(retryOfferCodes, unavailableOncePerCartIds);
     }
     const result: CartPurchaseResult = {
       lineItems: requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>(
@@ -409,7 +409,7 @@ export const startClientConfirmOrderCreation = async (
     });
 
     if (confirmResult.error) {
-      const reservedOncePerCartIds = await reportClientConfirmError(
+      const unavailableOncePerCartIds = await reportClientConfirmError(
         order.id,
         "confirm",
         confirmResult.error,
@@ -422,7 +422,7 @@ export const startClientConfirmOrderCreation = async (
           success: false,
           error_message: confirmResult.error.message ?? "Sorry, something went wrong.",
         },
-        withoutReservedOncePerCartOfferCodes(retryOfferCodes, reservedOncePerCartIds),
+        withoutUnavailableOncePerCartOfferCodes(retryOfferCodes, unavailableOncePerCartIds),
       );
     }
 
@@ -461,22 +461,22 @@ export const startClientConfirmOrderCreation = async (
     // captured. Surface it as a pending outcome; a pre-confirmation error is a normal failure.
     if (confirmedReturnUrl) throw new PaymentConfirmedError(confirmedReturnUrl);
     if (preparedOrderId) {
-      const reservedOncePerCartIds = await reportClientConfirmError(
+      const unavailableOncePerCartIds = await reportClientConfirmError(
         preparedOrderId,
         "confirm",
         error instanceof Error ? error : new Error("Unknown confirmation error"),
         selectedMethodType,
         preparedProcessorIntentId,
       );
-      retryOfferCodes = withoutReservedOncePerCartOfferCodes(retryOfferCodes, reservedOncePerCartIds);
+      retryOfferCodes = withoutUnavailableOncePerCartOfferCodes(retryOfferCodes, unavailableOncePerCartIds);
     }
     return ensureValidCartResult(requestData, { lineItems: {}, canBuyerSignUp: false, offerCodes: retryOfferCodes });
   }
 };
 
-const withoutReservedOncePerCartOfferCodes = (
+const withoutUnavailableOncePerCartOfferCodes = (
   offerCodes: OfferCodes,
-  reservedOncePerCartIds: ReadonlySet<string> | null,
+  unavailableOncePerCartIds: ReadonlySet<string> | null,
 ): OfferCodes =>
   offerCodes.flatMap((offerCode) => {
     const products = Object.fromEntries(
@@ -486,9 +486,9 @@ const withoutReservedOncePerCartOfferCodes = (
             discount.type === "fixed" &&
             discount.once_per_cart &&
             discount.once_per_cart_has_usage_limit &&
-            (reservedOncePerCartIds === null ||
+            (unavailableOncePerCartIds === null ||
               !discount.once_per_cart_id ||
-              reservedOncePerCartIds.has(discount.once_per_cart_id))
+              unavailableOncePerCartIds.has(discount.once_per_cart_id))
           ),
       ),
     );
@@ -524,11 +524,11 @@ const reportClientConfirmError = async (
     if (
       typeof result === "object" &&
       result !== null &&
-      "reserved_once_per_cart_ids" in result &&
-      Array.isArray(result.reserved_once_per_cart_ids) &&
-      result.reserved_once_per_cart_ids.every((id): id is string => typeof id === "string")
+      "unavailable_once_per_cart_ids" in result &&
+      Array.isArray(result.unavailable_once_per_cart_ids) &&
+      result.unavailable_once_per_cart_ids.every((id): id is string => typeof id === "string")
     ) {
-      return new Set(result.reserved_once_per_cart_ids);
+      return new Set(result.unavailable_once_per_cart_ids);
     }
     return null;
   } catch {

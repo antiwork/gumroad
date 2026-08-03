@@ -1899,6 +1899,9 @@ class Purchase < ApplicationRecord
   def minimum_paid_price_cents
     return 0 if is_gift_receiver_purchase
     return perceived_price_cents if perceived_price_cents.present? && is_applying_plan_change
+    if perceived_price_cents.present? && is_commission_completion_purchase? && once_per_cart_fixed_offer_code?
+      return [perceived_price_cents.to_i - tip&.value_cents.to_i, 0].max
+    end
 
     if is_recurring_subscription_charge
       minimum_price = subscription.current_subscription_price_cents

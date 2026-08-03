@@ -561,6 +561,24 @@ describe Order::CreateService, :vcr do
         expect(purchase.displayed_price_cents_before_offer_code).to eq(commission_product.price_cents)
         expect(purchase.displayed_price_cents + commission.completion_display_price_cents).to eq(discounted_total)
         expect(purchase.price_cents + commission.completion_price_cents).to eq(discounted_total)
+
+        purchase.create_tip!(value_cents: 10, value_usd_cents: 10)
+        purchase.update!(displayed_price_cents: purchase.displayed_price_cents + 10, price_cents: purchase.price_cents + 10)
+        expect(purchase.displayed_price_cents + commission.completion_display_price_cents).to eq(discounted_total + 20)
+        expect(purchase.price_cents + commission.completion_price_cents).to eq(discounted_total + 20)
+
+        completion_purchase = build(
+          :purchase_in_progress,
+          link: commission_product,
+          seller: seller_1,
+          perceived_price_cents: commission.completion_display_price_cents,
+          is_commission_completion_purchase: true
+        )
+        completion_purchase.inherit_offer_code_from(purchase)
+        completion_purchase.build_tip(value_cents: 10, value_usd_cents: 10)
+        completion_purchase.set_price_and_rate
+        expect(completion_purchase.displayed_price_cents + completion_purchase.tip.value_cents)
+          .to eq(commission.completion_display_price_cents)
       end
 
       it "reserves one capped use for the whole cart" do
