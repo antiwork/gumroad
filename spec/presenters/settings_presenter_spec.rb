@@ -477,6 +477,63 @@ describe SettingsPresenter do
                                                               settings_pages: %w(main team payments billing authorized_applications password third_party_analytics advanced),
                                                             })
     end
+
+    context "when the seller re-authorized with a different scope set than their first grant" do
+      let(:oauth_application) { create(:oauth_application, owner: seller) }
+
+      before do
+        # Order matters: the narrow grant must be the earliest one, which is what the page used to
+        # render. A device-flow re-authorization mints a second grant rather than widening the first.
+        @narrow_grant = Doorkeeper::AccessGrant.create!(application_id: oauth_application.id, resource_owner_id: seller.id,
+                                                        redirect_uri: oauth_application.redirect_uri,
+                                                        expires_in: 1.day.from_now, scopes: "view_profile")
+        @narrow_grant.update!(created_at: 2.days.ago)
+        Doorkeeper::AccessGrant.create!(application_id: oauth_application.id, resource_owner_id: seller.id,
+                                        redirect_uri: oauth_application.redirect_uri,
+                                        expires_in: 1.day.from_now, scopes: "account view_payouts refund_sales")
+      end
+
+      it "renders what the live tokens can reach, not the earliest grant's scopes" do
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application,
+                                          scopes: "account view_payouts refund_sales")
+
+        application = presenter.authorized_applications_props[:authorized_applications].sole
+
+        expect(application[:scopes].to_a).to match_array(%w[account view_payouts refund_sales])
+        expect(application[:first_authorized_at]).to eq(@narrow_grant.created_at.iso8601)
+      end
+
+      it "unions the scopes across every live token" do
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "view_profile")
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "account view_payouts")
+
+        expect(presenter.authorized_applications_props[:authorized_applications].sole[:scopes].to_a)
+          .to match_array(%w[view_profile account view_payouts])
+      end
+
+      it "ignores revoked tokens" do
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "view_profile")
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application,
+                                          scopes: "account refund_sales", revoked_at: 1.hour.ago)
+
+        expect(presenter.authorized_applications_props[:authorized_applications].sole[:scopes].to_a).to eq(%w[view_profile])
+      end
+
+      it "ignores another seller's tokens on the same application" do
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "view_profile")
+        create("doorkeeper/access_token", resource_owner_id: create(:user).id, application: oauth_application, scopes: "account refund_sales")
+
+        expect(presenter.authorized_applications_props[:authorized_applications].sole[:scopes].to_a).to eq(%w[view_profile])
+      end
+
+      it "ignores an expired token, which can reach nothing" do
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "view_profile")
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application,
+                                          scopes: "account refund_sales", expires_in: 1, created_at: 1.day.ago)
+
+        expect(presenter.authorized_applications_props[:authorized_applications].sole[:scopes].to_a).to eq(%w[view_profile])
+      end
+    end
   end
 
   describe "#payments_props" do

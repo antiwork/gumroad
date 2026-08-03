@@ -213,7 +213,7 @@ class SettingsPresenter
       icon_url: application.icon_url,
       is_own_app: application.owner == seller,
       first_authorized_at: application_grants[application.id].created_at.iso8601,
-      scopes: application_grants[application.id].scopes,
+      scopes: live_scopes_for(application) || application_grants[application.id].scopes,
       id: application.external_id,
     } end
 
@@ -300,6 +300,24 @@ class SettingsPresenter
   end
 
   private
+    # What this seller's usable tokens for `application` can actually reach, or nil if there are
+    # none left by the time we look.
+    #
+    # The union across usable tokens, not the first grant's scopes: the device flow mints a fresh
+    # grant per scope set, so a seller who re-authorized with a broader set kept seeing the
+    # narrower list from their first grant while holding a token that could reach refunds and
+    # payout data. `active_for` rather than `revoked_at: nil` so an expired token, which can reach
+    # nothing, is not rendered as a capability.
+    def live_scopes_for(application)
+      scopes = Doorkeeper::AccessToken
+        .active_for(seller)
+        .where(application_id: application.id)
+        .pluck(:scopes)
+        .flat_map { |value| value.to_s.split }
+        .uniq
+      Doorkeeper::OAuth::Scopes.from_array(scopes) if scopes.present?
+    end
+
     # What the payout settings page needs to know about the legal-guardian requirement.
     #
     # Always a hash, never nil, and every key is always present — an omitted key arrives in the
