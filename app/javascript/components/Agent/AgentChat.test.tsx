@@ -1179,7 +1179,9 @@ describe("AgentChat locked state", () => {
 
     const input = screen.getByLabelText("Message");
     fireEvent.change(input, { target: { value: "raise my prices" } });
-    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    const form = input.closest("form");
+    if (!form) throw new Error("composer form not rendered");
+    fireEvent.submit(form);
 
     expect(streamAgentMessage).not.toHaveBeenCalled();
   });
