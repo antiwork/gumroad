@@ -120,7 +120,7 @@ export const Card = ({
                 </MenuItem>
                 <MenuItem variant="danger" onClick={() => onDelete()}>
                   <Trash className="size-5" />
-                  Delete permanently
+                  Remove from library
                 </MenuItem>
               </Menu>
             </PopoverContent>
@@ -144,7 +144,7 @@ export const DeleteProductModal = ({
     try {
       await deletePurchasedProduct({ purchase_id: result.purchase.id });
       onDelete(result);
-      showAlert("Product deleted!", "success");
+      showAlert("Removed from your library!", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong.", "error");
@@ -155,7 +155,7 @@ export const DeleteProductModal = ({
     <Modal
       open={!!deleting}
       onClose={onCancel}
-      title="Delete Product"
+      title="Remove from library"
       footer={
         <>
           <Button onClick={onCancel}>Cancel</Button>
@@ -165,7 +165,11 @@ export const DeleteProductModal = ({
         </>
       }
     >
-      <h4>Are you sure you want to delete {deleting?.product.name ?? ""}?</h4>
+      <h4>Remove {deleting?.product.name ?? ""} from your library?</h4>
+      <p>
+        You keep access through your original download link, and our support team can put the card back if you change
+        your mind.
+      </p>
     </Modal>
   );
 };
@@ -282,7 +286,7 @@ export default function LibraryPage() {
     try {
       await deletePurchasedProduct({ purchase_id: result.purchase.id });
       router.reload();
-      showAlert("Product deleted!", "success");
+      showAlert("Removed from your library!", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong.", "error");

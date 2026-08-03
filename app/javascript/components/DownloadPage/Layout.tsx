@@ -355,7 +355,7 @@ const PurchaseDeleteButton = ({
     setIsDeleting(true);
     try {
       await deletePurchasedProduct({ purchase_id });
-      showAlert("Product deleted!", "success");
+      showAlert("Removed from your library!", "success");
       window.location.href = Routes.library_path();
     } catch (e) {
       assertResponseError(e);
@@ -367,12 +367,12 @@ const PurchaseDeleteButton = ({
   return (
     <>
       <Button color="danger" onClick={() => setIsDeleteModalOpen(true)}>
-        Delete permanently
+        Remove from library
       </Button>
       <Modal
         open={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
-        title="Delete Product"
+        title="Remove from library"
         footer={
           <>
             <Button onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
@@ -382,9 +382,15 @@ const PurchaseDeleteButton = ({
           </>
         }
       >
-        <span className="inline">
-          Are you sure you want to delete <b>{product_name ?? ""}</b>?
-        </span>
+        <div>
+          <span className="inline">
+            Remove <b>{product_name ?? ""}</b> from your library?
+          </span>
+          <p>
+            You keep access through this page's link, and our support team can put the card back if you change your
+            mind.
+          </p>
+        </div>
       </Modal>
     </>
   );
