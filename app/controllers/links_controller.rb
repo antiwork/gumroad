@@ -1402,11 +1402,16 @@ class LinksController < ApplicationController
     # audit rows — and it is why the report has never fired.
     #
     # `confirmed_removed_variant_ids` is the witness. The editor sends it beside
-    # `deletion_operations` and both derive from the same in-session list, so a
+    # the deletion operations and both derive from the same in-session list, so a
     # contract-aware payload that confirms a removal while naming none of it is
     # self-contradictory: the seller pressed "Yes, remove" and the request did
     # not ask for it. Under Rule 1 the server correctly does nothing, which is
     # what makes the failure silent.
+    #
+    # A current client cannot produce that contradiction — both lists come off
+    # one snapshot. This is a tripwire for the clients that can: a stale bundle,
+    # or a path nobody has found yet. It does NOT catch a row dropped from state
+    # with no confirmed id, which is undetectable here by contract design.
     #
     # Report, not guard: acting on the confirmed ids would delete rows through a
     # route the contract deliberately closed.
