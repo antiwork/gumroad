@@ -410,7 +410,7 @@ export const Product = ({
 
   return (
     <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
-      <Covers covers={product.covers} mainCoverId={product.main_cover_id} />
+      <Covers covers={product.covers} mainCoverId={product.main_cover_id} productName={product.name} />
       {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
       <section className="lg:border-r">
         <header className="grid gap-4 p-6 not-first:border-t">
@@ -750,7 +750,15 @@ export const Product = ({
   );
 };
 
-const Covers = ({ covers, mainCoverId }: { covers: AssetPreview[]; mainCoverId: string | null }) => {
+const Covers = ({
+  covers,
+  mainCoverId,
+  productName,
+}: {
+  covers: AssetPreview[];
+  mainCoverId: string | null;
+  productName: string;
+}) => {
   const [activeCoverId, setActiveCoverId] = React.useState(mainCoverId);
   useOnChange(() => setActiveCoverId(mainCoverId), [mainCoverId]);
 
@@ -761,6 +769,7 @@ const Covers = ({ covers, mainCoverId }: { covers: AssetPreview[]; mainCoverId: 
       covers={covers}
       activeCoverId={activeCoverId}
       setActiveCoverId={setActiveCoverId}
+      productName={productName}
       className={activeCoverId ? "" : "pb-[25%]"}
     />
   );
