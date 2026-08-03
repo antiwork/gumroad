@@ -70,10 +70,10 @@ module Product::Prices
     # offers a free-entry amount box whose minimum on the free option is 0 and a buyer can
     # pay full price for the free tier (gumroad-private#1660).
     if variant_categories_alive.joins(:variants).merge(BaseVariant.alive).sum("base_variants.price_difference_cents") > 0
-      update_column(:customizable_price, false) if customizable_price?
+      write_customizable_price_column(false)
       return
     end
-    update_column(:customizable_price, true)
+    write_customizable_price_column(true)
   end
 
   def price_range=(price)
@@ -326,6 +326,15 @@ module Product::Prices
       else
         alive_prices.where(currency: price_currency_type)
       end
+    end
+
+    def write_customizable_price_column(value)
+      return if customizable_price? == value
+      # update_column skips the before_update hook that refreshes the search index, and
+      # customizable_price is an indexed field PriceCheckerService filters on — so the
+      # refresh has to be requested by hand.
+      update_column(:customizable_price, value)
+      enqueue_index_update_for(["customizable_price"])
     end
 
     # Private: Called only on create to instantiate Price object(s) and associate it to the newly created product.
