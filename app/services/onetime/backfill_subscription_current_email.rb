@@ -6,6 +6,9 @@
 # reassignment, so a member whose email changed BEFORE the field existed stays unfindable by the
 # address the seller has in hand — the exact ticket that motivated it.
 #
+# Run it AFTER AddSubscriptionCurrentEmailToPurchasesIndex: the purchases mapping is
+# `dynamic: :strict`, so before that migration every write carrying the field 400s.
+#
 # Only memberships whose indexed `email` already differs from the member's current account email are
 # reindexed. The rest are findable by `email` today and get the field for free the next time the
 # member changes their address, so widening the scope would buy nothing and cost millions of writes.
