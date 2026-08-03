@@ -42,6 +42,7 @@ describe User, :vcr do
       it "still records the email change history the admin surface reads" do
         user = create(:user, email: "before@example.com")
 
+        user.skip_reconfirmation!
         user.update!(email: "after@example.com", otp_secret_key: ROTP::Base32.random_base32)
 
         changes = user.versions_for(:email).first.changes
