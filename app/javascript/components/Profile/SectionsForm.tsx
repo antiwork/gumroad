@@ -1,4 +1,16 @@
-import { Bell, Box, ChevronDown, ChevronUp, Copy, Envelope, FileDetail, Grid, Plus, Trash } from "@boxicons/react";
+import {
+  Bell,
+  Box,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  CopyPlus,
+  Envelope,
+  FileDetail,
+  Grid,
+  Plus,
+  Trash,
+} from "@boxicons/react";
 import { EditorContent } from "@tiptap/react";
 import { isEqual, sortBy } from "lodash-es";
 import * as React from "react";
@@ -194,12 +206,43 @@ const OptionRow = ({
   </Row>
 );
 
+const withFreshUpsellCards = (section: Section): Section => {
+  if (section.type !== "SellerProfileRichTextSection") return section;
+  // An upsellCard's `attrs.id` is a persisted Upsell row. SaveContentUpsellsService only mints a
+  // new one for a card that arrives without an id, so a copy keeping the original's id makes both
+  // sections share one Upsell — and removing the card from either then soft-deletes it (and its
+  // offer code) out from under the other.
+  const content = section.text.content;
+  if (!Array.isArray(content)) return section;
+  return {
+    ...section,
+    text: {
+      ...section.text,
+      content: content.map((node: unknown) => {
+        if (!isUpsellCard(node)) return node;
+        const { id: _id, ...attrs } = node.attrs;
+        return { ...node, attrs };
+      }),
+    },
+  };
+};
+
+const isUpsellCard = (node: unknown): node is { type: string; attrs: Record<string, unknown> } =>
+  typeof node === "object" &&
+  node !== null &&
+  "type" in node &&
+  node.type === "upsellCard" &&
+  "attrs" in node &&
+  typeof node.attrs === "object" &&
+  node.attrs !== null;
+
 const SectionRow = ({
   section,
   state,
   disabled,
   shouldFocusHeader,
   updateSection,
+  onDuplicate,
   onDelete,
 }: {
   section: Section;
@@ -207,6 +250,7 @@ const SectionRow = ({
   disabled: boolean;
   shouldFocusHeader: boolean;
   updateSection: (section: Section) => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) => {
   const uid = React.useId();
@@ -239,11 +283,19 @@ const SectionRow = ({
         <ReorderingHandle disabled={disabled} />
         {SECTION_TYPE_ICONS[section.type]}
         <h3>{sectionTitle}</h3>
+        {/* A named section otherwise shows only its own heading, so several sections on one page
+            read as a list of unrelated titles with no clue which block each one labels. */}
+        {section.header ? <small>{SECTION_TYPE_LABELS[section.type]}</small> : null}
       </RowContent>
       <RowActions>
         <WithTooltip tip="Copy link">
           <Button size="icon" onClick={copyLink} aria-label="Copy link">
             <Copy className="size-5" />
+          </Button>
+        </WithTooltip>
+        <WithTooltip tip="Duplicate">
+          <Button size="icon" onClick={onDuplicate} disabled={disabled} aria-label="Duplicate section">
+            <CopyPlus className="size-5" />
           </Button>
         </WithTooltip>
         <DrawerToggle
@@ -611,10 +663,11 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     ? deletionModalSection.header || SECTION_TYPE_LABELS[deletionModalSection.type]
     : "";
 
-  React.useEffect(
-    () => onChange?.({ sections, tabs: tabsWithoutIds(tabs), selectedTabIndex }),
-    [onChange, sections, selectedTabIndex, tabs],
-  );
+  React.useEffect(() => {
+    // Braces, not a concise body: React reads a returned value as a cleanup function, and `onChange`
+    // is typed `=> void`, which does not stop a caller returning something.
+    onChange?.({ sections, tabs: tabsWithoutIds(tabs), selectedTabIndex });
+  }, [onChange, sections, selectedTabIndex, tabs]);
 
   const updateSection = (updated: Section) => {
     if (disabled) return;
@@ -692,7 +745,6 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
         return {
           ...commonProps,
           type,
-          header: `Subscribe to receive email updates from ${props.creator_profile.name}.`,
           button_label: "Subscribe",
         };
       case "SellerProfileFeaturedProductSection":
@@ -719,6 +771,27 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     );
     setLastAddedSectionId(section.id);
     setSections((currentSections) => [...currentSections, section]);
+    setSelectedTab(nextTabs.find((tab) => tab.id === selectedTab.id) ?? selectedTab);
+    setTabs(nextTabs);
+  };
+
+  const duplicateSection = (sectionId: string) => {
+    if (disabled || !selectedTab) return;
+
+    const original = sections.find((section) => section.id === sectionId);
+    if (!original) return;
+
+    const copy = withFreshUpsellCards({ ...original, id: GuidGenerator.generate() });
+    const nextTabs = tabs.map((tab) => {
+      if (tab.id !== selectedTab.id) return tab;
+      const index = tab.sections.indexOf(sectionId);
+      if (index < 0) return tab;
+      const nextSections = [...tab.sections];
+      nextSections.splice(index + 1, 0, copy.id);
+      return { ...tab, sections: nextSections };
+    });
+    setLastAddedSectionId(copy.id);
+    setSections((currentSections) => [...currentSections, copy]);
     setSelectedTab(nextTabs.find((tab) => tab.id === selectedTab.id) ?? selectedTab);
     setTabs(nextTabs);
   };
@@ -786,6 +859,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
               disabled={disabled}
               shouldFocusHeader={section.id === lastAddedSectionId}
               updateSection={updateSection}
+              onDuplicate={() => duplicateSection(section.id)}
               onDelete={() => setDeletionModalSectionId(section.id)}
             />
           ))}
