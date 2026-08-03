@@ -257,6 +257,23 @@ describe UsersController, :vcr, type: :controller do
       end
     end
 
+    it "rejects an offset past the end of the catalogue, so a huge one cannot page the table" do
+      create_products(2)
+
+      aggregate_failures do
+        # The last valid page starts at the total: it is legitimately empty, and a page asking for
+        # it is how a client confirms it has read everything.
+        get :landing_products, params: { offset: 2, limit: 2 }
+        expect(response).to have_http_status(:ok)
+
+        [3, 10_000, 10**12].each do |offset|
+          get :landing_products, params: { offset:, limit: 2 }
+          expect(response).to have_http_status(:bad_request), "expected 400 for offset #{offset}"
+          expect(response.parsed_body["success"]).to be(false)
+        end
+      end
+    end
+
     it "is never cacheable by shared caches — the prices half derives from the visitor's IP" do
       seller.update!(custom_html: %(<div data-gumroad-product="x"></div>))
       create_products(1)

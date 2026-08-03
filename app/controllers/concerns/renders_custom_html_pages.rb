@@ -959,6 +959,11 @@ module RendersCustomHtmlPages
       return render json: { success: false }, status: :bad_request if offset.nil? || offset.negative? || limit.nil? || limit < 1
 
       limit = [limit, Pages::ProfileData::MAX_ITEMS].min
+      # Rejected against the count BEFORE paging: MySQL walks and discards every row preceding a
+      # large OFFSET, so an unbounded one is a cheap way to make this endpoint expensive from
+      # outside, and each distinct offset would also take its own cache entry.
+      return render json: { success: false }, status: :bad_request if offset > Pages::ProfileData.products_total(seller)
+
       page = Pages::ProfileData.products_page(seller, offset:, limit:)
       # The prices half is uncached and derived from the visitor's IP, so this response must
       # never be shared — same rule as landing_iframe_content. And same as there, the build is
