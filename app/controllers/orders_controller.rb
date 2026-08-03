@@ -211,6 +211,7 @@ class OrdersController < ApplicationController
     end
 
     def offer_codes_after_payment(order, offer_codes, purchase_responses, line_items)
+      line_items = Array(line_items)
       candidates = Order::OfferCodeRecoveryService.merge_responses(
         offer_codes,
         Order::OfferCodeRecoveryService.for_order(order)

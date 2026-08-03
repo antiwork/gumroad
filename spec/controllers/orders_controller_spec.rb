@@ -789,6 +789,19 @@ describe OrdersController, :vcr do
         end
       end
 
+      it "handles a request without line items" do
+        allow(controller).to receive(:skip_recaptcha?).and_return(true)
+        order_purchases = double("order_purchases", successful: [])
+        allow(order_purchases).to receive(:each).and_return([])
+        order = double("order", persisted?: false, purchases: order_purchases, send_charge_receipts: nil)
+        allow(Order::CreateService).to receive(:new).and_return(instance_double(Order::CreateService, perform: [order, {}, []]))
+        allow(Order::ChargeService).to receive(:new).and_return(instance_double(Order::ChargeService, perform: {}))
+
+        post :create
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
       it "returns once-per-cart codes when charging fails after order creation" do
         purchases = double("order_purchases", successful: [])
         allow(purchases).to receive(:each).and_return([])
