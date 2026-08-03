@@ -418,8 +418,44 @@ describe Order do
         Purchase::MarkFailedService.new(failed).perform
         expect(order.reload).to be_partially_successful
 
-        expect(order).not_to receive(:update_columns)
-        order.record_charge_outcome!
+        expect do
+          order.record_charge_outcome!
+        end.not_to change { order.reload.updated_at }
+      end
+    end
+
+    context "when the only successful line item is a test purchase" do
+      # A seller testing their own product is not a buyer half-served, so a test purchase beside a
+      # real failure must not mark the order partial.
+      it "leaves the order unflagged" do
+        test_item = create(:test_purchase, link: product_1)
+        failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << test_item << failed
+
+        Purchase::MarkFailedService.new(failed).perform
+
+        expect(order.reload).not_to be_partially_successful
+      end
+    end
+
+    context "when the flag is written concurrently with another bit on the same order" do
+      # `flags` is a shared bitfield, so the write must be a bitwise OR rather than a
+      # read-modify-write of a stale in-memory value.
+      it "does not clobber a bit set after this order was loaded" do
+        succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << succeeded << failed
+        succeeded.update_balance_and_mark_successful!
+
+        stale = Order.find(order.id)
+        Order.where(id: order.id).update_all("flags = flags | 1")
+
+        Purchase::MarkFailedService.new(failed).perform
+        stale.record_charge_outcome!
+
+        order.reload
+        expect(order).to be_partially_successful
+        expect(order.flags & 1).to eq(1)
       end
     end
   end

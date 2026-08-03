@@ -72,15 +72,19 @@ class Order < ApplicationRecord
   # predicate can never go back to false (purchase states are terminal), so a still-in-progress
   # sibling cannot change the answer, only when it is written.
   #
-  # Written with `update_columns` because this is derived bookkeeping: an ordinary save here would
-  # be the first order-row save after a purchase succeeded and would fire `schedule_review_reminder!`
-  # from the charge path rather than from the purchase-success transition that owns it.
+  # `update_all` with a bitwise OR rather than a save: sibling line items in the same order settle
+  # concurrently, and a read-modify-write of `flags` would let one overwrite the other's bits.
+  # It also keeps this derived bookkeeping out of `after_save :schedule_review_reminder!` — the
+  # order row is otherwise saved only at creation, so an ordinary save from the charge path would
+  # fire the reminder hook that the purchase-success transition owns.
   def record_charge_outcome!
-    partial = purchases.all_success_states_including_test.exists? && purchases.failed.exists?
+    partial = purchases.all_success_states.exists? && purchases.failed.exists?
     return if partially_successful? == partial
 
+    bit = self.class.flag_mapping["flags"][:partially_successful]
+    sql = partial ? "flags = flags | #{bit}" : "flags = flags & ~#{bit}"
+    self.class.where(id:).update_all("#{sql}, updated_at = #{self.class.connection.quote(Time.current)}")
     self.partially_successful = partial
-    update_columns(flags:, updated_at: Time.current)
   end
 
   # Called from Purchase when a purchase transitions to a successful state. The
