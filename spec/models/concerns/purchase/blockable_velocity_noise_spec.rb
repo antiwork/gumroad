@@ -98,6 +98,25 @@ RSpec.describe Purchase::Blockable do
 
         expect(PlatformBlock.active.find_by(object_value: ip)).to be_present
       end
+
+      it "still blocks the ip when a guest checkout merely types the seller's email (gp#1755 review)" do
+        seller = create(:user)
+        4.times do |i|
+          create(:failed_purchase, link: create(:product, user: seller), seller:,
+                                   purchaser: nil, email: seller.email,
+                                   browser_guid: guid, ip_address: ip,
+                                   stripe_fingerprint: "spoof#{i}",
+                                   stripe_error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT)
+        end
+
+        create(:failed_purchase, link: create(:product, user: seller), seller:,
+                                 browser_guid: guid, ip_address: ip,
+                                 stripe_fingerprint: "live-spoof",
+                                 stripe_error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT)
+              .send(:block_ip_address_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: ip)).to be_present
+      end
     end
 
     context "when the issuer answered about the card" do

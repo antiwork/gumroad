@@ -917,12 +917,14 @@ module Purchase::Blockable
 
       # Excludes the seller testing their own paid flow (gumroad-private#1755): several
       # self-purchases on new cards is the documented way to verify checkout, and it should not
-      # arm a threshold meant for a stranger card-testing the storefront.
+      # arm a threshold meant for a stranger card-testing the storefront. Only a confirmed
+      # `purchaser_id` match proves the seller made the purchase — a guest checkout's typed-in
+      # email is unauthenticated and a card tester can set it to the seller's own address to
+      # dodge the threshold entirely, so email alone must never exempt a row.
       recent_failures = countable_card_testing_failures
                           .where("ip_address = ?", ip_address)
                           .where(created_at: CARD_TESTING_IP_ADDRESS_WATCH_PERIOD.ago..)
                           .where("purchaser_id IS NULL OR purchaser_id != ?", seller.id)
-                          .where("email IS NULL OR email != ?", seller.email)
 
       return if distinct_card_count(recent_failures) < MAX_NUMBER_OF_FAILED_FINGERPRINTS
 
