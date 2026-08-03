@@ -54,8 +54,13 @@ describe Onetime::SeedTaxonomies do
   end
 
   it "refuses to run when the seed file's skip flag is set" do
-    stub_const("ENV", ENV.to_hash.merge("SKIP_TAXONOMY_CREATION" => "1"))
+    # Set the real variable rather than stub_const("ENV", hash): ENV is not a Hash, so replacing it
+    # with one passes here while diverging from what the seed file's own top-level guard reads.
+    original = ENV["SKIP_TAXONOMY_CREATION"]
+    ENV["SKIP_TAXONOMY_CREATION"] = "1"
 
     expect { described_class.process }.to raise_error(/refusing to report success/)
+  ensure
+    ENV["SKIP_TAXONOMY_CREATION"] = original
   end
 end
