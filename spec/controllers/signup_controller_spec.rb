@@ -143,6 +143,38 @@ describe SignupController, type: :controller, inertia: true do
       end
     end
 
+    describe "the only account holding the email was deleted" do
+      before do
+        @deleted = create(:user, password: "password")
+        @deleted.update!(deleted_at: Time.current)
+      end
+
+      it "names the deleted account and routes to support instead of claiming the account exists" do
+        post "create", params: { user: { email: @deleted.email, password: "password" } }
+
+        expect(response).to redirect_to(signup_path)
+        expect(flash[:warning]).to eq(User::DELETED_ACCOUNT_HOLDS_EMAIL_ERROR)
+        expect(flash[:warning]).to include("support@gumroad.com")
+        expect(flash[:warning]).to_not include("An account already exists")
+        expect(controller.user_signed_in?).to eq false
+      end
+
+      it "returns the same message over json" do
+        post "create", params: { user: { email: @deleted.email, password: "password" } }, format: :json
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error_message"]).to eq(User::DELETED_ACCOUNT_HOLDS_EMAIL_ERROR)
+      end
+
+      it "still says the account already exists when a live account holds the email" do
+        live = create(:user, password: "password")
+
+        post "create", params: { user: { email: live.email, password: "wrongpassword" } }
+
+        expect(flash[:warning]).to eq("An account already exists with this email.")
+      end
+    end
+
     it "creates a user" do
       user = build(:user, password: "password")
       post "create", params: { user: { email: user.email, password: "password" } }
