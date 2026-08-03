@@ -431,7 +431,7 @@ export const startClientConfirmOrderCreation = async (
     // The return page resolves a captured payment to its durable outcome (receipt, pending, or
     // failed-with-restored-cart), so every post-capture error carries its URL.
     confirmedReturnUrl = `${Routes.checkout_return_url(order.id)}?payment_intent=${encodeURIComponent(
-      clientSecret.split("_secret")[0],
+      clientSecret.split("_secret")[0] ?? "",
     )}`;
 
     // Inline methods resolve in-page, then finalize via the (idempotent) AJAX endpoint.
