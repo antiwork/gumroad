@@ -8,7 +8,7 @@ class Order::OfferCodeRecoveryService
 
   def self.merge_responses(*response_groups)
     response_groups.flatten.each_with_object({}) do |response, merged|
-      key = response[:code].to_s.strip.downcase
+      key = OfferCode.normalize_code(response[:code])
       if merged.key?(key)
         merged[key][:products].merge!(response[:products])
       else
@@ -32,7 +32,7 @@ class Order::OfferCodeRecoveryService
     candidates.each_with_object([]) do |candidate, sanitized|
       return [] unless candidate.respond_to?(:key?) && candidate.respond_to?(:[])
 
-      code = candidate[:code].to_s.strip.downcase
+      code = OfferCode.normalize_code(candidate[:code])
       product_params = candidate[:products]
       return [] if code.blank? || code.bytesize > MAX_RETRY_OFFER_CODE_FIELD_BYTES
       return [] unless product_params.respond_to?(:each_pair) && product_params.respond_to?(:size)

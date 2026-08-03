@@ -397,7 +397,7 @@ class Order::CreateService
     end
 
     def normalize_discount_code(code)
-      code.to_s.unicode_normalize(:nfc).strip.downcase
+      OfferCode.normalize_code(code)
     end
 
     def build_purchase_params(product, purchase_params)

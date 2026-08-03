@@ -78,6 +78,13 @@ class OfferCode < ApplicationRecord
     where("NOT EXISTS (SELECT 1 FROM offer_codes_excluded_products WHERE offer_codes_excluded_products.offer_code_id = offer_codes.id AND offer_codes_excluded_products.product_id = ?)", product.id)
   }
 
+  # Codes may contain accented Latin characters (see the format validation above), so NFC-normalize
+  # before comparing — a decomposed client submission must match its precomposed stored form. For
+  # DB lookups the collation forgives everything here except leading whitespace.
+  def self.normalize_code(code)
+    code.to_s.unicode_normalize(:nfc).strip.downcase
+  end
+
   def is_valid_for_purchase?(purchase_quantity: 1, excluding_purchase: nil)
     return true if max_purchase_count.nil?
 

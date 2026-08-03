@@ -18,7 +18,7 @@ class OfferCodesController < ApplicationController
   }.freeze
 
   def compute_discount
-    result = OfferCodeDiscountComputingService.new(params[:code], params[:products], buyer: logged_in_user).process
+    result = OfferCodeDiscountComputingService.new(OfferCode.normalize_code(params[:code]), params[:products], buyer: logged_in_user).process
 
     response = if result[:error_code].present?
       { valid: false, error_code: result[:error_code], error_message: INELIGIBILITY_MESSAGES[result[:error_code]] }

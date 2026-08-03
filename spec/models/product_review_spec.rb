@@ -149,7 +149,70 @@ describe ProductReview do
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
     end
 
-    it "doesn't send emails on updates" do
+    it "delays the email for a review created without a message, so the rating autosave doesn't announce an empty review", :freeze_time do
+      # The star tap autosaves a message-less row a minute or two before the buyer submits their
+      # text (gumroad-private#1783); the delayed render's claim loses to the blank→present arrival
+      # send once the text has arrived.
+      product.user.update!(disable_reviews_email: false)
+      product_review.message = nil
+
+      expect do
+        product_review.save!
+      end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+        .at(ProductReview::SELLER_NOTIFICATION_DELAY.from_now)
+        .with { |id| # `.with(product_review.id)` would capture nil, the id before save
+          expect(id).to eq(product_review.id)
+        }
+    end
+
+    it "sends when the buyer's message arrives on an autosaved rating-only review" do
+      product.user.update!(disable_reviews_email: false)
+      product_review.message = nil
+      product_review.save!
+
+      expect do
+        product_review.update!(message: "Exactly what I needed")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted).with(product_review.id)
+    end
+
+    it "doesn't send when the message arrives after the seller was already told about the review" do
+      # The buyer tapped stars, the delayed render reported the rating-only review, and they came
+      # back later to write the text. That is an edit of a review the seller has seen, not a
+      # submission they haven't.
+      product.user.update!(disable_reviews_email: false)
+      product_review.message = nil
+      product_review.save!
+      product_review.update_columns(seller_notified_at: Time.current)
+
+      expect do
+        product_review.update!(message: "Exactly what I needed")
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+    end
+
+    it "doesn't send when an existing message is edited" do
+      product.user.update!(disable_reviews_email: false)
+
+      product_review.save!
+
+      expect do
+        product_review.update!(message: "Revised: #{product_review.message}")
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+    end
+
+    it "doesn't send when a blank message is overwritten with another blank" do
+      # /product_reviews/set is a public PUT, so a client can write "" or whitespace over a
+      # nil message; without the present? term that would email a text-less review — the exact
+      # bug this fixes.
+      product.user.update!(disable_reviews_email: false)
+      product_review.message = nil
+      product_review.save!
+
+      expect do
+        product_review.update!(message: "   ")
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+    end
+
+    it "doesn't send on rating-only updates" do
       product.user.update!(disable_reviews_email: false)
 
       product_review.save!

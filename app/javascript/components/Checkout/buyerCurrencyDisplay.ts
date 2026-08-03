@@ -37,7 +37,7 @@ export type CheckoutBuyerCurrencyDisplay = {
 // Everything the checkout table needs to render a non-USD amount: which currency to label it
 // with, how many minor units make one unit of it, and the rate that turns a canonical USD cent
 // figure into that currency. Both non-USD checkout lanes produce one of these — the FX-quoted
-// buyer-currency lane (rate from the locked quote) and the method-forced listed-currency lane
+// buyer-currency lane (rate from the locked quote) and the direct-listed lane
 // (rate from the product's stored USD exchange rate) — so every formatting helper below works
 // the same way for either, and the rest of the checkout never has to know which lane it is on.
 export type CheckoutLocalCurrencyFormat = Pick<CheckoutBuyerCurrencyDisplay, "currencyCode" | "rate" | "subunitToUnit">;
@@ -55,6 +55,8 @@ export type CheckoutLocalCurrencyFormat = Pick<CheckoutBuyerCurrencyDisplay, "cu
 // to checked while logged in.
 export type CheckoutListedCurrencyOptions = Pick<CheckoutBuyerCurrencyOptions, "paymentMethod"> & {
   usingSavedCard?: boolean;
+  hasTip?: boolean;
+  hasShipping?: boolean;
 };
 
 export const isRecurringUpiPaymentConfig = (checkoutPayment: CheckoutPaymentConfig) => {
@@ -125,12 +127,8 @@ export const getCheckoutBuyerCurrencyQuoteToken = (
 ): string | null =>
   getCheckoutBuyerCurrencyDisplay(surcharges, options) ? (surcharges?.buyer_currency_quote?.token ?? null) : null;
 
-// The method-forced local-method lane (a single product priced in the currency the payment method
-// forces — a BRL product paid with Pix, an EUR product with iDEAL, an INR product with UPI).
-// Charge::MethodForcedPresentment charges that listed price directly and there is no FX quote
-// anywhere in the flow, so the cart must be shown in the listed currency: converting the listed
-// price to USD for display (what happens when this returns null) showed a Brazilian buyer a
-// US$9.16 total next to a Stripe sheet about to charge R$49.90 (gumroad-private#1371).
+// Direct-listed presentment, reached through either a method-forced local method or the matching
+// buyer-currency card ramp. There is no FX quote, so the cart must be shown in the listed currency.
 //
 // `rate` is the product's own stored USD exchange rate — the same rate the charge uses to convert
 // the USD-side amounts (tax, shipping) back into the listed currency — so the displayed rows and
@@ -141,11 +139,9 @@ export const getCheckoutBuyerCurrencyQuoteToken = (
 // single-item, priced-in-that-currency shape the lane assumes.
 //
 // The payment-selection gates matter as much as the cart shape, and for the same reason as on the
-// FX-quoted lane above: only a new card confirmed through the Payment Element reaches
-// Charge::MethodForcedPresentment. A saved card (the default whenever the buyer has one on file)
-// and PayPal both charge canonical USD through other paths, so showing listed-currency totals for
-// them would recreate exactly the display/charge mismatch this lane exists to fix — just pointed
-// at a different set of buyers.
+// FX-quoted lane above: only a new card confirmed through the Payment Element reaches this
+// client-confirm presentment path. A saved card (the default whenever the buyer has one on file)
+// and PayPal both charge canonical USD through other paths.
 export const getCheckoutListedCurrencyDisplay = (
   checkoutPayment: CheckoutPaymentConfig,
   // Only the pricing/plan fields are read, so callers can pass cart items directly and tests
@@ -155,11 +151,17 @@ export const getCheckoutListedCurrencyDisplay = (
     pay_in_installments?: boolean;
     recurrence?: string | null;
   }[],
-  { paymentMethod = "card", usingSavedCard = false }: CheckoutListedCurrencyOptions = {},
+  {
+    paymentMethod = "card",
+    usingSavedCard = false,
+    hasTip = false,
+    hasShipping = false,
+  }: CheckoutListedCurrencyOptions = {},
 ): CheckoutLocalCurrencyFormat | null => {
   if (checkoutPayment.integration !== "payment_element_client_confirm") return null;
   const listedCurrency = checkoutPayment.elements_options.listed_currency_display;
   if (!listedCurrency) return null;
+  if (checkoutPayment.elements_options.direct_listed_card && (hasTip || hasShipping)) return null;
   if (usingSavedCard || paymentMethod !== "card") return null;
   if (cartItems.length !== 1) return null;
 
@@ -247,7 +249,7 @@ export const formatPresentmentCents = (
   buyerCurrencyDisplay: Pick<CheckoutBuyerCurrencyDisplay, "currencyCode" | "subunitToUnit">,
 ) => formatMinorUnitPriceWithIntl(buyerCurrencyDisplay.currencyCode, cents, buyerCurrencyDisplay.subunitToUnit);
 
-// All the listed-currency amounts the checkout table displays on the method-forced lane. Two
+// All the listed-currency amounts the checkout table displays on the direct-listed lane. Two
 // different kinds of input meet here, and keeping them straight is the whole point of this
 // function:
 //
@@ -257,7 +259,7 @@ export const formatPresentmentCents = (
 //     would round twice and could disagree with the charge by a cent.
 //   * Tax and shipping come back from the surcharge endpoint in USD, so they are converted with
 //     the product's stored exchange rate — the same rate
-//     Charge::MethodForcedPresentment#direct_listed_amount_result uses on those same two figures,
+//     Charge::DirectListedPresentment uses on those same two figures,
 //     so the totals shown here and the amount charged agree by construction.
 //
 // Returns null when there is no listed-currency lane, leaving every row in canonical USD.

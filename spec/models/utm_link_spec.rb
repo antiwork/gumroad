@@ -446,6 +446,24 @@ describe UtmLink do
         expect(utm_link.utm_url).to eq("#{post.full_url}?utm_campaign=#{utm_link.utm_campaign}&utm_medium=#{utm_link.utm_medium}&utm_source=#{utm_link.utm_source}")
       end
     end
+
+    context "when the target resource row no longer exists" do
+      it "returns nil instead of raising for a dangling product_page target" do
+        product = create(:product)
+        utm_link = create(:utm_link, target_resource_type: :product_page, target_resource_id: product.id, seller: product.user)
+        product.destroy!
+
+        expect(utm_link.utm_url).to be_nil
+      end
+
+      it "returns nil instead of raising for a dangling post_page target" do
+        post = create(:audience_post)
+        utm_link = create(:utm_link, target_resource_type: :post_page, target_resource_id: post.id, seller: post.seller)
+        post.destroy!
+
+        expect(utm_link.utm_url).to be_nil
+      end
+    end
   end
 
   describe "#target_resource" do
