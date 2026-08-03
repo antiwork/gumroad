@@ -1,10 +1,19 @@
-export const cancellationRebuttalOptions = {
+// Keys first as a const tuple so the union derives from them: Object.keys widens to string[],
+// and `assertionStyle: "never"` rules out casting it back.
+export const cancellationRebuttalOptionKeys = [
+  "customer_did_not_request",
+  "customer_reactivated",
+  "customer_agreed_to_keep",
+  "other",
+] as const;
+export type CancellationRebuttalOption = (typeof cancellationRebuttalOptionKeys)[number];
+
+export const cancellationRebuttalOptions: Record<CancellationRebuttalOption, string> = {
   customer_did_not_request: "The customer did not request cancellation",
   customer_reactivated: "The customer reactivated their subscription",
   customer_agreed_to_keep: "The customer agreed to keep the subscription",
   other: "Other",
 };
-export type CancellationRebuttalOption = keyof typeof cancellationRebuttalOptions;
 
 export const reasonForWinningOptions = {
   cardholder_withdrew_dispute: "The cardholder withdrew the dispute",

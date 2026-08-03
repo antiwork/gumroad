@@ -66,7 +66,7 @@ describe FightDisputeJob do
       end
     end
 
-    context "when the dispute evidence has not been submitted" do
+    context "when the dispute evidence has not been saved" do
       context "when the seller hasn't been contacted" do
         before do
           dispute_evidence.update_as_not_seller_contacted!
@@ -91,17 +91,19 @@ describe FightDisputeJob do
       end
 
       context "when the seller has been contacted" do
-        context "when the seller has submitted the evidence" do
+        context "when the seller has saved a response" do
           before do
             dispute_evidence.update_as_seller_submitted!
           end
 
+          # The whole point of holding it: Stripe accepts one submission, so a seller who answers
+          # early keeps the rest of their window to revise. Forwarding here would spend it at hour 1.
           context "when there are still hours left to submit evidence" do
             before do
               dispute_evidence.update_as_seller_contacted!
             end
 
-            it_behaves_like "submitted dispute evidence"
+            it_behaves_like "does nothing"
           end
 
           context "when there are no more hours left to submit evidence" do
@@ -113,7 +115,7 @@ describe FightDisputeJob do
           end
         end
 
-        context "when the seller has not submitted the evidence" do
+        context "when the seller has not saved a response" do
           context "when there are still hours left to submit evidence" do
             before do
               dispute_evidence.update_as_seller_contacted!

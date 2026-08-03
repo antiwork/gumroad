@@ -8,12 +8,12 @@ describe("Dispute evidence page", type: :system, js: true) do
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
   let(:product) { purchase.link }
 
-  # Submitting spends the seller's only Stripe evidence submission, so the Submit button
-  # opens a confirmation modal instead of submitting directly.
+  # Saving no longer forwards to Stripe — we hold the response until the deadline — but the
+  # confirmation modal stays, because after the deadline nothing more can be added.
   def submit_and_confirm
-    click_on("Submit")
-    within_modal "Submit your response?" do
-      click_on("Submit evidence")
+    click_on("Save response")
+    within_modal "Save your response?" do
+      click_on("Confirm and save")
     end
   end
 
@@ -25,7 +25,7 @@ describe("Dispute evidence page", type: :system, js: true) do
     expect(page).to have_text("The cardholder claims they did not authorize the purchase.")
     expect(page).to have_text("Why should you win this dispute?")
     expect(page).not_to have_text("Why is the customer not entitled to a refund?")
-    expect(page).to have_button("Submit", disabled: true)
+    expect(page).to have_button("Save response", disabled: true)
 
     expect(page).to have_selector("[role=listitem] h4", text: "Receipt")
   end
@@ -55,9 +55,9 @@ describe("Dispute evidence page", type: :system, js: true) do
       within_fieldset("Why should you win this dispute?") do
         choose("Other")
       end
-      expect(page).to have_button("Submit", disabled: true)
+      expect(page).to have_button("Save response", disabled: true)
       fill_in("Why should you win this dispute?", with: "Sample text.")
-      expect(page).to have_button("Submit")
+      expect(page).to have_button("Save response")
     end
 
     it "submits the form successfully" do
@@ -106,9 +106,9 @@ describe("Dispute evidence page", type: :system, js: true) do
           within_fieldset("Why was the customer's subscription not canceled?") do
             choose("Other")
           end
-          expect(page).to have_button("Submit", disabled: true)
+          expect(page).to have_button("Save response", disabled: true)
           fill_in("Why was the customer's subscription not canceled?", with: "Sample text.")
-          expect(page).to have_button("Submit")
+          expect(page).to have_button("Save response")
         end
 
         it "submits the form successfully" do
@@ -234,28 +234,28 @@ describe("Dispute evidence page", type: :system, js: true) do
       end
       wait_for_ajax
       expect(page).to have_selector("[role=listitem] h4", text: "smilie.png")
-      expect(page).to have_button("Submit")
+      expect(page).to have_button("Save response")
 
       click_on("Remove")
       wait_for_ajax
       expect(page).to have_button("Upload customer communication")
-      expect(page).to have_button("Submit", disabled: true)
+      expect(page).to have_button("Save response", disabled: true)
     end
   end
 
   describe "submit confirmation" do
-    it "warns that submitting is final and does not submit when the seller cancels" do
+    it "says the response is held until the deadline and does not save when the seller cancels" do
       visit purchase_dispute_evidence_path(purchase.external_id)
 
-      expect(page).to have_text("Submitting is final.")
+      expect(page).to have_text("You can keep adding to this until the deadline.")
 
       within_fieldset("Why should you win this dispute?") do
         choose("The cardholder was refunded")
       end
-      click_on("Submit")
+      click_on("Save response")
 
-      within_modal "Submit your response?" do
-        expect(page).to have_text("You only get one submission for this dispute.")
+      within_modal "Save your response?" do
+        expect(page).to have_text("We send this to our payment processor at the deadline, not now")
         click_on("Cancel")
       end
 
