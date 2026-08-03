@@ -723,24 +723,27 @@ const CartItemComponent = ({
   });
   const [error, setError] = React.useState<null | string>(null);
 
-  const selectionWithoutDiscount = applySelection(item.product, null, selection);
-  const provisionalItem = {
-    ...item,
-    price: selectionWithoutDiscount.isPWYW
-      ? (selection.price.value ?? selectionWithoutDiscount.priceCents)
-      : selectionWithoutDiscount.priceCents,
-    quantity: selection.quantity,
-    option_id: selection.optionId,
-    recurrence: selection.recurrence,
-    rent: selection.rent,
-    call_start_time: selection.callStartTime,
-    pay_in_installments: selection.payInInstallments,
+  const discountForSelection = (candidateSelection: PriceSelection) => {
+    const selectionWithoutDiscount = applySelection(item.product, null, candidateSelection);
+    const provisionalItem = {
+      ...item,
+      price: selectionWithoutDiscount.isPWYW
+        ? (candidateSelection.price.value ?? selectionWithoutDiscount.priceCents)
+        : selectionWithoutDiscount.priceCents,
+      quantity: candidateSelection.quantity,
+      option_id: candidateSelection.optionId,
+      recurrence: candidateSelection.recurrence,
+      rent: candidateSelection.rent,
+      call_start_time: candidateSelection.callStartTime,
+      pay_in_installments: candidateSelection.payInInstallments,
+    };
+    const provisionalCart = {
+      ...cart,
+      items: cart.items.map((candidate) => (candidate === item ? provisionalItem : candidate)),
+    };
+    return getDiscountedPrice(provisionalCart, provisionalItem);
   };
-  const provisionalCart = {
-    ...cart,
-    items: cart.items.map((candidate) => (candidate === item ? provisionalItem : candidate)),
-  };
-  const discount = getDiscountedPrice(provisionalCart, provisionalItem);
+  const discount = discountForSelection(selection);
 
   const { priceCents, isPWYW } = applySelection(
     item.product,
@@ -863,6 +866,10 @@ const CartItemComponent = ({
                       }}
                       product={item.product}
                       discount={discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null}
+                      discountForSelection={(candidateSelection) => {
+                        const candidateDiscount = discountForSelection(candidateSelection).discount;
+                        return candidateDiscount && candidateDiscount.type !== "ppp" ? candidateDiscount.value : null;
+                      }}
                       showInstallmentPlan
                     />
                     {error ? <Alert variant="danger">{error}</Alert> : null}

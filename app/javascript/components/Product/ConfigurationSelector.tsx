@@ -645,16 +645,29 @@ export const ConfigurationSelector = React.forwardRef<
     selection: PriceSelection;
     setSelection?: React.Dispatch<React.SetStateAction<PriceSelection>> | undefined;
     discount: Discount | null;
+    discountForSelection?: ((selection: PriceSelection) => Discount | null) | undefined;
     hidePrices?: boolean;
     initialSelection?: PriceSelection;
     showInstallmentPlan?: boolean;
   }
->(({ product, selection, setSelection, discount, hidePrices, initialSelection, showInstallmentPlan = false }, ref) => {
+>((props, ref) => {
+  const {
+    product,
+    selection,
+    setSelection,
+    discount,
+    discountForSelection,
+    hidePrices,
+    initialSelection,
+    showInstallmentPlan = false,
+  } = props;
   const update = (update: Partial<PriceSelection> | ((selection: PriceSelection) => Partial<PriceSelection>)) =>
     setSelection?.((prevSelection) => ({
       ...prevSelection,
       ...(typeof update === "function" ? update(prevSelection) : update),
     }));
+  const previewDiscount = (previewSelection: PriceSelection) =>
+    discountForSelection ? discountForSelection(previewSelection) : discount;
 
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;
   const {
@@ -784,7 +797,7 @@ export const ConfigurationSelector = React.forwardRef<
             description="Your rental will be available for 30 days. Once started, you’ll have 72 hours to watch it as much as you’d like!"
             currencyCode={product.currency_code}
             isPWYW={!!product.pwyw}
-            discount={discount}
+            discount={previewDiscount({ ...selection, rent: true })}
             product={product}
             quantity={selection.quantity}
             hidePrice={hidePrices}
@@ -797,7 +810,7 @@ export const ConfigurationSelector = React.forwardRef<
             description="Watch as many times as you want, forever."
             currencyCode={product.currency_code}
             isPWYW={!!product.pwyw}
-            discount={discount}
+            discount={previewDiscount({ ...selection, rent: false })}
             product={product}
             quantity={selection.quantity}
             hidePrice={hidePrices}
@@ -838,7 +851,11 @@ export const ConfigurationSelector = React.forwardRef<
                 currencyCode={product.currency_code}
                 isPWYW={product.is_tiered_membership ? option.is_pwyw : !!product.pwyw}
                 status={option.status}
-                discount={discount}
+                discount={previewDiscount({
+                  ...selection,
+                  optionId: option.id,
+                  price: { value: null, error: false },
+                })}
                 recurrence={selection.recurrence}
                 product={product}
                 quantity={selection.quantity}
