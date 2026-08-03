@@ -452,12 +452,10 @@ class Checkout::StripePaymentPresenter
         # shape (1) runs in live mode only when the resolver exposes a launched local method
         # whose Connect-account capabilities can accept the product's forced currency.
         #
-        # Shape 1 stays listed even though props now always hands a quoted cart to the
-        # buyer-currency element. Candidates the element shape still refuses — ramped
-        # sellers' recurring, preorder and commission items, whose charge differs from the
-        # locked cart total (gumroad-private#1737) — are never quoted as plain carts, so
-        # when such a cart is method-forced the client-confirm lane can charge it safely,
-        # keeping its local-method tabs instead of being kicked back to CardElement.
+        # Shape 1 stays listed so that a candidate cart the element shape refuses (recurring,
+        # preorder or commission items) keeps its local-method tabs when the resolver accepts
+        # it, instead of being kicked back to CardElement — the resolver independently rejects
+        # the shapes whose charge could disagree with a mounted element's amount.
         supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported
