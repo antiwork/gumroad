@@ -4411,6 +4411,21 @@ describe User, :vcr do
 
       expect(user.eligible_for_store_agent?).to eq(true)
     end
+
+    # This predicate runs on every Inertia render via policies_props, and
+    # sales_cents_total is an Elasticsearch aggregation that blows up when the
+    # index is absent. A seller with no completed payout must never reach it.
+    it "does not touch sales_cents_total when the seller has no completed payout" do
+      expect(user).to_not receive(:sales_cents_total)
+      expect(user.eligible_for_store_agent?).to eq(false)
+    end
+
+    it "memoizes the result so one render does not re-query Elasticsearch" do
+      create(:payment_completed, user:)
+      expect(user).to receive(:sales_cents_total).once.and_return(15_000)
+
+      3.times { expect(user.eligible_for_store_agent?).to eq(true) }
+    end
   end
 
   describe ".id?" do
