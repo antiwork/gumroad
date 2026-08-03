@@ -92,12 +92,13 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
           if suspended.include?(email)
             held << entry
           else
-            # Re-checked here, immediately before the write, rather than trusting the candidate
-            # query's snapshot — a concurrent admin block or an intervening chargeback would
-            # otherwise get cleared by a run that started before either landed.
+            # Re-checked here, immediately before the write, rather than trusting the batch's
+            # snapshot — a concurrent admin block, a newly-suspended account, or a chargeback
+            # recorded after the batch queries ran would otherwise get cleared by a decision that
+            # was already stale by the time it reached this line.
             block.reload
             still_active = block.blocked_at.present? && (block.expires_at.nil? || block.expires_at > Time.current)
-            if still_active && block.blocked_by.nil?
+            if still_active && block.blocked_by.nil? && !newly_disputed_or_suspended?(email)
               block.unblock!
               cleared << entry
             else
@@ -206,6 +207,15 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
                             .distinct.pluck(:email).map(&:downcase).to_set
 
       by_login | by_purchaser
+    end
+
+    # The batch-level `reject_disputed` and `linked_to_suspended_account` queries ran once, before
+    # this row's write. A chargeback recorded, or an account suspended, in the gap between that
+    # query and this `unblock!` would otherwise slip through unnoticed — re-deriving both from a
+    # single email, right at the write, is what closes that gap rather than trusting a snapshot the
+    # rest of the batch already moved past.
+    def newly_disputed_or_suspended?(email)
+      reject_disputed({ email => 1 }).empty? || linked_to_suspended_account([email]).any?
     end
 
     def message_for(scan)

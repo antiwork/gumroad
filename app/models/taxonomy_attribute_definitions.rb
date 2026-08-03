@@ -12,11 +12,16 @@
 # permanent once products carry values for it; `label` and `values` are display-side and may
 # be edited freely.
 class TaxonomyAttributeDefinitions
+  # `genre` and `content_type` were added after the initial ship (gumroad-private#1799 follow-up):
+  # sample-pack marketplaces like Splice and Loopmasters organize primarily by genre and content
+  # type, ahead of tempo bucket, so those were the real gap in the original facet set.
   MUSIC_DEFINITIONS = [
-    { name: "format", label: "Format", value_type: "enum", values: ["WAV", "MP3", "AIFF", "MIDI", "Stems"], position: 0 },
-    { name: "tempo", label: "Tempo", value_type: "enum", values: ["Under 90 BPM", "90–120 BPM", "120–140 BPM", "Over 140 BPM"], position: 1 },
-    { name: "loopable", label: "Loopable", value_type: "boolean", values: [], position: 2 },
-    { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Royalty-free"], position: 3 },
+    { name: "genre", label: "Genre", value_type: "enum", values: ["Hip-Hop", "House", "Techno", "Trap", "Pop", "R&B", "Lo-fi", "EDM", "Ambient", "Cinematic"], position: 0 },
+    { name: "content_type", label: "Content type", value_type: "enum", values: ["Loop", "One-shot", "MIDI", "Preset", "Stem", "Full track"], position: 1 },
+    { name: "format", label: "Format", value_type: "enum", values: ["WAV", "MP3", "AIFF", "MIDI", "Stems"], position: 2 },
+    { name: "tempo", label: "Tempo", value_type: "enum", values: ["Under 90 BPM", "90–120 BPM", "120–140 BPM", "Over 140 BPM"], position: 3 },
+    { name: "loopable", label: "Loopable", value_type: "boolean", values: [], position: 4 },
+    { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Royalty-free"], position: 5 },
   ].freeze
 
   # VRChat buyers don't shop on generic 3D-asset axes (engine/file format) — everything here is a

@@ -510,6 +510,14 @@ describe("Product Edit Memberships", type: :system, js: true) do
           second_tier = @product.tiers.find_by!(name: "Second Tier")
           expect(first_tier.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents).to eq 300
           expect(second_tier.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents).to eq 500
+
+          # save_recurring_prices! scopes its upsert by currency, so the switch to eur must
+          # retire the stale usd rows rather than leave both denominations alive — otherwise
+          # available_price_cents (and the search index it feeds) reports both, and reopening
+          # the editor can read back the pre-change currency.
+          [first_tier, second_tier].each do |tier|
+            expect(tier.prices.alive.pluck(:currency).uniq).to eq ["eur"]
+          end
         end
       end
 
