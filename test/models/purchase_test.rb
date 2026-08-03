@@ -2288,6 +2288,34 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_not purchase2.valid?
   end
 
+  test "not_double_charged sets an error code the client uses to offer a confirmation, for a successful prior purchase" do
+    product = create_product
+    ip = unique_ip
+    create_purchase(link: product, seller: product.user, email: "bob@gumroad.com", ip_address: ip, created_at: Time.current)
+    purchase2 = build_purchase(link: product, email: "bob@gumroad.com", ip_address: ip, created_at: Time.current)
+    assert_not purchase2.valid?
+    assert_equal PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED, purchase2.error_code
+  end
+
+  test "not_double_charged allows a confirmed repeat of a successful purchase" do
+    product = create_product
+    ip = unique_ip
+    create_purchase(link: product, seller: product.user, email: "bob@gumroad.com", ip_address: ip, created_at: Time.current)
+    purchase2 = build_purchase(link: product, email: "bob@gumroad.com", ip_address: ip, created_at: Time.current)
+    purchase2.confirmed_duplicate_purchase = true
+    assert purchase2.valid?
+  end
+
+  test "not_double_charged still blocks a confirmed repeat while the first purchase is only in progress" do
+    product = create_product
+    ip = unique_ip
+    purchase1 = create_purchase(link: product, seller: product.user, email: "bob@gumroad.com", ip_address: ip, created_at: Time.current, purchase_state: "in_progress")
+    purchase2 = build_purchase(link: product, email: "bob@gumroad.com", ip_address: ip, created_at: Time.current)
+    purchase2.confirmed_duplicate_purchase = true
+    assert_not_equal purchase1.id, purchase2.id
+    assert_not purchase2.valid?
+  end
+
   test "not_double_charged allows double-charges to different IP addresses" do
     product = create_product
     ip = unique_ip
@@ -2450,7 +2478,7 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase = build_membership_purchase_p3(link: product, email: gift.giftee_email, ip_address: ip, created_at: Time.current)
     assert_not_equal original_purchase.id, purchase.id
     assert_not purchase.valid?
-    assert_equal ["You have already paid for this product. It has been emailed to you."], purchase.errors[:base]
+    assert_equal ["You have already paid for this product. It has been emailed to you. Do you want to buy it again?"], purchase.errors[:base]
   end
 
   test "not_double_charged when gifting a subscription allows the recurring charge" do
@@ -2647,7 +2675,7 @@ class PurchaseTest < ActiveSupport::TestCase
     create_physical_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first], created_at: 8.seconds.ago)
     purchase2 = build_physical_purchase(link: product, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first])
     assert_not purchase2.valid?
-    assert_equal ["You have already paid for this product. It has been emailed to you."], purchase2.errors[:base]
+    assert_equal ["You have already paid for this product. It has been emailed to you. Do you want to buy it again?"], purchase2.errors[:base]
   end
 
   test "not_double_charged purchasing physical products allows double-charges after 10 seconds" do
@@ -2665,7 +2693,7 @@ class PurchaseTest < ActiveSupport::TestCase
     create_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", created_at: 8.seconds.ago)
     purchase2 = build_purchase(link: product, ip_address: ip, email: "bob@gumroad.com")
     assert_not purchase2.valid?
-    assert_equal ["You have already paid for this product. It has been emailed to you."], purchase2.errors[:base]
+    assert_equal ["You have already paid for this product. It has been emailed to you. Do you want to buy it again?"], purchase2.errors[:base]
   end
 
   test "not_double_charged purchasing licensed products allows double-charges after 10 seconds" do
@@ -2682,7 +2710,7 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase = create_membership_purchase(ip_address: ip, email: "bob@gumroad.com", created_at: 5.seconds.ago)
     purchase2 = build_membership_purchase_p3(ip_address: ip, email: "bob@gumroad.com", subscription: purchase.subscription, link: purchase.link, is_original_subscription_purchase: false, is_upgrade_purchase: true)
     assert_not purchase2.valid?
-    assert_equal ["You have already paid for this product. It has been emailed to you."], purchase2.errors[:base]
+    assert_equal ["You have already paid for this product. It has been emailed to you. Do you want to buy it again?"], purchase2.errors[:base]
   end
 
   test "not_double_charged when upgrading a subscription allows double-charges after 10 seconds" do
