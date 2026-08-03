@@ -55,6 +55,8 @@ export type CheckoutLocalCurrencyFormat = Pick<CheckoutBuyerCurrencyDisplay, "cu
 // to checked while logged in.
 export type CheckoutListedCurrencyOptions = Pick<CheckoutBuyerCurrencyOptions, "paymentMethod"> & {
   usingSavedCard?: boolean;
+  hasTip?: boolean;
+  hasShipping?: boolean;
 };
 
 export const getCheckoutBuyerCurrencyDisplay = (
@@ -104,12 +106,8 @@ export const getCheckoutBuyerCurrencyQuoteToken = (
 ): string | null =>
   getCheckoutBuyerCurrencyDisplay(surcharges, options) ? (surcharges?.buyer_currency_quote?.token ?? null) : null;
 
-// The method-forced local-method lane (a single product priced in the currency the payment method
-// forces — a BRL product paid with Pix, an EUR product with iDEAL, an INR product with UPI).
-// Charge::MethodForcedPresentment charges that listed price directly and there is no FX quote
-// anywhere in the flow, so the cart must be shown in the listed currency: converting the listed
-// price to USD for display (what happens when this returns null) showed a Brazilian buyer a
-// US$9.16 total next to a Stripe sheet about to charge R$49.90 (gumroad-private#1371).
+// Direct-listed presentment, reached through either a method-forced local method or the matching
+// buyer-currency card ramp. There is no FX quote, so the cart must be shown in the listed currency.
 //
 // `rate` is the product's own stored USD exchange rate — the same rate the charge uses to convert
 // the USD-side amounts (tax, shipping) back into the listed currency — so the displayed rows and
@@ -134,11 +132,17 @@ export const getCheckoutListedCurrencyDisplay = (
     pay_in_installments?: boolean;
     recurrence?: string | null;
   }[],
-  { paymentMethod = "card", usingSavedCard = false }: CheckoutListedCurrencyOptions = {},
+  {
+    paymentMethod = "card",
+    usingSavedCard = false,
+    hasTip = false,
+    hasShipping = false,
+  }: CheckoutListedCurrencyOptions = {},
 ): CheckoutLocalCurrencyFormat | null => {
   if (checkoutPayment.integration !== "payment_element_client_confirm") return null;
   const listedCurrency = checkoutPayment.elements_options.listed_currency_display;
   if (!listedCurrency) return null;
+  if (checkoutPayment.elements_options.direct_listed_card && (hasTip || hasShipping)) return null;
   if (usingSavedCard || paymentMethod !== "card") return null;
   if (cartItems.length !== 1) return null;
 

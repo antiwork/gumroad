@@ -69,8 +69,8 @@ class Charge::DirectListedPresentment
       # folded into the display total at purchase-creation time), which is why tip is
       # subtracted below without ever having been added. If that invariant breaks (e.g.
       # a future purchase type stores the tip separately), the subtraction would
-      # silently clamp price to 0 — raise early instead so the caller's rescue can
-      # surface it and fall back to the canonical USD path.
+      # silently clamp price to 0 — raise early so the caller can apply its own safe
+      # failure contract.
       raise "displayed_price_cents must include tip (purchase #{purchase.id}: tip #{tip_cents} > displayed #{purchase.displayed_price_cents})" if tip_cents > purchase.displayed_price_cents
 
       presentment_total_cents = purchase.displayed_price_cents +

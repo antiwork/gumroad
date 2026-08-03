@@ -124,7 +124,7 @@ class Checkout::BuyerCurrencyEligibility
     end
   end
 
-  attr_reader :order, :seller, :merchant_account, :chargeable, :purchases, :params, :setup_future_charges, :off_session
+  attr_reader :order, :seller, :merchant_account, :chargeable, :purchases, :params, :setup_future_charges, :off_session, :client_confirm
 
   def self.seller_enabled?(seller)
     seller.present? &&
@@ -329,7 +329,7 @@ class Checkout::BuyerCurrencyEligibility
     Stripe.api_key.to_s.start_with?("sk_test_")
   end
 
-  def initialize(order:, seller:, merchant_account:, chargeable:, purchases:, params:, setup_future_charges:, off_session:)
+  def initialize(order:, seller:, merchant_account:, chargeable:, purchases:, params:, setup_future_charges:, off_session:, client_confirm: false)
     @order = order
     @seller = seller
     @merchant_account = merchant_account
@@ -338,6 +338,7 @@ class Checkout::BuyerCurrencyEligibility
     @params = params || {}
     @setup_future_charges = setup_future_charges
     @off_session = off_session
+    @client_confirm = client_confirm
   end
 
   def decision
@@ -375,7 +376,7 @@ class Checkout::BuyerCurrencyEligibility
     # Any other off-session charge — a preorder release, a renewal that stored no amount —
     # still falls back.
     return fallback(:off_session) if off_session && !multi_seller_order? && !subscription_renewal_with_stored_amount?
-    return fallback(:missing_stripe_chargeable) if chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
+    return fallback(:missing_stripe_chargeable) if !client_confirm && chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
 
     # All purchases in an order come from the same checkout request, so any purchase's IP
     # identifies the buyer's location.
@@ -408,9 +409,13 @@ class Checkout::BuyerCurrencyEligibility
       # purchase's snapshotted currency, not the product's current one. A seller who
       # repriced from USD to the buyer's currency after the purchase was built would
       # otherwise get USD-denominated cents sent as the buyer's currency.
+      # The mount-currency report ties this charge decision to the surface the buyer saw;
+      # CardElement and canonical-USD Element fallbacks must stay canonical.
       return fallback(:listed_currency_is_buyer_currency) unless listed_in_buyer_currency.all? &&
                                                                 purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
-                                                                self.class.listed_currency_direct_charge_enabled?(seller)
+                                                                purchases.one? &&
+                                                                self.class.listed_currency_direct_charge_enabled?(seller) &&
+                                                                listed_currency_displayed?(buyer_currency)
 
       # A shape whose later charges are fixed at signup cannot use this lane yet. The fixing
       # is derived from the charge presentment's fx_rate (FixLaterChargePresentmentService
@@ -540,6 +545,11 @@ class Checkout::BuyerCurrencyEligibility
   end
 
   private
+    def listed_currency_displayed?(currency)
+      params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT &&
+        params[:payment_element_mount_currency].to_s.downcase == currency
+    end
+
     def eligible(currency:, direct_listed_amount: nil)
       Decision.new(eligible: true, currency:, fallback_reason: nil, direct_listed_amount:)
     end

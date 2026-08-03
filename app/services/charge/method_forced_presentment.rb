@@ -143,7 +143,6 @@ class Charge::MethodForcedPresentment
         gumroad_amount_cents:,
         currency:
       ).perform
-      return if presentment.blank?
 
       Result.new(
         presentment_total_cents: presentment.presentment_total_cents,
@@ -167,7 +166,7 @@ class Charge::MethodForcedPresentment
 
       # Ramp gate for quoting a destination charge, a pairing production has never minted.
       # Unlike the card lane, nil here refuses the checkout rather than falling back to USD:
-      # the caller (Order::PreparePaymentIntentService#method_forced_presentment_required?)
+      # the caller (Order::PreparePaymentIntentService#client_confirm_presentment_required?)
       # fails it, because the buyer's token was minted on a forced-currency element. Costs no
       # live traffic — the quoted branch needs a USD-priced cart, and a currency-forcing method
       # is only offered on a cart already priced in its own currency, which never quotes. The

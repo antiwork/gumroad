@@ -1460,7 +1460,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         # A destination-charge seller (Gumroad-managed Stripe Custom account) with the
         # destination-charge ramp flag off. Charge::MethodForcedPresentment returns nil here,
         # and on THIS lane nil is not the card path's quiet canonical-USD fallback: the buyer
-        # already confirmed on a forced-currency element, so #method_forced_presentment_required?
+        # already confirmed on a forced-currency element, so #client_confirm_presentment_required?
         # turns the nil into a clean synchronous failure with no PaymentIntent and no Stripe
         # quote call. Pinned because the alternative — creating a USD intent — would produce an
         # intent the EUR ConfirmationToken can never confirm, leaving the purchase in_progress
@@ -2050,6 +2050,92 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    context "with a direct-listed client-confirm card" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
+      let(:product) { create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 15_00) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+      before do
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      end
+
+      def perform_with_direct_listed_card(order, params, mount_currency: Currency::CAD)
+        params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
+        params[:payment_element_mount_currency] = mount_currency
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "CA" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_direct_cad", client_secret: "pi_direct_cad_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_direct_cad").perform
+        [create_args, responses]
+      end
+
+      it "prepares the intent for the displayed CAD amount and persists quote-less presentment rows" do
+        order, params = build_order
+        purchase = order.purchases.first
+        purchase.update!(displayed_price_cents: 15_00,
+                         displayed_price_currency_type: Currency::CAD,
+                         rate_converted_to_usd: BigDecimal("0.8"))
+
+        create_args, responses = perform_with_direct_listed_card(order, params)
+
+        expect(create_args[:currency]).to eq(Currency::CAD)
+        expect(create_args[:amount_cents]).to eq(15_00)
+        expect(create_args[:stripe_fx_quote_id]).to be_nil
+        expect(create_args[:idempotency_key]).to match(/buyer-currency-intent-.+-cad_ctoken_direct_cad/)
+        expect(responses["unique-id-0"][:success]).to eq(true)
+        expect(order.charges.last.charge_presentment)
+          .to have_attributes(presentment_currency: Currency::CAD, presentment_total_cents: 15_00, stripe_fx_quote_id: nil)
+      end
+
+      it "keeps the canonical USD intent when the Element reports that it displayed USD" do
+        order, params = build_order
+        expect(Charge::DirectListedPresentment).not_to receive(:new)
+
+        create_args, responses = perform_with_direct_listed_card(order, params, mount_currency: Currency::USD)
+
+        expect(create_args[:currency]).to eq(Currency::USD)
+        expect(responses["unique-id-0"][:success]).to eq(true)
+        expect(order.charges.last.charge_presentment).to be_nil
+      end
+
+      it "fails closed without creating a USD intent when direct-listed persistence fails" do
+        order, params = build_order
+        order.purchases.first.update!(displayed_price_cents: 15_00,
+                                      displayed_price_currency_type: Currency::CAD,
+                                      rate_converted_to_usd: BigDecimal("0.8"))
+        allow(ErrorNotifier).to receive(:notify)
+        allow(Charge::PresentmentOrchestrator).to receive(:persist!).and_raise("presentment persist failed")
+
+        create_args, responses = perform_with_direct_listed_card(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+      end
+    end
+
     context "with a method-forced UPI payment method" do
       let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
       let(:product) { create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 1_499_00) }
@@ -2352,7 +2438,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         order.purchases.each { _1.update!(ip_country: "Brazil") }
 
         # The seller's buyer-currency flags have to be off for this example to reach the Pix gate
-        # at all. With them on, method_forced_presentment_required? is true and
+        # at all. With them on, client_confirm_presentment_required? is true and
         # prepare_unconfirmed_charge fails the order on its own nil-presentment guard several lines
         # earlier, which produces this same generic error and would let the example pass without
         # the gate ever running. Flags off is also the only way a Pix token genuinely arrives with

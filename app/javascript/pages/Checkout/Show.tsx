@@ -251,7 +251,7 @@ const CheckoutIndexPage = () => {
       paymentMethod: state.paymentMethod,
     },
   );
-  // The method-forced listed-currency lane, for the large-tip confirmation below and for the tip
+  // The direct-listed currency lane, for the large-tip confirmation below and for the tip
   // basis the order submits. Suppressed whenever the FX-quoted buyer-currency lane is displaying,
   // exactly as the checkout summary's precedence does (`buyerCurrencyDisplay ?? listedCurrency`):
   // the two lanes are near-mutually-exclusive, but a non-USD buyer of a non-USD-priced product can
@@ -269,6 +269,8 @@ const CheckoutIndexPage = () => {
       : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items, {
           usingSavedCard: state.usingSavedCard,
           paymentMethod: state.paymentMethod,
+          hasTip: computeTip(state) > 0,
+          hasShipping: cartForm.data.cart.items.some((item) => item.product.require_shipping),
         });
   // The tip and cart total the confirmation modal quotes, in listed minor units. The tip runs
   // through the submission's own per-line allocation (see computeTipForListedLines) so the modal

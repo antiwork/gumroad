@@ -370,9 +370,8 @@ class Charge::CreateService
                            merchant_account_id: merchant_account.id,
                            presentment_currency: eligibility_decision.currency,
                          })
-    Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: #{e.class} #{e.message}")
-    # No quote token exists here; canonical USD is today's live behavior, not a mismatch against a confirmed quoted total.
-    {}
+    Rails.logger.info("Buyer currency direct-listed presentment failed for charge #{charge.external_id}: #{e.class} #{e.message}")
+    raise BuyerCurrencyQuoteInvalid, "direct-listed presentment failed"
   end
 
   # Processor args for a membership renewal presented in the currency stored at signup, or {}

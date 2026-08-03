@@ -346,7 +346,10 @@ describe Charge::CreateService, :vcr do
                                 setup_future_charges: false,
                                 off_session: false,
                                 statement_description: seller.name_or_username,
-                                params: {}).perform
+                                params: {
+                                  payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+                                  payment_element_mount_currency: Currency::CAD,
+                                }).perform
 
       expect(captured_intent_args[:positional][2]).to eq(21_75)
       expect(captured_intent_args[:keyword]).to include(processor_amount_cents: 15_80,
@@ -366,7 +369,7 @@ describe Charge::CreateService, :vcr do
       end
     end
 
-    it "falls back to canonical USD when direct listed presentment fails" do
+    it "fails closed when direct listed presentment fails" do
       seller = create(:user, disable_buyer_local_currency: false)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
@@ -389,16 +392,11 @@ describe Charge::CreateService, :vcr do
                         rate_converted_to_usd: "0.8",
                         price_cents: 18_75,
                         total_transaction_cents: 18_75)
-      captured_intent_args = nil
-
       allow_any_instance_of(Charge::DirectListedPresentment).to receive(:perform).and_raise("direct listed failed")
       expect(ErrorNotifier).to receive(:notify)
         .with(an_instance_of(RuntimeError).and(having_attributes(message: "direct listed failed")),
               context: hash_including(merchant_account_id: merchant_account.id, presentment_currency: Currency::CAD))
-      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*args, **kwargs|
-        captured_intent_args = { positional: args, keyword: kwargs }
-        nil
-      end
+      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
 
       Charge::CreateService.new(order:,
                                 seller:,
@@ -410,15 +408,13 @@ describe Charge::CreateService, :vcr do
                                 setup_future_charges: false,
                                 off_session: false,
                                 statement_description: seller.name_or_username,
-                                params: {}).perform
+                                params: {
+                                  payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+                                  payment_element_mount_currency: Currency::CAD,
+                                }).perform
 
-      expect(captured_intent_args[:positional][2]).to eq(18_75)
-      expect(captured_intent_args[:positional][3]).to eq(3_00)
-      expect(captured_intent_args[:keyword]).not_to have_key(:processor_amount_cents)
-      expect(captured_intent_args[:keyword]).not_to have_key(:processor_currency)
-      expect(captured_intent_args[:keyword]).not_to have_key(:stripe_fx_quote_id)
-      expect(purchase.error_code).to be_nil
-      expect(purchase.errors[:base]).to be_empty
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
     ensure
       if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
@@ -465,7 +461,11 @@ describe Charge::CreateService, :vcr do
                                 setup_future_charges: false,
                                 off_session: false,
                                 statement_description: seller.name_or_username,
-                                params: { buyer_currency_quote: "stale-token" }).perform
+                                params: {
+                                  buyer_currency_quote: "stale-token",
+                                  payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+                                  payment_element_mount_currency: Currency::CAD,
+                                }).perform
 
       expect(called).to be_empty
       expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)

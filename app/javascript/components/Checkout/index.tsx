@@ -251,8 +251,7 @@ export const Checkout = ({
       ),
     })),
   );
-  // The method-forced local-method lane (a BRL product paid with Pix, an EUR product with iDEAL,
-  // an INR product with UPI): the buyer is charged the listed price as-is, so the summary shows
+  // The direct-listed lane: the buyer is charged the listed price as-is, so the summary shows
   // the listed currency rather than dividing that price by our USD exchange rate. Null on every
   // other checkout, which keeps the canonical USD rendering below.
   //
@@ -269,6 +268,8 @@ export const Checkout = ({
       : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cart.items, {
           usingSavedCard: state.usingSavedCard,
           paymentMethod: state.paymentMethod,
+          hasTip: computeTip(state) > 0,
+          hasShipping: cart.items.some((item) => item.product.require_shipping),
         });
   // The per-line bases the ORDER submits its tip from: Show.tsx hands computeTipsForLines each
   // line's `getDiscountedPrice(...)`, in the product's own minor units. Passing the same bases to

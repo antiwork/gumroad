@@ -361,7 +361,13 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.currency).to eq(Currency::CAD)
   end
 
+  def report_listed_currency_element(params, currency = Currency::CAD)
+    params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
+    params[:payment_element_mount_currency] = currency
+  end
+
   it "falls back when a purchase is priced in the buyer's own currency while direct listed charging is off" do
+    report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
 
     expect(decision).not_to be_eligible
@@ -370,6 +376,7 @@ describe Checkout::BuyerCurrencyEligibility do
 
   it "allows direct listed charging when every purchase is priced in the buyer's own currency" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
                      displayed_price_currency_type: Currency::CAD)
 
@@ -377,9 +384,38 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.currency).to eq(Currency::CAD)
     expect(decision.direct_listed_amount?).to eq(true)
   end
+  it "falls back when checkout did not mount the listed-currency Payment Element" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                     displayed_price_currency_type: Currency::CAD)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+  end
+
+  it "allows the client-confirm prepare path without a server-side chargeable" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                     displayed_price_currency_type: Currency::CAD)
+
+    client_confirm_decision = described_class.new(order:,
+                                                  seller:,
+                                                  merchant_account:,
+                                                  chargeable: nil,
+                                                  purchases:,
+                                                  params:,
+                                                  setup_future_charges: false,
+                                                  off_session: false,
+                                                  client_confirm: true).decision
+
+    expect(client_confirm_decision).to be_eligible
+    expect(client_confirm_decision.direct_listed_amount?).to eq(true)
+  end
 
   it "falls back when the product was repriced into the buyer's currency after the purchase was built" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
                      displayed_price_currency_type: Currency::USD)
 
@@ -389,6 +425,7 @@ describe Checkout::BuyerCurrencyEligibility do
 
   it "falls back for a mixed cart with a buyer-currency product and a quoted product" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
     purchases << create(:purchase,
                         link: create(:product, user: seller, price_currency_type: Currency::USD),
@@ -403,6 +440,7 @@ describe Checkout::BuyerCurrencyEligibility do
 
   it "keeps earlier fallbacks ahead of direct listed charging" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
 
     off_session_decision = described_class.new(order:,
@@ -420,6 +458,7 @@ describe Checkout::BuyerCurrencyEligibility do
 
   it "falls back for a membership priced in the buyer's currency, whose renewals have no stored presentment" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
     Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
     membership = create(:membership_product, user: seller, price_currency_type: Currency::CAD)
     purchase.update!(link: membership,
@@ -435,6 +474,7 @@ describe Checkout::BuyerCurrencyEligibility do
 
   it "falls back when a buyer-currency purchase carries a tip" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
                      displayed_price_currency_type: Currency::CAD)
     create(:tip, purchase:, value_cents: 200)
@@ -445,6 +485,7 @@ describe Checkout::BuyerCurrencyEligibility do
 
   it "falls back when a buyer-currency purchase carries shipping" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
                      displayed_price_currency_type: Currency::CAD,
                      shipping_cents: 300)
@@ -455,6 +496,7 @@ describe Checkout::BuyerCurrencyEligibility do
 
   it "does not apply the FX-quote settlement gate to direct listed charging" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
     merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
                      displayed_price_currency_type: Currency::CAD)

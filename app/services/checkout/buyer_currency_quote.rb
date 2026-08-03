@@ -718,9 +718,8 @@ class Checkout::BuyerCurrencyQuote
     # something near but not equal to R$49.90 (two conversions, two rates, two
     # roundings), so the buyer would be charged an amount that differs from the price
     # on the page. That cart is withheld from quoting so it is never mispriced by the
-    # round trip. It only pays its listed price on the method-forced local-method lane
-    # (Charge::MethodForcedPresentment, for EUR/INR listings paid via iDEAL, Bancontact
-    # or UPI); a plain card checkout for that cart falls back to canonical USD today.
+    # round trip. Eligible client-confirm cards and method-forced local methods instead
+    # charge the listed amount directly, without an FX quote.
     def quotable_line_item?(line_item, buyer_currency:)
       product = line_item.product
       return false if product.price_currency_type.to_s.downcase == buyer_currency.to_s.downcase
