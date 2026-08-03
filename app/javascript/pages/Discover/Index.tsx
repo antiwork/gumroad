@@ -233,7 +233,7 @@ const parseUrlParams = (href: string, curatedProductIds: string[], defaultSortOr
 
   parseParams(["sort", "query", "offer_code"], (value) => value);
   parseParams(["min_price", "max_price", "rating"], (value) => Number(value));
-  parseParams(["filetypes", "tags"], (value) => value.split(","));
+  parseParams(["filetypes", "tags", "taxonomy_attribute_filters"], (value) => value.split(","));
   if (!parsedParams.sort) parsedParams.sort = defaultSortOrder;
   return parsedParams;
 };
@@ -272,7 +272,7 @@ function DiscoverIndex() {
     };
     serializeParams(["sort", "query", "offer_code"], (value) => value);
     serializeParams(["min_price", "max_price", "rating"], (value) => value.toString());
-    serializeParams(["filetypes", "tags"], (value) => value.join(","));
+    serializeParams(["filetypes", "tags", "taxonomy_attribute_filters"], (value) => value.join(","));
 
     const urlString = url.pathname + url.search;
     const currentUrlString = window.location.pathname + window.location.search;

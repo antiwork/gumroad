@@ -122,7 +122,9 @@ export const EditProfile = ({ controls = true, selectedTabIndex, onChange, ...pr
     setSections((currentSections) => (isEqual(currentSections, props.sections) ? currentSections : props.sections));
   }, [props.sections]);
 
-  React.useEffect(() => onChange?.({ sections, tabs: tabsWithoutIds(tabs) }), [onChange, sections, tabs]);
+  React.useEffect(() => {
+    onChange?.({ sections, tabs: tabsWithoutIds(tabs) });
+  }, [onChange, sections, tabs]);
 
   const addTab = () => {
     const tab = { id: GuidGenerator.generate(), name: "New page", sections: [] };

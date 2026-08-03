@@ -38,6 +38,7 @@ describe ProfileSectionsPresenter do
           total: 2,
           filetypes_data: [],
           tags_data: a_collection_containing_exactly(*tags.map { { "doc_count" => 2, "key" => _1.name } }),
+          taxonomy_attributes_data: [],
           products: products.map { _1.id.to_s }
         },
         show_filters: false,
@@ -346,6 +347,7 @@ describe ProfileSectionsPresenter do
               total: 2,
               filetypes_data: [],
               tags_data: [],
+              taxonomy_attributes_data: [],
               products: a_collection_containing_exactly(
                 *new_seller_products.map do |product|
                   ProductPresenter.card_for_web(product:, request:, target: Product::Layout::PROFILE, show_seller: false, compute_description: false)

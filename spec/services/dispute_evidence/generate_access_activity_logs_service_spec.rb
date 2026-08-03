@@ -579,4 +579,47 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
       )
     end
   end
+
+  describe "combined charge siblings" do
+    let(:sibling_product) { create(:product, user: seller, name: "Sibling Product") }
+    let(:sibling) { create(:purchase, link: sibling_product, seller:, email: purchase.email) }
+
+    it "reports a sibling's consumption events when the selected purchase has none" do
+      create(:consumption_event, purchase_id: sibling.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "1.2.3.4")
+
+      expect(described_class.perform(purchase, other_purchases: [sibling])).to eq(
+        <<~TEXT.strip_heredoc.rstrip
+        The customer accessed the product 1 time.
+
+        consumed_at,event_type,platform,ip_address,product
+        2024-05-08 00:00:00 UTC,watch,web,1.2.3.4,"Sibling Product"
+        TEXT
+      )
+    end
+
+    it "counts a sibling's redirect uses when nothing has consumption events" do
+      purchase.create_url_redirect!
+      purchase.url_redirect.update!(uses: 2)
+      sibling.create_url_redirect!
+      sibling.url_redirect.update!(uses: 3)
+
+      expect(described_class.perform(purchase, other_purchases: [sibling])).to eq("The customer accessed the product 5 times.")
+    end
+
+    it "attributes each row to its own purchase's product" do
+      create(:consumption_event, purchase_id: purchase.id, consumed_at: DateTime.parse("2024-05-08 00:01"), ip_address: "0.0.0.0")
+      create(:consumption_event, purchase_id: sibling.id, consumed_at: DateTime.parse("2024-05-08 00:02"), ip_address: "1.2.3.4")
+
+      content = described_class.perform(purchase, other_purchases: [sibling])
+
+      expect(content).to include("2024-05-08 00:01:00 UTC,watch,web,0.0.0.0,\"#{product.name}\"")
+      expect(content).to include("2024-05-08 00:02:00 UTC,watch,web,1.2.3.4,\"Sibling Product\"")
+    end
+
+    it "leaves output byte-identical when no siblings are passed" do
+      create(:consumption_event, purchase_id: purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "0.0.0.0")
+
+      expect(described_class.perform(purchase, other_purchases: [])).to eq(described_class.perform(purchase))
+    end
+  end
 end

@@ -80,6 +80,7 @@ export type User = {
   impersonatable: boolean;
   verified: boolean | null;
   all_adult_products: boolean;
+  content_moderation_disabled: boolean;
   admin_manageable_user_memberships: UserMembership[];
   alive_user_compliance_info?: ComplianceInfoProps | null;
   compliant?: boolean | null;

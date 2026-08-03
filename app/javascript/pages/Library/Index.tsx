@@ -214,23 +214,34 @@ export default function LibraryPage() {
   }
 
   // Two quick filter clicks would otherwise both build on the props of the page they were
-  // clicked from, so the second visit silently reverts the first. Base each navigation on
-  // the last requested params until the server echoes them back.
-  const pendingSearch = React.useRef<SearchParams | null>(null);
-  React.useEffect(() => {
-    pendingSearch.current = null;
-  }, [search]);
+  // clicked from, so the second visit silently reverts the first. Base each navigation and
+  // every control's rendered state on the last requested params until that request settles
+  // — a ref would fix the request but leave the checkboxes showing stale state, and the
+  // toggles derive their next value from what is rendered.
+  const [pendingSearch, setPendingSearch] = React.useState<SearchParams | null>(null);
+  const activeSearch = pendingSearch ?? search;
 
-  const navigate = (updates: Partial<SearchParams> & { page?: number }) => {
-    const next = { ...(pendingSearch.current ?? search), ...updates };
-    pendingSearch.current = next;
+  const navigate = ({ page, ...updates }: Partial<SearchParams> & { page?: number }) => {
+    const next = { ...activeSearch, ...updates };
+    setPendingSearch(next);
     const data: Record<string, string> = { sort: next.sort };
     if (next.query) data.query = next.query;
     if (next.creators.length > 0) data.creators = next.creators.join(",");
     if (next.bundles.length > 0) data.bundles = next.bundles.join(",");
     if (next.show_archived_only) data.show_archived_only = "true";
-    if (updates.page !== undefined && updates.page > 1) data.page = updates.page.toString();
-    router.get(Routes.library_path(), data, { preserveState: true, preserveScroll: updates.page === undefined });
+    if (page !== undefined && page > 1) data.page = page.toString();
+    router.get(Routes.library_path(), data, {
+      preserveState: true,
+      preserveScroll: page === undefined,
+      onFinish: (visit) => {
+        // Inertia fires this for superseded visits too. Clearing there would drop a newer
+        // click's params and reinstate exactly the bug this fixes, so only a visit that
+        // ran to its own end hands control back to the server's props — which is also what
+        // snaps the controls back when the request failed.
+        if (visit.cancelled || visit.interrupted) return;
+        setPendingSearch(null);
+      },
+    });
   };
 
   // Unarchiving the only archived purchase leaves the archived tab empty, so drop back to
@@ -249,7 +260,10 @@ export default function LibraryPage() {
   const isLibraryEmpty = archivedCount + unarchivedCount === 0;
   const showArchivedNotice = !isLibraryEmpty && !search.show_archived_only && unarchivedCount === 0;
   const hasParams =
-    search.show_archived_only || search.query !== "" || search.creators.length > 0 || search.bundles.length > 0;
+    activeSearch.show_archived_only ||
+    activeSearch.query !== "" ||
+    activeSearch.creators.length > 0 ||
+    activeSearch.bundles.length > 0;
   const [deleting, setDeleting] = React.useState<Result | null>(null);
 
   const sortUid = React.useId();
@@ -305,7 +319,7 @@ export default function LibraryPage() {
   });
 
   const commitQuery = () => {
-    if (enteredQuery !== search.query) navigate({ query: enteredQuery });
+    if (enteredQuery !== activeSearch.query) navigate({ query: enteredQuery });
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -406,7 +420,7 @@ export default function LibraryPage() {
                       </FieldsetTitle>
                       <FormSelect
                         id={sortUid}
-                        value={search.sort}
+                        value={activeSearch.sort}
                         onChange={(e) =>
                           navigate({ sort: e.target.value === "purchase_date" ? "purchase_date" : "recently_updated" })
                         }
@@ -426,7 +440,7 @@ export default function LibraryPage() {
                           inputId={bundlesUid}
                           instanceId={bundlesUid}
                           options={bundles}
-                          value={bundles.filter(({ id }) => search.bundles.includes(id))}
+                          value={bundles.filter(({ id }) => activeSearch.bundles.includes(id))}
                           onChange={(selectedOptions) => navigate({ bundles: selectedOptions.map(({ id }) => id) })}
                           isMulti
                           isClearable
@@ -441,7 +455,7 @@ export default function LibraryPage() {
                         All Creators
                         <Checkbox
                           wrapperClassName="ml-auto"
-                          checked={search.creators.length === 0}
+                          checked={activeSearch.creators.length === 0}
                           onClick={() => navigate({ creators: [] })}
                           readOnly
                         />
@@ -452,12 +466,12 @@ export default function LibraryPage() {
                           <span className="shrink-0 text-muted">{`(${creator.count})`}</span>
                           <Checkbox
                             wrapperClassName="ml-auto"
-                            checked={search.creators.includes(creator.id)}
+                            checked={activeSearch.creators.includes(creator.id)}
                             onClick={() =>
                               navigate({
-                                creators: search.creators.includes(creator.id)
-                                  ? search.creators.filter((id) => id !== creator.id)
-                                  : [...search.creators, creator.id],
+                                creators: activeSearch.creators.includes(creator.id)
+                                  ? activeSearch.creators.filter((id) => id !== creator.id)
+                                  : [...activeSearch.creators, creator.id],
                               })
                             }
                             readOnly
@@ -482,9 +496,9 @@ export default function LibraryPage() {
                         <Label className="justify-between">
                           Show archived only
                           <Checkbox
-                            checked={search.show_archived_only}
+                            checked={activeSearch.show_archived_only}
                             readOnly
-                            onClick={() => navigate({ show_archived_only: !search.show_archived_only })}
+                            onClick={() => navigate({ show_archived_only: !activeSearch.show_archived_only })}
                           />
                         </Label>
                       </Fieldset>

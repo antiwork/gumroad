@@ -48,6 +48,7 @@ class Admin::UserPresenter::Card
       flagged_for_tos_violation: user.flagged_for_tos_violation?,
       on_probation: user.on_probation?,
       all_adult_products: user.all_adult_products?,
+      content_moderation_disabled: user.content_moderation_disabled?,
 
       # Risk & moderation
       user_risk_state: user.user_risk_state.humanize,

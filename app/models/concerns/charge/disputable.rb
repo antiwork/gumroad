@@ -33,7 +33,12 @@ module Charge::Disputable
 
         selected_purchases ||= disputed_purchases
 
-        selected_purchases.sort_by(&:total_transaction_cents).last
+        # Break the amount tie on id: `disputed_purchases` comes off an unordered `purchases.to_a`
+        # and sort_by is not stable, so a tie at the maximum picked an arbitrary row between runs —
+        # and this choice decides which purchase's facts go to the card network on a submission we
+        # only get to make once. `to_i` because the column is nullable and a nil in the old sort
+        # raised rather than ranking.
+        selected_purchases.min_by { [-_1.total_transaction_cents.to_i, _1.id] }
       else
         disputed_purchases.first
       end
