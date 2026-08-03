@@ -230,6 +230,18 @@ describe Product::Prices do
         product.save!
       end
 
+      it "does not re-enqueue an index update when the flag is already right" do
+        product = create(:product, price_cents: 0)
+        category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+        product.save!
+        expect(product.reload.customizable_price).to be(false)
+
+        expect(product).not_to receive(:enqueue_index_update_for).with(["customizable_price"])
+
+        product.save!
+      end
+
       it "keeps a coffee product customizable despite its paid suggested amounts" do
         seller = create(:user, created_at: 2.months.ago)
         # after_create :initialize_suggested_amount_if_needed! has already moved the price onto a
