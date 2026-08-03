@@ -155,6 +155,7 @@ class PagesController < Sellers::BaseController
     # No navigation bridge in either branch: the editor pane has no trusted wrapper listening.
     # The follow bridge IS included — without it a data-gumroad-follow form would
     # native-submit and navigate the preview frame away, which reads as "the form is broken".
+    # The products bridge is answered here for real: see #products.
     if @profile_page
       # The prices are derived from the requester's IP, so this response must never be shared.
       response.cache_control.replace(private: true, no_store: true)
