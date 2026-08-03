@@ -253,6 +253,15 @@ describe Api::V2::LicensesController do
   end
 
   describe "POST 'verify'" do
+    it "does not write license keys to the application log" do
+      messages = []
+      allow(Rails.logger).to receive(:info) { |message| messages << message }
+
+      post :verify, params: { product_id: @product.external_id, license_key: @purchase.license.serial }
+
+      expect(messages.join("\n")).not_to include(@purchase.license.serial)
+    end
+
     shared_examples_for "verify license" do |product_identifier_key, product_identifier_value|
       before do
         @product_identifier = { product_identifier_key => @product.send(product_identifier_value) }

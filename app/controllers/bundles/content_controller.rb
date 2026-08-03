@@ -32,7 +32,7 @@ class Bundles::ContentController < Bundles::BaseController
     elsif should_unpublish
       redirect_back fallback_location: edit_bundle_content_path(bundle.external_id), notice: "Unpublished!", status: :see_other
     elsif params[:redirect_to].present?
-      redirect_to params[:redirect_to], notice: "Changes saved!", status: :see_other
+      redirect_to safe_redirect_path(params[:redirect_to]), allow_other_host: true, notice: "Changes saved!", status: :see_other
     else
       redirect_back fallback_location: edit_bundle_content_path(bundle.external_id), notice: "Changes saved!", status: :see_other
     end
