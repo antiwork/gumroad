@@ -292,15 +292,14 @@ export default function Show() {
           </strong>
         </p>
         <Alert variant="warning">
-          <strong>You can keep adding to this until the deadline.</strong> Our payment processor accepts one
-          submission per dispute, so we hold your response and send it at the deadline. Come back any time before
-          then to add files or revise what you wrote — after the deadline nothing more can be added, not even by
-          contacting support.
+          <strong>You can keep adding to this until the deadline.</strong> Our payment processor accepts one submission
+          per dispute, so we hold your response and send it at the deadline. Come back any time before then to add files
+          or revise what you wrote — after the deadline nothing more can be added, not even by contacting support.
         </Alert>
         {savedEntries.length > 0 ? (
           <Alert variant="info">
-            <strong>What you have saved so far.</strong> Saving again replaces the fields you fill in below and
-            leaves the rest as they are.
+            <strong>What you have saved so far.</strong> Saving again replaces the fields you fill in below and leaves
+            the rest as they are.
             <Rows>
               {savedEntries.map(([label, value]) => (
                 <Row key={label}>
@@ -462,8 +461,7 @@ export default function Show() {
         }
       >
         <p>
-          We send this to our payment processor at the deadline, not now, so you can come back and add to it until
-          then.
+          We send this to our payment processor at the deadline, not now, so you can come back and add to it until then.
         </p>
         {uploadedFiles.length > 0 ? (
           <p>
