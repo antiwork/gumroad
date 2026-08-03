@@ -118,11 +118,9 @@ export const getCheckoutBuyerCurrencyQuoteToken = (
 // single-item, priced-in-that-currency shape the lane assumes.
 //
 // The payment-selection gates matter as much as the cart shape, and for the same reason as on the
-// FX-quoted lane above: only a new card confirmed through the Payment Element reaches
-// Charge::MethodForcedPresentment. A saved card (the default whenever the buyer has one on file)
-// and PayPal both charge canonical USD through other paths, so showing listed-currency totals for
-// them would recreate exactly the display/charge mismatch this lane exists to fix — just pointed
-// at a different set of buyers.
+// FX-quoted lane above: only a new card confirmed through the Payment Element reaches this
+// client-confirm presentment path. A saved card (the default whenever the buyer has one on file)
+// and PayPal both charge canonical USD through other paths.
 export const getCheckoutListedCurrencyDisplay = (
   checkoutPayment: CheckoutPaymentConfig,
   // Only the pricing/plan fields are read, so callers can pass cart items directly and tests
@@ -243,7 +241,7 @@ export const formatPresentmentCents = (
 //     would round twice and could disagree with the charge by a cent.
 //   * Tax and shipping come back from the surcharge endpoint in USD, so they are converted with
 //     the product's stored exchange rate — the same rate
-//     Charge::MethodForcedPresentment#direct_listed_amount_result uses on those same two figures,
+//     Charge::DirectListedPresentment uses on those same two figures,
 //     so the totals shown here and the amount charged agree by construction.
 //
 // Returns null when there is no listed-currency lane, leaving every row in canonical USD.

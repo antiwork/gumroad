@@ -62,14 +62,9 @@ class Checkout::StripePaymentPresenter
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason, disable_wallets:) if fallback_reason.present?
 
-    # Buyer-currency presentment candidates whose cart shape the presentment path supports get
-    # the server-confirm Payment Element instead of the client-confirm lane: the client-confirm
-    # ConfirmationToken inherits the element's mount currency, and the deferred-intent prepare
-    # service only knows how to build presentment intents for the method-forced (iDEAL/Bancontact)
-    # shape — not for this GeoIP-driven card mode. The server-confirm lane creates a plain card
-    # PaymentMethod (currency-less), so the element can mount in the buyer's currency purely for
-    # display/method-filtering while the charge path prices the intent from the verified quote
-    # token.
+    # FX-quoted buyer-currency candidates use server-confirm because the deferred-intent path does
+    # not consume their locked quote token. Its currency-less PaymentMethod lets the charge path
+    # price the intent from the verified quote after the Element displays that same amount.
     #
     # Wallets are allowed here when the rollout flag below is on, because on this lane the
     # element's wallet sheet quotes the SAME locked buyer-currency total the cart displays: the

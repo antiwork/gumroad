@@ -500,7 +500,7 @@ class Order::PreparePaymentIntentService
         # all) or logged by Charge::MethodForcedPresentment itself. This branch skips the service
         # entirely, so without a line here an operator investigating "iDEAL checkouts fail for
         # this cart shape" sees only the generic charge error the caller raises, with no reason.
-        Rails.logger.info("Skipping method-forced presentment for order #{order.id}: a free or test line is not priced in #{forced_currency}")
+        Rails.logger.info("Skipping client-confirm presentment for order #{order.id}: a free or test line is not priced in #{forced_currency}")
         return nil
       end
 

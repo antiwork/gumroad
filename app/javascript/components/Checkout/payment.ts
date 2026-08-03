@@ -233,8 +233,8 @@ export type State = {
   // buyer-currency display and the quote token are suppressed while this is set.
   willSaveCard: boolean;
   // True while the buyer is paying with a card already on file. Saved cards stay on the
-  // server-confirm path, which never mints a ConfirmationToken and so never reaches
-  // Charge::MethodForcedPresentment — the charge is canonical USD. Mirrored into state (rather than
+  // server-confirm path, which never mints a ConfirmationToken and so never reaches client-confirm
+  // presentment — the charge is canonical USD. Mirrored into state (rather than
   // staying local to PaymentForm) because the cart summary has to know: it is the default selection
   // for any returning buyer, and showing listed-currency totals for a canonical-USD charge is the
   // display/charge mismatch we are fixing (gumroad-private#1371).

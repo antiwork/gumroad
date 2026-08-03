@@ -384,6 +384,7 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.currency).to eq(Currency::CAD)
     expect(decision.direct_listed_amount?).to eq(true)
   end
+
   it "falls back when checkout did not mount the listed-currency Payment Element" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
