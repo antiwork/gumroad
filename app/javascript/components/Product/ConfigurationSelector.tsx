@@ -648,6 +648,7 @@ export const ConfigurationSelector = React.forwardRef<
     discountForSelection?: ((selection: PriceSelection) => Discount | null) | undefined;
     hidePrices?: boolean;
     initialSelection?: PriceSelection;
+    pwywMinimumPriceCents?: number;
     showInstallmentPlan?: boolean;
   }
 >((props, ref) => {
@@ -659,6 +660,7 @@ export const ConfigurationSelector = React.forwardRef<
     discountForSelection,
     hidePrices,
     initialSelection,
+    pwywMinimumPriceCents,
     showInstallmentPlan = false,
   } = props;
   const update = (update: Partial<PriceSelection> | ((selection: PriceSelection) => Partial<PriceSelection>)) =>
@@ -684,7 +686,7 @@ export const ConfigurationSelector = React.forwardRef<
     (selectedOption && selection.recurrence
       ? selectedOption.recurrence_price_values?.[selection.recurrence]?.suggested_price_cents
       : product.pwyw?.suggested_price_cents) ?? 0,
-    discountedPriceCents,
+    pwywMinimumPriceCents ?? discountedPriceCents,
   );
   const usePreexistingPrice =
     initialSelection &&
@@ -704,7 +706,11 @@ export const ConfigurationSelector = React.forwardRef<
       currencyCode={product.currency_code}
       cents={usePreexistingPrice ? initialSelection.price.value : selection.price.value}
       onChange={(newPriceCents) => update({ price: { value: newPriceCents, error: false } })}
-      onBlur={() => update(({ price }) => ({ price: { ...price, error: (price.value ?? 0) < discountedPriceCents } }))}
+      onBlur={() =>
+        update(({ price }) => ({
+          price: { ...price, error: (price.value ?? 0) < (pwywMinimumPriceCents ?? discountedPriceCents) },
+        }))
+      }
       suggestedPriceCents={suggestedPriceCents}
       hasError={selection.price.error}
       hideLabel={product.native_type === "coffee"}

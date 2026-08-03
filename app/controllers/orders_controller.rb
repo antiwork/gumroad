@@ -239,7 +239,7 @@ class OrdersController < ApplicationController
         end
         products = retry_line_items.filter_map do |line_item|
           next unless permalinks.include?(line_item[:permalink])
-          [line_item[:uid], line_item.slice(:permalink, :quantity)]
+          [line_item[:uid], line_item.slice(:permalink, :quantity, :price_cents, :tip_cents)]
         end.to_h
         next if products.empty?
 

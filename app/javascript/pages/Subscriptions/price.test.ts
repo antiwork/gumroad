@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   initialSubscriptionUnitPrice,
   selectedSubscriptionTotal,
+  subscriptionPWYWMinimumUnitPrice,
   withOncePerCartMinimum,
 } from "$app/pages/Subscriptions/price";
 import type { Discount } from "$app/parsers/checkout";
@@ -32,6 +33,7 @@ describe("subscription pricing", () => {
     expect(selectedSubscriptionTotal({ unitPrice, quantity: 3, discount: oncePerCartDiscount, minimumPrice: 99 })).toBe(
       2_900,
     );
+    expect(subscriptionPWYWMinimumUnitPrice(1_000, 900, oncePerCartDiscount)).toBe(1_000);
   });
 
   it("keeps legacy per-item pricing unchanged", () => {
@@ -46,6 +48,7 @@ describe("subscription pricing", () => {
 
     expect(unitPrice).toBe(900);
     expect(selectedSubscriptionTotal({ unitPrice, quantity: 3, discount, minimumPrice: 99 })).toBe(2_700);
+    expect(subscriptionPWYWMinimumUnitPrice(1_000, 900, discount)).toBe(900);
     expect(withOncePerCartMinimum(50, discount, 99)).toBe(50);
   });
 

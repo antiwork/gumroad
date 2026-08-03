@@ -115,7 +115,9 @@ class Order::OfferCodeRecoveryService
 
     def products
       @products ||= unresolved_purchases.to_h do |purchase|
-        [purchase.id.to_s, { permalink: purchase.link.unique_permalink, quantity: purchase.quantity }]
+        pre_discount_price = purchase.displayed_price_cents_before_offer_code || purchase.displayed_price_cents
+        price_cents = [pre_discount_price - purchase.tip&.value_cents.to_i, 0].max
+        [purchase.id.to_s, { permalink: purchase.link.unique_permalink, quantity: purchase.quantity, price_cents: }]
       end
     end
 

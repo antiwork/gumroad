@@ -57,6 +57,32 @@ describe Order::OfferCodeRecoveryService do
     )
   end
 
+  it "reuses stored pre-discount prices when rebuilding the allocation" do
+    offer_code.update!(amount_cents: 15_00)
+    first_purchase = create(:failed_purchase, link: product_1, seller:, offer_code:, displayed_price_cents: 0)
+    first_purchase.create_purchase_offer_code_discount!(
+      offer_code:,
+      offer_code_amount: 5_00,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      pre_discount_minimum_price_cents: product_1.price_cents,
+      pre_discount_displayed_price_cents: 5_00
+    )
+    second_purchase = create(:failed_purchase, link: product_2, seller:, displayed_price_cents: 30_00)
+    order = create(:order)
+    order.purchases << [first_purchase, second_purchase]
+
+    result = described_class.new(order:, failed_purchases: [first_purchase, second_purchase]).perform
+
+    expect(result).to contain_exactly(
+      code: offer_code.code,
+      products: {
+        product_1.unique_permalink => include(cents: 5_00),
+        product_2.unique_permalink => include(cents: 10_00),
+      }
+    )
+  end
+
   it "does not recover a capped code after another line in the order succeeds" do
     offer_code.update!(max_purchase_count: 2)
     prior_purchase = create(:purchase, link: product_1, seller:, offer_code:)

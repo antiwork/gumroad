@@ -261,7 +261,7 @@ export function getDiscountedPrice(cart: CartState, item: CartItem, sourceItem: 
     if (candidate.isTarget) return discountedPrice;
   }
 
-  return getDiscountedPriceForItem(cart, item, new Map());
+  throw new Error("Discount target is missing from the candidate list");
 }
 
 const getDiscountCandidates = (cart: CartState, item: CartItem, sourceItem: CartItem) => {

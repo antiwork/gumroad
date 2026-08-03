@@ -19,6 +19,12 @@ export const initialSubscriptionUnitPrice = (subscription: SubscriptionPrice) =>
     ? subscription.price
     : subscription.pre_discount_price) / subscription.quantity;
 
+export const subscriptionPWYWMinimumUnitPrice = (
+  undiscountedPrice: number,
+  discountedPrice: number,
+  discount: Discount | null,
+) => (oncePerCartAmount(discount) === null ? discountedPrice : undiscountedPrice);
+
 export const selectedSubscriptionTotal = ({
   unitPrice,
   quantity,

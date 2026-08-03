@@ -8,6 +8,7 @@ import { updateSubscription } from "$app/data/subscription";
 import {
   initialSubscriptionUnitPrice,
   selectedSubscriptionTotal,
+  subscriptionPWYWMinimumUnitPrice,
   withOncePerCartMinimum,
 } from "$app/pages/Subscriptions/price";
 import { SavedCreditCard } from "$app/parsers/card";
@@ -169,7 +170,7 @@ export default function SubscriptionsManage() {
     ppp_details: null,
   };
 
-  const { isPWYW, discountedPriceCents, discountedTotalCents } = applySelection(
+  const { isPWYW, priceCents, discountedPriceCents, discountedTotalCents } = applySelection(
     configurationSelectorProduct,
     pricingDiscount,
     selection,
@@ -453,6 +454,7 @@ export default function SubscriptionsManage() {
             setSelection={setSelection}
             initialSelection={initialSelection}
             discount={pricingDiscount}
+            pwywMinimumPriceCents={subscriptionPWYWMinimumUnitPrice(priceCents, discountedPriceCents, pricingDiscount)}
           />
         </CardContent>
       ) : null}
