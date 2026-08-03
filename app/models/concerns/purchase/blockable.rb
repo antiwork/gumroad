@@ -293,7 +293,7 @@ module Purchase::Blockable
       end
 
       read_opts = PROCESSOR_REFUSAL_READ_OPTS.merge(
-        read_timeout: [PROCESSOR_REFUSAL_READ_OPTS[:read_timeout], [remaining.ceil, 1].max].min
+        read_timeout: [PROCESSOR_REFUSAL_READ_OPTS[:read_timeout], [remaining.floor, 1].max].min
       )
       charge = Stripe::Charge.retrieve({ id: candidate.stripe_transaction_id, expand: %w[outcome.rule] },
                                        read_opts)
