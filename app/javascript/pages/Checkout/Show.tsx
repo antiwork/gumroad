@@ -797,6 +797,13 @@ const CheckoutIndexPage = () => {
     // Anything already queued was built from the pre-payment cart; a queued save has not been
     // issued yet, so cancelling is strictly better than letting it start and be discarded.
     debouncedSaveCartStateRef.current.cancel();
+    // `onBefore` only gates a save before it is sent. A save that had already been dispatched
+    // (and so already passed that gate) when payment started is still in flight here, and its
+    // response would otherwise repaint the receipt with the pre-payment cart. Cancelling the
+    // Inertia visit itself marks it `cancelled`, which the recovery callbacks in
+    // checkoutPaymentRefresh already treat as a no-op — see the `visit?.cancelled` guard in
+    // `onFinish` — so this cannot race a later, legitimate save.
+    cartForm.cancel();
     cartSaveGenerationRef.current += 1;
   }, [paymentStarted]);
 
