@@ -222,11 +222,12 @@ describe Product::Prices do
 
       it "keeps a coffee product customizable despite its paid suggested amounts" do
         seller = create(:user, created_at: 2.months.ago)
+        # after_create :initialize_suggested_amount_if_needed! has already moved the price onto a
+        # paid "Suggested Amounts" variant and set the flag — the exact shape the clear would undo.
         product = create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 5_00)
-        product.initialize_suggested_amount_if_needed!
         expect(product.reload.customizable_price).to be(true)
         expect(product.variant_categories_alive.joins(:variants).merge(BaseVariant.alive)
-                 .sum("base_variants.price_difference_cents")).to be > 0
+                 .sum("base_variants.price_difference_cents")).to eq(5_00)
 
         product.save!
 
