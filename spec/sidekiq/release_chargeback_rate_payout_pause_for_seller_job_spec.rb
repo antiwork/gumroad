@@ -19,14 +19,14 @@ describe ReleaseChargebackRatePayoutPauseForSellerJob do
   def pause_for_chargeback_rate!(user = seller)
     user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
     user.comments.create!(
-      content: "Payouts automatically paused due to chargeback rate (#{still_high_rate}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume.",
+      content: "Payouts automatically paused due to chargeback rate (#{still_high_rate}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume over the last #{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}.",
       comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
       author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
     )
   end
 
   def stub_rate(volume)
-    allow_any_instance_of(User).to receive(:lost_chargebacks).and_return({ volume:, count: "0.0%" })
+    allow_any_instance_of(User).to receive(:lost_chargebacks_for_payout_gate).and_return({ volume:, count: "0.0%" })
   end
 
   context "when the rate has recovered" do
@@ -219,7 +219,7 @@ describe ReleaseChargebackRatePayoutPauseForSellerJob do
     pause_for_chargeback_rate!
     admin_id = create(:user).id
     # The rate lookup is the slow part; simulate an admin pausing the account during it.
-    allow_any_instance_of(User).to receive(:lost_chargebacks) do
+    allow_any_instance_of(User).to receive(:lost_chargebacks_for_payout_gate) do
       seller.update!(payouts_paused_internally: true, payouts_paused_by: admin_id)
       { volume: "0.5%", count: "0.0%" }
     end

@@ -20,7 +20,19 @@ module User::Risk
   #
   # This is the same 1% used for automatic refund-policy enforcement below, but measured
   # differently: this one is a share of DOLLAR VOLUME, that one is a share of unique BUYERS.
-  MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 1.0
+  #
+  # 1.5% over a trailing year, rather than 1% over lifetime (2026-08-03, Sahil). The old pairing
+  # made the hold hard to exit on exactly the accounts most worth keeping: measured over lifetime,
+  # a four-year seller's denominator is so large that a clean quarter barely moves the ratio, so a
+  # seller who has already fixed the behaviour stays paused on history they cannot change. A
+  # trailing window lets recent selling actually count, and the threshold moves up with it so the
+  # change is a genuine loosening rather than a reshuffle.
+  MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 1.5
+
+  # Only sales inside this trailing window count toward the payout gate's chargeback rate. Keep the
+  # pause and the release measuring the identical window — a release that reads a different span
+  # than the pause either re-pauses immediately or never fires.
+  PAYOUT_CHARGEBACK_RATE_WINDOW = 365.days
 
   # Thresholds for automatically forcing a buyer-friendly refund policy on a seller.
   # The dispute rate here is a rate of UNIQUE BUYERS (buyers with a standing chargeback /
