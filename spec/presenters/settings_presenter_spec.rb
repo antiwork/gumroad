@@ -528,6 +528,7 @@ describe SettingsPresenter do
         },
         user: {
           country_supports_native_payouts: false,
+          no_payout_rail_in_country: false,
           country_supports_iban: false,
           country_code: nil,
           payout_currency: nil,
