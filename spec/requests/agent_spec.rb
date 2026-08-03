@@ -103,6 +103,30 @@ describe "Agent tab", type: :system, js: true do
     expect(page).to have_text(AgentPresenter::GREETING, wait: 10)
   end
 
+  context "when the seller has not earned agent access yet" do
+    before { allow_any_instance_of(User).to receive(:eligible_for_store_agent?).and_return(false) }
+
+    it "keeps the tab, states the bar, and leaves the seller nothing to interact with" do
+      visit agent_path
+
+      # Still the Agent page, not a bounce to /dashboard with the generic authorization alert.
+      expect(page).to have_current_path(agent_path)
+      expect(page).to have_text(AgentPresenter::LOCKED_HEADING, wait: 10)
+      expect(page).to have_text(AgentPresenter::LOCKED_EXPLANATION)
+      expect(page).to_not have_text("You are not allowed to perform this action")
+
+      # The nav entry stays, so the tab does not silently vanish from under them.
+      within "nav" do
+        expect(page).to have_link("Agent")
+      end
+
+      # Composer and starter chips are inert: nothing here can reach an endpoint that would 401.
+      expect(find_field("Message", disabled: true)).to be_present
+      expect(find("button[type=submit][aria-label='Send']", visible: :all)).to be_disabled
+      expect(page).to_not have_button("List my products")
+    end
+  end
+
   describe "use cases" do
     before { open_agent }
 

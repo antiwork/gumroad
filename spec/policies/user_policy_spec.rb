@@ -173,4 +173,37 @@ describe UserPolicy do
       expect(subject).to_not permit(seller_context, seller)
     end
   end
+
+  permissions :view_store_agent? do
+    # The whole point of this separate permission: reaching the tab must NOT depend on the
+    # earned-access bar, so an ineligible seller can be told why the agent is locked.
+    it "grants the owner of a seller that has not earned the agent yet" do
+      allow(seller).to receive(:eligible_for_store_agent?).and_return(false)
+      seller_context = SellerContext.new(user: seller, seller:)
+      expect(subject).to permit(seller_context, seller)
+    end
+
+    it "grants an admin acting for a seller that has not earned the agent yet" do
+      allow(seller).to receive(:eligible_for_store_agent?).and_return(false)
+      seller_context = SellerContext.new(user: admin_for_seller, seller:)
+      expect(subject).to permit(seller_context, seller)
+    end
+
+    it "grants marketing" do
+      seller_context = SellerContext.new(user: marketing_for_seller, seller:)
+      expect(subject).to permit(seller_context, seller)
+    end
+
+    it "still denies accountant regardless of eligibility" do
+      allow(seller).to receive(:eligible_for_store_agent?).and_return(true)
+      seller_context = SellerContext.new(user: accountant_for_seller, seller:)
+      expect(subject).to_not permit(seller_context, seller)
+    end
+
+    it "still denies support regardless of eligibility" do
+      allow(seller).to receive(:eligible_for_store_agent?).and_return(true)
+      seller_context = SellerContext.new(user: support_for_seller, seller:)
+      expect(subject).to_not permit(seller_context, seller)
+    end
+  end
 end

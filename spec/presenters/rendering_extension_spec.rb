@@ -151,6 +151,7 @@ describe "RenderingExtension" do
                     create: true,
                   },
                   user: {
+                    view_store_agent: true,
                     use_store_agent: true,
                   }
                 },
