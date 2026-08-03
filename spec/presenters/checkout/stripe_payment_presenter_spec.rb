@@ -448,6 +448,47 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
   end
 
+  it "mounts the buyer-currency element for a buyer who picked pay-in-installments on a presentment candidate" do
+    # Sahil's follow-up on #6975: the buyer choosing installments must not kick a
+    # presentment-candidate cart back to CardElement any more than the product merely
+    # OFFERING an installment plan does above. The quote's later_charge_kind == "installment"
+    # component (CustomerSurchargeController#buyer_currency_charge_details) already derives the
+    # first-installment amount the buyer is charged today, so quoting it in the buyer's
+    # currency changes only the display/charge currency, not what is billed.
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:product, user: seller, price_cents: 1234)
+    create(:product_installment_plan, link: product)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    add_products = [
+      checkout_product_for(
+        product,
+        pay_in_installments: true,
+        buyer_currency_display: {
+          display_mode: "buyer_local",
+          buyer_currency_shown: Currency::CAD,
+        }
+      )
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(
+      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+    )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
+  it "still falls back to CardElement for a buyer who picked pay-in-installments when the cart is not a presentment candidate" do
+    # The unramped-seller / no-buyer-currency-display case: pay_in_installments must still route
+    # to CardElement here, because there is no FX quote path for it and the client-confirm lane
+    # cannot take an installment purchase (PreparePaymentIntentService resolves it as recurring).
+    expect(stripe_payment_props(add_products: [flagged_seller_product(pay_in_installments: true)]))
+      .to eq(card_element_fallback("setup_or_installment_flow"))
+  end
+
   it "mounts the buyer-currency element for a recurring presentment candidate" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:membership_product, user: seller, price_cents: 1234)
