@@ -61,10 +61,14 @@ module Product::Prices
   def set_customizable_price
     return if is_tiered_membership
     return unless default_price_cents == 0
-    # Clearing, not returning: a $0-base product that gains a paid variant keeps the
-    # stale `true` otherwise, and no editor control switches PWYW off on a $0 base — so
-    # checkout offers a free-entry amount box whose minimum on the free option is 0 and
-    # a buyer can pay full price for the free tier (gumroad-private#1660).
+    # Coffee is deliberately $0-base with paid "Suggested Amounts" variants and a free-entry
+    # box — initialize_suggested_amount_if_needed! sets both in one save, so clearing here
+    # would undo it on creation.
+    return if native_type == Link::NATIVE_TYPE_COFFEE
+    # Clearing, not returning: a $0-base product that gains a paid variant keeps the stale
+    # `true` otherwise, and no editor control switches PWYW off on a $0 base — so checkout
+    # offers a free-entry amount box whose minimum on the free option is 0 and a buyer can
+    # pay full price for the free tier (gumroad-private#1660).
     if variant_categories_alive.joins(:variants).merge(BaseVariant.alive).sum("base_variants.price_difference_cents") > 0
       update_column(:customizable_price, false) if customizable_price?
       return

@@ -218,6 +218,18 @@ describe Product::Prices do
 
         expect(product.reload.customizable_price).to be(true)
       end
+
+      it "keeps a coffee product customizable despite its paid suggested amounts" do
+        product = create(:product, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 5_00)
+        product.initialize_suggested_amount_if_needed!
+        expect(product.reload.customizable_price).to be(true)
+        expect(product.variant_categories_alive.joins(:variants).merge(BaseVariant.alive)
+                 .sum("base_variants.price_difference_cents")).to be > 0
+
+        product.save!
+
+        expect(product.reload.customizable_price).to be(true)
+      end
     end
   end
 
