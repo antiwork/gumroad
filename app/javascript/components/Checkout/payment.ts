@@ -59,13 +59,8 @@ export type PaymentElementConfig = {
 // the browser never widens it — card and Link everywhere (stripe_link_enabled reflects the
 // resolved set; Link auto-enables with the Payment Element, dropped only by the PPP gate), plus
 // the US-locked methods (cashapp, us_bank_account) for US buyers.
-// Currency is "usd" everywhere except the method-forced local-method surface (iDEAL/Bancontact/UPI),
-// where the server mounts the element in the payment method's forced currency (e.g. "eur") and
-// supplies presentment_amount_cents — the whole cart's listed subtotal in that currency,
-// quantities included (a cart is only eligible when every line is priced in the same forced
-// currency) — so Stripe shows the EUR-only method tabs (it hides methods that can't charge in the
-// element's currency). When presentment_amount_cents is null the amount derives from the USD
-// total below.
+// Currency is "usd" everywhere except direct-listed surfaces. Those mount in the listed currency
+// with the listed subtotal so the Element, checkout summary, and deferred intent stay aligned.
 // listed_currency_display is non-null on that same surface and tells the checkout summary to
 // render the cart in the listed currency, matching what the element and the charge use.
 export type ListedCurrencyDisplayConfig = {
@@ -79,6 +74,9 @@ export type PaymentElementClientConfirmConfig = {
   currency: string;
   presentment_amount_cents: number | null;
   listed_currency_display: ListedCurrencyDisplayConfig | null;
+  // Marks the GeoIP/listed-price card lane. Unlike the method-forced lane, tip or shipping
+  // moves this Element back to canonical USD because charge-time eligibility excludes both.
+  direct_listed_card?: boolean;
   payment_method_types: string[];
   // Signed server copy of payment_method_types above, echoed back at /orders/prepare so the
   // deferred intent is built from the list this page actually mounted rather than a second
@@ -235,8 +233,8 @@ export type State = {
   // buyer-currency display and the quote token are suppressed while this is set.
   willSaveCard: boolean;
   // True while the buyer is paying with a card already on file. Saved cards stay on the
-  // server-confirm path, which never mints a ConfirmationToken and so never reaches
-  // Charge::MethodForcedPresentment — the charge is canonical USD. Mirrored into state (rather than
+  // server-confirm path, which never mints a ConfirmationToken and so never reaches client-confirm
+  // presentment — the charge is canonical USD. Mirrored into state (rather than
   // staying local to PaymentForm) because the cart summary has to know: it is the default selection
   // for any returning buyer, and showing listed-currency totals for a canonical-USD charge is the
   // display/charge mismatch we are fixing (gumroad-private#1371).
@@ -442,12 +440,12 @@ export function getStripePaymentElementAmount(state: State) {
     state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
   )
     return null;
-  // Method-forced local-method surface: the element is mounted in the payment method's forced
-  // currency (e.g. EUR for iDEAL/Bancontact), so the USD total below would be the wrong unit.
-  // The server supplies the listed amount in the element's currency instead.
+  // Direct-listed surfaces mount in the listed currency, so the USD total below would be the
+  // wrong unit. The server supplies the listed amount instead.
   if (
     state.checkoutPayment.integration === "payment_element_client_confirm" &&
-    state.checkoutPayment.elements_options.presentment_amount_cents !== null
+    state.checkoutPayment.elements_options.presentment_amount_cents !== null &&
+    (!state.checkoutPayment.elements_options.direct_listed_card || directListedCardActive(state))
   )
     return state.checkoutPayment.elements_options.presentment_amount_cents;
   // Buyer-currency presentment lane: the element mounts in the quote currency, so the amount
@@ -480,21 +478,24 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   return { currency: display.currencyCode, amountCents: display.chargePresentmentTotalCents };
 }
 
-// The currency the server-confirm Payment Element should mount in, or null while it cannot be
-// known. On the buyer-currency presentment lane the currency lives in the FX quote of the
-// surcharge response, and every surcharge refresh (tip, address, VAT ID, or cart edits) passes
-// through pending/loading states with no quote. Returning null in that window — rather than
-// prematurely reporting canonical USD — lets PaymentElementInput keep the last mounted
-// currency, because a currency change destroys and recreates the Stripe element (it is part of
-// the Elements provider key), wiping any card details the buyer already entered. Definite
-// canonical states (a loaded response without a quote, or the buyer opting to save the card)
-// return "usd" so those transitions genuinely remount.
+// The currency the Payment Element should mount in. Direct-listed client-confirm checkouts use
+// the server-selected listed currency only while their cart stays eligible. The server-confirm
+// FX lane derives its currency from the surcharge quote; returning null while that quote reloads
+// preserves the current Element instead of remounting and wiping entered card details.
 export function getStripePaymentElementMountCurrency(state: State): string | null {
+  if (state.checkoutPayment.integration === "payment_element_client_confirm") {
+    const elementsOptions = state.checkoutPayment.elements_options;
+    return elementsOptions.direct_listed_card && !directListedCardActive(state) ? "usd" : elementsOptions.currency;
+  }
   if (state.checkoutPayment.integration !== "payment_element") return null;
   const elementsOptions = state.checkoutPayment.elements_options;
   if (!elementsOptions.buyer_currency_presentment) return elementsOptions.currency;
   if (state.surcharges.type !== "loaded") return null;
   return getStripePaymentElementPresentment(state)?.currency ?? elementsOptions.currency;
+}
+
+function directListedCardActive(state: State) {
+  return state.paymentMethod === "card" && !state.usingSavedCard && computeTip(state) === 0 && !hasShipping(state);
 }
 
 export function isProcessing(state: State) {

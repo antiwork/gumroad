@@ -32,6 +32,12 @@ class Checkout::BuyerCurrencyEligibility
   # buyer-currency charging away from the sellers who already have it.
   DESTINATION_CHARGE_FEATURE_NAME = :buyer_currency_destination_charges
 
+  # Per-seller ramp for charging a product's listed currency directly when it is already
+  # the buyer's currency. This lane mints no FX quote: the product price is already in the
+  # currency the buyer saw, and only USD-stored tax/shipping components are converted back
+  # with the purchase's stored rate.
+  LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME = :checkout_listed_currency_direct_charge
+
   # This lane's own ramp for memberships. Separate from FEATURE_NAME because a membership is
   # the first shape where a buyer-currency amount outlives the checkout that agreed it, and
   # because turning it on starts a recurring obligation rather than a single charge — so it
@@ -68,12 +74,9 @@ class Checkout::BuyerCurrencyEligibility
     "pix" => :checkout_local_method_pix,
   }.freeze
 
-  # `direct_listed_amount` is only set by the method-forced mode: true means the
-  # product is already priced in the forced currency, so the charge path can use
-  # the listed price as-is and skip fetching an FX quote. For the card mode
-  # (#decision) it is always nil: that mode always charges through the locked FX
-  # quote, and the one cart that could use a listed price as-is (a product priced
-  # in the buyer's own currency) is rejected by that mode instead of charged directly.
+  # `direct_listed_amount` is set when every product is already priced in the charge
+  # currency, so the charge path can use the listed price as-is and skip fetching an FX
+  # quote.
   Decision = Struct.new(:eligible, :currency, :fallback_reason, :direct_listed_amount, keyword_init: true) do
     def eligible?
       eligible
@@ -96,6 +99,10 @@ class Checkout::BuyerCurrencyEligibility
     feature.present? && seller.present? && Feature.active?(feature, seller)
   end
 
+  def self.listed_currency_direct_charge_enabled?(seller)
+    seller.present? && Feature.active?(LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+  end
+
   # Whether a method-forced surface for `currency` is available to card or Link in this
   # eligibility check: always in Stripe test mode, and in live mode when at least one
   # registry method forcing that currency has its launch flag active. The presenter and
@@ -111,7 +118,7 @@ class Checkout::BuyerCurrencyEligibility
     end
   end
 
-  attr_reader :order, :seller, :merchant_account, :chargeable, :purchases, :params, :setup_future_charges, :off_session
+  attr_reader :order, :seller, :merchant_account, :chargeable, :purchases, :params, :setup_future_charges, :off_session, :client_confirm
 
   def self.seller_enabled?(seller)
     seller.present? &&
@@ -305,7 +312,7 @@ class Checkout::BuyerCurrencyEligibility
     Stripe.api_key.to_s.start_with?("sk_test_")
   end
 
-  def initialize(order:, seller:, merchant_account:, chargeable:, purchases:, params:, setup_future_charges:, off_session:)
+  def initialize(order:, seller:, merchant_account:, chargeable:, purchases:, params:, setup_future_charges:, off_session:, client_confirm: false)
     @order = order
     @seller = seller
     @merchant_account = merchant_account
@@ -314,6 +321,7 @@ class Checkout::BuyerCurrencyEligibility
     @params = params || {}
     @setup_future_charges = setup_future_charges
     @off_session = off_session
+    @client_confirm = client_confirm
   end
 
   def decision
@@ -344,7 +352,7 @@ class Checkout::BuyerCurrencyEligibility
     # Any other off-session charge — a preorder release, a renewal that stored no amount —
     # still falls back.
     return fallback(:off_session) if off_session && !multi_seller_order? && !subscription_renewal_with_stored_amount?
-    return fallback(:missing_stripe_chargeable) if chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
+    return fallback(:missing_stripe_chargeable) if !client_confirm && chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
 
     # All purchases in an order come from the same checkout request, so any purchase's IP
     # identifies the buyer's location.
@@ -359,16 +367,52 @@ class Checkout::BuyerCurrencyEligibility
     # binds only seller, currency, and total (not product ids), so a stale token issued
     # for a supported cart could otherwise be replayed against an unsupported product
     # whose charged amount differs from the locked total.
+    listed_in_buyer_currency = []
     purchases.each do |purchase|
       return fallback(:unsupported_product_type) if unsupported_product_type?(purchase) && !later_charge_purchase_in_ramp?(purchase)
       return fallback(:unsupported_product_type) if unquotable_purchase?(purchase)
-      # A product already priced in the buyer's currency is withheld from the quote
-      # lane so an FX round trip can never misprice it — see the comment on
-      # BuyerCurrencyQuote#quotable_product?. (It only pays its listed price directly
-      # on the method-forced local-method lane; a card checkout for it charges
-      # canonical USD.) Any product currency other than the buyer's own is quotable,
-      # including non-USD ones.
-      return fallback(:listed_currency_is_buyer_currency) if purchase.link.price_currency_type.to_s.downcase == buyer_currency
+
+      listed_in_buyer_currency << (purchase.link.price_currency_type.to_s.downcase == buyer_currency)
+    end
+
+    # A product already priced in the buyer's currency is withheld from the QUOTE lane so an
+    # FX round trip can never misprice it (see BuyerCurrencyQuote#quotable_product?). It does
+    # not need one: the listed price is already the amount the buyer was shown, so charge it
+    # directly. A mixed cart still falls back — one direct line beside one quoted line needs
+    # the per-line basis tracked in gumroad-private#1298.
+    if listed_in_buyer_currency.any?
+      # The direct lane charges `displayed_price_cents`, which is denominated in the
+      # purchase's snapshotted currency, not the product's current one. A seller who
+      # repriced from USD to the buyer's currency after the purchase was built would
+      # otherwise get USD-denominated cents sent as the buyer's currency.
+      # The mount-currency report ties this charge decision to the surface the buyer saw;
+      # CardElement and canonical-USD Element fallbacks must stay canonical.
+      return fallback(:listed_currency_is_buyer_currency) unless listed_in_buyer_currency.all? &&
+                                                                purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
+                                                                purchases.one? &&
+                                                                self.class.listed_currency_direct_charge_enabled?(seller) &&
+                                                                listed_currency_displayed?(buyer_currency)
+
+      # A shape whose later charges are fixed at signup cannot use this lane yet. The fixing
+      # is derived from the charge presentment's fx_rate (FixLaterChargePresentmentService
+      # #presentment_terms), and this lane records none because it mints no quote — so the
+      # signup would charge the listed currency and every renewal after it would find no
+      # stored row and fall back to canonical USD. That is the mid-subscription currency
+      # switch #subscription_renewal_with_stored_amount? exists to prevent. Lifting this
+      # needs a fixing written from `rate_converted_to_usd`.
+      return fallback(:listed_currency_is_buyer_currency) if purchases.any? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? }
+
+      # Same divergence that makes BuyerCurrencyQuote refuse to quote a non-USD listing
+      # carrying a tip or shipping: the surcharge request the buyer's summary was rendered
+      # from and the order builder this lane charges convert those components at different
+      # points and disagree. The quote lane can afford to merely withhold the token because
+      # `verify!` would catch the mismatch; here there is no token and no verification, so an
+      # unexcluded cart would charge the divergent total silently.
+      return fallback(:listed_currency_is_buyer_currency) if purchases.any? { _1.tip&.value_cents.to_i.positive? || _1.shipping_cents.to_i.positive? }
+
+      # No settlement gate applies: the marker only predicts FX quote failures, and this
+      # lane mints no quote because the listed price is already in the buyer's currency.
+      return eligible(currency: buyer_currency, direct_listed_amount: true)
     end
 
     # Checked here (not up top with the other account gates) because the settlement
@@ -477,6 +521,11 @@ class Checkout::BuyerCurrencyEligibility
   end
 
   private
+    def listed_currency_displayed?(currency)
+      params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT &&
+        params[:payment_element_mount_currency].to_s.downcase == currency
+    end
+
     def eligible(currency:, direct_listed_amount: nil)
       Decision.new(eligible: true, currency:, fallback_reason: nil, direct_listed_amount:)
     end

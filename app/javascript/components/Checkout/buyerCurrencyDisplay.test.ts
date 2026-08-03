@@ -275,10 +275,27 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     },
   ];
 
+  const directListedCardPayment = (): CheckoutPaymentConfig => {
+    const payment = listedCurrencyPayment();
+    if (payment.integration !== "payment_element_client_confirm") throw new Error("unexpected payment config");
+    return {
+      ...payment,
+      elements_options: { ...payment.elements_options, direct_listed_card: true },
+    };
+  };
+
   it("renders the listed currency for a method-forced cart priced in that currency", () => {
     const listed = getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems());
 
     expect(listed).toEqual({ currencyCode: "brl", rate: 5.45, subunitToUnit: 100 });
+  });
+
+  it("falls back to USD for tip or shipping shapes excluded from the direct-listed card lane", () => {
+    expect(getCheckoutListedCurrencyDisplay(directListedCardPayment(), brlCartItems(), { hasTip: true })).toBeNull();
+    expect(
+      getCheckoutListedCurrencyDisplay(directListedCardPayment(), brlCartItems(), { hasShipping: true }),
+    ).toBeNull();
+    expect(getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems(), { hasTip: true })).not.toBeNull();
   });
 
   it("stays in canonical USD when the server did not choose the listed-currency lane", () => {
