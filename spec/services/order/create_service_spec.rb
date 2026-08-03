@@ -357,6 +357,14 @@ describe Order::CreateService, :vcr do
         expect(purchases.fetch(product_2).offer_code).to eq(offer_code)
       end
 
+      it "uses the explicit PPP preference when ordering allocations" do
+        service = Order::CreateService.new(params:)
+
+        expect(service.send(:allocations_consider_ppp?, [{ accepts_purchasing_power_parity_discount: false }])).to be(false)
+        expect(service.send(:allocations_consider_ppp?, [{ accepts_purchasing_power_parity_discount: true }])).to be(true)
+        expect(service.send(:allocations_consider_ppp?, [{}])).to be(true)
+      end
+
       it "keeps capped-code usage on a surviving fragment when the first allocation fails" do
         product_1.update!(price_cents: 10_00)
         offer_code.update!(amount_cents: 15_00, max_purchase_count: 1)

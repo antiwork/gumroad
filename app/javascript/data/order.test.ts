@@ -191,6 +191,23 @@ describe("mergeOfferCodes", () => {
 });
 
 describe("startOrderCreation", () => {
+  it("sends PPP eligibility independently of the winning discount", async () => {
+    vi.stubGlobal("Routes", { orders_path: () => "/orders" });
+    requestMock.mockReset().mockResolvedValueOnce(jsonResponse({ success: false, error_message: "Try again." }));
+    const lineItem = requestData.lineItems.at(0);
+    if (!lineItem) throw new Error("Missing test line item");
+
+    await startOrderCreation({ ...requestData, lineItems: [{ ...lineItem, acceptsPppDiscount: true }] });
+
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          line_items: [expect.objectContaining({ accepts_purchasing_power_parity_discount: true })],
+        }),
+      }),
+    );
+  });
+
   it("preserves active codes when order creation fails before line results", async () => {
     vi.stubGlobal("Routes", { orders_path: () => "/orders" });
     requestMock.mockReset().mockResolvedValueOnce(jsonResponse({ success: false, error_message: "Try again." }));

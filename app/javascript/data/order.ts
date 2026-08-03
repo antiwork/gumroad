@@ -124,6 +124,7 @@ export const startOrderCreation = async (
   activeOfferCodes: OfferCodes = [],
 ): Promise<CartPurchaseResult> => {
   let pendingOrderId: string | null = null;
+  let pendingProcessorIntentId: string | null = null;
   let retryOfferCodes = activeOfferCodes;
   try {
     const response = await createOrder(requestData);
@@ -143,6 +144,7 @@ export const startOrderCreation = async (
       const orderId = lineItemRequiringSCA.order.id;
       pendingOrderId = orderId;
       const clientSecret = lineItemRequiringSCA.client_secret;
+      pendingProcessorIntentId = clientSecret.split("_secret")[0] ?? null;
       const stripeConnectAccountId = lineItemRequiringSCA.order.stripe_connect_account_id;
       const requiresCardAction = "requires_card_action" in lineItemRequiringSCA;
       const orderConfirmResponse = await confirmOrder(
@@ -176,6 +178,7 @@ export const startOrderCreation = async (
         "confirm",
         error instanceof Error ? error : new Error("Unknown confirmation error"),
         null,
+        pendingProcessorIntentId,
       );
       if (!reservationsReleased) retryOfferCodes = withoutReservedOncePerCartOfferCodes(retryOfferCodes);
     }
@@ -361,6 +364,7 @@ export const startClientConfirmOrderCreation = async (
 ): Promise<CartPurchaseResult> => {
   let confirmedReturnUrl: string | null = null;
   let preparedOrderId: string | null = null;
+  let preparedProcessorIntentId: string | null = null;
   let retryOfferCodes = activeOfferCodes;
   try {
     const prepareResponse = await prepareClientConfirmOrder(requestData, confirmationTokenId);
@@ -389,6 +393,7 @@ export const startClientConfirmOrderCreation = async (
     );
     const { client_secret: clientSecret, order } = confirmationLineItem;
     preparedOrderId = order.id;
+    preparedProcessorIntentId = clientSecret.split("_secret")[0] ?? null;
     const stripe = order.stripe_connect_account_id
       ? await getConnectedAccountStripeInstance(order.stripe_connect_account_id)
       : await getStripeInstance();
@@ -409,6 +414,7 @@ export const startClientConfirmOrderCreation = async (
         "confirm",
         confirmResult.error,
         selectedMethodType,
+        clientSecret.split("_secret")[0] ?? null,
       );
       return translateOrderFailureResponseIntoLineItemFailures(
         requestData,
@@ -460,6 +466,7 @@ export const startClientConfirmOrderCreation = async (
         "confirm",
         error instanceof Error ? error : new Error("Unknown confirmation error"),
         selectedMethodType,
+        preparedProcessorIntentId,
       );
       if (!reservationsReleased) retryOfferCodes = withoutReservedOncePerCartOfferCodes(retryOfferCodes);
     }
@@ -483,6 +490,7 @@ const reportClientConfirmError = async (
   stage: string,
   error: StripeError | Error,
   selectedMethodType: string | null,
+  processorIntentId: string | null,
 ): Promise<boolean> => {
   try {
     const stripeError = "type" in error ? error : null;
@@ -497,6 +505,7 @@ const reportClientConfirmError = async (
         stripe_error_message: error.message ?? null,
         payment_method_type: stripeError?.payment_method?.type ?? null,
         selected_payment_method_type: selectedMethodType,
+        processor_intent_id: processorIntentId,
       },
     });
     if (!response.ok) return false;

@@ -130,23 +130,28 @@ class OrdersController < ApplicationController
       ErrorNotifier.notify("Client-confirm browser error", **error_details)
     end
 
-    reservations_released = release_failed_client_confirmation(order)
+    reservations_released = release_failed_client_confirmation(
+      order,
+      processor_intent_id: params[:processor_intent_id].to_s.first(100).presence
+    )
 
     render json: { success: true, reservations_released: }
   end
 
   private
-    def release_failed_client_confirmation(order)
+    def release_failed_client_confirmation(order, processor_intent_id:)
       purchase = order.purchases.in_progress.find do
-        _1.processor_payment_intent_id.present? || _1.processor_setup_intent_id.present?
+        intent_ids = [_1.processor_payment_intent_id, _1.processor_setup_intent_id].compact
+        intent_ids.any? && (processor_intent_id.nil? || intent_ids.include?(processor_intent_id))
       end
       return false unless purchase
 
       payment_intent = purchase.processor_payment_intent_id.present?
+      checked_intent_id = payment_intent ? purchase.processor_payment_intent_id : purchase.processor_setup_intent_id
       intent = if payment_intent
-        ChargeProcessor.get_charge_intent(purchase.merchant_account, purchase.processor_payment_intent_id)
+        ChargeProcessor.get_charge_intent(purchase.merchant_account, checked_intent_id)
       else
-        ChargeProcessor.get_setup_intent(purchase.merchant_account, purchase.processor_setup_intent_id)
+        ChargeProcessor.get_setup_intent(purchase.merchant_account, checked_intent_id)
       end
       status = payment_intent ? intent.payment_intent.status : intent.setup_intent.status
       safe_statuses = [
@@ -164,7 +169,10 @@ class OrdersController < ApplicationController
       else
         purchase.cancel_setup_intent!
       end
-      order.purchases.in_progress.find_each { Purchase::MarkFailedService.new(_1).perform }
+      order.purchases.in_progress.find_each do |other_purchase|
+        other_intent_id = payment_intent ? other_purchase.processor_payment_intent_id : other_purchase.processor_setup_intent_id
+        Purchase::MarkFailedService.new(other_purchase).perform if other_intent_id == checked_intent_id
+      end
       true
     rescue ChargeProcessorError => e
       ErrorNotifier.notify(e) { _1.add_metadata(:order, { id: order.id }) }
@@ -371,7 +379,7 @@ class OrdersController < ApplicationController
         # Individual purchase params
         line_items: [:uid, :permalink, :perceived_price_cents, :price_range, :discount_code, :is_preorder, :quantity, :call_start_time,
                      :was_product_recommended, :recommended_by, :referrer, :is_rental, :is_multi_buy,
-                     :was_discover_fee_charged, :price_cents, :tax_cents, :gumroad_tax_cents, :shipping_cents, :price_id, :affiliate_id, :url_parameters, :is_purchasing_power_parity_discounted,
+                     :was_discover_fee_charged, :price_cents, :tax_cents, :gumroad_tax_cents, :shipping_cents, :price_id, :affiliate_id, :url_parameters, :is_purchasing_power_parity_discounted, :accepts_purchasing_power_parity_discount,
                      :recommender_model_name, :tip_cents, :pay_in_installments, :force_new_subscription,
                      custom_fields: [:id, :value], variants: [], perceived_free_trial_duration: [:unit, :amount], accepted_offer: [:id, :original_variant_id, :original_product_id],
                      bundle_products: [:product_id, :variant_id, :quantity, custom_fields: [:id, :value]]])

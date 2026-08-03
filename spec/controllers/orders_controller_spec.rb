@@ -2886,6 +2886,36 @@ describe OrdersController, :vcr do
       expect(purchase.reload).to be_in_progress
     end
 
+    it "fails only purchases sharing the checked intent" do
+      second_product = create(:product, user: seller, price_cents: 10_00)
+      params = {
+        line_items: [
+          line_items.first,
+          { uid: "unique-id-1", permalink: second_product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 },
+        ],
+      }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      first_purchase, second_purchase = order.purchases.order(:id)
+      first_purchase.create_processor_payment_intent!(intent_id: "pi_failed")
+      second_purchase.create_processor_payment_intent!(intent_id: "pi_other")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
+      )
+      allow(ChargeProcessor).to receive(:get_charge_intent).and_return(charge_intent)
+      expect(ChargeProcessor).to receive(:cancel_payment_intent!).with(first_purchase.merchant_account, "pi_failed")
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        processor_intent_id: "pi_failed",
+        stripe_error_code: "card_declined",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => true)
+      expect(first_purchase.reload).to be_failed
+      expect(second_purchase.reload).to be_in_progress
+    end
+
     it "truncates oversized values so the endpoint cannot be used to flood the notifier" do
       params = { line_items: line_items.map(&:dup) }.merge(common_params)
       order, = Order::CreateService.new(params:).perform

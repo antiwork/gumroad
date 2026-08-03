@@ -604,6 +604,7 @@ const CheckoutIndexPage = () => {
                 !cartForm.data.cart.rejectPppDiscount &&
                 discounted.discount?.type === "ppp" &&
                 item.price !== 0,
+              acceptsPppDiscount: !!item.product.ppp_details && !cartForm.data.cart.rejectPppDiscount,
               forceNewSubscription: item.force_new_subscription,
               acceptedOffer: item.accepted_offer ?? null,
               bundleProducts: item.product.bundle_products.map((bundleProduct) => ({

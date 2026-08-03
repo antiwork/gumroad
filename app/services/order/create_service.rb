@@ -106,7 +106,10 @@ class Order::CreateService
               # in Purchase::CreateService#build_purchase.
               :payment_element_mount_currency, :payment_method_list_token
             )
-            .merge(line_item_params.except(:uid, :permalink, :once_per_cart_discount_cents, :once_per_cart_discount_rank))
+            .merge(line_item_params.except(
+              :uid, :permalink, :once_per_cart_discount_cents, :once_per_cart_discount_rank,
+              :accepts_purchasing_power_parity_discount
+            ))
             .merge({ cart_items: })
         ).merge(
           submitted_pre_discount_price_cents: submitted_pre_discount_price_cents(line_item_params, allocated_discount),
@@ -251,8 +254,8 @@ class Order::CreateService
 
       allocations_by_uid = {}
       zero_allocations_by_uid = Hash.new { |hash, line_item_uid| hash[line_item_uid] = [] }
+      consider_ppp = allocations_consider_ppp?(line_items)
       grouped_items.each do |(group_type, group_value), items|
-        consider_ppp = line_items.any? { _1[:is_purchasing_power_parity_discounted] }
         items = items.each_with_index.sort_by do |item, index|
           link = links_by_permalink[item[:permalink]]
           [allocation_alternative_savings_cents(item, link, consider_ppp:), link&.unique_permalink.to_s, index]
@@ -295,6 +298,15 @@ class Order::CreateService
         allocations_by_uid[line_item_uid] = distinct_allocations.first if distinct_allocations.one?
       end
       allocations_by_uid
+    end
+
+    def allocations_consider_ppp?(line_items)
+      preferences = line_items
+        .select { _1.key?(:accepts_purchasing_power_parity_discount) }
+        .map { _1[:accepts_purchasing_power_parity_discount] }
+      return true if preferences.empty?
+
+      preferences.any? { ActiveModel::Type::Boolean.new.cast(_1) }
     end
 
     def allocation_alternative_savings_cents(line_item, product, consider_ppp:)
