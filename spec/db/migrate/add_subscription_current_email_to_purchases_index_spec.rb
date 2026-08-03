@@ -24,6 +24,10 @@ RSpec.describe AddSubscriptionCurrentEmailToPurchasesIndex do
     EsClient.update(index:, id: 1, body: { "doc" => { "subscription_current_email" => "newname@newdomain.example" } })
   end
 
+  def write_current_email_domain
+    EsClient.update(index:, id: 1, body: { "doc" => { "subscription_current_email_domain" => "newdomain.example" } })
+  end
+
   it "makes the field writable, and it was not writable before" do
     expect { write_current_email }
       .to raise_error(Elasticsearch::Transport::Transport::Errors::BadRequest, /strict_dynamic_mapping_exception/)
@@ -33,6 +37,15 @@ RSpec.describe AddSubscriptionCurrentEmailToPurchasesIndex do
     expect { write_current_email }.not_to raise_error
   end
 
+  it "makes the domain field writable, and it was not writable before" do
+    expect { write_current_email_domain }
+      .to raise_error(Elasticsearch::Transport::Transport::Errors::BadRequest, /strict_dynamic_mapping_exception/)
+
+    described_class.new.up
+
+    expect { write_current_email_domain }.not_to raise_error
+  end
+
   # The mapping must match the model's, or a reindex writes a field the search clauses cannot use.
   it "matches the mapping the model declares" do
     described_class.new.up
@@ -40,6 +53,16 @@ RSpec.describe AddSubscriptionCurrentEmailToPurchasesIndex do
     live = EsClient.indices.get_mapping(index:).dig(index, "mappings", "properties", "subscription_current_email")
     expect(live.deep_transform_values(&:to_s)).to eq(
       Purchase.mappings.to_hash[:properties][:subscription_current_email]
+              .deep_stringify_keys.deep_transform_values(&:to_s)
+    )
+  end
+
+  it "matches the domain mapping the model declares" do
+    described_class.new.up
+
+    live = EsClient.indices.get_mapping(index:).dig(index, "mappings", "properties", "subscription_current_email_domain")
+    expect(live.deep_transform_values(&:to_s)).to eq(
+      Purchase.mappings.to_hash[:properties][:subscription_current_email_domain]
               .deep_stringify_keys.deep_transform_values(&:to_s)
     )
   end

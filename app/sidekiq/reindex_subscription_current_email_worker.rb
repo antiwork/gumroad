@@ -19,7 +19,7 @@ class ReindexSubscriptionCurrentEmailWorker
       ElasticsearchIndexerWorker.perform_async("update", {
                                                  "record_id" => purchase.id,
                                                  "class_name" => "Purchase",
-                                                 "fields" => ["subscription_current_email"],
+                                                 "fields" => ["subscription_current_email", "subscription_current_email_domain"],
                                                })
     end
   end

@@ -451,7 +451,7 @@ class PurchaseSearchService
         shoulds << {
           multi_match: {
             query: query_string,
-            fields: ["email", "email_domain", "full_name", "subscription_current_email"]
+            fields: ["email", "email_domain", "full_name", "subscription_current_email", "subscription_current_email_domain"]
           }
         }
         if query_string.include?("@")

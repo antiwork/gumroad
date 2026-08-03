@@ -72,6 +72,7 @@ module Purchase::Searchable
       indexes :subscription_current_email, type: :text, analyzer: :email, search_analyzer: :search_email do
         indexes :raw, type: :keyword
       end
+      indexes :subscription_current_email_domain, type: :text, analyzer: :email, search_analyzer: :search_email
       indexes :paypal_email, type: :text, analyzer: :email, search_analyzer: :search_email do
         indexes :raw, type: :keyword
       end
@@ -129,7 +130,7 @@ module Purchase::Searchable
       ],
       "country" => "country_or_ip_country",
       "created_at" => "created_at",
-      "email" => ["email", "email_domain", "subscription_current_email"],
+      "email" => ["email", "email_domain", "subscription_current_email", "subscription_current_email_domain"],
       "fee_cents" => "fee_cents",
       "flags" => %w[
         selected_flags
@@ -171,6 +172,8 @@ module Purchase::Searchable
         email.downcase.split("@")[1] if email.present?
       when "subscription_current_email"
         subscription.email&.downcase if is_original_subscription_purchase? && subscription.present?
+      when "subscription_current_email_domain"
+        subscription.email.downcase.split("@")[1] if is_original_subscription_purchase? && subscription.present? && subscription.email.present?
       when "selected_flags"
         selected_flags.map(&:to_s)
       when "stripe_refunded"
@@ -275,7 +278,7 @@ module Purchase::Searchable
       ElasticsearchIndexerWorker.perform_in(2.seconds, "update", {
                                               "record_id" => purchase.id,
                                               "class_name" => "Purchase",
-                                              "fields" => ["subscription_current_email"],
+                                              "fields" => ["subscription_current_email", "subscription_current_email_domain"],
                                             })
     end
   end

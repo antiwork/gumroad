@@ -77,6 +77,7 @@ describe Purchase::Searchable do
         "subscription_id" => nil,
         "subscription_cancelled_at" => nil,
         "subscription_current_email" => nil,
+        "subscription_current_email_domain" => nil,
         "subscription_deactivated_at" => nil,
         "taxonomy_id" => nil,
         "license_serial" => @purchase.license.serial,

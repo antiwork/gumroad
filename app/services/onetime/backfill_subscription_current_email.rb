@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-# Populates the `subscription_current_email` search field on memberships that predate it.
+# Populates the `subscription_current_email` and `subscription_current_email_domain` search fields
+# on memberships that predate them.
 #
 # The field is written by callbacks that only fire on a future account-email change or subscription
 # reassignment, so a member whose email changed BEFORE the field existed stays unfindable by the
@@ -22,7 +23,7 @@
 #   Onetime::BackfillSubscriptionCurrentEmail.process
 class Onetime::BackfillSubscriptionCurrentEmail
   BATCH_SIZE = 1_000
-  FIELDS = %w[subscription_current_email].freeze
+  FIELDS = %w[subscription_current_email subscription_current_email_domain].freeze
   # Spread each batch's index writes so a backfill cannot starve live indexing.
   BATCH_INTERVAL_SECONDS = 10
 
