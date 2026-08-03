@@ -155,4 +155,25 @@ describe Order::OfferCodeRecoveryService do
     expect(merged.first[:code]).to eq("SAVE")
     expect(merged.first[:products].keys).to contain_exactly(product_1.unique_permalink, product_2.unique_permalink)
   end
+
+  it "merges responses whose codes differ only in unicode normalization" do
+    merged = described_class.merge_responses(
+      [{ code: "éclair".unicode_normalize(:nfc), products: { product_1.unique_permalink => { cents: 100 } } }],
+      [{ code: "éclair".unicode_normalize(:nfd), products: { product_2.unique_permalink => { cents: 0 } } }],
+    )
+
+    expect(merged.one?).to be(true)
+    expect(merged.first[:products].keys).to contain_exactly(product_1.unique_permalink, product_2.unique_permalink)
+  end
+
+  it "sanitizes retry candidate codes to their precomposed form" do
+    candidates = described_class.sanitize_retry_candidates(
+      [{
+        code: "ÉCLAIR".unicode_normalize(:nfd),
+        products: { "retry-line" => { permalink: product_1.unique_permalink, quantity: 1 } },
+      }]
+    )
+
+    expect(candidates.first[:code]).to eq("éclair".unicode_normalize(:nfc))
+  end
 end

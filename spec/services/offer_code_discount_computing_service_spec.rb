@@ -78,6 +78,15 @@ describe OfferCodeDiscountComputingService do
     expect(result[:error_code]).to eq(:invalid_offer)
   end
 
+  it "matches a code submitted in decomposed unicode form, as checkout passes it unnormalized" do
+    offer_code.update!(code: "caf\u00E9")
+
+    result = OfferCodeDiscountComputingService.new("cafe\u0301", products_data).process
+
+    expect(result[:error_code]).to be_nil
+    expect(result[:products_data][product.unique_permalink][:discount]).to include(type: "percent", percents: 100)
+  end
+
   it "returns invalid error_code in result when products is nil" do
     result = OfferCodeDiscountComputingService.new(offer_code.code, nil).process
 

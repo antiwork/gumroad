@@ -1155,8 +1155,25 @@ class Link < ApplicationRecord
     self.json_data.present? && self.json_data["custom_attributes"].present? ? self.json_data["custom_attributes"] : []
   end
 
-  def taxonomy_attribute_values
+  # The seller's explicit Share-tab answers. `taxonomy_attribute_values` below layers inferred
+  # values underneath these for filtering/indexing; this raw accessor is what the editor writes
+  # to and what a re-run of the classifier must never overwrite (gumroad-private#1788: "a
+  # seller's explicit answer always wins").
+  def seller_taxonomy_attribute_values
     self.json_data.present? && self.json_data["taxonomy_attribute_values"].present? ? self.json_data["taxonomy_attribute_values"] : {}
+  end
+
+  # Classifier output, stored separately from `seller_taxonomy_attribute_values` so a backfill
+  # or a registry change can re-run and wholesale-replace this key without touching anything a
+  # seller typed in.
+  def inferred_taxonomy_attribute_values
+    self.json_data.present? && self.json_data["inferred_taxonomy_attribute_values"].present? ? self.json_data["inferred_taxonomy_attribute_values"] : {}
+  end
+
+  # Merged view used for filtering, indexing, and the product page: inferred values fill gaps,
+  # seller values always take priority over them.
+  def taxonomy_attribute_values
+    inferred_taxonomy_attribute_values.merge(seller_taxonomy_attribute_values)
   end
 
   def save_taxonomy_attribute_values(argument)
@@ -1168,6 +1185,23 @@ class Link < ApplicationRecord
 
     self.json_data ||= {}
     self.json_data["taxonomy_attribute_values"] = values
+    saved = save
+    enqueue_index_update_for(["taxonomy_attribute_filters"]) if saved
+    saved
+  end
+
+  # Called by the classifier (on create/update and by the backfill), never by the editor.
+  # Normalizes through the same attribute-definition rules as seller input so a bad classifier
+  # guess can't write a value the enum/boolean/number validators would have rejected.
+  def save_inferred_taxonomy_attribute_values(argument)
+    submitted_values = (argument || {}).to_h
+    values = taxonomy_attributes_for_current_taxonomy.each_with_object({}) do |attribute, normalized_values|
+      value = attribute.normalize_value(submitted_values[attribute.name])
+      normalized_values[attribute.name] = value if value.present?
+    end
+
+    self.json_data ||= {}
+    self.json_data["inferred_taxonomy_attribute_values"] = values
     saved = save
     enqueue_index_update_for(["taxonomy_attribute_filters"]) if saved
     saved

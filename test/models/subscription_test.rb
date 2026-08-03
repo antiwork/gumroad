@@ -4550,6 +4550,73 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_equal 400, renewal_purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents
   end
 
+  # A subscriber whose original purchase carried the discount renews on the
+  # purchase-time snapshot, so editing the code's once-per-cart setting later
+  # must not move their renewal price (adversarial review on #6750).
+  def once_per_cart_snapshot_context(once_per_cart:, displayed_price_cents:)
+    seller = create_user
+    product = create_membership_product_with_preset_tiered_pricing(user: seller)
+    code = create_offer_code(user: seller, products: [product], amount_cents: 50, amount_percentage: nil,
+                             currency_type: product.price_currency_type, once_per_cart:)
+    purchase = create_membership_purchase(link: product, offer_code: code,
+                                          variant_attributes: [product.alive_variants.first],
+                                          price_cents: displayed_price_cents)
+    purchase.update!(quantity: 2, displayed_price_cents:, price_cents: displayed_price_cents)
+    purchase.create_purchase_offer_code_discount!(
+      offer_code: code, offer_code_amount: 50, offer_code_is_percent: false, once_per_cart:,
+      pre_discount_minimum_price_cents: 200,
+      pre_discount_displayed_price_cents: once_per_cart ? 400 : nil
+    )
+    [purchase.subscription, code]
+  end
+
+  test "#build_purchase keeps the once-per-cart renewal price after the seller turns the setting off" do
+    subscription, code = once_per_cart_snapshot_context(once_per_cart: true, displayed_price_cents: 350)
+
+    code.update!(once_per_cart: false)
+
+    fresh_subscription = Subscription.find(subscription.id)
+    renewal_purchase = fresh_subscription.build_purchase
+    assert_equal 350, fresh_subscription.current_subscription_price_cents
+    assert_equal 350, renewal_purchase.perceived_price_cents
+    assert_equal true, renewal_purchase.purchase_offer_code_discount.once_per_cart
+    assert_equal 400, renewal_purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents
+  end
+
+  test "#build_purchase keeps the per-item renewal price after the seller turns once-per-cart on" do
+    subscription, code = once_per_cart_snapshot_context(once_per_cart: false, displayed_price_cents: 300)
+
+    code.update!(once_per_cart: true)
+
+    fresh_subscription = Subscription.find(subscription.id)
+    renewal_purchase = fresh_subscription.build_purchase
+    assert_equal 300, fresh_subscription.current_subscription_price_cents
+    assert_equal 300, renewal_purchase.perceived_price_cents
+    assert_equal false, renewal_purchase.purchase_offer_code_discount.once_per_cart
+  end
+
+  test "#build_purchase keeps a legacy no-snapshot renewal price after the seller toggles once-per-cart" do
+    seller = create_user
+    product = create_membership_product_with_preset_tiered_pricing(user: seller)
+    code = create_offer_code(user: seller, products: [product], amount_cents: 50, amount_percentage: nil,
+                             currency_type: product.price_currency_type, once_per_cart: false)
+    # Pre-snapshot purchases carry only the offer code; the renewal is built the
+    # same way and its charged amount stays pinned to the original purchase.
+    purchase = create_membership_purchase(link: product, offer_code: code,
+                                          variant_attributes: [product.alive_variants.first], price_cents: 300)
+    purchase.update!(quantity: 2, displayed_price_cents: 300, price_cents: 300)
+    subscription = purchase.subscription
+
+    code.update!(once_per_cart: true)
+
+    fresh_subscription = Subscription.find(subscription.id)
+    renewal_purchase = fresh_subscription.build_purchase
+    assert_equal 300, fresh_subscription.current_subscription_price_cents
+    assert_equal 300, renewal_purchase.perceived_price_cents
+    assert_equal code, renewal_purchase.offer_code
+    assert_nil renewal_purchase.purchase_offer_code_discount
+  end
+
   test "#auto_renewal_offer_code snapshots the selected price for an exact-zero once-per-cart renewal" do
     auto_renewal_context
     @arc_tiered_code.mark_deleted!

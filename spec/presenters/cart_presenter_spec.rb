@@ -199,6 +199,29 @@ describe CartPresenter do
     end
 
     context "with discount codes and offers" do
+      context "when the stored code has leading whitespace" do
+        let(:discount_codes) { [{ "code" => " SAVEMONEY", "fromUrl" => false }] }
+        let(:cart) { create(:cart, user:, discount_codes:) }
+        let(:product) { create(:product) }
+        let!(:offer_code) { create(:offer_code, code: "SAVEMONEY", amount_cents: 100, user: product.user, products: [product]) }
+
+        before do
+          create(:cart_product, cart:, product:)
+        end
+
+        it "still resolves the discount for the cart's products" do
+          expect(presenter.cart_props[:discountCodes]).to match(
+            [
+              {
+                code: " SAVEMONEY",
+                fromUrl: false,
+                products: { product.unique_permalink => a_hash_including(type: "fixed", cents: 100) },
+              }
+            ]
+          )
+        end
+      end
+
       context "when the user has accepeted an upsell" do
         let(:discount_codes) do
           [

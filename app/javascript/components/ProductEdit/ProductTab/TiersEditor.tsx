@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import * as React from "react";
 
 import { sendSamplePriceChangeEmail } from "$app/data/membership_tiers";
-import { confirmRichContentMoveSourceDeletions } from "$app/data/product_save_contract";
+import { confirmRichContentMoveSourceDeletions, reorderPreservingMembership } from "$app/data/product_save_contract";
 import { CurrencyCode, currencyCodeList, getIsSingleUnitCurrency } from "$app/utils/currency";
 import { priceCentsToUnit } from "$app/utils/price";
 import {
@@ -131,7 +131,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
       ) : null}
       <SortableList
         currentOrder={tiers.map(({ id }) => id)}
-        onReorder={(newOrder) => onChange(newOrder.flatMap((id) => tiers.find((version) => version.id === id) ?? []))}
+        onReorder={(newOrder) => onChange(reorderPreservingMembership(tiers, newOrder))}
         tag={SortableTierEditors}
       >
         {tiers.map((version) => (

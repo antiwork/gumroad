@@ -91,6 +91,7 @@ export const ShareTab = () => {
             <TaxonomyAttributesEditor
               attributes={taxonomyAttributes.filter((attribute) => attribute.taxonomy_id === product.taxonomy_id)}
               values={product.taxonomy_attribute_values}
+              inferredValues={product.inferred_taxonomy_attribute_values}
               setValues={(taxonomy_attribute_values) => updateProduct({ taxonomy_attribute_values })}
             />
             <TagSelector tags={product.tags} onChange={(tags) => updateProduct({ tags })} />

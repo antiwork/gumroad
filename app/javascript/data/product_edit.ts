@@ -482,7 +482,11 @@ export const saveProduct = async (
       // gates deletions only — a save carrying no deletions is accepted from a
       // stale tab, which is why an open second tab can still fix a typo.
       editor_revision: product.editor_revision ?? null,
-      deletion_operations: product.deletion_operations ?? buildDeletionOperations(product),
+      // Always derived, never taken from product state. The seller's confirmed
+      // removals are the single source of truth; an override here would let a
+      // stale or partially-built operations block outrank them and produce a
+      // save that reports success and deletes nothing (gumroad-private#1508).
+      deletion_operations: buildDeletionOperations(product),
       availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
         newlyAdded ? { ...availability, id: null } : availability,
       ),
