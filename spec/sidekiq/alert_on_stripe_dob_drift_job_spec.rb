@@ -188,6 +188,23 @@ describe AlertOnStripeDobDriftJob do
     expect(message).to include("we hold 2010-04-27, Stripe holds 2005-04-27")
   end
 
+  # The budget is a Stripe-read budget, so Connect accounts must not consume it. Filtered only inside
+  # the loop, a page that happens to begin with budget-many Connect rows would spend the whole run on
+  # accounts it never reads, advance the cursor past them, and report no drift while a managed account
+  # one row later is drifted.
+  it "does not let Stripe Connect accounts consume the scan budget" do
+    create(:merchant_account_stripe_connect, user: create(:user))
+
+    drifted_seller = create(:user)
+    account = gumroad_managed_account(user: drifted_seller)
+    compliance_info(birthday: Date.new(2010, 4, 27), user: drifted_seller)
+    stub_stripe_dobs(account.charge_processor_merchant_id => Date.new(2005, 4, 27))
+
+    stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 1)
+
+    expect(message).to include(drifted_seller.email)
+  end
+
   describe "sweeping the population across runs" do
     it "resumes after the account the previous run compared last" do
       first_account = gumroad_managed_account

@@ -12,7 +12,9 @@
 # writing a date of birth onto a KYC record is a human decision in either direction.
 class AlertOnStripeDobDriftJob
   include Sidekiq::Job
-  sidekiq_options retry: 2, queue: :low
+  # Serialized: the Redis cursor is read, used, and written back in separate steps, so two overlapping
+  # runs would claim the same page, spend the Stripe budget twice and send the report twice.
+  sidekiq_options retry: 2, queue: :low, lock: :until_executed
 
   # Report at most this many. The alert exists to be read.
   MAX_REPORTED = 25
@@ -92,9 +94,15 @@ class AlertOnStripeDobDriftJob
       { drifted: report_order(drifted), unreadable:, truncated: }
     end
 
-    # Live Stripe merchant accounts, oldest id first, one over the budget so that exhausting the
-    # population is distinguishable from it holding exactly that many. Stripe Connect accounts are
-    # filtered out by the caller using the model's own predicate.
+    # Live Stripe merchant accounts we manage the legal entity on, oldest id first, one over the
+    # budget so that exhausting the population is distinguishable from it holding exactly that many.
+    #
+    # Connect accounts are excluded here via the model's own `stripe_connect` scope rather than a
+    # hand-written `json_data->>` predicate, so there is still one definition of that rule. Excluding
+    # them in SQL rather than only in the loop matters for the BUDGET: filtered in Ruby, a page that
+    # happens to start with 400 Connect rows would spend the whole budget, advance the cursor past
+    # them, and report no drift without having read a single managed account. The loop keeps the
+    # model predicate as the authority anyway.
     #
     # Ordered by id rather than by anything drift-related because the ordering IS the resume cursor,
     # and no column records when the two copies last agreed.
@@ -104,6 +112,7 @@ class AlertOnStripeDobDriftJob
                      .stripe
                      .where.not(user_id: nil)
                      .where("merchant_accounts.id > ?", after_id)
+                     .where.not(id: MerchantAccount.stripe_connect.select(:id))
                      .order(id: :asc)
                      .limit(MAX_CANDIDATES_SCANNED + 1)
                      .to_a
