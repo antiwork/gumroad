@@ -391,21 +391,19 @@ export const startClientConfirmOrderCreation = async (
     });
 
     if (confirmResult.error) {
-      // Redirect-based methods (iDEAL, Bancontact) leave the page to authenticate at the
-      // buyer's bank, so a rejected confirm here is invisible server-side: no charge exists
-      // yet, no payment_failed webhook ever fires, and the purchase just sits in_progress
-      // until the abandonment sweeper cancels it. Report the error so production failures on
-      // this leg are debuggable (the 2026-07-23 iDEAL ramp-down produced zero completions
-      // with zero server-side evidence of why — gumroad-private#933). Fire-and-forget: the
-      // buyer-facing failure below must render whether or not the report lands.
-      void reportClientConfirmError(order.id, "confirm", confirmResult.error, selectedMethodType);
+      const reservationsReleased = await reportClientConfirmError(
+        order.id,
+        "confirm",
+        confirmResult.error,
+        selectedMethodType,
+      );
       return translateOrderFailureResponseIntoLineItemFailures(
         requestData,
         {
           success: false,
           error_message: confirmResult.error.message ?? "Sorry, something went wrong.",
         },
-        retryOfferCodes,
+        reservationsReleased ? retryOfferCodes : withoutOncePerCartOfferCodes(retryOfferCodes),
       );
     }
 
@@ -447,20 +445,24 @@ export const startClientConfirmOrderCreation = async (
   }
 };
 
-// Reports a client-side confirm failure to the server, which is otherwise blind to it (see the
-// call site above). Best-effort: swallow every failure — error reporting must never break the
-// checkout error path it instruments.
-//
-// Both method fields are sent: Stripe's own is authoritative but usually absent, so a mismatch
-// between the two stays visible instead of being papered over.
+const withoutOncePerCartOfferCodes = (offerCodes: OfferCodes): OfferCodes =>
+  offerCodes.flatMap((offerCode) => {
+    const products = Object.fromEntries(
+      Object.entries(offerCode.products).filter(
+        ([, discount]) => !(discount.type === "fixed" && discount.once_per_cart),
+      ),
+    );
+    return Object.keys(products).length > 0 ? [{ ...offerCode, products }] : [];
+  });
+
 const reportClientConfirmError = async (
   orderId: string,
   stage: string,
   error: StripeError,
   selectedMethodType: string,
-): Promise<void> => {
+): Promise<boolean> => {
   try {
-    await request({
+    const response = await request({
       method: "POST",
       url: Routes.confirm_error_order_path(orderId),
       accept: "json",
@@ -473,8 +475,17 @@ const reportClientConfirmError = async (
         selected_payment_method_type: selectedMethodType,
       },
     });
+    if (!response.ok) return false;
+
+    const result: unknown = await response.json();
+    return (
+      typeof result === "object" &&
+      result !== null &&
+      "reservations_released" in result &&
+      result.reservations_released === true
+    );
   } catch {
-    // Intentionally ignored.
+    return false;
   }
 };
 

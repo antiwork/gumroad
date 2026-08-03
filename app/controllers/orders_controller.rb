@@ -95,17 +95,8 @@ class OrdersController < ApplicationController
     render json: { success: true, line_items: finalize_responses, offer_codes:, can_buyer_sign_up: }
   end
 
-  # Records a client-side stripe.confirmPayment failure so redirect-based payment methods
-  # (iDEAL, Bancontact — methods that leave the page to authenticate at the buyer's bank) are
-  # debuggable in production. The browser is the ONLY place that ever sees these errors: a
-  # rejected confirm on a redirect method happens before any charge exists, so no
-  # payment_failed webhook fires and the purchase just sits in_progress until the abandonment
-  # sweeper cancels it — server-side, a buyer who hit a hard confirm error is
-  # indistinguishable from one who simply closed the tab (the failure mode behind the
-  # 2026-07-23 iDEAL ramp-down, gumroad-private#933: zero completions and zero server-side
-  # evidence of why). The order token proves the caller owns a real prepared order, the
-  # payload is size-capped below, and Sentry reports are rate-limited per order, so this
-  # can't be used to spam Sentry with arbitrary junk.
+  # Records browser-only Stripe confirmation failures and releases attempts that Stripe still
+  # confirms are safely pre-charge.
   CONFIRM_ERROR_NOTIFY_LIMIT_PER_ORDER = 5
   CONFIRM_ERROR_NOTIFY_LIMIT_WINDOW = 1.hour
 
@@ -139,10 +130,38 @@ class OrdersController < ApplicationController
       ErrorNotifier.notify("Client-confirm browser error", **error_details)
     end
 
-    render json: { success: true }
+    reservations_released = release_failed_client_confirmation(order)
+
+    render json: { success: true, reservations_released: }
   end
 
   private
+    def release_failed_client_confirmation(order)
+      purchase = order.purchases.in_progress.find { _1.processor_payment_intent_id.present? }
+      return false unless purchase
+
+      charge_intent = ChargeProcessor.get_charge_intent(purchase.merchant_account, purchase.processor_payment_intent_id)
+      status = charge_intent.payment_intent.status
+      safe_statuses = [
+        StripeIntentStatus::REQUIRES_PAYMENT_METHOD,
+        StripeIntentStatus::REQUIRES_CONFIRMATION,
+        StripeIntentStatus::CANCELED,
+      ]
+      return false unless status.in?(safe_statuses)
+
+      if status == StripeIntentStatus::CANCELED
+        Purchase::MarkFailedService.new(purchase).perform
+        purchase.charge&.destroy_presentment_records!
+      else
+        purchase.cancel_charge_intent!
+      end
+      order.purchases.in_progress.find_each { Purchase::MarkFailedService.new(_1).perform }
+      true
+    rescue ChargeProcessorError => e
+      ErrorNotifier.notify(e) { _1.add_metadata(:order, { id: order.id }) }
+      false
+    end
+
     def offer_codes_after_payment(order, offer_codes, purchase_responses, line_items)
       candidates = Order::OfferCodeRecoveryService.merge_responses(
         offer_codes,

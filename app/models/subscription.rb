@@ -316,12 +316,14 @@ class Subscription < ApplicationRecord
       pre_discount = original_purchase.minimum_paid_price_cents_per_unit_before_discount
       purchase.offer_code = auto.offer_code
       if auto.offer_code_amount.positive?
+        once_per_cart = auto.offer_code.is_cents? && auto.offer_code.once_per_cart?
         purchase.build_purchase_offer_code_discount(
           offer_code: auto.offer_code,
           offer_code_amount: auto.offer_code_amount,
           offer_code_is_percent: auto.offer_code_is_percent,
-          once_per_cart: auto.offer_code.is_cents? && auto.offer_code.once_per_cart?,
+          once_per_cart:,
           pre_discount_minimum_price_cents: pre_discount,
+          pre_discount_displayed_price_cents: once_per_cart ? renewal_pre_discount_total_cents : nil,
           duration_in_months: nil
         )
       end

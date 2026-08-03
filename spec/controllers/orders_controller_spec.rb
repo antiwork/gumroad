@@ -2803,6 +2803,68 @@ describe OrdersController, :vcr do
       expect(response.parsed_body["success"]).to be(true)
     end
 
+    it "releases a once-per-cart reservation when Stripe confirms the attempt is still pre-charge" do
+      offer_code = create(
+        :offer_code,
+        user: seller,
+        products: [product],
+        amount_cents: 1_00,
+        once_per_cart: true,
+        max_purchase_count: 1
+      )
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      purchase.update!(offer_code:)
+      purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 1_00,
+        offer_code_is_percent: false,
+        once_per_cart: true,
+        once_per_cart_allocation_id: SecureRandom.uuid,
+        pre_discount_minimum_price_cents: product.price_cents,
+        pre_discount_displayed_price_cents: product.price_cents
+      )
+      purchase.create_processor_payment_intent!(intent_id: "pi_pre_charge")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
+      )
+      allow(ChargeProcessor).to receive(:get_charge_intent).and_return(charge_intent)
+      expect(ChargeProcessor).to receive(:cancel_payment_intent!).with(purchase.merchant_account, "pi_pre_charge")
+      expect(offer_code.quantity_left).to eq(0)
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        stripe_error_code: "card_declined",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => true)
+      expect(purchase.reload).to be_failed
+      expect(offer_code.quantity_left).to eq(1)
+    end
+
+    it "keeps the reservation when Stripe no longer shows a safely cancelable attempt" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      purchase.create_processor_payment_intent!(intent_id: "pi_processing")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::PROCESSING)
+      )
+      allow(ChargeProcessor).to receive(:get_charge_intent).and_return(charge_intent)
+      expect(ChargeProcessor).not_to receive(:cancel_payment_intent!)
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        stripe_error_code: "payment_intent_unexpected_state",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
+      expect(purchase.reload).to be_in_progress
+    end
+
     it "truncates oversized values so the endpoint cannot be used to flood the notifier" do
       params = { line_items: line_items.map(&:dup) }.merge(common_params)
       order, = Order::CreateService.new(params:).perform

@@ -671,7 +671,7 @@ describe("startClientConfirmOrderCreation", () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": fixedDiscount(100) } }];
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
-      .mockResolvedValueOnce(jsonResponse({ success: true }));
+      .mockResolvedValueOnce(jsonResponse({ success: true, reservations_released: true }));
     const stripe = typia.assert<Stripe>({});
     stripe.confirmPayment = vi.fn().mockResolvedValue({
       error: { type: "invalid_request_error", code: "payment_intent_unexpected_state", message: "Bad state." },
@@ -695,6 +695,30 @@ describe("startClientConfirmOrderCreation", () => {
     });
     // The buyer still sees the failure — reporting must not change the outcome.
     expect(Object.values(result.lineItems).every((lineItem) => !lineItem.success)).toBe(true);
+    expect(result.offerCodes).toEqual(activeOfferCodes);
+  });
+
+  it("does not restore a reserved once-per-cart code unless the server releases it", async () => {
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100) } }];
+    requestMock
+      .mockResolvedValueOnce(jsonResponse(prepareResponse))
+      .mockResolvedValueOnce(jsonResponse({ success: true, reservations_released: false }));
+    confirmPaymentMock.mockResolvedValueOnce({ error: { message: "Card failed." } });
+
+    const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
+
+    expect(result.offerCodes).toEqual([]);
+  });
+
+  it("restores a once-per-cart code after the server releases its reservation", async () => {
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100) } }];
+    requestMock
+      .mockResolvedValueOnce(jsonResponse(prepareResponse))
+      .mockResolvedValueOnce(jsonResponse({ success: true, reservations_released: true }));
+    confirmPaymentMock.mockResolvedValueOnce({ error: { message: "Card failed." } });
+
+    const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
+
     expect(result.offerCodes).toEqual(activeOfferCodes);
   });
 
