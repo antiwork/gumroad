@@ -32,13 +32,19 @@ class Purchases::DisputeEvidenceController < ApplicationController
     set_meta_tag(title: "Submit additional information")
     set_noindex_header
 
-    render inertia: "Purchases/DisputeEvidence/Success"
+    render inertia: "Purchases/DisputeEvidence/Success",
+           props: DisputeEvidencePagePresenter.new(@dispute_evidence).success_props
   end
 
   def update
     input_blobs = customer_communication_file_blobs
+    # Only what the seller actually filled in this time. A revision is additive per field: the
+    # form always posts all three, so assigning them wholesale would let a seller who returns to
+    # attach a file blank the statement they wrote yesterday. Same reason the attachment below is
+    # left alone when no new file arrives.
     @dispute_evidence.assign_attributes(
       dispute_evidence_params.slice(:cancellation_rebuttal, :reason_for_winning, :refund_refusal_explanation)
+                             .compact_blank
     )
 
     if input_blobs.one?
@@ -46,9 +52,9 @@ class Purchases::DisputeEvidenceController < ApplicationController
       @dispute_evidence.customer_communication_file.attach(attached_blob)
     elsif input_blobs.many?
       # Stripe accepts a single file for this evidence field, so multiple uploads are merged
-      # into one PDF before attaching. The merge stays inline: the submit below is one-shot,
-      # and an async merge would let FightDisputeJob forward the evidence before the merged
-      # file exists.
+      # into one PDF before attaching. The merge stays inline: FightDisputeJob can fire the
+      # moment the window closes, and an async merge would let it forward the evidence before
+      # the merged file exists.
       merged_blob = DisputeEvidence::MergeCustomerCommunicationFilesService.perform(
         blobs: input_blobs,
         max_size: @dispute_evidence.customer_communication_file_max_size
@@ -60,7 +66,11 @@ class Purchases::DisputeEvidenceController < ApplicationController
     # seller's uploads intact, since a retry re-sends the same signed ids.
     input_blobs.each(&:purge) if merged_blob
 
-    FightDisputeJob.perform_async(@dispute_evidence.dispute.id)
+    # Nothing goes to Stripe yet — FightDisputesJob forwards the latest version once the window
+    # closes, which is what lets the seller keep revising. The exception is a window that already
+    # elapsed (CreateMissingDisputeEvidenceJob backdates it), where waiting for the hourly tick
+    # would burn an hour of a cutoff measured in hours.
+    FightDisputeJob.perform_async(@dispute_evidence.dispute.id) unless @dispute_evidence.accepting_evidence?
     redirect_to success_purchase_dispute_evidence_path(@purchase.external_id), status: :see_other
   rescue ActiveRecord::RecordInvalid
     merged_blob&.purge
@@ -107,10 +117,12 @@ class Purchases::DisputeEvidenceController < ApplicationController
         if @dispute_evidence.not_seller_contacted?
           # The feature flag was not enabled when the email was sent out
           "You are not allowed to perform this action."
-        elsif @dispute_evidence.seller_submitted?
-          "Additional information has already been submitted for this dispute."
         elsif @dispute_evidence.resolved?
           "Additional information can no longer be submitted for this dispute."
+        elsif !@dispute_evidence.accepting_evidence?
+          # Window elapsed but the row is not resolved yet: FightDisputeJob is forwarding it, so
+          # anything saved now would arrive too late to be part of the submission.
+          "The deadline for submitting additional information for this dispute has passed."
         end
       return if message.blank?
 

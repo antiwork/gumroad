@@ -40,6 +40,11 @@ type Props = {
     customer_communication_file_max_size: number;
     customer_communication_files_max_count: number;
     blobs: Blobs;
+    saved: {
+      reason_for_winning: string | null;
+      cancellation_rebuttal: string | null;
+      refund_refusal_explanation: string | null;
+    };
   };
   disputable: {
     purchase_for_dispute_evidence_id: string;
@@ -98,6 +103,17 @@ export default function Show() {
   const [isUploading, setIsUploading] = React.useState(false);
   const [uploadedFiles, setUploadedFiles] = React.useState<UploadedFile[]>([]);
   const [isConfirming, setIsConfirming] = React.useState(false);
+  // Shown back rather than loaded into the form: the stored values are the display text of the
+  // radio choices, so there is no option to re-select from them. Saving again replaces whichever
+  // fields the seller fills in this time.
+  const saved = dispute_evidence.saved;
+  const savedEntries = (
+    [
+      ["Why you should win", saved.reason_for_winning],
+      ["Why the subscription was not canceled", saved.cancellation_rebuttal],
+      ["Why a refund was refused", saved.refund_refusal_explanation],
+    ] as const
+  ).filter(([, value]) => value !== null && value !== "");
 
   const form = useForm<FormData>({
     dispute_evidence: {
@@ -276,10 +292,27 @@ export default function Show() {
           </strong>
         </p>
         <Alert variant="warning">
-          <strong>Submitting is final.</strong> We forward your response and all supporting files to our payment
-          processor straight away, and they accept one submission per dispute. You can't edit it or add anything
-          afterwards — not even by contacting support — so attach everything before you submit.
+          <strong>You can keep adding to this until the deadline.</strong> Our payment processor accepts one
+          submission per dispute, so we hold your response and send it at the deadline. Come back any time before
+          then to add files or revise what you wrote — after the deadline nothing more can be added, not even by
+          contacting support.
         </Alert>
+        {savedEntries.length > 0 ? (
+          <Alert variant="info">
+            <strong>What you have saved so far.</strong> Saving again replaces the fields you fill in below and
+            leaves the rest as they are.
+            <Rows>
+              {savedEntries.map(([label, value]) => (
+                <Row key={label}>
+                  <RowContent>
+                    <h4>{label}</h4>
+                    <p>{value}</p>
+                  </RowContent>
+                </Row>
+              ))}
+            </Rows>
+          </Alert>
+        ) : null}
       </CardContent>
       <CardContent>
         <Fieldset className="grow basis-0">
@@ -408,39 +441,36 @@ export default function Show() {
         >
           {form.processing ? (
             <>
-              <LoadingSpinner /> Submitting...
+              <LoadingSpinner /> Saving...
             </>
           ) : (
-            "Submit"
+            "Save response"
           )}
         </Button>
       </CardContent>
       <Modal
         open={isConfirming}
-        title="Submit your response?"
+        title="Save your response?"
         onClose={() => setIsConfirming(false)}
         footer={
           <>
             <Button onClick={() => setIsConfirming(false)}>Cancel</Button>
             <Button color="primary" disabled={isUploading || form.processing} onClick={submitDisputeEvidence}>
-              Submit evidence
+              Save response
             </Button>
           </>
         }
       >
         <p>
-          You only get one submission for this dispute. We forward this to our payment processor immediately, and
-          nothing can be added or changed afterwards.
+          We send this to our payment processor at the deadline, not now, so you can come back and add to it until
+          then.
         </p>
         {uploadedFiles.length > 0 ? (
           <p>
-            You are attaching {uploadedFiles.length} {uploadedFiles.length === 1 ? "file" : "files"}. Anything you meant
-            to include but have not uploaded yet cannot be sent later.
+            You are attaching {uploadedFiles.length} {uploadedFiles.length === 1 ? "file" : "files"}.
           </p>
         ) : (
-          <p>
-            You have not attached any files. If you have screenshots or emails to include, cancel and upload them now.
-          </p>
+          <p>You have not attached any files. You can add them here any time before the deadline.</p>
         )}
       </Modal>
     </Card>

@@ -15,6 +15,15 @@ class DisputeEvidencePagePresenter
     }
   end
 
+  # The success page tells the seller when we forward the response, so it needs the deadline and a
+  # way back to the form — nothing is sent until the window closes and they may keep revising.
+  def success_props
+    {
+      seller_response_due_at_formatted: dispute_evidence.seller_response_due_at&.strftime("%B %-d, %Y at %-l:%M %p %Z"),
+      purchase_for_dispute_evidence_id: purchase.external_id,
+    }
+  end
+
   private
     attr_reader :dispute_evidence, :purchase, :purchase_product_presenter
 
@@ -27,7 +36,14 @@ class DisputeEvidencePagePresenter
         seller_response_due_at: dispute_evidence.seller_response_due_at&.iso8601,
         customer_communication_file_max_size: dispute_evidence.customer_communication_file_max_size,
         customer_communication_files_max_count: DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES,
-        blobs: blobs_props
+        blobs: blobs_props,
+        # What the seller already saved, so a return visit shows their statement instead of an
+        # empty form that reads as though the earlier save was lost.
+        saved: {
+          reason_for_winning: dispute_evidence.reason_for_winning,
+          cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
+          refund_refusal_explanation: dispute_evidence.refund_refusal_explanation,
+        }
       }
     end
 

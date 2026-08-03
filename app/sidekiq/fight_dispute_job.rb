@@ -8,11 +8,10 @@ class FightDisputeJob
     dispute = Dispute.find(dispute_id)
     dispute_evidence = dispute.dispute_evidence
     return if dispute_evidence.resolved?
-    # Raw arithmetic, not hours_left_to_submit_evidence: that reports 0 once the submission is spent,
-    # and this guard exists to hold a not-yet-submitted row until its window closes. The seller's own
-    # submit path calls this deliberately early, which is why the not_seller_submitted? half is here.
-    return if dispute_evidence.not_seller_submitted? &&
-      DisputeEvidence.hours_left_in_window(dispute_evidence.seller_contacted_at).positive?
+    # Raw arithmetic, not hours_left_to_submit_evidence, so this reads the window and nothing else.
+    # Nothing is forwarded before the window closes even when the seller has already saved a
+    # statement: they keep the whole 72 hours to revise it, and Stripe accepts one submission.
+    return if DisputeEvidence.hours_left_in_window(dispute_evidence.seller_contacted_at).positive?
 
     disputable = dispute.disputable
     if disputable.charge_processor_transaction_id.blank?
