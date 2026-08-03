@@ -4,8 +4,8 @@ require "spec_helper"
 
 describe Order::OfferCodeRecoveryService do
   let(:seller) { create(:user) }
-  let(:product_1) { create(:product, user: seller, price_cents: 10_00) }
-  let(:product_2) { create(:product, user: seller, price_cents: 20_00) }
+  let(:product_1) { create(:product, user: seller, price_cents: 10_00, unique_permalink: "a_product") }
+  let(:product_2) { create(:product, user: seller, price_cents: 20_00, unique_permalink: "b_product") }
   let(:offer_code) do
     create(:offer_code, user: seller, products: [product_1, product_2], amount_cents: 1_00, once_per_cart: true)
   end
