@@ -149,7 +149,7 @@ describe ProductReview do
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
     end
 
-    it "delays the email for a review created without a message, so the rating autosave doesn't announce an empty review" do
+    it "delays the email for a review created without a message, so the rating autosave doesn't announce an empty review", :freeze_time do
       # The star tap autosaves a message-less row a minute or two before the buyer submits their
       # text (gumroad-private#1783); the delayed render skips itself once the text has arrived.
       product.user.update!(disable_reviews_email: false)
@@ -158,8 +158,11 @@ describe ProductReview do
       expect do
         product_review.save!
       end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
-        .with(product_review.id, skip_if_message_present: true)
         .at(ProductReview::SELLER_NOTIFICATION_DELAY.from_now)
+        .with { |id, opts| # rubocop:disable Style/BlockDelimiters — `.with(product_review.id)` would capture nil, the id before save
+          expect(id).to eq(product_review.id)
+          expect(opts).to eq(skip_if_message_present: true)
+        }
     end
 
     it "sends when the buyer's message arrives on an autosaved rating-only review" do
