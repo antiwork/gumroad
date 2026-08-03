@@ -538,6 +538,36 @@ describe SettingsPresenter do
       end
     end
 
+    # A per-application scope lookup grows with the seller's integrations, and the scopes have to
+    # stay right per application while batched — a single shared union would leak one app's
+    # capabilities onto another.
+    it "reads every application's live scopes in one token query" do
+      applications = Array.new(3) { create(:oauth_application, owner: create(:user)) }
+      applications.each_with_index do |application, index|
+        Doorkeeper::AccessGrant.create!(application_id: application.id, resource_owner_id: seller.id,
+                                        redirect_uri: application.redirect_uri,
+                                        expires_in: 1.day.from_now, scopes: "view_profile")
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application:,
+                                          scopes: index.zero? ? "account refund_sales" : "view_payouts")
+      end
+
+      # Match on the select list, not any mention: `authorized_for` picks applications with a token
+      # subquery, so a `FROM oauth_access_tokens` check counts that too and can never reach 1.
+      token_queries = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_, _, _, _, payload|
+        token_queries << payload[:sql] if payload[:sql].start_with?("SELECT `oauth_access_tokens`") && payload[:name] != "SCHEMA"
+      end
+      props = begin
+        presenter.authorized_applications_props
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      expect(token_queries.size).to eq(1), token_queries.join("\n")
+      expect(props[:authorized_applications].map { |application| application[:scopes].to_a.sort })
+        .to contain_exactly(%w[account refund_sales], %w[view_payouts], %w[view_payouts])
+    end
+
     # The page runs `typia.assert<Props>` on these props and indexes SCOPE_DESCRIPTIONS by scope, so
     # a scope Doorkeeper allows but the component's Scope union omits crashes Authorized Applications
     # rather than rendering an empty bullet. Adding a scope to doorkeeper.rb has to touch Index.tsx.
