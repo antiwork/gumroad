@@ -9,6 +9,7 @@ class AddRecurringPaymentMethodContextToCreditCards < ActiveRecord::Migration[7.
     20261206000025
     20261206000027
     20261206000029
+    20261206170803
   ].freeze
 
   COLUMNS = {
