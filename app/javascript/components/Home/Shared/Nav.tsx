@@ -82,7 +82,8 @@ const NavButton = ({
     // `dark:lg:` set: modifier1 applies `lg:bg-black`, and whether a single-variant `dark:`
     // utility beats a single-variant `lg:` one is a stylesheet-order coin flip. The
     // double-variant form always wins at desktop.
-    modifier2 = "dark:bg-pink dark:text-black dark:hover:bg-white dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white";
+    modifier2 =
+      "dark:bg-pink dark:text-black dark:hover:bg-white dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white";
   } else {
     modifier2 = "dark:lg:hover:bg-white dark:lg:hover:text-black";
   }
