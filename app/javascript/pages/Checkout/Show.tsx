@@ -782,12 +782,26 @@ const CheckoutIndexPage = () => {
   // The recovery has to be a save rather than a bare re-request of the configuration: a save sends
   // the cart the client currently holds, so its answer is the configuration for that same cart.
   // Saves also supersede one another, so a recovery cannot race the buyer's next edit.
-  const cartSavesPaused = state.status.type !== "input" && state.status.type !== "offering";
-  const cartSavesPausedRef = React.useRef(cartSavesPaused);
-  cartSavesPausedRef.current = cartSavesPaused;
+  //
+  // Once payment starts, the cart the buyer edited is no longer the cart that matters, and a save
+  // still carrying it must not be allowed to answer: its response re-renders `cart` from the
+  // pre-payment state, putting the purchased items and the checkout form back over the receipt
+  // (gumroad-private#1793). What cannot be blocked is the save *after* checkout, which persists the
+  // failed items into a fresh cart — so this is a staleness test, not a pause. Saves issued before
+  // payment started are dropped; saves issued from the trimmed post-checkout cart are the current
+  // generation and go through.
+  const cartSaveGenerationRef = React.useRef(0);
+  const paymentStarted = state.status.type !== "input" && state.status.type !== "offering";
+  React.useEffect(() => {
+    if (!paymentStarted) return;
+    // Anything already queued was built from the pre-payment cart; a queued save has not been
+    // issued yet, so cancelling is strictly better than letting it start and be discarded.
+    debouncedSaveCartStateRef.current.cancel();
+    cartSaveGenerationRef.current += 1;
+  }, [paymentStarted]);
 
   const saveCart = (callbacks: CartSaveCallbacks) => {
-    if (cartSavesPausedRef.current) return;
+    const generation = cartSaveGenerationRef.current;
 
     cartForm.patch(Routes.checkout_path(), {
       // checkout_payment comes back with the save because it is derived from the cart: which
@@ -798,7 +812,9 @@ const CheckoutIndexPage = () => {
       only: ["cart", "flash", "checkout_payment", "checkout_style"],
       preserveUrl: true,
       preserveScroll: true,
-      onBefore: () => !cartSavesPausedRef.current,
+      // The generation is captured when the save is issued, so this refuses exactly the saves that
+      // were built from a cart payment has since moved past — and lets a post-checkout save through.
+      onBefore: () => generation === cartSaveGenerationRef.current,
       ...callbacks,
     });
   };
@@ -829,10 +845,10 @@ const CheckoutIndexPage = () => {
       }),
     );
   }, cart_save_debounce_ms);
-
-  React.useEffect(() => {
-    if (cartSavesPaused) debouncedSaveCartState.cancel();
-  }, [cartSavesPaused, debouncedSaveCartState]);
+  // The pre-payment cancel above runs in an effect declared before this callback exists, so it
+  // reaches it through a ref rather than by ordering the declarations around each other.
+  const debouncedSaveCartStateRef = React.useRef(debouncedSaveCartState);
+  debouncedSaveCartStateRef.current = debouncedSaveCartState;
 
   // Clean URL params after initial render to avoid stale URL references during Inertia updates
   useRunOnce(() => {
@@ -842,11 +858,11 @@ const CheckoutIndexPage = () => {
     router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
   });
   React.useEffect(() => {
-    if (!cartSavesPaused) debouncedSaveCartState();
+    debouncedSaveCartState();
     if (state.status.type === "input") {
       dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
     }
-  }, [cartForm.data.cart, cartSavesPaused]);
+  }, [cartForm.data.cart]);
   // The cart changed in a way that can move it to a different payment lane, so the configuration
   // on screen was computed for the previous cart. Mark it stale (Pay stays disabled) until the
   // save above returns the recomputed one.
