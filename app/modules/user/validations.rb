@@ -21,9 +21,12 @@ module User::Validations
     end
 
     def email_almost_unique
-      return if !email_changed? || email.blank? || User.by_email(email).empty?
+      return if !email_changed? || email.blank?
 
-      errors.add(:base, "An account already exists with this email.")
+      holders = User.by_email(email)
+      return if holders.empty?
+
+      errors.add(:base, holders.all?(&:deleted?) ? User::DELETED_ACCOUNT_HOLDS_EMAIL_ERROR : "An account already exists with this email.")
     end
 
     def account_created_email_domain_is_not_blocked
