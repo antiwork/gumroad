@@ -90,6 +90,19 @@ describe("dropUnknownNodes", () => {
     const content = [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }];
     expect(dropUnknownNodes(content, schema)).toEqual(content);
   });
+
+  it("strips a mark type the schema doesn't know without dropping the text that carries it", () => {
+    const content = [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "kept", marks: [{ type: "sparkle" }, { type: "bold" }] }],
+      },
+    ];
+
+    expect(dropUnknownNodes(content, schema)).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: "kept", marks: [{ type: "bold" }] }] },
+    ]);
+  });
 });
 
 describe("useRichTextEditor", () => {

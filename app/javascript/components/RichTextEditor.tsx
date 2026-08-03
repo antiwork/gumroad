@@ -238,16 +238,19 @@ export const serializeEditorContentToHTML = (editor: Editor) => {
   return container.innerHTML;
 };
 
-// A stray node type the schema doesn't recognize (bad seller-authoring tooling, a removed
+// A stray node or mark type the schema doesn't recognize (bad seller-authoring tooling, a removed
 // extension, hand-edited API payloads) makes ProseMirror's parser throw for the WHOLE document
-// rather than skip just that node — see `Schema.nodeType` / `Node.fromJSON`. Drop only the
-// offending subtree so the rest of the page still renders; `text` nodes have no `type` to check
-// against the schema and pass through untouched.
+// rather than skip just that piece — see `Schema.nodeType` / `Node.fromJSON`. Drop only the
+// offending subtree (or strip the offending mark) so the rest of the page still renders; `text`
+// nodes have no `type` to check against the schema and pass through with their marks filtered.
 export const dropUnknownNodes = (content: JSONContent[], schema: Schema): JSONContent[] =>
   content.flatMap((node) => {
-    if (node.type === "text") return [node];
+    const marks = node.marks ? { marks: node.marks.filter((mark) => schema.marks[mark.type]) } : {};
+    if (node.type === "text") return [{ ...node, ...marks }];
     if (!node.type || !schema.nodes[node.type]) return [];
-    return [{ ...node, content: node.content ? dropUnknownNodes(node.content, schema) : node.content }];
+    return [
+      { ...node, ...marks, content: node.content ? dropUnknownNodes(node.content, schema) : node.content },
+    ];
   });
 
 export const useRichTextEditor = ({
