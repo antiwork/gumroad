@@ -5828,6 +5828,8 @@ class LinksControllerShowTest < ActionController::TestCase
 
   test "GET show stores click when coming from discover" do
     cookies[:_gumroad_guid] = "custom_guid"
+    taxonomy = Taxonomy.find_or_create_by(slug: "fonts")
+    product.update!(taxonomy:)
 
     assert_difference -> { DiscoverSearch.count }, 1 do
       get :show, params: { id: product.to_param, recommended_by: "search", query: "something", autocomplete: "true" }
@@ -5840,6 +5842,7 @@ class LinksControllerShowTest < ActionController::TestCase
       "autocomplete" => true,
       "clicked_resource_type" => product.class.name,
       "clicked_resource_id" => product.id,
+      "taxonomy_id" => taxonomy.id,
     }
 
     assert_difference -> { DiscoverSearch.count }, 1 do
@@ -5853,7 +5856,21 @@ class LinksControllerShowTest < ActionController::TestCase
       "autocomplete" => false,
       "clicked_resource_type" => product.class.name,
       "clicked_resource_id" => product.id,
+      "taxonomy_id" => taxonomy.id,
     }
+  end
+
+  test "GET show stores click with no taxonomy when the clicked product is uncategorized" do
+    cookies[:_gumroad_guid] = "custom_guid"
+    product.update!(taxonomy: nil)
+
+    assert_difference -> { DiscoverSearch.count }, 1 do
+      get :show, params: { id: product.to_param, recommended_by: "discover", query: "something" }
+    end
+
+    click = DiscoverSearch.last!
+    assert_nil click.taxonomy_id
+    assert_equal product.id, click.clicked_resource_id
   end
 
   test "GET show does not store click when not coming from discover" do

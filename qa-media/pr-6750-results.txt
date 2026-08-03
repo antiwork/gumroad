@@ -1,0 +1,4 @@
+[once-per-cart-on/desktop] code=qa6750cart subtotal=US$76 discount=US$-10 total=US$66 expected_discount=US$10 (4 items: 2x$19 + 2x$19) PASS=true
+[once-per-cart-on/mobile] code=qa6750cart subtotal=US$76 discount=US$-10 total=US$66 expected_discount=US$10 (4 items: 2x$19 + 2x$19) PASS=true
+[per-item-control/desktop] code=qa6750item subtotal=US$76 discount=US$-40 total=US$36 expected_discount=US$40 (4 items: 2x$19 + 2x$19) PASS=true
+[per-item-control/mobile] code=qa6750item subtotal=US$76 discount=US$-40 total=US$36 expected_discount=US$40 (4 items: 2x$19 + 2x$19) PASS=true
