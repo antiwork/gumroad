@@ -1,8 +1,18 @@
-import { getSchema } from "@tiptap/core";
+// @vitest-environment happy-dom
+import { act, cleanup, render } from "@testing-library/react";
+import { Editor, getSchema } from "@tiptap/core";
+import { undoDepth } from "@tiptap/pm/history";
 import StarterKit from "@tiptap/starter-kit";
-import { describe, expect, it } from "vitest";
+import * as React from "react";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { dropUnknownNodes, validateUrl } from "$app/components/RichTextEditor";
+import { dropUnknownNodes, useRichTextEditor, validateUrl } from "$app/components/RichTextEditor";
+
+// vite.config.ts's `define` replaces the bare `SSR` identifier at build time; vitest doesn't run
+// through that build step, so stub the global here for the hook test below.
+Object.assign(globalThis, { SSR: false });
+
+afterEach(cleanup);
 
 describe("validateUrl", () => {
   it("rejects empty input", () => {
@@ -79,5 +89,40 @@ describe("dropUnknownNodes", () => {
   it("leaves a document made only of known node types untouched", () => {
     const content = [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }];
     expect(dropUnknownNodes(content, schema)).toEqual(content);
+  });
+});
+
+describe("useRichTextEditor", () => {
+  // Regression for a P1 caught by Greptile on this PR: the content memo used to depend on
+  // `dedupedExtensions`, a fresh array every render, so an unrelated parent rerender (same
+  // `initialValue`) gave `content` a new identity and the sync effect discarded live edits.
+  it("keeps in-progress edits and undo history across a parent rerender with unchanged initialValue", async () => {
+    const initialValue = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "saved" }] }] };
+    let editor: Editor | null = null;
+    const Harness = (_props: { tick: number }) => {
+      editor = useRichTextEditor({ initialValue });
+      return null;
+    };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
+
+    const { rerender } = render(React.createElement(Harness, { tick: 0 }));
+    act(() => {
+      getEditor().chain().focus("end").insertContent(" draft").run();
+    });
+    expect(getEditor().getText()).toBe("saved draft");
+    expect(undoDepth(getEditor().state)).toBe(1);
+
+    // Same initialValue, different unrelated prop — this must not reset the live document.
+    // The content-sync effect schedules its reset via queueMicrotask, so flush one before asserting.
+    rerender(React.createElement(Harness, { tick: 1 }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getEditor().getText()).toBe("saved draft");
+    expect(undoDepth(getEditor().state)).toBe(1);
   });
 });
