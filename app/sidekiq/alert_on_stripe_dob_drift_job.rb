@@ -53,6 +53,12 @@ class AlertOnStripeDobDriftJob
       unreadable = 0
 
       candidates.each do |merchant_account|
+        # The model's own predicate rather than a SQL rewrite of it, the same way
+        # AlertOnNegativeDestinationBalancesJob does: a Stripe Connect account's legal entity is the
+        # seller's own to maintain, we push nothing onto it, and a hand-written
+        # `json_data->>'$.meta.stripe_connect'` filter is a second copy of a rule that already exists.
+        next unless merchant_account.is_a_gumroad_managed_stripe_account?
+
         user = merchant_account.user
         next if user.nil?
 
@@ -85,8 +91,9 @@ class AlertOnStripeDobDriftJob
       { drifted: report_order(drifted), unreadable:, truncated: }
     end
 
-    # Live Gumroad-managed Stripe accounts, oldest id first, one over the budget so that exhausting
-    # the population is distinguishable from it holding exactly that many.
+    # Live Stripe merchant accounts, oldest id first, one over the budget so that exhausting the
+    # population is distinguishable from it holding exactly that many. Stripe Connect accounts are
+    # filtered out by the caller using the model's own predicate.
     #
     # Ordered by id rather than by anything drift-related because the ordering IS the resume cursor,
     # and no column records when the two copies last agreed.
@@ -96,7 +103,6 @@ class AlertOnStripeDobDriftJob
                      .stripe
                      .where.not(user_id: nil)
                      .where("merchant_accounts.id > ?", after_id)
-                     .where("json_data->>'$.meta.stripe_connect' IS NULL OR json_data->>'$.meta.stripe_connect' != 'true'")
                      .order(id: :asc)
                      .limit(MAX_CANDIDATES_SCANNED + 1)
                      .to_a
@@ -121,12 +127,17 @@ class AlertOnStripeDobDriftJob
     # the read itself failed. The three are deliberately distinct: a missing dob on Stripe IS drift
     # against a birthday we hold, while a failed read establishes nothing and must not be reported as
     # agreement or as drift.
+    #
+    # Read with `[]` rather than `dig`: `Stripe::Account` is a `Stripe::StripeObject`, which does not
+    # implement `dig` at all (it wraps a values hash and exposes `[]`), so `dig` raises NoMethodError
+    # on every account. A stubbed plain Hash in a spec hides that, because Hash does implement it.
     def stripe_dob(merchant_account)
       account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-      dob = account.dig(:individual, :dob)
-      return nil if dob.blank?
+      individual = account["individual"]
+      dob = individual && individual["dob"]
+      return nil if dob.nil?
 
-      year, month, day = dob[:year], dob[:month], dob[:day]
+      year, month, day = dob["year"], dob["month"], dob["day"]
       return nil if year.blank? || month.blank? || day.blank?
 
       Date.new(year.to_i, month.to_i, day.to_i)
@@ -162,12 +173,12 @@ class AlertOnStripeDobDriftJob
       ].compact.join("\n")
     end
 
-    # Under-18-on-our-side first, then by how far apart the two dates are. What ranks a line is
-    # whether money is already being held on the strength of the disagreement.
+    # Under-18-on-our-side first, then widest gap first. What ranks a line is whether money is
+    # already being held on the strength of the disagreement.
     def report_order(drifted)
       drifted.sort_by do |entry|
-        [entry[:ours] > UserComplianceInfo::GUARDIAN_REQUIRED_BELOW_AGE.years.ago.to_date ? 0 : 1,
-         -((entry[:theirs] || Date.new(1900, 1, 1)) - entry[:ours]).to_i.abs]
+        gap = entry[:theirs] ? (entry[:theirs] - entry[:ours]).to_i.abs : Float::INFINITY
+        [entry[:ours] > UserComplianceInfo::GUARDIAN_REQUIRED_BELOW_AGE.years.ago.to_date ? 0 : 1, -gap]
       end
     end
 

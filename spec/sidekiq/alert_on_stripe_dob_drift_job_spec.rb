@@ -18,12 +18,18 @@ describe AlertOnStripeDobDriftJob do
   end
 
   # Stripe's answer keyed by account id, so one example can hold different dates per account.
+  #
+  # Built as a real `Stripe::StripeObject`, not a Hash. The two are not interchangeable here: a
+  # StripeObject exposes `[]` but no `dig`, so a Hash stub silently passes code that would raise
+  # NoMethodError against every live account.
   def stub_stripe_dobs(by_account_id)
     allow(Stripe::Account).to receive(:retrieve) do |account_id|
       raise Stripe::InvalidRequestError.new("no such account", nil) unless by_account_id.key?(account_id)
 
       dob = by_account_id[account_id]
-      { individual: { dob: dob && { year: dob.year, month: dob.month, day: dob.day } } }.with_indifferent_access
+      Stripe::StripeObject.construct_from(
+        individual: dob && { dob: { year: dob.year, month: dob.month, day: dob.day } }
+      )
     end
   end
 
@@ -129,7 +135,9 @@ describe AlertOnStripeDobDriftJob do
   it "skips a Stripe Connect account, whose legal entity is the seller's own to maintain" do
     create(:merchant_account_stripe_connect, user: seller)
     compliance_info(birthday: Date.new(2010, 4, 27))
-    allow(Stripe::Account).to receive(:retrieve).and_return({ individual: { dob: { year: 2005, month: 4, day: 27 } } }.with_indifferent_access)
+    allow(Stripe::Account).to receive(:retrieve).and_return(
+      Stripe::StripeObject.construct_from(individual: { dob: { year: 2005, month: 4, day: 27 } })
+    )
 
     described_class.new.perform
 
@@ -159,6 +167,22 @@ describe AlertOnStripeDobDriftJob do
     lines = message.lines.select { |line| line.start_with?("•") }
     expect(lines.first).to include(seller.email)
     expect(lines.second).to include(adult_seller.email)
+  end
+
+  # Regression pin for the defect the adversarial review round found: the first version read the dob
+  # with `account.dig(:individual, :dob)`, which raises NoMethodError on every live account because
+  # `Stripe::Account` is a `Stripe::StripeObject` and StripeObject has no `dig`. A Hash stub passed it.
+  # This example asserts against the real return type, so a `dig` regression is red rather than green.
+  it "reads the date of birth off a real Stripe object, which has no #dig" do
+    gumroad_managed_account
+    compliance_info(birthday: Date.new(2010, 4, 27))
+    stripe_account = Stripe::StripeObject.construct_from(
+      individual: { dob: { year: 2005, month: 4, day: 27 } }
+    )
+    expect(stripe_account).not_to respond_to(:dig)
+    allow(Stripe::Account).to receive(:retrieve).and_return(stripe_account)
+
+    expect(message).to include("we hold 2010-04-27, Stripe holds 2005-04-27")
   end
 
   describe "sweeping the population across runs" do
