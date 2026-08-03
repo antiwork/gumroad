@@ -52,6 +52,7 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { CollapsibleDescription } from "$app/components/Product/CollapsibleDescription";
 import {
   applySelection,
+  buyerLocalPriceCentsForSelection,
   buyerLocalContextFor,
   ConfigurationSelector,
   ConfigurationSelectorHandle,
@@ -61,6 +62,7 @@ import {
   PurchasingPowerParityDetails,
   Recurrences,
   Rental,
+  withConfiguredOncePerCartAmount,
 } from "$app/components/Product/ConfigurationSelector";
 import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { CtaButton } from "$app/components/Product/CtaButton";
@@ -220,7 +222,7 @@ export type WishlistForProduct = Wishlist & {
   selections_in_wishlist: { variant_id: string | null; recurrence: string | null; rent: boolean; quantity: number }[];
 };
 
-const formatDiscountAmount = (discount: Discount, buyerLocalContext: BuyerLocalCurrencyContext) => {
+export const formatDiscountAmount = (discount: Discount, buyerLocalContext: BuyerLocalCurrencyContext) => {
   if (discount.type === "percent") {
     return discount.tiered && discount.min_percents !== undefined && discount.max_percents !== undefined
       ? discount.min_percents === discount.max_percents
@@ -229,7 +231,7 @@ const formatDiscountAmount = (discount: Discount, buyerLocalContext: BuyerLocalC
       : `${discount.percents}%`;
   }
 
-  return formatBuyerLocalOrSetPrice(discount.cents, buyerLocalContext, {
+  return formatBuyerLocalOrSetPrice(discount.once_per_cart_amount_cents ?? discount.cents, buyerLocalContext, {
     symbolFormat: "long",
   });
 };
@@ -410,7 +412,7 @@ export const Product = ({
 
   return (
     <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
-      <Covers covers={product.covers} mainCoverId={product.main_cover_id} />
+      <Covers covers={product.covers} mainCoverId={product.main_cover_id} productName={product.name} />
       {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
       <section className="lg:border-r">
         <header className="grid gap-4 p-6 not-first:border-t">
@@ -440,7 +442,11 @@ export const Product = ({
                 buyerCurrency={product.buyer_currency}
                 buyerLocalCurrencyRate={product.buyer_local_currency_rate}
                 buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
-                buyerLocalPriceCents={product.buyer_local_price_cents}
+                buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
+                  product.buyer_local_price_cents,
+                  discountCode?.valid ? discountCode.discount : null,
+                  selection.quantity,
+                )}
                 buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
               />
             </div>
@@ -574,7 +580,10 @@ export const Product = ({
           ) : null}
           {discountCode ? (
             discountCode.valid ? (
-              (discountedPriceCents < priceCents || discountCode.discount.minimum_quantity) && !pppDiscounted ? (
+              (discountedPriceCents < priceCents ||
+                discountCode.discount.minimum_quantity ||
+                (discountCode.discount.type === "fixed" && discountCode.discount.once_per_cart)) &&
+              !pppDiscounted ? (
                 <Alert role="status" variant="success">
                   <div className="flex flex-col gap-4">
                     {discountCode.discount.minimum_quantity
@@ -627,7 +636,7 @@ export const Product = ({
             product={product}
             selection={selection}
             setSelection={setSelection}
-            discount={discountCode?.valid ? discountCode.discount : null}
+            discount={discountCode?.valid ? withConfiguredOncePerCartAmount(discountCode.discount) : null}
             ref={configurationSelectorRef}
           />
           {product.ppp_details && pppDiscounted ? (
@@ -750,7 +759,15 @@ export const Product = ({
   );
 };
 
-const Covers = ({ covers, mainCoverId }: { covers: AssetPreview[]; mainCoverId: string | null }) => {
+const Covers = ({
+  covers,
+  mainCoverId,
+  productName,
+}: {
+  covers: AssetPreview[];
+  mainCoverId: string | null;
+  productName: string;
+}) => {
   const [activeCoverId, setActiveCoverId] = React.useState(mainCoverId);
   useOnChange(() => setActiveCoverId(mainCoverId), [mainCoverId]);
 
@@ -761,6 +778,7 @@ const Covers = ({ covers, mainCoverId }: { covers: AssetPreview[]; mainCoverId: 
       covers={covers}
       activeCoverId={activeCoverId}
       setActiveCoverId={setActiveCoverId}
+      productName={productName}
       className={activeCoverId ? "" : "pb-[25%]"}
     />
   );

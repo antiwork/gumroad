@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
 class Pages::ProfileData
-  # Bumped when the shape of the cached payload changes (v6 added seller_rating), so
-  # already-cached entries built by the previous shape are not served to pages that
-  # now expect the new keys.
-  CACHE_VERSION = "v6"
+  # Bumped when the shape of the cached payload changes (v5 added the *_total counts and
+  # moved product/post URLs onto the seller's live custom domain; v6 added seller_rating;
+  # v7 added the id tiebreaker to the product ordering so offset-based slices can't overlap
+  # on created_at ties), so already-cached entries built by the previous shape are not served
+  # to pages that now expect the new keys.
+  CACHE_VERSION = "v7"
   MAX_ITEMS = 100
   DESCRIPTION_LIMIT = 200
 
@@ -34,6 +36,22 @@ class Pages::ProfileData
     end
   end
 
+  # One slice of the products array for the gumroad:products bridge (gumroad-private#1691),
+  # cached under the same version as the full payload so a slice and page 1 can never describe
+  # two different catalogues. products_total rides along on every slice — it's what tells a
+  # page how many more requests to make, and it's already part of the cache key's freshness
+  # domain (seller.products.cache_key_with_version moves whenever the count does).
+  def self.products_page(seller, offset:, limit:)
+    seller_profile = SellerProfile.find_by(seller_id: seller.id)
+    base_url = seller.store_host_with_protocol
+    Rails.cache.fetch([cache_key(seller, seller_profile, base_url), "products", offset, limit].join("/")) do
+      {
+        products: products(seller, base_url, offset:, limit:),
+        products_total: products_total(seller),
+      }
+    end
+  end
+
   def self.cache_key(seller, seller_profile, base_url = seller.store_host_with_protocol)
     [
       "profile_data",
@@ -53,10 +71,13 @@ class Pages::ProfileData
     ].join("/")
   end
 
-  def self.products(seller, base_url = seller.store_host_with_protocol)
+  def self.products(seller, base_url = seller.store_host_with_protocol, offset: 0, limit: MAX_ITEMS)
+    # created_at has second precision, so bulk-created products tie; without the id tiebreaker
+    # two offset slices could overlap or skip a row at their boundary. Pages::ProductPrices
+    # must slice on the identical order or a paged card loses its price.
     seller.products.alive.not_archived.not_draft
           .includes(:thumbnail_alive, display_asset_previews: { file_attachment: :blob })
-          .order(created_at: :desc).limit(MAX_ITEMS).map do |product|
+          .order(created_at: :desc, id: :desc).offset(offset).limit(limit).map do |product|
       {
         name: product.name,
         url: product.long_url(host: base_url),

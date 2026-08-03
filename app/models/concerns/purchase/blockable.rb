@@ -295,10 +295,19 @@ module Purchase::Blockable
                       .to_a
     eligible = scanned.reject { |purchase| purchase.merchant_account&.is_a_stripe_connect_account? }
     candidates = eligible.first(PROCESSOR_REFUSAL_MAX_READS)
-    return if candidates.empty?
 
     # A full scan may be hiding eligible rows behind the bound, so it counts as capped too.
     capped = eligible.size > candidates.size || scanned.size == PROCESSOR_REFUSAL_MAX_SCAN
+
+    # Ordered before the empty-candidates exit: a page that is entirely Connect rows leaves every
+    # eligible attempt behind the bound, and a bare nil there is the truncated-scan-reads-as-clean
+    # silence this method exists to end.
+    if candidates.empty?
+      return { incomplete: true, truncated_by: :read_cap } if capped
+
+      return
+    end
+
     ran_out_of_time = false
     deadline = Time.current + PROCESSOR_REFUSAL_TIME_BUDGET
 
@@ -519,7 +528,7 @@ module Purchase::Blockable
     return unless seller.present?
     return if [User::PAYOUT_PAUSE_SOURCE_ADMIN, User::PAYOUT_PAUSE_SOURCE_SYSTEM].include?(seller.payouts_paused_by_source)
 
-    chargeback_stats = seller.lost_chargebacks
+    chargeback_stats = seller.lost_chargebacks_for_payout_gate
     chargeback_volume_percentage = chargeback_stats[:volume]
     return if chargeback_volume_percentage == "NA"
 
@@ -532,7 +541,7 @@ module Purchase::Blockable
     User.transaction do
       seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       seller.comments.create(
-        content: "Payouts automatically paused due to chargeback rate (#{chargeback_volume_percentage}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume.",
+        content: "Payouts automatically paused due to chargeback rate (#{chargeback_volume_percentage}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume over the last #{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}.",
         comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
         author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
       )

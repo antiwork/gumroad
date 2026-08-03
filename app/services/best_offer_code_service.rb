@@ -62,9 +62,10 @@ class BestOfferCodeService
 
     def amount_off_from_discount(discount)
       return 0 unless discount
-      transient = discount[:type] == "fixed" ?
-        OfferCode.new(amount_cents: discount[:cents]) :
-        OfferCode.new(amount_percentage: discount[:percents])
-      transient.amount_off(@product.price_cents)
+      if discount[:type] == "fixed"
+        discount[:cents] * (discount[:once_per_cart] ? 1 : @quantity)
+      else
+        (@product.price_cents * discount[:percents] / 100.0).round * @quantity
+      end
     end
 end

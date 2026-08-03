@@ -5,14 +5,14 @@ module ClientConfirmedOrderFinalization
   include Events
 
   private
-    def finalize_client_confirmed_order(order)
-      service = Order::FinalizeConfirmedChargeService.new(order:)
+    def finalize_client_confirmed_order(order, retry_offer_codes: nil)
+      service = Order::FinalizeConfirmedChargeService.new(order:, retry_offer_codes:)
       responses = service.perform
 
       record_purchase_events(order)
       attribute_utm_link_sale(order, cookies[:_gumroad_guid])
 
-      [responses, service.charge_intent]
+      [responses, service.charge_intent, service.offer_codes]
     end
 
     def attribute_utm_link_sale(order, browser_guid)

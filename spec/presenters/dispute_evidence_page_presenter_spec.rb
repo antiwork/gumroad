@@ -38,6 +38,11 @@ describe DisputeEvidencePagePresenter do
               title: "Refund policy",
             },
             customer_communication_file: nil,
+          },
+          saved: {
+            reason_for_winning: nil,
+            cancellation_rebuttal: nil,
+            refund_refusal_explanation: nil,
           }
         }
       )

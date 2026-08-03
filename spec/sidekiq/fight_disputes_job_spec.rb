@@ -18,15 +18,15 @@ describe FightDisputesJob do
     end
 
     context "when the seller submitted early, inside their window" do
-      # hours_left_to_submit_evidence now reports 0 for a spent submission slot
-      # (gumroad-private#1612). This job must NOT read it: to the scheduler a spent slot is not an
-      # expired window, and treating it as one would forward a seller's evidence hours early.
+      # A saved response no longer spends the submission slot, so the clock keeps reporting the
+      # real hours remaining (gp#1765 inverts gp#1612's pin). This job's behaviour is unchanged:
+      # it waits for the window to close, which is now also when the response is forwarded.
       let!(:dispute_evidence_submitted_early) do
         create(:dispute_evidence, seller_contacted_at: 2.hours.ago, seller_submitted_at: 1.hour.ago)
       end
 
       it "still waits for the window to close before forwarding" do
-        expect(dispute_evidence_submitted_early.hours_left_to_submit_evidence).to eq(0)
+        expect(dispute_evidence_submitted_early.hours_left_to_submit_evidence).to be_positive
 
         described_class.new.perform
 

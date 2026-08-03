@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000029) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_163724) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1940,7 +1940,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000029) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "duration_in_months"
+    t.boolean "once_per_cart", default: false, null: false
+    t.integer "pre_discount_displayed_price_cents"
+    t.string "once_per_cart_allocation_id"
     t.index ["offer_code_id"], name: "index_purchase_offer_code_discounts_on_offer_code_id"
+    t.index ["once_per_cart_allocation_id"], name: "index_poc_discounts_on_once_per_cart_allocation_id"
     t.index ["purchase_id"], name: "index_purchase_offer_code_discounts_on_purchase_id", unique: true
   end
 

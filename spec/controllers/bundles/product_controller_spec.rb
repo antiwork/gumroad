@@ -147,6 +147,12 @@ describe Bundles::ProductController, inertia: true do
       expect(flash[:notice]).to eq("Changes saved!")
     end
 
+    it "keeps a supplied redirect on the Gumroad host" do
+      put :update, params: { bundle_id: bundle.external_id, redirect_to: "https://evil.example/phish", price_cents: 2000 }
+
+      expect(response).to redirect_to("/phish")
+    end
+
     # An unsupported currency is caught by the model's own
     # `price_must_be_within_range`, not by anything added here — these pin that
     # it surfaces to the seller as a flash alert and rolls the whole update back.

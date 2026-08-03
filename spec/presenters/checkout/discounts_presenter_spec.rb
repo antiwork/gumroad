@@ -43,6 +43,7 @@ describe Checkout::DiscountsPresenter do
                      minimum_quantity: 1,
                      duration_in_billing_cycles: 1,
                      minimum_amount_cents: 1000,
+                     once_per_cart: false,
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
@@ -81,6 +82,7 @@ describe Checkout::DiscountsPresenter do
                      minimum_quantity: nil,
                      duration_in_billing_cycles: nil,
                      minimum_amount_cents: nil,
+                     once_per_cart: false,
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
@@ -110,6 +112,7 @@ describe Checkout::DiscountsPresenter do
                      minimum_quantity: nil,
                      duration_in_billing_cycles: nil,
                      minimum_amount_cents: nil,
+                     once_per_cart: false,
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
@@ -174,6 +177,7 @@ describe Checkout::DiscountsPresenter do
             minimum_quantity: 1,
             duration_in_billing_cycles: 1,
             minimum_amount_cents: 1000,
+            once_per_cart: false,
             existing_customers_only: false,
             ownership_products: [],
             ownership_duration_tiers: nil,
@@ -220,6 +224,12 @@ describe Checkout::DiscountsPresenter do
             },
           ]
         )
+      end
+
+      it "exposes order-level fixed discounts" do
+        offer_code2.update!(once_per_cart: true)
+
+        expect(presenter.offer_code_props(offer_code2)[:once_per_cart]).to be(true)
       end
 
       it "exposes ownership products and tiers for existing-customers codes" do
