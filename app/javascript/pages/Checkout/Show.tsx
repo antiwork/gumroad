@@ -682,6 +682,23 @@ const CheckoutIndexPage = () => {
           result.error_code === DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED_ERROR_CODE,
       );
       if (duplicatePurchaseResults.length > 0) {
+        // Other lines in this cart may have already succeeded (or failed outright) while this
+        // one needs confirmation. Drop the successful lines from the cart now — same as the
+        // failedItems filter below — so "Buy again" only resubmits what didn't go through, not
+        // an unrelated item that's already been charged.
+        const remainingItems = cartForm.data.cart.items.flatMap((item) => {
+          const lineItem = result.lineItems[getCartItemUid(item)];
+          return lineItem && !lineItem.success
+            ? {
+                ...item,
+                ...lineItem.updated_product,
+                quantity: lineItem.updated_product?.quantity || item.quantity,
+                accepted_offer: null,
+              }
+            : [];
+        });
+        debouncedSaveCartState.cancel();
+        cartForm.setData((prev) => ({ cart: { ...prev.cart, items: remainingItems } }));
         setDuplicatePurchaseConfirmation({
           uids: duplicatePurchaseResults.map(({ item }) => getCartItemUid(item)),
           productNames: duplicatePurchaseResults.map(({ item }) => item.product.name),
