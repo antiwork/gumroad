@@ -85,10 +85,9 @@ class DisputeEvidence::CreateFromDisputeService
     # single submission. Checked as at checkout, not live: a seller disabling shipping later
     # must not erase delivery proof for an order that genuinely shipped.
     #
-    # `shipped_at` is required for the same reason. A row the seller created but never marked
-    # shipped carries no delivery date and, in production, no carrier or tracking either, so the
-    # structured slots would assert delivery to the network with nothing substantiating it. The
-    # free-text summary already holds this line.
+    # `shipped_at` is required because a row created and never marked shipped carries no date, and
+    # in production no carrier or tracking either, so the slots would assert a delivery with nothing
+    # behind it. GenerateUncategorizedTextService's tracking-URL row is deliberately ungated.
     def shipment_for(purchase)
       shipment = purchase.shipment
       return if shipment.blank?
