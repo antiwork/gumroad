@@ -2967,6 +2967,41 @@ describe OrdersController, :vcr do
       expect(purchase.reload).to be_in_progress
     end
 
+    it "allows cleanup to retry after a processor error" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      add_once_per_cart_reservation(purchase, product:)
+      purchase.create_processor_payment_intent!(intent_id: "pi_retry_cleanup")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
+      )
+      attempts = 0
+      expect(ChargeProcessor).to receive(:get_charge_intent).twice do
+        attempts += 1
+        raise ChargeProcessorError, "temporary failure" if attempts == 1
+
+        charge_intent
+      end
+      expect(ChargeProcessor).to receive(:cancel_payment_intent!).with(purchase.merchant_account, "pi_retry_cleanup")
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        processor_intent_id: "pi_retry_cleanup",
+        stripe_error_code: "card_declined",
+      }
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        processor_intent_id: "pi_retry_cleanup",
+        stripe_error_code: "card_declined",
+      }
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => true)
+      expect(purchase.reload).to be_failed
+    end
+
     it "fails only purchases sharing the checked intent" do
       second_product = create(:product, user: seller, price_cents: 10_00)
       params = {

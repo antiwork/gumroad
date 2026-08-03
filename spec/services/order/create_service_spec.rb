@@ -666,6 +666,17 @@ describe Order::CreateService, :vcr do
         expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([offer_code.id, nil])
       end
 
+      it "counts a missing quantity as one when checking the minimum" do
+        offer_code.update!(minimum_quantity: 1)
+        params[:line_items].first.delete(:quantity)
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1 - 1_00, price_2])
+        expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([offer_code.id, nil])
+      end
+
       it "normalizes the submitted code before allocating the discount" do
         params[:line_items].each { _1[:discount_code] = " #{offer_code.code.upcase} " }
 

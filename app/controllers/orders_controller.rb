@@ -146,6 +146,7 @@ class OrdersController < ApplicationController
 
   private
     def release_failed_client_confirmation(order, processor_intent_id:)
+      checked_intent_id = nil
       purchase = order.purchases.active_once_per_cart_offer_code_reservations.find do
         intent_ids = [_1.processor_payment_intent_id, _1.processor_setup_intent_id].compact
         intent_ids.any? && (processor_intent_id.nil? || intent_ids.include?(processor_intent_id))
@@ -183,18 +184,23 @@ class OrdersController < ApplicationController
       end
       true
     rescue ChargeProcessorError => e
+      Rails.cache.delete(confirm_error_cleanup_key(order, checked_intent_id)) if checked_intent_id
       ErrorNotifier.notify(e) { _1.add_metadata(:order, { id: order.id }) }
       false
     end
 
     def confirm_error_cleanup_allowed?(order, processor_intent_id)
       claimed = Rails.cache.write(
-        "confirm_error_cleanup:#{order.id}:#{processor_intent_id}",
+        confirm_error_cleanup_key(order, processor_intent_id),
         true,
         expires_in: CONFIRM_ERROR_CLEANUP_LIMIT_WINDOW,
         unless_exist: true
       )
       claimed.nil? || claimed
+    end
+
+    def confirm_error_cleanup_key(order, processor_intent_id)
+      "confirm_error_cleanup:#{order.id}:#{processor_intent_id}"
     end
 
     def unavailable_once_per_cart_offer_code_ids(order)

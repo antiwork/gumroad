@@ -29,7 +29,9 @@ class Order::CreateService
 
   def perform
     common_params = params.except(:line_items)
-    line_items = params.fetch(:line_items, [])
+    line_items = params.fetch(:line_items, []).map do |line_item|
+      line_item.key?(:quantity) ? line_item : line_item.merge(quantity: 1)
+    end
     line_item_uids = line_items.map { _1[:uid] }
     if line_items.length > Cart::MAX_ALLOWED_CART_PRODUCTS
       invalid_responses = line_item_uids.uniq.index_with do
