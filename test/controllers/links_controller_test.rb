@@ -5828,7 +5828,7 @@ class LinksControllerShowTest < ActionController::TestCase
 
   test "GET show stores click when coming from discover" do
     cookies[:_gumroad_guid] = "custom_guid"
-    taxonomy = Taxonomy.find_by(slug: "fonts") || Taxonomy.first!
+    taxonomy = Taxonomy.find_or_create_by(slug: "fonts")
     product.update!(taxonomy:)
 
     assert_difference -> { DiscoverSearch.count }, 1 do
