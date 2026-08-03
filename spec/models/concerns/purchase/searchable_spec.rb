@@ -39,6 +39,8 @@ describe Purchase::Searchable do
         "latest_charge_date" => nil,
         "email" => "buyer1@gmail.com",
         "email_domain" => "gmail.com",
+        "subscription_current_email" => nil,
+        "subscription_current_email_domain" => nil,
         "paypal_email" => "buyer1@paypal.com",
         "fee_cents" => 93, # 100 * 0.129 + 50 + 30
         "full_name" => "Joe Buyer",
@@ -91,6 +93,8 @@ describe Purchase::Searchable do
         "subscription_id" => @purchase.subscription.id,
         "subscription_cancelled_at" => "2018-01-01T00:00:00Z",
         "subscription_deactivated_at" => "2018-01-01T00:00:00Z",
+        "subscription_current_email" => @purchase.subscription.user.email,
+        "subscription_current_email_domain" => @purchase.subscription.user.email.split("@")[1],
         "monthly_recurring_revenue" => 100.0 / 12,
         "not_refunded_except_subscriptions" => true,
         "not_subscription_or_original_subscription_purchase" => true,
@@ -282,6 +286,56 @@ describe Purchase::Searchable do
       @subscription.save!
 
       expect(ElasticsearchIndexerWorker.jobs.size).to eq(0)
+    end
+  end
+
+  describe "BuyerEmail Callbacks" do
+    before do
+      @member = create(:user, email: "member@example.com")
+      @subscription = create(:subscription, user: @member)
+      @original_purchase = create(:purchase, subscription: @subscription, is_original_subscription_purchase: true, purchaser: @member)
+      @recurring_purchase = create(:purchase, subscription: @subscription, purchaser: @member)
+      ElasticsearchIndexerWorker.jobs.clear
+    end
+
+    def current_email_reindex_jobs
+      ElasticsearchIndexerWorker.jobs.select do |job|
+        job["args"][1]["class_name"] == "Purchase" &&
+          job["args"][1]["fields"] == ["subscription_current_email", "subscription_current_email_domain"]
+      end
+    end
+
+    it "reindexes the original subscription purchase when the member's email changes" do
+      @member.update!(email: "new-member@example.com")
+
+      expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("update", "record_id" => @original_purchase.id, "class_name" => "Purchase", "fields" => ["subscription_current_email", "subscription_current_email_domain"])
+      expect(current_email_reindex_jobs.size).to eq(1)
+    end
+
+    it "reindexes the original subscription purchase when the member's email change is confirmed" do
+      @member.update!(email: "new-member@example.com")
+      ElasticsearchIndexerWorker.jobs.clear
+
+      @member.confirm
+
+      expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("update", "record_id" => @original_purchase.id, "class_name" => "Purchase", "fields" => ["subscription_current_email", "subscription_current_email_domain"])
+    end
+
+    it "does not reindex when unrelated attributes change" do
+      @member.update!(name: "New Name")
+
+      expect(current_email_reindex_jobs.size).to eq(0)
+    end
+
+    it "updates the indexed current email", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+      index_model_records(Purchase)
+
+      @member.update!(email: "new-member@example.com")
+
+      document = get_document_attributes(@original_purchase)
+      expect(document["subscription_current_email"]).to eq("new-member@example.com")
+      expect(document["subscription_current_email_domain"]).to eq("example.com")
+      expect(document["email"]).to eq(@original_purchase.email)
     end
   end
 

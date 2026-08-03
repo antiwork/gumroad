@@ -499,6 +499,27 @@ describe PurchaseSearchService do
       expect(get_records(seller_query: purchase_6.license.serial)).to match_array([purchase_6])
     end
 
+    it "finds a membership by the member's current email after an account email change" do
+      member = create(:user, email: "signup-address@example.com")
+      product = create(:membership_product)
+      subscription = create(:subscription, link: product, user: member)
+      purchase = create(:membership_purchase, email: "signup-address@example.com", link: product, subscription:, purchaser: member)
+      index_model_records(Purchase)
+
+      expect(get_records(seller_query: "current-address@example.org")).to be_empty
+
+      member.update!(email: "current-address@example.org")
+      index_model_records(Purchase)
+
+      # findable by the current email: exact match, autocomplete prefix, and domain
+      expect(get_records(seller_query: "current-address@example.org")).to match_array([purchase])
+      expect(get_records(seller_query: "Current-Address@example.org")).to match_array([purchase])
+      expect(get_records(seller_query: "current-addr")).to match_array([purchase])
+      expect(get_records(seller_query: "example.org")).to match_array([purchase])
+      # still findable by the email the subscription signed up with
+      expect(get_records(seller_query: "signup-address@example.com")).to match_array([purchase])
+    end
+
     it "supports fulltext/autocomplete search as a buyer" do
       seller_1 = create(:user, name: "Daniel Vassallo")
       product_1 = create(:product, name: "Everyone Can Build a Twitter Audience", user: seller_1, description: "Last year I left a cushy job at <strong>Amazon</strong> to work for myself.")
