@@ -1,25 +1,29 @@
 import * as React from "react";
+import typia from "typia";
 
 import { request } from "$app/utils/request";
 
 // The editor-pane half of the gumroad:products bridge (gumroad-private#1691). On the live
 // storefront the trusted wrapper document answers these; here the dashboard does, so a page
-// that builds cards from catalogue slices renders in the preview instead of hanging on a
-// promise that never settles.
+// that awaits a catalogue slice renders in the preview instead of hanging on a promise that
+// never settles.
 //
 // The framed document is the seller's own untrusted HTML, so this side is the boundary: the
-// slice endpoint is the seller's own (`src` is derived from the signed-in session server-side),
-// nothing in the message picks an account, and offset/limit are validated as non-negative
-// integers before they reach it. The sandbox has no allow-same-origin, so e.origin is "null"
-// and e.source is the only usable check — same as the production wrapper.
-type ProductsResponse = {
-  success?: unknown;
-  products?: unknown;
-  products_total?: unknown;
-  prices?: unknown;
-  offset?: unknown;
-  limit?: unknown;
+// slice endpoint is derived server-side from the signed-in session, nothing in the message
+// picks an account, and offset/limit are validated before they reach it. The sandbox has no
+// allow-same-origin, so e.origin is "null" and e.source is the only usable check — same as
+// the production wrapper.
+type ProductsRequest = { type: "gumroad:products"; offset?: unknown; limit?: unknown; requestId?: unknown };
+type ProductsSlice = {
+  success: true;
+  products: unknown[];
+  products_total: number;
+  prices: Record<string, unknown>;
+  offset?: number;
+  limit?: number;
 };
+
+const isIndex = (value: unknown): value is number => typia.is<number>(value) && Number.isInteger(value) && value >= 0;
 
 export const CustomHtmlPreview = ({
   src,
@@ -38,18 +42,14 @@ export const CustomHtmlPreview = ({
     const onMessage = (e: MessageEvent) => {
       const frame = frameRef.current;
       if (!frame || e.source !== frame.contentWindow) return;
-      const data: unknown = e.data;
-      if (typeof data !== "object" || data === null) return;
-      const message = data as { type?: unknown; offset?: unknown; limit?: unknown; requestId?: unknown };
-      if (message.type !== "gumroad:products") return;
+      if (!typia.is<ProductsRequest>(e.data)) return;
+      const message = e.data;
 
-      const requestId = typeof message.requestId === "string" ? message.requestId : null;
+      const requestId = typia.is<string>(message.requestId) ? message.requestId : null;
       const reply = (payload: Record<string, unknown>) => {
         frame.contentWindow?.postMessage({ ...payload, type: "gumroad:products:result", requestId }, "*");
       };
 
-      const isIndex = (value: unknown): value is number =>
-        typeof value === "number" && Number.isInteger(value) && value >= 0;
       const offset = message.offset;
       const limit = message.limit === undefined || message.limit === null ? undefined : message.limit;
       if (!isIndex(offset) || (limit !== undefined && (!isIndex(limit) || limit < 1))) {
@@ -67,8 +67,8 @@ export const CustomHtmlPreview = ({
             reply({ success: false });
             return;
           }
-          const body = (await response.json()) as ProductsResponse;
-          if (body.success !== true) {
+          const body: unknown = await response.json();
+          if (!typia.is<ProductsSlice>(body)) {
             reply({ success: false });
             return;
           }
@@ -89,7 +89,5 @@ export const CustomHtmlPreview = ({
     return () => window.removeEventListener("message", onMessage);
   }, [productsSrc]);
 
-  return (
-    <iframe ref={frameRef} title={title} src={src} sandbox="allow-scripts" className={className} />
-  );
+  return <iframe ref={frameRef} title={title} src={src} sandbox="allow-scripts" className={className} />;
 };
