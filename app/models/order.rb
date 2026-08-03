@@ -13,6 +13,7 @@ class Order < ApplicationRecord
   attr_accessor :setup_future_charges
 
   has_flags 1 => :DEPRECATED_seller_receipt_enabled,
+            2 => :partially_successful,
             column: "flags",
             flag_query_mode: :bit_operator,
             check_for_column: false
@@ -60,6 +61,24 @@ class Order < ApplicationRecord
 
   def successful_charges
     @_successful_charges ||= charges.select { _1.successful_purchases.any? }
+  end
+
+  # Called once the charge flow has resolved every line item. Partial success is a reachable
+  # outcome of one checkout — `Order::ChargeService` rescues per seller group, so an exception in
+  # seller B's group leaves seller A's charge captured — and until this is recorded the outcome
+  # exists only as the derived states of the child purchases, so nothing can query or reconcile it.
+  #
+  # Written with `update_columns` because this is derived bookkeeping: an ordinary save here would
+  # be the first order-row save after a purchase succeeded and would fire `schedule_review_reminder!`
+  # from the charge path rather than from the purchase-success transition that owns it.
+  def record_charge_outcome!
+    return if purchases.in_progress.exists?
+
+    partial = purchases.all_success_states_including_test.exists? && purchases.failed.exists?
+    return if partially_successful? == partial
+
+    self.partially_successful = partial
+    update_columns(flags:, updated_at: Time.current)
   end
 
   # Called from Purchase when a purchase transitions to a successful state. The

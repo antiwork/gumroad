@@ -317,4 +317,84 @@ describe Order do
       end
     end
   end
+
+  describe "#record_charge_outcome!" do
+    let(:seller_1) { create(:user) }
+    let(:seller_2) { create(:user) }
+    let(:product_1) { create(:product, user: seller_1) }
+    let(:product_2) { create(:product, user: seller_2) }
+    let(:order) { create(:order) }
+
+    context "when one seller group succeeded and another failed" do
+      it "flags the order partially_successful" do
+        succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << succeeded << failed
+
+        succeeded.update_balance_and_mark_successful!
+        expect(order.reload).not_to be_partially_successful
+
+        Purchase::MarkFailedService.new(failed).perform
+
+        expect(order.reload).to be_partially_successful
+      end
+    end
+
+    context "when every line item succeeded" do
+      it "leaves the order unflagged" do
+        one = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        two = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << one << two
+
+        one.update_balance_and_mark_successful!
+        two.update_balance_and_mark_successful!
+
+        expect(order.reload).not_to be_partially_successful
+      end
+    end
+
+    context "when every line item failed" do
+      it "leaves the order unflagged" do
+        one = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        two = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << one << two
+
+        Purchase::MarkFailedService.new(one).perform
+        Purchase::MarkFailedService.new(two).perform
+
+        expect(order.reload).not_to be_partially_successful
+      end
+    end
+
+    context "when a sibling line item is still in progress" do
+      it "does not flag the order yet, and flags it once the sibling settles" do
+        succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        pending_item = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << succeeded << pending_item
+
+        succeeded.update_balance_and_mark_successful!
+        expect(order.reload).not_to be_partially_successful
+
+        # SCA confirmation / FailAbandonedPurchaseWorker resolve line items long after the
+        # charge loop returns, so the last one to settle is what writes the outcome.
+        Purchase::MarkFailedService.new(pending_item).perform
+
+        expect(order.reload).to be_partially_successful
+      end
+    end
+
+    context "when the outcome is already recorded" do
+      it "does not write the order row again" do
+        succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << succeeded << failed
+        succeeded.update_balance_and_mark_successful!
+        Purchase::MarkFailedService.new(failed).perform
+        expect(order.reload).to be_partially_successful
+
+        expect(order).not_to receive(:update_columns)
+        order.record_charge_outcome!
+      end
+    end
+  end
 end

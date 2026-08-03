@@ -288,6 +288,7 @@ class Purchase < ApplicationRecord
                                                                                                                                  }
     after_transition any => :successful, :do => :block_fraudulent_free_purchases!
     after_transition any => %i[successful not_charged gift_receiver_purchase_successful], :do => :schedule_order_review_reminder
+    after_transition any => any, :do => :record_order_charge_outcome
     after_transition any => any, :do => :log_transition
 
     # normal purchase transitions:
@@ -3831,6 +3832,18 @@ class Purchase < ApplicationRecord
     return if is_test_purchase?
 
     order&.schedule_review_reminder
+  end
+
+  # Recorded from the purchase transition rather than from `Order::ChargeService`, because a line
+  # item can reach its terminal state long after the charge loop returns — SCA confirmation,
+  # FailAbandonedPurchaseWorker, and the processor-sync recovery paths all land here instead.
+  # `record_charge_outcome!` no-ops while any sibling is still in progress, so the last line item
+  # to settle is the one that writes the order's outcome.
+  def record_order_charge_outcome
+    order&.record_charge_outcome!
+  rescue => e
+    # Derived bookkeeping must never break a purchase transition.
+    Rails.logger.error("Error recording order charge outcome for purchase (#{id}):: #{e.class} => #{e.message}")
   end
 
   def check_for_blocked_customer_emails
