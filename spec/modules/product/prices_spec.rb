@@ -196,9 +196,10 @@ describe Product::Prices do
         expect(product.reload.customizable_price).to be(false)
       end
 
-      it "keeps customizable_price when the paid version is deleted again" do
+      it "restores customizable_price once the paid version is deleted and a free one remains" do
         product = create(:product, price_cents: 0)
         category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "Free Version", price_difference_cents: 0)
         paid = category.variants.create!(name: "premium version", price_difference_cents: 10_00)
         product.save!
         expect(product.reload.customizable_price).to be(false)
@@ -220,7 +221,8 @@ describe Product::Prices do
       end
 
       it "keeps a coffee product customizable despite its paid suggested amounts" do
-        product = create(:product, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 5_00)
+        seller = create(:user, created_at: 2.months.ago)
+        product = create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 5_00)
         product.initialize_suggested_amount_if_needed!
         expect(product.reload.customizable_price).to be(true)
         expect(product.variant_categories_alive.joins(:variants).merge(BaseVariant.alive)
