@@ -1382,23 +1382,19 @@ class User < ApplicationRecord
   # earned-your-way-in bar as AI product generation: real money in, and a payout that
   # proves the account is a going concern rather than a fresh signup experimenting.
   #
-  # Unlike eligible_for_ai_product_generation?, this is evaluated on EVERY Inertia render
-  # (the Agent nav tab reads it out of policies_props), so it is ordered and memoized for
-  # that path. sales_cents_total is an Elasticsearch aggregation, while has_completed_payouts?
-  # is an indexed exists? — checking the payout first means a seller who has never been paid
-  # out short-circuits without touching ES, which is exactly the pre-launch account this
-  # gate exists to stop.
+  # Never memoize: this backs an authorization check on a long-lived SSE stream, so a
+  # suspension mid-conversation has to revoke access on the next check rather than at the
+  # next object load.
+  #
+  # The ordering is what keeps it cheap. sales_cents_total is an Elasticsearch aggregation
+  # while has_completed_payouts? is an indexed exists?, so testing the payout first means a
+  # seller who has never been paid out short-circuits without touching ES — exactly the
+  # pre-launch account this gate exists to stop.
   def eligible_for_store_agent?
-    return @eligible_for_store_agent if defined?(@eligible_for_store_agent)
+    return true if Rails.env.development?
+    return false if !confirmed? || suspended? || !has_completed_payouts?
 
-    @eligible_for_store_agent =
-      if Rails.env.development?
-        true
-      elsif !confirmed? || suspended? || !has_completed_payouts?
-        false
-      else
-        sales_cents_total >= MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT
-      end
+    sales_cents_total >= MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT
   end
 
   # Devise routes every confirmation *resend* through this method — the public
