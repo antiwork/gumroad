@@ -167,11 +167,12 @@ class OfferCodeDiscountComputingService
       end
     end
 
-    # Callers may pass the buyer's code as typed (OfferCodesController and
-    # CartPresenter do). That is safe: the code is used only in this lookup,
-    # where utf8mb4_unicode_ci already equates NFD/NFC forms, case, and
-    # trailing spaces — the same rows Order::CreateService#normalize_discount_code
-    # would match — and results are keyed by permalink, never by the code string.
+    # Buyer-facing callers pass the code through OfferCode.normalize_code first;
+    # leading whitespace is the one thing this lookup cannot forgive on its own.
+    # The collation (utf8mb4_unicode_ci) equates NFD/NFC forms, case, and
+    # trailing spaces, so raw code strings persisted in carts before callers
+    # normalized still resolve. Results are keyed by permalink, never by the
+    # code string.
     def offer_codes
       return OfferCode.none if code.blank? && offer_code_id.blank?
 

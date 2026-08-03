@@ -79,7 +79,8 @@ class OfferCode < ApplicationRecord
   }
 
   # Codes may contain accented Latin characters (see the format validation above), so NFC-normalize
-  # before comparing — a decomposed client submission must match its precomposed stored form.
+  # before comparing — a decomposed client submission must match its precomposed stored form. For
+  # DB lookups the collation forgives everything here except leading whitespace.
   def self.normalize_code(code)
     code.to_s.unicode_normalize(:nfc).strip.downcase
   end
