@@ -267,22 +267,36 @@ module Purchase::Blockable
   # Only platform-account charges are considered: a refusal on a creator's own Connect account came
   # from THEIR Radar rules, which we neither set nor can lift.
   #
-  # Returns nil when nothing on the processor side is holding them.
+  # Returns nil only when the whole window was read and nothing is holding them; a scan that ran out
+  # of reads or budget returns `incomplete` instead, because a nil there is indistinguishable from
+  # "clean" to the callers and that silence is the bug this method exists to end.
   def processor_rule_refusal
-    candidates = Purchase.where(email:)
-                         .where(created_at: PROCESSOR_REFUSAL_WINDOW.ago..)
-                         .where(charge_processor_id: StripeChargeProcessor.charge_processor_id)
-                         .where.not(stripe_transaction_id: nil)
-                         .order(created_at: :desc)
-                         .reject { |purchase| purchase.merchant_account&.is_a_stripe_connect_account? }
-                         .first(PROCESSOR_REFUSAL_MAX_READS)
+    eligible = Purchase.where(email:)
+                       .where(created_at: PROCESSOR_REFUSAL_WINDOW.ago..)
+                       .where(charge_processor_id: StripeChargeProcessor.charge_processor_id)
+                       .where.not(stripe_transaction_id: nil)
+                       .order(created_at: :desc)
+                       .reject { |purchase| purchase.merchant_account&.is_a_stripe_connect_account? }
+    candidates = eligible.first(PROCESSOR_REFUSAL_MAX_READS)
     return if candidates.empty?
 
+    unread = eligible.size > candidates.size
     deadline = Time.current + PROCESSOR_REFUSAL_TIME_BUDGET
 
     candidates.each do |candidate|
+      # Checked BEFORE the call, not after: each read carries its own timeout, so a post-call check
+      # lets the budget overrun by a whole read on a request whose unblock has already committed.
+      remaining = deadline - Time.current
+      if remaining <= 0
+        unread = true
+        break
+      end
+
+      read_opts = PROCESSOR_REFUSAL_READ_OPTS.merge(
+        read_timeout: [PROCESSOR_REFUSAL_READ_OPTS[:read_timeout], [remaining.ceil, 1].max].min
+      )
       charge = Stripe::Charge.retrieve({ id: candidate.stripe_transaction_id, expand: %w[outcome.rule] },
-                                       PROCESSOR_REFUSAL_READ_OPTS)
+                                       read_opts)
       outcome = charge["outcome"] || {}
 
       # A later authorised attempt means the buyer already got through, so an earlier refusal in the
@@ -303,9 +317,10 @@ module Purchase::Blockable
           attempted_at: candidate.created_at,
         }
       end
-
-      break if Time.current >= deadline
     end
+
+    # Reads left unmade mean an older refusal in the window may still stand.
+    return { incomplete: true } if unread
 
     nil
   rescue StandardError => e
@@ -319,6 +334,11 @@ module Purchase::Blockable
   def processor_rule_refusal_note(refusal)
     return if refusal.blank?
     return "Could not check whether Stripe is still refusing this buyer — retry the check before promising anything." if refusal[:error].present?
+    if refusal[:incomplete].present?
+      return "Checked the buyer's most recent Stripe attempts and none of them was refused by our " \
+             "rules, but there were more attempts in the last day than this check reads — if the " \
+             "buyer still fails, inspect their recent charges in Stripe before promising anything."
+    end
 
     case refusal[:kind]
     when :platform_block
