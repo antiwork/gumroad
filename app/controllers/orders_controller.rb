@@ -173,7 +173,7 @@ class OrdersController < ApplicationController
         other_intent_id = payment_intent ? other_purchase.processor_payment_intent_id : other_purchase.processor_setup_intent_id
         Purchase::MarkFailedService.new(other_purchase).perform if other_intent_id == checked_intent_id
       end
-      true
+      !order.purchases.active_once_per_cart_offer_code_reservations.exists?
     rescue ChargeProcessorError => e
       ErrorNotifier.notify(e) { _1.add_metadata(:order, { id: order.id }) }
       false
