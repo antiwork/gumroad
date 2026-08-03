@@ -172,6 +172,113 @@ describe Product::Prices do
         expect(product.customizable_price).to be(false)
         expect(product.price_cents).to eq(0)
       end
+
+      it "clears a stale customizable_price when a paid version is added later" do
+        product = create(:product, price_cents: 0)
+        expect(product.customizable_price).to be(true)
+
+        create(:variant_category, title: "versions", link: product)
+        product.variant_categories.first.variants.create!(name: "premium version", price_difference_cents: 10_00)
+        product.save!
+
+        expect(product.reload.customizable_price).to be(false)
+      end
+
+      it "clears the flag when the only free version sits beside a paid one" do
+        product = create(:product, price_cents: 0)
+        category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "Free Version", price_difference_cents: 0)
+        category.variants.create!(name: "Full Version", price_difference_cents: 10_00)
+        product.update_column(:customizable_price, true)
+
+        product.save!
+
+        expect(product.reload.customizable_price).to be(false)
+      end
+
+      it "restores customizable_price once the paid version is deleted and a free one remains" do
+        product = create(:product, price_cents: 0)
+        category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "Free Version", price_difference_cents: 0)
+        paid = category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+        product.save!
+        expect(product.reload.customizable_price).to be(false)
+
+        paid.mark_deleted!
+        product.save!
+
+        expect(product.reload.customizable_price).to be(true)
+      end
+
+      it "leaves a paid product's PWYW flag alone" do
+        product = create(:product, price_cents: 5_00, customizable_price: true)
+        category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+
+        product.save!
+
+        expect(product.reload.customizable_price).to be(true)
+      end
+
+      it "refreshes the search index when it clears the flag" do
+        product = create(:product, price_cents: 0)
+        category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+        # The variant save above already cleared it; put it back so this save has work to do.
+        product.update_column(:customizable_price, true)
+
+        expect(product).to receive(:enqueue_index_update_for).with(["customizable_price"])
+
+        product.save!
+      end
+
+      it "does not re-enqueue an index update when the flag is already right" do
+        product = create(:product, price_cents: 0)
+        category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+        expect(product.reload.customizable_price).to be(false)
+
+        expect(product).not_to receive(:enqueue_index_update_for).with(["customizable_price"])
+
+        product.save!
+      end
+
+      it "keeps a coffee product customizable despite its paid suggested amounts" do
+        seller = create(:user, created_at: 2.months.ago)
+        # after_create :initialize_suggested_amount_if_needed! has already moved the price onto a
+        # paid "Suggested Amounts" variant and set the flag — the exact shape the clear would undo.
+        product = create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 5_00)
+        expect(product.reload.customizable_price).to be(true)
+        expect(product.variant_categories_alive.joins(:variants).merge(BaseVariant.alive)
+                 .sum("base_variants.price_difference_cents")).to eq(5_00)
+
+        product.save!
+
+        expect(product.reload.customizable_price).to be(true)
+      end
+
+      it "clears the flag when the paid variant is saved without the product" do
+        product = create(:product, price_cents: 0)
+        expect(product.customizable_price).to be(true)
+        category = create(:variant_category, title: "versions", link: product)
+
+        # Api::V2::VariantsController#create saves only the variant.
+        category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+
+        expect(product.reload.customizable_price).to be(false)
+      end
+
+      it "restores the flag when the paid variant is deleted without the product" do
+        product = create(:product, price_cents: 0)
+        category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "Free Version", price_difference_cents: 0)
+        paid = category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+        expect(product.reload.customizable_price).to be(false)
+
+        paid.mark_deleted!
+
+        expect(product.reload.customizable_price).to be(true)
+      end
     end
   end
 
