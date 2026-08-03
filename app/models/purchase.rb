@@ -629,7 +629,8 @@ class Purchase < ApplicationRecord
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
-                :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited
+                :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited,
+                :submitted_pre_discount_price_cents, :once_per_cart_discount_allocation, :offer_code_cart_quantity
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -655,6 +656,47 @@ class Purchase < ApplicationRecord
   # a buyer could pay again by another method and end up paying twice, which is what the
   # double-charge guards built on this scope exist to prevent.
   scope :payment_settling, -> { in_progress.where.not(stripe_status: nil) }
+  # Unconfirmed attempts hold a short lease; a processor status means the payment can still settle
+  # after that lease expires.
+  scope :active_once_per_cart_offer_code_reservations, lambda {
+    in_progress
+      .not_recurring_charge
+      .not_is_additional_contribution
+      .not_is_gift_receiver_purchase
+      .not_is_archived_original_subscription_purchase
+      .not_is_commission_completion_purchase
+      .joins(:purchase_offer_code_discount)
+      .left_joins(:processor_payment_intent)
+      .where(purchase_offer_code_discounts: { once_per_cart: true })
+      .where("purchases.purchaser_id IS NULL OR purchases.purchaser_id != purchases.seller_id")
+      .where("purchases.preorder_id IS NULL OR purchases.flags & ? != 0", flag_mapping["flags"][:is_preorder_authorization])
+      .where(
+        "purchases.created_at >= :cutoff OR purchases.stripe_status IS NOT NULL OR " \
+        "purchases.processor_setup_intent_id IS NOT NULL OR processor_payment_intents.id IS NOT NULL",
+        cutoff: ChargeProcessor::TIME_TO_COMPLETE_SCA.ago
+      )
+  }
+  scope :completed_once_per_cart_allocation_uses, lambda {
+    where(purchase_state: NON_GIFT_SUCCESS_STATES)
+      .not_is_archived_original_subscription_purchase
+      .joins(:purchase_offer_code_discount)
+      .where(purchase_offer_code_discounts: { once_per_cart: true })
+      .where.not(purchase_offer_code_discounts: { once_per_cart_allocation_id: nil })
+      .where("purchases.purchaser_id IS NULL OR purchases.purchaser_id != purchases.seller_id")
+  }
+  scope :active_once_per_cart_allocation_uses, lambda {
+    in_progress
+      .joins(:purchase_offer_code_discount)
+      .left_joins(:processor_payment_intent)
+      .where(purchase_offer_code_discounts: { once_per_cart: true })
+      .where.not(purchase_offer_code_discounts: { once_per_cart_allocation_id: nil })
+      .where("purchases.purchaser_id IS NULL OR purchases.purchaser_id != purchases.seller_id")
+      .where(
+        "purchases.created_at >= :cutoff OR purchases.stripe_status IS NOT NULL OR " \
+        "purchases.processor_setup_intent_id IS NOT NULL OR processor_payment_intents.id IS NOT NULL",
+        cutoff: ChargeProcessor::TIME_TO_COMPLETE_SCA.ago
+      )
+  }
   scope :in_progress_or_successful_including_test, -> { where(purchase_state: %w(in_progress successful test_successful)) }
   scope :not_in_progress, -> { where.not(purchase_state: "in_progress") }
   scope :not_successful, -> { without_purchase_state(:successful) }
@@ -845,10 +887,14 @@ class Purchase < ApplicationRecord
       .not_is_archived_original_subscription_purchase
       .where(subscription: { deactivated_at: nil })
   }
-  scope :counts_towards_offer_code_uses, lambda {
+  scope :offer_code_statistics, lambda {
     where(purchase_state: NON_GIFT_SUCCESS_STATES)
       .not_recurring_charge
       .not_is_archived_original_subscription_purchase
+  }
+  scope :counts_towards_offer_code_uses, lambda {
+    offer_code_statistics
+      .not_is_commission_completion_purchase
   }
   scope :counts_towards_volume, lambda {
     successful
@@ -1283,7 +1329,26 @@ class Purchase < ApplicationRecord
         next if code_purchases.size < 2
         offer_code = code_purchases.first.offer_code
         next if offer_code&.max_purchase_count.nil?
-        next if code_purchases.sum(&:quantity) <= offer_code.quantity_left
+        once_per_cart_allocation_ids = Set.new
+        units_spent = code_purchases.sum do |purchase|
+          discount = purchase.purchase_offer_code_discount
+          if discount&.once_per_cart? && !discount.offer_code_is_percent
+            if discount.once_per_cart_allocation_id.present?
+              once_per_cart_allocation_ids << discount.once_per_cart_allocation_id
+              0
+            else
+              1
+            end
+          else
+            purchase.quantity
+          end
+        end
+        units_spent += once_per_cart_allocation_ids.size
+        quantity_left = offer_code.quantity_left(
+          excluding_order: code_purchases.first.order,
+          excluding_once_per_cart_allocation_ids: once_per_cart_allocation_ids.to_a
+        )
+        next if units_spent <= quantity_left
 
         code_purchases.each do |purchase|
           purchase.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
@@ -1838,19 +1903,26 @@ class Purchase < ApplicationRecord
   def minimum_paid_price_cents
     return 0 if is_gift_receiver_purchase
     return perceived_price_cents if perceived_price_cents.present? && is_applying_plan_change
+    if perceived_price_cents.present? && is_commission_completion_purchase? && once_per_cart_fixed_offer_code?
+      return [perceived_price_cents.to_i - tip&.value_cents.to_i, 0].max
+    end
 
     if is_recurring_subscription_charge
       minimum_price = subscription.current_subscription_price_cents
     elsif is_preorder_charge?
       minimum_price = preorder.authorization_purchase.displayed_price_cents
     else
-      minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
+      price_before_discount = minimum_paid_price_cents_per_unit_before_discount
+      minimum_price_cents = if once_per_cart_fixed_offer_code?
+        price_before_discount * quantity - offer_amount_off(price_before_discount * quantity)
+      else
+        (price_before_discount - offer_amount_off(price_before_discount)) * quantity
+      end
       # We allow offer codes larger than the product price, which would make this negative. Floor it
       # at 0 here, before splitting into installments, so a snapshot-backed installment price stays
       # authoritative rather than being overwritten when the live product price later drops.
       minimum_price_cents = 0 if offer_code_for_pricing.present? && minimum_price_cents < 0
-      # We want an offer code to apply to every quantity separately ($2 offer code on 2 CDs = $4 off).
-      minimum_price_cents *= quantity
+      minimum_price_cents = currency_minimum_or_zero(minimum_price_cents) if once_per_cart_fixed_offer_code?
 
       minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
 
@@ -2384,13 +2456,31 @@ class Purchase < ApplicationRecord
   end
 
   def set_price_and_rate
+    if once_per_cart_discount_allocation.present? && !has_cached_offer_code?
+      allocated_offer_code = OfferCode.find_by(id: once_per_cart_discount_allocation[:offer_code_id])
+      if allocated_offer_code&.is_cents? && allocated_offer_code.once_per_cart?
+        discount = build_purchase_offer_code_discount(
+          offer_code: allocated_offer_code,
+          offer_code_amount: once_per_cart_discount_allocation[:amount_cents],
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: link.is_recurring_billing? ? allocated_offer_code.duration_in_months : nil
+        )
+        discount.once_per_cart_allocation_id = once_per_cart_discount_allocation[:allocation_id]
+        discount.pre_discount_displayed_price_cents = verified_pre_discount_displayed_price_cents
+      end
+    end
+
     if offer_code.present? && !has_cached_offer_code?
       resolved_discount = resolved_offer_code_discount_for_buyer
       if resolved_discount.present?
         offer_code_is_percent = resolved_discount[:type] == "percent"
         offer_code_amount = offer_code_is_percent ? resolved_discount[:percents] : resolved_discount[:cents]
         self.build_purchase_offer_code_discount(offer_code:, offer_code_amount:, offer_code_is_percent:,
+                                                once_per_cart: !offer_code_is_percent && offer_code.once_per_cart?,
                                                 pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
+                                                pre_discount_displayed_price_cents: verified_pre_discount_displayed_price_cents,
                                                 duration_in_months: link.is_recurring_billing? ? offer_code.duration_in_months : nil)
       else
         @offer_code_invalid_for_buyer = true
@@ -2413,8 +2503,29 @@ class Purchase < ApplicationRecord
     self.fee_cents = 0
   end
 
+  def inherit_offer_code_from(reference_purchase)
+    discount = reference_purchase.purchase_offer_code_discount
+    self.offer_code = discount&.offer_code || reference_purchase.offer_code
+    return if discount.blank?
+
+    build_purchase_offer_code_discount(
+      offer_code: discount.offer_code,
+      offer_code_amount: discount.offer_code_amount,
+      offer_code_is_percent: discount.offer_code_is_percent,
+      once_per_cart: discount.once_per_cart,
+      once_per_cart_allocation_id: discount.once_per_cart_allocation_id,
+      pre_discount_minimum_price_cents: discount.pre_discount_minimum_price_cents,
+      pre_discount_displayed_price_cents: discount.pre_discount_displayed_price_cents,
+      duration_in_months: discount.duration_in_months
+    )
+  end
+
   def prepare_for_charge!
-    self.chargeable = process_without_charging!
+    reservable_offer_code = offer_code if offer_code&.is_cents? && offer_code.once_per_cart? &&
+      offer_code.max_purchase_count.present? &&
+      !does_not_count_towards_max_purchases && !is_test_purchase?
+
+    self.chargeable = process_without_charging!(reservable_offer_code:)
   end
 
   def update_balance_and_mark_successful!
@@ -3444,10 +3555,36 @@ class Purchase < ApplicationRecord
     offer_code_to_use = original_offer_code(include_deleted:)
     return displayed_price_cents unless offer_code_to_use.present?
 
-    price = has_cached_offer_code? ?
-      purchase_offer_code_discount.pre_discount_minimum_price_cents :
-      offer_code_to_use.original_price(displayed_price_cents)
+    if has_cached_offer_code?
+      discount = purchase_offer_code_discount
+      if discount.once_per_cart? && !discount.offer_code_is_percent
+        return discount.pre_discount_displayed_price_cents if discount.pre_discount_displayed_price_cents.present?
+
+        discounted_product_price = displayed_price_cents - tip&.value_cents.to_i
+        return discount.pre_discount_minimum_price_cents * quantity if discounted_product_price.zero?
+        return discounted_product_price + discount.offer_code_amount
+      end
+
+      return discount.pre_discount_minimum_price_cents * quantity
+    end
+
+    price = offer_code_to_use.original_price(displayed_price_cents)
     price * quantity if price.present?
+  end
+
+  def verified_pre_discount_displayed_price_cents
+    return unless once_per_cart_fixed_offer_code?
+    return if submitted_pre_discount_price_cents.blank?
+
+    minimum_total = minimum_paid_price_cents_per_unit_before_discount * quantity
+    return if submitted_pre_discount_price_cents < minimum_total
+
+    perceived_product_price = perceived_price_cents.to_i - tip&.value_cents.to_i
+    return if perceived_product_price.negative?
+    transformed_price = transformed_once_per_cart_price_cents(submitted_pre_discount_price_cents)
+    return unless [transformed_price, transformed_price - 1].include?(perceived_product_price)
+
+    submitted_pre_discount_price_cents
   end
 
   def displayed_price_per_unit_cents
@@ -3459,9 +3596,12 @@ class Purchase < ApplicationRecord
 
     if has_cached_offer_code?
       original_offer_code = purchase_offer_code_discount.offer_code
+      flags = original_offer_code.flags
+      once_per_cart_flag = OfferCode.flag_mapping["flags"][:once_per_cart]
+      flags = purchase_offer_code_discount.once_per_cart? ? flags | once_per_cart_flag : flags & ~once_per_cart_flag
       purchase_offer_code_discount.offer_code_is_percent ?
-        OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name) :
-        OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name)
+        OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name, flags:) :
+        OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code: original_offer_code.code, name: original_offer_code.name, flags:)
     else
       offer_code
     end
@@ -3736,7 +3876,8 @@ class Purchase < ApplicationRecord
     # Scale the charged total (which already includes tax) by the pre-discount/discounted
     # price ratio instead of re-deriving price + tax + FX from scratch — the mandate is an
     # upper bound, so a proportional estimate is sufficient and much simpler.
-    pre_discount_cents = discount.pre_discount_minimum_price_cents * reference_purchase.quantity
+    pre_discount_cents = discount.pre_discount_displayed_price_cents ||
+      discount.pre_discount_minimum_price_cents * reference_purchase.quantity
     [(Rational(base_cents * pre_discount_cents, reference_purchase.displayed_price_cents)).ceil, base_cents].max
   end
 
@@ -3871,11 +4012,15 @@ class Purchase < ApplicationRecord
   def total_price_before_installments
     return nil unless is_installment_payment
 
-    minimum_price_cents = minimum_paid_price_cents_per_unit_before_discount - offer_amount_off(minimum_paid_price_cents_per_unit_before_discount)
-    minimum_price_cents *= quantity
+    price_before_discount = minimum_paid_price_cents_per_unit_before_discount
+    minimum_price_cents = if once_per_cart_fixed_offer_code?
+      price_before_discount * quantity - offer_amount_off(price_before_discount * quantity)
+    else
+      (price_before_discount - offer_amount_off(price_before_discount)) * quantity
+    end
     minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
 
-    calculated_price = minimum_price_cents.round
+    calculated_price = once_per_cart_fixed_offer_code? ? currency_minimum_or_zero(minimum_price_cents) : minimum_price_cents.round
     calculated_price > 0 ? calculated_price : price_cents
   end
 
@@ -4060,6 +4205,36 @@ class Purchase < ApplicationRecord
       offer_code_for_pricing&.amount_off(purchase_min_price) || 0
     end
 
+    def currency_minimum_or_zero(price_cents)
+      rounded_price = price_cents.round
+      return link.currency["min_price"] if rounded_price.positive? && rounded_price < link.currency["min_price"]
+
+      rounded_price
+    end
+
+    def once_per_cart_fixed_offer_code?
+      pricing_offer_code = offer_code_for_pricing
+      pricing_offer_code&.is_cents? && pricing_offer_code.once_per_cart?
+    end
+
+    def transformed_once_per_cart_price_cents(pre_discount_price_cents)
+      price = [pre_discount_price_cents - offer_amount_off(pre_discount_price_cents), 0].max
+      price = currency_minimum_or_zero(price)
+      price = if is_free_trial_purchase
+        0
+      elsif is_commission_completion_purchase
+        price * (1 - Commission::COMMISSION_DEPOSIT_PROPORTION)
+      elsif link.native_type == Link::NATIVE_TYPE_COMMISSION
+        price * Commission::COMMISSION_DEPOSIT_PROPORTION
+      elsif is_installment_payment
+        calculate_installment_payment_price_cents(price)
+      else
+        price
+      end
+      price -= prorated_discount_price_cents if is_upgrade_purchase && prorated_discount_price_cents
+      price.round
+    end
+
     def displayed_price_usd_cents
       get_usd_cents(displayed_price_currency_type, displayed_price_cents)
     end
@@ -4074,15 +4249,21 @@ class Purchase < ApplicationRecord
       link.save!
     end
 
-    def process_without_charging!
+    def process_without_charging!(reservable_offer_code: nil)
       set_price_and_rate
       calculate_fees
-      save
+      if reservable_offer_code
+        # Serialize the final availability check with the reservation write.
+        reservable_offer_code.with_lock do
+          save if reservable_offer_code_available?(reservable_offer_code)
+        end
+      else
+        save
+      end
 
-      return if is_gift_receiver_purchase
+      return if errors.present? || is_gift_receiver_purchase
 
       create_sales_tax_info!
-      return if errors.present?
 
       calculate_shipping
       save
@@ -4865,23 +5046,49 @@ class Purchase < ApplicationRecord
         return
       end
 
-      unless quantity >= (offer_code.minimum_quantity || 0)
+      unless (offer_code_cart_quantity || quantity) >= (offer_code.minimum_quantity || 0)
         self.error_code = PurchaseErrorCode::OFFER_CODE_INSUFFICIENT_QUANTITY
         errors.add :base, "Sorry, the discount code you wish to use has an unmet minimum quantity."
         return
       end
 
-      return if offer_code.is_valid_for_purchase?(purchase_quantity: quantity)
+      return if offer_code_usage_available?(offer_code)
 
-      if offer_code.quantity_left > 0
+      add_offer_code_usage_error(offer_code)
+
+      true
+    end
+
+    def reservable_offer_code_available?(reservable_offer_code)
+      return false if errors.present?
+      return true if offer_code_usage_available?(reservable_offer_code, lock: true)
+
+      add_offer_code_usage_error(reservable_offer_code, lock: true)
+      false
+    end
+
+    def offer_code_usage_available?(offer_code, lock: false)
+      return true if offer_code.max_purchase_count.nil?
+
+      discount = purchase_offer_code_discount
+      once_per_cart = discount.present? ? discount.once_per_cart? && !discount.offer_code_is_percent : offer_code.is_cents? && offer_code.once_per_cart?
+      allocation_ids = [discount&.once_per_cart_allocation_id].compact if once_per_cart
+      units = once_per_cart ? 1 : quantity
+      offer_code.quantity_left(
+        excluding_purchase: self,
+        excluding_once_per_cart_allocation_ids: allocation_ids,
+        lock:
+      ) >= units
+    end
+
+    def add_offer_code_usage_error(offer_code, lock: false)
+      if offer_code.quantity_left(excluding_purchase: self, lock:).positive?
         self.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
         errors.add :base, "Sorry, the discount code you are using is invalid for the quantity you have selected."
       else
         self.error_code = PurchaseErrorCode::OFFER_CODE_SOLD_OUT
         errors.add :base, "Sorry, the discount code you wish to use has reached its usage limit."
       end
-
-      true
     end
 
     def reject_existing_customer_offer_code

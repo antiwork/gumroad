@@ -38,6 +38,11 @@ class Purchase::CreateService < Purchase::BaseService
 
       # build primary (non-gift) purchase
       self.purchase = build_purchase(purchase_params.merge(gift_given: gift))
+      purchase.submitted_pre_discount_price_cents = params[:submitted_pre_discount_price_cents]
+      purchase.once_per_cart_discount_allocation = params[:once_per_cart_discount_allocation]
+      if purchase.once_per_cart_discount_allocation.present?
+        purchase.offer_code = OfferCode.find_by(id: purchase.once_per_cart_discount_allocation[:offer_code_id])
+      end
       purchase.is_part_of_combined_charge = params[:is_part_of_combined_charge]
 
       # run post-build validations (to ensure a purchase is present along with the
@@ -118,7 +123,8 @@ class Purchase::CreateService < Purchase::BaseService
           # discount. The client can't automatically set the upsell discount
           # because it doesn't have a "code". Thus, upsell discount should only
           # be applied when the purchase does not already have a discount code.
-          if !params[:is_purchasing_power_parity_discounted] && purchase.offer_code.blank? && upsell.offer_code&.evaluate_for_buyer(buyer, product: purchase.link).present?
+          if purchase.offer_code.blank? && upsell.offer_code&.evaluate_for_buyer(buyer, product: purchase.link).present? &&
+             (!params[:is_purchasing_power_parity_discounted] || perceived_price_matches_accepted_offer?(upsell.offer_code))
             purchase.offer_code = upsell.offer_code
           end
         end
@@ -325,6 +331,16 @@ class Purchase::CreateService < Purchase::BaseService
         Rails.logger.info("Zip code #{purchase_params[:zip_code]} is invalid, customer email #{purchase_params[:email]}")
         raise Purchase::PurchaseInvalid, "You entered a ZIP Code that doesn't exist within your country."
       end
+    end
+
+    def perceived_price_matches_accepted_offer?(offer_code)
+      return false unless offer_code
+
+      original_offer_code = purchase.offer_code
+      purchase.offer_code = offer_code
+      purchase.minimum_paid_price_cents + params[:tip_cents].to_i == purchase_params[:perceived_price_cents].to_i
+    ensure
+      purchase.offer_code = original_offer_code if purchase
     end
 
     def validate_perceived_free_trial_params

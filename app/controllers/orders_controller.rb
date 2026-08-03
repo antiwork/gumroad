@@ -20,6 +20,7 @@ class OrdersController < ApplicationController
     attribute_utm_link_sale(order, order_params[:browser_guid])
 
     purchase_responses.merge!(charge_responses)
+    offer_codes = offer_codes_after_payment(order, offer_codes, purchase_responses, order_params[:line_items])
 
     order.purchases.each { create_purchase_event_and_recommendation_info(_1) }
     order.send_charge_receipts unless purchase_responses.any? { |_k, v| v[:requires_card_action] || v[:requires_card_setup] }
@@ -72,6 +73,7 @@ class OrdersController < ApplicationController
     ).perform
 
     purchase_responses.merge!(prepare_responses)
+    offer_codes = offer_codes_after_payment(order, offer_codes, purchase_responses, order_params[:line_items])
 
     record_purchase_events(order)
 
@@ -85,24 +87,19 @@ class OrdersController < ApplicationController
     order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 
-    finalize_responses, = finalize_client_confirmed_order(order)
+    finalize_responses, _, offer_codes = finalize_client_confirmed_order(
+      order,
+      retry_offer_codes: params[:retry_offer_codes]
+    )
 
-    render json: { success: true, line_items: finalize_responses, offer_codes: [], can_buyer_sign_up: }
+    render json: { success: true, line_items: finalize_responses, offer_codes:, can_buyer_sign_up: }
   end
 
-  # Records a client-side stripe.confirmPayment failure so redirect-based payment methods
-  # (iDEAL, Bancontact — methods that leave the page to authenticate at the buyer's bank) are
-  # debuggable in production. The browser is the ONLY place that ever sees these errors: a
-  # rejected confirm on a redirect method happens before any charge exists, so no
-  # payment_failed webhook fires and the purchase just sits in_progress until the abandonment
-  # sweeper cancels it — server-side, a buyer who hit a hard confirm error is
-  # indistinguishable from one who simply closed the tab (the failure mode behind the
-  # 2026-07-23 iDEAL ramp-down, gumroad-private#933: zero completions and zero server-side
-  # evidence of why). The order token proves the caller owns a real prepared order, the
-  # payload is size-capped below, and Sentry reports are rate-limited per order, so this
-  # can't be used to spam Sentry with arbitrary junk.
+  # Records browser-only Stripe confirmation failures and releases attempts that Stripe still
+  # confirms are safely pre-charge.
   CONFIRM_ERROR_NOTIFY_LIMIT_PER_ORDER = 5
   CONFIRM_ERROR_NOTIFY_LIMIT_WINDOW = 1.hour
+  CONFIRM_ERROR_CLEANUP_LIMIT_WINDOW = 5.minutes
 
   def confirm_error
     # `prepare` just created this order, so the replica can be behind when Stripe returns an error.
@@ -134,10 +131,139 @@ class OrdersController < ApplicationController
       ErrorNotifier.notify("Client-confirm browser error", **error_details)
     end
 
-    render json: { success: true }
+    cleanup_succeeded = release_failed_client_confirmation(
+      order,
+      processor_intent_id: params[:processor_intent_id].to_s.first(100).presence
+    )
+    unavailable_once_per_cart_ids = unavailable_once_per_cart_offer_code_ids(order)
+
+    render json: {
+      success: true,
+      reservations_released: cleanup_succeeded && unavailable_once_per_cart_ids.empty?,
+      unavailable_once_per_cart_ids:,
+    }
   end
 
   private
+    def release_failed_client_confirmation(order, processor_intent_id:)
+      checked_intent_id = nil
+      purchase = order.purchases.active_once_per_cart_offer_code_reservations.find do
+        intent_ids = [_1.processor_payment_intent_id, _1.processor_setup_intent_id].compact
+        intent_ids.any? && (processor_intent_id.nil? || intent_ids.include?(processor_intent_id))
+      end
+      return false unless purchase
+
+      payment_intent = purchase.processor_payment_intent_id.present?
+      checked_intent_id = payment_intent ? purchase.processor_payment_intent_id : purchase.processor_setup_intent_id
+      return false unless confirm_error_cleanup_allowed?(order, checked_intent_id)
+
+      intent = if payment_intent
+        ChargeProcessor.get_charge_intent(purchase.merchant_account, checked_intent_id)
+      else
+        ChargeProcessor.get_setup_intent(purchase.merchant_account, checked_intent_id)
+      end
+      status = payment_intent ? intent.payment_intent.status : intent.setup_intent.status
+      safe_statuses = [
+        StripeIntentStatus::REQUIRES_PAYMENT_METHOD,
+        StripeIntentStatus::REQUIRES_CONFIRMATION,
+        StripeIntentStatus::CANCELED,
+      ]
+      # Keep the claim for intents that can still settle. Webhooks own their final outcome, and
+      # releasing it here would turn confirm_error into an unbounded processor polling endpoint.
+      return false unless status.in?(safe_statuses)
+
+      if status == StripeIntentStatus::CANCELED
+        Purchase::MarkFailedService.new(purchase).perform
+        purchase.charge&.destroy_presentment_records! if payment_intent
+      elsif payment_intent
+        purchase.cancel_charge_intent!
+      else
+        purchase.cancel_setup_intent!
+      end
+      order.purchases.in_progress.find_each do |other_purchase|
+        other_intent_id = payment_intent ? other_purchase.processor_payment_intent_id : other_purchase.processor_setup_intent_id
+        Purchase::MarkFailedService.new(other_purchase).perform if other_intent_id == checked_intent_id
+      end
+      true
+    rescue ChargeProcessorError => e
+      Rails.cache.delete(confirm_error_cleanup_key(order, checked_intent_id)) if checked_intent_id
+      ErrorNotifier.notify(e) { _1.add_metadata(:order, { id: order.id }) }
+      false
+    end
+
+    def confirm_error_cleanup_allowed?(order, processor_intent_id)
+      claimed = Rails.cache.write(
+        confirm_error_cleanup_key(order, processor_intent_id),
+        true,
+        expires_in: CONFIRM_ERROR_CLEANUP_LIMIT_WINDOW,
+        unless_exist: true
+      )
+      claimed.nil? || claimed
+    end
+
+    def confirm_error_cleanup_key(order, processor_intent_id)
+      "confirm_error_cleanup:#{order.id}:#{processor_intent_id}"
+    end
+
+    def unavailable_once_per_cart_offer_code_ids(order)
+      associations = { purchase_offer_code_discount: :offer_code }
+      active_reservations = order.purchases.active_once_per_cart_offer_code_reservations.includes(associations)
+      completed_uses = order.purchases.completed_once_per_cart_allocation_uses.includes(associations)
+      (active_reservations + completed_uses)
+        .uniq
+        .filter_map do |purchase|
+          offer_code = purchase.purchase_offer_code_discount.offer_code
+          offer_code.external_id if offer_code.max_purchase_count.present?
+        end
+        .uniq
+    end
+
+    def offer_codes_after_payment(order, offer_codes, purchase_responses, line_items)
+      line_items = Array(line_items)
+      candidates = Order::OfferCodeRecoveryService.merge_responses(
+        offer_codes,
+        Order::OfferCodeRecoveryService.for_order(order)
+      )
+      retry_line_items = line_items.select { purchase_responses.dig(_1[:uid], :success) != true }
+      payment_confirmation_pending = purchase_responses.any? do |_uid, response|
+        response[:requires_card_action] || response[:requires_card_setup] || response[:requires_payment_confirmation]
+      end
+
+      preserved = candidates.filter_map do |response|
+        products = response[:products].reject { |_permalink, discount| discount[:once_per_cart] }
+        { code: response[:code], products: } if products.any?
+      end
+      revalidated = candidates.filter_map do |response|
+        permalinks = response[:products].filter_map do |permalink, discount|
+          permalink if discount[:once_per_cart]
+        end
+        products = retry_line_items.filter_map do |line_item|
+          next unless permalinks.include?(line_item[:permalink])
+          [line_item[:uid], line_item.slice(:permalink, :quantity, :price_cents, :tip_cents)]
+        end.to_h
+        next if products.empty?
+
+        service = OfferCodeDiscountComputingService.new(
+          response[:code],
+          products,
+          buyer: logged_in_user,
+          key_by_input: true,
+          excluding_order: payment_confirmation_pending ? order : nil
+        )
+        result = service.process
+        next if result[:error_code].present?
+
+        discounts = result[:products_data].filter_map do |line_item_uid, data|
+          next unless data.dig(:discount, :once_per_cart)
+          line_item = retry_line_items.find { _1[:uid] == line_item_uid }
+          [line_item[:permalink], data[:discount]] if line_item
+        end.to_h
+        { code: response[:code], products: discounts } if discounts.any?
+      end
+
+      Order::OfferCodeRecoveryService.merge_responses(preserved, revalidated)
+    end
+
     # Methods that confirm in-page: a failed attempt transitions the intent, so
     # `payment_intent.payment_failed` fires and `Purchase::ChargeEventsHandler#handle_event_failed!`
     # writes the code to `purchases.stripe_error_code`.
@@ -236,6 +362,10 @@ class OrdersController < ApplicationController
       # Don't allow the order to go through if the buyer is a bot. Pretend that the order succeeded instead.
       return render json: { success: true } if is_bot?
 
+      if params[:line_items].is_a?(Array) && params[:line_items].length > Cart::MAX_ALLOWED_CART_PRODUCTS
+        return render_error("You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart.")
+      end
+
       # Don't allow the order to go through if cookies are disabled and it's a paid order
       contains_paid_purchase = if params[:line_items].present?
         params[:line_items].any? { |product_params| product_params[:perceived_price_cents] != "0" }
@@ -289,7 +419,7 @@ class OrdersController < ApplicationController
         # Individual purchase params
         line_items: [:uid, :permalink, :perceived_price_cents, :price_range, :discount_code, :is_preorder, :quantity, :call_start_time,
                      :was_product_recommended, :recommended_by, :referrer, :is_rental, :is_multi_buy,
-                     :was_discover_fee_charged, :price_cents, :tax_cents, :gumroad_tax_cents, :shipping_cents, :price_id, :affiliate_id, :url_parameters, :is_purchasing_power_parity_discounted,
+                     :was_discover_fee_charged, :price_cents, :tax_cents, :gumroad_tax_cents, :shipping_cents, :price_id, :affiliate_id, :url_parameters, :is_purchasing_power_parity_discounted, :accepts_purchasing_power_parity_discount,
                      :recommender_model_name, :tip_cents, :pay_in_installments, :force_new_subscription,
                      custom_fields: [:id, :value], variants: [], perceived_free_trial_duration: [:unit, :amount], accepted_offer: [:id, :original_variant_id, :original_product_id],
                      bundle_products: [:product_id, :variant_id, :quantity, custom_fields: [:id, :value]]])

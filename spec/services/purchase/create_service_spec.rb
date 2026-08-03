@@ -239,6 +239,21 @@ describe Purchase::CreateService, :vcr do
     end
   end
 
+  it "validates accepted-offer prices with variants, quantity, and tip" do
+    offered_product = create(:product_with_digital_versions, user:, price_cents: 100)
+    variant = offered_product.alive_variants.first
+    variant.update!(price_difference_cents: 200)
+    offer_code = create(:offer_code, user:, products: [offered_product], amount_cents: 100)
+    purchase = build(:purchase, link: offered_product, quantity: 2, perceived_price_cents: 450)
+    purchase.variant_attributes = [variant]
+    accepted_offer_params = { purchase: { perceived_price_cents: 450 }, tip_cents: 50 }
+    service = described_class.new(product: offered_product, params: accepted_offer_params, buyer:)
+    service.purchase = purchase
+
+    expect(service.send(:perceived_price_matches_accepted_offer?, offer_code)).to be(true)
+    expect(purchase.offer_code).to be_nil
+  end
+
   context "when the purchase has an upsell" do
     let(:product) { create(:product_with_digital_versions, user:) }
     let(:upsell) { create(:upsell, seller: user, product:) }

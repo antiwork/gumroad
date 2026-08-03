@@ -1,5 +1,6 @@
 import { Head, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
+import { flushSync } from "react-dom";
 import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
@@ -339,7 +340,7 @@ const CheckoutIndexPage = () => {
   };
   const acceptOffer = () => {
     const newCart = getCartIfAccepted();
-    cartForm.setData({ cart: newCart });
+    flushSync(() => cartForm.setData({ cart: newCart }));
     // Synchronously, not via the passive effect below: completeOffer can dispatch "validate" in
     // the same tick, and a passive invalidation would run after it — submitting through a payment
     // configuration computed for the pre-offer cart. An accepted offer changes the cart's items,
@@ -580,7 +581,6 @@ const CheckoutIndexPage = () => {
 
           return linePricing.map(({ item, discounted, discountedPriceToChargeNow }, index) => {
             const tipCents = lineTips[index] ?? null;
-
             return {
               permalink: item.product.permalink,
               uid: getCartItemUid(item),
@@ -604,6 +604,7 @@ const CheckoutIndexPage = () => {
                 !cartForm.data.cart.rejectPppDiscount &&
                 discounted.discount?.type === "ppp" &&
                 item.price !== 0,
+              acceptsPppDiscount: !!item.product.ppp_details && !cartForm.data.cart.rejectPppDiscount,
               forceNewSubscription: item.force_new_subscription,
               acceptedOffer: item.accepted_offer ?? null,
               bundleProducts: item.product.bundle_products.map((bundleProduct) => ({
@@ -632,8 +633,9 @@ const CheckoutIndexPage = () => {
               requestData,
               requestData.paymentMethod.confirmationTokenId,
               requestData.paymentMethod.selectedMethodType,
+              cartForm.data.cart.discountCodes,
             )
-          : await startOrderCreation(requestData);
+          : await startOrderCreation(requestData, cartForm.data.cart.discountCodes);
       const results = Object.entries(result.lineItems).flatMap(([key, result]) => {
         const [permalink, optionId] = key.split(" ");
         const item = cartForm.data.cart.items.find(
@@ -1021,7 +1023,7 @@ const CheckoutIndexPage = () => {
               crossSell={currentOffer}
               accept={acceptOffer}
               decline={completeOffer}
-              cart={cartForm.data.cart}
+              cart={getCartIfAccepted()}
             />
           ) : (
             <UpsellModal cart={cartForm.data.cart} upsell={currentOffer} accept={acceptOffer} decline={completeOffer} />

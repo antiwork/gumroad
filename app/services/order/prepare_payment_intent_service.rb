@@ -952,12 +952,25 @@ class Order::PreparePaymentIntentService
     # sides resolve different Klarna answers near the window edges (an Element/intent
     # method-set mismatch that fails the whole cart at confirm). Instead we reconstruct the
     # chosen pre-discount amount from the purchase's own displayed price by inverting the
-    # offer code, mirroring the presenter's basis. A 100%-off code can't be inverted
+    # offer code, mirroring the presenter's basis. For a once-per-cart fixed code, use the
+    # submitted pre-discount line total because clamping can discard part of the amount.
+    # A 100%-off code can't be inverted
     # (original_price returns nil); fall back to the discounted amount, which is 0 and fails
     # closed out of Klarna's >= $1 window on both sides anyway.
     def klarna_window_price_cents(purchase)
       offer_code = purchase.original_offer_code
       return purchase.displayed_price_cents if offer_code.blank?
+
+      if offer_code.is_cents? && offer_code.once_per_cart?
+        verified_price = purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents
+        return verified_price if verified_price.present?
+
+        if purchase.displayed_price_cents.zero?
+          return purchase.purchase_offer_code_discount.pre_discount_minimum_price_cents * purchase.quantity
+        end
+
+        return purchase.displayed_price_cents + offer_code.amount_cents
+      end
 
       original_per_unit = offer_code.original_price(purchase.displayed_price_per_unit_cents)
       original_per_unit.present? ? original_per_unit * purchase.quantity : purchase.displayed_price_cents

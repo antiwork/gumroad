@@ -35,7 +35,8 @@ import {
   applySelection,
   ConfigurationSelector,
   PriceSelection,
-  computeDiscountedPrice,
+  computeSelectionDiscountedPrice,
+  withConfiguredOncePerCartAmount,
 } from "$app/components/Product/ConfigurationSelector";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -142,7 +143,10 @@ export const Checkout = ({
       const entries = Object.entries(discount.products_data);
       const pppDiscountGreaterCount = entries.reduce((acc, [permalink, discount]) => {
         const item = cart.items.find(({ product }) => product.permalink === permalink);
-        return item && computeDiscountedPrice(item.price, discount, item.product).ppp ? acc + 1 : acc;
+        const configuredDiscount = withConfiguredOncePerCartAmount(discount);
+        return item && computeSelectionDiscountedPrice(item.price, configuredDiscount, item.product, item.quantity).ppp
+          ? acc + 1
+          : acc;
       }, 0);
       if (pppDiscountGreaterCount === entries.length) {
         showAlert(
@@ -215,7 +219,7 @@ export const Checkout = ({
     (code) =>
       !code.fromUrl ||
       Object.values(code.products).some((discount) =>
-        discount.type === "fixed" ? discount.cents > 0 : discount.percents > 0,
+        discount.type === "fixed" ? (discount.once_per_cart_amount_cents ?? discount.cents) > 0 : discount.percents > 0,
       ),
   );
 
@@ -719,12 +723,33 @@ const CartItemComponent = ({
   });
   const [error, setError] = React.useState<null | string>(null);
 
-  const discount = getDiscountedPrice(cart, item);
+  const discountForSelection = (candidateSelection: PriceSelection) => {
+    const selectionWithoutDiscount = applySelection(item.product, null, candidateSelection);
+    const provisionalItem = {
+      ...item,
+      price: selectionWithoutDiscount.isPWYW
+        ? (candidateSelection.price.value ?? selectionWithoutDiscount.priceCents)
+        : selectionWithoutDiscount.priceCents,
+      quantity: candidateSelection.quantity,
+      option_id: candidateSelection.optionId,
+      recurrence: candidateSelection.recurrence,
+      rent: candidateSelection.rent,
+      call_start_time: candidateSelection.callStartTime,
+      pay_in_installments: candidateSelection.payInInstallments,
+    };
+    const provisionalCart = {
+      ...cart,
+      items: cart.items.map((candidate) => (candidate === item ? provisionalItem : candidate)),
+    };
+    return getDiscountedPrice(provisionalCart, provisionalItem);
+  };
+  const discount = discountForSelection(selection);
 
   const { priceCents, isPWYW } = applySelection(
     item.product,
     discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null,
     selection,
+    { preserveOncePerCartAllocation: true },
   );
 
   const saveChanges = () => {
@@ -841,6 +866,10 @@ const CartItemComponent = ({
                       }}
                       product={item.product}
                       discount={discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null}
+                      discountForSelection={(candidateSelection) => {
+                        const candidateDiscount = discountForSelection(candidateSelection).discount;
+                        return candidateDiscount && candidateDiscount.type !== "ppp" ? candidateDiscount.value : null;
+                      }}
                       showInstallmentPlan
                     />
                     {error ? <Alert variant="danger">{error}</Alert> : null}
