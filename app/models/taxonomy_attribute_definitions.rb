@@ -19,13 +19,26 @@ class TaxonomyAttributeDefinitions
     { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 3 },
   ].freeze
 
+  # VRChat buyers don't shop on generic 3D-asset axes (engine/file format) — everything here is a
+  # Unity upload by definition. What actually gates a purchase: what kind of item it is, which
+  # platform(s) it runs on (VRChat enforces very different poly/component limits for Quest vs PC —
+  # a PC-only accessory is unusable on a Quest avatar), and VRChat's own Excellent/Good/Medium/Poor
+  # performance-rank system, which buyers already screen for before an upload even shows in-world.
+  VRCHAT_DEFINITIONS = [
+    { name: "item_type", label: "Item type", value_type: "enum", values: ["Full avatar", "Accessory", "Clothing", "Hair", "Texture / shader", "Animation", "Prop / world asset"], position: 0 },
+    { name: "platform", label: "Platform", value_type: "enum", values: ["PC", "Quest", "PC and Quest"], position: 1 },
+    { name: "performance_rank", label: "Performance rank", value_type: "enum", values: ["Excellent", "Good", "Medium", "Poor"], position: 2 },
+    { name: "rigged", label: "Rigged", value_type: "boolean", values: [], position: 3 },
+    { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 4 },
+  ].freeze
+
   DEFINITIONS = {
-    # The same definitions hang off each leaf buyers browse (gumroad-private#1796): attributes do
-    # not inherit down the tree, and sharing `name`s across the leaves keeps the ES tokens
-    # identical, so a future entry on the `3d` root would aggregate these values, not orphan them.
+    # Generic 3D assets (game-dev models, environments, props not tied to VRChat's avatar system).
     "3d/3d-assets" => THREE_D_DEFINITIONS,
-    "3d/avatars" => THREE_D_DEFINITIONS,
-    "3d/vrchat" => THREE_D_DEFINITIONS,
+    # VRChat-specific leaves get VRCHAT_DEFINITIONS (gumroad-private#1796) — a different axis set
+    # from the generic 3D-assets leaf above, because the buyer question is different.
+    "3d/avatars" => VRCHAT_DEFINITIONS,
+    "3d/vrchat" => VRCHAT_DEFINITIONS,
     "design/fonts" => [
       { name: "format", label: "Format", value_type: "enum", values: ["OTF", "TTF", "WOFF2"], position: 0 },
       { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "App embedding"], position: 1 },
