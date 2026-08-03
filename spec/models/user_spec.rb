@@ -1995,6 +1995,18 @@ describe User, :vcr do
       expect(user).to be_valid_password("password")
       expect(user).to_not be_valid_password("INVALD")
     end
+
+    it "does not log password data when a legacy hash is encountered" do
+      user = build(:user, password: "password")
+      user.encrypted_password = "sha256$legacy"
+      messages = []
+      allow(Rails.logger).to receive(:info) { |message| messages << message }
+
+      expect(user.valid_password?("password")).to be(false)
+
+      expect(messages).to include("Account with legacy sha256 password user_id=")
+      expect(messages.join("\n")).not_to include(user.encrypted_password, user.email)
+    end
   end
 
   describe "#clear_products_cache" do

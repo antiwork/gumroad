@@ -750,7 +750,7 @@ class User < ApplicationRecord
   def valid_password?(password)
     super(password)
   rescue BCrypt::Errors::InvalidHash
-    logger.info "Account with sha256 password: #{inspect}"
+    logger.info "Account with legacy sha256 password user_id=#{id}"
     false
   end
 
