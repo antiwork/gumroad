@@ -188,6 +188,15 @@ describe("mergeOfferCodes", () => {
       ),
     ).toMatchObject([{ code: "SAVE", products: { first: { cents: 100 }, second: { cents: 0 } } }]);
   });
+
+  it("merges codes that differ only in unicode normalization", () => {
+    expect(
+      mergeOfferCodes(
+        [{ code: "éclair".normalize("NFC"), products: { first: fixedDiscount(100) } }],
+        [{ code: "éclair".normalize("NFD"), products: { second: fixedDiscount(0) } }],
+      ),
+    ).toMatchObject([{ products: { first: { cents: 100 }, second: { cents: 0 } } }]);
+  });
 });
 
 describe("startOrderCreation", () => {

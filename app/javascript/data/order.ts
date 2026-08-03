@@ -50,7 +50,7 @@ export const mergeOfferCodes = (...groups: OfferCodes[]): OfferCodes =>
     groups
       .flat()
       .reduce((merged, offerCode) => {
-        const key = offerCode.code.trim().toLowerCase();
+        const key = offerCode.code.normalize("NFC").trim().toLowerCase();
         const current = merged.get(key);
         merged.set(key, current ? { ...current, products: { ...current.products, ...offerCode.products } } : offerCode);
         return merged;
