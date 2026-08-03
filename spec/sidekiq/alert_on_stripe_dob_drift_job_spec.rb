@@ -205,6 +205,69 @@ describe AlertOnStripeDobDriftJob do
     expect(message).to include(drifted_seller.email)
   end
 
+  # A garbled date is drift too, but reporting it as "no date of birth on file" would be a false
+  # statement about what Stripe holds — in a report whose only job is to say which copy holds what.
+  it "distinguishes a date of birth it could not parse from one that is absent" do
+    account = gumroad_managed_account
+    compliance_info(birthday: Date.new(2010, 4, 27))
+    allow(Stripe::Account).to receive(:retrieve).with(account.charge_processor_merchant_id).and_return(
+      Stripe::StripeObject.construct_from(individual: { dob: { year: 2005, month: 2, day: 31 } })
+    )
+
+    body = message
+    expect(body).to include("Stripe holds a date of birth we could not read as a date")
+    expect(body).not_to include("no date of birth on file")
+  end
+
+  # Some parts present and some missing is a date Stripe holds, not an absent one.
+  it "treats a partially populated date of birth as unparseable rather than absent" do
+    account = gumroad_managed_account
+    compliance_info(birthday: Date.new(2010, 4, 27))
+    allow(Stripe::Account).to receive(:retrieve).with(account.charge_processor_merchant_id).and_return(
+      Stripe::StripeObject.construct_from(individual: { dob: { year: 2005, month: nil, day: nil } })
+    )
+
+    body = message
+    expect(body).to include("could not read as a date")
+    expect(body).not_to include("no date of birth on file")
+  end
+
+  # An all-blank dob hash is Stripe's shape for "never supplied", which stays the absent case.
+  it "still reports an all-blank date of birth as absent" do
+    account = gumroad_managed_account
+    compliance_info(birthday: Date.new(2010, 4, 27))
+    allow(Stripe::Account).to receive(:retrieve).with(account.charge_processor_merchant_id).and_return(
+      Stripe::StripeObject.construct_from(individual: { dob: { year: nil, month: nil, day: nil } })
+    )
+
+    body = message
+    expect(body).to include("Stripe holds no date of birth on file")
+    expect(body).not_to include("could not read as a date")
+  end
+
+  # An unparseable date must not raise in the ranking, which does date arithmetic on the pair.
+  it "ranks an unparseable date alongside comparable ones without raising" do
+    unparseable_seller = create(:user)
+    unparseable_account = gumroad_managed_account(user: unparseable_seller)
+    compliance_info(birthday: 16.years.ago.to_date, user: unparseable_seller)
+
+    comparable_account = gumroad_managed_account
+    expect(comparable_account).to be_present
+    compliance_info(birthday: 16.years.ago.to_date)
+
+    allow(Stripe::Account).to receive(:retrieve) do |account_id|
+      if account_id == unparseable_account.charge_processor_merchant_id
+        Stripe::StripeObject.construct_from(individual: { dob: { year: 2005, month: 2, day: 31 } })
+      else
+        Stripe::StripeObject.construct_from(individual: { dob: { year: 2004, month: 8, day: 27 } })
+      end
+    end
+
+    lines = message.lines.select { |line| line.start_with?("•") }
+    expect(lines.size).to eq(2)
+    expect(lines.first).to include(unparseable_seller.email)
+  end
+
   describe "sweeping the population across runs" do
     it "resumes after the account the previous run compared last" do
       first_account = gumroad_managed_account
