@@ -20,7 +20,14 @@ export const UpsellModal = ({
 }) => {
   const { item, offeredOption } = upsell;
   const product = item.product;
-  const { discount } = getDiscountedPrice(cart, { ...item, option_id: offeredOption.id });
+  const offeredPriceCents = product.price_cents + computeOptionPrice(offeredOption, item.recurrence);
+  const { discount } = getDiscountedPrice(
+    cart,
+    { ...item, price: offeredPriceCents, option_id: offeredOption.id },
+    item,
+  );
+  const hasOncePerCartDiscount =
+    discount?.type === "code" && discount.value.type === "fixed" && discount.value.once_per_cart;
   return (
     <>
       <div className="flex flex-col gap-4">
@@ -28,7 +35,7 @@ export const UpsellModal = ({
         <Tabs variant="buttons" role="radiogroup">
           <OptionRadioButton
             selected
-            priceCents={product.price_cents + computeOptionPrice(offeredOption, item.recurrence)}
+            priceCents={offeredPriceCents * (hasOncePerCartDiscount ? item.quantity : 1)}
             name={offeredOption.name}
             description={offeredOption.description}
             currencyCode={product.currency_code}

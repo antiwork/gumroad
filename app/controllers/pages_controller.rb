@@ -12,7 +12,11 @@ class PagesController < Sellers::BaseController
 
   layout "inertia"
 
-  before_action :set_page, only: [:edit, :update, :destroy, :preview]
+  before_action :set_page, only: [:edit, :update, :destroy, :preview, :products]
+  # The seller reaches the preview straight off a save, so a replica read can serve a slice
+  # that disagrees with the freshly-rendered first page — same reason the public landing
+  # endpoints pin.
+  before_action :stick_to_primary_for_landing_iframe, only: [:products]
 
   def index
     authorize :page
@@ -40,6 +44,7 @@ class PagesController < Sellers::BaseController
       is_new: true,
       username: current_seller.username.to_s,
       profile_url: current_seller.profile_url,
+      products_page_limit: Pages::ProfileData::MAX_ITEMS,
     }
   end
 
@@ -74,6 +79,7 @@ class PagesController < Sellers::BaseController
         is_new: false,
         username: current_seller.username.to_s,
         profile_url: current_seller.profile_url,
+        products_page_limit: Pages::ProfileData::MAX_ITEMS,
       }
       return
     end
@@ -84,6 +90,7 @@ class PagesController < Sellers::BaseController
       is_new: false,
       username: current_seller.username.to_s,
       profile_url: current_seller.profile_url,
+      products_page_limit: Pages::ProfileData::MAX_ITEMS,
     }
   end
 
@@ -155,6 +162,7 @@ class PagesController < Sellers::BaseController
     # No navigation bridge in either branch: the editor pane has no trusted wrapper listening.
     # The follow bridge IS included — without it a data-gumroad-follow form would
     # native-submit and navigate the preview frame away, which reads as "the form is broken".
+    # The products bridge is answered here for real: see #products.
     if @profile_page
       # The prices are derived from the requester's IP, so this response must never be shared.
       response.cache_control.replace(private: true, no_store: true)
@@ -166,6 +174,10 @@ class PagesController < Sellers::BaseController
         data_json: ERB::Util.json_escape(Pages::ProfileData.build(current_seller).to_json),
         prices_json: prices_referenced ? ERB::Util.json_escape(prices.to_json) : nil,
         follow_bridge: FOLLOW_BRIDGE_SCRIPT,
+        # The editor pane's own products wrapper answers these (see #products) —
+        # a page whose cards come from a catalogue slice has to render in the
+        # preview too, or the seller can only test it by publishing.
+        products_bridge: PRODUCTS_BRIDGE_SCRIPT,
       ).html_safe, layout: false
     else
       interpolated = Pages::Interpolator.interpolate_profile(custom_html, profile: current_seller)
@@ -186,6 +198,20 @@ class PagesController < Sellers::BaseController
         </html>
       HTML
     end
+  end
+
+  # Catalogue slices for the editor preview's products bridge. The preview pane's
+  # wrapper (LandingPagePreview-style listener in Pages/Edit) fetches this instead of
+  # the public /landing/products endpoint: the preview renders the seller's UNSAVED
+  # profile takeover from the dashboard origin, where that endpoint is not routed and
+  # the seller may not even have a visible custom page yet. Always the signed-in
+  # seller's own catalogue — the slice params can't pick an account.
+  def products
+    authorize :page
+
+    return head :not_found unless @profile_page
+
+    render_custom_html_products_slice(current_seller)
   end
 
   private

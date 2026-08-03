@@ -18,8 +18,13 @@ class Subscription::UpdaterService
     @remote_ip = remote_ip
     @api_notification_sent = false
 
-    [:price_range, :perceived_price_cents, :perceived_upgrade_price_cents, :quantity].each do |param|
+    [:price_range, :perceived_price_cents, :perceived_upgrade_price_cents, :quantity, :submitted_pre_discount_price_cents].each do |param|
       params[param] = params[param].to_i if params[param]
+    end
+    if params[:once_per_cart_discount_allocation]
+      params[:once_per_cart_discount_allocation] = params[:once_per_cart_discount_allocation].to_h.symbolize_keys
+      params[:once_per_cart_discount_allocation][:offer_code_id] = params[:once_per_cart_discount_allocation][:offer_code_id].to_i
+      params[:once_per_cart_discount_allocation][:amount_cents] = params[:once_per_cart_discount_allocation][:amount_cents].to_i
     end
 
     if params[:contact_info].present?
@@ -99,12 +104,15 @@ class Subscription::UpdaterService
         end
 
         original_discount = subscription.original_purchase.purchase_offer_code_discount
-        discount_changed = if params[:clear_discount]
+        discount_changed = if params[:once_per_cart_discount_allocation].present?
+          true
+        elsif params[:clear_discount]
           true
         elsif params[:offer_code].present? && original_discount.present?
           params[:offer_code] != original_discount.offer_code ||
             params[:offer_code].amount != original_discount.offer_code_amount ||
             params[:offer_code].is_percent? != original_discount.offer_code_is_percent ||
+            params[:offer_code].once_per_cart? != original_discount.once_per_cart? ||
             params[:offer_code].duration_in_billing_cycles != original_discount.duration_in_billing_cycles
         else
           params[:offer_code].present?
@@ -115,11 +123,13 @@ class Subscription::UpdaterService
             new_variants: variants,
             new_price: price,
             new_quantity: params[:quantity],
-            perceived_price_cents: params[:price_range],
+            perceived_price_cents: purchase_perceived_price_cents(original_discount),
             offer_code: params[:offer_code],
             clear_discount: params[:clear_discount],
             clear_deleted_discount: should_clear_original_discount?,
             authenticated_offer_code_buyer: logged_in_user,
+            submitted_pre_discount_price_cents: params[:submitted_pre_discount_price_cents] || params[:price_range],
+            once_per_cart_discount_allocation: params[:once_per_cart_discount_allocation],
           )
           subscription.reload
         end
@@ -228,6 +238,19 @@ class Subscription::UpdaterService
         logger.info("SubscriptionUpdater: Error updating subscription - perceived prices do not match: id: #{subscription.external_id} ; new_price_cents: #{new_price_cents} ; amount_owed: #{amount_owed} ; params: #{params}")
         raise Subscription::UpdateFailed, "The price just changed! Refresh the page for the updated price."
       end
+    end
+
+    def purchase_perceived_price_cents(original_discount)
+      return params[:price_range] unless pwyw? && params[:price_range].present?
+
+      fixed_once_per_cart = if params[:offer_code].present?
+        params[:offer_code].is_cents? && params[:offer_code].once_per_cart?
+      else
+        original_discount.present? && !original_discount.offer_code_is_percent && original_discount.once_per_cart?
+      end
+      return params[:price_range] unless fixed_once_per_cart
+
+      params[:perceived_price_cents]
     end
 
     def should_clear_original_discount?

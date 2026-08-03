@@ -242,6 +242,18 @@ module User::Stats
 
   # Admin use only
   def lost_chargebacks # returns `{ volume: String, count: String }`
+    chargeback_rates
+  end
+
+  # The payout gate's view of the same ratio, restricted to the trailing
+  # PAYOUT_CHARGEBACK_RATE_WINDOW. Lifetime is the wrong measure for a hold a seller is supposed to
+  # be able to work their way out of: on a long-lived account the denominator is so large that
+  # months of clean selling barely move it, so the hold outlives the behaviour that caused it.
+  def lost_chargebacks_for_payout_gate # returns `{ volume: String, count: String }`
+    chargeback_rates(created_on_or_after: User::PAYOUT_CHARGEBACK_RATE_WINDOW.ago)
+  end
+
+  def chargeback_rates(created_on_or_after: nil) # returns `{ volume: String, count: String }`
     search_params = {
       seller: self,
       state: "successful",
@@ -263,6 +275,7 @@ module User::Stats
         }
       }
     }
+    search_params[:created_on_or_after] = created_on_or_after if created_on_or_after
     search_result = PurchaseSearchService.search(search_params)
     count_denominator = search_result.response.hits.total.value.to_f
     volume_denominator = search_result.aggregations["price_cents_total"]["value"]

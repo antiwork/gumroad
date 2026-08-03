@@ -12,6 +12,20 @@ import { UserAgentProvider } from "$app/components/UserAgent";
 
 type PendingUpload = (signedId: string) => void;
 
+// getByRole returns HTMLElement, and `assertionStyle: "never"` rules out casting it. Narrowing
+// through querySelector keeps the .checked / .value reads typed.
+const asInput = (element: HTMLElement): HTMLInputElement => {
+  const input = element.closest("input") ?? element.querySelector("input");
+  if (!input) throw new Error(`expected an input, got ${element.tagName}`);
+  return input;
+};
+
+const asTextArea = (element: HTMLElement): HTMLTextAreaElement => {
+  const textarea = element.closest("textarea") ?? element.querySelector("textarea");
+  if (!textarea) throw new Error(`expected a textarea, got ${element.tagName}`);
+  return textarea;
+};
+
 const mocks = vi.hoisted(() => ({
   usePage: vi.fn(),
   put: vi.fn(),
@@ -67,6 +81,7 @@ const pageProps = {
     customer_communication_file_max_size: 5 * 1024 * 1024,
     customer_communication_files_max_count: 10,
     blobs: { receipt_image: null, policy_image: null, customer_communication_file: null },
+    saved: { reason_for_winning: null, cancellation_rebuttal: null, refund_refusal_explanation: null },
   },
   disputable: {
     purchase_for_dispute_evidence_id: "purchase-1",
@@ -76,7 +91,7 @@ const pageProps = {
   products: [{ url: "https://example.gumroad.com/l/thing", name: "Thing" }],
 };
 
-const submitButton = () => screen.getByRole("button", { name: "Submit" });
+const submitButton = () => screen.getByRole("button", { name: "Save response" });
 
 // The rows render the filename as "<n>. <name>" split across text nodes, and InlineList also emits
 // <li>, so read the row headings rather than list items.
@@ -138,12 +153,72 @@ describe("DisputeEvidence Show", () => {
     expect(queuedFileNames()).toEqual(["1. evidence-1.png", "2. evidence-2.png"]);
 
     act(() => submitButton().click());
-    const confirm = await screen.findByRole("button", { name: "Submit evidence" });
+    const confirm = await screen.findByRole("button", { name: "Confirm and save" });
     act(() => confirm.click());
 
     await waitFor(() => expect(mocks.put).toHaveBeenCalledTimes(1));
     expect(mocks.put.mock.calls[0]?.[1]).toMatchObject({
       dispute_evidence: { customer_communication_file_signed_blob_ids: ["signed-first", "signed-second"] },
     });
+  });
+
+  // A seller returning mid-window must be able to revise what they saved, not just read it back.
+  it("restores a saved radio choice into the form and resends it untouched", async () => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps,
+        dispute_evidence: {
+          ...pageProps.dispute_evidence,
+          saved: {
+            reason_for_winning: "The cardholder received the product or service",
+            cancellation_rebuttal: null,
+            refund_refusal_explanation: null,
+          },
+        },
+      },
+    });
+    renderPage();
+
+    const restored = await screen.findByRole("radio", { name: "The cardholder received the product or service" });
+    expect(asInput(restored).checked).toBe(true);
+    expect(asInput(screen.getByRole("radio", { name: "The cardholder withdrew the dispute" })).checked).toBe(false);
+
+    act(() => submitButton().click());
+    act(() => screen.getByRole("button", { name: "Confirm and save" }).click());
+
+    await waitFor(() => expect(mocks.put).toHaveBeenCalledTimes(1));
+    expect(mocks.put.mock.calls[0]?.[1]).toMatchObject({
+      dispute_evidence: { reason_for_winning: "The cardholder received the product or service" },
+    });
+  });
+
+  // Free text and text with no matching radio both have to land in the editable "Other" textarea:
+  // an option retired since the seller answered would otherwise strand their statement.
+  it("restores unmatched saved text into the Other textarea", async () => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps,
+        dispute_evidence: {
+          ...pageProps.dispute_evidence,
+          saved: {
+            reason_for_winning: "The buyer downloaded the file twice",
+            cancellation_rebuttal: null,
+            refund_refusal_explanation: null,
+          },
+        },
+      },
+    });
+    renderPage();
+
+    expect(asInput(await screen.findByRole("radio", { name: "Other" })).checked).toBe(true);
+    const textarea = screen.getByRole("textbox");
+    expect(asTextArea(textarea).value).toBe("The buyer downloaded the file twice");
+  });
+
+  it("preselects nothing when the seller has not answered yet", () => {
+    renderPage();
+
+    expect(screen.queryAllByRole("radio").some((radio) => asInput(radio).checked)).toBe(false);
+    expect(screen.queryByText("Your saved response is filled in below.")).toBe(null);
   });
 });

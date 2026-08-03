@@ -477,6 +477,107 @@ describe SettingsPresenter do
                                                               settings_pages: %w(main team payments billing authorized_applications password third_party_analytics advanced),
                                                             })
     end
+
+    context "when the seller re-authorized with a different scope set than their first grant" do
+      let(:oauth_application) { create(:oauth_application, owner: seller) }
+
+      before do
+        # Order matters: the narrow grant must be the earliest one, which is what the page used to
+        # render. A device-flow re-authorization mints a second grant rather than widening the first.
+        @narrow_grant = Doorkeeper::AccessGrant.create!(application_id: oauth_application.id, resource_owner_id: seller.id,
+                                                        redirect_uri: oauth_application.redirect_uri,
+                                                        expires_in: 1.day.from_now, scopes: "view_profile")
+        @narrow_grant.update!(created_at: 2.days.ago)
+        Doorkeeper::AccessGrant.create!(application_id: oauth_application.id, resource_owner_id: seller.id,
+                                        redirect_uri: oauth_application.redirect_uri,
+                                        expires_in: 1.day.from_now, scopes: "account view_payouts refund_sales")
+      end
+
+      it "renders what the live tokens can reach, not the earliest grant's scopes" do
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application,
+                                          scopes: "account view_payouts refund_sales")
+
+        application = presenter.authorized_applications_props[:authorized_applications].sole
+
+        expect(application[:scopes].to_a).to match_array(%w[account view_payouts refund_sales])
+        expect(application[:first_authorized_at]).to eq(@narrow_grant.created_at.iso8601)
+      end
+
+      it "unions the scopes across every live token" do
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "view_profile")
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "account view_payouts")
+
+        expect(presenter.authorized_applications_props[:authorized_applications].sole[:scopes].to_a)
+          .to match_array(%w[view_profile account view_payouts])
+      end
+
+      it "ignores revoked tokens" do
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "view_profile")
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application,
+                                          scopes: "account refund_sales", revoked_at: 1.hour.ago)
+
+        expect(presenter.authorized_applications_props[:authorized_applications].sole[:scopes].to_a).to eq(%w[view_profile])
+      end
+
+      it "ignores another seller's tokens on the same application" do
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "view_profile")
+        create("doorkeeper/access_token", resource_owner_id: create(:user).id, application: oauth_application, scopes: "account refund_sales")
+
+        expect(presenter.authorized_applications_props[:authorized_applications].sole[:scopes].to_a).to eq(%w[view_profile])
+      end
+
+      it "ignores an expired token, which can reach nothing" do
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "view_profile")
+        expired = create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application,
+                                                    scopes: "account refund_sales", expires_in: 1.hour)
+        # The factory stamps created_at itself, so age it afterwards — a token created now with any
+        # positive expires_in is still live.
+        expired.update_columns(created_at: 1.day.ago)
+
+        expect(presenter.authorized_applications_props[:authorized_applications].sole[:scopes].to_a).to eq(%w[view_profile])
+      end
+    end
+
+    # A per-application scope lookup grows with the seller's integrations, and the scopes have to
+    # stay right per application while batched — a single shared union would leak one app's
+    # capabilities onto another.
+    it "reads every application's live scopes in one token query" do
+      applications = Array.new(3) { create(:oauth_application, owner: create(:user)) }
+      applications.each_with_index do |application, index|
+        Doorkeeper::AccessGrant.create!(application_id: application.id, resource_owner_id: seller.id,
+                                        redirect_uri: application.redirect_uri,
+                                        expires_in: 1.day.from_now, scopes: "view_profile")
+        create("doorkeeper/access_token", resource_owner_id: seller.id, application:,
+                                          scopes: index.zero? ? "account refund_sales" : "view_payouts")
+      end
+
+      # Match on the select list, not any mention: `authorized_for` picks applications with a token
+      # subquery, so a `FROM oauth_access_tokens` check counts that too and can never reach 1.
+      token_queries = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_, _, _, _, payload|
+        token_queries << payload[:sql] if payload[:sql].start_with?("SELECT `oauth_access_tokens`") && payload[:name] != "SCHEMA"
+      end
+      props = begin
+        presenter.authorized_applications_props
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      expect(token_queries.size).to eq(1), token_queries.join("\n")
+      expect(props[:authorized_applications].map { |application| application[:scopes].to_a.sort })
+        .to contain_exactly(%w[account refund_sales], %w[view_payouts], %w[view_payouts])
+    end
+
+    # The page runs `typia.assert<Props>` on these props and indexes SCOPE_DESCRIPTIONS by scope, so
+    # a scope Doorkeeper allows but the component's Scope union omits crashes Authorized Applications
+    # rather than rendering an empty bullet. Adding a scope to doorkeeper.rb has to touch Index.tsx.
+    it "cannot emit a scope the settings page has no description for" do
+      scope_union = File.read(Rails.root.join("app/javascript/pages/Settings/AuthorizedApplications/Index.tsx"))
+                        .split("type Scope =").second.split(";").first.scan(/"([a-z_]+)"/).flatten
+
+      configured = Doorkeeper.configuration.scopes.to_a
+      expect(configured - scope_union).to be_empty, "Doorkeeper scopes missing from Index.tsx's Scope union: #{(configured - scope_union).join(', ')}"
+    end
   end
 
   describe "#payments_props" do
@@ -528,6 +629,7 @@ describe SettingsPresenter do
         },
         user: {
           country_supports_native_payouts: false,
+          no_payout_rail_in_country: false,
           country_supports_iban: false,
           country_code: nil,
           payout_currency: nil,

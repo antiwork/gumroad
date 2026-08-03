@@ -173,7 +173,9 @@ export const Nav = (props: Props) => {
     },
     {
       key: "agent",
-      visible: !!loggedInUser?.policies.user.use_store_agent,
+      // Role, not eligibility: a seller under the earned-access bar keeps the tab and is told why
+      // it is locked when they open it, rather than watching it disappear.
+      visible: !!loggedInUser?.policies.user.view_store_agent,
       text: "Agent",
       icon: <MessageBubbleDots pack="filled" className="size-5" />,
       href: Routes.agent_url(routeParams),

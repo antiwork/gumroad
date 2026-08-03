@@ -2360,6 +2360,30 @@ class SubscriptionTest < ActiveSupport::TestCase
     end
   end
 
+  test "#update_current_plan! snapshots an exact-zero once-per-cart PWYW price" do
+    VCR.use_cassette(UPDATE_PLAN_SHARED_CASSETTE) do
+      setup_subscription
+      chosen_price = 25_00
+      @new_tier.update!(customizable_price: true)
+      offer_code = create_offer_code(
+        products: [@product],
+        amount_cents: chosen_price,
+        once_per_cart: true
+      )
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: 0,
+        offer_code:,
+        submitted_pre_discount_price_cents: chosen_price
+      )
+
+      assert_equal chosen_price, new_purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents
+      assert_equal chosen_price, new_purchase.displayed_price_cents_before_offer_code
+    end
+  end
+
   test "#update_current_plan! copies correct attributes from the original purchase" do
     VCR.use_cassette("Subscription/_update_current_plan_/copies_correct_attributes_from_the_original_purchase") do
       setup_subscription(free_trial: true, was_product_recommended: true)
@@ -4508,6 +4532,52 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_equal 150, @arc_subscription.current_subscription_price_cents
     assert_equal 50, renewal_purchase.purchase_offer_code_discount.offer_code_amount
     assert_equal false, renewal_purchase.purchase_offer_code_discount.offer_code_is_percent
+  end
+
+  test "#auto_renewal_offer_code applies an order-level fixed discount once across quantity" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    @arc_subscription.original_purchase.update!(quantity: 2, displayed_price_cents: 400, price_cents: 400)
+    fixed_code = create_offer_code(user: @arc_seller, products: [@arc_product], ownership_products: [@arc_product],
+                                   existing_customers_only: true, amount_cents: 50, amount_percentage: nil,
+                                   currency_type: @arc_product.price_currency_type, once_per_cart: true)
+
+    renewal_purchase = @arc_subscription.build_purchase
+
+    assert_equal fixed_code, @arc_subscription.auto_renewal_offer_code.offer_code
+    assert_equal 350, @arc_subscription.current_subscription_price_cents
+    assert_equal true, renewal_purchase.purchase_offer_code_discount.once_per_cart
+    assert_equal 400, renewal_purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents
+  end
+
+  test "#auto_renewal_offer_code snapshots the selected price for an exact-zero once-per-cart renewal" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    @arc_subscription.original_purchase.update!(displayed_price_cents: 50, price_cents: 50)
+    create_offer_code(user: @arc_seller, products: [@arc_product], ownership_products: [@arc_product],
+                      existing_customers_only: true, amount_cents: 50, amount_percentage: nil,
+                      currency_type: @arc_product.price_currency_type, once_per_cart: true)
+
+    renewal_purchase = @arc_subscription.build_purchase
+
+    assert_equal 0, @arc_subscription.current_subscription_price_cents
+    assert_equal 50, renewal_purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents
+    assert_equal 50, renewal_purchase.displayed_price_cents_before_offer_code
+  end
+
+  test "#auto_renewal_offer_code snapshots the selected price when a once-per-cart renewal hits the currency minimum" do
+    auto_renewal_context
+    @arc_tiered_code.mark_deleted!
+    @arc_subscription.original_purchase.update!(displayed_price_cents: 120, price_cents: 120)
+    create_offer_code(user: @arc_seller, products: [@arc_product], ownership_products: [@arc_product],
+                      existing_customers_only: true, amount_cents: 50, amount_percentage: nil,
+                      currency_type: @arc_product.price_currency_type, once_per_cart: true)
+
+    renewal_purchase = @arc_subscription.build_purchase
+
+    assert_equal @arc_product.currency["min_price"], @arc_subscription.current_subscription_price_cents
+    assert_equal 120, renewal_purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents
+    assert_equal 120, renewal_purchase.displayed_price_cents_before_offer_code
   end
 
   test "#auto_renewal_offer_code ignores inactive renewal discounts" do

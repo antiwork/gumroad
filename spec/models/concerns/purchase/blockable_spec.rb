@@ -685,6 +685,27 @@ describe Purchase::Blockable do
         expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("more attempts in the last day")
       end
 
+      # The same silence, reached without a single read: when a full page of scanned attempts is all
+      # Connect charges there is nothing eligible to read, and the eligible attempts that would have
+      # answered the question sit behind the bound.
+      it "reports an incomplete scan when a full page of scanned attempts is all Connect charges" do
+        connect_account = create(:merchant_account, user: create(:user), charge_processor_id: StripeChargeProcessor.charge_processor_id)
+        connect_account.update!(json_data: { "meta" => { "stripe_connect" => "true" } })
+        # Unambiguously newer than the context's `ch_newer` row, which also sits at 1.hour.ago: the
+        # scan orders created_at DESC and takes a page of MAX_SCAN, so a tie there would let the one
+        # eligible row win the page at random and the assertion below would flake.
+        Purchase::Blockable::PROCESSOR_REFUSAL_MAX_SCAN.times do |offset|
+          create(:purchase, link: product, email: buyer_email, purchaser: buyer, created_at: (offset + 1).minutes.ago)
+            .update_columns(stripe_transaction_id: "ch_connect", merchant_account_id: connect_account.id)
+        end
+        expect(Stripe::Charge).not_to receive(:retrieve)
+
+        refusal = refused_purchase.processor_rule_refusal
+
+        expect(refusal).to eq({ incomplete: true, truncated_by: :read_cap })
+        expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("more attempts in the last day")
+      end
+
       # The two truncation exits are not interchangeable: telling the agent there were more attempts
       # than we read, when the scan actually timed out, is a reason they cannot act on.
       it "reports an incomplete scan when the time budget runs out before every attempt is read" do
@@ -1888,7 +1909,7 @@ describe Purchase::Blockable do
     context "when seller payouts are already paused internally" do
       before do
         seller.update!(payouts_paused_internally: true)
-        allow(seller).to receive(:lost_chargebacks).and_return({ volume: "4.2%", count: "15.0%" })
+        allow(seller).to receive(:lost_chargebacks_for_payout_gate).and_return({ volume: "4.2%", count: "15.0%" })
       end
 
       it "does not change the payout pause source" do
@@ -1905,7 +1926,7 @@ describe Purchase::Blockable do
 
     context "when chargeback volume is 'NA'" do
       before do
-        allow(seller).to receive(:lost_chargebacks).and_return({ volume: "NA", count: "0.0%" })
+        allow(seller).to receive(:lost_chargebacks_for_payout_gate).and_return({ volume: "NA", count: "0.0%" })
       end
 
       it "does not pause payouts" do
@@ -1927,7 +1948,7 @@ describe Purchase::Blockable do
     # policy should not need this file edited to keep the boundary covered.
     context "when chargeback volume is exactly at the threshold" do
       before do
-        allow(seller).to receive(:lost_chargebacks)
+        allow(seller).to receive(:lost_chargebacks_for_payout_gate)
           .and_return({ volume: "#{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}%", count: "10.0%" })
       end
 
@@ -1947,7 +1968,7 @@ describe Purchase::Blockable do
 
     context "when chargeback volume is below the threshold" do
       before do
-        allow(seller).to receive(:lost_chargebacks)
+        allow(seller).to receive(:lost_chargebacks_for_payout_gate)
           .and_return({ volume: "#{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS - 0.5}%", count: "5.0%" })
       end
 
@@ -1969,7 +1990,7 @@ describe Purchase::Blockable do
     # actually distinguishes the 1% policy from the 3% one.
     context "when chargeback volume is 2.5%, which the old 3% threshold allowed" do
       before do
-        allow(seller).to receive(:lost_chargebacks).and_return({ volume: "2.5%", count: "5.0%" })
+        allow(seller).to receive(:lost_chargebacks_for_payout_gate).and_return({ volume: "2.5%", count: "5.0%" })
       end
 
       it "pauses payouts internally" do
@@ -1983,13 +2004,13 @@ describe Purchase::Blockable do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
         expect(seller.comments.last.content)
-          .to eq("Payouts automatically paused due to chargeback rate (2.5%) exceeding 1.0% volume.")
+          .to eq("Payouts automatically paused due to chargeback rate (2.5%) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume over the last #{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}.")
       end
     end
 
     context "when chargeback volume exceeds the threshold" do
       before do
-        allow(seller).to receive(:lost_chargebacks).and_return({ volume: "4.2%", count: "15.0%" })
+        allow(seller).to receive(:lost_chargebacks_for_payout_gate).and_return({ volume: "4.2%", count: "15.0%" })
       end
 
       it "pauses payouts internally" do
@@ -2003,7 +2024,7 @@ describe Purchase::Blockable do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
         comment = seller.comments.last
-        expect(comment.content).to eq("Payouts automatically paused due to chargeback rate (4.2%) exceeding 1.0% volume.")
+        expect(comment.content).to eq("Payouts automatically paused due to chargeback rate (4.2%) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume over the last #{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}.")
         expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
         expect(comment.author_name).to eq("pause_payouts_for_seller_based_on_chargeback_rate")
       end
@@ -2027,7 +2048,7 @@ describe Purchase::Blockable do
 
     context "when chargeback volume is far above the threshold" do
       before do
-        allow(seller).to receive(:lost_chargebacks).and_return({ volume: "15.7%", count: "25.0%" })
+        allow(seller).to receive(:lost_chargebacks_for_payout_gate).and_return({ volume: "15.7%", count: "25.0%" })
       end
 
       it "pauses payouts internally" do
@@ -2041,15 +2062,19 @@ describe Purchase::Blockable do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
         comment = seller.comments.last
-        expect(comment.content).to eq("Payouts automatically paused due to chargeback rate (15.7%) exceeding 1.0% volume.")
+        expect(comment.content).to eq("Payouts automatically paused due to chargeback rate (15.7%) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume over the last #{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}.")
         expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
         expect(comment.author_name).to eq("pause_payouts_for_seller_based_on_chargeback_rate")
       end
     end
 
     context "edge case: when chargeback volume is just above the threshold" do
+      # Derived from the constant: a literal stops testing the boundary the moment the threshold
+      # moves, which is what a hardcoded 1.1% did when the gate went to 1.5.
+      let(:just_above) { format("%.1f%%", User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS + 0.1) }
+
       before do
-        allow(seller).to receive(:lost_chargebacks).and_return({ volume: "1.1%", count: "8.0%" })
+        allow(seller).to receive(:lost_chargebacks_for_payout_gate).and_return({ volume: just_above, count: "8.0%" })
       end
 
       it "pauses payouts internally" do
@@ -2063,7 +2088,7 @@ describe Purchase::Blockable do
         purchase.pause_payouts_for_seller_based_on_chargeback_rate!
 
         comment = seller.comments.last
-        expect(comment.content).to eq("Payouts automatically paused due to chargeback rate (1.1%) exceeding 1.0% volume.")
+        expect(comment.content).to eq("Payouts automatically paused due to chargeback rate (#{just_above}) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume over the last #{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}.")
         expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_ON_PROBATION)
         expect(comment.author_name).to eq("pause_payouts_for_seller_based_on_chargeback_rate")
       end

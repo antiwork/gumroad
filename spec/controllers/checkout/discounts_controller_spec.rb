@@ -164,6 +164,64 @@ describe Checkout::DiscountsController do
         }
       )
     end
+
+    it "does not reinterpret purchases made before order-level pricing was enabled" do
+      offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true)
+      purchase1.update!(quantity: 5)
+
+      get :statistics, params: { id: offer_code.external_id }, as: :json
+
+      expect(response.parsed_body.dig("uses", "total")).to eq(6)
+    end
+
+    it "counts a split cart allocation once under its first successful product" do
+      allocation_id = SecureRandom.uuid
+      [purchase1, purchase2].each do |purchase|
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 50,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: allocation_id,
+          pre_discount_minimum_price_cents: 100
+        )
+      end
+
+      get :statistics, params: { id: offer_code.external_id }, as: :json
+
+      expect(response.parsed_body.dig("uses")).to eq(
+        "total" => 1,
+        "products" => { products.first.external_id => 1 }
+      )
+    end
+
+    it "counts a commission once while including both payments in revenue" do
+      purchase1.destroy!
+      purchase2.destroy!
+      offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true)
+      deposit = create(:purchase, link: products.first, offer_code:, price_cents: 4500,
+                                  is_commission_deposit_purchase: true)
+      completion = create(:purchase, link: products.first, offer_code:, price_cents: 4500,
+                                     is_commission_completion_purchase: true)
+      [deposit, completion].each do |purchase|
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          pre_discount_minimum_price_cents: 5000
+        )
+      end
+
+      get :statistics, params: { id: offer_code.external_id }, as: :json
+
+      expect(response.parsed_body).to eq(
+        {
+          "uses" => { "total" => 1, "products" => { products.first.external_id => 1 } },
+          "revenue_cents" => 9000
+        }
+      )
+    end
   end
 
   describe "POST create" do
@@ -217,6 +275,33 @@ describe Checkout::DiscountsController do
       expect(offer_code.minimum_quantity).to eq(2)
       expect(offer_code.duration_in_billing_cycles).to eq(1)
       expect(offer_code.minimum_amount_cents).to eq(1000)
+    end
+
+    it "creates an order-level fixed discount" do
+      post :create, params: {
+        name: "Cart discount",
+        code: "cart",
+        amount_cents: 100,
+        currency_type: "usd",
+        universal: true,
+        once_per_cart: true,
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(seller.offer_codes.last.once_per_cart?).to be(true)
+    end
+
+    it "does not enable order-level pricing for a percentage discount" do
+      post :create, params: {
+        name: "Percent discount",
+        code: "percent",
+        amount_percentage: 10,
+        universal: true,
+        once_per_cart: true,
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(seller.offer_codes.last.once_per_cart?).to be(false)
     end
 
     context "when the offer code is universal with excluded products" do

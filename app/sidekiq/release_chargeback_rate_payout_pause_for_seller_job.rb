@@ -3,9 +3,10 @@
 # Re-checks one seller who is under an automatic chargeback-rate payout hold, and lifts the hold if
 # their rate is back within the allowed range.
 #
-# The release deliberately mirrors the pause: same rate (the lifetime unrefunded-sales volume ratio
-# from User#lost_chargebacks), same threshold constant, and an audit comment on the account so the
-# release is as traceable as the pause was.
+# The release deliberately mirrors the pause: same rate (the trailing-window unrefunded-sales volume
+# ratio from User#lost_chargebacks_for_payout_gate), same threshold constant, same window, and an
+# audit comment on the account so the release is as traceable as the pause was. Reading a different
+# span than the pause would either re-pause the seller immediately or never fire at all.
 #
 # Accounts that are suspended or flagged are left alone. Those are risk decisions made about the
 # account as a whole, and a recovered chargeback rate is not a reason to undo them — releasing there
@@ -19,7 +20,7 @@ class ReleaseChargebackRatePayoutPauseForSellerJob
     return if user.nil?
     return unless releasable?(user)
 
-    volume_percentage = user.lost_chargebacks[:volume]
+    volume_percentage = user.lost_chargebacks_for_payout_gate[:volume]
     # "NA" means the seller has no settled sales volume to divide by, so there is no rate to
     # compare. Leave the hold in place rather than guessing.
     return if volume_percentage == "NA"
@@ -50,7 +51,8 @@ class ReleaseChargebackRatePayoutPauseForSellerJob
     # contradicts the account's real state — same shape the Stripe resume path uses.
     def resume_comment_content(user, volume_percentage)
       recovered = "chargeback rate (#{volume_percentage}) is back within the " \
-                  "#{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume limit"
+                  "#{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume limit over the last " \
+                  "#{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}"
 
       if user.payouts_paused_by_user?
         "Automatic chargeback-rate hold lifted: #{recovered}. Payouts remain paused by the creator."

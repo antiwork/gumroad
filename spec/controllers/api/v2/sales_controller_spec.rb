@@ -420,6 +420,41 @@ describe Api::V2::SalesController do
         expect(response.parsed_body["sale"]).not_to have_key("buyer_presentment")
       end
 
+      it "returns the sale's listed currency, which is the currency a refund amount_cents is read in" do
+        get :show, params: @params
+
+        expect(response.parsed_body["sale"]["currency"]).to eq "usd"
+      end
+
+      it "returns the listed currency for a sale priced in a zero-decimal currency" do
+        jpy_product = create(:product, user: @seller, price_currency_type: "jpy", price_cents: 3_000)
+        jpy_purchase = create(:purchase, link: jpy_product, seller: @seller, displayed_price_currency_type: "jpy")
+
+        get :show, params: @params.merge(id: jpy_purchase.external_id)
+
+        expect(response.parsed_body["sale"]["currency"]).to eq "jpy"
+      end
+
+      # The refund endpoint scales amount_cents by the currency recorded on the
+      # PURCHASE, so a seller who relists the product in another currency must not
+      # change what an old sale reports — the product's current currency would
+      # scale a refund on this sale by 100 instead of 1.
+      it "reports the currency recorded on the sale, not the product's current one" do
+        jpy_product = create(:product, user: @seller, price_currency_type: "jpy", price_cents: 3_000)
+        jpy_purchase = create(:purchase, link: jpy_product, seller: @seller, displayed_price_currency_type: "jpy")
+        jpy_product.update_columns(price_currency_type: "usd")
+
+        expect(jpy_purchase.reload.link.price_currency_type).to eq "usd"
+
+        get :show, params: @params.merge(id: jpy_purchase.external_id)
+
+        expect(response.parsed_body["sale"]["currency"]).to eq "jpy"
+      end
+
+      it "omits the currency field from version 1 serializations" do
+        expect(@purchase.as_json).not_to have_key(:currency)
+      end
+
       it "includes buyer_presentment fields when the purchase has a presentment record" do
         # Values reconcile with the documented fx_rate direction (USD per 1 CAD;
         # canonical USD divided by the rate gives buyer-currency amounts): the

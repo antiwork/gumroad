@@ -207,13 +207,14 @@ class SettingsPresenter
       application_grants[application.id] = access_grant
     end
     valid_applications = valid_applications.sort_by { |application| application_grants[application.id].created_at }
+    live_scopes = live_scopes_by_application(valid_applications.map(&:id))
 
     authorized_applications = valid_applications.map do |application| {
       name: application.name,
       icon_url: application.icon_url,
       is_own_app: application.owner == seller,
       first_authorized_at: application_grants[application.id].created_at.iso8601,
-      scopes: application_grants[application.id].scopes,
+      scopes: live_scopes[application.id] || application_grants[application.id].scopes,
       id: application.external_id,
     } end
 
@@ -300,6 +301,30 @@ class SettingsPresenter
   end
 
   private
+    # Application id => what this seller's usable tokens for it can actually reach. Applications
+    # with no usable token left are absent rather than empty.
+    #
+    # The union across usable tokens, not the first grant's scopes: the device flow mints a fresh
+    # grant per scope set, so a seller who re-authorized with a broader set kept seeing the
+    # narrower list from their first grant while holding a token that could reach refunds and
+    # payout data. `not_expired` rather than Doorkeeper's `active_for`, which only checks
+    # `revoked_at` — every CLI token has a nil `expires_in` today, but an expired one can reach
+    # nothing and must not read as a capability once device tokens start expiring.
+    def live_scopes_by_application(application_ids)
+      return {} if application_ids.empty?
+
+      Doorkeeper::AccessToken
+        .by_resource_owner(seller)
+        .not_expired
+        .where(application_id: application_ids)
+        .pluck(:application_id, :scopes)
+        .group_by(&:first)
+        .each_with_object({}) do |(application_id, rows), result|
+          scopes = rows.flat_map { |(_, value)| value.to_s.split }.uniq
+          result[application_id] = Doorkeeper::OAuth::Scopes.from_array(scopes) if scopes.present?
+        end
+    end
+
     # What the payout settings page needs to know about the legal-guardian requirement.
     #
     # Always a hash, never nil, and every key is always present — an omitted key arrives in the
@@ -607,6 +632,7 @@ class SettingsPresenter
     def user_details(user_compliance_info)
       {
         country_supports_native_payouts: seller.native_payouts_supported?,
+        no_payout_rail_in_country: seller.no_payout_rail_in_compliance_country?,
         country_supports_iban: seller.country_supports_iban?,
         need_full_ssn: seller.has_ever_been_requested_for_user_compliance_info_field?(UserComplianceInfoFields::Individual::TAX_ID),
         country_code: user_compliance_info.legal_entity_country_code,

@@ -18,6 +18,7 @@ const PayPalEmailSection = ({
   updatePayoutMethod,
   errorFieldNames,
   user,
+  countryName,
 }: {
   canSetupBankPayouts: boolean;
   showPayPalPayoutsFeeNote: boolean;
@@ -28,7 +29,8 @@ const PayPalEmailSection = ({
   feeInfoText: string;
   updatePayoutMethod: (payoutMethod: PayoutMethod) => void;
   errorFieldNames: Set<FormFieldName>;
-  user: { country_code: string | null };
+  user: { country_code: string | null; no_payout_rail_in_country: boolean };
+  countryName: string | null;
 }) => {
   const uid = React.useId();
   return (
@@ -71,12 +73,11 @@ const PayPalEmailSection = ({
           directed to a PayPal account outside of Ukraine.
         </Alert>
       ) : null}
-      {user.country_code === "ZM" ? (
+      {user.no_payout_rail_in_country ? (
         <Alert variant="warning">
-          PayPal does not let accounts registered in Zambia receive money, so a payout to a Zambian PayPal account will
-          fail. Bank payouts are not available in Zambia either, so there is currently no way for us to pay you out
-          unless you use a PayPal account registered outside Zambia. Your balance stays in your Gumroad account in the
-          meantime.
+          PayPal does not let accounts registered in {countryName ?? "your country"} receive money, so a payout to one
+          will fail, and bank payouts are not available there either. To get paid you need a PayPal account registered
+          in a country PayPal can pay into. Your balance stays in your Gumroad account in the meantime.
         </Alert>
       ) : null}
     </section>

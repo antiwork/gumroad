@@ -383,18 +383,19 @@ describe ContactingCreatorMailer do
         end
 
         # The mailer renders whenever the queue gets to it, so the seller may have answered the ask —
-        # or the row may have been resolved — after the notice was enqueued. Both states make
-        # Purchases::DisputeEvidenceController redirect away, so the button would go nowhere.
-        context "when the seller has already submitted evidence by the time the mail renders" do
+        # or the row may have been resolved — after the notice was enqueued. Only resolution closes
+        # the form now: nothing is forwarded until the window elapses, so a seller who saved early
+        # may still revise, and the notice must keep linking them back.
+        context "when the seller has already saved a response by the time the mail renders" do
           before { dispute_evidence.update!(seller_submitted_at: Time.current) }
 
-          it "does not ask again for evidence the submission page will not accept" do
+          it "still links the seller back to the form they can keep revising" do
             mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
-            expect(mail.body.encoded).not_to include "Any additional information you can provide"
-            expect(mail.body.encoded).not_to include "Submit additional information"
-            expect(mail.subject).to eq "A sale has been disputed"
-            expect(mail.body.encoded).to include "We fight every dispute."
+            expect(dispute_evidence.accepting_evidence?).to be(true)
+            expect(mail.body.encoded).to include "Any additional information you can provide"
+            expect(mail.body.encoded).to include "Submit additional information"
+            expect(mail.subject).to eq "🚨 Urgent: Action required for resolving disputed sale"
           end
         end
 
@@ -411,12 +412,13 @@ describe ContactingCreatorMailer do
             expect(mail.body.encoded).to include "Submit additional information"
           end
 
-          it "does not send once the seller has already submitted" do
-            dispute_evidence.update!(seller_submitted_at: Time.current)
+          it "still reminds a seller who saved early, since they may keep revising" do
+            dispute_evidence.update!(seller_contacted_at: 49.hours.ago, seller_submitted_at: Time.current)
 
             mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
 
-            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+            expect(mail.subject).to eq "Reminder: Submit dispute evidence within 24 hours"
+            expect(mail.body.encoded).to include "You have 23 hours left."
           end
 
           it "does not send once the evidence has been resolved" do

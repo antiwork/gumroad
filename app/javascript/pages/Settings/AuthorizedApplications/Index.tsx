@@ -42,6 +42,7 @@ type Scope =
   | "view_tax_data"
   | "revenue_share"
   | "mobile_api"
+  | "helper_api"
   | "creator_api";
 
 const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
@@ -61,6 +62,7 @@ const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
   view_tax_data: "See your tax forms and annual earnings summary.",
   revenue_share: "Revenue Share",
   mobile_api: "Mobile API",
+  helper_api: "Helper API",
   creator_api: "Creator API",
 };
 

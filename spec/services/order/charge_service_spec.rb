@@ -2417,6 +2417,116 @@ describe Order::ChargeService, :vcr do
         expect(response[:error_code]).to eq(PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY)
       end
     end
+
+    it "uses the snapshotted once-per-cart allocation if the seller changes the code before charging" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1_000)
+      category = create(:variant_category, title: "Tier", link: product)
+      variant_a = create(:variant, name: "A", variant_category: category)
+      variant_b = create(:variant, name: "B", variant_category: category)
+      # One use left, two lines. OfferCodeDiscountComputingService#usage_units spends exactly one
+      # use for a once-per-cart code, so this cart quotes fine; the charge gate has to agree.
+      offer_code = create(:offer_code, products: [product], code: "once", amount_cents: 100, max_purchase_count: 1)
+      offer_code.once_per_cart = true
+      offer_code.save!(validate: false)
+
+      order = create(:order)
+      allocation_id = SecureRandom.uuid
+      [variant_a, variant_b].each do |variant|
+        purchase = build(:purchase_in_progress, link: product, seller:, offer_code:, quantity: 1)
+        purchase.variant_attributes << variant
+        purchase.save(validate: false)
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 50,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: allocation_id,
+          pre_discount_minimum_price_cents: product.price_cents
+        )
+        order.purchases << purchase
+      end
+      offer_code.once_per_cart = false
+      offer_code.save!(validate: false)
+
+      rejected = Purchase.validate_offer_code_usage_across_line_items(order.purchases.to_a)
+
+      expect(rejected).to be_empty
+      expect(order.purchases.reload.map(&:purchase_state).uniq).to eq(["in_progress"])
+    end
+
+    it "does not count a completed fragment twice when validating the rest of its allocation" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1_000)
+      offer_code = create(
+        :offer_code,
+        products: [product],
+        code: "once",
+        amount_cents: 100,
+        max_purchase_count: 1,
+        once_per_cart: true
+      )
+      allocation_id = SecureRandom.uuid
+      completed_fragment = create(:purchase, link: product, seller:, offer_code:)
+      completed_fragment.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 100,
+        offer_code_is_percent: false,
+        once_per_cart: true,
+        once_per_cart_allocation_id: allocation_id,
+        pre_discount_minimum_price_cents: product.price_cents
+      )
+
+      order = create(:order)
+      2.times do
+        purchase = create(:purchase_in_progress, link: product, seller:, offer_code:)
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 50,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: allocation_id,
+          pre_discount_minimum_price_cents: product.price_cents
+        )
+        order.purchases << purchase
+      end
+
+      rejected = Purchase.validate_offer_code_usage_across_line_items(order.purchases.to_a)
+
+      expect(rejected).to be_empty
+      expect(order.purchases.reload.map(&:purchase_state).uniq).to eq(["in_progress"])
+    end
+
+    it "uses the snapshotted per-item mode if the seller changes the code before charging" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1_000)
+      category = create(:variant_category, title: "Tier", link: product)
+      variant_a = create(:variant, name: "A", variant_category: category)
+      variant_b = create(:variant, name: "B", variant_category: category)
+      offer_code = create(:offer_code, products: [product], code: "once", amount_cents: 100, max_purchase_count: 1)
+
+      order = create(:order)
+      [variant_a, variant_b].each do |variant|
+        purchase = build(:purchase_in_progress, link: product, seller:, offer_code:, quantity: 1)
+        purchase.variant_attributes << variant
+        purchase.save(validate: false)
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: false,
+          pre_discount_minimum_price_cents: product.price_cents
+        )
+        order.purchases << purchase
+      end
+      offer_code.once_per_cart = true
+      offer_code.save!(validate: false)
+
+      rejected = Purchase.validate_offer_code_usage_across_line_items(order.purchases.to_a)
+
+      expect(rejected.size).to eq(2)
+      expect(order.purchases.reload.map(&:purchase_state).uniq).to eq(["failed"])
+    end
   end
 
   describe "#perform with a same-seller cart where one line item fails before charging" do

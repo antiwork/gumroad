@@ -32,7 +32,8 @@ export const CrossSellModal = ({
     recommender_model_name: null,
     accepted_offer: crossSell.discount ? { id: crossSell.id, discount: crossSell.discount } : null,
   };
-  const { price: discountedPrice } = getDiscountedPrice(cart, crossSellCartItem);
+  const acceptedCartItem = cart.items.find(({ accepted_offer }) => accepted_offer?.id === crossSell.id);
+  const { price: discountedPrice } = getDiscountedPrice(cart, acceptedCartItem ?? crossSellCartItem);
 
   return (
     <>

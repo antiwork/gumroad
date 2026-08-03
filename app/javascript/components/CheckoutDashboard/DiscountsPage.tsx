@@ -90,6 +90,7 @@ export type OfferCode = {
   duration_in_billing_cycles: Duration | null;
   minimum_quantity: number | null;
   minimum_amount_cents: number | null;
+  once_per_cart: boolean;
   existing_customers_only: boolean;
   ownership_products: Product[];
   ownership_duration_tiers: OwnershipDurationTier[] | null;
@@ -585,6 +586,12 @@ const DiscountsPage = ({
                     {selectedOfferCode.minimum_quantity}
                   </CardContent>
                 ) : null}
+                {selectedOfferCode.once_per_cart ? (
+                  <CardContent>
+                    <h5 className="grow font-bold">Fixed amount</h5>
+                    Once per cart
+                  </CardContent>
+                ) : null}
                 {(selectedOfferCode.products ?? products).some(({ is_tiered_membership }) => is_tiered_membership) ? (
                   <CardContent>
                     <h5 className="grow font-bold">Discount duration for memberships</h5>
@@ -710,6 +717,7 @@ const DiscountsPage = ({
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
             minimumAmount: offerCode.minimum_amount_cents,
+            oncePerCart: offerCode.once_per_cart,
             existingCustomersOnly: offerCode.existing_customers_only,
             ownershipProductIds: offerCode.ownership_products.map(({ id }) => id),
             ownershipDurationTiers: offerCode.ownership_duration_tiers,
@@ -757,6 +765,7 @@ const DiscountsPage = ({
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
             minimumAmount: offerCode.minimum_amount_cents,
+            oncePerCart: offerCode.once_per_cart,
             existingCustomersOnly: offerCode.existing_customers_only,
             ownershipProductIds: offerCode.ownership_products.map(({ id }) => id),
             ownershipDurationTiers: offerCode.ownership_duration_tiers,
@@ -873,6 +882,7 @@ const Form = ({
   const [maxQuantity, setMaxQuantity] = React.useState<{ value: number | null; error?: boolean }>({
     value: offerCode?.limit ?? null,
   });
+  const [oncePerCart, setOncePerCart] = React.useState(!!offerCode?.once_per_cart);
 
   const [limitValidity, setLimitValidity] = React.useState(!!offerCode?.valid_at);
   const [validAt, setValidAt] = React.useState(offerCode?.valid_at ? new Date(offerCode.valid_at) : new Date());
@@ -1043,6 +1053,7 @@ const Form = ({
       minimum_quantity: hasMinimumQuantity ? minimumQuantity.value : null,
       duration_in_billing_cycles: canSetDuration && !useTieredDiscounts ? durationInBillingCycles : null,
       minimum_amount_cents: hasMinimumAmount ? minimumAmount.value : null,
+      once_per_cart: discount.type === "cents" && !useTieredDiscounts && oncePerCart,
       existing_customers_only: existingCustomersOnly,
       ownership_products: existingCustomersOnly ? ownershipProducts : [],
       ownership_duration_tiers: tieredPayload,
@@ -1238,6 +1249,18 @@ const Form = ({
           )}
           <Fieldset className="gap-4">
             <FieldsetTitle>Settings</FieldsetTitle>
+            {discount.type === "cents" && !useTieredDiscounts ? (
+              <Fieldset>
+                <Switch
+                  checked={oncePerCart}
+                  onChange={(evt) => setOncePerCart(evt.target.checked)}
+                  label="Apply once per cart"
+                />
+                <FieldsetDescription>
+                  Deduct this fixed amount once from the cart instead of once per item.
+                </FieldsetDescription>
+              </Fieldset>
+            ) : null}
             <Details open={limitQuantity}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
@@ -1262,8 +1285,9 @@ const Form = ({
                     )}
                   </NumberInput>
                   <p className="text-muted-foreground text-sm">
-                    Each item a customer buys uses one. A customer checking out with five items uses five, whether that
-                    is five products or five copies of one.
+                    {discount.type === "cents" && !useTieredDiscounts && oncePerCart
+                      ? "Each checkout uses one, regardless of the number of items."
+                      : "Each item a customer buys uses one. A customer checking out with five items uses five, whether that is five products or five copies of one."}
                   </p>
                 </Fieldset>
               </Dropdown>

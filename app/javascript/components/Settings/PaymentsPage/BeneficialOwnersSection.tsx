@@ -1171,6 +1171,11 @@ const BeneficialOwnersSection = ({
                   const isUs = defaultCountry === "US";
                   const taxIdConfig =
                     isUs && useGovernmentIdForUs ? PERSONAL_ID_NUMBER_CONFIG : taxIdConfigFor(defaultCountry);
+                  // Only creating an owner requires an ID number (the server enforces it via
+                  // REQUIRED_CREATE_ONLY_FIELDS). Requiring it on edit stranded sellers completing a
+                  // co-director's DOB and address — a third party's ID number they cannot obtain, for
+                  // a field Stripe never asked for (gumroad-private#1776).
+                  const isCreatingOwner = editState.mode !== "edit";
                   const hasTaxIdOnFile =
                     editState.mode === "edit" &&
                     (editState.owner.id_number_provided || editState.owner.ssn_last_4_provided);
@@ -1209,7 +1214,7 @@ const BeneficialOwnersSection = ({
                               minLength={taxIdConfig.minLength}
                               maxLength={taxIdConfig.maxLength}
                               placeholder={taxIdConfig.placeholder}
-                              required={!hasTaxIdOnFile}
+                              required={isCreatingOwner}
                               disabled={isFormDisabled}
                               value={formState.id_number}
                               onChange={(event) => updateForm({ id_number: event.target.value })}
