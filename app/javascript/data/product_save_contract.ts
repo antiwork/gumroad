@@ -202,14 +202,20 @@ export const reorderPreservingMembership = <T extends { id: string }>(items: T[]
 
 // For a sortable that reports its new order as the row objects themselves.
 // Those objects are kept rather than looked up again, because the library
-// annotates them (a page's `chosen` drag flag is read straight off them).
-export const withOmittedRowsAppended = <T extends { id: string }>(ordered: T[], all: T[]): T[] => {
+// annotates them (a page's `chosen` drag flag is read straight off them) — but
+// only rows that consume a source row survive, so a report carrying a duplicate
+// or an id the product never had cannot add rows either.
+export const reorderRowsPreservingMembership = <T extends { id: string }>(reported: T[], all: T[]): T[] => {
   const remaining = [...all];
-  for (const row of ordered) {
+  const reordered: T[] = [];
+  for (const row of reported) {
     const index = remaining.findIndex((candidate) => candidate.id === row.id);
-    if (index !== -1) remaining.splice(index, 1);
+    if (index !== -1) {
+      remaining.splice(index, 1);
+      reordered.push(row);
+    }
   }
-  return [...ordered, ...remaining];
+  return [...reordered, ...remaining];
 };
 
 // True when this save asks the server to remove anything at all. Used to decide

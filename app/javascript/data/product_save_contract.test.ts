@@ -6,7 +6,7 @@ import {
   confirmRichContentMoveSourceDeletions,
   hasDeletions,
   reorderPreservingMembership,
-  withOmittedRowsAppended,
+  reorderRowsPreservingMembership,
 } from "$app/data/product_save_contract";
 
 // The editor's save used to delete whatever the payload didn't mention. Under
@@ -503,11 +503,11 @@ describe("reorderPreservingMembership", () => {
 // The content-tab page sortable reports its new order as the row objects, not
 // ids, and the library annotates those objects (a page's `chosen` drag flag is
 // read off them) — so they are kept rather than looked up again.
-describe("withOmittedRowsAppended", () => {
+describe("reorderRowsPreservingMembership", () => {
   const all = [{ id: "p1" }, { id: "p2" }, { id: "p3" }];
 
   it("applies the reported order", () => {
-    expect(withOmittedRowsAppended([{ id: "p3" }, { id: "p1" }, { id: "p2" }], all)).toEqual([
+    expect(reorderRowsPreservingMembership([{ id: "p3" }, { id: "p1" }, { id: "p2" }], all)).toEqual([
       { id: "p3" },
       { id: "p1" },
       { id: "p2" },
@@ -515,7 +515,7 @@ describe("withOmittedRowsAppended", () => {
   });
 
   it("keeps a page the report omitted instead of dropping it", () => {
-    expect(withOmittedRowsAppended([{ id: "p3" }, { id: "p1" }], all)).toEqual([
+    expect(reorderRowsPreservingMembership([{ id: "p3" }, { id: "p1" }], all)).toEqual([
       { id: "p3" },
       { id: "p1" },
       { id: "p2" },
@@ -523,14 +523,30 @@ describe("withOmittedRowsAppended", () => {
   });
 
   it("keeps every page when the report is empty", () => {
-    expect(withOmittedRowsAppended([], all)).toEqual(all);
+    expect(reorderRowsPreservingMembership([], all)).toEqual(all);
   });
 
   it("keeps the reported objects, not the originals", () => {
     const annotated = { id: "p1", chosen: true };
-    const result = withOmittedRowsAppended([annotated], all);
+    const result = reorderRowsPreservingMembership([annotated], all);
 
     expect(result[0]).toBe(annotated);
     expect(result).toHaveLength(3);
+  });
+
+  it("drops a page the product never had instead of adding it", () => {
+    expect(reorderRowsPreservingMembership([{ id: "ghost" }, { id: "p2" }], all)).toEqual([
+      { id: "p2" },
+      { id: "p1" },
+      { id: "p3" },
+    ]);
+  });
+
+  it("emits a repeated id once", () => {
+    expect(reorderRowsPreservingMembership([{ id: "p2" }, { id: "p2" }, { id: "p1" }], all)).toEqual([
+      { id: "p2" },
+      { id: "p1" },
+      { id: "p3" },
+    ]);
   });
 });
