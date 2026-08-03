@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, render } from "@testing-library/react";
-import { Editor, getSchema } from "@tiptap/core";
+import { Editor, getSchema, Node } from "@tiptap/core";
 import { undoDepth } from "@tiptap/pm/history";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
@@ -137,5 +137,47 @@ describe("useRichTextEditor", () => {
 
     expect(getEditor().getText()).toBe("saved draft");
     expect(undoDepth(getEditor().state)).toBe(1);
+  });
+
+  // Regression for a P1 Greptile caught on this PR: `useEditor` is called with `deps: []`, so
+  // the mounted editor keeps its ORIGINAL schema even after a rerender adds a new extension.
+  // Sanitizing against the freshly-computed (extension-added) schema would let a node type through
+  // that the still-mounted (extension-less) editor can't parse, reproducing the exact
+  // "Unknown node type" crash this file exists to prevent — just one extension-set change later.
+  it("sanitizes new content against the mounted editor's schema, not a freshly recomputed one", async () => {
+    const LateExtension = Node.create({ name: "lateNode", group: "block", content: "text*" });
+    let editor: Editor | null = null;
+    const Harness = ({ extensions, initialValue }: { extensions: typeof LateExtension[]; initialValue: unknown }) => {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- exercising the hook's public Content type
+      editor = useRichTextEditor({ initialValue: initialValue as never, extensions });
+      return null;
+    };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
+
+    const initial = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "first" }] }] };
+    const { rerender } = render(React.createElement(Harness, { extensions: [], initialValue: initial }));
+    expect(getEditor().getText()).toBe("first");
+
+    // The editor is never recreated (rerender doesn't remount), so its schema still doesn't know
+    // "lateNode" even though this render's `extensions` prop now includes it.
+    const next = {
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "before" }] },
+        { type: "lateNode", content: [{ type: "text", text: "dropped" }] },
+        { type: "paragraph", content: [{ type: "text", text: "after" }] },
+      ],
+    };
+    expect(() =>
+      rerender(React.createElement(Harness, { extensions: [LateExtension], initialValue: next })),
+    ).not.toThrow();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getEditor().getText()).toBe("before\n\nafter");
   });
 });

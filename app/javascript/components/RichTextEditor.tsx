@@ -308,6 +308,18 @@ export const useRichTextEditor = ({
   const extensionsRef = React.useRef(dedupedExtensions);
   extensionsRef.current = dedupedExtensions;
 
+  // `useEditor` below is called with `deps: []`, so the mounted editor is never recreated when
+  // `dedupedExtensions` changes shape (e.g. a workflow's trigger swapping which extension is
+  // included) — it keeps parsing with whatever schema it was first created with. Sanitizing
+  // against `extensionsRef.current` (this render's, possibly newer, schema) can therefore let a
+  // node type through that the STILL-MOUNTED editor doesn't recognize, reintroducing the same
+  // "Unknown node type" throw this function exists to prevent. `editorSchemaRef` is populated
+  // after each render with the schema the live editor actually parses against, so sanitization
+  // always targets that schema; only before the first mount (editor undefined) do we fall back to
+  // computing it fresh, which is safe because that's the schema the editor is about to be created
+  // with in this same pass.
+  const editorSchemaRef = React.useRef<Schema | null>(null);
+
   const content: Content = React.useMemo(() => {
     if (!SSR && typeof initialValue === "string") {
       const dom = document.createElement("div");
@@ -330,7 +342,7 @@ export const useRichTextEditor = ({
 
     if (typeof initialValue !== "object" || initialValue === null) return initialValue;
 
-    const schema = getSchema(baseEditorOptions(extensionsRef.current).extensions);
+    const schema = editorSchemaRef.current ?? getSchema(baseEditorOptions(extensionsRef.current).extensions);
     if (Array.isArray(initialValue)) return dropUnknownNodes(initialValue, schema);
     if (!initialValue.content) return initialValue;
     return { ...initialValue, content: dropUnknownNodes(initialValue.content, schema) };
@@ -384,6 +396,9 @@ export const useRichTextEditor = ({
     onUpdate: ({ editor }) => onUpdate(editor),
     onCreate: ({ editor }) => onCreate?.(editor),
   });
+  // Mutated directly during render, not in an effect: the content memo above reads this ref on
+  // the NEXT render, and an effect wouldn't run until after that render's commit, one render late.
+  if (editor) editorSchemaRef.current = editor.state.schema;
 
   React.useEffect(() => editor?.setOptions({ editable }), [editable]);
 
