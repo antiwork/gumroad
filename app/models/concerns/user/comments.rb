@@ -33,6 +33,13 @@ module User::Comments
     recent_payout_notes.find { |note| PayoutNoteVisibility.seller_visible?(note) }
   end
 
+  # The newest payout note recorded because Stripe rejected the seller's payout setup, or nil.
+  # Marked with StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG when written, so a
+  # reader that needs this specific note is not left guessing from the newest visible one.
+  def latest_payout_setup_rejection_note
+    recent_payout_notes.find { |note| note.json_data[StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
+  end
+
   # The newest payout note on the account, seller-facing or internal.
   #
   # Same scoping and ordering as latest_seller_visible_payout_note on purpose — the payout pipeline
