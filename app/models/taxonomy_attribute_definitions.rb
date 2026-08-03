@@ -47,6 +47,13 @@ class TaxonomyAttributeDefinitions
     { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 6 },
   ].freeze
 
+  SOFTWARE_DEVELOPMENT_DEFINITIONS = [
+    { name: "language", label: "Language", value_type: "enum", values: ["TypeScript", "JavaScript", "Python", "Ruby", "PHP", "Go", "Rust", "Swift", "Kotlin", "C#"], position: 0 },
+    { name: "framework", label: "Framework", value_type: "enum", values: ["React", "Next.js", "Vue", "Rails", "Django", "Laravel", "Flutter", "Node.js"], position: 1 },
+    { name: "includes_source", label: "Includes source code", value_type: "boolean", values: [], position: 2 },
+    { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 3 },
+  ].freeze
+
   DEFINITIONS = {
     # Generic 3D assets (game-dev models, environments, props not tied to VRChat's avatar system)
     # get THREE_D_ASSETS_DEFINITIONS — category-first faceting doesn't transfer to VRChat avatars,
@@ -76,6 +83,15 @@ class TaxonomyAttributeDefinitions
     "music-and-sound-design/instruments" => MUSIC_DEFINITIONS,
     "music-and-sound-design/sound-design" => MUSIC_DEFINITIONS,
     "music-and-sound-design/vocal" => MUSIC_DEFINITIONS,
+    # Root plus the children where the axes apply (gumroad-private#1798): attributes do not
+    # inherit, and sellers file software products on the root as well as its children. `hardware`
+    # and `cybersecurity` are left out — language/framework facets do not fit them.
+    "software-development" => SOFTWARE_DEVELOPMENT_DEFINITIONS,
+    "software-development/app-development" => SOFTWARE_DEVELOPMENT_DEFINITIONS,
+    "software-development/php-scripts" => SOFTWARE_DEVELOPMENT_DEFINITIONS,
+    "software-development/programming" => SOFTWARE_DEVELOPMENT_DEFINITIONS,
+    "software-development/software-and-plugins" => SOFTWARE_DEVELOPMENT_DEFINITIONS,
+    "software-development/web-development" => SOFTWARE_DEVELOPMENT_DEFINITIONS,
   }.freeze
 
   # Maps each configured slug path to its Taxonomy, skipping paths whose taxonomy is absent.
