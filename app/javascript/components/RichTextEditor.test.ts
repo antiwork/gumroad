@@ -1,7 +1,6 @@
-import { describe, expect, it } from "vitest";
-
 import { getSchema } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
+import { describe, expect, it } from "vitest";
 
 import { dropUnknownNodes, validateUrl } from "$app/components/RichTextEditor";
 
@@ -65,7 +64,10 @@ describe("dropUnknownNodes", () => {
     const content = [
       {
         type: "blockquote",
-        content: [{ type: "license", attrs: {} }, { type: "paragraph", content: [{ type: "text", text: "kept" }] }],
+        content: [
+          { type: "license", attrs: {} },
+          { type: "paragraph", content: [{ type: "text", text: "kept" }] },
+        ],
       },
     ];
 
