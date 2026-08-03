@@ -78,7 +78,8 @@ const NavButton = ({
 
   let modifier2 = "";
   if (context === "primary" && children !== "Dashboard") {
-    modifier2 = "dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white";
+    // Bare `dark:` (not just `dark:lg:`) so the mobile-menu button isn't black-on-black in dark mode.
+    modifier2 = "dark:bg-pink dark:text-black dark:hover:bg-white";
   } else {
     modifier2 = "dark:lg:hover:bg-white dark:lg:hover:text-black";
   }
