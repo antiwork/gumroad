@@ -91,11 +91,14 @@ class UtmLinkPresenter
       external_id = resource.external_id if resource.present?
       id = destination_option_id(type, external_id)
 
+      # resource can be nil here for an alive link whose target (product/post) was
+      # hard-deleted (e.g. GDPR erasure) — fall back to a "deleted" placeholder instead
+      # of dereferencing nil, same as UtmLink#target_resource_name.
       case type
       when target_resource_types[:product_page]
-        { id:, label: "#{add_label_prefix ? "Product — " : ""}#{resource.name}", url: resource.long_url }
+        { id:, label: "#{add_label_prefix ? "Product — " : ""}#{resource&.name || "deleted"}", url: resource&.long_url }
       when target_resource_types[:post_page]
-        { id:, label: "#{add_label_prefix ? "Post — " : ""}#{resource.name}", url: resource.full_url }
+        { id:, label: "#{add_label_prefix ? "Post — " : ""}#{resource&.name || "deleted"}", url: resource&.full_url }
       when target_resource_types[:profile_page]
         { id:, label: "Profile page", url: seller.profile_url }
       when target_resource_types[:subscribe_page]
