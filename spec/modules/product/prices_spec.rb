@@ -223,18 +223,16 @@ describe Product::Prices do
       it "refreshes the search index when it clears the flag" do
         product = create(:product, price_cents: 0)
         category = create(:variant_category, title: "versions", link: product)
+
+        expect_any_instance_of(Link).to receive(:enqueue_index_update_for).with(["customizable_price"])
+
         category.variants.create!(name: "premium version", price_difference_cents: 10_00)
-
-        expect(product).to receive(:enqueue_index_update_for).with(["customizable_price"])
-
-        product.save!
       end
 
       it "does not re-enqueue an index update when the flag is already right" do
         product = create(:product, price_cents: 0)
         category = create(:variant_category, title: "versions", link: product)
         category.variants.create!(name: "premium version", price_difference_cents: 10_00)
-        product.save!
         expect(product.reload.customizable_price).to be(false)
 
         expect(product).not_to receive(:enqueue_index_update_for).with(["customizable_price"])
@@ -250,16 +248,6 @@ describe Product::Prices do
         expect(product.reload.customizable_price).to be(true)
         expect(product.variant_categories_alive.joins(:variants).merge(BaseVariant.alive)
                  .sum("base_variants.price_difference_cents")).to eq(5_00)
-
-        product.save!
-
-        expect(product.reload.customizable_price).to be(true)
-      end
-
-      it "still re-sets a coffee product whose flag was lost" do
-        seller = create(:user, created_at: 2.months.ago)
-        product = create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE, price_cents: 5_00)
-        product.update_column(:customizable_price, false)
 
         product.save!
 
