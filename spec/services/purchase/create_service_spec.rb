@@ -498,6 +498,47 @@ describe Purchase::CreateService, :vcr do
         expect(error).to eq("The bundle's contents have changed. Please refresh the page!")
       end
     end
+
+    context "when a component product is sold out" do
+      # The component is taken to its cap by real sales rather than by setting the counter directly,
+      # so remaining_for_sale_count is derived the same way it is in production.
+      let(:sold_out_component) { product.bundle_products.second.product }
+
+      before do
+        params[:purchase][:perceived_price_cents] = 100
+        params[:bundle_products] = product.bundle_products.alive.map do |bundle_product|
+          { product_id: bundle_product.product.external_id, variant_id: nil, quantity: bundle_product.quantity }
+        end
+        sold_out_component.update!(max_purchase_count: 1, sales_count_for_inventory_cache: 1)
+      end
+
+      it "fails the whole bundle purchase before charging, naming the unavailable component" do
+        purchase, error = Purchase::CreateService.new(product:, params:, buyer:).perform
+
+        expect(error).to eq("#{sold_out_component.name} is no longer available in the quantity this bundle includes. Please refresh the page!")
+        expect(purchase).not_to be_persisted
+        expect(purchase.charge_intent).to be_nil
+        # The whole point: no child row is minted for any component, not just the exhausted one.
+        expect(purchase.product_purchases).to be_empty
+      end
+    end
+
+    context "when a component product has enough inventory left" do
+      before do
+        params[:purchase][:perceived_price_cents] = 100
+        params[:bundle_products] = product.bundle_products.alive.map do |bundle_product|
+          { product_id: bundle_product.product.external_id, variant_id: nil, quantity: bundle_product.quantity }
+        end
+        product.bundle_products.second.product.update!(max_purchase_count: 5)
+      end
+
+      it "creates the purchase" do
+        purchase, error = Purchase::CreateService.new(product:, params:, buyer:).perform
+
+        expect(error).to be_nil
+        expect(purchase.purchase_state).to eq("successful")
+      end
+    end
   end
 
   context "when the discount code has a minimum amount" do
