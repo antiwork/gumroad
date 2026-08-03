@@ -57,6 +57,49 @@ RSpec.describe Purchase::Blockable do
       end
     end
 
+    context "when the seller is testing their own paid flow (gumroad-private#1755)" do
+      def self_purchase(fingerprint:, seller:)
+        create(:failed_purchase, link: create(:product, user: seller), seller:,
+                                 purchaser: seller, email: seller.email,
+                                 browser_guid: guid, ip_address: ip,
+                                 stripe_fingerprint: fingerprint,
+                                 stripe_error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT)
+      end
+
+      it "does not block the ip address on four self-purchase declines alone" do
+        seller = create(:user)
+        4.times { |i| self_purchase(fingerprint: "self#{i}", seller:) }
+
+        create(:failed_purchase, link: create(:product, user: seller), seller:,
+                                 browser_guid: SecureRandom.uuid, ip_address: ip,
+                                 stripe_fingerprint: "live-self",
+                                 stripe_error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT)
+              .send(:block_ip_address_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: ip)).to be_nil
+      end
+
+      it "still blocks the ip when a stranger's four cards join a self-purchase" do
+        seller = create(:user)
+        self_purchase(fingerprint: "self0", seller:)
+        3.times do |i|
+          create(:failed_purchase, link: create(:product, user: seller), seller:,
+                                   email: "stranger-#{SecureRandom.hex(4)}@example.com",
+                                   browser_guid: guid, ip_address: ip,
+                                   stripe_fingerprint: "stranger#{i}",
+                                   stripe_error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT)
+        end
+
+        create(:failed_purchase, link: create(:product, user: seller), seller:,
+                                 browser_guid: guid, ip_address: ip,
+                                 stripe_fingerprint: "live-mixed",
+                                 stripe_error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT)
+              .send(:block_ip_address_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: ip)).to be_present
+      end
+    end
+
     context "when the issuer answered about the card" do
       # The attacker picks the amount and the card, so exempting an issuer-answered decline hands
       # them a velocity-free oracle for validating a stolen list.

@@ -915,9 +915,14 @@ module Purchase::Blockable
     def block_ip_address_based_on_recent_failures!
       return if PlatformBlock.ip_address.active.find_by(object_value: ip_address).present?
 
+      # Excludes the seller testing their own paid flow (gumroad-private#1755): several
+      # self-purchases on new cards is the documented way to verify checkout, and it should not
+      # arm a threshold meant for a stranger card-testing the storefront.
       recent_failures = countable_card_testing_failures
                           .where("ip_address = ?", ip_address)
                           .where(created_at: CARD_TESTING_IP_ADDRESS_WATCH_PERIOD.ago..)
+                          .where("purchaser_id IS NULL OR purchaser_id != ?", seller.id)
+                          .where("email IS NULL OR email != ?", seller.email)
 
       return if distinct_card_count(recent_failures) < MAX_NUMBER_OF_FAILED_FINGERPRINTS
 
