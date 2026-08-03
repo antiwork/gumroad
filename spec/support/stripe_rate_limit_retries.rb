@@ -49,10 +49,10 @@ module StripeTestRateLimitRetries
   # fallback, after checking the structured fields.
   RATE_LIMIT_MESSAGE = /rate limit|too many requests|creating accounts too quickly/i
 
-  # Retry budget for THROTTLED requests only: eight retries, so nine HTTP
+  # Retry budget for THROTTLED requests only: twelve retries, so thirteen HTTP
   # attempts. Delays before each retry follow the gem's own schedule (0.5s
-  # doubling, capped at MAX_RETRY_DELAY), so the worst case is
-  # 0.5 + 1 + 2 + 4 + 8 + 16 + 16 + 16 = 63.5 seconds of waiting.
+  # doubling, capped at MAX_RETRY_DELAY, jittered into (delay/2, delay]), so the
+  # worst case is 0.5 + 1 + 2 + 4 + 8 + 16 × 7 = 127.5 seconds of waiting.
   #
   # That is deliberately generous rather than minimal. The helper this file
   # replaces allowed roughly 134 seconds, and it did so specifically for
@@ -60,14 +60,23 @@ module StripeTestRateLimitRetries
   # request-rate bucket. A budget short enough to expire inside that window
   # would fail the build for the reason this file exists to prevent.
   #
+  # Eight retries (63.5s) was that budget, and it was not enough: on 2026-08-03
+  # nine open PRs went red at once, every failure a checkout or subscription spec
+  # whose log ended in "still rate limited after 8 retries". Test Slow alone
+  # fans out to 50 shards and Test Fast to 18, every one of them against the same
+  # Stripe test account, and several PRs build concurrently — so the contention
+  # scales with how busy the queue is, not with anything a spec does. Re-running
+  # the identical commit turned #6901 from 11 failures to 0, which is what a
+  # too-small budget looks like from the outside.
+  #
   # It is kept OFF Stripe's global configuration on purpose. Raising
   # Stripe.max_network_retries would also widen the gem's own retries for
   # timeouts, 409 conflicts and 500s, so a spec hitting one of those could sit
-  # in backoff for a minute for a reason that has nothing to do with
+  # in backoff for minutes for a reason that has nothing to do with
   # throttling. Instead the wider budget is applied only on the code path that
   # has already identified the failure as a rate limit, and the global values
   # stay as config/initializers/003_stripe.rb sets them.
-  MAX_RETRIES = 8
+  MAX_RETRIES = 12
   MAX_RETRY_DELAY = 16
 
   # should_retry? decides, and the gem then immediately asks sleep_time how long

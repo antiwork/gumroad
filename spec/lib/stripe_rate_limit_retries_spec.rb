@@ -123,7 +123,7 @@ describe "Stripe rate-limit retries in the test environment" do
       error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
 
       expect { Stripe::StripeClient.should_retry?(error, num_retries: 2) }
-        .to output(/rate limited.*Waiting and retrying \(retry 3 of 8\)/m).to_stderr
+        .to output(/rate limited.*Waiting and retrying \(retry 3 of 12\)/m).to_stderr
     end
 
     it "says it is giving up once the budget is gone, rather than claiming success" do
@@ -133,7 +133,7 @@ describe "Stripe rate-limit retries in the test environment" do
       error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
 
       expect { Stripe::StripeClient.should_retry?(error, num_retries: StripeTestRateLimitRetries::MAX_RETRIES) }
-        .to output(/still rate limited after 8 retries, giving up/).to_stderr
+        .to output(/still rate limited after 12 retries, giving up/).to_stderr
     end
 
     it "stays quiet about failures that have nothing to do with rate limiting" do
@@ -144,10 +144,11 @@ describe "Stripe rate-limit retries in the test environment" do
   end
 
   describe "the retry budget" do
-    it "allows eight retries capped at sixteen seconds of waiting each" do
+    it "allows twelve retries capped at sixteen seconds of waiting each" do
       # Pinned literally rather than derived, so that changing the budget has to
-      # change this spec deliberately.
-      expect(StripeTestRateLimitRetries::MAX_RETRIES).to eq(8)
+      # change this spec deliberately. Eight was not enough to outlast the
+      # contention 68 concurrent shards create on one Stripe test account.
+      expect(StripeTestRateLimitRetries::MAX_RETRIES).to eq(12)
       expect(StripeTestRateLimitRetries::MAX_RETRY_DELAY).to eq(16)
     end
 
