@@ -28,7 +28,14 @@ const ownerWithoutIdNumber = {
   phone: null,
   dob: { day: null, month: null, year: null },
   address: { line1: null, city: null, postal_code: null, state: null, country: "GB" },
-  relationship: { owner: true, director: true, executive: true, representative: false, title: null, percent_ownership: 25 },
+  relationship: {
+    owner: true,
+    director: true,
+    executive: true,
+    representative: false,
+    title: null,
+    percent_ownership: 25,
+  },
   id_number_provided: false,
   ssn_last_4_provided: false,
   nationality: null,
@@ -59,7 +66,8 @@ const renderSection = (owners: unknown[]) => {
   );
 };
 
-const idNumberInput = () => screen.getByLabelText(/tax ID number|ID number/iu);
+// GB has no country-specific config, so the field carries the fallback "Personal ID number" label.
+const idNumberInput = () => screen.getByLabelText("Personal ID number");
 
 describe("BeneficialOwnersSection ID number requirement", () => {
   // The server requires an ID number only when creating an owner
@@ -71,14 +79,14 @@ describe("BeneficialOwnersSection ID number requirement", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit Chloe Flexman" }));
 
-    await waitFor(() => expect(idNumberInput()).not.toBeRequired());
+    await waitFor(() => expect(idNumberInput().hasAttribute("required")).toBe(false));
   });
 
   it("still requires an ID number when adding a new owner", async () => {
     renderSection([]);
 
-    fireEvent.click(await screen.findByRole("button", { name: /add owner/iu }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add beneficial owner" }));
 
-    await waitFor(() => expect(idNumberInput()).toBeRequired());
+    await waitFor(() => expect(idNumberInput().hasAttribute("required")).toBe(true));
   });
 });
