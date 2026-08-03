@@ -1212,6 +1212,42 @@ describe User, :vcr do
       (1..n).map { ("a".."z").to_a.sample }.join
     end
 
+    describe "email_almost_unique" do
+      it "tells a signup that the address is held by a deleted account, not that an account exists" do
+        create(:user, email: "taken@example.com").update!(deleted_at: Time.current)
+
+        user = build(:user, email: "taken@example.com")
+
+        expect(user).to_not be_valid
+        expect(user.errors[:base]).to eq([User::DELETED_ACCOUNT_HOLDS_EMAIL_ERROR])
+      end
+
+      it "keeps the generic message when a live account holds the address" do
+        create(:user, email: "live@example.com")
+
+        user = build(:user, email: "live@example.com")
+
+        expect(user).to_not be_valid
+        expect(user.errors[:base]).to eq(["An account already exists with this email."])
+      end
+
+      # The live holder is created FIRST so a predicate that only inspects the first row
+      # would report "deleted" and hand the wrong message to someone who really is
+      # colliding with a live account. The second holder needs update_columns because
+      # the validation under test is what would otherwise refuse to create it.
+      it "keeps the generic message when a live and a deleted account both hold the address" do
+        create(:user, email: "shared@example.com")
+        second = create(:user, email: "other@example.com")
+        second.update_columns(email: "shared@example.com", deleted_at: Time.current)
+        expect(User.by_email("shared@example.com").order(:id).pluck(:deleted_at).map(&:present?)).to eq([false, true])
+
+        user = build(:user, email: "shared@example.com")
+
+        expect(user).to_not be_valid
+        expect(user.errors[:base]).to eq(["An account already exists with this email."])
+      end
+    end
+
     describe "google_analytics_id" do
       [
         { id: nil, valid: true },

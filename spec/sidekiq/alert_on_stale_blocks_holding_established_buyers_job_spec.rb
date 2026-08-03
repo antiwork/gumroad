@@ -43,7 +43,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
     settled_purchases(established_count)
     block_email
 
-    expect(message).to include(email, "#{established_count} settled purchases", "no recent attempt")
+    expect(message).to include(email, "#{established_count} settled purchases")
   end
 
   it "names the date the block was written" do
@@ -211,6 +211,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
     expect(body).to include("does NOT query attempts")
     expect(body).not_to include("have NOT tried recently")
     expect(body).not_to include("has not tried to check out recently")
+    expect(body).not_to include("no recent attempt")
   end
 
   # A truncated scan that found nothing must still report: otherwise the bound, not the platform,

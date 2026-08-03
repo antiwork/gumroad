@@ -32,6 +32,15 @@ class User < ApplicationRecord
 
   INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX = /:/
 
+  # Soft deletion keeps the row's email set, so a deleted account goes on
+  # reserving its address while `by_email` still finds it and login refuses it.
+  # Both surfaces must name that state: telling a returning visitor an account
+  # "already exists" or to "sign up for a new account" sends them round a loop
+  # neither surface can end, because releasing the address is a support write.
+  DELETED_ACCOUNT_HOLDS_EMAIL_ERROR = "This email address belonged to a Gumroad account that was deleted, so it can't be used for a new account yet. Email support@gumroad.com and we'll free it up for you."
+
+  DELETED_ACCOUNT_LOGIN_ERROR = "You cannot log in because your account was deleted. Email support@gumroad.com if you'd like to use this email address for a new account."
+
   MIN_AU_BACKTAX_OWED_CENTS_FOR_CONTACT = 100_00
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
