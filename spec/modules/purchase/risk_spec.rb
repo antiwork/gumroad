@@ -282,7 +282,6 @@ describe Purchase::Risk do
       it "returns error when a blocked buyer ip_address lands in the seller's slots because the seller has none" do
         seller = create(:user, current_sign_in_ip: nil, last_sign_in_ip: nil, account_created_ip: nil)
         purchase = build(:purchase, link: create(:product, user: seller), seller:, ip_address: blocked_ip_address)
-        allow(seller).to receive(:compliant?).and_return(true)
 
         expect do
           purchase.check_for_fraud
@@ -290,13 +289,26 @@ describe Purchase::Risk do
           .from(nil).to(PurchaseErrorCode::BLOCKED_IP_ADDRESS)
       end
 
-      it "still lets a compliant seller sell when it is the seller's own ip_address that is blocked" do
-        seller = create(:user, current_sign_in_ip: blocked_ip_address)
-        purchase = build(:purchase, link: create(:product, user: seller), seller:)
-        allow(seller).to receive(:compliant?).and_return(true)
+      %w[compliant not_reviewed].each do |risk_state|
+        it "lets a #{risk_state} seller sell when it is the seller's own ip_address that is blocked" do
+          seller = create(:user, current_sign_in_ip: blocked_ip_address, user_risk_state: risk_state)
+          purchase = build(:purchase, link: create(:product, user: seller), seller:)
 
-        purchase.check_for_fraud
-        expect(purchase.error_code).to be_nil
+          purchase.check_for_fraud
+          expect(purchase.error_code).to be_nil
+        end
+      end
+
+      it "still blocks the buyer's own blocked ip_address when the seller's is blocked too" do
+        buyer_ip_address = "198.51.100.7"
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: buyer_ip_address, expires_in: 1.hour)
+        seller = create(:user, current_sign_in_ip: blocked_ip_address, user_risk_state: "compliant")
+        purchase = build(:purchase, link: create(:product, user: seller), seller:, ip_address: buyer_ip_address)
+
+        expect do
+          purchase.check_for_fraud
+        end.to change { purchase.error_code }
+          .from(nil).to(PurchaseErrorCode::BLOCKED_IP_ADDRESS)
       end
 
       describe "subscription purchase" do

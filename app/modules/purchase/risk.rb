@@ -104,10 +104,18 @@ module Purchase::Risk
       buyer_ip_addresses = User.where(email: blockable_emails_if_fraudulent_transaction).pluck(:current_sign_in_ip, :last_sign_in_ip, :account_created_ip).flatten.compact.uniq
       seller_ip_addresses = [seller.current_sign_in_ip, seller.last_sign_in_ip, seller.account_created_ip].compact
       ip_addresses_to_check = (seller_ip_addresses + [ip_address].compact).concat(buyer_ip_addresses)
-      return if PlatformBlock.active.where(object_value: ip_addresses_to_check).count == 0
-      # Compacting before slicing let a nil seller slot pull the buyer's IP into the first three
-      # positions, so a blocked buyer satisfied the seller's own carve-out and checked out.
-      return if PlatformBlock.active.where(object_value: seller_ip_addresses).present? && seller.compliant?
+      blocked_ip_addresses = PlatformBlock.active.where(object_value: ip_addresses_to_check).pluck(:object_value)
+      return if blocked_ip_addresses.empty?
+
+      # Screen the buyer, never the seller. A block on the seller's own IP rejects every paid
+      # purchase on their whole storefront, from any buyer on any network, and surfaces as a
+      # card error the buyer cannot act on — so subtract the seller's addresses and block only
+      # on what is left. If the seller is the problem, that is a flag or a suspension.
+      #
+      # Subtracting rather than short-circuiting on "a seller IP is blocked" matters in both
+      # directions: the old carve-out returned even when the buyer's own IP was separately
+      # blocked, and it was gated on compliant?, which excluded every never-reviewed seller.
+      return if (blocked_ip_addresses - seller_ip_addresses).empty?
 
       self.error_code = PurchaseErrorCode::BLOCKED_IP_ADDRESS
       errors.add :base, "Your card was not charged. Please try again on a different browser and/or internet connection."
