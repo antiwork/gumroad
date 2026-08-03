@@ -76,7 +76,7 @@ describe Checkout::StripePaymentPresenter do
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, direct_listed_card: false, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
@@ -99,6 +99,7 @@ describe Checkout::StripePaymentPresenter do
         payment_method_list_token: "issued:#{payment_method_types.join(",")}",
         stripe_link_enabled:,
         stripe_connect_account_id:,
+        **(direct_listed_card ? { direct_listed_card: true } : {}),
       },
     }
   end
@@ -127,7 +128,8 @@ describe Checkout::StripePaymentPresenter do
   end
 
   def stub_geoip_country(ip, country_name)
-    allow(GeoIp).to receive(:lookup).with(ip).and_return(double(country_name:))
+    country_code = Compliance::Countries.find_by_name(country_name)&.alpha2
+    allow(GeoIp).to receive(:lookup).with(ip).and_return(double(country_name:, country_code:))
   end
 
   it "selects Stripe Payment Element for a flagged single-seller charged checkout without a saved card" do
@@ -299,7 +301,7 @@ describe Checkout::StripePaymentPresenter do
     end
   end
 
-  it "selects the buyer-currency presentment Payment Element for a cart spanning several ramped sellers" do
+  it "selects the buyer-currency presentment Payment Element for a cart spanning several sellers" do
     sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
     buyer_currency_display = {
@@ -313,7 +315,6 @@ describe Checkout::StripePaymentPresenter do
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
       checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
     end
 
@@ -326,41 +327,6 @@ describe Checkout::StripePaymentPresenter do
     (sellers || []).each do |seller|
       Feature.deactivate_user(:buyer_local_currency, seller)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
-    end
-  end
-
-  it "falls back to CardElement for a presentment-candidate cart spanning sellers when one is not in the multi-seller ramp" do
-    sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
-    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
-    buyer_currency_display = {
-      display_mode: "buyer_local",
-      buyer_currency_shown: Currency::CAD,
-    }
-    # The ramp is a decision about the cart the buyer sees, so one seller being outside it
-    # withholds the lane from the whole cart: it keeps riding CardElement in canonical USD.
-    add_products = sellers.each_with_index.map do |seller, index|
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(:buyer_local_currency, seller)
-      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller) if index.zero?
-      checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
-    end
-
-    expect(stripe_payment_props(add_products:)).to eq(
-      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
-      fallback_reason: "buyer_currency_presentment_unsupported",
-      disable_wallets: true,
-      request_apple_pay_merchant_tokens: false,
-      payment_element_wallets: false,
-      flat_payment_methods: false,
-      elements_options: nil,
-    )
-  ensure
-    (sellers || []).each do |seller|
-      Feature.deactivate_user(:buyer_local_currency, seller)
-      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
     end
   end
 
@@ -377,7 +343,6 @@ describe Checkout::StripePaymentPresenter do
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
       checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
     end
 
@@ -389,7 +354,6 @@ describe Checkout::StripePaymentPresenter do
     (sellers || []).each do |seller|
       Feature.deactivate_user(:buyer_local_currency, seller)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
     end
   end
 
@@ -1592,6 +1556,40 @@ describe Checkout::StripePaymentPresenter do
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_client_confirm_props)
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "mounts and displays a CAD listing in CAD for a Canadian card buyer in the direct-listed ramp" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("24.48.0.1", "Canada")
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "24.48.0.1")).to eq(
+        payment_element_client_confirm_props(
+          currency: Currency::CAD,
+          presentment_amount_cents: 1500,
+          direct_listed_card: true,
+          disable_wallets: true,
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps that CAD listing on the USD element while the direct-listed ramp is off" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("24.48.0.1", "Canada")
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "24.48.0.1"))
         .to eq(payment_element_client_confirm_props)
     ensure
       deactivate_buyer_currency_flags(seller) if seller

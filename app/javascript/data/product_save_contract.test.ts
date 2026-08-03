@@ -5,6 +5,8 @@ import {
   buildDeletionOperations,
   confirmRichContentMoveSourceDeletions,
   hasDeletions,
+  reorderPreservingMembership,
+  reorderRowsPreservingMembership,
 } from "$app/data/product_save_contract";
 
 // The editor's save used to delete whatever the payload didn't mention. Under
@@ -451,5 +453,100 @@ describe("buildDeletionOperations, version-scoped integrations", () => {
       }),
     );
     expect(afterRefresh.variant_deleted_ids).toEqual({ v1: { integrations: ["discord"] } });
+  });
+});
+
+// The reported failure in gumroad-private#1508: a save that returned 200 and
+// deleted nothing. Under the contract the only payload that produces it is one
+// whose deletion operations name nothing, so a row leaving state without a
+// confirmed-removal id is the client-side defect. Reorder was that route.
+describe("reorderPreservingMembership", () => {
+  const rows = [{ id: "a" }, { id: "b" }, { id: "c" }];
+
+  it("applies the order it was given", () => {
+    expect(reorderPreservingMembership(rows, ["c", "a", "b"])).toEqual([{ id: "c" }, { id: "a" }, { id: "b" }]);
+  });
+
+  it("keeps a row the order omitted instead of dropping it", () => {
+    expect(reorderPreservingMembership(rows, ["c", "a"])).toEqual([{ id: "c" }, { id: "a" }, { id: "b" }]);
+  });
+
+  it("keeps every row when the order is empty", () => {
+    expect(reorderPreservingMembership(rows, [])).toEqual(rows);
+  });
+
+  it("ignores ids that are not in the list and never duplicates one", () => {
+    expect(reorderPreservingMembership(rows, ["b", "ghost", "b", "a", "c"])).toEqual([
+      { id: "b" },
+      { id: "a" },
+      { id: "c" },
+    ]);
+  });
+
+  // Unreachable today (external ids are unique), but a helper whose name
+  // promises membership must not quietly drop a twin if that ever changes.
+  it("keeps both rows when two share an id", () => {
+    const twins = [
+      { id: "a", n: 1 },
+      { id: "a", n: 2 },
+      { id: "b", n: 3 },
+    ];
+
+    expect(reorderPreservingMembership(twins, ["b", "a"])).toEqual([
+      { id: "b", n: 3 },
+      { id: "a", n: 1 },
+      { id: "a", n: 2 },
+    ]);
+  });
+});
+
+// The content-tab page sortable reports its new order as the row objects, not
+// ids, and the library annotates those objects (a page's `chosen` drag flag is
+// read off them) — so they are kept rather than looked up again.
+describe("reorderRowsPreservingMembership", () => {
+  const all = [{ id: "p1" }, { id: "p2" }, { id: "p3" }];
+
+  it("applies the reported order", () => {
+    expect(reorderRowsPreservingMembership([{ id: "p3" }, { id: "p1" }, { id: "p2" }], all)).toEqual([
+      { id: "p3" },
+      { id: "p1" },
+      { id: "p2" },
+    ]);
+  });
+
+  it("keeps a page the report omitted instead of dropping it", () => {
+    expect(reorderRowsPreservingMembership([{ id: "p3" }, { id: "p1" }], all)).toEqual([
+      { id: "p3" },
+      { id: "p1" },
+      { id: "p2" },
+    ]);
+  });
+
+  it("keeps every page when the report is empty", () => {
+    expect(reorderRowsPreservingMembership([], all)).toEqual(all);
+  });
+
+  it("keeps the reported objects, not the originals", () => {
+    const annotated = { id: "p1", chosen: true };
+    const result = reorderRowsPreservingMembership([annotated], all);
+
+    expect(result[0]).toBe(annotated);
+    expect(result).toHaveLength(3);
+  });
+
+  it("drops a page the product never had instead of adding it", () => {
+    expect(reorderRowsPreservingMembership([{ id: "ghost" }, { id: "p2" }], all)).toEqual([
+      { id: "p2" },
+      { id: "p1" },
+      { id: "p3" },
+    ]);
+  });
+
+  it("emits a repeated id once", () => {
+    expect(reorderRowsPreservingMembership([{ id: "p2" }, { id: "p2" }, { id: "p1" }], all)).toEqual([
+      { id: "p2" },
+      { id: "p1" },
+      { id: "p3" },
+    ]);
   });
 });

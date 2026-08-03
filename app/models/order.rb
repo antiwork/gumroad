@@ -13,6 +13,7 @@ class Order < ApplicationRecord
   attr_accessor :setup_future_charges
 
   has_flags 1 => :DEPRECATED_seller_receipt_enabled,
+            2 => :partially_successful,
             column: "flags",
             flag_query_mode: :bit_operator,
             check_for_column: false
@@ -60,6 +61,34 @@ class Order < ApplicationRecord
 
   def successful_charges
     @_successful_charges ||= charges.select { _1.successful_purchases.any? }
+  end
+
+  # Partial success is a reachable outcome of one checkout — `Order::ChargeService` rescues per
+  # seller group, so an exception in seller B's group leaves seller A's charge captured — and until
+  # this is recorded the outcome exists only as the derived states of the child purchases, so
+  # nothing can query or reconcile it.
+  #
+  # Set-only. The predicate is NOT monotone: a preorder leaves `ALL_SUCCESS_STATES` when it
+  # concludes (`preorder_authorization_successful` → `preorder_concluded_{successfully,
+  # unsuccessfully}`), so a later sibling settling would recompute `false` and clear a flag that was
+  # correct when written. Partial success is a fact about the checkout, not a current-state query.
+  #
+  # `update_all` with a bitwise OR rather than a save: sibling line items in the same order settle
+  # concurrently, and a read-modify-write of `flags` would let one overwrite the other's bits.
+  # It also keeps this derived bookkeeping out of `after_save :schedule_review_reminder!` — the
+  # order row is otherwise saved only at creation, so an ordinary save from the charge path would
+  # fire the reminder hook that the purchase-success transition owns.
+  #
+  # Reads the sibling states from the DB rather than a loaded association: the caller is
+  # RecordOrderChargeOutcomeJob, running after each line item's own transaction has committed, and a
+  # concurrently-settled sibling is only visible on a fresh read.
+  def record_charge_outcome!
+    return if partially_successful?
+    return unless purchases.checkout_succeeded.exists? && purchases.checkout_failed.exists?
+
+    bit = self.class.flag_mapping["flags"][:partially_successful]
+    self.class.where(id:).update_all("flags = flags | #{bit}, updated_at = #{self.class.connection.quote(Time.current)}")
+    self.partially_successful = true
   end
 
   # Called from Purchase when a purchase transitions to a successful state. The

@@ -170,7 +170,7 @@ class Order::PreparePaymentIntentService
     def apply_previewed_card_country(preview)
       # Remember which payment method the buyer actually picked in the Payment Element:
       # a method-forced local method (iDEAL/Bancontact) changes the currency the deferred
-      # intent must be created in (see method_forced_presentment_for).
+      # intent must be created in (see client_confirm_presentment_for).
       @previewed_payment_method_type = preview[:type]
       country = previewed_country(preview)
       purchases_to_charge.each do |purchase|
@@ -418,8 +418,8 @@ class Order::PreparePaymentIntentService
       return if block_klarna_final_amount_outside_window
 
       charge = build_charge
-      presentment = method_forced_presentment_for(charge)
-      return fail_purchases_with(GENERIC_CHARGE_ERROR) if presentment.nil? && method_forced_presentment_required?
+      presentment = client_confirm_presentment_for(charge)
+      return fail_purchases_with(GENERIC_CHARGE_ERROR) if presentment.nil? && client_confirm_presentment_required?
 
       @charge_with_prepare_time_presentment = charge if presentment.present?
       # Runs after the presentment because Pix's floor is denominated in BRL, which only the
@@ -483,15 +483,14 @@ class Order::PreparePaymentIntentService
     #   2. The buyer picked ANY other method (card, Link) on a Payment Element that was
     #      mounted in a forced currency (the method-forced shape: a single item priced in a
     #      forced currency whose resolver result offers a capability-eligible local method).
-    #      The ConfirmationToken
-    #      inherits the element's currency, so a canonical USD intent can never accept
-    #      it — Stripe rejects the confirm with a currency mismatch.
+    #      The ConfirmationToken inherits the element's currency, so a canonical USD
+    #      intent can never accept it.
+    #   3. A direct-listed card Element mounted in the buyer's matching listed currency.
     # Returns nil (canonical USD intent, no presentment rows — byte-for-byte today's
     # behavior) for every other checkout, for ineligible carts, and when the feature
-    # flags are off: the eligibility service inside Charge::MethodForcedPresentment
-    # enforces all of that, and the service also swallows its own failures into a nil
-    # fallback.
-    def method_forced_presentment_for(charge)
+    # flags are off. A non-USD Element never falls back to USD after tokenization; the
+    # caller turns a missing presentment into a synchronous failure.
+    def client_confirm_presentment_for(charge)
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
       forced_currency = intent_forced_currency
@@ -501,8 +500,14 @@ class Order::PreparePaymentIntentService
         # all) or logged by Charge::MethodForcedPresentment itself. This branch skips the service
         # entirely, so without a line here an operator investigating "iDEAL checkouts fail for
         # this cart shape" sees only the generic charge error the caller raises, with no reason.
-        Rails.logger.info("Skipping method-forced presentment for order #{order.id}: a free or test line is not priced in #{forced_currency}")
+        Rails.logger.info("Skipping client-confirm presentment for order #{order.id}: a free or test line is not priced in #{forced_currency}")
         return nil
+      end
+
+      direct_listed_decision = client_confirm_direct_listed_decision
+      if direct_listed_decision.eligible? && direct_listed_decision.direct_listed_amount? &&
+         direct_listed_decision.currency == forced_currency
+        return direct_listed_presentment_for(charge, direct_listed_decision)
       end
 
       Charge::MethodForcedPresentment.new(
@@ -519,12 +524,52 @@ class Order::PreparePaymentIntentService
       ).perform
     end
 
-    # The currency the Payment Element was mounted in when it differs from USD, derived
-    # from the same basis as Checkout::StripePaymentPresenter#method_forced_shape?
-    # (seller flags + a resolver result that exposes a capability-eligible local method +
-    # purchases all priced in the same currency some payment method forces). Nil everywhere else —
-    # flags off, no launched method for the currency in live mode, USD-priced or mixed-currency
-    # carts — which keeps every other checkout on the canonical USD intent.
+    def client_confirm_direct_listed_decision
+      @client_confirm_direct_listed_decision ||= Checkout::BuyerCurrencyEligibility.new(
+        order:,
+        seller:,
+        merchant_account:,
+        chargeable: nil,
+        purchases: purchases_to_charge,
+        params:,
+        setup_future_charges: false,
+        off_session: false,
+        client_confirm: true
+      ).decision
+    end
+
+    def direct_listed_presentment_for(charge, decision)
+      presentment = Charge::DirectListedPresentment.new(
+        charge:,
+        purchases: purchases_to_charge,
+        gumroad_amount_cents:,
+        currency: decision.currency
+      ).perform
+
+      Charge::MethodForcedPresentment::Result.new(
+        presentment_total_cents: presentment.presentment_total_cents,
+        presentment_currency: decision.currency,
+        presentment_gumroad_amount_cents: presentment.presentment_gumroad_amount_cents,
+        stripe_fx_quote_id: nil,
+        idempotency_key: Charge::MethodForcedPresentment.idempotency_key_for(
+          charge:,
+          presentment_currency: decision.currency
+        )
+      )
+    rescue StandardError => e
+      ErrorNotifier.notify(e, context: {
+                             order_id: order.id,
+                             charge_id: charge.id,
+                             charge_external_id: charge.external_id,
+                             merchant_account_id: merchant_account.id,
+                             presentment_currency: decision.currency,
+                           })
+      Rails.logger.error("Direct-listed client-confirm presentment failed for order #{order.id}: #{e.class} #{e.message}")
+      nil
+    end
+
+    # Legacy fallback for clients that did not report their Element's mount currency. It
+    # only infers the method-forced surface; the new direct-listed card surface always reports.
     def element_mount_forced_currency
       return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
 
@@ -545,7 +590,7 @@ class Order::PreparePaymentIntentService
     # cart non-uniform, so the Element mounted in canonical USD, and building a forced-currency
     # presentment from the paid subset alone would create an intent the ConfirmationToken can
     # never confirm. Returning false here leaves the checkout on the canonical USD intent, and
-    # for a token minted on a forced-currency element #method_forced_presentment_required? turns
+    # for a token minted on a forced-currency element #client_confirm_presentment_required? turns
     # that into a clean synchronous failure instead of an unconfirmable intent.
     def free_and_test_lines_share_currency?(forced_currency)
       (charge_purchases - purchases_to_charge).all? do |purchase|
@@ -578,7 +623,7 @@ class Order::PreparePaymentIntentService
     #
     # A reported non-USD currency we cannot legitimately build an intent in (the seller is not
     # enabled for buyer-currency charging, we force no method in that currency, or the cart is not
-    # uniformly priced in it) returns nil here, and #method_forced_presentment_required? turns that
+    # uniformly priced in it) returns nil here, and #client_confirm_presentment_required? turns that
     # into a clean synchronous failure rather than an intent the token can never confirm.
     #
     # Nothing reported at all means an older client, so fall back to inferring the mount currency
@@ -607,19 +652,21 @@ class Order::PreparePaymentIntentService
 
     # Whether we can legitimately create the intent in the currency the browser reported. The
     # browser is trusted about WHICH currency its element used, never about whether that currency
-    # is chargeable: that stays server-side, on the same conditions the checkout page renders on —
-    # the seller is enabled for buyer-currency charging, some payment method forces that currency,
-    # and every line in the charge is priced in it (the only shape where one PaymentIntent can be
-    # created in it). Anything else fails closed.
+    # is chargeable: that stays server-side, on either the direct-listed eligibility decision or
+    # the method-forced surface's gates. Anything else fails closed.
     def honorable_element_mount_currency?(currency)
+      direct_listed_decision = client_confirm_direct_listed_decision
+      return true if direct_listed_decision.eligible? && direct_listed_decision.direct_listed_amount? &&
+                     direct_listed_decision.currency == currency
+
       return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       return false unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
 
       uniform_method_forced_purchase_currency == currency
     end
 
-    # Once the buyer confirmed on a forced-currency Payment Element — with a forced-currency
-    # method (iDEAL/Bancontact) or any other method the element offered (card, Link) — the
+    # Once the buyer confirmed on a non-USD Payment Element — through a direct-listed card
+    # surface, a forced-currency method, or another method that Element offered — the
     # canonical USD intent is never a usable fallback: Stripe rejects confirming such a
     # ConfirmationToken against a USD intent, synchronously and without a payment_failed
     # webhook, so the purchase would sit in_progress until the abandonment worker instead of
@@ -632,7 +679,7 @@ class Order::PreparePaymentIntentService
     # must fail the order rather than fall back to dollars. A reported USD mount currency requires
     # nothing — the canonical USD intent is exactly what that token confirms against, which is the
     # dominant shape in gumroad-private#1382.
-    def method_forced_presentment_required?
+    def client_confirm_presentment_required?
       return false if @previewed_payment_method_type.blank?
 
       if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).present?

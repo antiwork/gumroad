@@ -106,6 +106,19 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
   },
 };
 
+const directListedCardConfig: CheckoutPaymentConfig = {
+  ...paymentElementClientConfirmConfig,
+  disable_wallets: true,
+  flat_payment_methods: true,
+  elements_options: {
+    ...paymentElementClientConfirmConfig.elements_options,
+    currency: "cad",
+    presentment_amount_cents: 1_500,
+    listed_currency_display: { currency: "cad", subunit_to_unit: 100 },
+    direct_listed_card: true,
+  },
+};
+
 const product = (overrides: Partial<Product> = {}): Product => ({
   permalink: "product-a",
   name: "Product A",
@@ -649,6 +662,60 @@ describe("getStripePaymentElementAmount", () => {
         }),
       ),
     ).toBe(98);
+  });
+});
+
+describe("direct-listed card element", () => {
+  it("mounts with the listed currency and amount", () => {
+    const s = state({ checkoutPayment: directListedCardConfig });
+
+    expect(getStripePaymentElementAmount(s)).toBe(1_500);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("remounts in canonical USD when a tip makes the direct-listed charge ineligible", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [product({ hasTippingEnabled: true })],
+      tip: { type: "percentage", percentage: 10 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: 1_100,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(1_100);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+
+  it("remounts in canonical USD for a shipping cart", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [product({ requireShipping: true })],
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 200,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: 1_000,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(1_200);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
   });
 });
 

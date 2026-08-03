@@ -4,7 +4,20 @@ class User < ApplicationRecord
   devise :database_authenticatable, :registerable, :confirmable, :omniauthable,
          :recoverable, :rememberable, :trackable, :pwned_password
 
-  has_paper_trail
+  # Every save that touches these writes them verbatim into `versions.object_changes`, where GDPR
+  # erasure does not reach and rows survive ~10 weeks (gumroad-private#1781). `otp_secret_key` is the
+  # plaintext TOTP shared secret and `confirmation_token` is stored raw, so a retained diff
+  # reproduces a second factor. `email` is deliberately NOT excluded — `versions_for(:email,
+  # :payment_address)` is a live admin consumer (Admin::Users::EmailChangesController).
+  has_paper_trail skip: %w[
+    encrypted_password
+    reset_password_token
+    confirmation_token
+    otp_secret_key
+    twitter_oauth_token
+    twitter_oauth_secret
+    facebook_access_token
+  ]
   has_one_time_password
   include Flipper::Identifier, FlagShihTzu, CurrencyHelper, JsonData, Deletable, MoneyBalance,
           DeviseInternal, PayoutSchedule, SocialTwitter, SocialGoogle, SocialApple, SocialGoogleMobile,

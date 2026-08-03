@@ -195,7 +195,6 @@ describe CustomerSurchargeController, :vcr do
       [@user, other_seller].each do |seller|
         Feature.activate_user(:buyer_local_currency, seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-        Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
       end
 
       post "calculate_all", params: {
@@ -215,7 +214,6 @@ describe CustomerSurchargeController, :vcr do
         Feature.deactivate_user(:buyer_local_currency, seller)
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
       end
-      [@user, other_seller].compact.each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
     end
 
     it "returns no quote props for buyer currencies Gumroad stores in different minor units than Stripe charges" do

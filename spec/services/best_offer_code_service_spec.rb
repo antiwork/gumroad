@@ -51,6 +51,17 @@ describe BestOfferCodeService do
           expect(subject.result).to eq({ valid: false, error_code: :invalid_offer })
         end
       end
+
+      context "and it has leading whitespace" do
+        let(:url_code) { " #{url_offer_code.code}" }
+
+        it "matches the code and echoes it as submitted" do
+          result = subject.result
+
+          expect(result&.dig(:valid)).to be(true)
+          expect(result&.dig(:code)).to eq(" URL10")
+        end
+      end
     end
 
     context "when only default_code is provided" do

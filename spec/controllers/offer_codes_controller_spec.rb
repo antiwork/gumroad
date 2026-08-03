@@ -25,6 +25,14 @@ describe OfferCodesController do
       expect(response.parsed_body).to eq({ "error_message" => "Sorry, the discount code you wish to use is invalid.", "error_code" => "invalid_offer", "valid" => false })
     end
 
+    it "applies a code pasted with leading whitespace" do
+      offer_code_params[:code] = " #{offer_code.code}"
+      get :compute_discount, params: offer_code_params
+
+      expect(response.parsed_body["valid"]).to be true
+      expect(response.parsed_body["products_data"]).to have_key(product.unique_permalink)
+    end
+
     it "returns sold_out error in response when offer code is sold out" do
       offer_code.update_attribute(:max_purchase_count, 0)
       get :compute_discount, params: offer_code_params

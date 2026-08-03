@@ -176,6 +176,48 @@ export const buildDeletionOperations = (
   return operations;
 };
 
+// A reorder must never change WHICH rows exist. The order comes from the DOM,
+// so a row missing from it (a drag that lands mid-render, a nested sortable
+// swallowing an id) silently drops that row from state — and dropping a version
+// without a confirmed-removal id produces the save contract's silent no-op: the
+// row is gone from the editor, named in no deletion operation, and the save
+// reports success having deleted nothing (gumroad-private#1508).
+//
+// Both helpers below move what the order names and keep whatever it omitted,
+// appending the leftovers in their previous relative order. Rows are matched by
+// consuming one source row per named row, so a repeated id cannot duplicate a
+// row or silently drop its twin. Deletion has exactly one route: the
+// confirmation modal.
+
+// For a sortable that reports its new order as ids.
+export const reorderPreservingMembership = <T extends { id: string }>(items: T[], newOrder: string[]): T[] => {
+  const remaining = [...items];
+  const reordered: T[] = [];
+  for (const id of newOrder) {
+    const index = remaining.findIndex((candidate) => candidate.id === id);
+    if (index !== -1) reordered.push(...remaining.splice(index, 1));
+  }
+  return [...reordered, ...remaining];
+};
+
+// For a sortable that reports its new order as the row objects themselves.
+// Those objects are kept rather than looked up again, because the library
+// annotates them (a page's `chosen` drag flag is read straight off them) — but
+// only rows that consume a source row survive, so a report carrying a duplicate
+// or an id the product never had cannot add rows either.
+export const reorderRowsPreservingMembership = <T extends { id: string }>(reported: T[], all: T[]): T[] => {
+  const remaining = [...all];
+  const reordered: T[] = [];
+  for (const row of reported) {
+    const index = remaining.findIndex((candidate) => candidate.id === row.id);
+    if (index !== -1) {
+      remaining.splice(index, 1);
+      reordered.push(row);
+    }
+  }
+  return [...reordered, ...remaining];
+};
+
 // True when this save asks the server to remove anything at all. Used to decide
 // whether the revision token is required: a save that deletes nothing does not
 // need to prove which snapshot it came from, so a stale tab can still fix a

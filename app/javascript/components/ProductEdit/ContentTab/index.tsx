@@ -40,6 +40,7 @@ import {
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
 } from "$app/data/product_edit";
+import { reorderRowsPreservingMembership } from "$app/data/product_save_contract";
 import { type Post } from "$app/types/workflow";
 import { escapeRegExp } from "$app/utils";
 import { assertDefined } from "$app/utils/assert";
@@ -198,14 +199,22 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     : product.variants.find((variant) => variant.id === selectedVariantId);
   const pages: (Page & { chosen?: boolean })[] = selectedVariant ? selectedVariant.rich_content : product.rich_content;
   const pagesRef = useRefToLatest(pages);
-  const updatePages = (pages: Page[]) =>
+  const setPages = (nextPages: Page[]) =>
     updateProduct((product) => {
-      if (selectedVariant) selectedVariant.rich_content = pages;
+      if (selectedVariant) selectedVariant.rich_content = nextPages;
       else {
         product.has_same_rich_content_for_all_variants = true;
-        product.rich_content = pages;
+        product.rich_content = nextPages;
       }
     });
+  // Only the sortable goes through this. Its report is a DOM-derived list, so a
+  // page missing from it must not leave state — it carries no confirmed-removal
+  // id, and would vanish from the editor while the server correctly keeps the
+  // row (gumroad-private#1508). Intentional removals (the confirm modal, the
+  // copy-from-version replacement) call setPages directly, so reconciliation
+  // cannot resurrect what the seller actually deleted.
+  const reorderPages = (reportedPages: Page[]) =>
+    setPages(reorderRowsPreservingMembership(reportedPages, pagesRef.current));
   // Records that the seller explicitly deleted these pages, so the server-side
   // wipe guard allows removing them even though they may still have content.
   const confirmPageRemovals = (removedPages: Page[]) => {
@@ -225,7 +234,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       title: null,
       updated_at: new Date().toISOString(),
     };
-    updatePages([...pages, page]);
+    setPages([...pages, page]);
     setSelectedPageId(page.id);
     return page;
   };
@@ -371,7 +380,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       baseEditorOptions(contentEditorExtensions).extensions,
     );
 
-    if (selectedPage) updatePages(pages.map((page) => (page === selectedPage ? { ...page, description } : page)));
+    if (selectedPage) setPages(pages.map((page) => (page === selectedPage ? { ...page, description } : page)));
     else addPage(description);
   });
   const handleCreatePageClick = () => {
@@ -555,7 +564,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     // Replacing this variant's pages deletes the current ones — record that the
     // seller confirmed it (the copy-from-version dialog) for the server-side guard.
     confirmPageRemovals(pages);
-    updatePages(cloned);
+    setPages(cloned);
     if (cloned[0]) setSelectedPageId(cloned[0].id);
     setCopyFromOpen(false);
   };
@@ -899,7 +908,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     handle="[aria-grabbed]"
                     tag={PageList}
                     list={pages.map((page) => ({ ...page, id: page.id }))}
-                    setList={updatePages}
+                    setList={reorderPages}
                   >
                     <>
                       {isDesktop ? null : (
@@ -929,7 +938,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                 if (!isDesktop) setPagesExpanded(false);
                               }}
                               onUpdate={(title) =>
-                                updatePages(
+                                setPages(
                                   pagesRef.current.map((existing) =>
                                     existing.id === page.id ? { ...existing, title } : existing,
                                   ),
@@ -1076,7 +1085,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 onClick={() => {
                   if (!editor) return;
                   confirmPageRemovals([confirmingDeletePage]);
-                  updatePages(pages.filter((page) => page !== confirmingDeletePage));
+                  setPages(pages.filter((page) => page !== confirmingDeletePage));
                   setConfirmingDeletePage(null);
                 }}
               >

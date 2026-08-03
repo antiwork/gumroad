@@ -146,6 +146,44 @@ describe SaveUtmLinkService do
           ).perform
         end.to raise_error(ActiveRecord::RecordInvalid, "Validation failed: Permalink is invalid")
       end
+
+      it "does not create a link pointed at another seller's product" do
+        other_sellers_product = create(:product)
+
+        expect do
+          described_class.new(
+            seller:,
+            params: {
+              title: "Test Link",
+              target_resource_id: other_sellers_product.external_id,
+              target_resource_type: "product_page",
+              permalink: "abc12345",
+              utm_source: "facebook",
+              utm_medium: "social",
+              utm_campaign: "summer"
+            }
+          ).perform
+        end.to raise_error(ActiveRecord::RecordInvalid, "Validation failed: Target resource can't be blank")
+      end
+
+      it "does not create a link pointed at another seller's post" do
+        other_sellers_post = create(:audience_post, :published, shown_on_profile: true)
+
+        expect do
+          described_class.new(
+            seller:,
+            params: {
+              title: "Test Link",
+              target_resource_id: other_sellers_post.external_id,
+              target_resource_type: "post_page",
+              permalink: "abc12345",
+              utm_source: "facebook",
+              utm_medium: "social",
+              utm_campaign: "summer"
+            }
+          ).perform
+        end.to raise_error(ActiveRecord::RecordInvalid, "Validation failed: Target resource can't be blank")
+      end
     end
 
     context "when 'utm_link' is provided" do

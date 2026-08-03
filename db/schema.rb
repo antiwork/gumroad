@@ -1820,6 +1820,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_183000) do
     t.text "message"
     t.virtual "has_message", type: :boolean, null: false, as: "if((`message` is null),false,true)", stored: true
     t.datetime "deleted_at"
+    t.datetime "seller_notified_at"
     t.index ["link_id", "has_message", "created_at"], name: "idx_on_link_id_has_message_created_at_2fcf6c0c64"
     t.index ["purchase_id"], name: "index_product_reviews_on_purchase_id", unique: true
   end

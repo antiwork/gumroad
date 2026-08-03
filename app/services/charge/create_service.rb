@@ -298,6 +298,16 @@ class Charge::CreateService
       raise BuyerCurrencyQuoteInvalid, "charge-time eligibility fallback (#{eligibility_decision.fallback_reason}) with a quote token present"
     end
 
+    if eligibility_decision.direct_listed_amount?
+      # This lane mints no quote, so the display side never issues a token for a cart that
+      # reaches it. A token here was issued for a different cart, and its locked total is not
+      # the listed price about to be charged — fail closed like the fallback case above rather
+      # than charge past a total the buyer confirmed.
+      raise BuyerCurrencyQuoteInvalid, "direct-listed presentment with a quote token present" if quote_token.present?
+
+      return direct_listed_presentment_processor_args(eligibility_decision)
+    end
+
     if quote_token.blank?
       Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: missing_buyer_currency_quote")
       return {}
@@ -334,6 +344,34 @@ class Charge::CreateService
       processor_gumroad_amount_cents: presentment_result.processor_gumroad_amount_cents,
       stripe_fx_quote_id: presentment_result.stripe_fx_quote_id,
     }
+  end
+
+  def direct_listed_presentment_processor_args(eligibility_decision)
+    # No blank check: perform either raises (caught below) or returns a populated Result.
+    presentment_result = Charge::DirectListedPresentment.new(
+      charge:,
+      purchases:,
+      gumroad_amount_cents:,
+      currency: eligibility_decision.currency
+    ).perform
+
+    @presentment_currency_attempted = presentment_result.processor_currency
+
+    {
+      processor_amount_cents: presentment_result.processor_amount_cents,
+      processor_currency: presentment_result.processor_currency,
+      processor_gumroad_amount_cents: presentment_result.processor_gumroad_amount_cents,
+      stripe_fx_quote_id: nil,
+    }
+  rescue StandardError => e
+    ErrorNotifier.notify(e, context: {
+                           charge_id: charge.id,
+                           charge_external_id: charge.external_id,
+                           merchant_account_id: merchant_account.id,
+                           presentment_currency: eligibility_decision.currency,
+                         })
+    Rails.logger.info("Buyer currency direct-listed presentment failed for charge #{charge.external_id}: #{e.class} #{e.message}")
+    raise BuyerCurrencyQuoteInvalid, "direct-listed presentment failed"
   end
 
   # Processor args for a membership renewal presented in the currency stored at signup, or {}
@@ -420,6 +458,15 @@ class Charge::CreateService
     Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
   end
 
+  # Keys on the Stripe FX quote id, which is fresh per quote and therefore per attempt, so a
+  # retry of the same create is idempotent while a re-quote after a decline is not.
+  #
+  # The direct-listed lane deliberately gets NO key. The obvious substitute — external id +
+  # currency, as Charge::MethodForcedPresentment.idempotency_key_for uses — is stable across
+  # attempts on this lane, because the charge row is found-or-created per seller and no
+  # ConfirmationToken scopes it the way Order::PreparePaymentIntentService scopes the
+  # method-forced key. Stripe would then replay a declined intent for 24h and the buyer could
+  # not retry their card at all. Duplicate intents are recoverable; a locked-out buyer is not.
   def payment_intent_idempotency_key(presentment_args)
     stripe_fx_quote_id = presentment_args[:stripe_fx_quote_id]
     return if stripe_fx_quote_id.blank?

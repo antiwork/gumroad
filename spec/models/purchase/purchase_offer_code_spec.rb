@@ -46,6 +46,47 @@ describe Purchase, "offer-code capacity" do
     expect(purchase.error_code).to eq(PurchaseErrorCode::OFFER_CODE_SOLD_OUT)
   end
 
+  it "excludes its own once-per-cart allocation when picking the usage error" do
+    product = create(:product)
+    offer_code = create(
+      :offer_code,
+      products: [product],
+      amount_cents: 100,
+      once_per_cart: true,
+      max_purchase_count: 1
+    )
+    completed_purchase = create(:purchase, link: product, seller: product.user, offer_code:, purchaser: nil)
+    completed_purchase.create_purchase_offer_code_discount!(
+      offer_code:,
+      offer_code_amount: 100,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      once_per_cart_allocation_id: SecureRandom.uuid,
+      pre_discount_minimum_price_cents: product.price_cents
+    )
+
+    allocation_id = SecureRandom.uuid
+    purchase = build(:purchase_in_progress, link: product, seller: product.user, offer_code:)
+    purchase.build_purchase_offer_code_discount(
+      offer_code:,
+      offer_code_amount: 100,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      once_per_cart_allocation_id: allocation_id,
+      pre_discount_minimum_price_cents: product.price_cents
+    )
+
+    # The error branch must read capacity with the same exclusions as the
+    # availability check, or the two usage messages can disagree.
+    expect(offer_code).to receive(:quantity_left)
+      .with(hash_including(excluding_once_per_cart_allocation_ids: [allocation_id]))
+      .and_call_original
+
+    purchase.send(:add_offer_code_usage_error, offer_code)
+
+    expect(purchase.error_code).to eq(PurchaseErrorCode::OFFER_CODE_SOLD_OUT)
+  end
+
   it "sizes a temporary-discount mandate from the saved PWYW total" do
     product = create(:membership_product, price_cents: 10_00, customizable_price: true)
     offer_code = create(:offer_code, products: [product], amount_cents: 5_00, once_per_cart: true)

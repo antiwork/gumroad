@@ -294,6 +294,190 @@ describe Charge::CreateService, :vcr do
                                 params: { buyer_currency_quote: "locked-token" }).perform
     end
 
+    it "charges a listed-currency cart directly in the buyer's currency without a quote token" do
+      seller = create(:user, disable_buyer_local_currency: false)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      stripe_chargeable = instance_double(StripeChargeablePaymentMethod)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp", get_chargeable_for: stripe_chargeable)
+      product = create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 15_00)
+      purchase = create(:purchase,
+                        link: product,
+                        seller:,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        ip_address: "203.0.113.1",
+                        displayed_price_cents: 15_00,
+                        displayed_price_currency_type: Currency::CAD,
+                        rate_converted_to_usd: "0.8",
+                        price_cents: 18_75,
+                        tax_cents: 1_00,
+                        was_tax_excluded_from_price: true,
+                        total_transaction_cents: 21_75)
+      captured_intent_args = nil
+
+      expect(Checkout::BuyerCurrencyQuote).not_to receive(:verify!)
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*args, **kwargs|
+        captured_intent_args = { positional: args, keyword: kwargs }
+        expect(ChargePresentment.sole).to have_attributes(presentment_currency: Currency::CAD,
+                                                          presentment_total_cents: 15_80,
+                                                          presentment_gumroad_amount_cents: 2_40,
+                                                          stripe_fx_quote_id: nil)
+        expect(purchase.reload.purchase_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                                        presentment_price_cents: 15_00,
+                                                                        presentment_seller_tax_cents: 80,
+                                                                        presentment_shipping_cents: 0,
+                                                                        presentment_total_cents: 15_80)
+        nil
+      end
+
+      Charge::CreateService.new(order:,
+                                seller:,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents: 21_75,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: false,
+                                off_session: false,
+                                statement_description: seller.name_or_username,
+                                params: {
+                                  payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+                                  payment_element_mount_currency: Currency::CAD,
+                                }).perform
+
+      expect(captured_intent_args[:positional][2]).to eq(21_75)
+      expect(captured_intent_args[:keyword]).to include(processor_amount_cents: 15_80,
+                                                        processor_currency: Currency::CAD,
+                                                        processor_gumroad_amount_cents: 2_40,
+                                                        stripe_fx_quote_id: nil)
+      # Deliberate: a stable key on this lane would make Stripe replay a declined intent for
+      # 24h (see Charge::CreateService#payment_intent_idempotency_key).
+      expect(captured_intent_args[:keyword]).not_to have_key(:idempotency_key)
+      expect(purchase.error_code).to be_nil
+      expect(purchase.errors[:base]).to be_empty
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      end
+    end
+
+    it "fails closed when direct listed presentment fails" do
+      seller = create(:user, disable_buyer_local_currency: false)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      stripe_chargeable = instance_double(StripeChargeablePaymentMethod)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp", get_chargeable_for: stripe_chargeable)
+      product = create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 15_00)
+      purchase = create(:purchase,
+                        link: product,
+                        seller:,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        ip_address: "203.0.113.1",
+                        displayed_price_cents: 15_00,
+                        displayed_price_currency_type: Currency::CAD,
+                        rate_converted_to_usd: "0.8",
+                        price_cents: 18_75,
+                        total_transaction_cents: 18_75)
+      allow_any_instance_of(Charge::DirectListedPresentment).to receive(:perform).and_raise("direct listed failed")
+      expect(ErrorNotifier).to receive(:notify)
+        .with(an_instance_of(RuntimeError).and(having_attributes(message: "direct listed failed")),
+              context: hash_including(merchant_account_id: merchant_account.id, presentment_currency: Currency::CAD))
+      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+      Charge::CreateService.new(order:,
+                                seller:,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents: 18_75,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: false,
+                                off_session: false,
+                                statement_description: seller.name_or_username,
+                                params: {
+                                  payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+                                  payment_element_mount_currency: Currency::CAD,
+                                }).perform
+
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      end
+    end
+
+    it "refuses a direct-listed charge that arrives with a quote token" do
+      seller = create(:user, disable_buyer_local_currency: false)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      stripe_chargeable = instance_double(StripeChargeablePaymentMethod)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp", get_chargeable_for: stripe_chargeable)
+      product = create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 15_00)
+      purchase = create(:purchase,
+                        link: product,
+                        seller:,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        ip_address: "203.0.113.1",
+                        displayed_price_cents: 15_00,
+                        displayed_price_currency_type: Currency::CAD,
+                        rate_converted_to_usd: "0.8",
+                        price_cents: 18_75,
+                        total_transaction_cents: 18_75)
+
+      called = []
+      allow(Charge::DirectListedPresentment).to receive(:new) { called << :presentment; raise "should not be called" }
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) { called << :charge; nil }
+
+      Charge::CreateService.new(order:,
+                                seller:,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents: 18_75,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: false,
+                                off_session: false,
+                                statement_description: seller.name_or_username,
+                                params: {
+                                  buyer_currency_quote: "stale-token",
+                                  payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+                                  payment_element_mount_currency: Currency::CAD,
+                                }).perform
+
+      expect(called).to be_empty
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      end
+    end
+
     it "converts the e-mandate cap into the charge currency on a buyer-presentment charge" do
       # The cap is registered with this charge and then governs every future off-session
       # renewal. Stripe reads mandate_options[:amount] in the mandate's own currency, and the
@@ -587,7 +771,6 @@ describe Charge::CreateService, :vcr do
       sellers.each do |seller|
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
         Feature.activate_user(:buyer_local_currency, seller)
-        Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
       end
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
       allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
@@ -681,99 +864,6 @@ describe Charge::CreateService, :vcr do
       (sellers || []).each do |seller|
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
         Feature.deactivate_user(:buyer_local_currency, seller)
-        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
-      end
-    end
-
-    it "fails a multi-seller charge closed when the lane is withdrawn between quote and charge" do
-      # The safety property behind both mid-checkout flag pulls and a rollback of this change.
-      #
-      # A multi-seller token is only readable by code that has this change: it has no flat
-      # top-level amount. That is safe because any server WITHOUT this change refuses a
-      # multi-seller order at eligibility (`:multi_seller_checkout`) before it ever looks at
-      # the token, and Charge::CreateService then fails the charge closed because a token was
-      # submitted. Pulling the ramp flag mid-checkout takes the identical path, which is what
-      # this exercises: the buyer is asked to review the updated total and never charged
-      # canonical US dollars against a local-currency display.
-      sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false, check_merchant_account_is_linked: true, disable_buyer_currency_rounding: true) }
-      sellers.each do |seller|
-        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-        Feature.activate_user(:buyer_local_currency, seller)
-        Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
-      end
-      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
-      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
-      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
-      allow(StripeFxQuote).to receive(:create).and_return(
-        StripeFxQuote::Quote.new(id: "fxq_withdrawn", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
-      )
-
-      order = create(:order)
-      merchant_accounts = sellers.each_with_index.map do |seller, index|
-        create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: "acct_withdrawn_#{index}")
-      end
-      products = sellers.each_with_index.map { |seller, index| create(:product, user: seller, price_cents: [10_00, 5_00][index]) }
-      purchases = products.each_with_index.map do |product, index|
-        purchase = create(:purchase,
-                          link: product,
-                          seller: sellers[index],
-                          merchant_account: merchant_accounts[index],
-                          purchase_state: "in_progress",
-                          price_cents: product.price_cents,
-                          total_transaction_cents: product.price_cents,
-                          ip_address: "203.0.113.1")
-        order.purchases << purchase
-        purchase
-      end
-      stripe_chargeable = instance_double(StripeChargeablePaymentMethod)
-      chargeable = instance_double(Chargeable, fingerprint: "card_fp", get_chargeable_for: stripe_chargeable)
-
-      # A genuinely signed multi-seller token, minted while the lane was on — the thing that is
-      # in flight in a browser when the lane goes away underneath it.
-      quote_line_items = products.map do |product|
-        Checkout::BuyerCurrencyQuote::LineItem.new(
-          permalink: product.unique_permalink,
-          product:,
-          price_cents: product.price_cents,
-          tip_cents: 0,
-          seller_tax_cents: 0,
-          gumroad_tax_cents: 0,
-          shipping_cents: 0
-        )
-      end
-      quote = Checkout::BuyerCurrencyQuote.create(line_items: quote_line_items, canonical_total_cents: 15_00, ip: "203.0.113.1")
-      expect(quote.token).to be_present
-      expect(quote.charges.length).to eq(2)
-
-      # Now the lane is withdrawn: a pulled ramp flag, or a rolled-back server whose
-      # eligibility refuses every multi-seller order. Same code path either way.
-      sellers.each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
-
-      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
-
-      purchases.each_with_index do |purchase, index|
-        Charge::CreateService.new(order:,
-                                  seller: sellers[index],
-                                  merchant_account: merchant_accounts[index],
-                                  chargeable:,
-                                  purchases: [purchase],
-                                  amount_cents: purchase.total_transaction_cents,
-                                  gumroad_amount_cents: 1_00,
-                                  setup_future_charges: false,
-                                  off_session: true,
-                                  statement_description: sellers[index].name_or_username,
-                                  params: { buyer_currency_quote: quote.token }).perform
-      end
-
-      purchases.each do |purchase|
-        expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
-        expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
-      end
-    ensure
-      (sellers || []).each do |seller|
-        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-        Feature.deactivate_user(:buyer_local_currency, seller)
-        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
       end
     end
 
