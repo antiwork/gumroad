@@ -109,6 +109,9 @@ describe Order::ConfirmService, :vcr do
     end
 
     it "returns purchase error responses and offer codes in case of SCA failure with offer codes applied" do
+      # The once-per-cart allocation breaks ties by permalink; pin them so product_1's line wins.
+      product_1.update_column(:unique_permalink, "a_product")
+      product_2.update_column(:unique_permalink, "b_product")
       offer_code = create(:offer_code, user: seller, products: [product_1, product_2], once_per_cart: true)
       params[:line_items].each { _1[:discount_code] = offer_code.code }
       params[:line_items].first[:perceived_price_cents] -= 100

@@ -856,6 +856,9 @@ describe OrdersController, :vcr do
 
       it "keeps a once-per-cart retry code until SCA resolves its active reservation",
          vcr: { cassette_name: "OrdersController/POST_create/multiple_purchases/doesn_t_allow_it_to_go_through_if_the_guid_is_blank" } do
+        # The once-per-cart allocation breaks ties by permalink; pin them so product_1's line wins.
+        product_1.update_column(:unique_permalink, "a_product")
+        product_2.update_column(:unique_permalink, "b_product")
         offer_code = create(
           :offer_code,
           user: product_1.user,
