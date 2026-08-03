@@ -135,6 +135,7 @@ module RenderingExtension
           create: Pundit.policy!(pundit_user, :page).create?,
         },
         user: {
+          view_store_agent: Pundit.policy!(pundit_user, pundit_user.seller).view_store_agent?,
           use_store_agent: Pundit.policy!(pundit_user, pundit_user.seller).use_store_agent?,
         }
       }

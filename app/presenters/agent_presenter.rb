@@ -15,6 +15,13 @@ class AgentPresenter
     "Create a 20% off code called LAUNCH",
   ].freeze
 
+  # Copy for a seller who can see the tab but has not earned agent access yet. Sales and payout
+  # both land at $100, so it reads as one threshold rather than two hurdles.
+  LOCKED_HEADING = "Agent unlocks after your first payout"
+  LOCKED_EXPLANATION = "The Agent can read your store and make changes to it, so it opens once you " \
+                       "have #{MoneyFormatter.format(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT, :usd, no_cents_if_whole: true, symbol: true)} " \
+                       "in sales and your first payout has completed. Nothing to apply for — it appears here on its own."
+
   def initialize(pundit_user:)
     @pundit_user = pundit_user
     @seller = pundit_user.seller
@@ -24,6 +31,9 @@ class AgentPresenter
     {
       greeting: GREETING,
       suggestions: SUGGESTIONS,
+      eligible: seller.eligible_for_store_agent?,
+      locked_heading: LOCKED_HEADING,
+      locked_explanation: LOCKED_EXPLANATION,
     }
   end
 
