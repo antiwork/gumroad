@@ -6,6 +6,9 @@ class ProductReview < ApplicationRecord
   PRODUCT_RATING_RANGE = (1..5)
   REVIEW_REMINDER_DELAY = 5.days
   REVIEW_REMINDER_PHYSICAL_DELAY = 90.days
+  # How long a rating-only review waits before its seller notification goes out, so a buyer who
+  # tapped a star and is still typing gets their text into the same email. See `notify_seller`.
+  RATING_AUTOSAVE_GRACE = 30.minutes
   RestrictedOperationError = Class.new(StandardError)
 
   belongs_to :link, optional: true
@@ -44,7 +47,7 @@ class ProductReview < ApplicationRecord
   end
   after_save :update_product_review_stat
 
-  after_create_commit :notify_seller
+  after_commit :notify_seller
 
   private
     def update_product_review_stat
@@ -56,8 +59,34 @@ class ProductReview < ApplicationRecord
       errors.add(:base, "Adult keywords are not allowed") if AdultKeywordDetector.adult?(message)
     end
 
+    # Notification timing is the whole point of this method (gumroad-private#1783). The buyer's
+    # rating autosaves 500ms after they tap a star (`autosaveRating` in ReviewForm.tsx), so the
+    # create commit almost always lands before they have typed the review — notifying there emailed
+    # sellers a star-only review that in fact had text. Notifying on every save instead would
+    # re-email on later edits.
+    #
+    # So: text present means the buyer is done, send now. A rating-only create might still be
+    # mid-typing, so defer past the autosave window; `review_submitted` reloads the review at
+    # delivery time, so if text arrives in the window that send carries it.
     def notify_seller
       return if link.user.disable_reviews_email?
-      ContactingCreatorMailer.review_submitted(id).deliver_later
+      return unless message.present? || previously_new_record?
+      return unless claim_seller_notification!
+
+      if message.present?
+        ContactingCreatorMailer.review_submitted(id).deliver_later
+      else
+        ContactingCreatorMailer.review_submitted(id).deliver_later(wait: RATING_AUTOSAVE_GRACE)
+      end
+    end
+
+    # One notification per review, claimed rather than checked: the autosave create and the buyer's
+    # submit can commit close enough together to both pass a plain `seller_notified_at.nil?` read.
+    # The UPDATE only matches while the column is still NULL, so exactly one caller wins.
+    def claim_seller_notification!
+      now = Time.current
+      claimed = self.class.unscoped.where(id:, seller_notified_at: nil).update_all(seller_notified_at: now) == 1
+      self[:seller_notified_at] = now if claimed
+      claimed
     end
 end

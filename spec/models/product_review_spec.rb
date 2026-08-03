@@ -158,5 +158,65 @@ describe ProductReview do
         product_review.update!(rating: 5)
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
     end
+
+    # The rating autosaves 500ms after a star tap, so this create is the common case and the buyer
+    # is usually still typing — the email must wait rather than go out star-only (gp#1783).
+    context "when the review is created rating-only by the autosave" do
+      let(:product_review) { build(:product_review, purchase:, message: nil) }
+
+      before { product.user.update!(disable_reviews_email: false) }
+
+      it "defers the notification past the autosave window instead of sending immediately" do
+        expect do
+          product_review.save!
+        end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+          .with(product_review.id)
+          .at(a_value_within(1.minute).of(ProductReview::RATING_AUTOSAVE_GRACE.from_now))
+      end
+
+      it "does not send a second email when the buyer's text arrives" do
+        product_review.save!
+
+        expect do
+          product_review.update!(message: "Genuinely excellent, worth every cent.")
+        end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+      end
+
+      it "records that the seller was notified so a later edit cannot re-notify" do
+        product_review.save!
+
+        expect(product_review.reload.seller_notified_at).to be_present
+      end
+    end
+
+    context "when the review is created with a message" do
+      let(:product_review) { build(:product_review, purchase:, message: "Great product.") }
+
+      before { product.user.update!(disable_reviews_email: false) }
+
+      it "sends immediately, with no autosave grace period" do
+        expect do
+          product_review.save!
+        end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+          .with(product_review.id)
+          .at(:no_wait)
+      end
+    end
+
+    context "when a message is added to a review that was never notified" do
+      let(:product_review) { build(:product_review, purchase:, message: nil) }
+
+      it "sends on the message arrival" do
+        product.user.update!(disable_reviews_email: true)
+        product_review.save!
+        expect(product_review.reload.seller_notified_at).to be_nil
+
+        product.user.update!(disable_reviews_email: false)
+
+        expect do
+          product_review.update!(message: "Adding my thoughts after the fact.")
+        end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted).with(product_review.id)
+      end
+    end
   end
 end
