@@ -324,6 +324,18 @@ describe Admin::UsersController, type: :controller, inertia: true do
       expect(user.all_adult_products?).to be(true)
       expect(user.comments.last.content).to include("Re-enabled content moderation")
     end
+
+    # A committed toggle with a failed audit write reports failure to the admin, who then
+    # retries and flips the persisted state a second time.
+    it "leaves the flag untouched when the audit comment cannot be written" do
+      allow_any_instance_of(Comment).to receive(:save!).and_raise(ActiveRecord::RecordInvalid)
+
+      post :toggle_content_moderation_disabled, params: { external_id: user.external_id }
+
+      expect(response.parsed_body["success"]).to be(false)
+      expect(user.reload.content_moderation_disabled?).to be(false)
+      expect(user.all_adult_products?).to be(false)
+    end
   end
 
   describe "POST #toggle_adult_products" do

@@ -230,16 +230,20 @@ class Admin::UsersController < Admin::BaseController
   def toggle_content_moderation_disabled
     enabling = !@user.content_moderation_disabled?
 
-    @user.content_moderation_disabled = enabling
-    @user.all_adult_products = true if enabling
-    @user.save!
+    # One transaction: a committed toggle with no audit comment would report failure to the
+    # admin, who then retries and flips the persisted state back.
+    ActiveRecord::Base.transaction do
+      @user.content_moderation_disabled = enabling
+      @user.all_adult_products = true if enabling
+      @user.save!
 
-    @user.comments.create!(
-      author_id: current_user.id,
-      author_name: current_user.name,
-      comment_type: Comment::COMMENT_TYPE_NOTE,
-      content: enabling ? "Disabled content moderation for this account (all products, including future ones) and marked it adult" : "Re-enabled content moderation for this account"
-    )
+      @user.comments.create!(
+        author_id: current_user.id,
+        author_name: current_user.name,
+        comment_type: Comment::COMMENT_TYPE_NOTE,
+        content: enabling ? "Disabled content moderation for this account (all products, including future ones) and marked it adult" : "Re-enabled content moderation for this account"
+      )
+    end
 
     render json: { success: true }
   rescue => e
