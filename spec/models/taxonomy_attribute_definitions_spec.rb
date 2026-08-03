@@ -48,7 +48,16 @@ describe TaxonomyAttributeDefinitions do
     it "skips configured paths whose taxonomy does not exist" do
       Taxonomy.where(slug: "fonts").destroy_all
 
-      expect(described_class.each_taxonomy_with_definitions.to_a).to be_empty
+      yielded_slugs = described_class.each_taxonomy_with_definitions.map { |taxonomy, _| taxonomy.slug }
+      expect(yielded_slugs).not_to include("fonts")
+    end
+
+    it "resolves every configured slug path against the canonical taxonomy tree" do
+      load Rails.root.join("db/seeds/010_development_staging_test/taxonomy_create.rb")
+
+      described_class::DEFINITIONS.each_key do |slug_path|
+        expect(described_class.taxonomy_for(slug_path)).to be_present, "#{slug_path} does not resolve"
+      end
     end
   end
 end

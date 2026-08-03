@@ -12,6 +12,13 @@
 # permanent once products carry values for it; `label` and `values` are display-side and may
 # be edited freely.
 class TaxonomyAttributeDefinitions
+  MUSIC_DEFINITIONS = [
+    { name: "format", label: "Format", value_type: "enum", values: ["WAV", "MP3", "AIFF", "MIDI", "Stems"], position: 0 },
+    { name: "tempo", label: "Tempo", value_type: "enum", values: ["Under 90 BPM", "90–120 BPM", "120–140 BPM", "Over 140 BPM"], position: 1 },
+    { name: "loopable", label: "Loopable", value_type: "boolean", values: [], position: 2 },
+    { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Royalty-free"], position: 3 },
+  ].freeze
+
   DEFINITIONS = {
     "design/fonts" => [
       { name: "format", label: "Format", value_type: "enum", values: ["OTF", "TTF", "WOFF2"], position: 0 },
@@ -19,6 +26,13 @@ class TaxonomyAttributeDefinitions
       { name: "variable_font", label: "Variable font", value_type: "boolean", values: [], position: 2 },
       { name: "styles", label: "Styles", value_type: "number", values: [], position: 3 },
     ],
+    # Root plus the four children named in gumroad-private#1799: attributes do not inherit, and
+    # sample packs file under the root as well as its children.
+    "music-and-sound-design" => MUSIC_DEFINITIONS,
+    "music-and-sound-design/dance-and-theater" => MUSIC_DEFINITIONS,
+    "music-and-sound-design/instruments" => MUSIC_DEFINITIONS,
+    "music-and-sound-design/sound-design" => MUSIC_DEFINITIONS,
+    "music-and-sound-design/vocal" => MUSIC_DEFINITIONS,
   }.freeze
 
   # Maps each configured slug path to its Taxonomy, skipping paths whose taxonomy is absent.
