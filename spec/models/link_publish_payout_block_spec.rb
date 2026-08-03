@@ -6,7 +6,9 @@ require "spec_helper"
 # generic "connect a payment method" wall sent them looking for something that was already there —
 # one seller stayed blocked for a month (gumroad-private#1777).
 describe Link, "#publish! when the seller cannot be paid out" do
-  let(:seller) { create(:user) }
+  # payment_address is populated by the factory, and it alone satisfies can_publish_products?, so a
+  # seller with no payout rail has to be built explicitly.
+  let(:seller) { create(:user, payment_address: nil) }
   let(:product) { create(:product, user: seller, draft: true, purchase_disabled_at: Time.current) }
 
   def publish_error
