@@ -147,8 +147,14 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
 
   # The column collates ci, so a legacy mixed-case history row comes back under its own casing and
   # would not join to a lowercase block value without normalising both sides.
+  #
+  # Purchase#downcase_email lowercases on write, so a mixed-case row cannot be created through
+  # validation — update_column is what actually puts the legacy casing in the table. Creating it
+  # normally makes this test pass whether or not the job normalises anything.
   it "matches legacy mixed-case history to the block value" do
-    settled_purchases(established_count, buyer_email: "Established@Example.com")
+    settled_purchases(established_count).each do |purchase|
+      purchase.update_column(:email, "Established@Example.com")
+    end
     block_email
 
     expect(message).to include("#{established_count} settled purchases")
@@ -157,19 +163,54 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
   it "reports the oldest block first" do
     settled_purchases(established_count)
     settled_purchases(established_count, buyer_email: "newer@example.com")
-    block_email("newer@example.com", blocked_at: 6.months.ago)
     block_email(blocked_at: 3.years.ago)
+    block_email("newer@example.com", blocked_at: 6.months.ago)
 
     lines = message.split("\n").select { |line| line.start_with?("•") }
     expect(lines.first).to include(email)
     expect(lines.second).to include("newer@example.com")
   end
 
-  it "tells the reader these buyers have not tried recently" do
+  describe "sweeping the backlog across runs" do
+    # The whole point of gp#1746: a fixed page re-reports the same blocks forever and never reaches
+    # the rest. Each run must resume past what the previous one judged.
+    it "resumes after the block the previous run stopped at" do
+      settled_purchases(established_count)
+      settled_purchases(established_count, buyer_email: "second@example.com")
+      first = block_email
+      block_email("second@example.com", blocked_at: 1.year.ago)
+
+      stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 1)
+
+      expect(message).to include(email)
+      expect($redis.get(RedisKey.stale_block_sweep_cursor).to_i).to eq(first.id)
+
+      # Second run: the first block is behind the cursor, so the next one surfaces.
+      second_message = message
+      expect(second_message).to include("second@example.com")
+      expect(second_message).not_to include(email)
+    end
+
+    it "wraps to the start once it runs out of blocks" do
+      settled_purchases(established_count)
+      block = block_email
+      $redis.set(RedisKey.stale_block_sweep_cursor, block.id)
+
+      # Nothing past the cursor, so the sweep restarts rather than reporting nothing forever.
+      expect(message).to include(email)
+    end
+  end
+
+  # The report must not claim these buyers stopped retrying: it never queries attempts, so that
+  # state is unknown to it. Saying it anyway sent a reader looking for a fact the job cannot supply.
+  it "does not claim anything about recent checkout attempts" do
     settled_purchases(established_count)
     block_email
 
-    expect(message).to include("have NOT tried recently")
+    body = message
+    expect(body).to include("does NOT query attempts")
+    expect(body).not_to include("have NOT tried recently")
+    expect(body).not_to include("has not tried to check out recently")
   end
 
   # A truncated scan that found nothing must still report: otherwise the bound, not the platform,

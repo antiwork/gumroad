@@ -1,20 +1,14 @@
 # frozen_string_literal: true
 
 # Reports buyers with settled payment history sitting behind an active platform block, keyed on the
-# BLOCKS rather than on recent failures (gumroad-private#1746).
+# BLOCKS rather than on recent checkout failures (gumroad-private#1746).
 #
-# AlertOnBlockedEstablishedBuyersJob asks "who was refused lately, and is a block still holding
-# them?" — so it only ever sees someone who tried recently. A block is not retryable, so a buyer
-# refused once gives up and never generates another row; that job's own comment concedes they are
-# then "invisible to this report forever". Measured 2026-08-03: 5,001 emails had a block-declined
-# failure in a 30-day window while 39,701 active automated email blocks had none, the oldest written
-# 2021-04-29, and 18% of a sample of those cleared the clean-history gate.
+# AlertOnBlockedEstablishedBuyersJob keys on recent failures, so it only sees buyers who tried
+# lately. A block is not retryable, so a buyer refused once may never generate another failure row
+# and stays outside that job's reach no matter how long the block stands. Keying on the blocks is
+# what reaches them.
 #
-# This job asks the inverted question — "which active blocks are standing in front of a settled
-# buyer?" — which reaches the ones who stopped trying. Overlap with the failure-keyed report is a
-# duplicate line in an internal alert, which is cheaper than a silent drop.
-#
-# Reports; clearing stays a human decision.
+# Reports only; clearing a block stays a human decision.
 class AlertOnStaleBlocksHoldingEstablishedBuyersJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
@@ -29,10 +23,11 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
   # Report at most this many. The alert exists to be read.
   MAX_REPORTED = 25
 
-  # The bound on the work: how many blocks get their buyer's history counted. Everything past it is
-  # unscanned, and the report says so rather than presenting its count as the total. Measured 40,000+
-  # candidate blocks, so a full pass is deliberately out of reach for one run — this job surfaces the
-  # worst of the backlog repeatedly rather than claiming to enumerate it.
+  # The bound on the work: how many blocks get their buyer's history counted per run. Everything past
+  # it is unscanned in THIS run, and the report says so rather than presenting its count as the total.
+  # Measured 40,000+ candidate blocks, so a full pass is out of reach for one run — successive runs
+  # resume from a saved cursor and wrap, so the backlog is covered over ~8 weeks rather than the same
+  # page being re-reported forever.
   MAX_CANDIDATES_SCANNED = 5_000
 
   # Blocks are counted in batches to keep each grouped query's IN list bounded.
@@ -51,9 +46,20 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     # One entry per active block standing in front of a buyer with settled history, in the report's
     # own ranking. `truncated` means the candidate window was cut short, so the counts are floors.
     def scan_for_stale_blocks
-      candidates = candidate_blocks
+      after_id = current_cursor
+      candidates = candidate_blocks(after_id)
+
+      # Exhausted the backlog: wrap to the beginning so the sweep is a loop rather than a dead end.
+      if candidates.empty? && after_id.positive?
+        save_cursor(0)
+        candidates = candidate_blocks(0)
+      end
+
       truncated = candidates.size > MAX_CANDIDATES_SCANNED
       candidates = candidates.first(MAX_CANDIDATES_SCANNED)
+      # Advance past what this run judged. Saved before the counting work so a later failure cannot
+      # pin the cursor and re-report the same page forever.
+      save_cursor(candidates.last.id) if candidates.any?
 
       stale = []
       candidates.each_slice(HISTORY_COUNT_BATCH) do |batch|
@@ -92,20 +98,43 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     # not a rule that outlived itself. Not airtight — PlatformBlock.add! overwrites blocked_by on
     # every re-block, so a human's row a rule later re-triggered arrives here as unattended, which is
     # why the report tells its reader to re-check rather than presenting a line as proof.
-    def candidate_blocks
+    def candidate_blocks(after_id)
       PlatformBlock.active
                    .where(object_type: BLOCK_TYPE, blocked_by: nil)
                    .where.not(object_value: nil)
-                   .order(blocked_at: :asc, id: :asc)
+                   .where("platform_blocks.id > ?", after_id)
+                   .order(id: :asc)
                    .limit(MAX_CANDIDATES_SCANNED + 1)
                    .to_a
     end
 
-    # Downcased email => settled non-free purchase count, for buyers clearing the same bar
-    # Purchase::Blockable#buyer_has_clean_payment_history? sets: purchases old enough for a cardholder
-    # to have disputed them, none refunded, none charged back. Reading the same constants is what
-    # keeps a report of "this block should not be holding them" aligned with the rule that decides
-    # whether to write one.
+    # Where this run starts: the id the last run stopped at. Ordering is by id rather than
+    # `blocked_at` so the stopping point is a keyset the next run resumes from exactly.
+    def current_cursor
+      $redis.get(RedisKey.stale_block_sweep_cursor).to_i
+    rescue => e
+      # A lost cursor re-reports the first page, which is noisy but not wrong. Losing the run is worse.
+      ErrorNotifier.notify(e)
+      0
+    end
+
+    def save_cursor(cursor_id)
+      $redis.set(RedisKey.stale_block_sweep_cursor, cursor_id)
+    rescue => e
+      ErrorNotifier.notify(e)
+    end
+
+    # Downcased email => settled non-free purchase count, using the same constants and veto scopes as
+    # Purchase::Blockable#buyer_has_clean_payment_history?: purchases old enough for a cardholder to
+    # have disputed them, none refunded, none charged back.
+    #
+    # ⚠️ It is NOT the same predicate. The real gate returns false on a blank stripe_fingerprint and
+    # counts history on the CARD; this counts on the EMAIL, because a block value is an address and
+    # there is no card in hand to key on. So this is deliberately WIDER: three settled PayPal
+    # purchases, or three on three different one-use cards, clear here and would not clear there.
+    # Email is also a weaker identity than a card — a line here can pair one person's block with
+    # another's history. Both are why the report asks its reader to re-check before clearing anything
+    # and why nothing here writes.
     #
     # Keyed on the downcased address for the same reason DecliningPlatformBlocks does it: the column
     # collates ci, so a mixed-case legacy row comes back under an arbitrary member's casing and would
@@ -149,8 +178,10 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
         *lines,
         (omitted.positive? ? "…and #{omitted} more." : nil),
         "",
-        "These buyers have NOT tried recently — that is why the failure-keyed report never named them. " \
-          "A line here is not proof the block is stale: a velocity rule writes `blocked_by` nil too, so " \
+        "This scan keys on active blocks, not on recent checkout failures — so unlike the " \
+          "failure-keyed report it reaches buyers who never retried. It does NOT query attempts, so " \
+          "a line here may or may not have tried recently. " \
+          "A line is also not proof the block is stale: a velocity rule writes `blocked_by` nil too, so " \
           "check the rules before unblocking, and remember `unblock_buyer!` clears the buyer's whole " \
           "identifier set rather than one row (see gumroad-private#1746).",
       ].compact.join("\n")
@@ -173,6 +204,6 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
       "#{truncated ? "At least " : ""}#{count} active email block#{"s" if count != 1} " \
         "#{count == 1 ? "is" : "are"} holding a buyer with " \
-        "#{Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY}+ settled purchases who has not tried to check out recently."
+        "#{Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY}+ settled purchases."
     end
 end
