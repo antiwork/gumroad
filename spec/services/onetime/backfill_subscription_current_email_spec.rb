@@ -103,5 +103,4 @@ RSpec.describe Onetime::BackfillSubscriptionCurrentEmail do
     expect(Sidekiq::Client).not_to have_received(:push_bulk)
     expect(ReplicaLagWatcher).not_to have_received(:watch)
   end
-
 end
