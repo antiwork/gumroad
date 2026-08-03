@@ -78,8 +78,11 @@ const NavButton = ({
 
   let modifier2 = "";
   if (context === "primary" && children !== "Dashboard") {
-    // Bare `dark:` (not just `dark:lg:`) so the mobile-menu button isn't black-on-black in dark mode.
-    modifier2 = "dark:bg-pink dark:text-black dark:hover:bg-white";
+    // Bare `dark:` so the mobile-menu button isn't black-on-black in dark mode, plus the
+    // `dark:lg:` set: modifier1 applies `lg:bg-black`, and whether a single-variant `dark:`
+    // utility beats a single-variant `lg:` one is a stylesheet-order coin flip. The
+    // double-variant form always wins at desktop.
+    modifier2 = "dark:bg-pink dark:text-black dark:hover:bg-white dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white";
   } else {
     modifier2 = "dark:lg:hover:bg-white dark:lg:hover:text-black";
   }

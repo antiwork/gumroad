@@ -12,9 +12,11 @@
         end
       } border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:py-2 lg:px-6 whitespace-nowrap #{
         if options[:context] == 'primary' && text != 'Dashboard'
-          # Bare `dark:`, not `dark:lg:`: below lg this button keeps its base `bg-black`, which is
-          # invisible against the dark-mode mobile menu's own black background.
-          'dark:bg-pink dark:text-black dark:hover:bg-white'
+          # Bare `dark:` so the button isn't black-on-black in the dark-mode mobile menu, plus the
+          # `dark:lg:` set: the primary branch above applies `lg:bg-black`, and single-variant
+          # `dark:` vs `lg:` is a stylesheet-order coin flip. The double-variant form always wins
+          # at desktop.
+          'dark:bg-pink dark:text-black dark:hover:bg-white dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white'
         else
           'dark:lg:hover:bg-white dark:lg:hover:text-black'
         end
