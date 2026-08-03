@@ -103,8 +103,8 @@ class Purchase < ApplicationRecord
   # first-party consent signals and must never be reversed by an automated restore.
   CAN_CONTACT_REASON_BUYER_UNSUBSCRIBE = "buyer_unsubscribe"
   CAN_CONTACT_REASON_SPAM_REPORT = "spam_report"
-  # Nobody acted on THIS row: it was born uncontactable because a sibling row for the same
-  # (email, seller) already was. Reversing it is safe iff the row it inherited from is reversed.
+  # Nobody acted on THIS row: it was born uncontactable because a sibling already was.
+  # Reversing it is safe iff the row it inherited from is reversed.
   CAN_CONTACT_REASON_INHERITED = "inherited"
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
@@ -3197,6 +3197,8 @@ class Purchase < ApplicationRecord
       purchase.save(validate: false)
     end
 
+    upgrade_reversible_reasons_in_cohort(reason)
+
     Follower.unsubscribe(seller_id, email)
   end
 
@@ -5451,6 +5453,21 @@ class Purchase < ApplicationRecord
         payment_option.installment_plan_snapshot.calculate_installment_payment_price_cents
       else
         fetch_installment_plan.calculate_installment_payment_price_cents(total_price_cents)
+      end
+    end
+
+    # First-party consent outranks an inherited or unrecorded suppression. Those rows are
+    # already `can_contact: false` so the loop above skips them, which would leave a
+    # reversible reason standing after the buyer themselves acted -- exactly the misreading
+    # this attribute exists to prevent.
+    def upgrade_reversible_reasons_in_cohort(reason)
+      return if reason == CAN_CONTACT_REASON_INHERITED
+
+      Purchase.where(email:, seller_id:, can_contact: false).find_each do |purchase|
+        next if purchase.can_contact_reason.in?([CAN_CONTACT_REASON_BUYER_UNSUBSCRIBE, CAN_CONTACT_REASON_SPAM_REPORT])
+
+        purchase.can_contact_reason = reason
+        purchase.save(validate: false)
       end
     end
 
