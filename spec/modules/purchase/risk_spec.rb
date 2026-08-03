@@ -243,11 +243,11 @@ describe Purchase::Risk do
       expect(bad_purchase.errors.full_messages).to eq ["Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."]
     end
 
-    it "returns errors if the seller ip_address has been blocked" do
+    it "does not return errors if only the seller's account_created_ip has been blocked" do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "123.121.11.1", expires_in: 1.hour)
-      bad_purchase = build(:purchase, link: @product, seller: @user)
-      bad_purchase.send(:check_for_fraud)
-      expect(bad_purchase.errors.empty?).to be(false)
+      purchase = build(:purchase, link: @product, seller: @user)
+      purchase.send(:check_for_fraud)
+      expect(purchase.errors.empty?).to be(true)
     end
 
     describe "ip_address check" do
@@ -355,7 +355,7 @@ describe Purchase::Risk do
       end
     end
 
-    context "when the creator's ip_address has been blocked but the seller is compliant" do
+    context "when the creator's ip_address has been blocked" do
       let(:seller) { @product.user }
 
       before do
