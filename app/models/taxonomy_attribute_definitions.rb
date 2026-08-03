@@ -19,7 +19,43 @@ class TaxonomyAttributeDefinitions
     { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Royalty-free"], position: 3 },
   ].freeze
 
+  # VRChat buyers don't shop on generic 3D-asset axes (engine/file format) — everything here is a
+  # Unity upload by definition. What actually gates a purchase: what kind of item it is, which
+  # platform(s) it runs on (VRChat enforces very different poly/component limits for Quest vs PC —
+  # a PC-only accessory is unusable on a Quest avatar), and VRChat's own Excellent/Good/Medium/Poor
+  # performance-rank system, which buyers already screen for before an upload even shows in-world.
+  VRCHAT_DEFINITIONS = [
+    { name: "item_type", label: "Item type", value_type: "enum", values: ["Full avatar", "Accessory", "Clothing", "Hair", "Texture / shader", "Animation", "Prop / world asset"], position: 0 },
+    { name: "platform", label: "Platform", value_type: "enum", values: ["PC", "Quest", "PC and Quest"], position: 1 },
+    { name: "performance_rank", label: "Performance rank", value_type: "enum", values: ["Excellent", "Good", "Medium", "Poor"], position: 2 },
+    { name: "rigged", label: "Rigged", value_type: "boolean", values: [], position: 3 },
+    { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 4 },
+  ].freeze
+
+  # Generic 3D-model marketplace facets (gumroad-private#1796), modeled on how TurboSquid,
+  # CGTrader, and Sketchfab actually let buyers narrow a catalog: subject category first
+  # (their primary nav/filter), then technical facets. `engine` was dropped from the original
+  # draft — format + category already cover the buyer's main "will this work for me" question,
+  # and a 7th enum pushed the filter rail past what the other Discover categories carry.
+  THREE_D_ASSETS_DEFINITIONS = [
+    { name: "subject_category", label: "Category", value_type: "enum", values: ["Character", "Vehicle", "Architecture", "Furniture", "Nature", "Animal", "Weapon", "Food", "Prop", "Environment"], position: 0 },
+    { name: "file_format", label: "File format", value_type: "enum", values: ["FBX", "OBJ", "BLEND", "GLB", "VRM", "UnityPackage"], position: 1 },
+    { name: "textured_pbr", label: "Textured / PBR", value_type: "boolean", values: [], position: 2 },
+    { name: "rigged", label: "Rigged", value_type: "boolean", values: [], position: 3 },
+    { name: "animated", label: "Animated", value_type: "boolean", values: [], position: 4 },
+    { name: "poly_count", label: "Poly count", value_type: "enum", values: ["Low-poly (under 10k)", "Mid-poly (10k-50k)", "High-poly (over 50k)"], position: 5 },
+    { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 6 },
+  ].freeze
+
   DEFINITIONS = {
+    # Generic 3D assets (game-dev models, environments, props not tied to VRChat's avatar system)
+    # get THREE_D_ASSETS_DEFINITIONS — category-first faceting doesn't transfer to VRChat avatars,
+    # whose buyers filter on avatar-specific concerns instead.
+    "3d/3d-assets" => THREE_D_ASSETS_DEFINITIONS,
+    # VRChat-specific leaves get VRCHAT_DEFINITIONS (gumroad-private#1796) — a different axis set
+    # from the generic 3D-assets leaf above, because the buyer question is different.
+    "3d/avatars" => VRCHAT_DEFINITIONS,
+    "3d/vrchat" => VRCHAT_DEFINITIONS,
     "design/fonts" => [
       { name: "format", label: "Format", value_type: "enum", values: ["OTF", "TTF", "WOFF2"], position: 0 },
       { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "App embedding"], position: 1 },
