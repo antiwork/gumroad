@@ -39,7 +39,7 @@ class LoginsController < Devise::SessionsController
 
     return redirect_with_login_error("Please try another password. The one you entered was incorrect.") unless @user.valid_password?(password)
 
-    return redirect_with_login_error("You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!") if @user.deleted?
+    return redirect_with_login_error(User::DELETED_ACCOUNT_LOGIN_ERROR) if @user.deleted?
 
     @user.remember_me = true # Always "remember" user sessions
 

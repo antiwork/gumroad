@@ -40,6 +40,7 @@ import {
   ProductEditContext,
   ProfileSection,
   ShippingCountry,
+  TaxonomyAttribute,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -79,6 +80,7 @@ type Props = {
   is_physical: boolean;
   profile_sections: ProfileSection[];
   taxonomies: Taxonomy[];
+  taxonomy_attributes: TaxonomyAttribute[];
   earliest_membership_price_change_date: string;
   custom_domain_verification_status: { success: boolean; message: string } | null;
   sales_count_for_inventory: number;
@@ -118,6 +120,7 @@ const createContextValue = (props: Props) => ({
   isPhysical: props.is_physical,
   profileSections: props.profile_sections,
   taxonomies: props.taxonomies,
+  taxonomyAttributes: props.taxonomy_attributes,
   earliestMembershipPriceChangeDate: new Date(props.earliest_membership_price_change_date),
   customDomainVerificationStatus: props.custom_domain_verification_status,
   salesCountForInventory: props.sales_count_for_inventory,

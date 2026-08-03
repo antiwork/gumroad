@@ -2,8 +2,7 @@
 
 # Tells a seller when a buyer paid and there is no evidence the receipt ever reached them, because
 # nothing else does: a receipt whose delivery is never confirmed sits in `email_infos` forever and
-# notifies nobody, and a bounced one silently sets `can_contact: false` for that buyer across all of
-# the seller's sales, so the seller loses the channel at the same moment they need it
+# notifies nobody, while a bounced row is another no-delivery signal for the seller
 # (gumroad-private#1635).
 #
 # The seller is the recipient rather than our own error reporting for the reason established in

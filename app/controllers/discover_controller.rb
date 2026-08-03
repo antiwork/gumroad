@@ -122,7 +122,7 @@ class DiscoverController < ApplicationController
     end
 
     def is_searching?
-      params.values_at(:query, :tags, :category, :offer_code).any?(&:present?) ||
+      params.values_at(:query, :tags, :category, :offer_code, :taxonomy_attribute_filters).any?(&:present?) ||
         (params[:taxonomy].present? && params.values_at(:sort, :min_price, :max_price, :rating, :filetypes).any?(&:present?))
     end
 

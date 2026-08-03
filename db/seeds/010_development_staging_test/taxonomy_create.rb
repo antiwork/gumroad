@@ -400,3 +400,6 @@ Taxonomy.find_or_create_by!(slug: "pbr", parent: textures)
 Taxonomy.find_or_create_by!(slug: "tattoos", parent: textures)
 
 Taxonomy.find_or_create_by!(slug: "other")
+
+# Same registry the production backfill applies, so the two cannot drift.
+Onetime::SeedTaxonomyAttributes.process(dry_run: false)

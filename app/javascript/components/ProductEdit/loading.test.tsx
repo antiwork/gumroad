@@ -154,7 +154,7 @@ describe("product editor loading", () => {
   });
 
   it("retries once when the editor's code fails to download, so a blip doesn't cost the seller the page", async () => {
-    const { fetchWithOneRetry } = await import("$app/components/ProductEdit/load");
+    const { fetchWithOneRetry } = await import("$app/utils/lazy_chunk");
     const fetch = vi
       .fn()
       .mockRejectedValueOnce(new Error("Failed to fetch dynamically imported module"))
@@ -166,7 +166,7 @@ describe("product editor loading", () => {
   });
 
   it("gives up after the retry rather than fetching forever, and reports the original failure", async () => {
-    const { fetchWithOneRetry } = await import("$app/components/ProductEdit/load");
+    const { fetchWithOneRetry } = await import("$app/utils/lazy_chunk");
     const fetch = vi
       .fn()
       .mockRejectedValueOnce(new Error("Failed to fetch dynamically imported module"))
@@ -177,7 +177,7 @@ describe("product editor loading", () => {
   });
 
   it("does not retry when the first fetch succeeds", async () => {
-    const { fetchWithOneRetry } = await import("$app/components/ProductEdit/load");
+    const { fetchWithOneRetry } = await import("$app/utils/lazy_chunk");
     const fetch = vi.fn().mockResolvedValue("editor chunk");
 
     await expect(fetchWithOneRetry(fetch, 0)).resolves.toBe("editor chunk");

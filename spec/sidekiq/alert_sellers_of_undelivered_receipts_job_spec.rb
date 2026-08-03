@@ -25,6 +25,22 @@ describe AlertSellersOfUndeliveredReceiptsJob do
       .with(seller.id, [purchase.id])
   end
 
+  # Charge-keyed rows carry no purchase_id, and combined-cart orders make them a large share of real
+  # receipts. `Charge#purchase_as_orderable` does not exist (it is private on `Order`), so reaching
+  # the seller this way raised NoMethodError and the sweep died on the very cohort it exists to find.
+  it "emails the seller about a charge-keyed receipt that carries no purchase_id" do
+    charge = create(:charge, seller:)
+    purchase = create(:purchase, seller:, link: product)
+    charge.purchases << purchase
+    charge.update!(order: create(:order))
+    create(:customer_email_info, purchase: nil, state: "sent", sent_at: 3.days.ago,
+                                 email_info_charge_attributes: { charge_id: charge.id })
+
+    expect { described_class.new.perform }
+      .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+      .with(seller.id, [purchase.id])
+  end
+
   it "emails nobody when every receipt was delivered" do
     purchase = create(:purchase, seller:, link: product)
     create(:customer_email_info, purchase:, state: "delivered", sent_at: 3.days.ago, delivered_at: 3.days.ago)
