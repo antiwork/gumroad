@@ -669,6 +669,7 @@ class LinksController < ApplicationController
       return render json: { error_message: }, status: :unprocessable_entity
     end
     report_unapplied_deletions!
+    report_unstated_confirmed_removals!
 
     invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
       offer_code.is_currency_valid?(@product)
@@ -1399,6 +1400,72 @@ class LinksController < ApplicationController
       )
     rescue StandardError => e
       ErrorNotifier.notify(e)
+    end
+
+    # The blind spot in the report above: it is gated on `requested_deletion?`,
+    # so it cannot see a payload that named NO deletion at all. That is exactly
+    # the shape reported in gumroad-private#1508 — 200, nothing deleted, zero
+    # audit rows — and it is why the report has never fired.
+    #
+    # `confirmed_removed_variant_ids` is the witness. The editor sends it beside
+    # the deletion operations and both derive from the same in-session list, so a
+    # contract-aware payload that confirms a removal while naming none of it is
+    # self-contradictory: the seller pressed "Yes, remove" and the request did
+    # not ask for it. Under Rule 1 the server correctly does nothing, which is
+    # what makes the failure silent.
+    #
+    # A current client cannot produce that contradiction — both lists come off
+    # one snapshot. This is a tripwire for the clients that can: a stale bundle,
+    # or a path nobody has found yet. It does NOT catch a row dropped from state
+    # with no confirmed id, which is undetectable here by contract design.
+    #
+    # Report, not guard: acting on the confirmed ids would delete rows through a
+    # route the contract deliberately closed.
+    def report_unstated_confirmed_removals!
+      contract = product_save_contract
+      return unless contract.enforced?
+      # A tab that predates the contract cannot state deletions, so its
+      # confirmed ids are not a contradiction.
+      return unless contract.contract_aware?
+
+      unstated_variants = unstated_confirmed_ids(:variants, confirmed_removed_variant_ids)
+      unstated_pages = unstated_confirmed_ids(:rich_content, confirmed_removed_rich_content_ids)
+      return if unstated_variants.empty? && unstated_pages.empty?
+
+      @product.reload
+      # Still-alive is what makes this a live defect rather than a replayed
+      # payload: the editor clears its confirmed ids after a successful save,
+      # so a resend naming already-deleted rows is noise.
+      surviving_variants = surviving_variant_ids(unstated_variants)
+      surviving_pages = surviving_rich_content_ids(unstated_pages)
+      return if surviving_variants.empty? && surviving_pages.empty?
+
+      ErrorNotifier.notify(
+        "Product save confirmed a removal its deletion operations never named",
+        product_id: @product.id,
+        seller_id: @product.user_id,
+        request_id: request.request_id,
+        confirmed_variant_ids: confirmed_removed_variant_ids,
+        unstated_variant_ids: surviving_variants,
+        confirmed_rich_content_ids: confirmed_removed_rich_content_ids,
+        unstated_rich_content_ids: surviving_pages,
+        named_variant_ids: contract.raw_deleted_ids(:variants),
+        named_rich_content_ids: contract.raw_deleted_ids(:rich_content),
+      )
+    rescue StandardError => e
+      ErrorNotifier.notify(e)
+    end
+
+    # Confirmed ids the payload did not carry into a deletion operation. A
+    # clear-all states every id in the collection, so it contradicts nothing.
+    def unstated_confirmed_ids(collection, confirmed_ids)
+      confirmed = Array(confirmed_ids).map(&:to_s).uniq.reject(&:blank?)
+      return [] if confirmed.empty?
+
+      contract = product_save_contract
+      return [] if contract.raw_cleared?(collection)
+
+      confirmed - contract.raw_deleted_ids(collection)
     end
 
     # Survivors are looked up by the requested id rather than by walking the
