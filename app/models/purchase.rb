@@ -65,6 +65,12 @@ class Purchase < ApplicationRecord
   # it is reached when a preorder is released and charged, long after checkout.
   CHECKOUT_FAILURE_STATES = %w[failed preorder_authorization_failed gift_receiver_purchase_failed].freeze
 
+  # States proving a line item was served at checkout. Both concluded-preorder states belong here
+  # even though one is a later failure: they are reachable only from
+  # `preorder_authorization_successful`, so their presence is evidence the authorization succeeded.
+  # Without them a preorder that concludes before its sibling fails looks like it never succeeded.
+  CHECKOUT_SUCCESS_STATES = (ALL_SUCCESS_STATES + %w[preorder_concluded_successfully preorder_concluded_unsuccessfully]).freeze
+
   # States that can change an order's partial-success answer. `in_progress` is deliberately absent:
   # it counts as neither side of the predicate, so entering it can only cost a no-op job.
   ORDER_OUTCOME_STATES = (ALL_SUCCESS_STATES_INCLUDING_TEST + CHECKOUT_FAILURE_STATES).freeze
@@ -683,6 +689,7 @@ class Purchase < ApplicationRecord
   scope :not_charged, -> { where(purchase_state: "not_charged") }
   scope :all_success_states, -> { where(purchase_state: Purchase::ALL_SUCCESS_STATES) }
   scope :checkout_failed, -> { where(purchase_state: Purchase::CHECKOUT_FAILURE_STATES) }
+  scope :checkout_succeeded, -> { where(purchase_state: Purchase::CHECKOUT_SUCCESS_STATES) }
   scope :all_success_states_including_test, -> { where(purchase_state: Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST) }
   scope :all_success_states_except_preorder_auth_and_gift, -> { where(purchase_state: Purchase::ALL_SUCCESS_STATES_EXCEPT_PREORDER_AUTH_AND_GIFT) }
   scope :exclude_not_charged_except_free_trial, -> { where("purchases.purchase_state != 'not_charged' OR purchases.flags & ? != 0", Purchase.flag_mapping["flags"][:is_free_trial_purchase]) }

@@ -68,9 +68,10 @@ class Order < ApplicationRecord
   # this is recorded the outcome exists only as the derived states of the child purchases, so
   # nothing can query or reconcile it.
   #
-  # No "all line items settled" guard: once the order holds both a success and a failure the
-  # predicate can never go back to false (purchase states are terminal), so a still-in-progress
-  # sibling cannot change the answer, only when it is written.
+  # Set-only. The predicate is NOT monotone: a preorder leaves `ALL_SUCCESS_STATES` when it
+  # concludes (`preorder_authorization_successful` → `preorder_concluded_{successfully,
+  # unsuccessfully}`), so a later sibling settling would recompute `false` and clear a flag that was
+  # correct when written. Partial success is a fact about the checkout, not a current-state query.
   #
   # `update_all` with a bitwise OR rather than a save: sibling line items in the same order settle
   # concurrently, and a read-modify-write of `flags` would let one overwrite the other's bits.
@@ -82,13 +83,12 @@ class Order < ApplicationRecord
   # RecordOrderChargeOutcomeJob, running after each line item's own transaction has committed, and a
   # concurrently-settled sibling is only visible on a fresh read.
   def record_charge_outcome!
-    partial = purchases.all_success_states.exists? && purchases.checkout_failed.exists?
-    return if partially_successful? == partial
+    return if partially_successful?
+    return unless purchases.checkout_succeeded.exists? && purchases.checkout_failed.exists?
 
     bit = self.class.flag_mapping["flags"][:partially_successful]
-    sql = partial ? "flags = flags | #{bit}" : "flags = flags & ~#{bit}"
-    self.class.where(id:).update_all("#{sql}, updated_at = #{self.class.connection.quote(Time.current)}")
-    self.partially_successful = partial
+    self.class.where(id:).update_all("flags = flags | #{bit}, updated_at = #{self.class.connection.quote(Time.current)}")
+    self.partially_successful = true
   end
 
   # Called from Purchase when a purchase transitions to a successful state. The

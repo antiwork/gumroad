@@ -550,5 +550,58 @@ describe Order do
         expect(order.reload).to be_partially_successful
       end
     end
+    context "when the flag is already set and the current states no longer justify it" do
+      # Set-only. Partial success is a fact about the checkout, not a current-state query, so no
+      # later recompute may clear a flag that was correct when written — whatever moved the line
+      # items since. This pins the write direction itself, independent of which states count.
+      it "never clears the flag" do
+        failed = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        order.purchases << failed
+        settle { Purchase::MarkFailedService.new(failed).perform }
+        Order.where(id: order.id).update_all("flags = flags | #{Order.flag_mapping['flags'][:partially_successful]}")
+        expect(order.reload).to be_partially_successful
+
+        Order.find(order.id).record_charge_outcome!
+
+        expect(order.reload).to be_partially_successful
+      end
+    end
+
+    context "when a preorder concludes after the order was already flagged" do
+      # The predicate is not monotone: concluding takes the line item out of ALL_SUCCESS_STATES, so
+      # a recompute-and-overwrite write clears a flag that was correct. The write is set-only.
+      it "keeps the flag" do
+        preorder = create(:purchase_in_progress, link: product_1, seller: seller_1, is_preorder_authorization: true)
+        failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << preorder << failed
+
+        settle { preorder.mark_preorder_authorization_successful! }
+        settle { Purchase::MarkFailedService.new(failed).perform }
+        expect(order.reload).to be_partially_successful
+
+        preorder.mark_preorder_concluded_unsuccessfully!
+        RecordOrderChargeOutcomeJob.new.perform(order.id)
+
+        expect(order.reload).to be_partially_successful
+      end
+    end
+
+    context "when the preorder concludes before its sibling fails" do
+      # Ordering must not decide the outcome. A concluded preorder is reachable only from
+      # `preorder_authorization_successful`, so it is still evidence the checkout served this item.
+      it "flags the order partially_successful" do
+        preorder = create(:purchase_in_progress, link: product_1, seller: seller_1, is_preorder_authorization: true)
+        failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << preorder << failed
+
+        settle { preorder.mark_preorder_authorization_successful! }
+        preorder.mark_preorder_concluded_unsuccessfully!
+        expect(order.reload).not_to be_partially_successful
+
+        settle { Purchase::MarkFailedService.new(failed).perform }
+
+        expect(order.reload).to be_partially_successful
+      end
+    end
   end
 end
