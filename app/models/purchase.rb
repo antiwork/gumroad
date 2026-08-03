@@ -65,6 +65,10 @@ class Purchase < ApplicationRecord
   # it is reached when a preorder is released and charged, long after checkout.
   CHECKOUT_FAILURE_STATES = %w[failed preorder_authorization_failed gift_receiver_purchase_failed].freeze
 
+  # States that can change an order's partial-success answer. `in_progress` is deliberately absent:
+  # it counts as neither side of the predicate, so entering it can only cost a no-op job.
+  ORDER_OUTCOME_STATES = (ALL_SUCCESS_STATES_INCLUDING_TEST + CHECKOUT_FAILURE_STATES).freeze
+
   ACTIVE_SALES_SEARCH_OPTIONS = {
     state: NON_GIFT_SUCCESS_STATES,
     exclude_refunded_except_subscriptions: true,
@@ -408,7 +412,10 @@ class Purchase < ApplicationRecord
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
 
-  after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) { purchase.purchase_state_previously_changed? }
+  after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) {
+    purchase.purchase_state_previously_changed? &&
+      ORDER_OUTCOME_STATES.include?(purchase.purchase_state)
+  }
 
   after_create :mark_inventory_new_in_txn
   before_save :snapshot_inventory_pre_save_state

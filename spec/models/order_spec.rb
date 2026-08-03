@@ -520,6 +520,21 @@ describe Order do
       end
     end
 
+    context "when an attached line item transitions to a state the predicate ignores" do
+      # A preorder concluding cannot change the answer — its authorization already counted as the
+      # success — so that transition must not enqueue a reconciliation.
+      it "enqueues no reconciliation" do
+        preorder = create(:purchase_in_progress, link: product_1, seller: seller_1, is_preorder_authorization: true)
+        order.purchases << preorder
+        settle { preorder.mark_preorder_authorization_successful! }
+        RecordOrderChargeOutcomeJob.jobs.clear
+
+        preorder.mark_preorder_concluded_successfully!
+
+        expect(RecordOrderChargeOutcomeJob.jobs).to be_empty
+      end
+    end
+
     context "when the same order is reconciled twice" do
       it "is idempotent" do
         succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)

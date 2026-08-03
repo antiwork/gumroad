@@ -78,9 +78,9 @@ class Order < ApplicationRecord
   # order row is otherwise saved only at creation, so an ordinary save from the charge path would
   # fire the reminder hook that the purchase-success transition owns.
   #
-  # Read the sibling states from the DB, never from a loaded association: this runs from
-  # RecordOrderChargeOutcomeJob after each line item's own transaction has committed, and the
-  # sibling that settled concurrently is only visible on a fresh read.
+  # Reads the sibling states from the DB rather than a loaded association: the caller is
+  # RecordOrderChargeOutcomeJob, running after each line item's own transaction has committed, and a
+  # concurrently-settled sibling is only visible on a fresh read.
   def record_charge_outcome!
     partial = purchases.all_success_states.exists? && purchases.checkout_failed.exists?
     return if partially_successful? == partial
