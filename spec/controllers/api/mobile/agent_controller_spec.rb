@@ -16,6 +16,10 @@ describe Api::Mobile::AgentController do
     @auth_params = { mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN, access_token: @token.token }
   end
 
+  before do
+    allow_any_instance_of(User).to receive(:eligible_for_store_agent?).and_return(true)
+  end
+
   after { $redis.del(RedisKey.agent_request_throttle(@seller.id)) }
 
   def exhaust_agent_request_throttle(seller)

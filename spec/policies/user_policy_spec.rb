@@ -117,6 +117,22 @@ describe UserPolicy do
   end
 
   permissions :use_store_agent? do
+    before do
+      allow_any_instance_of(User).to receive(:eligible_for_store_agent?).and_return(true)
+    end
+
+    it "denies access to the owner of a seller that has not earned the agent yet" do
+      allow_any_instance_of(User).to receive(:eligible_for_store_agent?).and_return(false)
+      seller_context = SellerContext.new(user: seller, seller:)
+      expect(subject).to_not permit(seller_context, seller)
+    end
+
+    it "denies access to an admin when the seller has not earned the agent yet" do
+      allow_any_instance_of(User).to receive(:eligible_for_store_agent?).and_return(false)
+      seller_context = SellerContext.new(user: admin_for_seller, seller:)
+      expect(subject).to_not permit(seller_context, seller)
+    end
+
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)
       expect(subject).to permit(seller_context, seller)
