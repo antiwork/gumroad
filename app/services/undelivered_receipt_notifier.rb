@@ -2,7 +2,8 @@
 
 # Tells a seller when a buyer paid and there is no evidence the receipt ever reached them, because
 # nothing else does: a receipt whose delivery is never confirmed sits in `email_infos` forever and
-# notifies nobody, while a bounced row is another no-delivery signal for the seller
+# notifies nobody, and a bounced one silently sets `can_contact: false` for that buyer across all of
+# the seller's sales, so the seller loses the channel at the same moment they need it
 # (gumroad-private#1635).
 #
 # The seller is the recipient rather than our own error reporting for the reason established in
@@ -125,6 +126,8 @@ class UndeliveredReceiptNotifier
   # bounced resend report a receipt the buyer demonstrably already got — delivery evidence on ANY send
   # of this receipt means it reached them, and it cannot un-arrive.
   def self.undelivered?(purchase)
+    return false unless paid?(purchase)
+
     email_infos = purchase.receipt_email_infos.to_a
     email_infos = [purchase.receipt_email_info].compact if email_infos.empty?
     return false if email_infos.empty?
@@ -139,14 +142,30 @@ class UndeliveredReceiptNotifier
     !accessed_content?(purchase)
   end
 
+  # Free downloads are excluded because every action this notice prescribes assumes money changed
+  # hands: there is nothing to refund, and a free-checkout address the buyer typed wrong is not a
+  # customer waiting on the seller. It is also where the bounce volume lives — one suspended account
+  # produced 143,746 bounces in a day from automated $0 checkouts to scraped addresses
+  # (gumroad-private#1397), so including them would bury the paid buyers who can actually be helped.
+  def self.paid?(purchase)
+    order_purchases(purchase).any? { |p| p.price_cents.to_i.positive? }
+  end
+  private_class_method :paid?
+
   # A charge receipt covers every purchase in the order, so any one of them being opened means the
   # buyer got the email. Checking only the representative purchase would report a buyer who is
   # demonstrably reading their content.
   def self.accessed_content?(purchase)
-    purchases = purchase.uses_charge_receipt? ? purchase.charge.purchases.to_a : [purchase]
-    purchases.any? { |p| p.url_redirect.present? && p.url_redirect.uses.to_i.positive? }
+    order_purchases(purchase).any? { |p| p.url_redirect.present? && p.url_redirect.uses.to_i.positive? }
   end
   private_class_method :accessed_content?
+
+  # Everything one receipt covers. A charge receipt stands for the whole order, so judging the
+  # representative purchase alone would answer for one line of a cart.
+  def self.order_purchases(purchase)
+    purchase.uses_charge_receipt? ? purchase.charge.purchases.to_a : [purchase]
+  end
+  private_class_method :order_purchases
 
   def self.report(error)
     ErrorNotifier.notify(error)

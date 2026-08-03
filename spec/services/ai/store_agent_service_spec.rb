@@ -126,6 +126,55 @@ describe Ai::StoreAgentService do
       expect(assistant_message[:content]).to end_with("\n\n[Server proposal state: #{proposal_state}]")
     end
 
+    it "sends the whole request the creator just typed, and still trims their earlier turns" do
+      captured = nil
+      allow(client).to receive(:messages) do |args|
+        captured = args
+        text_result("ok")
+      end
+      earlier_request = "e" * (described_class::MAX_MESSAGE_LENGTH + 500)
+      current_request = "c" * (described_class::MAX_MESSAGE_LENGTH + 500)
+
+      service.respond(messages: [
+                        { role: "user", content: earlier_request },
+                        { role: "assistant", content: "Done." },
+                        { role: "user", content: current_request },
+                      ])
+
+      # The decoy is a user message of the SAME oversized length, so a limit applied to every user
+      # message alike cannot pass this: the earlier turn must still be cut and the last one must not.
+      expect(captured[:messages].first[:content].length).to eq(described_class::MAX_MESSAGE_LENGTH)
+      expect(captured[:messages].last[:content]).to eq(current_request)
+    end
+
+    it "trims a current message past the current-message budget" do
+      captured = nil
+      allow(client).to receive(:messages) do |args|
+        captured = args
+        text_result("ok")
+      end
+
+      service.respond(messages: [{ role: "user", content: "c" * (described_class::MAX_CURRENT_MESSAGE_LENGTH + 100) }])
+
+      expect(captured[:messages].last[:content].length).to eq(described_class::MAX_CURRENT_MESSAGE_LENGTH)
+    end
+
+    it "treats the last non-blank user turn as the current message when blank turns trail it" do
+      captured = nil
+      allow(client).to receive(:messages) do |args|
+        captured = args
+        text_result("ok")
+      end
+      current_request = "c" * (described_class::MAX_MESSAGE_LENGTH + 500)
+
+      service.respond(messages: [
+                        { role: "user", content: current_request },
+                        { role: "user", content: "   " },
+                      ])
+
+      expect(captured[:messages].last[:content]).to eq(current_request)
+    end
+
     context "when the model completes a turn" do
       it "rejects an untyped staging claim that the prose backstop does not recognize" do
         false_claim = "Your edit is waiting in the action panel. Use the button there."
