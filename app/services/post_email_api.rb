@@ -26,18 +26,7 @@ class PostEmailApi
     end
 
     # Split recipients based on email provider determination
-    recipients_by_provider = recipients.group_by do |recipient|
-      email = recipient[:email]
-
-      # If the email contains non-ASCII characters or special characters, route it through SendGrid.
-      # Recipients whose provider policy-blocks Resend's sending IPs go to
-      # SendGrid too (MailerInfo::UNITED_INTERNET_RECIPIENT_DOMAINS).
-      if valid_email_address_for_resend?(email) && !MailerInfo.force_sendgrid_for_recipients?(email)
-        MailerInfo::Router.determine_email_provider(MailerInfo::DeliveryMethod::DOMAIN_CREATORS)
-      else
-        MailerInfo::EMAIL_PROVIDER_SENDGRID
-      end
-    end
+    recipients_by_provider = recipients.group_by { provider_for(post: post, email: _1[:email]) }
 
     resend_recipients = recipients_by_provider[MailerInfo::EMAIL_PROVIDER_RESEND] || []
     sendgrid_recipients = recipients_by_provider[MailerInfo::EMAIL_PROVIDER_SENDGRID] || []
@@ -46,12 +35,31 @@ class PostEmailApi
     PostSendgridApi.process(**args.merge(recipients: sendgrid_recipients)) if sendgrid_recipients.any?
   end
 
+  def self.provider_for(post:, email:)
+    if Feature.inactive?(:use_resend_for_post_emails, post&.seller)
+      MailerInfo::EMAIL_PROVIDER_SENDGRID
+    elsif Feature.active?(:force_resend_for_post_emails, post&.seller)
+      # Recipients whose provider policy-blocks Resend's sending IPs go to
+      # SendGrid too (MailerInfo::UNITED_INTERNET_RECIPIENT_DOMAINS).
+      MailerInfo.force_sendgrid_for_recipients?(email) ? MailerInfo::EMAIL_PROVIDER_SENDGRID : MailerInfo::EMAIL_PROVIDER_RESEND
+    # If the email contains non-ASCII characters or special characters, route it through SendGrid.
+    elsif valid_email_address_for_resend?(email) && !MailerInfo.force_sendgrid_for_recipients?(email)
+      MailerInfo::Router.determine_email_provider(MailerInfo::DeliveryMethod::DOMAIN_CREATORS)
+    else
+      MailerInfo::EMAIL_PROVIDER_SENDGRID
+    end
+  end
+
   def self.max_recipients
     if Feature.active?(:use_resend_for_post_emails)
       PostResendApi::MAX_RECIPIENTS
     else
       PostSendgridApi::MAX_RECIPIENTS
     end
+  end
+
+  def self.max_recipients_for(provider)
+    provider == MailerInfo::EMAIL_PROVIDER_RESEND ? PostResendApi::MAX_RECIPIENTS : PostSendgridApi::MAX_RECIPIENTS
   end
 
   private
