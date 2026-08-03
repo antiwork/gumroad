@@ -377,7 +377,7 @@ export const RefundSale = () => (
     <ApiParameters>
       <ApiParameter
         name="amount_cents"
-        description="(optional) - Amount to refund, in minor units of the sale's listed currency — the `currency` field on the sale object, not the buyer's local currency. Most currencies have 100 minor units, so 200 means 2.00 of that currency; zero-decimal currencies have none, so for a JPY sale 200 means ¥200. If set, issue partial refund by this amount. If not set, issue full refund. You can issue multiple partial refunds per sale until it is fully refunded."
+        description="(optional) - Amount to refund, in minor units of the sale's listed currency — the `currency` field on the sale object, not the buyer's local currency. Every listed currency has 100 minor units except `jpy`, which has none (whole yen), so for most sales 200 means 2.00 of that currency, but for a JPY sale 200 means ¥200. If set, issue partial refund by this amount. If not set, issue full refund. You can issue multiple partial refunds per sale until it is fully refunded."
       />
     </ApiParameters>
     <SaleResponseFields />
