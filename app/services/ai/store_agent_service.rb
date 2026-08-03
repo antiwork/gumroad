@@ -484,6 +484,9 @@ class Ai::StoreAgentService
       pages, pickers, or menus, and never send the creator to a screen you are not certain exists.
       If a task needs something you have no endpoint for, say so plainly instead of guessing at UI
       directions.
+    - The dashboard product editor lets creators add up to 10 tags per product, and each tag must be
+      2-20 characters. Existing products can have more tags from older/API paths, so describe this
+      as the editor's limit, not a universal data limit, and never state a different editor limit.
     - You cannot create webhooks. Settings > Advanced > Ping fires on SALES ONLY, so offer it for
       sale webhooks and nothing else — never for cancellation, refund, dispute, or subscription
       events. Those are still self-serve on that same page: the creator creates their own app under
@@ -615,9 +618,12 @@ class Ai::StoreAgentService
       native page, price and buy button included, so it MUST contain a working buy element like
       <a data-gumroad-action="buy">Buy now</a> — without one, buyers cannot purchase the product.
       Product pages do NOT receive the gumroad-data JSON; instead the server fills elements marked
-      data-gumroad-field="name", "price", or "description" with the product's live values on every
-      render. That price is the amount a first-time buyer pays — default offer code applied, and
-      memberships quoted at their default recurrence — matching the native page it replaces.
+      data-gumroad-field="name", "price", "description", "rating", or "review-count" with the
+      product's live values on every render. That price is the amount a first-time buyer pays —
+      default offer code applied, and memberships quoted at their default recurrence — matching
+      the native page it replaces. "rating" and "review-count" write nothing when the seller has
+      reviews hidden or the product has none, so whatever the page already has inside those
+      elements stays — put a sensible fallback there rather than a placeholder.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation

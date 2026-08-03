@@ -5,7 +5,10 @@ class IndonesiaBankAccount < BankAccount
 
   BANK_ACCOUNT_TYPE = "ID"
 
-  BANK_CODE_FORMAT_REGEX = /\A[0-9a-zA-Z]{3,4}\z/
+  # Stripe's ID rail resolves the bank from its own Sandi Bank directory, which is exactly 3 digits.
+  # Anything else (a SWIFT-ish `BBSB`, a zero-padded `0140`) saves here and then fails bank-sync with
+  # routing_number_invalid, leaving the seller unpayable with no visible error.
+  BANK_CODE_FORMAT_REGEX = /\A[0-9]{3}\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{1,35}\z/
@@ -15,7 +18,11 @@ class IndonesiaBankAccount < BankAccount
 
   stripped_fields :account_holder_full_name, remove_duplicate_spaces: false, nilify_blanks: false
 
-  validate :validate_bank_code
+  # Only on write: 2,233 live rows predate the digits-only rule, and re-validating them would abort
+  # unrelated saves — including the mark_deleted! that a switch to another payout method performs
+  # after the Stripe account is already gone. A nil code on a new row is still rejected: nothing
+  # presence-validates bank_number.
+  validate :validate_bank_code, if: -> { new_record? || will_save_change_to_bank_number? }
   validate :validate_account_number
 
   def routing_number
@@ -49,7 +56,7 @@ class IndonesiaBankAccount < BankAccount
   private
     def validate_bank_code
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
-      errors.add :base, "The bank code is invalid."
+      errors.add :base, "Enter your bank's 3-digit Indonesian bank code, digits only."
     end
 
     def validate_account_number

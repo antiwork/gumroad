@@ -9,11 +9,13 @@ module Product::StructuredData
   AVAILABILITY_LIMITED = "#{SCHEMA_ORG_CONTEXT}/LimitedAvailability"
   AVAILABILITY_SOLD_OUT = "#{SCHEMA_ORG_CONTEXT}/SoldOut"
 
-  def structured_data
+  # host: threads the seller's custom domain through so the JSON-LD urls match the
+  # canonical tag on the same page (PageMeta::Product). nil keeps the subdomain default.
+  def structured_data(host: nil)
     if native_type == Link::NATIVE_TYPE_EBOOK
-      build_ebook_structured_data
+      build_ebook_structured_data(host:)
     elsif has_displayable_reviews?
-      build_product_structured_data
+      build_product_structured_data(host:)
     else
       {}
     end
@@ -24,8 +26,8 @@ module Product::StructuredData
       display_product_reviews? && reviews_count > 0
     end
 
-    def build_ebook_structured_data
-      url = long_url
+    def build_ebook_structured_data(host: nil)
+      url = long_url(host:)
       data = {
         "@context" => SCHEMA_ORG_CONTEXT,
         "@type" => "Book",
@@ -45,8 +47,8 @@ module Product::StructuredData
       data.compact
     end
 
-    def build_product_structured_data
-      url = long_url
+    def build_product_structured_data(host: nil)
+      url = long_url(host:)
       {
         "@context" => SCHEMA_ORG_CONTEXT,
         "@type" => "Product",

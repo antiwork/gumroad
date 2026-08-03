@@ -1209,7 +1209,7 @@ describe "PurchaseRefunds", :vcr do
           sample_image = File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg"))
           allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(purchase).and_return(sample_image)
           allow(DisputeEvidence::GenerateUncategorizedTextService).to receive(:perform).with(purchase).and_return("Sample uncategorized text")
-          allow(DisputeEvidence::GenerateAccessActivityLogsService).to receive(:perform).with(purchase).and_return("Sample activity logs")
+          allow(DisputeEvidence::GenerateAccessActivityLogsService).to receive(:perform).with(purchase, other_purchases: []).and_return("Sample activity logs")
           Purchase.handle_charge_event(charge_event_dispute)
           expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
           purchase.reload

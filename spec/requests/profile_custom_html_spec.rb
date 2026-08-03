@@ -312,6 +312,16 @@ describe "Profile custom HTML rendering", type: :request do
       expect(data["products"].first.keys).to match_array(%w[name url price native_type thumbnail_url cover_url description])
     end
 
+    it "adds seller_rating to the payload only once the seller_reputation_summary flag is on" do
+      create(:product, user: seller, name: "Cool thing")
+      Feature.activate_user(:seller_reputation_summary, seller)
+
+      get "http://seller.example.com/landing/embed"
+
+      json = response.body[%r{<script id="gumroad-data"[^>]*>(.*?)</script>}m, 1]
+      expect(JSON.parse(json).keys).to match_array(%w[products posts pages products_total posts_total seller_rating])
+    end
+
     it "embeds a per-request price blob keyed by permalink alongside the cached catalog" do
       product = create(:product, user: seller, name: "Cool thing", price_cents: 1400)
       seller.update!(custom_html: %(<main><script>document.getElementById("gumroad-prices")</script></main>))

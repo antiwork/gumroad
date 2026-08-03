@@ -31,7 +31,12 @@ class Commission < ApplicationRecord
 
   def create_completion_purchase!
     return if is_completed?
+    # A completion still settling in the buyer's presentment currency leaves the commission
+    # in_progress with the buyer already charged, so `is_completed?` alone would charge them a
+    # second time here. A failed attempt stays retryable.
+    return if completion_purchase.present? && !completion_purchase.failed?
     ensure_deposit_is_chargeable!
+    ensure_deliverable_is_attached!
 
     completion_purchase_attributes = deposit_purchase.slice(
       :link, :purchaser, :credit_card_id, :email, :full_name, :street_address,
@@ -83,6 +88,14 @@ class Commission < ApplicationRecord
     (deposit_purchase.displayed_price_cents / COMMISSION_DEPOSIT_PROPORTION) - deposit_purchase.displayed_price_cents
   end
 
+  # Keyed on the completion charge, not the status alone: a completion still settling in the
+  # buyer's presentment currency leaves the commission in_progress with the buyer already
+  # charged, and the files justify that charge. Serialized to the seller UI so its affordances
+  # match what CommissionsController#update will accept.
+  def files_are_editable?
+    !is_completed? && completion_purchase.nil?
+  end
+
   private
     # Refunding the deposit is how the Help Center tells sellers to reject a commission, and
     # nothing transitions the commission when they do — so the deposit is re-read at charge time.
@@ -90,6 +103,13 @@ class Commission < ApplicationRecord
       return if deposit_is_chargeable?
 
       errors.add(:base, "This commission's deposit is no longer in a completable state, so it can no longer be completed.")
+      raise ActiveRecord::RecordInvalid, self
+    end
+
+    def ensure_deliverable_is_attached!
+      return if files.attached?
+
+      errors.add(:base, "Attach at least one file before completing this commission.")
       raise ActiveRecord::RecordInvalid, self
     end
 

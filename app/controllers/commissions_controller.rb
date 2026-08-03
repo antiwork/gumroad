@@ -4,6 +4,7 @@ class CommissionsController < ApplicationController
   def update
     commission = Commission.find_by_external_id!(params[:id])
     authorize commission
+    ensure_files_can_be_changed!(commission)
 
     file_signed_ids = permitted_params[:file_signed_ids]
 
@@ -35,6 +36,13 @@ class CommissionsController < ApplicationController
   end
 
   private
+    def ensure_files_can_be_changed!(commission)
+      return if commission.files_are_editable?
+
+      commission.errors.add(:base, "This commission has already been completed, so its files can no longer be changed.")
+      raise ActiveRecord::RecordInvalid, commission
+    end
+
     def permitted_params
       params.permit(file_signed_ids: [])
     end

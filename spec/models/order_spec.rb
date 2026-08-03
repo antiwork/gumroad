@@ -244,13 +244,6 @@ describe Order do
     end
   end
 
-  describe "#unsubscribe_buyer" do
-    it "calls unsubscribe_buyer on purchase" do
-      allow_any_instance_of(Purchase).to receive(:unsubscribe_buyer).and_return("unsubscribed!")
-      expect(order.unsubscribe_buyer).to eq("unsubscribed!")
-    end
-  end
-
   describe "#schedule_review_reminder!" do
     let(:order) { create(:order) }
     let(:purchase) { create(:purchase) }

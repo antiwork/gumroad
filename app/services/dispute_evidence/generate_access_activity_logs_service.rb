@@ -1,14 +1,15 @@
 # frozen_string_literal: true
 
 class DisputeEvidence::GenerateAccessActivityLogsService
-  def self.perform(purchase)
-    new(purchase).perform
+  def self.perform(purchase, other_purchases: [])
+    new(purchase, other_purchases:).perform
   end
 
   include ActionView::Helpers::NumberHelper
 
-  def initialize(purchase)
+  def initialize(purchase, other_purchases: [])
     @purchase = purchase
+    @other_purchases = other_purchases
     @url_redirect = purchase.url_redirect
   end
 
@@ -21,7 +22,7 @@ class DisputeEvidence::GenerateAccessActivityLogsService
   end
 
   private
-    attr_reader :purchase, :url_redirect
+    attr_reader :purchase, :other_purchases, :url_redirect
 
     def rental_activity
       return unless url_redirect.present? && url_redirect.rental_first_viewed_at.present?
@@ -39,16 +40,24 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     # The disputed row on a bundle sale is the wrapper, but access rows are written against the
     # member purchases the buyer actually downloads. Both are counted: the wrapper's own download
     # page still increments when no member is library-visible.
+    #
+    # A combined charge is disputed as one amount, so the siblings count too: the representative is
+    # chosen on refund policy and amount, never on access, and reporting only its activity told
+    # Stripe "no access recorded" for orders the buyer demonstrably consumed elsewhere in the charge.
     def access_purchases
-      @_access_purchases ||= if bundle?
-        [purchase, *purchase.product_purchases.includes(:link, :url_redirect)]
-      else
-        [purchase]
-      end
+      @_access_purchases ||= [purchase, *other_purchases].flat_map { with_bundle_members(_1) }
     end
 
-    def bundle?
-      purchase.is_bundle_purchase?
+    def with_bundle_members(candidate)
+      return [candidate] unless candidate.is_bundle_purchase?
+
+      [candidate, *candidate.product_purchases.includes(:link, :url_redirect)]
+    end
+
+    # Name the product on each row once the log can span more than one of them, so an entry is
+    # attributable to the purchase it came from rather than reading as the representative's.
+    def attribute_products?
+      access_purchases.size > 1
     end
 
     def consumption_events
@@ -88,13 +97,13 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     BASE_ROW_ATTRIBUTES = %w(consumed_at event_type platform ip_address).freeze
 
     def consumption_event_row_attributes
-      BASE_ROW_ATTRIBUTES + (bundle? ? ["product"] : [])
+      BASE_ROW_ATTRIBUTES + (attribute_products? ? ["product"] : [])
     end
 
     def consumption_event_rows
-      consumption_events.first(LOG_RECORDS_LIMIT).map do |event|
+      consumption_events.last(LOG_RECORDS_LIMIT).map do |event|
         row = event.slice(*BASE_ROW_ATTRIBUTES).values
-        row += [product_name_for(event)] if bundle?
+        row += [product_name_for(event)] if attribute_products?
         row.join(",")
       end
     end

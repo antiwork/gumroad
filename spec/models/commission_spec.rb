@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 describe Commission, :vcr do
+  def attach_commission_file(commission)
+    commission.files.attach(file_fixture("test.pdf"))
+  end
+
   describe "validations" do
     it "validates inclusion of status in STATUSES" do
       commission = build(:commission, status: "invalid_status")
@@ -47,11 +51,55 @@ describe Commission, :vcr do
       end
     end
 
+    context "when a completion purchase already exists" do
+      let!(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
+
+      before { attach_commission_file(commission) }
+
+      # `create_completion_purchase!` leaves the commission in_progress while the charge settles
+      # in the buyer's presentment currency, so a second complete request lands on a commission
+      # whose buyer has already been charged.
+      it "does not charge the buyer again while the completion charge is still settling" do
+        settling_purchase = create(:purchase, link: commission.deposit_purchase.link, seller: commission.deposit_purchase.seller, is_commission_completion_purchase: true)
+        commission.update!(completion_purchase: settling_purchase)
+
+        expect { commission.create_completion_purchase! }.not_to change { Purchase.count }
+
+        expect(commission.reload.completion_purchase).to eq(settling_purchase)
+        expect(commission.status).to eq(Commission::STATUS_IN_PROGRESS)
+      end
+
+      it "retries the charge when the previous completion attempt failed" do
+        commission.update!(completion_purchase: create(:failed_purchase, link: commission.deposit_purchase.link, seller: commission.deposit_purchase.seller, is_commission_completion_purchase: true))
+        expect_any_instance_of(Purchase).to receive(:process!) do |purchase|
+          purchase.errors.add(:base, "Stop before charging")
+        end
+
+        expect { commission.create_completion_purchase! }.to raise_error(ActiveRecord::RecordInvalid)
+      end
+    end
+
+    context "when no deliverable files are attached" do
+      let!(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
+
+      it "refuses to create a completion purchase" do
+        expect do
+          commission.create_completion_purchase!
+        end.to raise_error(ActiveRecord::RecordInvalid) { |error|
+          expect(error.record.errors.full_messages).to eq(["Attach at least one file before completing this commission."])
+        }.and not_change { Purchase.count }
+
+        expect(commission.reload.completion_purchase).to be_nil
+        expect(commission.status).to eq(Commission::STATUS_IN_PROGRESS)
+      end
+    end
+
     it "makes the commission's stored presentment available while processing the completion purchase" do
       product = create(:commission_product)
       merchant_account = create(:merchant_account, user: product.user, charge_processor_merchant_id: "commission-presentment-test")
       deposit_purchase = create(:purchase, link: product, merchant_account:, is_commission_deposit_purchase: true)
       commission = create(:commission, status: Commission::STATUS_IN_PROGRESS, deposit_purchase:)
+      attach_commission_file(commission)
       fixing = create(:later_charge_presentment, owner: commission, canonical_price_cents: deposit_purchase.price_cents)
       expect_any_instance_of(Purchase).to receive(:process!) do |completion_purchase|
         expect(completion_purchase.commission.current_later_charge_presentment).to eq(fixing)
@@ -107,6 +155,7 @@ describe Commission, :vcr do
       # dispute would strand the commission.
       it "still charges when a chargeback was reversed" do
         deposit_purchase.update!(chargeback_date: Date.today, chargeback_reversed: true)
+        attach_commission_file(commission)
 
         expect { commission.create_completion_purchase! }.to change { Purchase.count }.by(1)
         expect(commission.reload.status).to eq(Commission::STATUS_COMPLETED)
@@ -132,6 +181,7 @@ describe Commission, :vcr do
       # it charges nothing but is a supported flow, so the state gate must admit it.
       it "still charges when the deposit is a seller test purchase" do
         deposit_purchase.update_columns(purchase_state: "test_successful")
+        attach_commission_file(commission)
 
         expect { commission.create_completion_purchase! }.to change { Purchase.count }.by(1)
         expect(commission.reload.status).to eq(Commission::STATUS_COMPLETED)
@@ -144,6 +194,7 @@ describe Commission, :vcr do
       let(:product) { deposit_purchase.link }
 
       before do
+        attach_commission_file(commission)
         deposit_purchase.update!(zip_code: "10001")
         deposit_purchase.update!(displayed_price_cents: 100)
         deposit_purchase.create_tip!(value_cents: 20)
@@ -214,6 +265,8 @@ describe Commission, :vcr do
       let!(:deposit_purchase) { create(:commission_deposit_purchase, link: product) }
       let!(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS, deposit_purchase: deposit_purchase) }
 
+      before { attach_commission_file(commission) }
+
       it "creates a completion purchase without any variant attributes" do
         expect(deposit_purchase.variant_attributes).to be_empty
         expect(deposit_purchase.price_cents).to eq(500)
@@ -233,6 +286,8 @@ describe Commission, :vcr do
 
       let!(:deposit_purchase) { create(:commission_deposit_purchase, link: product, variant_attributes: [variant]) }
       let!(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS, deposit_purchase: deposit_purchase) }
+
+      before { attach_commission_file(commission) }
 
       context "variant price changed" do
         it "creates a completion purchase with the original price" do
@@ -282,6 +337,8 @@ describe Commission, :vcr do
 
       let!(:deposit_purchase) { create(:commission_deposit_purchase, link: product, offer_code:, discount_code: offer_code.code) }
       let!(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS, deposit_purchase: deposit_purchase) }
+
+      before { attach_commission_file(commission) }
 
       it "creates a completion purchase with the original price" do
         expect(deposit_purchase.price_cents).to eq(500)
@@ -346,6 +403,8 @@ describe Commission, :vcr do
 
       let!(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS, deposit_purchase:) }
 
+      before { attach_commission_file(commission) }
+
       it "creates a completion purchase with PPP discount applied" do
         expect(deposit_purchase.is_purchasing_power_parity_discounted).to eq(true)
         expect(deposit_purchase.purchasing_power_parity_info).to be_present
@@ -369,6 +428,26 @@ describe Commission, :vcr do
 
     it "returns the correct completion price" do
       expect(commission.completion_price_cents).to eq(5000)
+    end
+  end
+
+  describe "#files_are_editable?" do
+    let(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
+
+    it "returns true while the commission is in progress with no completion charge" do
+      expect(commission.files_are_editable?).to be true
+    end
+
+    it "returns false once the commission is completed" do
+      commission.status = Commission::STATUS_COMPLETED
+      expect(commission.files_are_editable?).to be false
+    end
+
+    it "returns false while the completion charge is still settling" do
+      commission.update!(completion_purchase: create(:purchase, link: commission.deposit_purchase.link, seller: commission.deposit_purchase.seller, is_commission_completion_purchase: true))
+
+      expect(commission.files_are_editable?).to be false
+      expect(commission.status).to eq(Commission::STATUS_IN_PROGRESS)
     end
   end
 

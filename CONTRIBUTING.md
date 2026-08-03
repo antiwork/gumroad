@@ -12,7 +12,7 @@ Your PR on your fork is held to the same bar as anything we write. Concretely, a
 
 - **Visual evidence** for anything a user can see, before/after, desktop + mobile, light + dark. Video preferred. This is the #1 rule below and it is not waived for forks. The one exception is the same one we give ourselves: a PR that only touches documentation or agent skill files needs no video, because the diff is the reviewable artifact.
 - **QA steps** someone else can actually follow to verify the change.
-- **Test results** — updated tests, and a screenshot of them passing.
+- **Test results** — updated tests where appropriate, and the relevant commands/checks run. No screenshot of passing specs or terminal output is required.
 - **An AI disclosure** naming the specific model, after a `---` separator.
 - **A self-review** comment on your own diff, and a **What / Why / Before-After / Test Results** description.
 
@@ -55,9 +55,9 @@ Non-trivial PRs should follow this structure:
 - **What** — What this PR does. Concrete changes, not a list of files.
 - **Why** — Why this change exists and why this approach was chosen over alternatives. When other PRs or approaches exist for the same problem, name them and say why this one wins (fewer changes, right API, no backend/storage churn, etc.).
 - **Before/After** — Video is required for all PRs, except PRs that only touch documentation or agent skill files, where the diff itself is the reviewable artifact. For user-facing changes, show before/after with desktop and mobile, light and dark mode. For non-user-facing changes, include a short video walking through the relevant existing functionality.
-- **Test Results** — Screenshot of tests passing locally.
+- **Test Results** — List the relevant test commands/checks run. No screenshot of passing specs or terminal output is required.
 
-Store screenshots and videos in `qa-media/` using the naming convention `pr-<number>-<description>.<ext>`. From a fork, use your own fork's PR number — it won't match any number here, and that's fine. Reference them in PR descriptions with raw GitHub URLs:
+Store visual evidence screenshots and videos in `qa-media/` using the naming convention `pr-<number>-<description>.<ext>`. From a fork, use your own fork's PR number — it won't match any number here, and that's fine. Reference them in PR descriptions with raw GitHub URLs:
 
 ```markdown
 ![description](https://raw.githubusercontent.com/antiwork/gumroad/<branch>/qa-media/pr-5160-pagination-page1.png)

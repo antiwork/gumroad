@@ -151,6 +151,28 @@ describe("Bundle edit page", type: :system, js: true) do
     expect(bundle.reload.default_offer_code).to be_nil
   end
 
+  it "changes the display currency through the editor and only offers supported currencies" do
+    visit edit_bundle_product_path(bundle.external_id)
+
+    currency_select = find("select[aria-label='Currency']", visible: :all)
+    expect(currency_select).to have_css("option[value='usd']", text: "$", visible: :all)
+    expect(currency_select).to have_no_css("option[value='xyz']", visible: :all)
+
+    select "€", from: "Currency", visible: :all
+    in_preview { expect(page).to have_selector("[itemprop='price']", text: "€2") }
+
+    click_on "Save changes"
+    expect(page).to have_alert(text: "Changes saved!")
+
+    bundle.reload
+    expect(bundle.price_currency_type).to eq("eur")
+    expect(bundle.price_cents).to eq(200)
+
+    visit edit_bundle_product_path(bundle.external_id)
+    expect(page).to have_select("Currency", selected: "€", visible: :all)
+    in_preview { expect(page).to have_selector("[itemprop='price']", text: "€2") }
+  end
+
   context "when seller refund is set to false" do
     before do
       seller.update!(refund_policy_enabled: false)
@@ -394,8 +416,6 @@ describe("Bundle edit page", type: :system, js: true) do
           select_combo_box_option search: "Test#{index}", from: "Tags"
           expect(page).to have_button("test#{index}")
         end
-        fill_in "Tags", with: "Test6"
-        expect(page).to_not have_combo_box "Tags", expanded: true
         click_on "test2"
         click_on "test3"
         click_on "test4"

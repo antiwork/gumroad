@@ -359,6 +359,46 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "GET /api/mobile/url_redirects/download throttle" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "shares one download throttle bucket across formatted route variants of the same file" do
+      request_for = lambda do |path|
+        Rack::Attack::Request.new(
+          Rack::MockRequest.env_for(path, method: "GET", input: "", "HTTP_CF_CONNECTING_IP" => "203.0.113.90")
+        )
+      end
+
+      travel_to(Time.current) do
+        60.times do |i|
+          request = request_for.call(i.even? ? "/api/mobile/url_redirects/download/token123/file456" : "/api/mobile/url_redirects/download/token123/file456.json")
+
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(Rack::Attack.configuration.throttled?(request_for.call("/api/mobile/url_redirects/download/token123/file456.xml"))).to be(true)
+      end
+    end
+
+    it "counts different files under the same token separately" do
+      request_for = lambda do |path|
+        Rack::Attack::Request.new(
+          Rack::MockRequest.env_for(path, method: "GET", input: "", "HTTP_CF_CONNECTING_IP" => "203.0.113.91")
+        )
+      end
+
+      travel_to(Time.current) do
+        60.times do
+          expect(Rack::Attack.configuration.throttled?(request_for.call("/api/mobile/url_redirects/download/token123/file456"))).to be(false)
+        end
+
+        expect(Rack::Attack.configuration.throttled?(request_for.call("/api/mobile/url_redirects/download/token123/file456"))).to be(true)
+        expect(Rack::Attack.configuration.throttled?(request_for.call("/api/mobile/url_redirects/download/token123/file789"))).to be(false)
+      end
+    end
+  end
+
   describe "PUT /api/v2/products/:id per-token throttle" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }

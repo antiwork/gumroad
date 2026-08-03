@@ -2029,6 +2029,31 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_response :success
   end
 
+  test "PUT update re-denominates membership tier prices when the editor changes display currency" do
+    product = create_membership_product_with_preset_tiered_pricing(user: @seller, price_currency_type: "usd")
+    first_tier = product.tiers.find_by!(name: "First Tier")
+    second_tier = product.tiers.find_by!(name: "Second Tier")
+
+    post :update, params: {
+      id: product.unique_permalink,
+      name: product.name,
+      price_currency_type: "eur",
+      variants: [
+        { id: first_tier.external_id, name: first_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 300 } } },
+        { id: second_tier.external_id, name: second_tier.name,
+          updated_at: Product::StaleContentWriteGuard.snapshot_at(second_tier).as_json,
+          recurrence_price_values: { monthly: { enabled: true, price_cents: 500 } } },
+      ]
+    }, format: :json
+
+    assert_response :success
+    assert_equal "eur", product.reload.price_currency_type
+    assert_equal 300, first_tier.reload.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+    assert_equal 500, second_tier.reload.alive_prices.is_buy.find_by!(currency: "eur", recurrence: BasePrice::Recurrence::MONTHLY).price_cents
+  end
+
   test "PUT update rejects a stale tier save that would re-enable a recurrence another session turned off" do
     enforce_stale_content_block!
     # Both tiers carry the same set of recurrences — the editor enforces that,
@@ -5803,6 +5828,8 @@ class LinksControllerShowTest < ActionController::TestCase
 
   test "GET show stores click when coming from discover" do
     cookies[:_gumroad_guid] = "custom_guid"
+    taxonomy = Taxonomy.find_or_create_by(slug: "fonts")
+    product.update!(taxonomy:)
 
     assert_difference -> { DiscoverSearch.count }, 1 do
       get :show, params: { id: product.to_param, recommended_by: "search", query: "something", autocomplete: "true" }
@@ -5815,6 +5842,7 @@ class LinksControllerShowTest < ActionController::TestCase
       "autocomplete" => true,
       "clicked_resource_type" => product.class.name,
       "clicked_resource_id" => product.id,
+      "taxonomy_id" => taxonomy.id,
     }
 
     assert_difference -> { DiscoverSearch.count }, 1 do
@@ -5828,7 +5856,21 @@ class LinksControllerShowTest < ActionController::TestCase
       "autocomplete" => false,
       "clicked_resource_type" => product.class.name,
       "clicked_resource_id" => product.id,
+      "taxonomy_id" => taxonomy.id,
     }
+  end
+
+  test "GET show stores click with no taxonomy when the clicked product is uncategorized" do
+    cookies[:_gumroad_guid] = "custom_guid"
+    product.update!(taxonomy: nil)
+
+    assert_difference -> { DiscoverSearch.count }, 1 do
+      get :show, params: { id: product.to_param, recommended_by: "discover", query: "something" }
+    end
+
+    click = DiscoverSearch.last!
+    assert_nil click.taxonomy_id
+    assert_equal product.id, click.clicked_resource_id
   end
 
   test "GET show does not store click when not coming from discover" do
@@ -6212,6 +6254,7 @@ class LinksControllerSearchTest < ActionController::TestCase
       "total" => 1,
       "filetypes_data" => [],
       "tags_data" => [],
+      "taxonomy_attributes_data" => [],
       "products" => [product_json(@sao_product, "discover")]
     }
     get :search
@@ -6241,6 +6284,7 @@ class LinksControllerSearchTest < ActionController::TestCase
                    "total" => 23,
                    "filetypes_data" => [{ "doc_count" => 1, "key" => "pdf" }],
                    "tags_data" => [{ "doc_count" => 1, "key" => "mustelid" }],
+                   "taxonomy_attributes_data" => [],
                    "products" => shown_products[0...9].map { |p| product_json(p, "profile") }
                  }, response.parsed_body)
   end
@@ -6262,17 +6306,17 @@ class LinksControllerSearchTest < ActionController::TestCase
   test "GET search returns an empty response when searching by non-existent user" do
     setting_and_ordering_setup
     get :search, params: { user_id: 1640736000000, section_id: @section.id }
-    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "taxonomy_attributes_data" => [], "products" => [] }, response.parsed_body)
   end
 
   test "GET search returns an empty response when searching by non-existent section" do
     setting_and_ordering_setup
     get :search, params: { user_id: @creator.external_id, section_id: 1640736000000 }
-    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "taxonomy_attributes_data" => [], "products" => [] }, response.parsed_body)
 
     section = create_seller_profile_posts_section(seller: @creator)
     get :search, params: { user_id: @creator.external_id, section_id: section.id }
-    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "taxonomy_attributes_data" => [], "products" => [] }, response.parsed_body)
   end
 
   test "GET search returns all the creator's live profile products for the virtual default products section" do
@@ -6294,7 +6338,7 @@ class LinksControllerSearchTest < ActionController::TestCase
     setting_and_ordering_setup
     get :search, params: { user_id: @creator.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
 
-    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "taxonomy_attributes_data" => [], "products" => [] }, response.parsed_body)
   end
 
   test "GET search searches only for recommendable products" do
@@ -6312,6 +6356,7 @@ class LinksControllerSearchTest < ActionController::TestCase
                    "total" => 1,
                    "filetypes_data" => [{ "doc_count" => 1, "key" => "pdf" }],
                    "tags_data" => [{ "doc_count" => 1, "key" => "mustelid" }],
+                   "taxonomy_attributes_data" => [],
                    "products" => [product_json(@sao_product, "discover")]
                  }, response.parsed_body)
   end

@@ -277,6 +277,13 @@ class ApplicationController < ActionController::Base
       return if last_sign_in_at && last_sign_in_at.to_i >= logged_in_user.last_active_sessions_invalidated_at.to_i
 
       sign_out
+
+      # The session cookie is scoped to `.gumroad.com`, so it also travels to the API host, where
+      # `login_path` is not routed at all — redirecting there answers a token-authenticated API
+      # call with a 404 for a page it never asked for. Doorkeeper runs after this and ignores the
+      # cookie session, so continue instead and let token auth answer.
+      return unless GumroadDomainConstraint.matches?(request)
+
       flash[:warning] = "We're sorry; you have been logged out. Please login again."
       redirect_to login_path
     end

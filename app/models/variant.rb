@@ -17,6 +17,7 @@ class Variant < BaseVariant
 
   before_create :set_position
   after_save :set_customizable_price
+  after_save :sync_product_customizable_price
 
   delegate :link, to: :variant_category
   delegate :user, to: :link

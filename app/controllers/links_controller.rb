@@ -169,8 +169,12 @@ class LinksController < ApplicationController
     @body_class = "iframe" if params[:overlay] || params[:embed]
 
     if ["search", "discover"].include?(params[:recommended_by])
+      # The clicked product's own category, not the browsed one: Discover click-throughs land here
+      # without the taxonomy params the results page had, so this is the only side that can attribute
+      # a click to a category at all.
       create_discover_search!(
         clicked_resource: @product,
+        taxonomy_id: @product.taxonomy_id,
         query: params[:query],
         autocomplete: params[:autocomplete] == "true"
       )
@@ -246,7 +250,7 @@ class LinksController < ApplicationController
         user.present? &&
         search_params[:section_id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID &&
         user.seller_profile_sections.on_profile.none?
-      return render json: { total: 0, filetypes_data: [], tags_data: [], products: [] } if user.nil? || (section.nil? && !searching_default_products_section && search_params[:ids].blank?)
+      return render json: { total: 0, filetypes_data: [], tags_data: [], taxonomy_attributes_data: [], products: [] } if user.nil? || (section.nil? && !searching_default_products_section && search_params[:ids].blank?)
       search_params[:section] = section if section
       search_params[:is_alive_on_profile] = true
       search_params[:user_id] = user.id
@@ -476,6 +480,7 @@ class LinksController < ApplicationController
           :custom_button_text_option,
           :custom_summary,
           :custom_attributes,
+          :taxonomy_attribute_values,
           :file_attributes,
           :covers,
           :refund_policy,
@@ -505,6 +510,7 @@ class LinksController < ApplicationController
         @product.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
         @product.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
         @product.save_custom_attributes((product_permitted_params[:custom_attributes] || []).filter { _1[:name].present? || _1[:description].present? })
+        @product.save_taxonomy_attribute_values(product_permitted_params[:taxonomy_attribute_values]) unless product_permitted_params[:taxonomy_attribute_values].nil?
         @product.save_tags!(product_permitted_params[:tags] || [])
         @product.reorder_previews((product_permitted_params[:covers] || []).map.with_index.to_h)
         if !current_seller.account_level_refund_policy_enabled?
@@ -1969,7 +1975,7 @@ class LinksController < ApplicationController
       checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?#{Rack::Utils.build_query(checkout_params)}".to_json)
       store_hostnames_js = ERB::Util.json_escape(product_store_hostnames.to_json)
       title = ERB::Util.h(product.name.to_s)
-      canonical = ERB::Util.h(product.long_url.to_s)
+      canonical = ERB::Util.h(product.long_url(host: custom_domain_host_for_meta(product)).to_s)
       # The wrapper is what search engines see at the canonical /l/<permalink>
       # URL — the seller's HTML lives in a sandboxed, opaque-origin iframe whose
       # content crawlers generally do NOT attribute to this page. Without the
@@ -1989,7 +1995,7 @@ class LinksController < ApplicationController
       # untouched. Escape quotes explicitly so a description containing `"`
       # can't break out of the meta tag's attribute value.
       description_attr = description.gsub('"', "&quot;")
-      structured_data = product.structured_data
+      structured_data = product.structured_data(host: custom_domain_host_for_meta(product))
       # json_escape keeps the JSON valid while escaping <, >, & so a
       # description containing "</script>" can't break out of the script tag.
       structured_data_tag = if structured_data.any?
