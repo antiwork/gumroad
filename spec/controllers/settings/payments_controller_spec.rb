@@ -2355,6 +2355,50 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response).to redirect_to settings_payments_url
     end
 
+    it "warns instead of clearing the seller when Stripe paused payouts with no requirements outstanding" do
+      # `disabled_reason: "other"` with all three lists empty: Stripe pauses out of band
+      # and owes us nothing, so every requirement check passes and the seller still can't
+      # be paid. This is the case that must NOT get "You're all set".
+      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(
+        Stripe::Account.construct_from(
+          id: merchant_account.charge_processor_merchant_id,
+          object: "account",
+          requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] },
+          future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
+        )
+      )
+
+      get :remediation
+
+      expect(response).to redirect_to settings_payments_url
+      expect(flash[:notice]).to be_nil
+      expect(flash[:alert]).to include("Stripe has paused payouts")
+      expect(flash[:alert]).to include("contact support")
+    end
+
+    it "still says 'all set' when the pause came from us rather than Stripe" do
+      # An admin/system pause is ours to explain elsewhere on the page; only a
+      # Stripe-sourced pause means nobody has told the seller what is wrong.
+      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(
+        Stripe::Account.construct_from(
+          id: merchant_account.charge_processor_merchant_id,
+          object: "account",
+          requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] },
+          future_requirements: { "currently_due" => [], "past_due" => [] }
+        )
+      )
+
+      get :remediation
+
+      expect(response).to redirect_to settings_payments_url
+      expect(flash[:notice]).to eq "Thanks! You're all set."
+      expect(flash[:alert]).to be_nil
+    end
+
     it "opens a Stripe AccountLink when local has no pending requests but Stripe still has open requirements" do
       merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
       stripe_connect_account_id = merchant_account.charge_processor_merchant_id
@@ -2571,6 +2615,26 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
       expect(response).to redirect_to settings_payments_url
       expect(flash[:notice]).to be_nil
+    end
+
+    it "warns on the return trip when Stripe paused payouts with nothing outstanding" do
+      # The seller has just come back from Stripe's own flow, which is the exact
+      # moment "You're all set" is most convincing and most wrong.
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+        Stripe::Account.construct_from(
+          id: stripe_connect_account_id,
+          object: "account",
+          requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] },
+          future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
+        )
+      )
+
+      get :verify_stripe_remediation
+
+      expect(response).to redirect_to settings_payments_url
+      expect(flash[:notice]).to be_nil
+      expect(flash[:alert]).to include("Stripe has paused payouts")
     end
   end
 end

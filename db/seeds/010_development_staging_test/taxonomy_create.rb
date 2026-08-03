@@ -53,17 +53,7 @@ Taxonomy.find_or_create_by!(slug: "photoshop", parent: mockups)
 Taxonomy.find_or_create_by!(slug: "illustrator", parent: mockups)
 Taxonomy.find_or_create_by!(slug: "canva", parent: mockups)
 Taxonomy.find_or_create_by!(slug: "indesign", parent: mockups)
-fonts = Taxonomy.find_or_create_by!(slug: "fonts", parent: design)
-[
-  { name: "format", label: "Format", value_type: "enum", values: ["OTF", "TTF", "WOFF2"], position: 0 },
-  { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "App embedding"], position: 1 },
-  { name: "variable_font", label: "Variable font", value_type: "boolean", values: [], position: 2 },
-  { name: "styles", label: "Styles", value_type: "number", values: [], position: 3 },
-].each do |definition|
-  TaxonomyAttribute.find_or_create_by!(taxonomy: fonts, name: definition[:name]) do |attribute|
-    attribute.assign_attributes(definition)
-  end
-end
+Taxonomy.find_or_create_by!(slug: "fonts", parent: design)
 branding = Taxonomy.find_or_create_by!(slug: "branding", parent: design)
 Taxonomy.find_or_create_by!(slug: "logos", parent: branding)
 Taxonomy.find_or_create_by!(slug: "business-cards", parent: branding)
@@ -410,3 +400,6 @@ Taxonomy.find_or_create_by!(slug: "pbr", parent: textures)
 Taxonomy.find_or_create_by!(slug: "tattoos", parent: textures)
 
 Taxonomy.find_or_create_by!(slug: "other")
+
+# Same registry the production backfill applies, so the two cannot drift.
+Onetime::SeedTaxonomyAttributes.process(dry_run: false)
