@@ -185,6 +185,19 @@ describe ProductReview do
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
     end
 
+    it "doesn't send when a blank message is overwritten with another blank" do
+      # /product_reviews/set is a public PUT, so a client can write "" or whitespace over a
+      # nil message; without the present? term that would email a text-less review — the exact
+      # bug this fixes.
+      product.user.update!(disable_reviews_email: false)
+      product_review.message = nil
+      product_review.save!
+
+      expect do
+        product_review.update!(message: "   ")
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+    end
+
     it "doesn't send on rating-only updates" do
       product.user.update!(disable_reviews_email: false)
 
