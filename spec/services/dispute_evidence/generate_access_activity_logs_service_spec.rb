@@ -263,6 +263,52 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
           end
         end
 
+        # Event routing falls back to the newest row when no send predates the
+        # event, so a stray pre-send event lands on a row it cannot describe.
+        # The package must not claim a delivery before the send.
+        context "when the recorded event predates the send" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at - 2.hours,
+              opened_at: sent_at - 1.hour
+            )
+          end
+
+          it "omits the delivery and open rather than dating them before the send" do
+            expect(email_activity).to eq("The receipt email was sent at 2024-05-07 00:00:00 UTC.")
+          end
+        end
+
+        context "when a pre-send event lands on one of several sends" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at - 2.hours,
+              opened_at: sent_at - 1.hour
+            )
+            create(
+              :customer_email_info_sent,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+            )
+          end
+
+          it "names every send and claims no delivery or open" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at " \
+              "2024-05-12 00:00:00 UTC."
+            )
+          end
+        end
+
         # A resend is often triggered BY the dispute, so the evidence must date
         # the receipt from the ORIGINAL send. Delivery events carry no message
         # id, so with two sends outstanding they are reported without claiming

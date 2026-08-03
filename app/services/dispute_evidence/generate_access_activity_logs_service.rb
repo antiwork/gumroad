@@ -136,9 +136,11 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     end
 
     def single_send_activity(email_info)
+      delivered_at, opened_at = events_after(email_info.sent_at, [email_info.delivered_at, email_info.opened_at])
+
       content = "The receipt email was sent at #{email_info.sent_at}"
-      content << ", delivered at #{email_info.delivered_at}" if email_info.delivered_at.present?
-      content << ", opened at #{email_info.opened_at}" if email_info.opened_at.present?
+      content << ", delivered at #{delivered_at}" if delivered_at.present?
+      content << ", opened at #{opened_at}" if opened_at.present?
       content << "."
     end
 
@@ -150,12 +152,23 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     # needs "it was delivered and read", and a per-send claim here would be
     # evidence we cannot stand behind. Tracked in gumroad-private#1635.
     def unattributed_event_activity(sends)
-      delivered_at = sends.filter_map(&:delivered_at).min
-      opened_at = sends.filter_map(&:opened_at).min
+      delivered_at, opened_at = events_after(
+        sends.first.sent_at,
+        [sends.filter_map(&:delivered_at).min, sends.filter_map(&:opened_at).min]
+      )
 
       content = +""
       content << " A receipt was delivered at #{delivered_at}." if delivered_at.present?
       content << " A receipt was opened at #{opened_at}." if opened_at.present?
       content
+    end
+
+    # An event stamped before the earliest send cannot describe any of these
+    # sends — routing falls back to the newest row when nothing predates the
+    # event, which would otherwise print a receipt delivered before it was sent.
+    # Dropping it loses nothing we could defend; asserting it to a card network
+    # discredits the whole package.
+    def events_after(sent_at, timestamps)
+      timestamps.map { _1.present? && _1 >= sent_at ? _1 : nil }
     end
 end
