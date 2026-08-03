@@ -455,7 +455,7 @@ export default function Show() {
           <>
             <Button onClick={() => setIsConfirming(false)}>Cancel</Button>
             <Button color="primary" disabled={isUploading || form.processing} onClick={submitDisputeEvidence}>
-              Save response
+              Confirm and save
             </Button>
           </>
         }

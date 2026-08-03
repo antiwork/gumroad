@@ -67,6 +67,7 @@ const pageProps = {
     customer_communication_file_max_size: 5 * 1024 * 1024,
     customer_communication_files_max_count: 10,
     blobs: { receipt_image: null, policy_image: null, customer_communication_file: null },
+    saved: { reason_for_winning: null, cancellation_rebuttal: null, refund_refusal_explanation: null },
   },
   disputable: {
     purchase_for_dispute_evidence_id: "purchase-1",
@@ -76,7 +77,7 @@ const pageProps = {
   products: [{ url: "https://example.gumroad.com/l/thing", name: "Thing" }],
 };
 
-const submitButton = () => screen.getByRole("button", { name: "Submit" });
+const submitButton = () => screen.getByRole("button", { name: "Save response" });
 
 // The rows render the filename as "<n>. <name>" split across text nodes, and InlineList also emits
 // <li>, so read the row headings rather than list items.
@@ -138,12 +139,40 @@ describe("DisputeEvidence Show", () => {
     expect(queuedFileNames()).toEqual(["1. evidence-1.png", "2. evidence-2.png"]);
 
     act(() => submitButton().click());
-    const confirm = await screen.findByRole("button", { name: "Submit evidence" });
+    const confirm = await screen.findByRole("button", { name: "Confirm and save" });
     act(() => confirm.click());
 
     await waitFor(() => expect(mocks.put).toHaveBeenCalledTimes(1));
     expect(mocks.put.mock.calls[0]?.[1]).toMatchObject({
       dispute_evidence: { customer_communication_file_signed_blob_ids: ["signed-first", "signed-second"] },
     });
+  });
+
+  // A seller returning mid-window must see what they already saved. The stored values are the
+  // display text of the radio choices, so they are shown back rather than loaded into the form.
+  it("shows a previously saved response back to the seller", async () => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps,
+        dispute_evidence: {
+          ...pageProps.dispute_evidence,
+          saved: {
+            reason_for_winning: "The buyer downloaded the file",
+            cancellation_rebuttal: null,
+            refund_refusal_explanation: null,
+          },
+        },
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByText("The buyer downloaded the file")).toBeTruthy();
+    expect(screen.queryByText("Why a refund was refused")).toBe(null);
+  });
+
+  it("shows nothing saved when the seller has not answered yet", () => {
+    renderPage();
+
+    expect(screen.queryByText("What you have saved so far.")).toBe(null);
   });
 });
