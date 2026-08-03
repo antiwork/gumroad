@@ -1995,6 +1995,18 @@ describe User, :vcr do
       expect(user).to be_valid_password("password")
       expect(user).to_not be_valid_password("INVALD")
     end
+
+    it "does not log password data when a legacy hash is encountered" do
+      user = build(:user, password: "password")
+      user.encrypted_password = "sha256$legacy"
+      messages = []
+      allow(Rails.logger).to receive(:info) { |message| messages << message }
+
+      expect(user.valid_password?("password")).to be(false)
+
+      expect(messages).to include("Account with legacy sha256 password user_id=")
+      expect(messages.join("\n")).not_to include(user.encrypted_password, user.email)
+    end
   end
 
   describe "#clear_products_cache" do
@@ -4390,6 +4402,87 @@ describe User, :vcr do
       allow(user).to receive(:sales_cents_total).and_return(0)
 
       expect(user.eligible_for_ai_product_generation?).to eq(true)
+    end
+  end
+
+  describe "#eligible_for_store_agent?" do
+    let(:user) { create(:user) }
+
+    before do
+      user.confirm
+      allow(user).to receive(:sales_cents_total).and_return(15_000)
+    end
+
+    it "returns true when user has $100+ in sales and a completed payout" do
+      create(:payment_completed, user:)
+      expect(user.eligible_for_store_agent?).to eq(true)
+    end
+
+    it "returns true when user made a successful sale with a Stripe Connect account" do
+      stripe_connect_account = create(:merchant_account_stripe_connect, user:)
+      create(:purchase, seller: user, link: create(:product, user:), merchant_account: stripe_connect_account)
+      expect(user.eligible_for_store_agent?).to eq(true)
+    end
+
+    it "returns false when user has no completed payouts or successful sales" do
+      expect(user.eligible_for_store_agent?).to eq(false)
+    end
+
+    it "returns false when user has the payout but under $100 in sales" do
+      allow(user).to receive(:sales_cents_total).and_return(9_999)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_store_agent?).to eq(false)
+    end
+
+    it "returns true at exactly $100 in sales with a completed payout" do
+      allow(user).to receive(:sales_cents_total).and_return(10_000)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_store_agent?).to eq(true)
+    end
+
+    it "returns false when user is not confirmed" do
+      user.update!(confirmed_at: nil)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_store_agent?).to eq(false)
+    end
+
+    it "returns false when user is suspended" do
+      user.update!(user_risk_state: :suspended_for_fraud)
+      create(:payment_completed, user:)
+      expect(user.eligible_for_store_agent?).to eq(false)
+    end
+
+    it "returns true regardless of other conditions in development environment" do
+      allow(Rails.env).to receive(:development?).and_return(true)
+      user.update!(confirmed_at: nil)
+      allow(user).to receive(:sales_cents_total).and_return(0)
+
+      expect(user.eligible_for_store_agent?).to eq(true)
+    end
+
+    # This predicate runs on every Inertia render via policies_props, and
+    # sales_cents_total is an Elasticsearch aggregation that blows up when the
+    # index is absent. A seller with no completed payout must never reach it.
+    it "does not touch sales_cents_total when the seller has no completed payout" do
+      expect(user).to_not receive(:sales_cents_total)
+      expect(user.eligible_for_store_agent?).to eq(false)
+    end
+
+    it "re-evaluates on every call so a suspension revokes access on the same object" do
+      create(:payment_completed, user:)
+      expect(user.eligible_for_store_agent?).to eq(true)
+
+      user.update!(user_risk_state: :suspended_for_fraud)
+
+      expect(user.eligible_for_store_agent?).to eq(false)
+    end
+
+    it "re-evaluates on every call so a newly eligible seller is not held to an earlier denial" do
+      expect(user.eligible_for_store_agent?).to eq(false)
+
+      create(:payment_completed, user:)
+
+      expect(user.eligible_for_store_agent?).to eq(true)
     end
   end
 

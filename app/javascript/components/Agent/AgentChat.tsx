@@ -160,6 +160,9 @@ const toDisplayMessage = (
 type Props = {
   greeting: string;
   suggestions: string[];
+  // Set when the seller can see the tab but has not earned agent access yet: the chat renders
+  // read-only with this notice instead of a composer they would only get a 401 from.
+  locked?: { heading: string; explanation: string } | null;
 };
 
 // One object (product, discount, sale, ...) rendered as a card: a title, an optional subtitle, a
@@ -459,7 +462,7 @@ const ProposedActionCard = ({
   );
 };
 
-export const AgentChat = ({ greeting, suggestions }: Props) => {
+export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   const [messages, setMessages] = React.useState<DisplayMessage[]>([{ role: "assistant", content: greeting }]);
   const [input, setInput] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
@@ -606,13 +609,15 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   // Keep the composer ready to type: focus on load and again whenever a turn finishes. The textarea
   // is disabled while a reply streams, which drops focus, so re-focus once it re-enables.
   React.useEffect(() => {
-    if (!isSending) inputRef.current?.focus({ preventScroll: true });
-  }, [isSending]);
+    if (!isSending && !locked) inputRef.current?.focus({ preventScroll: true });
+  }, [isSending, locked]);
 
   // On mount, resume the most recently active stored conversation (like OpenAI/Claude restore your
   // last chat) so a page refresh doesn't lose the history. Any turn the seller sends before this
   // resolves wins: it starts a fresh conversation, and we skip hydration rather than clobber it.
   React.useEffect(() => {
+    // An ineligible seller has no conversations and the endpoint would 401 anyway.
+    if (locked) return;
     let cancelled = false;
     void fetchLatestAgentConversation()
       .then((conversation) => {
@@ -709,7 +714,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
 
   const send = async (text: string) => {
     const trimmed = text.trim();
-    if (trimmed.length === 0 || isSending) return;
+    if (trimmed.length === 0 || isSending || locked) return;
 
     // From here on the seller owns the chat: block the mount-time hydration from replacing it.
     hasSentMessageRef.current = true;
@@ -1029,7 +1034,14 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
           ) : null}
           {/* Suggested prompts sit at the end of the conversation (not pinned above the composer) so
               they read as the chat's next step and scroll with it. */}
-          {messages.length <= 1 ? (
+          {locked ? (
+            <Alert variant="info" aria-label="Agent locked">
+              <div className="flex flex-col gap-1">
+                <strong>{locked.heading}</strong>
+                <span>{locked.explanation}</span>
+              </div>
+            </Alert>
+          ) : messages.length <= 1 ? (
             <div className="flex flex-wrap gap-2">
               {suggestions.map((suggestion) => (
                 <Button key={suggestion} onClick={() => void send(suggestion)} disabled={isSending}>
@@ -1067,10 +1079,10 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
                 void send(input);
               }
             }}
-            placeholder="Ask about your store or describe a change…"
+            placeholder={locked ? locked.heading : "Ask about your store or describe a change…"}
             rows={2}
             aria-label="Message"
-            disabled={isSending}
+            disabled={isSending || !!locked}
             className="resize-none border-none bg-transparent p-2 focus:outline-none"
           />
           <div className="flex justify-end">
@@ -1081,7 +1093,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
               size="icon"
               aria-label="Send"
               className={classNames("size-11 rounded-full opacity-100", !hasText && "text-muted")}
-              disabled={isSending || !hasText}
+              disabled={isSending || !hasText || !!locked}
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                 <path

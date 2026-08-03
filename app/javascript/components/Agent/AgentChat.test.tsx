@@ -1148,3 +1148,50 @@ describe("AgentChat custom-html proposal cards", () => {
     expect(screen.getByText("Confirm").closest("button")?.disabled).toBe(false);
   });
 });
+
+describe("AgentChat locked state", () => {
+  const locked = { heading: "Agent unlocks after your first payout", explanation: "Once you have $100 in sales." };
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("states the bar and disables every control that would hit a 401", () => {
+    render(<AgentChat greeting="Hi" suggestions={["List my products"]} locked={locked} />);
+
+    expect(screen.getByText(locked.heading)).toBeTruthy();
+    expect(screen.getByText(locked.explanation)).toBeTruthy();
+    expect(screen.getByLabelText("Message").hasAttribute("disabled")).toBe(true);
+    expect(screen.getByLabelText("Send").hasAttribute("disabled")).toBe(true);
+    // Starter chips would each fire a turn, so they are replaced by the notice rather than disabled.
+    expect(screen.queryByText("List my products")).toBeNull();
+  });
+
+  it("does not resume a conversation an ineligible seller cannot have", () => {
+    render(<AgentChat greeting="Hi" suggestions={[]} locked={locked} />);
+
+    expect(fetchLatestAgentConversation).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing even if a submit is forced through", () => {
+    render(<AgentChat greeting="Hi" suggestions={[]} locked={locked} />);
+
+    const input = screen.getByLabelText("Message");
+    fireEvent.change(input, { target: { value: "raise my prices" } });
+    const form = input.closest("form");
+    if (!form) throw new Error("composer form not rendered");
+    fireEvent.submit(form);
+
+    expect(streamAgentMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the composer live when the seller is eligible", () => {
+    fetchLatestAgentConversation.mockResolvedValueOnce(null);
+    render(<AgentChat greeting="Hi" suggestions={["List my products"]} />);
+
+    expect(screen.queryByText(locked.heading)).toBeNull();
+    expect(screen.getByLabelText("Message").hasAttribute("disabled")).toBe(false);
+    expect(screen.getByText("List my products")).toBeTruthy();
+  });
+});

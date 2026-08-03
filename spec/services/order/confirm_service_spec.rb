@@ -109,14 +109,18 @@ describe Order::ConfirmService, :vcr do
     end
 
     it "returns purchase error responses and offer codes in case of SCA failure with offer codes applied" do
-      offer_code = create(:offer_code, user: seller, products: [product_1, product_2])
-      params[:purchase][:discount_code] = offer_code.code
-      params[:line_items].each { _1[:perceived_price_cents] -= 100 }
+      # The once-per-cart allocation breaks ties by permalink; pin them so product_1's line wins.
+      product_1.update_column(:unique_permalink, "a_product")
+      product_2.update_column(:unique_permalink, "b_product")
+      offer_code = create(:offer_code, user: seller, products: [product_1, product_2], once_per_cart: true)
+      params[:line_items].each { _1[:discount_code] = offer_code.code }
+      params[:line_items].first[:perceived_price_cents] -= 100
 
       expect(Purchase::ConfirmService).to receive(:new).exactly(2).times.and_call_original
 
       order, _ = Order::CreateService.new(params:).perform
       expect(order.purchases.in_progress.count).to eq(2)
+      expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([offer_code.id, nil])
 
       charge_responses = Order::ChargeService.new(order:, params:).perform
       expect(order.purchases.in_progress.count).to eq(2)
@@ -142,6 +146,73 @@ describe Order::ConfirmService, :vcr do
       expect(offer_code_responses[0][:code]).to eq(offer_code.code)
       expect(offer_code_responses[0][:products].size).to eq(2)
       expect(offer_code_responses[0][:products].keys).to match_array([product_1.unique_permalink, product_2.unique_permalink])
+    end
+
+    it "revalidates retry codes for lines outside the persisted order" do
+      order = create(:order)
+      offer_code = create(:offer_code, user: seller, products: [product_1], once_per_cart: true)
+      retry_offer_codes = [{
+        code: offer_code.code,
+        products: {
+          "failed-line" => { permalink: product_1.unique_permalink, quantity: 1 },
+        },
+      }]
+
+      _, offer_code_responses = Order::ConfirmService.new(order:, params: { retry_offer_codes: }).perform
+
+      expect(offer_code_responses).to contain_exactly(
+        hash_including(code: offer_code.code.downcase, products: hash_including(product_1.unique_permalink))
+      )
+
+      offer_code.update!(max_purchase_count: 0)
+      _, sold_out_responses = Order::ConfirmService.new(order:, params: { retry_offer_codes: }).perform
+
+      expect(sold_out_responses).to be_empty
+    end
+
+    it "rejects retry-code payloads above the work limits" do
+      order = create(:order)
+      too_many_codes = Array.new(Order::OfferCodeRecoveryService::MAX_RETRY_OFFER_CODES + 1) do |index|
+        { code: "SAVE#{index}", products: {} }
+      end
+      too_many_products = [{
+        code: "SAVE",
+        products: (Order::OfferCodeRecoveryService::MAX_RETRY_OFFER_CODE_PRODUCTS + 1).times.to_h do |index|
+          [index.to_s, { permalink: product_1.unique_permalink, quantity: 1 }]
+        end,
+      }]
+
+      expect(OfferCodeDiscountComputingService).not_to receive(:new)
+
+      _, code_responses = Order::ConfirmService.new(order:, params: { retry_offer_codes: too_many_codes }).perform
+      _, product_responses = Order::ConfirmService.new(order:, params: { retry_offer_codes: too_many_products }).perform
+
+      expect(code_responses).to be_empty
+      expect(product_responses).to be_empty
+    end
+
+    it "accepts one retry code for every product allowed in the cart" do
+      candidates = Array.new(Cart::MAX_ALLOWED_CART_PRODUCTS) do |index|
+        {
+          code: "SAVE#{index}",
+          products: {
+            index.to_s => { permalink: "product-#{index}", quantity: 1 },
+          },
+        }
+      end
+
+      expect(Order::OfferCodeRecoveryService.sanitize_retry_candidates(candidates).size)
+        .to eq(Cart::MAX_ALLOWED_CART_PRODUCTS)
+    end
+
+    it "discards malformed retry-code payloads before confirming purchases" do
+      order = create(:order)
+
+      expect(Purchase::ConfirmService).not_to receive(:new)
+      expect do
+        _, responses = Order::ConfirmService.new(order:, params: { retry_offer_codes: ["invalid"] }).perform
+        expect(responses).to be_empty
+      end.not_to raise_error
     end
   end
 end

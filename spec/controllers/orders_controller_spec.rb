@@ -59,6 +59,23 @@ describe OrdersController, :vcr do
       common_purchase_params_without_payment.merge(pp_native_payment_params)
     end
 
+    it "rejects carts above the product limit before creating an order" do
+      stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 1)
+      expect(Order::CreateService).not_to receive(:new)
+
+      post :create, params: {
+        line_items: [
+          { uid: "first", permalink: "first", perceived_price_cents: 0 },
+          { uid: "second", permalink: "second", perceived_price_cents: 0 },
+        ]
+      }
+
+      expect(response.parsed_body).to include(
+        "success" => false,
+        "error_message" => "You cannot add more than 1 products to the cart."
+      )
+    end
+
     context "single purchase" do
       let(:single_purchase_params) do
         {
@@ -367,23 +384,24 @@ describe OrdersController, :vcr do
 
     context "multiple purchases" do
       let(:payment_params) { StripePaymentMethodHelper.success.to_stripejs_params(prepare_future_payments: true) }
+      let(:multiple_purchase_line_items) do
+        [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            quantity: 1
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            perceived_price_cents: product_2.price_cents,
+            quantity: 1
+          }
+        ]
+      end
       let(:multiple_purchase_params) do
-        {
-          line_items: [
-            {
-              uid: "unique-id-0",
-              permalink: product_1.unique_permalink,
-              perceived_price_cents: product_1.price_cents,
-              quantity: 1
-            },
-            {
-              uid: "unique-id-1",
-              permalink: product_2.unique_permalink,
-              perceived_price_cents: product_2.price_cents,
-              quantity: 1
-            }
-          ]
-        }.merge(common_purchase_params)
+        { line_items: multiple_purchase_line_items }.merge(common_purchase_params)
       end
 
       it "creates an order, the associated purchases and a combined charge" do
@@ -736,11 +754,11 @@ describe OrdersController, :vcr do
       end
 
       describe "strong params for reusable Stripe payments" do
-        it "passes stripe_setup_intent_id through to order creation" do
+        it "passes reusable payment fields through to order creation" do
           order_purchases = double("order_purchases", successful: [])
           allow(order_purchases).to receive(:each).and_return([])
           order = double("order", persisted?: false, purchases: order_purchases, send_charge_receipts: nil)
-          create_service = instance_double(Order::CreateService, perform: [order, {}, {}])
+          create_service = instance_double(Order::CreateService, perform: [order, {}, []])
           charge_service = instance_double(Order::ChargeService, perform: {})
 
           expect(Order::CreateService).to receive(:new).with(
@@ -748,7 +766,8 @@ describe OrdersController, :vcr do
             params: hash_including(
               stripe_payment_method_id: "pm_123",
               stripe_customer_id: "cus_123",
-              stripe_setup_intent_id: "seti_123"
+              stripe_setup_intent_id: "seti_123",
+              line_items: contain_exactly(hash_including(uid: "unique-id-0"))
             )
           ).and_return(create_service)
           allow(Order::ChargeService).to receive(:new).and_return(charge_service)
@@ -768,6 +787,114 @@ describe OrdersController, :vcr do
 
           expect(response.parsed_body["success"]).to be(true)
         end
+      end
+
+      it "handles a request without line items" do
+        allow(controller).to receive(:skip_recaptcha?).and_return(true)
+        order_purchases = double("order_purchases", successful: [])
+        allow(order_purchases).to receive(:each).and_return([])
+        order = double("order", persisted?: false, purchases: order_purchases, send_charge_receipts: nil)
+        allow(Order::CreateService).to receive(:new).and_return(instance_double(Order::CreateService, perform: [order, {}, []]))
+        allow(Order::ChargeService).to receive(:new).and_return(instance_double(Order::ChargeService, perform: {}))
+
+        post :create
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "returns once-per-cart codes when charging fails after order creation" do
+        purchases = double("order_purchases", successful: [])
+        allow(purchases).to receive(:each).and_return([])
+        order = double("order", persisted?: true, purchases:, send_charge_receipts: nil)
+        create_service = instance_double(Order::CreateService, perform: [order, {}, []])
+        charge_service = instance_double(Order::ChargeService, perform: { "uid" => { success: false } })
+        recovered = [{ code: "SAVE", products: { product_1.unique_permalink => { type: "fixed", cents: 100 } } }]
+
+        allow(Order::CreateService).to receive(:new).and_return(create_service)
+        allow(Order::ChargeService).to receive(:new).and_return(charge_service)
+        allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return(recovered)
+
+        post :create, params: { line_items: multiple_purchase_line_items }
+
+        expect(response.parsed_body["offer_codes"]).to eq(JSON.parse(recovered.to_json))
+      end
+
+      it "removes a capped once-per-cart code after another line consumes its last use" do
+        purchases = double("order_purchases", successful: [])
+        allow(purchases).to receive(:each).and_return([])
+        order = double("order", persisted?: true, purchases:, send_charge_receipts: nil)
+        stale = [{
+          code: "SAVE",
+          products: {
+            product_1.unique_permalink => {
+              type: "fixed",
+              cents: 0,
+              once_per_cart: true,
+              once_per_cart_id: "offer-code-1",
+            },
+          },
+        }]
+        create_service = instance_double(
+          Order::CreateService,
+          perform: [order, { "unique-id-0" => { success: false } }, stale]
+        )
+        charge_service = instance_double(Order::ChargeService, perform: {})
+        discount_service = instance_double(
+          OfferCodeDiscountComputingService,
+          process: { products_data: {}, error_code: :sold_out }
+        )
+
+        allow(Order::CreateService).to receive(:new).and_return(create_service)
+        allow(Order::ChargeService).to receive(:new).and_return(charge_service)
+        allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return([])
+        allow(OfferCodeDiscountComputingService).to receive(:new).and_return(discount_service)
+
+        post :create, params: { line_items: multiple_purchase_line_items }
+
+        expect(response.parsed_body["offer_codes"]).to eq([])
+      end
+
+      it "keeps a once-per-cart retry code until SCA resolves its active reservation",
+         vcr: { cassette_name: "OrdersController/POST_create/multiple_purchases/doesn_t_allow_it_to_go_through_if_the_guid_is_blank" } do
+        # The once-per-cart allocation breaks ties by permalink; pin them so product_1's line wins.
+        product_1.update_column(:unique_permalink, "a_product")
+        product_2.update_column(:unique_permalink, "b_product")
+        offer_code = create(
+          :offer_code,
+          user: product_1.user,
+          products: [product_1, product_2],
+          amount_cents: 100,
+          max_purchase_count: 1,
+          once_per_cart: true
+        )
+        product_2.update!(max_purchase_count: 1)
+        request_params = multiple_purchase_params.deep_dup
+        request_params[:line_items].first.merge!(
+          discount_code: offer_code.code,
+          price_cents: product_1.price_cents,
+          perceived_price_cents: product_1.price_cents - offer_code.amount_cents
+        )
+        request_params[:line_items].second.merge!(
+          discount_code: offer_code.code,
+          price_cents: product_2.price_cents * 2,
+          perceived_price_cents: product_2.price_cents * 2,
+          quantity: 2
+        )
+        charge_service = instance_double(
+          Order::ChargeService,
+          perform: { "unique-id-0" => { success: true, requires_card_action: true } }
+        )
+
+        allow(Order::ChargeService).to receive(:new).and_return(charge_service)
+
+        post :create, params: request_params
+
+        expect(response.parsed_body["offer_codes"]).to contain_exactly(
+          hash_including(
+            "code" => offer_code.code,
+            "products" => hash_including(product_2.unique_permalink)
+          )
+        )
       end
 
       describe "single item purchases that require SCA" do
@@ -2608,6 +2735,79 @@ describe OrdersController, :vcr do
       expect(Event.purchase.where(purchase_id: Purchase.last.id)).to be_empty
     end
 
+    it "returns once-per-cart codes when preparing the payment fails after order creation" do
+      purchases = double("order_purchases")
+      allow(purchases).to receive(:each).and_return([])
+      order = double("order", persisted?: true, purchases:)
+      create_service = instance_double(Order::CreateService, perform: [order, {}, []])
+      prepare_service = instance_double(Order::PreparePaymentIntentService, perform: { "unique-id-0" => { success: false } })
+      recovered = [{ code: "SAVE", products: { product.unique_permalink => { type: "fixed", cents: 100 } } }]
+
+      allow(Order::CreateService).to receive(:new).and_return(create_service)
+      allow(Order::PreparePaymentIntentService).to receive(:new).and_return(prepare_service)
+      allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return(recovered)
+
+      post :prepare, params: { line_items:, confirmation_token: "ctoken-test" }.merge(common_params)
+
+      expect(response.parsed_body["offer_codes"]).to eq(JSON.parse(recovered.to_json))
+    end
+
+    it "keeps a once-per-cart retry code until client confirmation resolves its active reservation" do
+      purchases = double("order_purchases")
+      allow(purchases).to receive(:each).and_return([])
+      order = double("order", persisted?: true, purchases:)
+      retry_discount = {
+        type: "fixed",
+        cents: 100,
+        once_per_cart: true,
+        once_per_cart_id: "offer-code-1",
+      }
+      create_service = instance_double(
+        Order::CreateService,
+        perform: [order, { "unique-id-1" => { success: false } }, [{
+          code: "SAVE",
+          products: { product.unique_permalink => retry_discount },
+        }]]
+      )
+      prepare_service = instance_double(
+        Order::PreparePaymentIntentService,
+        perform: { "unique-id-0" => { success: true, requires_payment_confirmation: true } }
+      )
+      discount_service = instance_double(
+        OfferCodeDiscountComputingService,
+        process: {
+          products_data: { "unique-id-1" => { discount: retry_discount } },
+          error_code: nil,
+        }
+      )
+
+      allow(Order::CreateService).to receive(:new).and_return(create_service)
+      allow(Order::PreparePaymentIntentService).to receive(:new).and_return(prepare_service)
+      allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return([])
+      expect(OfferCodeDiscountComputingService).to receive(:new).with(
+        "SAVE",
+        { "unique-id-1" => hash_including("permalink" => product.unique_permalink, "quantity" => "1") },
+        buyer: nil,
+        key_by_input: true,
+        excluding_order: order
+      ).and_return(discount_service)
+
+      post :prepare, params: {
+        line_items: [
+          *line_items,
+          { uid: "unique-id-1", permalink: product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 },
+        ],
+        confirmation_token: "ctoken-test",
+      }.merge(common_params)
+
+      expect(response.parsed_body["offer_codes"]).to eq(
+        [{
+          "code" => "SAVE",
+          "products" => { product.unique_permalink => JSON.parse(retry_discount.to_json) },
+        }]
+      )
+    end
+
     it "records the client-confirm lane in the purchase's payment-flow analytics row" do
       post :prepare, params: { line_items:, confirmation_token: confirmation_token_id, payment_details_source: "payment_element" }.merge(common_params)
 
@@ -2730,6 +2930,28 @@ describe OrdersController, :vcr do
       }
     end
 
+    def add_once_per_cart_reservation(purchase, product:)
+      offer_code = create(
+        :offer_code,
+        user: product.user,
+        products: [product],
+        amount_cents: 1_00,
+        once_per_cart: true,
+        max_purchase_count: 1
+      )
+      purchase.update!(offer_code:)
+      purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 1_00,
+        offer_code_is_percent: false,
+        once_per_cart: true,
+        once_per_cart_allocation_id: SecureRandom.uuid,
+        pre_discount_minimum_price_cents: product.price_cents,
+        pre_discount_displayed_price_cents: product.price_cents
+      )
+      offer_code
+    end
+
     it "reports the browser-side confirm failure to the error notifier" do
       params = { line_items: line_items.map(&:dup) }.merge(common_params)
       order, = Order::CreateService.new(params:).perform
@@ -2757,6 +2979,274 @@ describe OrdersController, :vcr do
       }
 
       expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "leaves attempts without a once-per-cart reservation in progress" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      purchase.create_processor_payment_intent!(intent_id: "pi_without_reservation")
+      expect(ChargeProcessor).not_to receive(:get_charge_intent)
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        processor_intent_id: "pi_without_reservation",
+        stripe_error_code: "card_declined",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
+      expect(purchase.reload).to be_in_progress
+    end
+
+    it "releases a once-per-cart reservation when Stripe confirms the attempt is still pre-charge" do
+      offer_code = create(
+        :offer_code,
+        user: seller,
+        products: [product],
+        amount_cents: 1_00,
+        once_per_cart: true,
+        max_purchase_count: 1
+      )
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      purchase.update!(offer_code:)
+      purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 1_00,
+        offer_code_is_percent: false,
+        once_per_cart: true,
+        once_per_cart_allocation_id: SecureRandom.uuid,
+        pre_discount_minimum_price_cents: product.price_cents,
+        pre_discount_displayed_price_cents: product.price_cents
+      )
+      purchase.create_processor_payment_intent!(intent_id: "pi_pre_charge")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
+      )
+      allow(ChargeProcessor).to receive(:get_charge_intent).and_return(charge_intent)
+      expect(ChargeProcessor).to receive(:cancel_payment_intent!).with(purchase.merchant_account, "pi_pre_charge")
+      expect(offer_code.quantity_left).to eq(0)
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        stripe_error_code: "card_declined",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => true)
+      expect(response.parsed_body["unavailable_once_per_cart_ids"]).to eq([])
+      expect(purchase.reload).to be_failed
+      expect(offer_code.quantity_left).to eq(1)
+    end
+
+    it "releases a SetupIntent reservation when Stripe confirms the attempt is still pre-charge" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      add_once_per_cart_reservation(purchase, product:)
+      purchase.update!(processor_setup_intent_id: "seti_pre_charge")
+      setup_intent = instance_double(
+        SetupIntent,
+        setup_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      expect(ChargeProcessor).to receive(:cancel_setup_intent!).with(purchase.merchant_account, "seti_pre_charge")
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        stripe_error_code: "setup_intent_unexpected_state",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => true)
+      expect(purchase.reload).to be_failed
+    end
+
+    it "keeps the reservation when Stripe no longer shows a safely cancelable attempt" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      add_once_per_cart_reservation(purchase, product:)
+      purchase.create_processor_payment_intent!(intent_id: "pi_processing")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::PROCESSING)
+      )
+      allow(ChargeProcessor).to receive(:get_charge_intent).and_return(charge_intent)
+      expect(ChargeProcessor).not_to receive(:cancel_payment_intent!)
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        stripe_error_code: "payment_intent_unexpected_state",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
+      expect(purchase.reload).to be_in_progress
+    end
+
+    it "rate-limits processor lookups when the same cleanup request is replayed" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      add_once_per_cart_reservation(purchase, product:)
+      purchase.create_processor_payment_intent!(intent_id: "pi_processing")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::PROCESSING)
+      )
+      expect(ChargeProcessor).to receive(:get_charge_intent).once.and_return(charge_intent)
+
+      2.times do
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          processor_intent_id: "pi_processing",
+          stripe_error_code: "payment_intent_unexpected_state",
+        }
+
+        expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
+      end
+      expect(purchase.reload).to be_in_progress
+    end
+
+    it "allows cleanup to retry after a processor error" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      add_once_per_cart_reservation(purchase, product:)
+      purchase.create_processor_payment_intent!(intent_id: "pi_retry_cleanup")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
+      )
+      attempts = 0
+      expect(ChargeProcessor).to receive(:get_charge_intent).twice do
+        attempts += 1
+        raise ChargeProcessorError, "temporary failure" if attempts == 1
+
+        charge_intent
+      end
+      expect(ChargeProcessor).to receive(:cancel_payment_intent!).with(purchase.merchant_account, "pi_retry_cleanup")
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        processor_intent_id: "pi_retry_cleanup",
+        stripe_error_code: "card_declined",
+      }
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        processor_intent_id: "pi_retry_cleanup",
+        stripe_error_code: "card_declined",
+      }
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => true)
+      expect(purchase.reload).to be_failed
+    end
+
+    it "fails only purchases sharing the checked intent" do
+      second_product = create(:product, user: seller, price_cents: 10_00)
+      params = {
+        line_items: [
+          line_items.first,
+          { uid: "unique-id-1", permalink: second_product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 },
+        ],
+      }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      first_purchase, second_purchase = order.purchases.order(:id)
+      add_once_per_cart_reservation(first_purchase, product:)
+      first_purchase.create_processor_payment_intent!(intent_id: "pi_failed")
+      second_purchase.create_processor_payment_intent!(intent_id: "pi_other")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
+      )
+      allow(ChargeProcessor).to receive(:get_charge_intent).and_return(charge_intent)
+      expect(ChargeProcessor).to receive(:cancel_payment_intent!).with(first_purchase.merchant_account, "pi_failed")
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        processor_intent_id: "pi_failed",
+        stripe_error_code: "card_declined",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => true)
+      expect(first_purchase.reload).to be_failed
+      expect(second_purchase.reload).to be_in_progress
+    end
+
+    it "reports once-per-cart codes that are still reserved or already used" do
+      second_product = create(:product, user: seller, price_cents: 10_00)
+      completed_product = create(:product, user: seller, price_cents: 10_00)
+      offer_code = create(
+        :offer_code,
+        user: seller,
+        products: [second_product],
+        amount_cents: 1_00,
+        once_per_cart: true,
+        max_purchase_count: 1
+      )
+      completed_offer_code = create(
+        :offer_code,
+        user: seller,
+        products: [completed_product],
+        amount_cents: 1_00,
+        once_per_cart: true,
+        max_purchase_count: 1
+      )
+      params = {
+        line_items: [
+          line_items.first,
+          { uid: "unique-id-1", permalink: second_product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 },
+          { uid: "unique-id-2", permalink: completed_product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 },
+        ],
+      }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      first_purchase, second_purchase, completed_purchase = order.purchases.order(:id)
+      first_purchase.create_processor_payment_intent!(intent_id: "pi_failed")
+      second_purchase.create_processor_payment_intent!(intent_id: "pi_pending")
+      second_purchase.update!(offer_code:)
+      second_purchase.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 1_00,
+        offer_code_is_percent: false,
+        once_per_cart: true,
+        once_per_cart_allocation_id: SecureRandom.uuid,
+        pre_discount_minimum_price_cents: second_product.price_cents,
+        pre_discount_displayed_price_cents: second_product.price_cents
+      )
+      completed_purchase.update!(offer_code: completed_offer_code)
+      completed_purchase.create_purchase_offer_code_discount!(
+        offer_code: completed_offer_code,
+        offer_code_amount: 1_00,
+        offer_code_is_percent: false,
+        once_per_cart: true,
+        once_per_cart_allocation_id: SecureRandom.uuid,
+        pre_discount_minimum_price_cents: completed_product.price_cents,
+        pre_discount_displayed_price_cents: completed_product.price_cents
+      )
+      completed_purchase.update_column(:purchase_state, "successful")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
+      )
+      allow(ChargeProcessor).to receive(:get_charge_intent).and_return(charge_intent)
+      expect(ChargeProcessor).not_to receive(:cancel_payment_intent!)
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        processor_intent_id: "pi_failed",
+        stripe_error_code: "card_declined",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
+      expect(response.parsed_body["unavailable_once_per_cart_ids"]).to contain_exactly(
+        offer_code.external_id,
+        completed_offer_code.external_id
+      )
+      expect(first_purchase.reload).to be_in_progress
+      expect(second_purchase.reload).to be_in_progress
+      expect(completed_purchase.reload).to be_successful
+      expect(offer_code.quantity_left).to eq(0)
     end
 
     it "truncates oversized values so the endpoint cannot be used to flood the notifier" do

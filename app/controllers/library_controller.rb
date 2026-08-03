@@ -54,7 +54,7 @@ class LibraryController < Sellers::BaseController
 
     @purchase.update!(is_deleted_by_buyer: true)
 
-    redirect_to library_path, notice: "Product deleted!", status: :see_other
+    redirect_to library_path, notice: "Removed from your library!", status: :see_other
   end
 
   private

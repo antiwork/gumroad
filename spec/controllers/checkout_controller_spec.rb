@@ -646,6 +646,45 @@ describe CheckoutController, type: :controller, inertia: true do
         )
       end
 
+      it "clears a stale accepted offer when the cart item is submitted without one" do
+        original_product = create(:product, user: seller)
+        offered_product = create(:product, user: seller)
+        cross_sell = create(
+          :upsell,
+          seller:,
+          product: offered_product,
+          selected_products: [original_product],
+          cross_sell: true
+        )
+        cart = create(:cart, user: controller.logged_in_user)
+        cart_product = create(
+          :cart_product,
+          cart:,
+          product: offered_product,
+          accepted_offer: cross_sell,
+          accepted_offer_details: { original_product_id: original_product.external_id, original_variant_id: nil }
+        )
+
+        patch :update, params: {
+          cart: {
+            items: [{
+              product: { id: offered_product.external_id },
+              price: offered_product.price_cents,
+              quantity: 1,
+              rent: false,
+              referrer: "direct",
+              url_parameters: {},
+              accepted_offer: nil
+            }],
+            discountCodes: []
+          }
+        }, as: :json
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+        expect(cart_product.reload).to have_attributes(accepted_offer: nil, accepted_offer_details: {})
+      end
+
       it "forces the cart email to the signed-in user's email regardless of the submitted email" do
         cart = create(:cart, user: seller, email: "stale@example.com")
 

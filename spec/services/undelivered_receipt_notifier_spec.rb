@@ -68,6 +68,15 @@ describe UndeliveredReceiptNotifier do
       expect(described_class.undelivered?(purchase)).to eq(true)
     end
 
+    # Nothing this notice prescribes applies to a free download: there is no payment to refund, and it
+    # told sellers a buyer "paid you" for a $0 checkout (gumroad-private#1635 follow-up).
+    it "is false for a free purchase" do
+      free_purchase = create(:purchase, link: create(:product, price_cents: 0), price_cents: 0)
+      create(:customer_email_info, purchase: free_purchase, state: "bounced", sent_at: 3.days.ago)
+
+      expect(described_class.undelivered?(free_purchase)).to eq(false)
+    end
+
     context "with a charge receipt covering several purchases" do
       let(:seller) { create(:user) }
       let(:charge) { create(:charge, seller:) }
@@ -95,6 +104,24 @@ describe UndeliveredReceiptNotifier do
         create(:url_redirect, purchase: second_purchase, link: second_purchase.link, uses: 0)
 
         expect(described_class.undelivered?(first_purchase)).to eq(true)
+      end
+
+      # A paid line makes the whole order actionable: the seller can refund it, so the free companion
+      # item must not suppress the notice.
+      it "is true when only one purchase in the charge was paid" do
+        first_purchase.update_columns(price_cents: 0)
+        create(:url_redirect, purchase: first_purchase, link: first_purchase.link, uses: 0)
+        create(:url_redirect, purchase: second_purchase, link: second_purchase.link, uses: 0)
+
+        expect(described_class.undelivered?(first_purchase)).to eq(true)
+      end
+
+      it "is false when every purchase in the charge was free" do
+        first_purchase.update_columns(price_cents: 0)
+        second_purchase.update_columns(price_cents: 0)
+        create(:url_redirect, purchase: first_purchase, link: first_purchase.link, uses: 0)
+
+        expect(described_class.undelivered?(first_purchase)).to eq(false)
       end
     end
   end

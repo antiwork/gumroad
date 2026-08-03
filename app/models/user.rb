@@ -50,6 +50,8 @@ class User < ApplicationRecord
 
   MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
 
+  MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT = 10_000
+
   # How long a resolved avatar variant URL stays cached. Avatar URLs are stable
   # for as long as the seller keeps the same picture, so this is only about
   # bounding how long a cached URL can keep being served after the file behind
@@ -748,7 +750,7 @@ class User < ApplicationRecord
   def valid_password?(password)
     super(password)
   rescue BCrypt::Errors::InvalidHash
-    logger.info "Account with sha256 password: #{inspect}"
+    logger.info "Account with legacy sha256 password user_id=#{id}"
     false
   end
 
@@ -1374,6 +1376,25 @@ class User < ApplicationRecord
     return false if sales_cents_total < MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION
 
     has_completed_payouts?
+  end
+
+  # The store Agent can rewrite a seller's live storefront, so it stays behind the same
+  # earned-your-way-in bar as AI product generation: real money in, and a payout that
+  # proves the account is a going concern rather than a fresh signup experimenting.
+  #
+  # Never memoize: this backs an authorization check on a long-lived SSE stream, so a
+  # suspension mid-conversation has to revoke access on the next check rather than at the
+  # next object load.
+  #
+  # The ordering is what keeps it cheap. sales_cents_total is an Elasticsearch aggregation
+  # while has_completed_payouts? is an indexed exists?, so testing the payout first means a
+  # seller who has never been paid out short-circuits without touching ES — exactly the
+  # pre-launch account this gate exists to stop.
+  def eligible_for_store_agent?
+    return true if Rails.env.development?
+    return false if !confirmed? || suspended? || !has_completed_payouts?
+
+    sales_cents_total >= MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT
   end
 
   # Devise routes every confirmation *resend* through this method — the public

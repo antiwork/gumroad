@@ -20,7 +20,7 @@ class PostToIndividualPingEndpointWorker
 
     response = HTTParty.post(post_url, body:, timeout: 5, headers: { "Content-Type" => content_type })
 
-    Rails.logger.info("PostToIndividualPingEndpointWorker response=#{response.code} url=#{post_url} content_type=#{content_type} params=#{params.inspect}")
+    Rails.logger.info("PostToIndividualPingEndpointWorker response=#{response.code} content_type=#{content_type} user_id=#{user_id}")
 
     unless response.success?
       if ERROR_CODES_TO_RETRY.include?(response.code) && retry_count < (BACKOFF_STRATEGY.length - 1)
@@ -31,7 +31,7 @@ class PostToIndividualPingEndpointWorker
   # rescue clause to handle connection errors. Without this, the job
   # would fail if the user inputted post_url is invalid.
   rescue *INTERNET_EXCEPTIONS => e
-    Rails.logger.info("[#{e.class}] PostToIndividualPingEndpointWorker error=\"#{e.message}\" url=#{post_url} content_type=#{content_type} params=#{params.inspect}")
+    Rails.logger.info("[#{e.class}] PostToIndividualPingEndpointWorker error content_type=#{content_type} user_id=#{user_id}")
   end
 
   private

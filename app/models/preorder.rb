@@ -130,7 +130,7 @@ class Preorder < ApplicationRecord
     purchase = Purchase.new(purchase_params)
     purchase.preorder = self
     purchase.credit_card = credit_card
-    purchase.offer_code = authorization_purchase.offer_code
+    purchase.inherit_offer_code_from(authorization_purchase)
     purchase.variant_attributes = authorization_purchase.variant_attributes
     purchase.purchaser = purchaser
     purchase.link = link

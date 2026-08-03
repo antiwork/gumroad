@@ -39,7 +39,13 @@ class Ai::StoreAgentService
   # of a runaway tool loop. A late phantom-staging claim can reserve the two tightly scoped turns
   # below when the normal budget no longer has room for them.
   MAX_TOOL_ITERATIONS = 25
+  # History budget per PRIOR message, so twenty turns of recap cannot crowd out the system prompt.
   MAX_MESSAGE_LENGTH = 2_000
+  # The turn being answered gets its own budget: it is the request, not a recap, and trimming it
+  # drops the instructions the model needs. Gumroad's own Share tab → Landing page → "Copy prompt"
+  # emits ~4,900 characters, so at the history budget every creator who pasted it lost most of it
+  # before the model saw it and was told the request was too large.
+  MAX_CURRENT_MESSAGE_LENGTH = 20_000
   MISSING_REQUIRED_READ_MESSAGE = "Store agent write proposal blocked by missing required full read"
   # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat
   # reply: when the agent edits a product, the model must emit the ENTIRE new value (for example a
@@ -1121,7 +1127,10 @@ class Ai::StoreAgentService
     # Build the Anthropic message array from the client-supplied history. The system prompt is passed
     # separately (Anthropic's top-level `system` param), so it is NOT included here.
     def build_conversation(messages)
-      history = Array(messages).last(MAX_HISTORY_MESSAGES).filter_map do |msg|
+      window = Array(messages).last(MAX_HISTORY_MESSAGES)
+      current_message_index = window.rindex { |msg| (msg[:role] || msg["role"]) == "user" && (msg[:content] || msg["content"]).to_s.strip.present? }
+
+      history = window.each_with_index.filter_map do |msg, index|
         role = msg[:role] || msg["role"]
         content = (msg[:content] || msg["content"]).to_s.strip
         next if content.blank?
@@ -1134,7 +1143,8 @@ class Ai::StoreAgentService
           else
             ""
           end
-        content = content.truncate(MAX_MESSAGE_LENGTH - state_suffix.length, omission: "...")
+        limit = index == current_message_index ? MAX_CURRENT_MESSAGE_LENGTH : MAX_MESSAGE_LENGTH
+        content = content.truncate(limit - state_suffix.length, omission: "...")
         { role:, content: "#{content}#{state_suffix}" }
       end
 

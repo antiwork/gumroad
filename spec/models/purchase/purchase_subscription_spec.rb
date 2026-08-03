@@ -10,6 +10,40 @@ describe "PurchaseSubscription", :vcr do
     expect(user.unpaid_balance_cents).to eq expected_balance
   end
 
+  describe "Subscription#current_subscription_price_cents" do
+    it "keeps a positive once-per-cart renewal total at the currency minimum" do
+      subscription = build(:subscription, link: build(:product, price_currency_type: "usd"))
+      auto_discount = double(offer_code: instance_double(OfferCode, is_cents?: true, once_per_cart?: true))
+      allow(subscription).to receive(:reuse_original_discount_on_next_charge?).and_return(false)
+      allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(2_00)
+      allow(subscription).to receive(:auto_renewal_offer_code).and_return(auto_discount)
+      allow(subscription).to receive(:auto_renewal_discount_amount_off_cents).and_return(1_50)
+
+      expect(subscription.current_subscription_price_cents).to eq(99)
+    end
+
+    it "ranks automatic renewal discounts by their floored totals" do
+      subscription = build(:subscription, link: build(:product, price_currency_type: "usd"))
+      fixed_discount = double(
+        offer_code: instance_double(OfferCode, is_cents?: true, once_per_cart?: true),
+        offer_code_amount: 1_00,
+        offer_code_is_percent: false
+      )
+      percentage_discount = double(
+        offer_code: instance_double(OfferCode, is_cents?: false, once_per_cart?: false),
+        offer_code_amount: 40,
+        offer_code_is_percent: true
+      )
+
+      fixed_total = subscription.send(:auto_renewal_discounted_total_cents, fixed_discount, 1_50)
+      percentage_total = subscription.send(:auto_renewal_discounted_total_cents, percentage_discount, 1_50)
+
+      expect(fixed_total).to eq(99)
+      expect(percentage_total).to eq(90)
+      expect(1_50 - percentage_total).to be > 1_50 - fixed_total
+    end
+  end
+
   describe "subscriptions" do
     describe "original subscription purchase" do
       before do

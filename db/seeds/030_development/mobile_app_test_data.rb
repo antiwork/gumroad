@@ -86,6 +86,29 @@ def create_mobile_product_file(product:, fixture_name:, file_name:)
   product_file
 end
 
+# A third-party embed, not an uploaded file: `create_mobile_product_file` covers the native
+# player, and nothing here exercised the WebView the embed renders in. The URL has to be a real
+# HTTPS one — the content page turns `attrs.url` into an anchor href and RichContent rejects the
+# script-bearing schemes, so a placeholder like "embed://x" would not save.
+def create_mobile_embed_page(product:, title:)
+  existing = product.alive_rich_contents.find_by(title:)
+  return existing if existing.present?
+
+  product.alive_rich_contents.create!(
+    title:,
+    description: [
+      {
+        "type" => "mediaEmbed",
+        "attrs" => {
+          "url" => "https://www.youtube.com/watch?v=YE7VzlLtp-4",
+          "title" => "Big Buck Bunny",
+          "html" => '<iframe src="https://cdn.iframe.ly/api/iframe?url=https%3A%2F%2Fyoutu.be%2FYE7VzlLtp-4&key=31708e31359468f73bc5b03e9dcab7da" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;" allowfullscreen scrolling="no" allow="accelerometer *; clipboard-write *; encrypted-media *; gyroscope *; picture-in-picture *; web-share *;"></iframe>'
+        }
+      }
+    ]
+  )
+end
+
 seller1 = create_mobile_user(
   email: "mobile_seller1_do_not_edit@gumroad.com",
   name: "Mobile Seller 1",
@@ -138,3 +161,14 @@ create_mobile_purchase(seller: seller2, buyer: seller1, product: product2)
 
 create_mobile_purchase(seller: seller1, buyer: buyer, product: product1)
 create_mobile_purchase(seller: seller2, buyer: buyer, product: product2)
+
+embed_course = create_mobile_product(
+  user: seller1,
+  name: "Mobile Embed Video Course",
+  price_cents: 500,
+  permalink: "embedvideocourse"
+)
+
+create_mobile_embed_page(product: embed_course, title: "Lesson 1")
+
+create_mobile_purchase(seller: seller1, buyer: buyer, product: embed_course)

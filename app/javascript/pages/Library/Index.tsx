@@ -120,7 +120,7 @@ export const Card = ({
                 </MenuItem>
                 <MenuItem variant="danger" onClick={() => onDelete()}>
                   <Trash className="size-5" />
-                  Delete permanently
+                  Remove from library
                 </MenuItem>
               </Menu>
             </PopoverContent>
@@ -144,7 +144,7 @@ export const DeleteProductModal = ({
     try {
       await deletePurchasedProduct({ purchase_id: result.purchase.id });
       onDelete(result);
-      showAlert("Product deleted!", "success");
+      showAlert("Removed from your library!", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong.", "error");
@@ -155,7 +155,7 @@ export const DeleteProductModal = ({
     <Modal
       open={!!deleting}
       onClose={onCancel}
-      title="Delete Product"
+      title="Remove from library"
       footer={
         <>
           <Button onClick={onCancel}>Cancel</Button>
@@ -165,7 +165,11 @@ export const DeleteProductModal = ({
         </>
       }
     >
-      <h4>Are you sure you want to delete {deleting?.product.name ?? ""}?</h4>
+      <h4>Remove {deleting?.product.name ?? ""} from your library?</h4>
+      <p>
+        You keep access through your original download link, and our support team can put the card back if you change
+        your mind.
+      </p>
     </Modal>
   );
 };
@@ -220,6 +224,11 @@ export default function LibraryPage() {
   // toggles derive their next value from what is rendered.
   const [pendingSearch, setPendingSearch] = React.useState<SearchParams | null>(null);
   const activeSearch = pendingSearch ?? search;
+  // Counts only the visits navigate() started. An interrupted filter visit must keep the
+  // optimistic state when a newer filter click displaced it, but drop it when something
+  // else did — router.reload() from an archive/delete also interrupts, and echoes the old
+  // search, so trusting the interrupted flag alone would strand the controls permanently.
+  const inFlightNavigations = React.useRef(0);
 
   const navigate = ({ page, ...updates }: Partial<SearchParams> & { page?: number }) => {
     const next = { ...activeSearch, ...updates };
@@ -230,16 +239,15 @@ export default function LibraryPage() {
     if (next.bundles.length > 0) data.bundles = next.bundles.join(",");
     if (next.show_archived_only) data.show_archived_only = "true";
     if (page !== undefined && page > 1) data.page = page.toString();
+    inFlightNavigations.current += 1;
     router.get(Routes.library_path(), data, {
       preserveState: true,
       preserveScroll: page === undefined,
-      onFinish: (visit) => {
-        // Inertia fires this for superseded visits too. Clearing there would drop a newer
-        // click's params and reinstate exactly the bug this fixes, so only a visit that
-        // ran to its own end hands control back to the server's props — which is also what
-        // snaps the controls back when the request failed.
-        if (visit.cancelled || visit.interrupted) return;
-        setPendingSearch(null);
+      onFinish: () => {
+        inFlightNavigations.current -= 1;
+        // The last navigation to settle hands the controls back to the server's props,
+        // whether it succeeded, failed or was displaced by a reload.
+        if (inFlightNavigations.current === 0) setPendingSearch(null);
       },
     });
   };
@@ -282,7 +290,7 @@ export default function LibraryPage() {
     try {
       await deletePurchasedProduct({ purchase_id: result.purchase.id });
       router.reload();
-      showAlert("Product deleted!", "success");
+      showAlert("Removed from your library!", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert("Something went wrong.", "error");
@@ -359,7 +367,7 @@ export default function LibraryPage() {
             )}
           </Placeholder>
         ) : null}
-        {archivedCount > 0 && !search.show_archived_only && !showArchivedNotice ? (
+        {archivedCount > 0 && !activeSearch.show_archived_only && !showArchivedNotice ? (
           <Alert role="status" variant="info" className="mb-5">
             You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
             <button

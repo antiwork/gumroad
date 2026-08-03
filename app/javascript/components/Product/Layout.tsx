@@ -17,6 +17,7 @@ import {
 } from "$app/components/Product";
 import {
   applySelection,
+  buyerLocalPriceCentsForSelection,
   ConfigurationSelectorHandle,
   PriceSelection,
 } from "$app/components/Product/ConfigurationSelector";
@@ -312,7 +313,11 @@ const CtaBar = ({
           buyerCurrency={product.buyer_currency}
           buyerLocalCurrencyRate={product.buyer_local_currency_rate}
           buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
-          buyerLocalPriceCents={product.buyer_local_price_cents}
+          buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
+            product.buyer_local_price_cents,
+            discountCode?.valid ? discountCode.discount : null,
+            selection.quantity,
+          )}
           buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
         />
         <h3 className="hidden flex-1 lg:block">{product.name}</h3>

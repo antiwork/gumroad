@@ -71,6 +71,12 @@ class CheckoutController < ApplicationController
             original_product_id: accepted_offer[:original_product_id],
             original_variant_id: accepted_offer[:original_variant_id],
           }
+        else
+          # A cart item that no longer carries an accepted offer must clear any offer left on the
+          # existing row. This happens when a buyer removes the product that triggered a cross-sell;
+          # retaining the association makes a later cart reload resurrect the discount and upsell.
+          cart_product.accepted_offer = nil
+          cart_product.accepted_offer_details = {}
         end
         cart_product.price = item[:price]
         cart_product.quantity = item[:quantity]

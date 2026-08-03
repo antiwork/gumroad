@@ -1,5 +1,6 @@
 import { Head, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
+import { flushSync } from "react-dom";
 import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
@@ -342,7 +343,7 @@ const CheckoutIndexPage = () => {
   };
   const acceptOffer = () => {
     const newCart = getCartIfAccepted();
-    cartForm.setData({ cart: newCart });
+    flushSync(() => cartForm.setData({ cart: newCart }));
     // Synchronously, not via the passive effect below: completeOffer can dispatch "validate" in
     // the same tick, and a passive invalidation would run after it — submitting through a payment
     // configuration computed for the pre-offer cart. An accepted offer changes the cart's items,
@@ -584,7 +585,6 @@ const CheckoutIndexPage = () => {
 
           return linePricing.map(({ item, discounted, discountedPriceToChargeNow }, index) => {
             const tipCents = lineTips[index] ?? null;
-
             return {
               permalink: item.product.permalink,
               uid: getCartItemUid(item),
@@ -608,6 +608,7 @@ const CheckoutIndexPage = () => {
                 !cartForm.data.cart.rejectPppDiscount &&
                 discounted.discount?.type === "ppp" &&
                 item.price !== 0,
+              acceptsPppDiscount: !!item.product.ppp_details && !cartForm.data.cart.rejectPppDiscount,
               forceNewSubscription: item.force_new_subscription,
               acceptedOffer: item.accepted_offer ?? null,
               bundleProducts: item.product.bundle_products.map((bundleProduct) => ({
@@ -636,8 +637,9 @@ const CheckoutIndexPage = () => {
               requestData,
               requestData.paymentMethod.confirmationTokenId,
               requestData.paymentMethod.selectedMethodType,
+              cartForm.data.cart.discountCodes,
             )
-          : await startOrderCreation(requestData);
+          : await startOrderCreation(requestData, cartForm.data.cart.discountCodes);
 
       // The CAPTCHA check refused the order on risk score alone, which is not something the buyer
       // can act on — so run the challenge key instead and resubmit with its token
@@ -730,6 +732,12 @@ const CheckoutIndexPage = () => {
 
       setRedirecting(!!redirectTo);
 
+      // A save scheduled before Pay can still be pending here — an email keystroke's debounce, or
+      // a timer a backgrounded tab (wallet/Link popup flows) held until focus returned. It carries
+      // the pre-purchase cart, so letting it fire now re-persists the items that were just bought;
+      // the buyer sees their cart come back and pays again (gumroad-private#1793).
+      debouncedSaveCartState.cancel();
+
       cartForm.setData((prev) => ({
         cart: {
           ...prev.cart,
@@ -771,6 +779,9 @@ const CheckoutIndexPage = () => {
           "Your payment is being processed — check your email for your receipt. Please do not pay again.",
           "warning",
         );
+        // Same stale-save hazard as the success path above: a pre-purchase save still pending
+        // would re-fill the cart this line just emptied.
+        debouncedSaveCartState.cancel();
         cartForm.setData((prev) => ({ cart: { ...prev.cart, items: [] } }));
         dispatch({ type: "cancel" });
         return;
@@ -796,7 +807,34 @@ const CheckoutIndexPage = () => {
   // The recovery has to be a save rather than a bare re-request of the configuration: a save sends
   // the cart the client currently holds, so its answer is the configuration for that same cart.
   // Saves also supersede one another, so a recovery cannot race the buyer's next edit.
+  //
+  // Once payment starts, the cart the buyer edited is no longer the cart that matters, and a save
+  // still carrying it must not be allowed to answer: its response re-renders `cart` from the
+  // pre-payment state, putting the purchased items and the checkout form back over the receipt
+  // (gumroad-private#1793). What cannot be blocked is the save *after* checkout, which persists the
+  // failed items into a fresh cart — so this is a staleness test, not a pause. Saves issued before
+  // payment started are dropped; saves issued from the trimmed post-checkout cart are the current
+  // generation and go through.
+  const cartSaveGenerationRef = React.useRef(0);
+  const paymentStarted = state.status.type !== "input" && state.status.type !== "offering";
+  React.useEffect(() => {
+    if (!paymentStarted) return;
+    // Anything already queued was built from the pre-payment cart; a queued save has not been
+    // issued yet, so cancelling is strictly better than letting it start and be discarded.
+    debouncedSaveCartStateRef.current.cancel();
+    // `onBefore` only gates a save before it is sent. A save that had already been dispatched
+    // (and so already passed that gate) when payment started is still in flight here, and its
+    // response would otherwise repaint the receipt with the pre-payment cart. Cancelling the
+    // Inertia visit itself marks it `cancelled`, which the recovery callbacks in
+    // checkoutPaymentRefresh already treat as a no-op — see the `visit?.cancelled` guard in
+    // `onFinish` — so this cannot race a later, legitimate save.
+    cartForm.cancel();
+    cartSaveGenerationRef.current += 1;
+  }, [paymentStarted]);
+
   const saveCart = (callbacks: CartSaveCallbacks) => {
+    const generation = cartSaveGenerationRef.current;
+
     cartForm.patch(Routes.checkout_path(), {
       // checkout_payment comes back with the save because it is derived from the cart: which
       // element this checkout mounts, and in which currency, can change when the cart changes.
@@ -806,6 +844,9 @@ const CheckoutIndexPage = () => {
       only: ["cart", "flash", "checkout_payment", "checkout_style"],
       preserveUrl: true,
       preserveScroll: true,
+      // The generation is captured when the save is issued, so this refuses exactly the saves that
+      // were built from a cart payment has since moved past — and lets a post-checkout save through.
+      onBefore: () => generation === cartSaveGenerationRef.current,
       ...callbacks,
     });
   };
@@ -836,6 +877,10 @@ const CheckoutIndexPage = () => {
       }),
     );
   }, cart_save_debounce_ms);
+  // The pre-payment cancel above runs in an effect declared before this callback exists, so it
+  // reaches it through a ref rather than by ordering the declarations around each other.
+  const debouncedSaveCartStateRef = React.useRef(debouncedSaveCartState);
+  debouncedSaveCartStateRef.current = debouncedSaveCartState;
 
   // Clean URL params after initial render to avoid stale URL references during Inertia updates
   useRunOnce(() => {
@@ -992,7 +1037,7 @@ const CheckoutIndexPage = () => {
               crossSell={currentOffer}
               accept={acceptOffer}
               decline={completeOffer}
-              cart={cartForm.data.cart}
+              cart={getCartIfAccepted()}
             />
           ) : (
             <UpsellModal cart={cartForm.data.cart} upsell={currentOffer} accept={acceptOffer} decline={completeOffer} />

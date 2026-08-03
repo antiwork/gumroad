@@ -11,6 +11,10 @@ describe Api::Internal::AgentMessageStreamsController do
 
   include_context "with user signed in as admin for seller"
 
+  before do
+    allow_any_instance_of(User).to receive(:eligible_for_store_agent?).and_return(true)
+  end
+
   after { $redis.del(throttle_key) }
 
   def exhaust_agent_request_throttle(key)

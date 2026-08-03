@@ -93,10 +93,11 @@ class DisputeEvidence < ApplicationRecord
     (SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - (Time.current - seller_contacted_at) / 1.hour).round
   end
 
-  # Zero once the single submission slot is spent, even while hours_left_in_window is still
-  # positive. The filing schedulers must NOT read this — a spent slot is not an expired window.
+  # Hours the seller has left to keep working on their statement. A saved statement does not close
+  # this: nothing reaches Stripe until the window elapses, so the seller may revise until then.
+  # Zero once the row is resolved, which is when the submission is actually spent.
   def hours_left_to_submit_evidence
-    return 0 if self.class.evidence_submission_closed?(seller_submitted_at:, resolved_at:)
+    return 0 if resolved_at.present?
 
     self.class.hours_left_in_window(seller_contacted? ? seller_contacted_at : nil)
   end
@@ -115,8 +116,8 @@ class DisputeEvidence < ApplicationRecord
     self.class.seller_response_due_at(seller_contacted_at)
   end
 
-  def self.schedule_due_soon_reminder(dispute_id:, seller_contacted_at:, seller_submitted_at:, resolved_at:)
-    return unless accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+  def self.schedule_due_soon_reminder(dispute_id:, seller_contacted_at:, resolved_at:)
+    return unless accepting_evidence?(seller_contacted_at:, resolved_at:)
 
     reminder_at = seller_response_reminder_at(seller_contacted_at)
     return unless reminder_at&.future?
@@ -126,19 +127,20 @@ class DisputeEvidence < ApplicationRecord
     ErrorNotifier.notify("DisputeEvidence: could not schedule evidence reminder for dispute #{dispute_id}: #{e.class} #{e.message}")
   end
 
-  # Both terminal states make Purchases::DisputeEvidenceController redirect away, so no notice may
-  # reference the form once either is set.
-  def self.evidence_submission_closed?(seller_submitted_at:, resolved_at:)
-    seller_submitted_at.present? || resolved_at.present?
+  # The only state that closes the form. A saved statement does not: nothing is forwarded until the
+  # window elapses, so the seller may keep revising and every notice must keep linking them back.
+  def self.evidence_submission_closed?(resolved_at:)
+    resolved_at.present?
   end
 
   # May we ask this seller for a statement and link them to the form? Requires an OPEN window:
   # check_if_needs_redirect bounces an unstamped row too, so a nil stamp is not permission to ask.
+  # A seller who already saved one is still accepting: they may revise until the window closes.
   #
   # Takes raw column values so a caller holding them without a trustworthy record can still ask —
   # the sweep must not #reload mid-transaction (see claim_seller_contacted_window!).
-  def self.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
-    return false if evidence_submission_closed?(seller_submitted_at:, resolved_at:)
+  def self.accepting_evidence?(seller_contacted_at:, resolved_at:)
+    return false if evidence_submission_closed?(resolved_at:)
 
     seller_contacted_at.present? && hours_left_in_window(seller_contacted_at).positive?
   end
@@ -146,14 +148,14 @@ class DisputeEvidence < ApplicationRecord
   # Is the notice itself still worth sending, whether or not we may ask for evidence? A dispute with
   # no evidence surface at all (PayPal, Stripe Connect) never gets a window and still needs its
   # plain notice, so an unstamped row is accepted here and refused by accepting_evidence?.
-  def self.notice_worth_sending?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
-    return false if evidence_submission_closed?(seller_submitted_at:, resolved_at:)
+  def self.notice_worth_sending?(seller_contacted_at:, resolved_at:)
+    return false if evidence_submission_closed?(resolved_at:)
 
     seller_contacted_at.nil? || hours_left_in_window(seller_contacted_at).positive?
   end
 
   def accepting_evidence?
-    self.class.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    self.class.accepting_evidence?(seller_contacted_at:, resolved_at:)
   end
 
   # Opens the seller's evidence window, and returns whether this caller is the one that opened it.
