@@ -169,8 +169,12 @@ class LinksController < ApplicationController
     @body_class = "iframe" if params[:overlay] || params[:embed]
 
     if ["search", "discover"].include?(params[:recommended_by])
+      # The clicked product's own category, not the browsed one: Discover click-throughs land here
+      # without the taxonomy params the results page had, so this is the only side that can attribute
+      # a click to a category at all.
       create_discover_search!(
         clicked_resource: @product,
+        taxonomy_id: @product.taxonomy_id,
         query: params[:query],
         autocomplete: params[:autocomplete] == "true"
       )
