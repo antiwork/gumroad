@@ -109,13 +109,14 @@ class SidekiqUtilityTest < ActiveSupport::TestCase
     @sidekiq_utility.send(:wait_for_sidekiq_to_process_existing_jobs)
   end
 
+  # The worker stays busy for every check, so the only thing that can end the
+  # loop is the deadline. Returning false twice then true is what proves two
+  # heartbeats happen before the deadline stops the wait: if the loop exited
+  # because the worker went idle instead, this would still pass while covering
+  # a different branch.
   test "heartbeats until the graceful shutdown deadline is reached" do
-    @sidekiq_utility.stubs(:sidekiq_process).returns(
-      { "busy" => 2, "identity" => "test_identity" },
-      { "busy" => 2, "identity" => "test_identity" },
-      { "busy" => 0, "identity" => "test_identity" },
-    )
-    @sidekiq_utility.stubs(:timeout_exceeded?).returns(false, false)
+    @sidekiq_utility.stubs(:sidekiq_process).returns({ "busy" => 2, "identity" => "test_identity" })
+    @sidekiq_utility.stubs(:timeout_exceeded?).returns(false, false, true)
     @sidekiq_utility.stubs(:sleep)
     @asg_double.expects(:record_lifecycle_action_heartbeat).twice
 
