@@ -12,9 +12,16 @@
 # writing a date of birth onto a KYC record is a human decision in either direction.
 class AlertOnStripeDobDriftJob
   include Sidekiq::Job
+  include RecurringLockTtl
+
   # Serialized: the Redis cursor is read, used, and written back in separate steps, so two overlapping
   # runs would claim the same page, spend the Stripe budget twice and send the report twice.
   sidekiq_options retry: 2, queue: :low, lock: :until_executed
+  # Worst case is the read budget, not the database: MAX_CANDIDATES_SCANNED sequential
+  # `Stripe::Account.retrieve` calls. At a pessimistic ~2s each — a Stripe timeout rather than a
+  # normal round trip — 400 accounts is ~13 minutes, so 30 gives the budget room to grow without
+  # the declaration going stale silently.
+  recurring_lock_ttl max_attempt: 30.minutes
 
   # Report at most this many. The alert exists to be read.
   MAX_REPORTED = 25
