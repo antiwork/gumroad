@@ -39,9 +39,13 @@ class SendPostBlastEmailsJob
       begin
         PostEmailApi.process(post: @post, recipients:, cache:, blast: @blast)
         mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
-      rescue => e
+      rescue Exception => e
         # Delete the sent_post_emails records if there's an error with PostEmailApi.process
         # We cannot use `transaction` here because it exceeds the lock timeout.
+        # Rescuing Exception, not StandardError: a deploy's hard shutdown raises
+        # Sidekiq::Shutdown (an Interrupt), and letting that skip the cleanup would leave
+        # these recipients marked sent but never emailed — the retry filters them out as
+        # already-emailed, so they are silently dropped from the blast.
         unless @blast.to_non_openers?
           emails = members.map(&:email)
           SentPostEmail.where(post: @post, email: emails).delete_all

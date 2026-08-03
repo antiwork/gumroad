@@ -41,10 +41,13 @@ describe TransientDeliveryRetry do
     expect(calls).to eq(described_class::ATTEMPTS)
   end
 
-  # ECONNRESET and ReadTimeout can fire AFTER the ESP accepted the payload, so retrying
-  # them would send the same recipients twice. They must reach the caller untouched.
+  # These can all fire AFTER the ESP accepted the payload, so retrying them would send the
+  # same recipients twice. ECONNRESET and ReadTimeout are read-phase by nature; EHOSTUNREACH
+  # and ETIMEDOUT are raw syscall errors the response-read can raise just as well as the
+  # connect can, and the rescue cannot tell the two phases apart. All must reach the caller
+  # untouched.
   it "does not retry an error that can follow an accepted payload" do
-    [Errno::ECONNRESET, Net::ReadTimeout].each do |error_class|
+    [Errno::ECONNRESET, Net::ReadTimeout, Errno::EHOSTUNREACH, Errno::ETIMEDOUT].each do |error_class|
       calls = 0
 
       expect do
@@ -71,13 +74,15 @@ describe TransientDeliveryRetry do
     expect(calls).to eq(1)
   end
 
-  it "backs off between attempts" do
+  # Total must stay under Sidekiq's ~25s shutdown grace period — see the note on BACKOFF.
+  it "backs off between attempts, staying inside the shutdown grace period" do
     expect(described_class).to receive(:sleep).with(2).ordered
     expect(described_class).to receive(:sleep).with(8).ordered
-    expect(described_class).to receive(:sleep).with(30).ordered
 
     expect do
       described_class.call(context: "test") { raise Net::OpenTimeout }
     end.to raise_error(Net::OpenTimeout)
+
+    expect(described_class::BACKOFF.sum).to be < 25
   end
 end
