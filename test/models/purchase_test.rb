@@ -2298,12 +2298,25 @@ class PurchaseTest < ActiveSupport::TestCase
 
   test "not_double_charged disallows identical successful repeat purchases seconds apart" do
     product = create_product
+    ip = unique_ip
+    create_purchase(link: product, seller: product.user, email: "bob@gumroad.com", ip_address: ip, total_transaction_cents: 12_34, created_at: Time.current)
+
+    purchase2 = build_purchase(link: product, email: "bob@gumroad.com", ip_address: ip, total_transaction_cents: 12_34, created_at: Time.current)
+
+    assert_not purchase2.valid?
+    assert_includes purchase2.errors.full_messages, "You have already paid for this product. It has been emailed to you."
+  end
+
+  test "not_double_charged allows identical successful purchases from different guest checkouts on the same email" do
+    # A guest resave replays the SAME browser tab, so it always carries the same IP as the
+    # purchase it's shadowing. Two different people who happen to share an email/amount pair
+    # (e.g. a shared support inbox) buying from separate IPs is a real second sale.
+    product = create_product
     create_purchase(link: product, seller: product.user, email: "bob@gumroad.com", total_transaction_cents: 12_34, created_at: Time.current)
 
     purchase2 = build_purchase(link: product, email: "bob@gumroad.com", total_transaction_cents: 12_34, created_at: Time.current)
 
-    assert_not purchase2.valid?
-    assert_includes purchase2.errors.full_messages, "You have already paid for this product. It has been emailed to you."
+    assert purchase2.valid?
   end
 
   test "not_double_charged disallows identical successful repeat purchases by the same buyer account" do

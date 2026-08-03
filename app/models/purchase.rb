@@ -5054,12 +5054,6 @@ class Purchase < ApplicationRecord
         "in_progress"
       ]
 
-      last_allowed_successful_purchase_at = if is_upgrade_purchase? || link.quantity_enabled || link.is_physical || link.is_licensed
-        10.seconds.ago
-      else
-        5.minutes.ago
-      end
-
       last_allowed_purchase_at = if is_upgrade_purchase? || link.quantity_enabled || link.is_physical || link.is_licensed
         10.seconds.ago
       else
@@ -5102,7 +5096,7 @@ class Purchase < ApplicationRecord
       add_errors_for_existing_purchase(already)
       return if errors.present?
 
-      not_double_charged_after_success(recipient_email, last_allowed_successful_purchase_at)
+      not_double_charged_after_success(recipient_email, last_allowed_purchase_at)
       return if errors.present?
 
       not_double_charged_while_payment_settling(recipient_email)
@@ -5111,6 +5105,16 @@ class Purchase < ApplicationRecord
     def not_double_charged_after_success(recipient_email, window_start)
       return if is_gift_sender_purchase
       return if link.quantity_enabled && is_multi_buy
+      # Any purchase tied to an existing subscription is a renewal/resubscribe on the same
+      # membership, not a resave of one checkout — including a later "original" purchase a
+      # test or an admin backfill attaches to a pre-existing subscription record.
+      return if subscription_id.present?
+      return if is_installment_payment
+      return if is_preorder_charge?
+      # A not-yet-charged purchase (e.g. a free trial awaiting its first charge) hasn't
+      # taken the buyer's money yet, so it can't be a resave shadowing an earlier charge —
+      # other validations (free-trial eligibility, etc.) own whether it's allowed to proceed.
+      return unless purchase_state == "successful"
 
       successful = self.class.successful.where(
         link_id: link.id,
@@ -5118,13 +5122,25 @@ class Purchase < ApplicationRecord
       ).where("purchases.created_at > ?", window_start)
 
       successful = if purchaser_id.present?
+        # A signed-in buyer's identity is a strong enough signal on its own — a resave from
+        # a different network (mobile data flipping to wifi mid-checkout) still has to block.
         successful.where("purchases.email = ? OR purchases.purchaser_id = ?", recipient_email, purchaser_id)
       else
-        successful.where(email: recipient_email)
+        # A guest resave replays the same in-flight checkout tab, so it always carries the
+        # browser's own IP — matching on IP here is what keeps two different guests who
+        # happen to buy with the same email+amount (see non_opener_context-style specs)
+        # from tripping this.
+        successful.where(email: recipient_email, ip_address:)
       end
 
       successful = successful.where("purchases.id != ?", id) if id
       successful = successful.not_is_gift_sender_purchase unless is_gift_sender_purchase
+
+      # Buying two different variants at the same price is a legitimate second sale, not a
+      # resave duplicate — a resave replays the SAME cart, so it always carries the same
+      # variant selection as the purchase it's shadowing.
+      my_variant_ids = variant_attribute_ids.sort
+      successful = successful.reject { |p| p.variant_attribute_ids.sort != my_variant_ids }
 
       add_errors_for_existing_purchase(successful)
     end
