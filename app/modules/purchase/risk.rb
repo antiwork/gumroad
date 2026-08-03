@@ -6,6 +6,12 @@ module Purchase::Risk
   CHARGEBACK_GRACE_PERIOD = 1.year
   CHARGEBACK_GRACE_LIMIT = 1
 
+  # Shown when an identifier-level block stopped the purchase. Deliberately suggests nothing the
+  # payer can change themselves: we cannot see from here which identifiers are blocked, and every
+  # self-service suggestion we have tried sent people around a loop that could not end
+  # (gumroad-private#1480, gumroad-private#1755). Support is the only route that always works.
+  BLOCKED_IDENTIFIER_ERROR = "Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."
+
   def check_for_fraud
     Timeout.timeout(CHECK_FOR_FRAUD_TIMEOUT_SECONDS) do
       check_for_past_blocked_email_domains
@@ -62,13 +68,9 @@ module Purchase::Risk
       return unless past_blocked_object(browser_guid)
 
       self.error_code = PurchaseErrorCode::BLOCKED_BROWSER_GUID
-      # Do not suggest another browser or connection here. A browser block may have been written
-      # alongside a block on the buyer's email address (#block_buyer! does both), in which case
-      # switching browser, network or payment method changes nothing — and the old wording sent
-      # blocked buyers around that loop until they gave up (gumroad-private#1480). We cannot tell
-      # from here which blocks exist, so point at the one route that always works: only support can
-      # look at the block and lift it.
-      errors.add :base, "Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."
+      # A browser block is usually written alongside a block on the buyer's email address
+      # (#block_buyer! does both), so switching browser, network or payment method changes nothing.
+      errors.add :base, BLOCKED_IDENTIFIER_ERROR
     end
 
     def check_for_past_chargebacks
@@ -122,7 +124,10 @@ module Purchase::Risk
       return if (blocked_ip_addresses & buyer_side_ip_addresses).empty?
 
       self.error_code = PurchaseErrorCode::BLOCKED_IP_ADDRESS
-      errors.add :base, "Your card was not charged. Please try again on a different browser and/or internet connection."
+      # The blocked address may be the buyer's account IP rather than the one this request came
+      # from, and a browser switch never moves an IP at all, so the old "different browser and/or
+      # internet connection" wording was advice that frequently could not work.
+      errors.add :base, BLOCKED_IDENTIFIER_ERROR
     end
 
     def past_blocked_object(object)

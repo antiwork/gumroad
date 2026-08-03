@@ -3,6 +3,16 @@
 require "spec_helper"
 
 describe Purchase::Risk do
+  describe "BLOCKED_IDENTIFIER_ERROR" do
+    # The two blocks it covers can sit on an identifier the payer cannot change from the checkout
+    # they are looking at (an account IP, or an email block written beside a browser block), so any
+    # self-service instruction here is a loop with no exit. Both prior wordings were one.
+    it "routes the payer to support and suggests nothing they could change themselves" do
+      expect(Purchase::Risk::BLOCKED_IDENTIFIER_ERROR).to include("support@gumroad.com")
+      expect(Purchase::Risk::BLOCKED_IDENTIFIER_ERROR).to_not match(/browser|internet connection|different card|another/i)
+    end
+  end
+
   describe "check purchase for previous chargebacks" do
     it "returns errors if the email has charged-back" do
       product = create(:product)
@@ -230,7 +240,8 @@ describe Purchase::Risk do
       bad_purchase = build(:purchase, link: @product, ip_address: "192.378.12.1")
       bad_purchase.send(:check_for_fraud)
       expect(bad_purchase.errors.empty?).to be(false)
-      expect(bad_purchase.errors.full_messages).to eq ["Your card was not charged. Please try again on a different browser and/or internet connection."]
+      expect(bad_purchase.error_code).to eq PurchaseErrorCode::BLOCKED_IP_ADDRESS
+      expect(bad_purchase.errors.full_messages).to eq [Purchase::Risk::BLOCKED_IDENTIFIER_ERROR]
     end
 
     it "returns errors if the buyer browser_guid has been blocked" do
@@ -240,7 +251,8 @@ describe Purchase::Risk do
       bad_purchase = build(:purchase, link: @product, browser_guid:)
       bad_purchase.send(:check_for_fraud)
       expect(bad_purchase.errors.empty?).to be(false)
-      expect(bad_purchase.errors.full_messages).to eq ["Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."]
+      expect(bad_purchase.error_code).to eq PurchaseErrorCode::BLOCKED_BROWSER_GUID
+      expect(bad_purchase.errors.full_messages).to eq [Purchase::Risk::BLOCKED_IDENTIFIER_ERROR]
     end
 
     it "does not return errors if only the seller's account_created_ip has been blocked" do
@@ -266,7 +278,7 @@ describe Purchase::Risk do
         end.to change { purchase.error_code }
           .from(nil).to(PurchaseErrorCode::BLOCKED_IP_ADDRESS)
           .and change { purchase.errors.empty? }.from(true).to(false)
-          .and change { purchase.errors.full_messages }.from([]).to(["Your card was not charged. Please try again on a different browser and/or internet connection."])
+          .and change { purchase.errors.full_messages }.from([]).to([Purchase::Risk::BLOCKED_IDENTIFIER_ERROR])
       end
 
       it "blocks even with purchase_check_for_fraudulent_ips explicitly off, because the flag no longer gates the check" do
@@ -329,7 +341,7 @@ describe Purchase::Risk do
             purchase = build(:membership_purchase, is_original_subscription_purchase: true, ip_address: blocked_ip_address, subscription:)
             purchase.send(:check_for_fraud)
             expect(purchase.errors.empty?).to be(false)
-            expect(purchase.errors.full_messages).to eq ["Your card was not charged. Please try again on a different browser and/or internet connection."]
+            expect(purchase.errors.full_messages).to eq [Purchase::Risk::BLOCKED_IDENTIFIER_ERROR]
           end
         end
 
