@@ -250,13 +250,13 @@ describe "deleted_ids[:variants] kind invariant" do
     it "reorders the content page list without letting a page leave the list" do
       source = File.read(javascript_root.join("components", "ProductEdit", "ContentTab", "index.tsx"))
 
-      expect(source).to match(/withOmittedRowsAppended\(nextPages, pagesRef\.current\)/),
-                        "The content page list must reorder through withOmittedRowsAppended. Assigning the " \
-                        "sortable's list straight to rich_content drops any page it omits — see " \
+      expect(source).to match(/reorderRowsPreservingMembership\(reportedPages, pagesRef\.current\)/),
+                        "The content page list must reorder through reorderRowsPreservingMembership. Assigning " \
+                        "the sortable's list straight to rich_content drops any page it omits — see " \
                         "gumroad-private#1508."
-      expect(source).not_to match(/(?:selectedVariant\.rich_content|product\.rich_content) = pages;/),
-                            "The page list assigns the sortable's reported list directly, which cannot preserve a " \
-                            "page that report omitted."
+      expect(source).not_to match(/setList=\{setPages\}/),
+                            "The page sortable writes its reported list straight to state, which cannot preserve " \
+                            "a page that report omitted. Route it through reorderPages."
     end
 
     it "exposes no grouping as a deletable object in the product editor" do
