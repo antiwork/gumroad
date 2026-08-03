@@ -239,6 +239,11 @@ module Purchase::Blockable
 
   # An informational read on an admin request that has already committed its unblock, so it gets a
   # tight budget and never retries: a slow processor must not turn a done unblock into a timeout.
+  #
+  # Passed as a StripeClient, never as per-request opts: stripe-ruby forwards any opts key outside
+  # `Util::OPTS_USER_SPECIFIED` as an HTTP header, so an Integer timeout raises `NoMethodError:
+  # undefined method 'strip' for an instance of Integer` before the request leaves the process —
+  # which the rescue below then reports as "could not read the processor outcome" on every call.
   PROCESSOR_REFUSAL_READ_OPTS = { read_timeout: 5, open_timeout: 2, max_network_retries: 0 }.freeze
 
   # A refusal can sit behind newer attempts that failed for unrelated reasons (an issuer decline, a
@@ -300,12 +305,14 @@ module Purchase::Blockable
       # Clamped together, because a connect and a read both spend this budget: leaving open_timeout
       # at its default lets a late read outlive the deadline by the whole connect phase.
       open_timeout = [PROCESSOR_REFUSAL_READ_OPTS[:open_timeout], remaining - 1].min
-      read_opts = PROCESSOR_REFUSAL_READ_OPTS.merge(
-        open_timeout:,
-        read_timeout: [PROCESSOR_REFUSAL_READ_OPTS[:read_timeout], remaining - open_timeout].min
+      read_client = Stripe::StripeClient.new(
+        PROCESSOR_REFUSAL_READ_OPTS.merge(
+          open_timeout:,
+          read_timeout: [PROCESSOR_REFUSAL_READ_OPTS[:read_timeout], remaining - open_timeout].min
+        )
       )
       charge = Stripe::Charge.retrieve({ id: candidate.stripe_transaction_id, expand: %w[outcome.rule] },
-                                       read_opts)
+                                       { client: read_client })
       outcome = charge["outcome"] || {}
 
       # A later authorised attempt means the buyer already got through, so an earlier refusal in the
