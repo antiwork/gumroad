@@ -8,15 +8,15 @@ describe RepairOrderChargeOutcomesJob do
   let(:product_1) { create(:product, user: seller_1) }
   let(:product_2) { create(:product, user: seller_2) }
 
-  # Simulates the enqueue being lost: settle both line items with the reconciliation job discarded,
-  # so nothing writes the flag. `mark_successful!` rather than `update_balance_and_mark_successful!`
-  # — the balance leg is not what this job reads.
+  # Models the enqueue being lost: `update_columns` writes the terminal states without firing the
+  # `after_commit` that would normally enqueue the reconciliation, so nothing writes the flag. It
+  # also sidesteps the charge-path validations, which is not what this job reads.
   def settle_with_lost_enqueue(order)
     succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
     failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
     order.purchases << succeeded << failed
-    succeeded.mark_successful!
-    Purchase::MarkFailedService.new(failed).perform
+    succeeded.update_columns(purchase_state: "successful")
+    failed.update_columns(purchase_state: "failed")
     RecordOrderChargeOutcomeJob.jobs.clear
     order
   end
@@ -31,8 +31,10 @@ describe RepairOrderChargeOutcomesJob do
   end
 
   it "leaves an order outside the lookback window alone" do
+    # Absolute age, not `LOOKBACK.ago` — a fixture derived from the constant moves with it and
+    # cannot pin the window at all.
     order = settle_with_lost_enqueue(create(:order))
-    order.update_column(:created_at, described_class::LOOKBACK.ago - 1.day)
+    order.update_column(:created_at, 30.days.ago)
 
     described_class.new.perform
 
@@ -44,8 +46,8 @@ describe RepairOrderChargeOutcomesJob do
     one = create(:purchase_in_progress, link: product_1, seller: seller_1)
     two = create(:purchase_in_progress, link: product_2, seller: seller_2)
     order.purchases << one << two
-    one.mark_successful!
-    two.mark_successful!
+    one.update_columns(purchase_state: "successful")
+    two.update_columns(purchase_state: "successful")
     RecordOrderChargeOutcomeJob.jobs.clear
 
     described_class.new.perform

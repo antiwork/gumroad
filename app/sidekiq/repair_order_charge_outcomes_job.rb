@@ -16,15 +16,16 @@ class RepairOrderChargeOutcomesJob
   def perform
     ActiveRecord::Base.connection.stick_to_primary!
 
-    unflagged_partial_order_ids.each { Order.find_by(id: _1)&.record_charge_outcome! }
+    candidate_order_ids.each { Order.find_by(id: _1)&.record_charge_outcome! }
   end
 
   private
-    def unflagged_partial_order_ids
+    # A failed line item is the cheap half of the predicate and the rarer one; `record_charge_outcome!`
+    # is authoritative about the rest, so narrowing further here would only duplicate it.
+    def candidate_order_ids
       Order.not_partially_successful
            .where(created_at: LOOKBACK.ago..)
-           .joins(:purchases).merge(Purchase.checkout_succeeded)
-           .where(id: Order.joins(:purchases).merge(Purchase.checkout_failed).select(:id))
+           .joins(:purchases).merge(Purchase.checkout_failed)
            .distinct
            .pluck(:id)
     end
