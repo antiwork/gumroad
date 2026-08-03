@@ -72,6 +72,30 @@ class UtmLink < ApplicationRecord
     "#{UrlService.short_domain_with_protocol}/u/#{permalink}"
   end
 
+  # The public API shape (Api::V2::UtmLinksController). External id only — the numeric id,
+  # seller_id, ip_address and browser_guid must never leave — and the permalink is exposed as
+  # the resolved short_url, which is the form sellers actually distribute.
+  def as_json(_options = {})
+    {
+      id: external_id,
+      title:,
+      short_url:,
+      utm_url:,
+      target_resource_type:,
+      target_resource_id: target_resource&.external_id,
+      utm_source:,
+      utm_medium:,
+      utm_campaign:,
+      utm_term:,
+      utm_content:,
+      enabled: enabled?,
+      total_clicks:,
+      unique_clicks:,
+      created_at:,
+      updated_at:,
+    }
+  end
+
   def utm_url
     uri = Addressable::URI.parse(target_resource_url)
     params = uri.query_values || {}

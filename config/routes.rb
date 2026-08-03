@@ -120,6 +120,12 @@ Rails.application.routes.draw do
         end
       end
       resources :upsells, only: [:index, :show, :create, :update, :destroy]
+      resources :utm_links, only: [:index, :show, :create, :update, :destroy] do
+        member do
+          put "disable"
+          put "enable"
+        end
+      end
       resources :emails, only: [:index, :show, :create, :destroy] do
         member do
           post :preview
