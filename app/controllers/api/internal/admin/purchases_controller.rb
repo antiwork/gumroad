@@ -317,7 +317,15 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       surviving = purchase.unblock_buyer!
       create_unblock_buyer_comments!(purchase)
 
-      if surviving.any?
+      # Stripe can keep refusing this buyer on one of our own Radar rules after every block we hold
+      # is gone, and the block we just cleared is what made them cycle cards into it. Read it from
+      # Stripe and say so, rather than reporting a clean unblock and inviting a retry Stripe will
+      # refuse (gumroad-private#1739). The note distinguishes a velocity predicate (genuinely a
+      # ~24h wait) from the value-list rule backing the block just cleared (retry shortly).
+      refusal = purchase.processor_rule_refusal
+      refusal_note = refusal.present? ? " #{purchase.processor_rule_refusal_note(refusal)}" : ""
+
+      if surviving.any? || refusal.present?
         # Say so rather than reporting a bare success. Three years of "Buyer unblocked" notes were
         # written over unblocks that left a row behind, and the silence is what hid it
         # (gumroad-private#1648).
@@ -325,8 +333,11 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
           success: true,
           status: "partially_unblocked",
           surviving_blocks: surviving.map { |block| { object_type: block.object_type, object_value: block.object_value } },
-          message: "Unblocked buyer for purchase number #{purchase.external_id_numeric}, but #{surviving.size} block(s) still hold this buyer: " \
-                   "#{surviving.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}"
+          processor_rule_refusal: refusal,
+          message: "Unblocked buyer for purchase number #{purchase.external_id_numeric}." +
+                   (surviving.any? ? " #{surviving.size} block(s) still hold this buyer: " \
+                                     "#{surviving.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}." : "") +
+                   refusal_note
         }
       end
 

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -95,6 +95,33 @@ const renderPage = (props = defaultProps()) => {
   );
 };
 
+const creatorCheckbox = (name: string): HTMLInputElement => {
+  const input = screen.getByText(name).closest("label")?.querySelector("input");
+  if (!input) throw new Error(`expected a checkbox for creator ${name}`);
+  return input;
+};
+
+type VisitOutcome = { cancelled: boolean; interrupted: boolean };
+type OnFinish = (visit: VisitOutcome) => void;
+
+// router.get is a vi.fn, so its recorded options are untyped; narrow rather than assert.
+const isOnFinish = (value: unknown): value is OnFinish => typeof value === "function";
+
+const lastOnFinish = (): OnFinish => {
+  const call = mocks.routerGet.mock.calls.at(-1);
+  if (!call) throw new Error("expected router.get to have been called");
+  const options: unknown = call[2];
+  if (typeof options !== "object" || options === null || !("onFinish" in options))
+    throw new Error("expected router.get options with an onFinish");
+  const { onFinish } = options;
+  if (!isOnFinish(onFinish)) throw new Error("expected onFinish to be a function");
+  return onFinish;
+};
+
+const settleLastVisit = (visit: VisitOutcome = { cancelled: false, interrupted: false }) => {
+  lastOnFinish()(visit);
+};
+
 const lastGetParams = (): Record<string, string> => {
   const call = mocks.routerGet.mock.calls.at(-1);
   if (!call) throw new Error("expected router.get to have been called");
@@ -126,7 +153,7 @@ describe("LibraryPage", () => {
     expect(mocks.routerGet).toHaveBeenCalledWith(
       "/library",
       { sort: "purchase_date" },
-      { preserveState: true, preserveScroll: true },
+      expect.objectContaining({ preserveState: true, preserveScroll: true }),
     );
   });
 
@@ -154,6 +181,56 @@ describe("LibraryPage", () => {
     expect(lastGetParams()).toEqual({ sort: "recently_updated", creators: "c1,c2" });
   });
 
+  it("composes creator selections made before the server echoes the first one back", () => {
+    renderPage();
+
+    // No props arrive between the two clicks: the second must build on the first, and the
+    // first checkbox must stay checked while its request is in flight.
+    fireEvent.click(creatorCheckbox("Ann"));
+    fireEvent.click(creatorCheckbox("Zoe"));
+
+    expect(lastGetParams()).toEqual({ sort: "recently_updated", creators: "c2,c1" });
+    expect(creatorCheckbox("Ann").checked).toBe(true);
+  });
+
+  it("unchecks a creator selected optimistically when it is clicked again", () => {
+    renderPage();
+
+    fireEvent.click(creatorCheckbox("Zoe"));
+    expect(creatorCheckbox("Zoe").checked).toBe(true);
+
+    fireEvent.click(creatorCheckbox("Zoe"));
+    expect(creatorCheckbox("Zoe").checked).toBe(false);
+    expect(lastGetParams()).toEqual({ sort: "recently_updated" });
+  });
+
+  it("hands the filter controls back to the server's props once the visit settles", () => {
+    renderPage();
+
+    fireEvent.click(creatorCheckbox("Zoe"));
+    expect(creatorCheckbox("Zoe").checked).toBe(true);
+
+    // The server ignored the id, so its echoed props win over the optimistic tick.
+    act(() => settleLastVisit());
+    expect(creatorCheckbox("Zoe").checked).toBe(false);
+  });
+
+  it("keeps the newer click's params when a superseded visit settles", () => {
+    renderPage();
+
+    fireEvent.click(creatorCheckbox("Ann"));
+    const supersededVisit = lastOnFinish();
+    fireEvent.click(creatorCheckbox("Zoe"));
+
+    // Inertia fires onFinish for the visit the second click interrupted; honouring it would
+    // discard Ann and put us back at the bug.
+    act(() => supersededVisit({ cancelled: false, interrupted: true }));
+    expect(creatorCheckbox("Ann").checked).toBe(true);
+
+    fireEvent.click(creatorCheckbox("Zoe"));
+    expect(lastGetParams()).toEqual({ sort: "recently_updated", creators: "c2" });
+  });
+
   it("preserves bundle and archived params and omits empty ones when toggling a filter", () => {
     const props = defaultProps();
     props.search.bundles = ["b1"];
@@ -173,7 +250,8 @@ describe("LibraryPage", () => {
     expect(mocks.routerGet).toHaveBeenCalledWith(
       "/library",
       { sort: "recently_updated", page: "2" },
-      { preserveState: true, preserveScroll: false },
+      // Paging scrolls to the top; a filter change keeps the buyer's scroll position.
+      expect.objectContaining({ preserveState: true, preserveScroll: false }),
     );
 
     // A filter change navigates without a page param, i.e. back to page 1.

@@ -8,6 +8,7 @@ module SearchProducts
     def search_products(params)
       filetype_options = Link.filetype_options(params)
       filetype_response = Link.search(filetype_options)
+      taxonomy_attribute_response = Link.search(Link.taxonomy_attribute_options(params)) if params[:taxonomy_id].present?
       product_options = Link.search_options(params.merge(track_total_hits: true))
 
       product_response = Link.search(product_options)
@@ -15,8 +16,28 @@ module SearchProducts
         total: product_response.results.total,
         tags_data: product_response.aggregations["tags.keyword"]["buckets"].to_a.map(&:to_h),
         filetypes_data: filetype_response.aggregations["filetypes.keyword"]["buckets"].to_a.map(&:to_h),
+        taxonomy_attributes_data: taxonomy_attributes_data(params, taxonomy_attribute_response),
         products: product_response.records
       }
+    end
+
+    def taxonomy_attributes_data(params, taxonomy_attribute_response)
+      return [] if params[:taxonomy_id].blank? || taxonomy_attribute_response.nil?
+
+      attributes = Taxonomy.find_by(id: params[:taxonomy_id])&.taxonomy_attributes&.select(&:filterable?) || []
+      return [] if attributes.empty?
+
+      buckets_by_key = taxonomy_attribute_response.aggregations["taxonomy_attribute_filters"]["buckets"].to_a.index_by { |bucket| bucket["key"] }
+      attributes.filter_map do |attribute|
+        filters = attribute.filter_options.filter_map do |option|
+          token = attribute.filter_token_for(option)
+          bucket = buckets_by_key[token]
+          { key: token, label: attribute.filter_label_for(option), doc_count: bucket ? bucket["doc_count"] : 0 } if token
+        end
+        next if filters.empty?
+
+        { name: attribute.name, label: attribute.label, filters: }
+      end
     end
 
     # Value-shape coercions only. Split out from format_search_params! so callers that build
@@ -34,15 +55,26 @@ module SearchProducts
         search_params[:filetypes] = search_params[:filetypes].split(",").map { |f| f.squish.downcase }
       end
 
+      if search_params[:taxonomy_attribute_filters].is_a?(String)
+        search_params[:taxonomy_attribute_filters] = search_params[:taxonomy_attribute_filters].split(",").map(&:squish)
+      elsif search_params[:taxonomy_attribute_filters].is_a?(ActionController::Parameters) || search_params[:taxonomy_attribute_filters].is_a?(Hash)
+        search_params[:taxonomy_attribute_filters] = search_params[:taxonomy_attribute_filters].values.filter_map { |filter| scalar_search_value(filter)&.to_s&.squish }
+      end
+
       if search_params[:ids].is_a?(String)
         search_params[:ids] = search_params[:ids].split(",").map(&:strip)
       end
 
       # These reach ES as `terms` clauses, which reject a nested structure with a 400.
-      %i[tags filetypes ids].each do |key|
+      %i[tags filetypes ids taxonomy_attribute_filters].each do |key|
         next unless search_params[key].is_a?(Array)
 
         search_params[key] = search_params[key].filter_map { |element| scalar_search_value(element)&.to_s }
+      end
+
+      if search_params[:taxonomy_attribute_filters].is_a?(Array)
+        search_params[:taxonomy_attribute_filters] =
+          search_params[:taxonomy_attribute_filters].uniq.first(Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS)
       end
 
       # search_options coerces each of these unconditionally (`.to_i`, `.to_f`) or hands it to ES

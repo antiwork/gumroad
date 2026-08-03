@@ -10,7 +10,9 @@ describe "Product::Searchable - Indexing scenarios" do
   describe "#as_indexed_json" do
     it "includes all properties" do
       taxonomy = create(:taxonomy)
+      TaxonomyAttribute.create!(taxonomy:, name: "format", label: "Format", value_type: "enum", values: ["OTF", "TTF"], position: 0)
       @product.update!(name: "Searching for Robby Fischer", description: "Search search search", taxonomy:, is_adult: true)
+      @product.save_taxonomy_attribute_values("format" => "OTF")
       @product.tag!("tag")
       @product.save_files!([{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/some-url.txt" }])
       @product.save_files!([
@@ -47,6 +49,7 @@ describe "Product::Searchable - Indexing scenarios" do
       expect(properties["creator_external_id"]).to eq(@product.user.external_id)
       expect(properties["content_updated_at"]).to eq(@product.content_updated_at.iso8601)
       expect(properties["taxonomy_id"]).to eq(taxonomy.id)
+      expect(properties["taxonomy_attribute_filters"]).to eq(["format:otf"])
       expect(properties["total_fee_cents"]).to eq(93)
       expect(properties["past_year_fee_cents"]).to eq(186)
     end
@@ -168,8 +171,8 @@ describe "Product::Searchable - Indexing scenarios" do
         @product.update!(deleted_at: Time.current)
       end
 
-      it "sends updated taxonomy_id field on `taxonomy_id` change" do
-        expect_product_update %w[taxonomy_id is_recommendable]
+      it "sends updated taxonomy_id and taxonomy attribute filter fields on `taxonomy_id` change" do
+        expect_product_update %w[taxonomy_id taxonomy_attribute_filters is_recommendable]
 
         @product.update!(taxonomy: create(:taxonomy))
       end

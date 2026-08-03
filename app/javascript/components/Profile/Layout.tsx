@@ -1,4 +1,4 @@
-import { Pencil, TwitterX } from "@boxicons/react";
+import { Pencil, Star, TwitterX } from "@boxicons/react";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
@@ -72,6 +72,12 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
                 </WithTooltip>
               ) : null}
             </a>
+            {creatorProfile.reputation ? (
+              <div className="flex items-center gap-1 text-sm text-muted" aria-label="Creator rating">
+                <Star pack="filled" className="size-4" />
+                {`${creatorProfile.reputation.average} from ${creatorProfile.reputation.count} verified ${creatorProfile.reputation.count === 1 ? "review" : "reviews"} across ${creatorProfile.reputation.products_count} products`}
+              </div>
+            ) : null}
             {!isDesktop ? headerButtons : null}
           </div>
           {!hideFollowForm ? (

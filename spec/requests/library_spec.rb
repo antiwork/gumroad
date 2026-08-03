@@ -584,6 +584,45 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to_not have_selector("[role='navigation'][aria-label='Pagination']")
   end
 
+  describe "server-side pagination" do
+    before do
+      @solo_creator = create(:user, name: "Solo creator")
+      @solo = create(:purchase, link: create(:product, user: @solo_creator, name: "Solo Product", price_cents: 0), purchaser: @user)
+      20.times { |n| create(:purchase, link: create(:product, name: "Bulk Product #{n}", price_cents: 0), purchaser: @user) }
+
+      Link.import(refresh: true, force: true)
+    end
+
+    it "serves the last page when the requested page is past the end" do
+      visit "/library?page=99"
+
+      expect(page).to have_text("Showing 16-21 of 21 products")
+      expect(page).to have_product_card(count: 6)
+    end
+
+    it "goes back to the first page of the narrowed set when a filter is applied from a deep page" do
+      visit "/library?page=2"
+      expect(page).to have_text("Showing 16-21 of 21 products")
+
+      # 21 distinct creators, so the facet list is truncated to 5 until this is clicked.
+      find_and_click("button", text: "Show more")
+      find_and_click("label", text: @solo_creator.name)
+
+      expect(page).to have_text("Showing 1-1 of 1 products")
+      expect(page).to have_product_card(@solo.link)
+      expect(page).to_not have_selector("[role='navigation'][aria-label='Pagination']")
+    end
+
+    it "restores a sorted, paged view from its URL alone" do
+      visit "/library?sort=purchase_date&page=2"
+
+      expect(page).to have_text("Showing 16-21 of 21 products")
+      expect(page).to have_field("Sort by", text: "Purchase Date")
+      # The bookmarked page must be the one highlighted, not just the one rendered.
+      expect(page).to have_selector("[role='navigation'][aria-label='Pagination'] [aria-current='page']", text: "2")
+    end
+  end
+
   describe "bundle purchases" do
     let(:purchase) { create(:purchase, purchaser: @user, link: create(:product, :bundle)) }
     before do

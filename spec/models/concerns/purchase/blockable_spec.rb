@@ -541,6 +541,238 @@ describe Purchase::Blockable do
     end
   end
 
+  describe "#processor_rule_refusal" do
+    let(:buyer_email) { "velocity-buyer@example.com" }
+    # Setting stripe_transaction_id at create time runs the charge validations, so the column is
+    # written after the row exists.
+    let(:refused_purchase) do
+      create(:purchase, link: product, email: buyer_email, purchaser: buyer).tap do |record|
+        record.update_column(:stripe_transaction_id, "ch_latest")
+      end
+    end
+
+    def stub_charge(outcome_type:, outcome_reason:, predicate: nil)
+      outcome = {
+        "type" => outcome_type,
+        "reason" => outcome_reason,
+        "network_status" => "not_sent_to_network",
+        "risk_level" => "normal",
+        "seller_message" => "One of your rules blocked this payment.",
+      }
+      outcome["rule"] = { "id" => "ssr_test", "predicate" => predicate } if predicate
+      allow(Stripe::Charge).to receive(:retrieve).and_return({ "outcome" => outcome })
+    end
+
+    it "reports a velocity refusal when the blocking rule is a predicate we cannot lift" do
+      stub_charge(outcome_type: "blocked", outcome_reason: "rule",
+                  predicate: ":card_count_for_email_daily: > 3")
+
+      refusal = refused_purchase.processor_rule_refusal
+
+      expect(refusal[:kind]).to eq(:velocity_rule)
+      expect(refusal[:charge_id]).to eq("ch_latest")
+      expect(refusal[:network_status]).to eq("not_sent_to_network")
+      expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("about a day")
+    end
+
+    # The block we enforce at Stripe refuses with the SAME type/reason as a velocity rule, so
+    # without reading the predicate this case would tell the agent to wait a day for a block that
+    # was just lifted (verified live on the gumroad-private#1739 buyer).
+    it "reports the just-cleared block, not a day-long wait, when the rule reads our value list" do
+      stub_charge(outcome_type: "blocked", outcome_reason: "rule",
+                  predicate: ":email: IN @gumroad_blocked_emails")
+
+      refusal = refused_purchase.processor_rule_refusal
+
+      expect(refusal[:kind]).to eq(:platform_block)
+      expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("retry shortly")
+      expect(refused_purchase.processor_rule_refusal_note(refusal)).not_to include("about a day")
+    end
+
+    it "returns nil when the issuer declined rather than one of our rules" do
+      stub_charge(outcome_type: "issuer_declined", outcome_reason: "generic_decline")
+
+      expect(refused_purchase.processor_rule_refusal).to be_nil
+    end
+
+    it "returns nil when the buyer has no Stripe attempt inside the window" do
+      # update! re-runs the purchase's charge validations; only the column matters here.
+      refused_purchase.update_column(:stripe_transaction_id, nil)
+
+      expect(refused_purchase.processor_rule_refusal).to be_nil
+    end
+
+    it "ignores charges made on a creator's own Connect account, whose rules are not ours" do
+      connect_account = create(:merchant_account, user: create(:user), charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      connect_account.update!(json_data: { "meta" => { "stripe_connect" => "true" } })
+      refused_purchase.update_column(:merchant_account_id, connect_account.id)
+      expect(Stripe::Charge).not_to receive(:retrieve)
+
+      expect(refused_purchase.processor_rule_refusal).to be_nil
+    end
+
+    it "says the check could not run rather than reading as clean when Stripe is unreachable" do
+      allow(Stripe::Charge).to receive(:retrieve).and_raise(Stripe::APIConnectionError.new("boom"))
+
+      expect(refused_purchase.processor_rule_refusal).to eq({ error: "could not read the processor outcome" })
+    end
+
+    # The unblock has already committed by the time this runs, so nothing here may raise.
+    it "does not let an unexpected error escape and fail the unblock that already committed" do
+      allow(Stripe::Charge).to receive(:retrieve).and_raise(NoMethodError.new("unexpected"))
+
+      expect(refused_purchase.processor_rule_refusal).to eq({ error: "could not read the processor outcome" })
+    end
+
+    context "when a newer attempt is not the refusal" do
+      def outcome_for(type:, reason:, predicate: nil)
+        outcome = { "type" => type, "reason" => reason, "network_status" => "not_sent_to_network" }
+        outcome["rule"] = { "id" => "ssr_test", "predicate" => predicate } if predicate
+        { "outcome" => outcome }
+      end
+
+      before do
+        # Newest first, since the scan walks created_at DESC. The charge id is written after create
+        # for the same reason as the shared let: setting it up front runs the charge validations.
+        create(:purchase, link: product, email: buyer_email, purchaser: buyer, created_at: 1.hour.ago)
+          .update_column(:stripe_transaction_id, "ch_newer")
+        refused_purchase.update_column(:created_at, 3.hours.ago)
+      end
+
+      # The refusal that stranded the #1739 buyer sat behind later attempts that died for unrelated
+      # reasons, so stopping at the newest attempt reports a clean unblock over a live rule.
+      it "finds a rule refusal sitting behind a newer ordinary decline" do
+        allow(Stripe::Charge).to receive(:retrieve) do |params, _opts|
+          params[:id] == "ch_newer" ? outcome_for(type: "issuer_declined", reason: "generic_decline")
+                                    : outcome_for(type: "blocked", reason: "rule", predicate: ":card_count_for_email_daily: > 3")
+        end
+
+        refusal = refused_purchase.processor_rule_refusal
+
+        expect(refusal[:kind]).to eq(:velocity_rule)
+        expect(refusal[:charge_id]).to eq("ch_latest")
+      end
+
+      it "stops at a newer authorized attempt, because the buyer already got through" do
+        allow(Stripe::Charge).to receive(:retrieve) do |params, _opts|
+          params[:id] == "ch_newer" ? outcome_for(type: "authorized", reason: "approved_by_network")
+                                    : outcome_for(type: "blocked", reason: "rule", predicate: ":card_count_for_email_daily: > 3")
+        end
+
+        expect(refused_purchase.processor_rule_refusal).to be_nil
+      end
+
+      it "reads at most PROCESSOR_REFUSAL_MAX_READS charges" do
+        create_list(:purchase, 5, link: product, email: buyer_email, purchaser: buyer, created_at: 2.hours.ago)
+          .each { |record| record.update_column(:stripe_transaction_id, "ch_extra") }
+        allow(Stripe::Charge).to receive(:retrieve).and_return(outcome_for(type: "issuer_declined", reason: "generic_decline"))
+
+        refused_purchase.processor_rule_refusal
+
+        expect(Stripe::Charge).to have_received(:retrieve).exactly(Purchase::Blockable::PROCESSOR_REFUSAL_MAX_READS).times
+      end
+
+      # Cheap silence is the whole bug: an unread older attempt looks identical to "nothing is
+      # holding them" at the callers, which is how #1739's buyer got told to retry.
+      it "reports an incomplete scan rather than nil when the read cap leaves attempts unread" do
+        create_list(:purchase, 5, link: product, email: buyer_email, purchaser: buyer, created_at: 2.hours.ago)
+          .each { |record| record.update_column(:stripe_transaction_id, "ch_extra") }
+        allow(Stripe::Charge).to receive(:retrieve).and_return(outcome_for(type: "issuer_declined", reason: "generic_decline"))
+
+        refusal = refused_purchase.processor_rule_refusal
+
+        expect(refusal).to eq({ incomplete: true, truncated_by: :read_cap })
+        expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("more attempts in the last day")
+      end
+
+      # The two truncation exits are not interchangeable: telling the agent there were more attempts
+      # than we read, when the scan actually timed out, is a reason they cannot act on.
+      it "reports an incomplete scan when the time budget runs out before every attempt is read" do
+        allow(Stripe::Charge).to receive(:retrieve) do
+          travel Purchase::Blockable::PROCESSOR_REFUSAL_TIME_BUDGET + 1.second
+          outcome_for(type: "issuer_declined", reason: "generic_decline")
+        end
+
+        refusal = refused_purchase.processor_rule_refusal
+
+        expect(refusal).to eq({ incomplete: true, truncated_by: :time_budget })
+        expect(Stripe::Charge).to have_received(:retrieve).once
+        expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("ran out of time")
+        expect(refused_purchase.processor_rule_refusal_note(refusal)).not_to include("more attempts in the last day")
+      end
+
+      # A read may not outlive the budget it is spending: the unblock is already committed and the
+      # admin request is still open. Both phases are clamped, because a connect that starts inside
+      # the budget can still finish outside it.
+      it "shortens both per-read timeouts to what is left of the budget" do
+        allow(Stripe::Charge).to receive(:retrieve) do |_params, opts|
+          travel Purchase::Blockable::PROCESSOR_REFUSAL_TIME_BUDGET - 2.seconds
+          config = opts[:client].config
+          @observed = (@observed || []) << [config.open_timeout, config.read_timeout]
+          outcome_for(type: "issuer_declined", reason: "generic_decline")
+        end
+
+        refused_purchase.processor_rule_refusal
+
+        defaults = Purchase::Blockable::PROCESSOR_REFUSAL_READ_OPTS
+        expect(@observed).to eq([[defaults[:open_timeout], defaults[:read_timeout]], [1, 1]])
+        expect(@observed.last.sum).to be <= 2
+      end
+
+      # stripe-ruby forwards any opts key outside Util::OPTS_USER_SPECIFIED as an HTTP header, so
+      # passing the timeouts as per-request opts raised before the request was made and every scan
+      # reported "could not read" — invisible to the other examples, which stub `retrieve` away.
+      it "carries the timeouts in a way the Stripe client actually accepts" do
+        allow(Stripe::Charge).to receive(:retrieve) do |_params, opts|
+          rejected = opts.keys - Stripe::Util::OPTS_USER_SPECIFIED.to_a - [:client]
+          raise ArgumentError, "opts#{rejected.inspect} would be sent to Stripe as HTTP headers" if rejected.any?
+
+          outcome_for(type: "issuer_declined", reason: "generic_decline")
+        end
+
+        # nil, not the {error:} hash the rescue produces when the call raises.
+        expect(refused_purchase.processor_rule_refusal).to be_nil
+      end
+
+      # With less than a connect-plus-read left there is no timeout pair that fits, so the read is
+      # not worth starting at all.
+      it "does not start a read it cannot finish inside the budget" do
+        allow(Stripe::Charge).to receive(:retrieve) do
+          travel Purchase::Blockable::PROCESSOR_REFUSAL_TIME_BUDGET - 1.second
+          outcome_for(type: "issuer_declined", reason: "generic_decline")
+        end
+
+        expect(refused_purchase.processor_rule_refusal).to eq({ incomplete: true, truncated_by: :time_budget })
+        expect(Stripe::Charge).to have_received(:retrieve).once
+      end
+
+      # A slow scan over more attempts than the cap trips both limits. The cap has to win: a re-run
+      # reads the same four attempts, so the timeout's "run it again" is the one useless answer here.
+      it "prefers the read cap over the time budget when a slow scan trips both" do
+        create_list(:purchase, 5, link: product, email: buyer_email, purchaser: buyer, created_at: 2.hours.ago)
+          .each { |record| record.update_column(:stripe_transaction_id, "ch_extra") }
+        allow(Stripe::Charge).to receive(:retrieve) do
+          travel Purchase::Blockable::PROCESSOR_REFUSAL_TIME_BUDGET - 1.second
+          outcome_for(type: "issuer_declined", reason: "generic_decline")
+        end
+
+        refusal = refused_purchase.processor_rule_refusal
+
+        expect(Stripe::Charge).to have_received(:retrieve).once
+        expect(refusal).to eq({ incomplete: true, truncated_by: :read_cap })
+        expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("more attempts in the last day")
+      end
+    end
+
+    it "names the charge in both notes so the agent can inspect it" do
+      velocity = { kind: :velocity_rule, charge_id: "ch_blocked", network_status: "not_sent_to_network" }
+      platform = { kind: :platform_block, charge_id: "ch_blocked" }
+
+      expect(purchase.processor_rule_refusal_note(velocity)).to include("ch_blocked")
+      expect(purchase.processor_rule_refusal_note(platform)).to include("ch_blocked")
+    end
+  end
+
   describe "#unblock_buyer!" do
     context "when buyer is not blocked" do
       it "does not call #unblock! on any blocked objects" do

@@ -112,6 +112,7 @@ class LinkPolicy < ApplicationPolicy
         :name,
         :value
       ],
+      taxonomy_attribute_values: {},
       file_attributes: [
         :name,
         :value

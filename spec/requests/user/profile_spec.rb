@@ -689,16 +689,17 @@ describe "User profile page", type: :system, js: true do
 
         add_section "Subscribe"
 
+        # A new subscribe section starts unnamed, like every other section type: no heading in the
+        # preview, and an empty Section name to fill in. The header follow form also renders an
+        # email field, so assert on the section's own name field rather than the preview's inputs.
         within_profile_editor_preview do
-          within_section "Subscribe to receive email updates from Gumbot.", section_element: :section do
-            expect(page).to have_field("Your email address")
-            expect(page).to have_button("Subscribe")
-          end
+          expect(page).to_not have_text("Subscribe to receive email updates from Gumbot.")
         end
 
         expect(seller.seller_profile_sections.count).to eq 0
 
-        within_section_form "Subscribe to receive email updates from Gumbot." do
+        within_section_form "Subscribe" do
+          expect(page).to have_field("Section name", with: "")
           fill_in "Section name", with: "Subscribe now or else"
           fill_in "Button label", with: "Follow"
         end

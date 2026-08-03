@@ -483,6 +483,22 @@ describe ProductPresenter::ProductProps do
       end
     end
 
+    context "seller reputation" do
+      let(:product) { create(:product, user: seller) }
+
+      it "omits the key when the seller_reputation_summary flag is off" do
+        expect(described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product]).not_to have_key(:seller_reputation)
+      end
+
+      it "includes the summary excluding the viewed product when the flag is on" do
+        Feature.activate_user(:seller_reputation_summary, seller)
+        summary = { average: 4.8, count: 12, products_count: 2 }
+        expect_any_instance_of(User).to receive(:seller_reputation_summary).with(exclude_product: product).and_return(summary)
+
+        expect(described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product][:seller_reputation]).to eq(summary)
+      end
+    end
+
     context "bundle product" do
       let(:bundle) { create(:product, user: seller, is_bundle: true) }
 
