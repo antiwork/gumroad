@@ -88,6 +88,37 @@ describe Order::OfferCodeRecoveryService do
     expect(result).to be_empty
   end
 
+  it "revalidates retry lines without counting the order's active reservation as a completed use" do
+    offer_code.update!(max_purchase_count: 1)
+    reserved_purchase = create(:purchase_in_progress, link: product_1, seller:, offer_code:)
+    reserved_purchase.create_purchase_offer_code_discount!(
+      offer_code:,
+      offer_code_amount: offer_code.amount_cents,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      once_per_cart_allocation_id: SecureRandom.uuid,
+      pre_discount_minimum_price_cents: product_1.price_cents
+    )
+    order = create(:order)
+    order.purchases << reserved_purchase
+    candidates = [{
+      code: offer_code.code,
+      products: { "retry-line" => { permalink: product_2.unique_permalink, quantity: 1 } },
+    }]
+    expect(offer_code.quantity_left).to eq(0)
+
+    result = described_class.revalidate_retry_candidates(order:, candidates:)
+
+    expect(result).to contain_exactly(
+      code: offer_code.code,
+      products: { product_2.unique_permalink => include(once_per_cart: true, cents: offer_code.amount_cents) }
+    )
+
+    reserved_purchase.update_column(:purchase_state, "successful")
+
+    expect(described_class.revalidate_retry_candidates(order:, candidates:)).to be_empty
+  end
+
   it "merges product maps for responses that share a normalized code" do
     merged = described_class.merge_responses(
       [{ code: "SAVE", products: { product_1.unique_permalink => { cents: 100 } } }],

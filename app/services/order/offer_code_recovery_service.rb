@@ -62,7 +62,8 @@ class Order::OfferCodeRecoveryService
         candidate[:code],
         candidate[:products],
         buyer: order.purchaser,
-        key_by_input: true
+        key_by_input: true,
+        excluding_order: order
       )
       result = service.process
       next if result[:error_code].present?

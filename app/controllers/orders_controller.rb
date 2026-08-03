@@ -168,6 +168,8 @@ class OrdersController < ApplicationController
         StripeIntentStatus::REQUIRES_CONFIRMATION,
         StripeIntentStatus::CANCELED,
       ]
+      # Keep the claim for intents that can still settle. Webhooks own their final outcome, and
+      # releasing it here would turn confirm_error into an unbounded processor polling endpoint.
       return false unless status.in?(safe_statuses)
 
       if status == StripeIntentStatus::CANCELED

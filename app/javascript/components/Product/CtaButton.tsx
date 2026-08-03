@@ -61,9 +61,16 @@ const ctaNames = {
 };
 export const getCtaName = (cta: CustomButtonTextOption) => ctaNames[cta];
 
-export const getUndiscountedPWYWPrice = (discountedPrice: number, discount: Discount, quantity: number) => {
+export const getUndiscountedPWYWPrice = (
+  discountedPrice: number,
+  discount: Discount,
+  quantity: number,
+  minimumPrices?: { discounted: number; undiscounted: number },
+) => {
   const configuredDiscount = withConfiguredOncePerCartAmount(discount);
   if (configuredDiscount.type === "percent") return discountedPrice / ((100 - configuredDiscount.percents) / 100.0);
+  if (configuredDiscount.once_per_cart && quantity === 1 && discountedPrice === minimumPrices?.discounted)
+    return minimumPrices.undiscounted;
   return !configuredDiscount.once_per_cart || quantity === 1
     ? discountedPrice + configuredDiscount.cents
     : discountedPrice;
@@ -97,7 +104,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     const [referrer, setReferrer] = React.useState("");
     useRunOnce(() => setReferrer(document.referrer));
 
-    const { selectedOption, pppDiscounted, discountedPriceCents } = applySelection(
+    const { selectedOption, priceCents, pppDiscounted, discountedPriceCents } = applySelection(
       product,
       discountCode?.valid ? discountCode.discount : null,
       selection,
@@ -123,7 +130,10 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
       if (pppDiscounted && product.ppp_details) {
         price /= product.ppp_details.factor;
       } else if (discountCode?.valid && hasMetDiscountConditions(discountCode.discount, selection.quantity)) {
-        price = getUndiscountedPWYWPrice(price, discountCode.discount, selection.quantity);
+        price = getUndiscountedPWYWPrice(price, discountCode.discount, selection.quantity, {
+          discounted: discountedPriceCents,
+          undiscounted: priceCents,
+        });
       }
 
       url.searchParams.set("price", Math.round(price).toString());

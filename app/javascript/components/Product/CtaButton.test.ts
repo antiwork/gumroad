@@ -25,4 +25,16 @@ describe("getUndiscountedPWYWPrice", () => {
 
     expect(getUndiscountedPWYWPrice(500, discount, 1)).toBe(2_000);
   });
+
+  it("restores the product minimum when the cart discount is clamped to the currency minimum", () => {
+    const discount: Discount = {
+      type: "fixed",
+      cents: 975,
+      once_per_cart: true,
+      once_per_cart_amount_cents: 975,
+      ...conditions,
+    };
+
+    expect(getUndiscountedPWYWPrice(99, discount, 1, { discounted: 99, undiscounted: 1_000 })).toBe(1_000);
+  });
 });
