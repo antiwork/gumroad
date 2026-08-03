@@ -12,6 +12,20 @@ import { UserAgentProvider } from "$app/components/UserAgent";
 
 type PendingUpload = (signedId: string) => void;
 
+// getByRole returns HTMLElement, and `assertionStyle: "never"` rules out casting it. Narrowing
+// through querySelector keeps the .checked / .value reads typed.
+const asInput = (element: HTMLElement): HTMLInputElement => {
+  const input = element.closest("input") ?? element.querySelector("input");
+  if (!input) throw new Error(`expected an input, got ${element.tagName}`);
+  return input;
+};
+
+const asTextArea = (element: HTMLElement): HTMLTextAreaElement => {
+  const textarea = element.closest("textarea") ?? element.querySelector("textarea");
+  if (!textarea) throw new Error(`expected a textarea, got ${element.tagName}`);
+  return textarea;
+};
+
 const mocks = vi.hoisted(() => ({
   usePage: vi.fn(),
   put: vi.fn(),
@@ -166,10 +180,8 @@ describe("DisputeEvidence Show", () => {
     renderPage();
 
     const restored = await screen.findByRole("radio", { name: "The cardholder received the product or service" });
-    expect((restored as HTMLInputElement).checked).toBe(true);
-    expect(
-      (screen.getByRole("radio", { name: "The cardholder withdrew the dispute" }) as HTMLInputElement).checked,
-    ).toBe(false);
+    expect(asInput(restored).checked).toBe(true);
+    expect(asInput(screen.getByRole("radio", { name: "The cardholder withdrew the dispute" })).checked).toBe(false);
 
     act(() => submitButton().click());
     act(() => screen.getByRole("button", { name: "Confirm and save" }).click());
@@ -198,15 +210,15 @@ describe("DisputeEvidence Show", () => {
     });
     renderPage();
 
-    expect(((await screen.findByRole("radio", { name: "Other" })) as HTMLInputElement).checked).toBe(true);
+    expect(asInput(await screen.findByRole("radio", { name: "Other" })).checked).toBe(true);
     const textarea = screen.getByRole("textbox");
-    expect((textarea as HTMLTextAreaElement).value).toBe("The buyer downloaded the file twice");
+    expect(asTextArea(textarea).value).toBe("The buyer downloaded the file twice");
   });
 
   it("preselects nothing when the seller has not answered yet", () => {
     renderPage();
 
-    expect(screen.queryAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
+    expect(screen.queryAllByRole("radio").some((radio) => asInput(radio).checked)).toBe(false);
     expect(screen.queryByText("Your saved response is filled in below.")).toBe(null);
   });
 });

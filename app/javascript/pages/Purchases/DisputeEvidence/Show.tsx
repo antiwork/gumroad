@@ -11,6 +11,7 @@ import {
   ReasonForWinningOption,
   reasonForWinningOptions,
   cancellationRebuttalOptions,
+  cancellationRebuttalOptionKeys,
 } from "$app/data/purchase/dispute_evidence_data";
 import FileUtils from "$app/utils/file";
 
@@ -120,7 +121,7 @@ export default function Show() {
   const savedCancellationRebuttal = restoreChoice(
     saved.cancellation_rebuttal,
     cancellationRebuttalOptions,
-    Object.keys(cancellationRebuttalOptions) as CancellationRebuttalOption[],
+    cancellationRebuttalOptionKeys,
   );
   const [reasonForWinningOption, setReasonForWinningOption] = React.useState<ReasonForWinningOption | null>(
     savedReasonForWinning.option,
