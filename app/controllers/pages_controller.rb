@@ -40,6 +40,7 @@ class PagesController < Sellers::BaseController
       is_new: true,
       username: current_seller.username.to_s,
       profile_url: current_seller.profile_url,
+      products_page_limit: Pages::ProfileData::MAX_ITEMS,
     }
   end
 
@@ -74,6 +75,7 @@ class PagesController < Sellers::BaseController
         is_new: false,
         username: current_seller.username.to_s,
         profile_url: current_seller.profile_url,
+        products_page_limit: Pages::ProfileData::MAX_ITEMS,
       }
       return
     end
@@ -84,6 +86,7 @@ class PagesController < Sellers::BaseController
       is_new: false,
       username: current_seller.username.to_s,
       profile_url: current_seller.profile_url,
+      products_page_limit: Pages::ProfileData::MAX_ITEMS,
     }
   end
 

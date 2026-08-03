@@ -12,10 +12,17 @@ const mocks = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("$app/utils/request", () => ({ request: mocks.request }));
 
 const PRODUCTS_PATH = "/pages/profile/products";
+// Pages::ProfileData::MAX_ITEMS, threaded in as a prop.
+const DEFAULT_LIMIT = 100;
 
 const renderPreview = () => {
   const result = render(
-    <CustomHtmlPreview title="Page preview" src="/pages/profile/preview" productsSrc={PRODUCTS_PATH} />,
+    <CustomHtmlPreview
+      title="Page preview"
+      src="/pages/profile/preview"
+      productsSrc={PRODUCTS_PATH}
+      productsDefaultLimit={DEFAULT_LIMIT}
+    />,
   );
   const frame = result.container.querySelector("iframe");
   if (!frame) throw new Error("expected the preview iframe to render");
@@ -76,7 +83,9 @@ describe("CustomHtmlPreview products bridge", () => {
     expect(url.searchParams.get("limit")).toBe("1");
   });
 
-  it("omits limit so the server applies its own default when the page sends none", async () => {
+  // The live wrapper defaults an omitted limit to MAX_ITEMS; the endpoint rejects a request
+  // without one, so forwarding "no limit" would fail every offset-only page.
+  it("defaults an omitted limit to the live bridge's MAX_ITEMS", async () => {
     mocks.request.mockResolvedValue(jsonResponse({ success: true, products: [], products_total: 0, prices: {} }));
     const { frame } = renderPreview();
 
@@ -84,7 +93,18 @@ describe("CustomHtmlPreview products bridge", () => {
 
     await waitFor(() => expect(mocks.request).toHaveBeenCalled());
     const url = new URL(requestedUrl(), "http://localhost");
-    expect(url.searchParams.has("limit")).toBe(false);
+    expect(url.searchParams.get("limit")).toBe(String(DEFAULT_LIMIT));
+  });
+
+  it("defaults a null limit the same way", async () => {
+    mocks.request.mockResolvedValue(jsonResponse({ success: true, products: [], products_total: 0, prices: {} }));
+    const { frame } = renderPreview();
+
+    postFromFrame(frame, { type: "gumroad:products", offset: 0, limit: null, requestId: "gumroad-products-1" });
+
+    await waitFor(() => expect(mocks.request).toHaveBeenCalled());
+    const url = new URL(requestedUrl(), "http://localhost");
+    expect(url.searchParams.get("limit")).toBe(String(DEFAULT_LIMIT));
   });
 
   it("rejects a non-integer or negative offset/limit without hitting the server", async () => {
@@ -97,12 +117,11 @@ describe("CustomHtmlPreview products bridge", () => {
       { offset: 0, limit: 0 },
       { offset: 0, limit: -3 },
       { offset: 0, limit: "2" },
-      {},
     ]) {
       postFromFrame(frame, { type: "gumroad:products", ...bad, requestId: "r" });
     }
 
-    await waitFor(() => expect(post).toHaveBeenCalledTimes(7));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(6));
     for (const [payload] of post.mock.calls) expect(payload).toMatchObject({ success: false });
     expect(mocks.request).not.toHaveBeenCalled();
   });

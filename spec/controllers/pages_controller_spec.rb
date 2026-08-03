@@ -109,6 +109,17 @@ describe PagesController, type: :controller, inertia: true do
 
       expect(response).to redirect_to(pages_path)
     end
+
+    # The preview's products responder defaults an omitted limit with this; the slice endpoint
+    # rejects a request without one, so a missing prop breaks every offset-only page.
+    it "passes MAX_ITEMS so the preview bridge defaults its limit like the live wrapper" do
+      aggregate_failures do
+        ["about", "profile"].each do |slug|
+          get :edit, params: { slug: }
+          expect(inertia.props[:products_page_limit]).to eq(Pages::ProfileData::MAX_ITEMS), "missing for #{slug}"
+        end
+      end
+    end
   end
 
   describe "PATCH update" do

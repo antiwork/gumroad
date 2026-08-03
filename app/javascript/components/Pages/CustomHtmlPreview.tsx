@@ -28,11 +28,15 @@ const isIndex = (value: unknown): value is number => typia.is<number>(value) && 
 export const CustomHtmlPreview = ({
   src,
   productsSrc,
+  productsDefaultLimit,
   title,
   className,
 }: {
   src: string;
   productsSrc: string;
+  // What an omitted limit means, mirroring the live wrapper's MAX_ITEMS default. A preview that
+  // instead forwarded "no limit" would fail the endpoint's own validation.
+  productsDefaultLimit: number;
   title: string;
   className?: string;
 }) => {
@@ -51,15 +55,15 @@ export const CustomHtmlPreview = ({
       };
 
       const offset = message.offset;
-      const limit = message.limit === undefined || message.limit === null ? undefined : message.limit;
-      if (!isIndex(offset) || (limit !== undefined && (!isIndex(limit) || limit < 1))) {
+      const limit = message.limit === undefined || message.limit === null ? productsDefaultLimit : message.limit;
+      if (!isIndex(offset) || !isIndex(limit) || limit < 1) {
         reply({ success: false });
         return;
       }
 
       const url = new URL(productsSrc, window.location.origin);
       url.searchParams.set("offset", String(offset));
-      if (limit !== undefined) url.searchParams.set("limit", String(limit));
+      url.searchParams.set("limit", String(limit));
       void (async () => {
         try {
           const response = await request({ method: "GET", accept: "json", url: url.toString() });
@@ -87,7 +91,7 @@ export const CustomHtmlPreview = ({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [productsSrc]);
+  }, [productsSrc, productsDefaultLimit]);
 
   return <iframe ref={frameRef} title={title} src={src} sandbox="allow-scripts" className={className} />;
 };
