@@ -544,23 +544,24 @@ describe StripeChargeProcessor, :vcr do
       ].join("\n\n")
       expect(Stripe::Dispute).to receive(:update).with(
         stripe_charge.dispute,
-        evidence: hash_including({
-                                   billing_address: dispute_evidence.billing_address,
-                                   customer_email_address: dispute_evidence.customer_email,
-                                   customer_name: dispute_evidence.customer_name,
-                                   customer_purchase_ip: dispute_evidence.customer_purchase_ip,
-                                   product_description: dispute_evidence.product_description,
-                                   service_date: dispute_evidence.purchased_at.to_fs(:formatted_date_full_month),
-                                   shipping_address: dispute_evidence.shipping_address,
-                                   shipping_carrier: dispute_evidence.shipping_carrier,
-                                   shipping_date: dispute_evidence.shipped_at&.to_fs(:formatted_date_full_month),
-                                   shipping_tracking_number: dispute_evidence.shipping_tracking_number,
-                                   uncategorized_text: expected_uncategorized_text,
-                                   access_activity_log: dispute_evidence.access_activity_log,
-                                   refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
-                                   cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
-                                   refund_refusal_explanation: dispute_evidence.refund_refusal_explanation
-                                 })
+        hash_including(evidence: hash_including({
+                                                  billing_address: dispute_evidence.billing_address,
+                                                  customer_email_address: dispute_evidence.customer_email,
+                                                  customer_name: dispute_evidence.customer_name,
+                                                  customer_purchase_ip: dispute_evidence.customer_purchase_ip,
+                                                  product_description: dispute_evidence.product_description,
+                                                  service_date: dispute_evidence.purchased_at.to_fs(:formatted_date_full_month),
+                                                  shipping_address: dispute_evidence.shipping_address,
+                                                  shipping_carrier: dispute_evidence.shipping_carrier,
+                                                  shipping_date: dispute_evidence.shipped_at&.to_fs(:formatted_date_full_month),
+                                                  shipping_tracking_number: dispute_evidence.shipping_tracking_number,
+                                                  uncategorized_text: expected_uncategorized_text,
+                                                  access_activity_log: dispute_evidence.access_activity_log,
+                                                  refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
+                                                  cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
+                                                  refund_refusal_explanation: dispute_evidence.refund_refusal_explanation
+                                                })),
+        hash_including(:idempotency_key)
       ).and_call_original
       subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
     end
@@ -570,7 +571,8 @@ describe StripeChargeProcessor, :vcr do
       stripe_charge.refresh
       expect(Stripe::Dispute).to receive(:update).with(
         stripe_charge.dispute,
-        evidence: hash_including({ receipt: "receipt_file" })
+        hash_including(evidence: hash_including({ receipt: "receipt_file" })),
+        hash_including(:idempotency_key)
       )
 
       subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
@@ -584,7 +586,8 @@ describe StripeChargeProcessor, :vcr do
       stripe_charge.refresh
       expect(Stripe::Dispute).to receive(:update).with(
         stripe_charge.dispute,
-        evidence: hash_including({ customer_communication: "customer_communication_file" })
+        hash_including(evidence: hash_including({ customer_communication: "customer_communication_file" })),
+        hash_including(:idempotency_key)
       )
 
       subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
@@ -596,7 +599,8 @@ describe StripeChargeProcessor, :vcr do
         stripe_charge.refresh
         expect(Stripe::Dispute).to receive(:update).with(
           stripe_charge.dispute,
-          evidence: hash_including({ refund_policy: "refund_policy_file" })
+          hash_including(evidence: hash_including({ refund_policy: "refund_policy_file" })),
+          hash_including(:idempotency_key)
         )
 
         subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
@@ -621,7 +625,8 @@ describe StripeChargeProcessor, :vcr do
         stripe_charge.refresh
         expect(Stripe::Dispute).to receive(:update).with(
           stripe_charge.dispute,
-          evidence: hash_including({ cancellation_policy: "cancellation_policy_file" })
+          hash_including(evidence: hash_including({ cancellation_policy: "cancellation_policy_file" })),
+          hash_including(:idempotency_key)
         )
 
         subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
@@ -4358,7 +4363,7 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
   def evidence_sent_to_stripe
     DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload)
     sent = nil
-    allow(Stripe::Dispute).to receive(:update) { |_id, evidence:| sent = evidence }
+    allow(Stripe::Dispute).to receive(:update) { |_id, params, _opts| sent = params[:evidence] }
     described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
     sent
   end
@@ -4381,5 +4386,56 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
 
     expect(evidence[:uncategorized_text]).to_not include("shipment tracking URL")
     expect(evidence[:uncategorized_text]).to_not include("confirmed delivery by phone")
+  end
+
+  describe "idempotency key" do
+    # A dispute accepts evidence once (gumroad-private#1612) and FightDisputeJob retries five
+    # times, so the key is what stops a retry after a landed call spending the submission again.
+    # It only works if it is IMMUTABLE across attempts, which is what these pin.
+    def capture_options(evidence_row = nil)
+      captured = nil
+      allow(Stripe::Dispute).to receive(:update) { |_id, _params, opts| captured = opts }
+      described_class.new.fight_chargeback("ch_test", evidence_row || disputed_purchase.dispute.reload.dispute_evidence)
+      captured
+    end
+
+    before { DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload) }
+
+    it "sends one derived from the evidence row" do
+      expect(capture_options[:idempotency_key]).to eq("dispute_evidence_#{disputed_purchase.dispute.reload.dispute_evidence.external_id}")
+    end
+
+    it "is stable across a retry that re-reads the same row" do
+      # The payload is NOT stable across attempts — create_dispute_evidence_stripe_file uploads a
+      # fresh Stripe file each call — so anything digesting it would change here and let the retry
+      # spend the one-shot submission.
+      first = capture_options
+
+      expect(capture_options[:idempotency_key]).to eq(first[:idempotency_key])
+    end
+
+    it "is stable after the seller writes a statement into the same row" do
+      # `updated_at` is not usable either: the seller legitimately writes into this row during the
+      # 2.19-day assembly-to-submission gap, and a retry after a landed call must still replay.
+      first = capture_options
+
+      evidence_row = disputed_purchase.dispute.reload.dispute_evidence
+      travel_to 1.hour.from_now do
+        evidence_row.update!(reason_for_winning: "The buyer signed for the parcel.")
+      end
+
+      expect(capture_options(evidence_row.reload)[:idempotency_key]).to eq(first[:idempotency_key])
+    end
+
+    it "differs between two evidence rows" do
+      other_purchase = create(:free_purchase)
+      create(:dispute_formalized, purchase: other_purchase)
+      DisputeEvidence.create_from_dispute!(other_purchase.dispute.reload)
+
+      mine = capture_options
+      theirs = capture_options(other_purchase.dispute.reload.dispute_evidence)
+
+      expect(theirs[:idempotency_key]).to_not eq(mine[:idempotency_key])
+    end
   end
 end
