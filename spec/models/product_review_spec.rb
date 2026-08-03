@@ -175,6 +175,20 @@ describe ProductReview do
       end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted).with(product_review.id)
     end
 
+    it "doesn't send when the message arrives after the seller was already told about the review" do
+      # The buyer tapped stars, the delayed render reported the rating-only review, and they came
+      # back later to write the text. That is an edit of a review the seller has seen, not a
+      # submission they haven't.
+      product.user.update!(disable_reviews_email: false)
+      product_review.message = nil
+      product_review.save!
+      product_review.update_columns(seller_notified_at: Time.current)
+
+      expect do
+        product_review.update!(message: "Exactly what I needed")
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+    end
+
     it "doesn't send when an existing message is edited" do
       product.user.update!(disable_reviews_email: false)
 
