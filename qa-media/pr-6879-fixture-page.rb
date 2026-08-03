@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 out = []
 seller = User.find_by(email: "seller@gumroad.com")
 
