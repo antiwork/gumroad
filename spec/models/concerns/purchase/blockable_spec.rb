@@ -707,7 +707,8 @@ describe Purchase::Blockable do
       it "shortens both per-read timeouts to what is left of the budget" do
         allow(Stripe::Charge).to receive(:retrieve) do |_params, opts|
           travel Purchase::Blockable::PROCESSOR_REFUSAL_TIME_BUDGET - 2.seconds
-          @observed = (@observed || []) << [opts[:open_timeout], opts[:read_timeout]]
+          config = opts[:client].config
+          @observed = (@observed || []) << [config.open_timeout, config.read_timeout]
           outcome_for(type: "issuer_declined", reason: "generic_decline")
         end
 
@@ -716,6 +717,21 @@ describe Purchase::Blockable do
         defaults = Purchase::Blockable::PROCESSOR_REFUSAL_READ_OPTS
         expect(@observed).to eq([[defaults[:open_timeout], defaults[:read_timeout]], [1, 1]])
         expect(@observed.last.sum).to be <= 2
+      end
+
+      # stripe-ruby forwards any opts key outside Util::OPTS_USER_SPECIFIED as an HTTP header, so
+      # passing the timeouts as per-request opts raised before the request was made and every scan
+      # reported "could not read" — invisible to the other examples, which stub `retrieve` away.
+      it "carries the timeouts in a way the Stripe client actually accepts" do
+        allow(Stripe::Charge).to receive(:retrieve) do |_params, opts|
+          rejected = opts.keys - Stripe::Util::OPTS_USER_SPECIFIED.to_a - [:client]
+          raise ArgumentError, "opts#{rejected.inspect} would be sent to Stripe as HTTP headers" if rejected.any?
+
+          outcome_for(type: "issuer_declined", reason: "generic_decline")
+        end
+
+        # nil, not the {error:} hash the rescue produces when the call raises.
+        expect(refused_purchase.processor_rule_refusal).to be_nil
       end
 
       # With less than a connect-plus-read left there is no timeout pair that fits, so the read is
