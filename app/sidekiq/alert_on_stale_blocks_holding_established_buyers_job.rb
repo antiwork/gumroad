@@ -87,12 +87,13 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
       { stale: report_order(stale), truncated: }
     end
 
-    # Active email blocks nobody is named on, oldest first, one over the candidate budget so that
-    # exhausting it is distinguishable from a table holding exactly that many.
+    # Active email blocks nobody is named on, one over the candidate budget so that exhausting it is
+    # distinguishable from a table holding exactly that many.
     #
-    # Oldest first because age is the whole complaint: a block written years ago that still refuses a
-    # long-standing customer is the one a human should see, and a recent row is more likely to be a
-    # velocity rule firing for cause.
+    # Ordered by id, not age: id is the keyset the cursor resumes from, and `blocked_at` is not
+    # monotonic in id because PlatformBlock.add! reuses the row and rewrites blocked_at on re-block.
+    # Age-ranking happens per page in `report_order`, so a run reports its own page oldest-first
+    # rather than the backlog's oldest rows.
     #
     # `blocked_by: nil` keeps this to unattended rows. A named block is a decision about this buyer,
     # not a rule that outlived itself. Not airtight — PlatformBlock.add! overwrites blocked_by on
@@ -188,7 +189,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
     end
 
     # Oldest block first. Age is what makes a line worth reading here: unlike the failure-keyed
-    # report there is no recent attempt to rank by, and the buyer stuck since 2021 is the one whose
+    # report there is no attempt recency to rank by, and the buyer stuck since 2021 is the one whose
     # block is least likely to still be justified.
     def report_order(stale)
       stale.sort_by { |entry| [entry[:blocked_at].to_i, -entry[:settled_purchases]] }
@@ -196,7 +197,7 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
     def line_for(entry)
       "• #{entry[:email]} — #{entry[:settled_purchases]} settled purchases, " \
-        "blocked by email since #{entry[:blocked_at].to_date} (no recent attempt)"
+        "blocked by email since #{entry[:blocked_at].to_date}"
     end
 
     def headline(count, truncated)
