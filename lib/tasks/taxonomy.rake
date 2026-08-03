@@ -3,7 +3,7 @@
 namespace :taxonomy do
   desc "Apply the taxonomy tree and its attribute definitions to the current environment (idempotent)"
   task seed: :environment do
-    puts "Created #{Onetime::SeedTaxonomies.process} taxonomy row(s)"
+    puts "Created #{Taxonomy::Seeder.new.perform} taxonomy row(s)"
   rescue StandardError => e
     # The deploy script runs this non-fatally so a failure cannot hold the migration lock, which
     # means the shell discards the exit status — this report is the only thing that tells anyone

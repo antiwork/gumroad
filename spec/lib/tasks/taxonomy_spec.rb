@@ -19,8 +19,12 @@ describe "taxonomy rake tasks" do
   end
 
   describe "taxonomy:seed" do
+    let(:seeder) { instance_double(Taxonomy::Seeder) }
+
+    before { allow(Taxonomy::Seeder).to receive(:new).and_return(seeder) }
+
     it "reports the created count on success" do
-      allow(Onetime::SeedTaxonomies).to receive(:process).and_return(5)
+      allow(seeder).to receive(:perform).and_return(5)
 
       expect { run_task }.to output(/Created 5 taxonomy row\(s\)/).to_stdout
     end
@@ -28,7 +32,7 @@ describe "taxonomy rake tasks" do
     context "when seeding raises" do
       let(:error) { ActiveRecord::StatementInvalid.new("Lost connection to MySQL server") }
 
-      before { allow(Onetime::SeedTaxonomies).to receive(:process).and_raise(error) }
+      before { allow(seeder).to receive(:perform).and_raise(error) }
 
       # The deploy script runs this with `|| echo`, so the shell throws the exit status away. If the
       # task swallows the failure too, a stale taxonomy tree ships with nothing anywhere to read.

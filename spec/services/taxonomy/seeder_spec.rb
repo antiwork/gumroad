@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe Onetime::SeedTaxonomies do
+describe Taxonomy::Seeder do
   # The seed file's own leaves, not invented slugs: the point of this service is that it applies
   # that file, so a fixture tree of its own would pass while the real seed never loaded.
   let(:seeded_slug_path) { ["software-development", "cybersecurity", "network-security"] }
@@ -11,7 +11,7 @@ describe Onetime::SeedTaxonomies do
     Taxonomy.delete_all
     TaxonomyHierarchy.delete_all
 
-    expect { described_class.process }.to change { Taxonomy.count }.from(0)
+    expect { described_class.new.perform }.to change { Taxonomy.count }.from(0)
     expect(Taxonomy.find_by_path(seeded_slug_path)).to be_present
   end
 
@@ -19,17 +19,17 @@ describe Onetime::SeedTaxonomies do
     Taxonomy.delete_all
     TaxonomyHierarchy.delete_all
 
-    created = described_class.process
+    created = described_class.new.perform
 
     expect(created).to eq(Taxonomy.count)
     expect(created).to be > 0
   end
 
   it "is idempotent" do
-    described_class.process
+    described_class.new.perform
     count_after_first_run = Taxonomy.count
 
-    expect(described_class.process).to eq(0)
+    expect(described_class.new.perform).to eq(0)
     expect(Taxonomy.count).to eq(count_after_first_run)
   end
 
@@ -39,7 +39,7 @@ describe Onetime::SeedTaxonomies do
     Taxonomy.delete_all
     TaxonomyHierarchy.delete_all
 
-    described_class.process
+    described_class.new.perform
 
     leaf = Taxonomy.find_by_path(seeded_slug_path)
     expect(leaf.self_and_ancestors.map(&:slug)).to eq(seeded_slug_path.reverse)
@@ -48,7 +48,7 @@ describe Onetime::SeedTaxonomies do
   it "busts the nav cache" do
     Rails.cache.write("taxonomies_for_nav", "stale")
 
-    described_class.process
+    described_class.new.perform
 
     expect(Rails.cache.read("taxonomies_for_nav")).to be_nil
   end
@@ -56,7 +56,7 @@ describe Onetime::SeedTaxonomies do
   # The seed file's last line applies TaxonomyAttributeDefinitions, so this task owns attribute rows
   # too. Pinned because the deactivation is destructive-ish and invisible from the service's name.
   it "applies the taxonomy attribute registry, deactivating rows absent from it" do
-    described_class.process
+    described_class.new.perform
 
     fonts = Taxonomy.find_by_path(%w[design fonts])
     expect(TaxonomyAttribute.where(taxonomy: fonts, active: true).pluck(:name))
@@ -65,7 +65,7 @@ describe Onetime::SeedTaxonomies do
     stale = TaxonomyAttribute.create!(taxonomy: fonts, name: "not_in_registry", label: "Stale",
                                       value_type: "enum", values: [], position: 9, active: true)
 
-    described_class.process
+    described_class.new.perform
 
     expect(stale.reload.active).to be(false)
   end
@@ -76,7 +76,7 @@ describe Onetime::SeedTaxonomies do
     original = ENV["SKIP_TAXONOMY_CREATION"]
     ENV["SKIP_TAXONOMY_CREATION"] = "1"
 
-    expect { described_class.process }.to raise_error(/refusing to report success/)
+    expect { described_class.new.perform }.to raise_error(/refusing to report success/)
   ensure
     ENV["SKIP_TAXONOMY_CREATION"] = original
   end
