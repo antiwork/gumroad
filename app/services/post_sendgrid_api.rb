@@ -42,7 +42,9 @@ class PostSendgridApi
       sendgrid = SendGrid::API.new(api_key: GlobalConfig.get("SENDGRID_GR_CREATORS_API_KEY"))
       result = nil
       duration = Benchmark.realtime do
-        result = sendgrid.client.mail._("send").post(request_body: mail_json)
+        result = TransientDeliveryRetry.call(context: "PostSendgridApi post_id=#{@post.id}") do
+          sendgrid.client.mail._("send").post(request_body: mail_json)
+        end
       end
       Rails.logger.info(
         "[#{self.class.name}] Sent post #{@post.id} to #{@recipients.size} recipients" \
