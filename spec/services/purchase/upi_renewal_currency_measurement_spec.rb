@@ -72,14 +72,25 @@ describe "method-forced (UPI-shaped) purchases and later-charge fixing" do
 
     expect(subscription.reload.later_charge_presentments).to be_empty
 
+    # Read the renewal side with a renewal-shaped purchase. The original signup purchase would
+    # hit the same fallback for a different reason (later_charge_owner nils out originals), which
+    # would leave this assertion green even if a fixing existed.
+    renewal = create(:purchase,
+                     link: product,
+                     seller:,
+                     merchant_account:,
+                     subscription:,
+                     is_original_subscription_purchase: false,
+                     price_cents: 602,
+                     total_transaction_cents: 602)
     service = Purchase::LaterChargePresentmentService.new(
-      merchant_account:, purchases: [purchase], amount_cents: 602, gumroad_amount_cents: 60
+      merchant_account:, purchases: [renewal], amount_cents: 602, gumroad_amount_cents: 60
     )
     expect(service.perform).to be_nil
     expect(service.fallback_reason).to eq(:no_stored_presentment)
   end
 
-  it "writes the fixing when an fx_rate IS present, confirming fx_rate is the only blocker" do
+  it "writes the fixing when an fx_rate IS present, confirming fx_rate is the only blocker to the fixing being written" do
     purchase = build_forced_currency_purchase(with_fx_rate: BigDecimal("83.0"))
 
     Purchase::FixLaterChargePresentmentService.new(purchase:).perform
