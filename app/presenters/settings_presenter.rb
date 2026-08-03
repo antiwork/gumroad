@@ -306,11 +306,13 @@ class SettingsPresenter
     # The union across usable tokens, not the first grant's scopes: the device flow mints a fresh
     # grant per scope set, so a seller who re-authorized with a broader set kept seeing the
     # narrower list from their first grant while holding a token that could reach refunds and
-    # payout data. `active_for` rather than `revoked_at: nil` so an expired token, which can reach
-    # nothing, is not rendered as a capability.
+    # payout data. `not_expired` rather than Doorkeeper's `active_for`, which only checks
+    # `revoked_at` — every CLI token has a nil `expires_in` today, but an expired one can reach
+    # nothing and must not read as a capability once device tokens start expiring.
     def live_scopes_for(application)
       scopes = Doorkeeper::AccessToken
-        .active_for(seller)
+        .by_resource_owner(seller)
+        .not_expired
         .where(application_id: application.id)
         .pluck(:scopes)
         .flat_map { |value| value.to_s.split }

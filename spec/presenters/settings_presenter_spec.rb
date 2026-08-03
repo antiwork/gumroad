@@ -528,8 +528,11 @@ describe SettingsPresenter do
 
       it "ignores an expired token, which can reach nothing" do
         create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application, scopes: "view_profile")
-        create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application,
-                                          scopes: "account refund_sales", expires_in: 1, created_at: 1.day.ago)
+        expired = create("doorkeeper/access_token", resource_owner_id: seller.id, application: oauth_application,
+                                                    scopes: "account refund_sales", expires_in: 1.hour)
+        # The factory stamps created_at itself, so age it afterwards — a token created now with any
+        # positive expires_in is still live.
+        expired.update_columns(created_at: 1.day.ago)
 
         expect(presenter.authorized_applications_props[:authorized_applications].sole[:scopes].to_a).to eq(%w[view_profile])
       end
