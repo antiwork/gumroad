@@ -21,6 +21,8 @@ describe RepairOrderChargeOutcomesJob do
     order
   end
 
+  before { $redis.del(RedisKey.order_charge_outcome_repair_cursor) }
+
   it "flags a partial order whose reconciliation enqueue was lost" do
     order = settle_with_lost_enqueue(create(:order))
     expect(order.reload).not_to be_partially_successful
@@ -30,11 +32,20 @@ describe RepairOrderChargeOutcomesJob do
     expect(order.reload).to be_partially_successful
   end
 
-  it "leaves an order outside the lookback window alone" do
-    # Absolute age, not `LOOKBACK.ago` — a fixture derived from the constant moves with it and
-    # cannot pin the window at all.
+  # Absolute ages throughout, not `RECENT_WINDOW.ago` — a fixture derived from the constant moves
+  # with it and cannot pin any boundary at all.
+  it "flags an order that settled long after checkout, past the freshness window" do
     order = settle_with_lost_enqueue(create(:order))
     order.update_column(:created_at, 30.days.ago)
+
+    described_class.new.perform
+
+    expect(order.reload).to be_partially_successful
+  end
+
+  it "leaves an order older than the backlog horizon alone" do
+    order = settle_with_lost_enqueue(create(:order))
+    order.update_column(:created_at, 120.days.ago)
 
     described_class.new.perform
 
@@ -53,6 +64,25 @@ describe RepairOrderChargeOutcomesJob do
     described_class.new.perform
 
     expect(order.reload).not_to be_partially_successful
+  end
+
+  it "resumes the backlog walk from the saved cursor and wraps once past the end" do
+    older = settle_with_lost_enqueue(create(:order))
+    newer = settle_with_lost_enqueue(create(:order))
+    [older, newer].each { _1.update_column(:created_at, 30.days.ago) }
+    stub_const("#{described_class}::MAX_BACKLOG_SCANNED", 1)
+
+    described_class.new.perform
+    expect(older.reload).to be_partially_successful
+    expect(newer.reload).not_to be_partially_successful
+    expect($redis.get(RedisKey.order_charge_outcome_repair_cursor).to_i).to eq(older.id)
+
+    described_class.new.perform
+    expect(newer.reload).to be_partially_successful
+
+    # Nothing left past the cursor, so the third run wraps to the start rather than stalling there.
+    described_class.new.perform
+    expect($redis.get(RedisKey.order_charge_outcome_repair_cursor).to_i).to eq(older.id)
   end
 
   it "reads from the primary" do
