@@ -248,6 +248,10 @@ module Purchase::Blockable
   PROCESSOR_REFUSAL_MAX_READS = 4
   PROCESSOR_REFUSAL_TIME_BUDGET = 8.seconds
 
+  # Both timeout phases spend the same budget, so a read needs a second for each of them to be worth
+  # starting; with less left than this the attempt is counted unread instead.
+  PROCESSOR_REFUSAL_MIN_READ_SECONDS = 2
+
   # Whether the PROCESSOR is still refusing this buyer on one of our own risk rules, read from the
   # processor rather than inferred from our rows.
   #
@@ -280,20 +284,25 @@ module Purchase::Blockable
     candidates = eligible.first(PROCESSOR_REFUSAL_MAX_READS)
     return if candidates.empty?
 
-    unread = eligible.size > candidates.size
+    capped = eligible.size > candidates.size
+    ran_out_of_time = false
     deadline = Time.current + PROCESSOR_REFUSAL_TIME_BUDGET
 
     candidates.each do |candidate|
       # Checked BEFORE the call, not after: each read carries its own timeout, so a post-call check
       # lets the budget overrun by a whole read on a request whose unblock has already committed.
-      remaining = deadline - Time.current
-      if remaining <= 0
-        unread = true
+      remaining = (deadline - Time.current).floor
+      if remaining < PROCESSOR_REFUSAL_MIN_READ_SECONDS
+        ran_out_of_time = true
         break
       end
 
+      # Clamped together, because a connect and a read both spend this budget: leaving open_timeout
+      # at its default lets a late read outlive the deadline by the whole connect phase.
+      open_timeout = [PROCESSOR_REFUSAL_READ_OPTS[:open_timeout], remaining - 1].min
       read_opts = PROCESSOR_REFUSAL_READ_OPTS.merge(
-        read_timeout: [PROCESSOR_REFUSAL_READ_OPTS[:read_timeout], [remaining.floor, 1].max].min
+        open_timeout:,
+        read_timeout: [PROCESSOR_REFUSAL_READ_OPTS[:read_timeout], remaining - open_timeout].min
       )
       charge = Stripe::Charge.retrieve({ id: candidate.stripe_transaction_id, expand: %w[outcome.rule] },
                                        read_opts)
@@ -319,8 +328,11 @@ module Purchase::Blockable
       end
     end
 
-    # Reads left unmade mean an older refusal in the window may still stand.
-    return { incomplete: true } if unread
+    # Reads left unmade mean an older refusal in the window may still stand. The two exits get
+    # different copy because the agent's next move differs: a capped scan has attempts we never
+    # looked at, a timed-out one may have nothing left to look at and just needs re-running.
+    return { incomplete: true, truncated_by: :read_cap } if capped
+    return { incomplete: true, truncated_by: :time_budget } if ran_out_of_time
 
     nil
   rescue StandardError => e
@@ -335,6 +347,12 @@ module Purchase::Blockable
     return if refusal.blank?
     return "Could not check whether Stripe is still refusing this buyer — retry the check before promising anything." if refusal[:error].present?
     if refusal[:incomplete].present?
+      if refusal[:truncated_by] == :time_budget
+        return "Checked the buyer's most recent Stripe attempts and none of them was refused by our " \
+               "rules, but the check ran out of time before reading them all — re-run it, and if the " \
+               "buyer still fails, inspect their recent charges in Stripe before promising anything."
+      end
+
       return "Checked the buyer's most recent Stripe attempts and none of them was refused by our " \
              "rules, but there were more attempts in the last day than this check reads — if the " \
              "buyer still fails, inspect their recent charges in Stripe before promising anything."

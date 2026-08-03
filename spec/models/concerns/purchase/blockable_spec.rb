@@ -681,32 +681,53 @@ describe Purchase::Blockable do
 
         refusal = refused_purchase.processor_rule_refusal
 
-        expect(refusal).to eq({ incomplete: true })
+        expect(refusal).to eq({ incomplete: true, truncated_by: :read_cap })
         expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("more attempts in the last day")
       end
 
+      # The two truncation exits are not interchangeable: telling the agent there were more attempts
+      # than we read, when the scan actually timed out, is a reason they cannot act on.
       it "reports an incomplete scan when the time budget runs out before every attempt is read" do
         allow(Stripe::Charge).to receive(:retrieve) do
           travel Purchase::Blockable::PROCESSOR_REFUSAL_TIME_BUDGET + 1.second
           outcome_for(type: "issuer_declined", reason: "generic_decline")
         end
 
-        expect(refused_purchase.processor_rule_refusal).to eq({ incomplete: true })
+        refusal = refused_purchase.processor_rule_refusal
+
+        expect(refusal).to eq({ incomplete: true, truncated_by: :time_budget })
         expect(Stripe::Charge).to have_received(:retrieve).once
+        expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("ran out of time")
+        expect(refused_purchase.processor_rule_refusal_note(refusal)).not_to include("more attempts in the last day")
       end
 
       # A read may not outlive the budget it is spending: the unblock is already committed and the
-      # admin request is still open.
-      it "shortens the per-read timeout to what is left of the budget" do
+      # admin request is still open. Both phases are clamped, because a connect that starts inside
+      # the budget can still finish outside it.
+      it "shortens both per-read timeouts to what is left of the budget" do
         allow(Stripe::Charge).to receive(:retrieve) do |_params, opts|
           travel Purchase::Blockable::PROCESSOR_REFUSAL_TIME_BUDGET - 2.seconds
-          @observed_timeouts = (@observed_timeouts || []) << opts[:read_timeout]
+          @observed = (@observed || []) << [opts[:open_timeout], opts[:read_timeout]]
           outcome_for(type: "issuer_declined", reason: "generic_decline")
         end
 
         refused_purchase.processor_rule_refusal
 
-        expect(@observed_timeouts).to eq([Purchase::Blockable::PROCESSOR_REFUSAL_READ_OPTS[:read_timeout], 2])
+        defaults = Purchase::Blockable::PROCESSOR_REFUSAL_READ_OPTS
+        expect(@observed).to eq([[defaults[:open_timeout], defaults[:read_timeout]], [1, 1]])
+        expect(@observed.last.sum).to be <= 2
+      end
+
+      # With less than a connect-plus-read left there is no timeout pair that fits, so the read is
+      # not worth starting at all.
+      it "does not start a read it cannot finish inside the budget" do
+        allow(Stripe::Charge).to receive(:retrieve) do
+          travel Purchase::Blockable::PROCESSOR_REFUSAL_TIME_BUDGET - 1.second
+          outcome_for(type: "issuer_declined", reason: "generic_decline")
+        end
+
+        expect(refused_purchase.processor_rule_refusal).to eq({ incomplete: true, truncated_by: :time_budget })
+        expect(Stripe::Charge).to have_received(:retrieve).once
       end
     end
 
