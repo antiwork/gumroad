@@ -94,5 +94,9 @@ class RedisKey
     # Purchases whose notice was claimed but never transmitted. The cursor is already past their
     # email_infos rows, so this set is the only thing that brings them back.
     def undelivered_receipt_pending_retry = "undelivered_receipt_sweep:pending_retry"
+    # Claims the seller notification for a review so the message-less delayed render and the
+    # blank→present immediate send can't both deliver when the buyer's text lands mid-flight.
+    # See ContactingCreatorMailer#review_submitted.
+    def product_review_seller_notified(review_id) = "product_review_seller_notified:#{review_id}"
   end
 end

@@ -6,6 +6,12 @@ class ProductReview < ApplicationRecord
   PRODUCT_RATING_RANGE = (1..5)
   REVIEW_REMINDER_DELAY = 5.days
   REVIEW_REMINDER_PHYSICAL_DELAY = 90.days
+  # How long a message-less review waits before the seller is told about it. The rating autosave
+  # creates the row the moment a star is tapped, usually a minute or two before the buyer submits
+  # their text (gumroad-private#1783) — notifying on create meant the email routinely quoted
+  # nothing. The window only has to cover taps that never become a submit; a message arriving at
+  # any point emails immediately and cancels the delayed render.
+  SELLER_NOTIFICATION_DELAY = 5.minutes
   RestrictedOperationError = Class.new(StandardError)
 
   belongs_to :link, optional: true
@@ -44,7 +50,13 @@ class ProductReview < ApplicationRecord
   end
   after_save :update_product_review_stat
 
-  after_create_commit :notify_seller
+  after_create_commit :notify_seller_of_new_review
+  # The rating autosave creates the row before the buyer has typed, so the message arrives as an
+  # update. Scoped to the blank→present transition: edits of existing text stay silent, and a
+  # rating-only change never fires this. A distinct method name is load-bearing — Rails registers
+  # `after_commit` callbacks by method name, so reusing the create callback's name here would
+  # silently replace it.
+  after_update_commit :notify_seller_of_arrived_message, if: -> { saved_change_to_message? && saved_change_to_message.first.blank? && message.present? }
 
   private
     def update_product_review_stat
@@ -56,8 +68,23 @@ class ProductReview < ApplicationRecord
       errors.add(:base, "Adult keywords are not allowed") if AdultKeywordDetector.adult?(message)
     end
 
-    def notify_seller
+    def notify_seller_of_new_review
       return if link.user.disable_reviews_email?
+
+      if message.present?
+        ContactingCreatorMailer.review_submitted(id).deliver_later
+      else
+        # Delayed so a buyer who taps stars first gets one email with their text in it (the
+        # blank→present update below wins the claim in `ContactingCreatorMailer#review_submitted`
+        # when the buyer's text has arrived by then). Only a review that stays message-less emails
+        # star-only.
+        ContactingCreatorMailer.review_submitted(id).deliver_later(wait: SELLER_NOTIFICATION_DELAY)
+      end
+    end
+
+    def notify_seller_of_arrived_message
+      return if link.user.disable_reviews_email?
+
       ContactingCreatorMailer.review_submitted(id).deliver_later
     end
 end

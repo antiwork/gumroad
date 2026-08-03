@@ -2697,6 +2697,32 @@ describe ContactingCreatorMailer do
       end
     end
 
+    context "the seller's notification claim" do
+      it "does not send when another render already claimed the notification" do
+        RedisKey.product_review_seller_notified(review.id).then { |key| $redis.set(key, Time.current.to_i) }
+
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "still sends the first time nothing has claimed it" do
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.to).to eq([review.link.user.email])
+      end
+    end
+
+    it "does not send for a deleted review" do
+      review.mark_deleted!
+      mail = ContactingCreatorMailer.review_submitted(review.id)
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+
+    it "does not send if the seller turned off review emails after the job was enqueued" do
+      review.link.user.update!(disable_reviews_email: true)
+      mail = ContactingCreatorMailer.review_submitted(review.id)
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+
     context "when the review has a pending video" do
       let!(:pending_video) do
         create(
