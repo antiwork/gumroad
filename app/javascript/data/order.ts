@@ -123,6 +123,7 @@ export const startOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
   activeOfferCodes: OfferCodes = [],
 ): Promise<CartPurchaseResult> => {
+  let pendingOrderId: string | null = null;
   let retryOfferCodes = activeOfferCodes;
   try {
     const response = await createOrder(requestData);
@@ -140,6 +141,7 @@ export const startOrderCreation = async (
       ) ?? null;
     if (lineItemRequiringSCA) {
       const orderId = lineItemRequiringSCA.order.id;
+      pendingOrderId = orderId;
       const clientSecret = lineItemRequiringSCA.client_secret;
       const stripeConnectAccountId = lineItemRequiringSCA.order.stripe_connect_account_id;
       const requiresCardAction = "requires_card_action" in lineItemRequiringSCA;
@@ -168,6 +170,15 @@ export const startOrderCreation = async (
     // Treat parsing errors, timeout, etc as failed purchase, but print a log entry
     // eslint-disable-next-line no-console
     console.error("Error occurred processing order", error);
+    if (pendingOrderId) {
+      const reservationsReleased = await reportClientConfirmError(
+        pendingOrderId,
+        "confirm",
+        error instanceof Error ? error : new Error("Unknown confirmation error"),
+        null,
+      );
+      if (!reservationsReleased) retryOfferCodes = withoutOncePerCartOfferCodes(retryOfferCodes);
+    }
     const result: CartPurchaseResult = {
       lineItems: requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>(
         (lineItems, lineItem) => ({ ...lineItems, [lineItem.uid]: { success: false } }),
@@ -349,6 +360,7 @@ export const startClientConfirmOrderCreation = async (
   activeOfferCodes: OfferCodes = [],
 ): Promise<CartPurchaseResult> => {
   let confirmedReturnUrl: string | null = null;
+  let preparedOrderId: string | null = null;
   let retryOfferCodes = activeOfferCodes;
   try {
     const prepareResponse = await prepareClientConfirmOrder(requestData, confirmationTokenId);
@@ -376,6 +388,7 @@ export const startClientConfirmOrderCreation = async (
       prepareResponse.offer_codes,
     );
     const { client_secret: clientSecret, order } = confirmationLineItem;
+    preparedOrderId = order.id;
     const stripe = order.stripe_connect_account_id
       ? await getConnectedAccountStripeInstance(order.stripe_connect_account_id)
       : await getStripeInstance();
@@ -441,6 +454,15 @@ export const startClientConfirmOrderCreation = async (
     // A failure after the card was confirmed must not re-enable resubmission — the charge may be
     // captured. Surface it as a pending outcome; a pre-confirmation error is a normal failure.
     if (confirmedReturnUrl) throw new PaymentConfirmedError(confirmedReturnUrl);
+    if (preparedOrderId) {
+      const reservationsReleased = await reportClientConfirmError(
+        preparedOrderId,
+        "confirm",
+        error instanceof Error ? error : new Error("Unknown confirmation error"),
+        selectedMethodType,
+      );
+      if (!reservationsReleased) retryOfferCodes = withoutOncePerCartOfferCodes(retryOfferCodes);
+    }
     return ensureValidCartResult(requestData, { lineItems: {}, canBuyerSignUp: false, offerCodes: retryOfferCodes });
   }
 };
@@ -458,20 +480,21 @@ const withoutOncePerCartOfferCodes = (offerCodes: OfferCodes): OfferCodes =>
 const reportClientConfirmError = async (
   orderId: string,
   stage: string,
-  error: StripeError,
-  selectedMethodType: string,
+  error: StripeError | Error,
+  selectedMethodType: string | null,
 ): Promise<boolean> => {
   try {
+    const stripeError = "type" in error ? error : null;
     const response = await request({
       method: "POST",
       url: Routes.confirm_error_order_path(orderId),
       accept: "json",
       data: {
         stage,
-        stripe_error_type: error.type,
-        stripe_error_code: error.code ?? null,
+        stripe_error_type: stripeError?.type ?? null,
+        stripe_error_code: stripeError?.code ?? null,
         stripe_error_message: error.message ?? null,
-        payment_method_type: error.payment_method?.type ?? null,
+        payment_method_type: stripeError?.payment_method?.type ?? null,
         selected_payment_method_type: selectedMethodType,
       },
     });

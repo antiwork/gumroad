@@ -294,6 +294,7 @@ describe("startOrderCreation", () => {
     vi.stubGlobal("Routes", {
       orders_path: () => "/orders",
       confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+      confirm_error_order_path: (id: string) => `/orders/${id}/confirm_error`,
     });
     requestMock.mockReset();
     getStripeInstanceMock.mockReset();
@@ -304,25 +305,62 @@ describe("startOrderCreation", () => {
     const lineItem = requestData.lineItems.at(0);
     if (!lineItem) throw new Error("Missing test line item");
     const activeOfferCodes = [{ code: "SAVE", products: { [lineItem.permalink]: oncePerCartDiscount(100) } }];
-    requestMock.mockResolvedValueOnce(
-      jsonResponse({
-        success: true,
-        line_items: {
-          [lineItem.uid]: {
-            success: true,
-            requires_card_action: true,
-            client_secret: "pi_secret",
-            order: { id: "order-token", stripe_connect_account_id: null },
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [lineItem.uid]: {
+              success: true,
+              requires_card_action: true,
+              client_secret: "pi_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
           },
-        },
-        can_buyer_sign_up: false,
-        offer_codes: [],
-      }),
-    );
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ success: true, reservations_released: true }));
 
     const result = await startOrderCreation(requestData, activeOfferCodes);
 
     expect(result.offerCodes).toEqual(activeOfferCodes);
+  });
+
+  it("does not restore a reserved once-per-cart code when SCA cleanup fails", async () => {
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+      confirm_error_order_path: (id: string) => `/orders/${id}/confirm_error`,
+    });
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardPayment = vi.fn().mockRejectedValue(new Error("Stripe unavailable"));
+    getStripeInstanceMock.mockResolvedValue(stripe);
+    const lineItem = requestData.lineItems.at(0);
+    if (!lineItem) throw new Error("Missing test line item");
+    const activeOfferCodes = [{ code: "SAVE", products: { [lineItem.permalink]: oncePerCartDiscount(100) } }];
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [lineItem.uid]: {
+              success: true,
+              requires_card_action: true,
+              client_secret: "pi_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ success: true, reservations_released: false }));
+
+    const result = await startOrderCreation(requestData, activeOfferCodes);
+
+    expect(result.offerCodes).toEqual([]);
   });
 
   it("drops a legacy code rejected during SCA confirmation", async () => {
@@ -722,15 +760,29 @@ describe("startClientConfirmOrderCreation", () => {
     expect(result.offerCodes).toEqual(activeOfferCodes);
   });
 
-  it("preserves active codes on confirmation-pending lines when payment rejects before capture", async () => {
+  it("preserves active codes when a thrown confirmation error releases the attempt", async () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": fixedDiscount(100) } }];
-    requestMock.mockResolvedValueOnce(jsonResponse(prepareResponse));
+    requestMock
+      .mockResolvedValueOnce(jsonResponse(prepareResponse))
+      .mockResolvedValueOnce(jsonResponse({ success: true, reservations_released: true }));
     confirmPaymentMock.mockRejectedValueOnce(new Error("network down"));
 
     const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
 
     expect(Object.values(result.lineItems).every((lineItem) => !lineItem.success)).toBe(true);
     expect(result.offerCodes).toEqual(activeOfferCodes);
+  });
+
+  it("does not restore a reserved once-per-cart code when thrown-error cleanup fails", async () => {
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100) } }];
+    requestMock
+      .mockResolvedValueOnce(jsonResponse(prepareResponse))
+      .mockResolvedValueOnce(jsonResponse({ success: true, reservations_released: false }));
+    confirmPaymentMock.mockRejectedValueOnce(new Error("network down"));
+
+    const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
+
+    expect(result.offerCodes).toEqual([]);
   });
 
   it("reports the selected Payment Element row, which is the only method signal a decline carries", async () => {
