@@ -68,6 +68,12 @@ module PurchaseErrorCode
   # We fail these ourselves instead of submitting them to Stripe, because Indian issuers
   # decline mandate-less recurring charges (as transaction_not_allowed) every time.
   INDIA_CARD_MANDATE_MISSING = "india_card_mandate_missing"
+  # Blocked by Purchase#not_double_charged against another SUCCESSFUL purchase of the same
+  # (buyer, product, amount) inside the short window — distinct from the in-progress/settling
+  # cases below it, which the buyer cannot resolve by re-submitting. The client offers an
+  # explicit "buy again" confirmation and retries with confirmed_duplicate_purchase: true,
+  # which is the only thing that widens this specific check (gumroad-private#1793).
+  DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED = "duplicate_purchase_confirmation_required"
 
   PAYPAL_ERROR_CODES = {
     "2000" => "Do Not Honor",

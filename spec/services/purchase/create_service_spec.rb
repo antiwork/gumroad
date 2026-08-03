@@ -2348,7 +2348,7 @@ describe Purchase::CreateService, :vcr do
           buyer: giftee
         ).perform
 
-        expect(error).to eq "You have already paid for this product. It has been emailed to you."
+        expect(error).to eq "You have already paid for this product. It has been emailed to you. Do you want to buy it again?"
       end
 
       context "by a signed-in user" do
@@ -3075,7 +3075,7 @@ describe Purchase::CreateService, :vcr do
       expect do
         _, error = Purchase::CreateService.new(product:, params:, buyer:).perform
 
-        expect(error).to eq "You have already paid for this product. It has been emailed to you."
+        expect(error).to eq "You have already paid for this product. It has been emailed to you. Do you want to buy it again?"
       end.not_to change { Purchase.count }
     end
   end

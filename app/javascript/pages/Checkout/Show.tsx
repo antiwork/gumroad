@@ -119,6 +119,7 @@ type CheckoutIndexPageProps = {
 const BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE = "buyer_currency_quote_invalid";
 const BUYER_CURRENCY_QUOTE_INVALID_MESSAGE =
   "The local-currency price changed or expired. Please review the updated total and try again.";
+const DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED_ERROR_CODE = "duplicate_purchase_confirmation_required";
 
 function getCartItemUid(item: CartItem) {
   return `${item.product.permalink} ${item.option_id ?? ""}`;
@@ -458,6 +459,15 @@ const CheckoutIndexPage = () => {
   const [showLargeTipConfirmation, setShowLargeTipConfirmation] = React.useState(false);
   const largeTipConfirmedRef = React.useRef(false);
 
+  // Line-item uids the buyer has explicitly confirmed they want to buy again after
+  // not_double_charged flagged an existing successful purchase of the same product
+  // (gumroad-private#1793). Persists across the retry pay() issues once confirmed.
+  const confirmedDuplicatePurchaseUidsRef = React.useRef(new Set<string>());
+  const [duplicatePurchaseConfirmation, setDuplicatePurchaseConfirmation] = React.useState<{
+    uids: string[];
+    productNames: string[];
+  } | null>(null);
+
   // The cart stays editable while the charge request is in flight — the Edit and Remove
   // controls in the cart rows are not disabled during processing — so the buyer can change a
   // quantity, an option, or a pay-what-you-want price, or drop an item entirely, between
@@ -608,6 +618,7 @@ const CheckoutIndexPage = () => {
                 item.price !== 0,
               acceptsPppDiscount: !!item.product.ppp_details && !cartForm.data.cart.rejectPppDiscount,
               forceNewSubscription: item.force_new_subscription,
+              confirmedDuplicatePurchase: confirmedDuplicatePurchaseUidsRef.current.has(getCartItemUid(item)),
               acceptedOffer: item.accepted_offer ?? null,
               bundleProducts: item.product.bundle_products.map((bundleProduct) => ({
                 productId: bundleProduct.product_id,
@@ -656,6 +667,25 @@ const CheckoutIndexPage = () => {
         showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
         dispatch({ type: "cancel" });
         recoverFromInvalidBuyerCurrencyQuote(result.lineItems);
+        return;
+      }
+
+      // Server refused a same-product repeat charge (Purchase#not_double_charged,
+      // gumroad-private#1793) rather than silently double-charging on a resubmit. Offer the
+      // buyer an explicit confirmation instead of the generic error message, and retry only
+      // the flagged lines once they confirm — mirrors the large-tip confirmation below: state
+      // stays "finished" so the retry effect below can resubmit without the buyer pressing Pay.
+      const duplicatePurchaseResults = results.filter(
+        ({ result }) =>
+          !result.success &&
+          "error_code" in result &&
+          result.error_code === DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED_ERROR_CODE,
+      );
+      if (duplicatePurchaseResults.length > 0) {
+        setDuplicatePurchaseConfirmation({
+          uids: duplicatePurchaseResults.map(({ item }) => getCartItemUid(item)),
+          productNames: duplicatePurchaseResults.map(({ item }) => item.product.name),
+        });
         return;
       }
 
@@ -786,6 +816,21 @@ const CheckoutIndexPage = () => {
   React.useEffect(() => {
     largeTipConfirmedRef.current = false;
   }, [state.tip]);
+  React.useEffect(() => {
+    if (
+      duplicatePurchaseConfirmation === null &&
+      confirmedDuplicatePurchaseUidsRef.current.size > 0 &&
+      state.status.type === "finished"
+    ) {
+      // One retry attempt is all the confirmation buys; clear it after pay() reads it so a
+      // later, unrelated repeat purchase of the same product gets asked again rather than
+      // sailing through. Cleared once pay() settles rather than immediately: pay()'s first
+      // await runs before it builds the line items that read this ref.
+      void pay().finally(() => {
+        confirmedDuplicatePurchaseUidsRef.current = new Set();
+      });
+    }
+  }, [duplicatePurchaseConfirmation]);
 
   // A save can finish without delivering a recomputed configuration (dropped connection, timeout,
   // 500). The hold on Pay is NOT released in that case — see checkoutPaymentRefresh for why a lost
@@ -1077,6 +1122,32 @@ const CheckoutIndexPage = () => {
                 noCentsIfWhole: true,
               })}{" "}
           purchase. Are you sure?
+        </p>
+      </Modal>
+      <Modal
+        open={duplicatePurchaseConfirmation !== null}
+        onClose={() => setDuplicatePurchaseConfirmation(null)}
+        title="You already own this"
+        footer={
+          <>
+            <Button onClick={() => setDuplicatePurchaseConfirmation(null)}>Cancel</Button>
+            <Button
+              color="primary"
+              onClick={() => {
+                if (duplicatePurchaseConfirmation)
+                  for (const uid of duplicatePurchaseConfirmation.uids)
+                    confirmedDuplicatePurchaseUidsRef.current.add(uid);
+                setDuplicatePurchaseConfirmation(null);
+              }}
+            >
+              Buy again
+            </Button>
+          </>
+        }
+      >
+        <p>
+          You already paid for {duplicatePurchaseConfirmation?.productNames.join(", ") ?? ""}. Do you want to buy{" "}
+          {(duplicatePurchaseConfirmation?.productNames.length ?? 0) > 1 ? "them" : "it"} again?
         </p>
       </Modal>
     </StateContext.Provider>
