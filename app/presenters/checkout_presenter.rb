@@ -240,7 +240,7 @@ class CheckoutPresenter
     pre_discount_price = if subscription.is_installment_plan
       subscription_price
     elsif discount&.dig(:type) == "fixed" && discount[:once_per_cart]
-      subscription.original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || subscription_price
+      subscription.renewal_pre_discount_total_cents
     else
       subscription_price
     end

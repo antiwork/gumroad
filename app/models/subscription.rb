@@ -224,6 +224,12 @@ class Subscription < ApplicationRecord
     auto_renewal_discounted_total_cents(auto, pre_discount)
   end
 
+  def renewal_pre_discount_total_cents
+    return cached_tiered_pwyw_renewal_pre_discount_total_cents if cached_tiered_pwyw_renewal_pre_discount_total_cents.present?
+
+    original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
+  end
+
   def auto_renewal_offer_code(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
     unless authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
       return compute_auto_renewal_offer_code(authenticated_offer_code_buyer)
@@ -1208,12 +1214,6 @@ class Subscription < ApplicationRecord
         discounted_total = [discounted_total, link.currency["min_price"]].max
       end
       discounted_total
-    end
-
-    def renewal_pre_discount_total_cents
-      return cached_tiered_pwyw_renewal_pre_discount_total_cents if cached_tiered_pwyw_renewal_pre_discount_total_cents.present?
-
-      original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
     end
 
     def cached_tiered_pwyw_renewal_pre_discount_total_cents

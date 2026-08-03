@@ -1149,6 +1149,28 @@ describe CheckoutPresenter do
           )
         end
 
+        it "keeps the reconstructed PWYW price when a fixed renewal discount replaces a cached percentage discount",
+           vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/membership_for_PWYW_tier/returns_the_correct_current_subscription_price_and_tier_displayed_price" } do
+          tiered_offer_code = create(:tiered_offer_code, user: @product.user, products: [@product], code: "tiered")
+          buyer = create(:user)
+          @purchase.update!(offer_code: tiered_offer_code, displayed_price_cents: @pwyw_price_cents, purchaser: buyer, email: buyer.email)
+          @purchase.create_purchase_offer_code_discount!(
+            offer_code: tiered_offer_code,
+            offer_code_amount: 50,
+            offer_code_is_percent: true,
+            pre_discount_minimum_price_cents: @original_price_cents
+          )
+          fixed_offer_code = create(:offer_code, :for_existing_customers, user: @product.user, products: [@product], code: "fixed", amount_cents: 200, once_per_cart: true)
+
+          result = described_class.new(logged_in_user: buyer, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+          expect(result[:subscription]).to include(
+            discount: hash_including(type: "fixed", cents: fixed_offer_code.amount_cents, once_per_cart: true),
+            price: 2 * @pwyw_price_cents - fixed_offer_code.amount_cents,
+            pre_discount_price: 2 * @pwyw_price_cents
+          )
+        end
+
         it "keeps installment management at the next installment price",
            vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/membership_for_PWYW_tier/returns_the_correct_current_subscription_price_and_tier_displayed_price" } do
           offer_code = create(:offer_code, user: @product.user, products: [@product], amount_cents: 100, once_per_cart: true)

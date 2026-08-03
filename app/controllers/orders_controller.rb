@@ -99,6 +99,7 @@ class OrdersController < ApplicationController
   # confirms are safely pre-charge.
   CONFIRM_ERROR_NOTIFY_LIMIT_PER_ORDER = 5
   CONFIRM_ERROR_NOTIFY_LIMIT_WINDOW = 1.hour
+  CONFIRM_ERROR_CLEANUP_LIMIT_WINDOW = 5.minutes
 
   def confirm_error
     # `prepare` just created this order, so the replica can be behind when Stripe returns an error.
@@ -153,6 +154,8 @@ class OrdersController < ApplicationController
 
       payment_intent = purchase.processor_payment_intent_id.present?
       checked_intent_id = payment_intent ? purchase.processor_payment_intent_id : purchase.processor_setup_intent_id
+      return false unless confirm_error_cleanup_allowed?(order, checked_intent_id)
+
       intent = if payment_intent
         ChargeProcessor.get_charge_intent(purchase.merchant_account, checked_intent_id)
       else
@@ -182,6 +185,16 @@ class OrdersController < ApplicationController
     rescue ChargeProcessorError => e
       ErrorNotifier.notify(e) { _1.add_metadata(:order, { id: order.id }) }
       false
+    end
+
+    def confirm_error_cleanup_allowed?(order, processor_intent_id)
+      claimed = Rails.cache.write(
+        "confirm_error_cleanup:#{order.id}:#{processor_intent_id}",
+        true,
+        expires_in: CONFIRM_ERROR_CLEANUP_LIMIT_WINDOW,
+        unless_exist: true
+      )
+      claimed.nil? || claimed
     end
 
     def unavailable_once_per_cart_offer_code_ids(order)

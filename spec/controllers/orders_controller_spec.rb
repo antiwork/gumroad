@@ -2930,6 +2930,30 @@ describe OrdersController, :vcr do
       expect(purchase.reload).to be_in_progress
     end
 
+    it "rate-limits processor lookups when the same cleanup request is replayed" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      add_once_per_cart_reservation(purchase, product:)
+      purchase.create_processor_payment_intent!(intent_id: "pi_processing")
+      charge_intent = instance_double(
+        ChargeIntent,
+        payment_intent: double(status: StripeIntentStatus::PROCESSING)
+      )
+      expect(ChargeProcessor).to receive(:get_charge_intent).once.and_return(charge_intent)
+
+      2.times do
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          processor_intent_id: "pi_processing",
+          stripe_error_code: "payment_intent_unexpected_state",
+        }
+
+        expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
+      end
+      expect(purchase.reload).to be_in_progress
+    end
+
     it "fails only purchases sharing the checked intent" do
       second_product = create(:product, user: seller, price_cents: 10_00)
       params = {
