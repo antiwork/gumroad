@@ -1285,7 +1285,7 @@ const Form = ({
                     )}
                   </NumberInput>
                   <p className="text-muted-foreground text-sm">
-                    {discount.type === "cents" && oncePerCart
+                    {discount.type === "cents" && !useTieredDiscounts && oncePerCart
                       ? "Each checkout uses one, regardless of the number of items."
                       : "Each item a customer buys uses one. A customer checking out with five items uses five, whether that is five products or five copies of one."}
                   </p>

@@ -540,7 +540,8 @@ describe Order::CreateService, :vcr do
         seller_1.update!(created_at: 31.days.ago)
         commission_product = create(:commission_product, user: seller_1, price_cents: 1_98)
         offer_code.update!(amount_cents: 99)
-        discounted_deposit = ((commission_product.price_cents - offer_code.amount_cents) * Commission::COMMISSION_DEPOSIT_PROPORTION).round
+        discounted_total = commission_product.price_cents - offer_code.amount_cents
+        discounted_deposit = discounted_total * Commission::COMMISSION_DEPOSIT_PROPORTION
         params[:line_items] = [{
           uid: "unique-id-0",
           permalink: commission_product.unique_permalink,
@@ -552,11 +553,14 @@ describe Order::CreateService, :vcr do
 
         order, purchase_responses = Order::CreateService.new(params:).perform
         purchase = order.purchases.first
+        commission = Commission.new(deposit_purchase: purchase)
 
         expect(purchase_responses).to be_empty
-        expect(purchase.displayed_price_cents).to eq(discounted_deposit)
+        expect(purchase.displayed_price_cents).to eq(discounted_deposit.round)
         expect(purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents).to eq(commission_product.price_cents)
         expect(purchase.displayed_price_cents_before_offer_code).to eq(commission_product.price_cents)
+        expect(purchase.displayed_price_cents + commission.completion_display_price_cents).to eq(discounted_total)
+        expect(purchase.price_cents + commission.completion_price_cents).to eq(discounted_total)
       end
 
       it "reserves one capped use for the whole cart" do

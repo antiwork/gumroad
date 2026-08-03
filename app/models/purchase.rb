@@ -3574,7 +3574,8 @@ class Purchase < ApplicationRecord
 
     perceived_product_price = perceived_price_cents.to_i - tip&.value_cents.to_i
     return if perceived_product_price.negative?
-    return unless perceived_product_price == transformed_once_per_cart_price_cents(submitted_pre_discount_price_cents)
+    transformed_price = transformed_once_per_cart_price_cents(submitted_pre_discount_price_cents)
+    return unless [transformed_price, transformed_price - 1].include?(perceived_product_price)
 
     submitted_pre_discount_price_cents
   end

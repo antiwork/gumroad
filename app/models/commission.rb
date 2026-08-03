@@ -82,10 +82,23 @@ class Commission < ApplicationRecord
   end
 
   def completion_price_cents
+    if (discounted_total = once_per_cart_discounted_display_price_cents)
+      total_price_cents = deposit_purchase.get_usd_cents(
+        deposit_purchase.displayed_price_currency_type,
+        discounted_total,
+        rate: deposit_purchase.rate_converted_to_usd
+      )
+      return [total_price_cents - deposit_purchase.price_cents, 0].max
+    end
+
     (deposit_purchase.price_cents / COMMISSION_DEPOSIT_PROPORTION) - deposit_purchase.price_cents
   end
 
   def completion_display_price_cents
+    if (discounted_total = once_per_cart_discounted_display_price_cents)
+      return [discounted_total - deposit_purchase.displayed_price_cents, 0].max
+    end
+
     (deposit_purchase.displayed_price_cents / COMMISSION_DEPOSIT_PROPORTION) - deposit_purchase.displayed_price_cents
   end
 
@@ -98,6 +111,17 @@ class Commission < ApplicationRecord
   end
 
   private
+    def once_per_cart_discounted_display_price_cents
+      discount = deposit_purchase.purchase_offer_code_discount
+      return unless discount&.once_per_cart? && !discount.offer_code_is_percent
+      return if discount.pre_discount_displayed_price_cents.blank?
+
+      total = [discount.pre_discount_displayed_price_cents - discount.offer_code_amount, 0].max
+      minimum = deposit_purchase.link.currency["min_price"]
+      total = minimum if total.positive? && total < minimum
+      total
+    end
+
     # Refunding the deposit is how the Help Center tells sellers to reject a commission, and
     # nothing transitions the commission when they do — so the deposit is re-read at charge time.
     def ensure_deposit_is_chargeable!
