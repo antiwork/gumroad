@@ -729,6 +729,23 @@ describe Purchase::Blockable do
         expect(refused_purchase.processor_rule_refusal).to eq({ incomplete: true, truncated_by: :time_budget })
         expect(Stripe::Charge).to have_received(:retrieve).once
       end
+
+      # A slow scan over more attempts than the cap trips both limits. The cap has to win: a re-run
+      # reads the same four attempts, so the timeout's "run it again" is the one useless answer here.
+      it "prefers the read cap over the time budget when a slow scan trips both" do
+        create_list(:purchase, 5, link: product, email: buyer_email, purchaser: buyer, created_at: 2.hours.ago)
+          .each { |record| record.update_column(:stripe_transaction_id, "ch_extra") }
+        allow(Stripe::Charge).to receive(:retrieve) do
+          travel Purchase::Blockable::PROCESSOR_REFUSAL_TIME_BUDGET - 1.second
+          outcome_for(type: "issuer_declined", reason: "generic_decline")
+        end
+
+        refusal = refused_purchase.processor_rule_refusal
+
+        expect(Stripe::Charge).to have_received(:retrieve).once
+        expect(refusal).to eq({ incomplete: true, truncated_by: :read_cap })
+        expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("more attempts in the last day")
+      end
     end
 
     it "names the charge in both notes so the agent can inspect it" do

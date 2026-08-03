@@ -331,6 +331,9 @@ module Purchase::Blockable
     # Reads left unmade mean an older refusal in the window may still stand. The two exits get
     # different copy because the agent's next move differs: a capped scan has attempts we never
     # looked at, a timed-out one may have nothing left to look at and just needs re-running.
+    #
+    # The cap wins when a slow scan hits both, and that ordering is the point: re-running a capped
+    # scan reads the same four attempts again, so only "go look in Stripe" is advice that can help.
     return { incomplete: true, truncated_by: :read_cap } if capped
     return { incomplete: true, truncated_by: :time_budget } if ran_out_of_time
 
