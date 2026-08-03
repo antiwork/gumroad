@@ -2695,6 +2695,25 @@ describe ContactingCreatorMailer do
       end
     end
 
+    context "skip_if_message_present" do
+      it "does not send when the buyer's message has arrived, because the blank→present update already emailed it" do
+        mail = ContactingCreatorMailer.review_submitted(review.id, skip_if_message_present: true)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "still sends for a review that stayed message-less" do
+        review.update!(message: nil)
+        mail = ContactingCreatorMailer.review_submitted(review.id, skip_if_message_present: true)
+        expect(mail.to).to eq([review.link.user.email])
+      end
+    end
+
+    it "does not send for a deleted review" do
+      review.mark_deleted!
+      mail = ContactingCreatorMailer.review_submitted(review.id)
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+
     context "when the review has a pending video" do
       let!(:pending_video) do
         create(

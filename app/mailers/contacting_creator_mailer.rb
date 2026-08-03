@@ -687,8 +687,14 @@ class ContactingCreatorMailer < ApplicationMailer
     end
   end
 
-  def review_submitted(review_id)
+  # `skip_if_message_present` is set by the delayed message-less render scheduled at create: when
+  # the buyer's text arrives before the delay elapses, the blank→present update has already sent
+  # this email with the message in it, so the delayed copy must not follow it.
+  def review_submitted(review_id, skip_if_message_present: false)
     @review = ProductReview.includes(:purchase, link: :user).find(review_id)
+    return do_not_send if @review.deleted?
+    return do_not_send if skip_if_message_present && @review.message.present?
+
     @product = @review.link
     @seller = @product.user
     full_name = @review.purchase.full_name

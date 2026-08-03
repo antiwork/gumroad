@@ -149,7 +149,40 @@ describe ProductReview do
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
     end
 
-    it "doesn't send emails on updates" do
+    it "delays the email for a review created without a message, so the rating autosave doesn't announce an empty review" do
+      # The star tap autosaves a message-less row a minute or two before the buyer submits their
+      # text (gumroad-private#1783); the delayed render skips itself once the text has arrived.
+      product.user.update!(disable_reviews_email: false)
+      product_review.message = nil
+
+      expect do
+        product_review.save!
+      end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+        .with(product_review.id, skip_if_message_present: true)
+        .at(ProductReview::SELLER_NOTIFICATION_DELAY.from_now)
+    end
+
+    it "sends when the buyer's message arrives on an autosaved rating-only review" do
+      product.user.update!(disable_reviews_email: false)
+      product_review.message = nil
+      product_review.save!
+
+      expect do
+        product_review.update!(message: "Exactly what I needed")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted).with(product_review.id)
+    end
+
+    it "doesn't send when an existing message is edited" do
+      product.user.update!(disable_reviews_email: false)
+
+      product_review.save!
+
+      expect do
+        product_review.update!(message: "Revised: #{product_review.message}")
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
+    end
+
+    it "doesn't send on rating-only updates" do
       product.user.update!(disable_reviews_email: false)
 
       product_review.save!
