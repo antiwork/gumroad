@@ -4456,11 +4456,21 @@ describe User, :vcr do
       expect(user.eligible_for_store_agent?).to eq(false)
     end
 
-    it "memoizes the result so one render does not re-query Elasticsearch" do
+    it "re-evaluates on every call so a suspension revokes access on the same object" do
       create(:payment_completed, user:)
-      expect(user).to receive(:sales_cents_total).once.and_return(15_000)
+      expect(user.eligible_for_store_agent?).to eq(true)
 
-      3.times { expect(user.eligible_for_store_agent?).to eq(true) }
+      user.update!(user_risk_state: :suspended_for_fraud)
+
+      expect(user.eligible_for_store_agent?).to eq(false)
+    end
+
+    it "re-evaluates on every call so a newly eligible seller is not held to an earlier denial" do
+      expect(user.eligible_for_store_agent?).to eq(false)
+
+      create(:payment_completed, user:)
+
+      expect(user.eligible_for_store_agent?).to eq(true)
     end
   end
 
