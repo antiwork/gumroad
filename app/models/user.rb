@@ -50,6 +50,8 @@ class User < ApplicationRecord
 
   MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
 
+  MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT = 10_000
+
   # How long a resolved avatar variant URL stays cached. Avatar URLs are stable
   # for as long as the seller keeps the same picture, so this is only about
   # bounding how long a cached URL can keep being served after the file behind
@@ -1374,6 +1376,29 @@ class User < ApplicationRecord
     return false if sales_cents_total < MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION
 
     has_completed_payouts?
+  end
+
+  # The store Agent can rewrite a seller's live storefront, so it stays behind the same
+  # earned-your-way-in bar as AI product generation: real money in, and a payout that
+  # proves the account is a going concern rather than a fresh signup experimenting.
+  #
+  # Unlike eligible_for_ai_product_generation?, this is evaluated on EVERY Inertia render
+  # (the Agent nav tab reads it out of policies_props), so it is ordered and memoized for
+  # that path. sales_cents_total is an Elasticsearch aggregation, while has_completed_payouts?
+  # is an indexed exists? — checking the payout first means a seller who has never been paid
+  # out short-circuits without touching ES, which is exactly the pre-launch account this
+  # gate exists to stop.
+  def eligible_for_store_agent?
+    return @eligible_for_store_agent if defined?(@eligible_for_store_agent)
+
+    @eligible_for_store_agent =
+      if Rails.env.development?
+        true
+      elsif !confirmed? || suspended? || !has_completed_payouts?
+        false
+      else
+        sales_cents_total >= MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT
+      end
   end
 
   # Devise routes every confirmation *resend* through this method — the public
