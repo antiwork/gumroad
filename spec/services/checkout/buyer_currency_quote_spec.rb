@@ -323,6 +323,18 @@ describe Checkout::BuyerCurrencyQuote do
         expect(result.charges.map { _1.seller.id }).to eq([seller.id, other_seller.id])
       end
 
+      it "signs a multi-charge quote with no flat shape, so a rollback cannot read one charge's amount as the cart's" do
+        # The flat top-level fields exist only on single-charge tokens (see the flat-shape
+        # example above). A multi-charge token gaining them would let code that predates
+        # per-charge quoting charge the first charge's amount for every charge in the order —
+        # the missing keys are what make such code fail the payment closed instead.
+        result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        payload = Rails.application.message_verifier(described_class::TOKEN_PURPOSE).verify(result.token)
+
+        expect(payload.keys).to match_array(%w[currency charges])
+      end
+
       it "verifies each charge against its OWN locked total, not the cart's" do
         result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
 

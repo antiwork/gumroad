@@ -293,7 +293,7 @@ describe Checkout::BuyerCurrencyEligibility do
       order.purchases << other_seller_purchase
     end
 
-    it "is eligible" do
+    it "is eligible for every charge a multi-seller order produces" do
       # Each charge is priced from its own entry in the quote token, locked before the buyer
       # saw a total, so nothing needs splitting across intents.
       expect(decision).to be_eligible

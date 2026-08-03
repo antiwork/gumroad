@@ -528,12 +528,13 @@ class Checkout::BuyerCurrencyQuote
       charge_canonical_total_cents = charge_line_items.sum(&:canonical_total_cents)
       # A seller whose lines are all free gets no quote, which nils the quote for the whole
       # cart. That is deliberate rather than a gap: Order::ChargeService creates no charge for
-      # such a seller, so there is nothing to lock, and quoting the rest of the cart while
-      # ignoring them would mean the quote's seller set no longer matches the set the
-      # eligibility gate ramped on. If that is ever loosened to skip zero-total sellers here,
-      # `BuyerCurrencyEligibility#order_sellers` has to be narrowed to chargeable purchases in
-      # the same change — otherwise one unramped seller of a free item fails the paid seller's
-      # charge closed, with a token already in the buyer's hands.
+      # such a seller, so there is nothing to lock. It also keeps `off_session` honest — the
+      # charge service derives it from non-free sellers while
+      # `BuyerCurrencyEligibility#multi_seller_order?` counts every purchase, and withholding
+      # the quote here is what stops those two reads from disagreeing on a paid-plus-free
+      # cart. Loosening this to skip zero-total sellers must reconcile that pair in the same
+      # change, or such a cart fails the paid seller's charge closed with a token already in
+      # the buyer's hands.
       return unless charge_canonical_total_cents.positive?
 
       quote = begin
