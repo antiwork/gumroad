@@ -495,6 +495,8 @@ const withoutUnavailableOncePerCartOfferCodes = (
     return Object.keys(products).length > 0 ? [{ ...offerCode, products }] : [];
   });
 
+const CLIENT_CONFIRM_ERROR_TIMEOUT_MS = 5_000;
+
 const reportClientConfirmError = async (
   orderId: string,
   stage: string,
@@ -502,12 +504,15 @@ const reportClientConfirmError = async (
   selectedMethodType: string | null,
   processorIntentId: string | null,
 ): Promise<ReadonlySet<string> | null> => {
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), CLIENT_CONFIRM_ERROR_TIMEOUT_MS);
   try {
     const stripeError = "type" in error ? error : null;
     const response = await request({
       method: "POST",
       url: Routes.confirm_error_order_path(orderId),
       accept: "json",
+      abortSignal: abort.signal,
       data: {
         stage,
         stripe_error_type: stripeError?.type ?? null,
@@ -533,6 +538,8 @@ const reportClientConfirmError = async (
     return null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 };
 

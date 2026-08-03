@@ -430,8 +430,9 @@ class OfferCode < ApplicationRecord
       return normalized_ownership_duration_tiers.all? { is_percentage_amount_valid?(product, it["amount_percentage"]) }
     end
 
-    product.available_price_cents.all? do |price_cents|
-      price_after_code = price_cents - amount_off(price_cents)
+    product.available_price_cents.all? do |unit_price_cents|
+      eligible_price_cents = unit_price_cents * once_per_cart_eligible_quantity
+      price_after_code = eligible_price_cents - amount_off(eligible_price_cents)
       price_after_code <= 0 || price_after_code >= product.currency["min_price"]
     end
   end
@@ -490,8 +491,16 @@ class OfferCode < ApplicationRecord
     def validate_membership_price_after_discount(product)
       return unless product.is_tiered_membership? && duration_in_billing_cycles.present?
 
-      return if product.available_price_cents.none? { _1 - amount_off(_1) <= 0 }
+      return if product.available_price_cents.none? do |price_cents|
+        eligible_price_cents = price_cents * once_per_cart_eligible_quantity
+        eligible_price_cents - amount_off(eligible_price_cents) <= 0
+      end
+
       errors.add(:base, "A fixed-duration discount code cannot be used to make a membership product temporarily free. Please add a free trial to your membership instead.")
+    end
+
+    def once_per_cart_eligible_quantity
+      is_cents? && once_per_cart? ? [minimum_quantity.to_i, 1].max : 1
     end
 
     def code_validation

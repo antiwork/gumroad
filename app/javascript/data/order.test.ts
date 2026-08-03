@@ -754,6 +754,32 @@ describe("startClientConfirmOrderCreation", () => {
     expect(result.offerCodes).toEqual(activeOfferCodes);
   });
 
+  it("stops waiting for confirm-error cleanup and keeps capped codes unavailable", async () => {
+    vi.useFakeTimers();
+    try {
+      const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100) } }];
+      requestMock.mockResolvedValueOnce(jsonResponse(prepareResponse)).mockImplementationOnce(
+        ({ abortSignal }) =>
+          new Promise<Response>((_resolve, reject) => {
+            abortSignal?.addEventListener("abort", () => reject(new Error("aborted")));
+          }),
+      );
+      confirmPaymentMock.mockResolvedValueOnce({ error: { message: "Card failed." } });
+
+      const resultPromise = startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
+      await vi.advanceTimersByTimeAsync(5_000);
+      const result = await resultPromise;
+
+      expect(result.offerCodes).toEqual([]);
+      const reportRequest = requestMock.mock.calls.find(
+        ([options]) => options.url === "/orders/order-token/confirm_error",
+      )?.[0];
+      expect(reportRequest?.abortSignal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not restore a reserved once-per-cart code unless the server releases it", async () => {
     const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100) } }];
     requestMock

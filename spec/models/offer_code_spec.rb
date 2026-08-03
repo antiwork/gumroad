@@ -211,6 +211,17 @@ describe OfferCode do
             expect(offer_code).to be_valid
           end
         end
+
+        context "when a once-per-cart code requires multiple units" do
+          before do
+            offer_code.once_per_cart = true
+            offer_code.minimum_quantity = 2
+          end
+
+          it "validates against the eligible cart price" do
+            expect(offer_code).to be_valid
+          end
+        end
       end
 
       context "the offer code is not fixed duration" do
@@ -1189,6 +1200,17 @@ describe OfferCode do
 
         it "returns false" do
           expect(offer_code.is_amount_valid?(product)).to eq(false)
+        end
+      end
+
+      context "when a once-per-cart code requires multiple units" do
+        it "validates against the eligible cart price" do
+          product.update!(price_cents: 10_00)
+          offer_code = build(:offer_code, user: seller, products: [product], amount_cents: 9_50,
+                                          once_per_cart: true, minimum_quantity: 2)
+
+          expect(offer_code).to be_valid
+          expect(offer_code.is_amount_valid?(product)).to be(true)
         end
       end
 
