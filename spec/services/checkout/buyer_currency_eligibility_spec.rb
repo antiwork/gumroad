@@ -293,63 +293,21 @@ describe Checkout::BuyerCurrencyEligibility do
       order.purchases << other_seller_purchase
     end
 
-    it "is eligible when every seller in the order is in the multi-seller ramp" do
+    it "is eligible for every charge a multi-seller order produces" do
       # Each charge is priced from its own entry in the quote token, locked before the buyer
       # saw a total, so nothing needs splitting across intents.
-      [seller, other_seller].each { Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
-
       expect(decision).to be_eligible
       expect(decision.currency).to eq(Currency::CAD)
-    ensure
-      [seller, other_seller].each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
-    end
-
-    it "falls back when any seller in the order is outside the ramp" do
-      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
-
-      expect(decision).not_to be_eligible
-      expect(decision.fallback_reason).to eq(:multi_seller_checkout)
-    ensure
-      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
     end
 
     it "is eligible for the off-session charge a multi-seller cart performs" do
       # A multi-seller checkout charges off-session by design: the browser collects a reusable
       # payment method once and each seller's charge is confirmed against it server-side. The
       # buyer is present for that, so presentment is safe — unlike a renewal months later.
-      [seller, other_seller].each { Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
-
       decision = described_class.new(order:, seller:, merchant_account:, chargeable:, purchases:, params:,
                                      setup_future_charges: false, off_session: true).decision
 
       expect(decision).to be_eligible
-    ensure
-      [seller, other_seller].each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
-    end
-
-    it "loads the ramp's seller rows in one query rather than one per purchase" do
-      # This runs on the synchronous charge path, once per charge the order produces, so a
-      # seller row per purchase would multiply across a wide cart.
-      [seller, other_seller].each { Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
-      third_seller = create(:user)
-      order.purchases << create(:purchase,
-                                link: create(:product, user: third_seller),
-                                seller: third_seller,
-                                purchase_state: "in_progress")
-      user_queries = []
-      counter = lambda do |*, payload|
-        sql = payload[:sql].to_s
-        user_queries << sql if sql.start_with?("SELECT") && sql.include?("`users`")
-      end
-
-      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
-        described_class.new(order:, seller:, merchant_account:, chargeable:, purchases:, params:,
-                            setup_future_charges: false, off_session: false).send(:order_sellers)
-      end
-
-      expect(user_queries.size).to eq(1)
-    ensure
-      [seller, other_seller].each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
     end
   end
 

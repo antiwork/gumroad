@@ -299,7 +299,7 @@ describe Checkout::StripePaymentPresenter do
     end
   end
 
-  it "selects the buyer-currency presentment Payment Element for a cart spanning several ramped sellers" do
+  it "selects the buyer-currency presentment Payment Element for a cart spanning several sellers" do
     sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
     buyer_currency_display = {
@@ -313,7 +313,6 @@ describe Checkout::StripePaymentPresenter do
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
       checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
     end
 
@@ -326,41 +325,6 @@ describe Checkout::StripePaymentPresenter do
     (sellers || []).each do |seller|
       Feature.deactivate_user(:buyer_local_currency, seller)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
-    end
-  end
-
-  it "falls back to CardElement for a presentment-candidate cart spanning sellers when one is not in the multi-seller ramp" do
-    sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
-    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
-    buyer_currency_display = {
-      display_mode: "buyer_local",
-      buyer_currency_shown: Currency::CAD,
-    }
-    # The ramp is a decision about the cart the buyer sees, so one seller being outside it
-    # withholds the lane from the whole cart: it keeps riding CardElement in canonical USD.
-    add_products = sellers.each_with_index.map do |seller, index|
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(:buyer_local_currency, seller)
-      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller) if index.zero?
-      checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
-    end
-
-    expect(stripe_payment_props(add_products:)).to eq(
-      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
-      fallback_reason: "buyer_currency_presentment_unsupported",
-      disable_wallets: true,
-      request_apple_pay_merchant_tokens: false,
-      payment_element_wallets: false,
-      flat_payment_methods: false,
-      elements_options: nil,
-    )
-  ensure
-    (sellers || []).each do |seller|
-      Feature.deactivate_user(:buyer_local_currency, seller)
-      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
     end
   end
 
@@ -377,7 +341,6 @@ describe Checkout::StripePaymentPresenter do
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
       checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
     end
 
@@ -389,7 +352,6 @@ describe Checkout::StripePaymentPresenter do
     (sellers || []).each do |seller|
       Feature.deactivate_user(:buyer_local_currency, seller)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
     end
   end
 
