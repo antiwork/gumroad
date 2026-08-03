@@ -26,6 +26,12 @@ class TaxonomyAttributeDefinitions
       { name: "variable_font", label: "Variable font", value_type: "boolean", values: [], position: 2 },
       { name: "styles", label: "Styles", value_type: "number", values: [], position: 3 },
     ],
+    "design/graphics/assets-and-templates" => [
+      { name: "software", label: "Software", value_type: "enum", values: ["Figma", "Photoshop", "Illustrator", "Canva", "Sketch", "After Effects"], position: 0 },
+      { name: "file_format", label: "File format", value_type: "enum", values: ["PSD", "AI", "FIG", "SVG", "EPS", "PDF", "PNG"], position: 1 },
+      { name: "layered", label: "Layered / editable", value_type: "boolean", values: [], position: 2 },
+      { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 3 },
+    ],
     # Root plus the four children named in gumroad-private#1799: attributes do not inherit, and
     # sample packs file under the root as well as its children.
     "music-and-sound-design" => MUSIC_DEFINITIONS,
