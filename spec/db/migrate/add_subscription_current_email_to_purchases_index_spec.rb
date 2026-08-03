@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require Rails.root.join("db/migrate/20261206000029_add_subscription_current_email_to_purchases_index.rb")
+require Rails.root.join("db/migrate/20261206183000_add_subscription_current_email_to_purchases_index.rb")
 
 # `dynamic: :strict` on the purchases mapping rejects any document carrying a field the live index
 # does not know, so without this migration every write of the new field 400s — the backfill's and the
