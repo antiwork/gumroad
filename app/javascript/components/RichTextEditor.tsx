@@ -293,6 +293,11 @@ export const useRichTextEditor = ({
   const dedupedExtensions = allExtensions.filter(
     (ext, index) => allExtensions.findIndex((e) => e.name === ext.name) === index,
   );
+  // Read through a ref, never a dep: this list is rebuilt on every render, and the effect below
+  // rebuilds the whole EditorState whenever `content`'s identity changes — depending on it here
+  // would discard the seller's unsaved edits on any re-render.
+  const extensionsRef = React.useRef(dedupedExtensions);
+  extensionsRef.current = dedupedExtensions;
 
   const content: Content = React.useMemo(() => {
     if (!SSR && typeof initialValue === "string") {
@@ -316,11 +321,11 @@ export const useRichTextEditor = ({
 
     if (typeof initialValue !== "object" || initialValue === null) return initialValue;
 
-    const schema = getSchema(baseEditorOptions(dedupedExtensions).extensions);
+    const schema = getSchema(baseEditorOptions(extensionsRef.current).extensions);
     if (Array.isArray(initialValue)) return dropUnknownNodes(initialValue, schema);
     if (!initialValue.content) return initialValue;
     return { ...initialValue, content: dropUnknownNodes(initialValue.content, schema) };
-  }, [initialValue, dedupedExtensions]);
+  }, [initialValue]);
   const imageSettings = useImageUploadSettings();
   const uploadFiles = ({ view, files }: { view: EditorView; files: File[] }) => {
     const [images, nonImages] = partition(files, (file) => file.type.startsWith("image"));
