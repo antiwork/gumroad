@@ -172,6 +172,52 @@ describe Product::Prices do
         expect(product.customizable_price).to be(false)
         expect(product.price_cents).to eq(0)
       end
+
+      it "clears a stale customizable_price when a paid version is added later" do
+        product = create(:product, price_cents: 0)
+        expect(product.customizable_price).to be(true)
+
+        create(:variant_category, title: "versions", link: product)
+        product.variant_categories.first.variants.create!(name: "premium version", price_difference_cents: 10_00)
+        product.save!
+
+        expect(product.reload.customizable_price).to be(false)
+      end
+
+      it "clears the flag when the only free version sits beside a paid one" do
+        product = create(:product, price_cents: 0)
+        category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "Free Version", price_difference_cents: 0)
+        category.variants.create!(name: "Full Version", price_difference_cents: 10_00)
+        product.update_column(:customizable_price, true)
+
+        product.save!
+
+        expect(product.reload.customizable_price).to be(false)
+      end
+
+      it "keeps customizable_price when the paid version is deleted again" do
+        product = create(:product, price_cents: 0)
+        category = create(:variant_category, title: "versions", link: product)
+        paid = category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+        product.save!
+        expect(product.reload.customizable_price).to be(false)
+
+        paid.mark_deleted!
+        product.save!
+
+        expect(product.reload.customizable_price).to be(true)
+      end
+
+      it "leaves a paid product's PWYW flag alone" do
+        product = create(:product, price_cents: 5_00, customizable_price: true)
+        category = create(:variant_category, title: "versions", link: product)
+        category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+
+        product.save!
+
+        expect(product.reload.customizable_price).to be(true)
+      end
     end
   end
 

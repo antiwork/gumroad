@@ -61,7 +61,14 @@ module Product::Prices
   def set_customizable_price
     return if is_tiered_membership
     return unless default_price_cents == 0
-    return if variant_categories_alive.joins(:variants).merge(BaseVariant.alive).sum("base_variants.price_difference_cents") > 0
+    # Clearing, not returning: a $0-base product that gains a paid variant keeps the
+    # stale `true` otherwise, and no editor control switches PWYW off on a $0 base — so
+    # checkout offers a free-entry amount box whose minimum on the free option is 0 and
+    # a buyer can pay full price for the free tier (gumroad-private#1660).
+    if variant_categories_alive.joins(:variants).merge(BaseVariant.alive).sum("base_variants.price_difference_cents") > 0
+      update_column(:customizable_price, false) if customizable_price?
+      return
+    end
     update_column(:customizable_price, true)
   end
 
