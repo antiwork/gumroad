@@ -377,7 +377,7 @@ const PurchaseDeleteButton = ({
           <>
             <Button onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
             <Button color="danger" onClick={handleDelete}>
-              {isDeleting ? "Deleting..." : "Confirm"}
+              {isDeleting ? "Removing..." : "Confirm"}
             </Button>
           </>
         }
