@@ -140,9 +140,10 @@ class SignupController < Devise::RegistrationsController
           format.json { render json: { success: true, redirect_location: login_path_for(user) } }
         end
       else
+        message = user.deleted? ? User::DELETED_ACCOUNT_HOLDS_EMAIL_ERROR : "An account already exists with this email."
         respond_to do |format|
-          format.html { redirect_with_signup_error("An account already exists with this email.") }
-          format.json { render json: { success: false, error_message: "An account already exists with this email." } }
+          format.html { redirect_with_signup_error(message) }
+          format.json { render json: { success: false, error_message: message } }
         end
       end
     end
