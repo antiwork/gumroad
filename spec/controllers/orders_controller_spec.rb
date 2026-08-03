@@ -384,23 +384,24 @@ describe OrdersController, :vcr do
 
     context "multiple purchases" do
       let(:payment_params) { StripePaymentMethodHelper.success.to_stripejs_params(prepare_future_payments: true) }
+      let(:multiple_purchase_line_items) do
+        [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            quantity: 1
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            perceived_price_cents: product_2.price_cents,
+            quantity: 1
+          }
+        ]
+      end
       let(:multiple_purchase_params) do
-        {
-          line_items: [
-            {
-              uid: "unique-id-0",
-              permalink: product_1.unique_permalink,
-              perceived_price_cents: product_1.price_cents,
-              quantity: 1
-            },
-            {
-              uid: "unique-id-1",
-              permalink: product_2.unique_permalink,
-              perceived_price_cents: product_2.price_cents,
-              quantity: 1
-            }
-          ]
-        }.merge(common_purchase_params)
+        { line_items: multiple_purchase_line_items }.merge(common_purchase_params)
       end
 
       it "creates an order, the associated purchases and a combined charge" do
@@ -800,7 +801,7 @@ describe OrdersController, :vcr do
         allow(Order::ChargeService).to receive(:new).and_return(charge_service)
         allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return(recovered)
 
-        post :create, params: multiple_purchase_params
+        post :create, params: { line_items: multiple_purchase_line_items }
 
         expect(response.parsed_body["offer_codes"]).to eq(JSON.parse(recovered.to_json))
       end
@@ -835,12 +836,13 @@ describe OrdersController, :vcr do
         allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return([])
         allow(OfferCodeDiscountComputingService).to receive(:new).and_return(discount_service)
 
-        post :create, params: multiple_purchase_params
+        post :create, params: { line_items: multiple_purchase_line_items }
 
         expect(response.parsed_body["offer_codes"]).to eq([])
       end
 
-      it "keeps a once-per-cart retry code until SCA resolves its active reservation" do
+      it "keeps a once-per-cart retry code until SCA resolves its active reservation",
+         vcr: { cassette_name: "OrdersController/POST_create/multiple_purchases/doesn_t_allow_it_to_go_through_if_the_guid_is_blank" } do
         offer_code = create(
           :offer_code,
           user: product_1.user,

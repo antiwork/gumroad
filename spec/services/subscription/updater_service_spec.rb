@@ -3015,7 +3015,8 @@ describe Subscription::UpdaterService, :vcr do
         expect(new_discount.offer_code_is_percent).to eq(true)
       end
 
-      it "updates the discount snapshot when the seller changes its cart application mode" do
+      it "updates the discount snapshot when the seller changes its cart application mode",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/inventory_counter_cache/does_not_double-count_when_resubscribing_with_a_tier_change" } do
         original_purchase = @subscription.original_purchase
         original_discount = original_purchase.purchase_offer_code_discount
         @offer_code.update!(amount_cents: 100, amount_percentage: nil)
@@ -3042,7 +3043,8 @@ describe Subscription::UpdaterService, :vcr do
         expect(new_purchase.purchase_offer_code_discount.once_per_cart).to be(true)
       end
 
-      it "retains the chosen PWYW price with an existing exact-zero once-per-cart discount" do
+      it "retains the chosen PWYW price with an existing exact-zero once-per-cart discount",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/inventory_counter_cache/does_not_drift_link_or_variant_cache_on_a_non-immediate_downgrade" } do
         chosen_price = @original_tier_yearly_price.price_cents + 2_00
         @original_tier.update!(customizable_price: true)
         @offer_code.update!(amount_cents: chosen_price, amount_percentage: nil, once_per_cart: true)

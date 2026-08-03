@@ -356,7 +356,7 @@ describe Preorder, :vcr do
     end
 
     it "applies the offer code that was used at the time of the preorder" do
-      offer_code = create(:offer_code, products: [@product], code: "sxsw", amount_cents: 200)
+      offer_code = create(:offer_code, products: [@product], code: "sxsw", amount_cents: 200, once_per_cart: true)
       authorization_purchase = build(:purchase, link: @product, offer_code:, discount_code: offer_code.code,
                                                 chargeable: @good_card, purchase_state: "in_progress", referrer: "thefacebook.com",
                                                 is_preorder_authorization: true)
@@ -369,6 +369,7 @@ describe Preorder, :vcr do
       allow(mail_double).to receive(:deliver_later)
       expect(ContactingCreatorMailer).to receive(:notify).and_return(mail_double)
       preorder.mark_authorization_successful
+      offer_code.update!(once_per_cart: false)
 
       expect(ContactingCreatorMailer).to_not receive(:notify)
 
@@ -378,22 +379,7 @@ describe Preorder, :vcr do
       expect(charge_purchase.offer_code).to eq offer_code
       expect(charge_purchase.price_cents).to eq 400
       expect(charge_purchase.referrer).to eq "thefacebook.com"
-    end
-
-    it "keeps the offer code application mode recorded at preorder checkout" do
-      offer_code = create(:offer_code, products: [@product], code: "cart", amount_cents: 200, once_per_cart: true)
-      authorization_purchase = build(:purchase, link: @product, offer_code:, discount_code: offer_code.code,
-                                                chargeable: @good_card, purchase_state: "in_progress",
-                                                is_preorder_authorization: true)
-      preorder = @preorder_product.build_preorder(authorization_purchase)
-      preorder.authorize!
-      preorder.mark_authorization_successful
-      offer_code.update!(once_per_cart: false)
-
-      preorder.charge!
-
-      charge_discount = preorder.purchases.last.purchase_offer_code_discount
-      expect(charge_discount.once_per_cart).to be(true)
+      expect(charge_purchase.purchase_offer_code_discount.once_per_cart).to be(true)
     end
 
     it "applies the variants that were used at the time of the preorder" do
