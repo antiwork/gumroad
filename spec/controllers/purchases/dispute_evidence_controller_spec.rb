@@ -151,9 +151,10 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       expect(FightDisputeJob.jobs.size).to eq(0)
     end
 
-    # CreateMissingDisputeEvidenceJob backdates the window on a row it rescues late, so waiting for
-    # FightDisputesJob's hourly tick could cost an hour of a cutoff measured in hours.
-    it "forwards immediately when the window has already elapsed" do
+    # An elapsed window is refused before anything is written: FightDisputeJob is already forwarding
+    # the submission, so a late save would either arrive too late or race the forward. This is the
+    # one case where the seller genuinely cannot keep adding to their response.
+    it "refuses a save once the window has elapsed, and forwards nothing" do
       dispute_evidence.update!(seller_contacted_at: DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours.ago)
 
       put :update, params: {
@@ -161,7 +162,10 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
         dispute_evidence: { reason_for_winning: "Reason for winning" }
       }
 
-      expect(FightDisputeJob.jobs.size).to eq(1)
+      expect(response).to redirect_to(dashboard_url)
+      expect(flash[:alert]).to eq("The deadline for submitting additional information for this dispute has passed.")
+      expect(dispute_evidence.reload.reason_for_winning).to be_nil
+      expect(FightDisputeJob.jobs.size).to eq(0)
     end
 
     # The form posts all three fields every time, so assigning them wholesale would let a seller who

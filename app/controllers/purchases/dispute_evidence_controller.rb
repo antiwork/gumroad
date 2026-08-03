@@ -66,11 +66,10 @@ class Purchases::DisputeEvidenceController < ApplicationController
     # seller's uploads intact, since a retry re-sends the same signed ids.
     input_blobs.each(&:purge) if merged_blob
 
-    # Nothing goes to Stripe yet — FightDisputesJob forwards the latest version once the window
-    # closes, which is what lets the seller keep revising. The exception is a window that already
-    # elapsed (CreateMissingDisputeEvidenceJob backdates it), where waiting for the hourly tick
-    # would burn an hour of a cutoff measured in hours.
-    FightDisputeJob.perform_async(@dispute_evidence.dispute.id) unless @dispute_evidence.accepting_evidence?
+    # Nothing goes to Stripe here — FightDisputesJob forwards the latest version once the window
+    # closes, which is what lets the seller keep revising. An already-elapsed window never reaches
+    # this point: check_if_needs_redirect refuses the save, because a submission the job is already
+    # forwarding cannot be added to.
     redirect_to success_purchase_dispute_evidence_path(@purchase.external_id), status: :see_other
   rescue ActiveRecord::RecordInvalid
     merged_blob&.purge
