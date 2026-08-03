@@ -51,6 +51,7 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { CollapsibleDescription } from "$app/components/Product/CollapsibleDescription";
 import {
   applySelection,
+  buyerLocalPriceCentsForSelection,
   buyerLocalContextFor,
   ConfigurationSelector,
   ConfigurationSelectorHandle,
@@ -437,7 +438,11 @@ export const Product = ({
                 buyerCurrency={product.buyer_currency}
                 buyerLocalCurrencyRate={product.buyer_local_currency_rate}
                 buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
-                buyerLocalPriceCents={product.buyer_local_price_cents}
+                buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
+                  product.buyer_local_price_cents,
+                  discountCode?.valid ? discountCode.discount : null,
+                  selection.quantity,
+                )}
                 buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
               />
             </div>

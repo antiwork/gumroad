@@ -188,6 +188,15 @@ export const getMaxQuantity = (product: Product, option: Option | null) =>
 export const hasMetDiscountConditions = (discount: Discount | null, quantity: number) =>
   quantity >= (discount?.minimum_quantity ?? 0);
 
+export const buyerLocalPriceCentsForSelection = (
+  buyerLocalPriceCents: number | null | undefined,
+  discount: Discount | null,
+  quantity: number,
+) =>
+  discount?.type === "fixed" && discount.once_per_cart && hasMetDiscountConditions(discount, quantity) && quantity > 1
+    ? null
+    : buyerLocalPriceCents;
+
 export const computeDiscountedPrice = (
   priceCents: number,
   discount: Discount | null,

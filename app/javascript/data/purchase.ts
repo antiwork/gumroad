@@ -74,8 +74,6 @@ export type PurchaseLineItemPayload = {
   variants: VariantOptionId[];
   callStartTime: string | null;
   discountCode: string | null;
-  oncePerCartDiscountCents: number | null;
-  oncePerCartDiscountRank: number | null;
   recommendedBy: string | null;
   recommenderModelName: string | null;
   affiliateId: string | null;
@@ -286,8 +284,6 @@ export const createPurchasesRequestData = (
       variants: lineItem.variants,
       call_start_time: lineItem.callStartTime || "",
       discount_code: lineItem.discountCode || "",
-      once_per_cart_discount_cents: lineItem.oncePerCartDiscountCents,
-      once_per_cart_discount_rank: lineItem.oncePerCartDiscountRank,
       was_product_recommended: lineItem.recommendedBy != null,
       recommended_by: lineItem.recommendedBy || "",
       recommender_model_name: lineItem.recommenderModelName || "",

@@ -97,8 +97,6 @@ const requestData: StartCartPurchaseRequestPayload = {
       variants: [],
       callStartTime: null,
       discountCode: null,
-      oncePerCartDiscountCents: null,
-      oncePerCartDiscountRank: null,
       recommendedBy: null,
       recommenderModelName: null,
       affiliateId: null,
@@ -200,31 +198,6 @@ describe("startOrderCreation", () => {
     const result = await startOrderCreation(requestData, activeOfferCodes);
 
     expect(result.offerCodes).toEqual(activeOfferCodes);
-  });
-
-  it("sends the client allocation used to order the server split", async () => {
-    vi.stubGlobal("Routes", { orders_path: () => "/orders" });
-    requestMock.mockReset();
-    const lineItem = requestData.lineItems[0];
-    if (!lineItem) throw new Error("Missing test line item");
-    const requestWithAllocation = {
-      ...requestData,
-      lineItems: [{ ...lineItem, discountCode: "SAVE", oncePerCartDiscountCents: 500, oncePerCartDiscountRank: 1 }],
-    };
-    requestMock.mockResolvedValueOnce(
-      jsonResponse({
-        success: true,
-        line_items: { [lineItem.uid]: confirmedPurchase(lineItem.permalink) },
-        can_buyer_sign_up: false,
-        offer_codes: [],
-      }),
-    );
-
-    await startOrderCreation(requestWithAllocation);
-
-    expect(requestMock.mock.calls[0]?.[0]).toMatchObject({
-      data: { line_items: [{ once_per_cart_discount_cents: 500, once_per_cart_discount_rank: 1 }] },
-    });
   });
 
   it("sends failed-line code candidates for server revalidation after SCA", async () => {

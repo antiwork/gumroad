@@ -204,21 +204,6 @@ const getNonCodeDiscountedPrice = (cart: CartState, item: CartItem): DiscountedP
   return applicable;
 };
 
-const getDiscountedPriceWithoutOncePerCartCodes = (cart: CartState, item: CartItem): DiscountedPrice => {
-  let applicable = getNonCodeDiscountedPrice(cart, item);
-  for (const discountCode of cart.discountCodes) {
-    const discount = discountCode.products[item.product.permalink];
-    if (!discount || !hasMetCartDiscountConditions(cart, item, discount)) continue;
-    if (discount.type === "fixed" && discount.once_per_cart) continue;
-
-    const discounted = applyOfferCodeToCents(discount, item.price) * item.quantity;
-    if (discounted <= applicable.price) {
-      applicable = { discount: { type: "code", value: discount, code: discountCode.code }, price: discounted };
-    }
-  }
-  return applicable;
-};
-
 const getDiscountedPriceForItem = (
   cart: CartState,
   item: CartItem,
@@ -274,12 +259,11 @@ export function getDiscountedPrice(cart: CartState, item: CartItem, sourceItem: 
   return getDiscountedPriceForItem(cart, item, new Map());
 }
 
-export const getOncePerCartDiscountRank = (cart: CartState, item: CartItem) =>
-  getDiscountCandidates(cart, item, item).findIndex(({ isTarget }) => isTarget);
-
 const getDiscountCandidates = (cart: CartState, item: CartItem, sourceItem: CartItem) => {
-  const alternativeSavingsCents = (candidate: CartItem) =>
-    candidate.price * candidate.quantity - getDiscountedPriceWithoutOncePerCartCodes(cart, candidate).price;
+  const alternativeSavingsCents = (candidate: CartItem) => {
+    const fullPrice = candidate.price * candidate.quantity;
+    return fullPrice - computeDiscountedPrice(fullPrice, null, candidate.product).value;
+  };
   const candidates = cart.items.map((candidate, index) => ({
     item: candidate === sourceItem ? item : candidate,
     isTarget: candidate === sourceItem,
@@ -294,9 +278,13 @@ const getDiscountCandidates = (cart: CartState, item: CartItem, sourceItem: Cart
       alternativeSavingsCents: alternativeSavingsCents(item),
     });
   }
-  candidates.sort(
-    (left, right) => left.alternativeSavingsCents - right.alternativeSavingsCents || left.index - right.index,
-  );
+  candidates.sort((left, right) => {
+    const savingsDifference = left.alternativeSavingsCents - right.alternativeSavingsCents;
+    if (savingsDifference !== 0) return savingsDifference;
+    if (left.item.product.permalink !== right.item.product.permalink)
+      return left.item.product.permalink < right.item.product.permalink ? -1 : 1;
+    return left.index - right.index;
+  });
   return candidates;
 };
 

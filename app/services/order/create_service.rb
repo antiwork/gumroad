@@ -253,14 +253,18 @@ class Order::CreateService
       zero_allocations_by_uid = Hash.new { |hash, line_item_uid| hash[line_item_uid] = [] }
       grouped_items.each do |(group_type, group_value), items|
         items = items.each_with_index.sort_by do |item, index|
-          allocation_rank = Integer(item[:once_per_cart_discount_rank], exception: false)
-          allocation_cents = [Integer(item[:once_per_cart_discount_cents], exception: false).to_i, 0].max
-          allocation_rank && allocation_rank >= 0 ? [0, allocation_rank, index] : [1, -allocation_cents, index]
+          link = links_by_permalink[item[:permalink]]
+          [allocation_alternative_savings_cents(item, link), link&.unique_permalink.to_s, index]
         end.map(&:first)
         submitted_uids = items.to_set { _1.fetch(:uid) }
         ordered_items = items + line_items.reject { submitted_uids.include?(_1.fetch(:uid)) }
         products = ordered_items.to_h do |item|
-          [item.fetch(:uid), item.slice(:permalink, :quantity, :price_cents, :tip_cents)]
+          link = links_by_permalink[item[:permalink]]
+          product = item.slice(:permalink, :quantity).merge(
+            price_cents: allocation_capacity_cents(item, link),
+            tip_cents: 0
+          )
+          [item.fetch(:uid), product]
         end
         service = OfferCodeDiscountComputingService.new(
           normalize_discount_code(items.first[:discount_code]),
@@ -290,6 +294,37 @@ class Order::CreateService
         allocations_by_uid[line_item_uid] = distinct_allocations.first if distinct_allocations.one?
       end
       allocations_by_uid
+    end
+
+    def allocation_alternative_savings_cents(line_item, product)
+      return 0 unless product
+
+      full_price = allocation_capacity_cents(line_item, product)
+      ppp_details = product.ppp_details(params[:ip_address])
+      return 0 if ppp_details.blank? || full_price.zero?
+
+      discounted_price = [(full_price * ppp_details[:factor]).round, ppp_details[:minimum_price]].max
+      full_price - discounted_price
+    end
+
+    def allocation_capacity_cents(line_item, product)
+      return 0 unless product
+
+      quantity = [Integer(line_item[:quantity], exception: false).to_i, 1].max
+      submitted_total = Integer(line_item[:price_cents], exception: false).to_i
+      tip_cents = Integer(line_item[:tip_cents], exception: false).to_i
+      selected_price = [submitted_total - tip_cents, 0].max / quantity
+      recurrence = product.prices.alive.find_by_external_id(line_item[:price_id])&.recurrence if line_item[:price_id].present?
+      cart_item = product.cart_item(
+        price: selected_price,
+        option: Array(line_item[:variants]).first,
+        rent: line_item[:is_rental],
+        recurrence:,
+        quantity:,
+        pay_in_installments: line_item[:pay_in_installments],
+        force_new_subscription: line_item[:force_new_subscription]
+      )
+      cart_item[:price] * quantity
     end
 
     def restore_once_per_cart_coverage(offer_codes, allocation, line_items)

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Discount } from "$app/parsers/checkout";
 
-import { getDiscountedPrice, getOncePerCartDiscountRank } from "$app/components/Checkout/cartState";
+import { getDiscountedPrice } from "$app/components/Checkout/cartState";
 import type { CartItem, CartState, Product } from "$app/components/Checkout/cartState";
 
 const product: Product = {
@@ -75,13 +75,13 @@ const cartWith = (discount: Discount): CartState => ({
 });
 
 describe("getDiscountedPrice", () => {
-  it("reports the order used to allocate a cart discount", () => {
+  it("allocates a cart discount in stable product order", () => {
     const firstItem = { ...item, price: 500, quantity: 1 };
     const secondProduct = { ...product, id: "second-product-id", permalink: "second-product" };
     const secondItem = { ...item, product: secondProduct, price: 2_000, quantity: 1 };
     const oncePerCartDiscount = { type: "fixed" as const, cents: 1_500, once_per_cart: true, ...discountConditions };
     const cart: CartState = {
-      items: [firstItem, secondItem],
+      items: [secondItem, firstItem],
       discountCodes: [
         {
           code: "SAVE",
@@ -91,8 +91,6 @@ describe("getDiscountedPrice", () => {
       ],
     };
 
-    expect(getOncePerCartDiscountRank(cart, firstItem)).toBe(0);
-    expect(getOncePerCartDiscountRank(cart, secondItem)).toBe(1);
     expect(getDiscountedPrice(cart, firstItem).price).toBe(0);
     expect(getDiscountedPrice(cart, secondItem).price).toBe(1_000);
   });
@@ -460,7 +458,7 @@ describe("getDiscountedPrice", () => {
     expect(getDiscountedPrice(cart, offeredItem, currentItem).price).toBe(500);
   });
 
-  it("allocates the remaining discount when pricing an additive cross-sell", () => {
+  it("prices an additive cross-sell in stable product order", () => {
     const crossSellProduct = { ...product, id: "cross-sell-id", permalink: "cross-sell" };
     const currentItem = { ...item, price: 1_000, quantity: 1 };
     const crossSellItem = { ...item, price: 1_000, quantity: 1, product: crossSellProduct };
@@ -476,7 +474,7 @@ describe("getDiscountedPrice", () => {
       discountCodes: [{ code: "SAVE", products: { product: discount, "cross-sell": discount }, fromUrl: false }],
     };
 
-    expect(getDiscountedPrice(cart, crossSellItem).price).toBe(500);
+    expect(getDiscountedPrice(cart, crossSellItem).price).toBe(0);
   });
 
   it("keeps the source identity when pricing a copy of the second duplicate line", () => {

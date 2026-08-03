@@ -753,7 +753,7 @@ describe OrdersController, :vcr do
       end
 
       describe "strong params for reusable Stripe payments" do
-        it "passes payment and discount allocation fields through to order creation" do
+        it "passes reusable payment fields through to order creation" do
           order_purchases = double("order_purchases", successful: [])
           allow(order_purchases).to receive(:each).and_return([])
           order = double("order", persisted?: false, purchases: order_purchases, send_charge_receipts: nil)
@@ -766,7 +766,7 @@ describe OrdersController, :vcr do
               stripe_payment_method_id: "pm_123",
               stripe_customer_id: "cus_123",
               stripe_setup_intent_id: "seti_123",
-              line_items: contain_exactly(hash_including(once_per_cart_discount_rank: "2"))
+              line_items: contain_exactly(hash_including(uid: "unique-id-0"))
             )
           ).and_return(create_service)
           allow(Order::ChargeService).to receive(:new).and_return(charge_service)
@@ -780,7 +780,6 @@ describe OrdersController, :vcr do
               uid: "unique-id-0",
               permalink: product_1.unique_permalink,
               perceived_price_cents: price_1,
-              once_per_cart_discount_rank: 2,
               quantity: 1
             }]
           }

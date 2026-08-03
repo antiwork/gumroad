@@ -99,6 +99,8 @@ describe Order::CreateService, :vcr do
       end
 
       before do
+        product_1.update_column(:unique_permalink, "a_product")
+        product_2.update_column(:unique_permalink, "b_product")
         params[:line_items] = [
           {
             uid: "unique-id-0",
@@ -162,8 +164,10 @@ describe Order::CreateService, :vcr do
         expect(offer_code.quantity_left).to eq(0)
       end
 
-      it "matches the optimized client allocation order" do
+      it "ignores client allocation hints" do
         product_1.update!(price_cents: 10_00)
+        product_1.update_column(:unique_permalink, "z_product")
+        product_2.update_column(:unique_permalink, "a_product")
         offer_code.update!(amount_cents: 15_00)
         params[:line_items] = [
           {
@@ -173,8 +177,8 @@ describe Order::CreateService, :vcr do
             perceived_price_cents: 5_00,
             quantity: 1,
             discount_code: offer_code.code,
-            once_per_cart_discount_cents: 5_00,
-            once_per_cart_discount_rank: 1,
+            once_per_cart_discount_cents: 10_00,
+            once_per_cart_discount_rank: 0,
           },
           {
             uid: "unique-id-1",
@@ -183,8 +187,8 @@ describe Order::CreateService, :vcr do
             perceived_price_cents: 0,
             quantity: 1,
             discount_code: offer_code.code,
-            once_per_cart_discount_cents: 10_00,
-            once_per_cart_discount_rank: 0,
+            once_per_cart_discount_cents: 5_00,
+            once_per_cart_discount_rank: 1,
           },
         ]
 
@@ -196,7 +200,7 @@ describe Order::CreateService, :vcr do
         expect(purchases.map { _1.purchase_offer_code_discount.offer_code_amount }).to eq([5_00, 10_00])
       end
 
-      it "preserves cart order when later lines receive a larger allocation" do
+      it "uses the product price instead of the submitted allocation capacity" do
         product_1.update!(price_cents: 5_00)
         product_2.update!(price_cents: 20_00)
         offer_code.update!(amount_cents: 15_00)
@@ -204,12 +208,10 @@ describe Order::CreateService, :vcr do
           {
             uid: "unique-id-0",
             permalink: product_1.unique_permalink,
-            price_cents: 5_00,
+            price_cents: 1_00,
             perceived_price_cents: 0,
             quantity: 1,
             discount_code: offer_code.code,
-            once_per_cart_discount_cents: 5_00,
-            once_per_cart_discount_rank: 0,
           },
           {
             uid: "unique-id-1",
@@ -218,8 +220,6 @@ describe Order::CreateService, :vcr do
             perceived_price_cents: 10_00,
             quantity: 1,
             discount_code: offer_code.code,
-            once_per_cart_discount_cents: 10_00,
-            once_per_cart_discount_rank: 1,
           },
         ]
 
