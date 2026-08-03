@@ -577,11 +577,11 @@ describe("ProductShowScenario", type: :system, js: true) do
           product.alive_variants.each_with_index { _1.update(price_difference_cents: (_2 + 1) * 100) }
         end
 
-        it "sets the PWYW input placeholder value correctly" do
+        it "does not show the PWYW input" do
           visit product.long_url
-          expect(page).to have_field("Name a fair price:", with: "", placeholder: "1+")
+          expect(page).not_to have_field("Name a fair price:")
           choose "Untitled 2"
-          expect(page).to have_field("Name a fair price:", with: "", placeholder: "2+")
+          expect(page).not_to have_field("Name a fair price:")
         end
       end
 

@@ -32,7 +32,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
         flash[:alert] = "You're an admin, you can't login with Twitter."
         redirect_to login_path
       elsif @user.deleted?
-        flash[:alert] = "You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!"
+        flash[:alert] = User::DELETED_ACCOUNT_LOGIN_ERROR
         redirect_to login_path
       elsif @user.email.present?
         sign_in_or_prepare_for_two_factor_auth(@user)
@@ -94,7 +94,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
         flash[:alert] = "An account already exists with this email."
         return safe_redirect_to referer
       elsif user.deleted?
-        flash[:alert] = "You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!"
+        flash[:alert] = User::DELETED_ACCOUNT_LOGIN_ERROR
         return safe_redirect_to referer
       end
 
@@ -154,7 +154,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     def sign_in_with_oauth(provider_name)
       if @user&.persisted?
         if @user.deleted?
-          flash[:alert] = "You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!"
+          flash[:alert] = User::DELETED_ACCOUNT_LOGIN_ERROR
           redirect_to login_path
         else
           sign_in @user
