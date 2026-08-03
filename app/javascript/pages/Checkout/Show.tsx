@@ -552,7 +552,7 @@ const CheckoutIndexPage = () => {
             const discountedPriceTotal = discounted.price;
             let discountedPriceToChargeNow = discounted.price;
             if (item.product.native_type === "commission") {
-              discountedPriceToChargeNow *= COMMISSION_DEPOSIT_PROPORTION;
+              discountedPriceToChargeNow = Math.round(discountedPriceToChargeNow * COMMISSION_DEPOSIT_PROPORTION);
             } else if (item.pay_in_installments && item.product.installment_plan) {
               discountedPriceToChargeNow = calculateFirstInstallmentPaymentPriceCents(
                 discountedPriceTotal,

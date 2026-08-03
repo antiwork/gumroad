@@ -173,14 +173,14 @@ export const startOrderCreation = async (
     // eslint-disable-next-line no-console
     console.error("Error occurred processing order", error);
     if (pendingOrderId) {
-      const reservationsReleased = await reportClientConfirmError(
+      const reservedOncePerCartIds = await reportClientConfirmError(
         pendingOrderId,
         "confirm",
         error instanceof Error ? error : new Error("Unknown confirmation error"),
         null,
         pendingProcessorIntentId,
       );
-      if (!reservationsReleased) retryOfferCodes = withoutReservedOncePerCartOfferCodes(retryOfferCodes);
+      retryOfferCodes = withoutReservedOncePerCartOfferCodes(retryOfferCodes, reservedOncePerCartIds);
     }
     const result: CartPurchaseResult = {
       lineItems: requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>(
@@ -409,7 +409,7 @@ export const startClientConfirmOrderCreation = async (
     });
 
     if (confirmResult.error) {
-      const reservationsReleased = await reportClientConfirmError(
+      const reservedOncePerCartIds = await reportClientConfirmError(
         order.id,
         "confirm",
         confirmResult.error,
@@ -422,7 +422,7 @@ export const startClientConfirmOrderCreation = async (
           success: false,
           error_message: confirmResult.error.message ?? "Sorry, something went wrong.",
         },
-        reservationsReleased ? retryOfferCodes : withoutReservedOncePerCartOfferCodes(retryOfferCodes),
+        withoutReservedOncePerCartOfferCodes(retryOfferCodes, reservedOncePerCartIds),
       );
     }
 
@@ -461,25 +461,35 @@ export const startClientConfirmOrderCreation = async (
     // captured. Surface it as a pending outcome; a pre-confirmation error is a normal failure.
     if (confirmedReturnUrl) throw new PaymentConfirmedError(confirmedReturnUrl);
     if (preparedOrderId) {
-      const reservationsReleased = await reportClientConfirmError(
+      const reservedOncePerCartIds = await reportClientConfirmError(
         preparedOrderId,
         "confirm",
         error instanceof Error ? error : new Error("Unknown confirmation error"),
         selectedMethodType,
         preparedProcessorIntentId,
       );
-      if (!reservationsReleased) retryOfferCodes = withoutReservedOncePerCartOfferCodes(retryOfferCodes);
+      retryOfferCodes = withoutReservedOncePerCartOfferCodes(retryOfferCodes, reservedOncePerCartIds);
     }
     return ensureValidCartResult(requestData, { lineItems: {}, canBuyerSignUp: false, offerCodes: retryOfferCodes });
   }
 };
 
-const withoutReservedOncePerCartOfferCodes = (offerCodes: OfferCodes): OfferCodes =>
+const withoutReservedOncePerCartOfferCodes = (
+  offerCodes: OfferCodes,
+  reservedOncePerCartIds: ReadonlySet<string> | null,
+): OfferCodes =>
   offerCodes.flatMap((offerCode) => {
     const products = Object.fromEntries(
       Object.entries(offerCode.products).filter(
         ([, discount]) =>
-          !(discount.type === "fixed" && discount.once_per_cart && discount.once_per_cart_has_usage_limit),
+          !(
+            discount.type === "fixed" &&
+            discount.once_per_cart &&
+            discount.once_per_cart_has_usage_limit &&
+            (reservedOncePerCartIds === null ||
+              !discount.once_per_cart_id ||
+              reservedOncePerCartIds.has(discount.once_per_cart_id))
+          ),
       ),
     );
     return Object.keys(products).length > 0 ? [{ ...offerCode, products }] : [];
@@ -491,7 +501,7 @@ const reportClientConfirmError = async (
   error: StripeError | Error,
   selectedMethodType: string | null,
   processorIntentId: string | null,
-): Promise<boolean> => {
+): Promise<ReadonlySet<string> | null> => {
   try {
     const stripeError = "type" in error ? error : null;
     const response = await request({
@@ -508,17 +518,21 @@ const reportClientConfirmError = async (
         processor_intent_id: processorIntentId,
       },
     });
-    if (!response.ok) return false;
+    if (!response.ok) return null;
 
     const result: unknown = await response.json();
-    return (
+    if (
       typeof result === "object" &&
       result !== null &&
-      "reservations_released" in result &&
-      result.reservations_released === true
-    );
+      "reserved_once_per_cart_ids" in result &&
+      Array.isArray(result.reserved_once_per_cart_ids) &&
+      result.reserved_once_per_cart_ids.every((id): id is string => typeof id === "string")
+    ) {
+      return new Set(result.reserved_once_per_cart_ids);
+    }
+    return null;
   } catch {
-    return false;
+    return null;
   }
 };
 

@@ -2842,6 +2842,7 @@ describe OrdersController, :vcr do
       }
 
       expect(response.parsed_body).to include("success" => true, "reservations_released" => true)
+      expect(response.parsed_body["reserved_once_per_cart_ids"]).to eq([])
       expect(purchase.reload).to be_failed
       expect(offer_code.quantity_left).to eq(1)
     end
@@ -2962,6 +2963,7 @@ describe OrdersController, :vcr do
       }
 
       expect(response.parsed_body).to include("success" => true, "reservations_released" => false)
+      expect(response.parsed_body["reserved_once_per_cart_ids"]).to eq([offer_code.external_id])
       expect(first_purchase.reload).to be_failed
       expect(second_purchase.reload).to be_in_progress
       expect(offer_code.quantity_left).to eq(0)

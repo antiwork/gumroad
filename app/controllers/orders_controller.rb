@@ -130,12 +130,17 @@ class OrdersController < ApplicationController
       ErrorNotifier.notify("Client-confirm browser error", **error_details)
     end
 
-    reservations_released = release_failed_client_confirmation(
+    cleanup_succeeded = release_failed_client_confirmation(
       order,
       processor_intent_id: params[:processor_intent_id].to_s.first(100).presence
     )
+    reserved_once_per_cart_ids = reserved_once_per_cart_offer_code_ids(order)
 
-    render json: { success: true, reservations_released: }
+    render json: {
+      success: true,
+      reservations_released: cleanup_succeeded && reserved_once_per_cart_ids.empty?,
+      reserved_once_per_cart_ids:,
+    }
   end
 
   private
@@ -173,10 +178,20 @@ class OrdersController < ApplicationController
         other_intent_id = payment_intent ? other_purchase.processor_payment_intent_id : other_purchase.processor_setup_intent_id
         Purchase::MarkFailedService.new(other_purchase).perform if other_intent_id == checked_intent_id
       end
-      !order.purchases.active_once_per_cart_offer_code_reservations.exists?
+      true
     rescue ChargeProcessorError => e
       ErrorNotifier.notify(e) { _1.add_metadata(:order, { id: order.id }) }
       false
+    end
+
+    def reserved_once_per_cart_offer_code_ids(order)
+      order.purchases.active_once_per_cart_offer_code_reservations
+        .includes(purchase_offer_code_discount: :offer_code)
+        .filter_map do |purchase|
+          offer_code = purchase.purchase_offer_code_discount.offer_code
+          offer_code.external_id if offer_code.max_purchase_count.present?
+        end
+        .uniq
     end
 
     def offer_codes_after_payment(order, offer_codes, purchase_responses, line_items)
