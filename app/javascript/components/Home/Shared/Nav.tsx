@@ -78,7 +78,8 @@ const NavButton = ({
 
   let modifier2 = "";
   if (context === "primary" && children !== "Dashboard") {
-    modifier2 = "dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white";
+    modifier2 =
+      "dark:bg-pink dark:text-black dark:hover:bg-white dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white";
   } else {
     modifier2 = "dark:lg:hover:bg-white dark:lg:hover:text-black";
   }
