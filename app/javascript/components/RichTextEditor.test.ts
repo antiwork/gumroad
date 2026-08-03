@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { validateUrl } from "$app/components/RichTextEditor";
+import { getSchema } from "@tiptap/core";
+import StarterKit from "@tiptap/starter-kit";
+
+import { dropUnknownNodes, validateUrl } from "$app/components/RichTextEditor";
 
 describe("validateUrl", () => {
   it("rejects empty input", () => {
@@ -39,5 +42,40 @@ describe("validateUrl", () => {
 
   it("rejects input that is not a URL at all", () => {
     expect(validateUrl("http://")).toBe(false);
+  });
+});
+
+describe("dropUnknownNodes", () => {
+  const schema = getSchema([StarterKit]);
+
+  it("drops a node type the schema doesn't know, keeping its siblings", () => {
+    const content = [
+      { type: "paragraph", content: [{ type: "text", text: "before" }] },
+      { type: "license", attrs: {} },
+      { type: "paragraph", content: [{ type: "text", text: "after" }] },
+    ];
+
+    expect(dropUnknownNodes(content, schema)).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: "before" }] },
+      { type: "paragraph", content: [{ type: "text", text: "after" }] },
+    ]);
+  });
+
+  it("drops an unknown node nested inside a known container without dropping the container", () => {
+    const content = [
+      {
+        type: "blockquote",
+        content: [{ type: "license", attrs: {} }, { type: "paragraph", content: [{ type: "text", text: "kept" }] }],
+      },
+    ];
+
+    expect(dropUnknownNodes(content, schema)).toEqual([
+      { type: "blockquote", content: [{ type: "paragraph", content: [{ type: "text", text: "kept" }] }] },
+    ]);
+  });
+
+  it("leaves a document made only of known node types untouched", () => {
+    const content = [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }];
+    expect(dropUnknownNodes(content, schema)).toEqual(content);
   });
 });

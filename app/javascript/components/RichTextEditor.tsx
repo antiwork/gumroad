@@ -18,11 +18,11 @@ import {
   Underline as UnderlineIcon,
   Undo,
 } from "@boxicons/react";
-import { Content, createDocument, Editor, isList } from "@tiptap/core";
+import { Content, createDocument, Editor, getSchema, isList, JSONContent } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
 import { redoDepth, undoDepth } from "@tiptap/pm/history";
-import { DOMSerializer } from "@tiptap/pm/model";
+import { DOMSerializer, Schema } from "@tiptap/pm/model";
 import { EditorState, Selection } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import { EditorContent, Extensions, useEditor } from "@tiptap/react";
@@ -238,6 +238,18 @@ export const serializeEditorContentToHTML = (editor: Editor) => {
   return container.innerHTML;
 };
 
+// A stray node type the schema doesn't recognize (bad seller-authoring tooling, a removed
+// extension, hand-edited API payloads) makes ProseMirror's parser throw for the WHOLE document
+// rather than skip just that node — see `Schema.nodeType` / `Node.fromJSON`. Drop only the
+// offending subtree so the rest of the page still renders; `text` nodes have no `type` to check
+// against the schema and pass through untouched.
+export const dropUnknownNodes = (content: JSONContent[], schema: Schema): JSONContent[] =>
+  content.flatMap((node) => {
+    if (node.type === "text") return [node];
+    if (!node.type || !schema.nodes[node.type]) return [];
+    return [{ ...node, content: node.content ? dropUnknownNodes(node.content, schema) : node.content }];
+  });
+
 export const useRichTextEditor = ({
   placeholder,
   initialValue,
@@ -277,6 +289,11 @@ export const useRichTextEditor = ({
     }
   }
 
+  const allExtensions = [...extensions, ...(placeholder ? [Placeholder.configure({ placeholder })] : []), UpsellCard];
+  const dedupedExtensions = allExtensions.filter(
+    (ext, index) => allExtensions.findIndex((e) => e.name === ext.name) === index,
+  );
+
   const content: Content = React.useMemo(() => {
     if (!SSR && typeof initialValue === "string") {
       const dom = document.createElement("div");
@@ -297,19 +314,19 @@ export const useRichTextEditor = ({
       return { type: "doc", content: [{ type: "paragraph" }] };
     }
 
-    return initialValue;
-  }, [initialValue]);
+    if (typeof initialValue !== "object" || initialValue === null) return initialValue;
+
+    const schema = getSchema(baseEditorOptions(dedupedExtensions).extensions);
+    if (Array.isArray(initialValue)) return dropUnknownNodes(initialValue, schema);
+    if (!initialValue.content) return initialValue;
+    return { ...initialValue, content: dropUnknownNodes(initialValue.content, schema) };
+  }, [initialValue, dedupedExtensions]);
   const imageSettings = useImageUploadSettings();
   const uploadFiles = ({ view, files }: { view: EditorView; files: File[] }) => {
     const [images, nonImages] = partition(files, (file) => file.type.startsWith("image"));
     onInputNonImageFiles?.(nonImages);
     uploadImages({ view, files: images, imageSettings });
   };
-
-  const allExtensions = [...extensions, ...(placeholder ? [Placeholder.configure({ placeholder })] : []), UpsellCard];
-  const dedupedExtensions = allExtensions.filter(
-    (ext, index) => allExtensions.findIndex((e) => e.name === ext.name) === index,
-  );
 
   const editor = useEditor({
     ...baseEditorOptions(dedupedExtensions),
