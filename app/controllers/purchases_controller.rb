@@ -125,6 +125,7 @@ class PurchasesController < ApplicationController
     # One rebuild per buyer at the end of the loop rather than one per purchase row.
     Purchase.deferring_audience_member_rebuilds do
       Purchase.where(email: @purchase.email, seller_id: @purchase.seller_id, can_contact: false).find_each do |purchase|
+        purchase.can_contact_reason = nil
         purchase.update!(can_contact: true)
       rescue ActiveRecord::RecordInvalid
         # Mirrors `Purchase#unsubscribe_buyer`. Some old purchase rows no longer pass today's
@@ -134,6 +135,7 @@ class PurchasesController < ApplicationController
         Rails.logger.info "Could not update purchase (#{purchase.id}) with validations turned on. Re-subscribing the buyer without running validations."
 
         purchase.can_contact = true
+        purchase.can_contact_reason = nil
         purchase.save(validate: false)
       end
     end
