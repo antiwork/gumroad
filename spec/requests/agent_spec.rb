@@ -24,6 +24,10 @@ describe "Agent tab", type: :system, js: true do
 
   before do
     FileUtils.mkdir_p(screenshot_dir)
+    # The Agent tab is gated on User#eligible_for_store_agent? ($100 in sales + a completed
+    # payout). These specs exercise the Agent UX, not the eligibility bar, which is covered
+    # in spec/models/user_spec.rb and spec/policies/user_policy_spec.rb.
+    allow_any_instance_of(User).to receive(:eligible_for_store_agent?).and_return(true)
     login_as seller
   end
 
