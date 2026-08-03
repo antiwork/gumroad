@@ -13,7 +13,7 @@ class User < ApplicationRecord
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
           AttributeBlockable, PayoutInfo, EmailNormalization, SingleUseResetPasswordToken,
-          DashboardNavItems
+          DashboardNavItems, ReputationSummary
 
   has_many :user_external_authentications, dependent: :destroy
 

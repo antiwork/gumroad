@@ -68,6 +68,26 @@ describe ProfilePresenter do
       expect(described_class.new(pundit_user:, seller:).creator_profile[:can_edit]).to eq(false)
     end
 
+    describe "reputation" do
+      it "omits the key when the seller_reputation_summary flag is off" do
+        expect(presenter.creator_profile).not_to have_key(:reputation)
+      end
+
+      it "includes the summary when the flag is on" do
+        Feature.activate_user(:seller_reputation_summary, seller)
+        summary = { average: 4.8, count: 12, products_count: 2 }
+        allow(seller).to receive(:seller_reputation_summary).and_return(summary)
+
+        expect(presenter.creator_profile[:reputation]).to eq(summary)
+      end
+
+      it "includes a nil summary when the flag is on but thresholds are unmet" do
+        Feature.activate_user(:seller_reputation_summary, seller)
+
+        expect(presenter.creator_profile[:reputation]).to be_nil
+      end
+    end
+
     it "sets can_edit to false for profile view-only team members" do
       support_user = create(:user)
       create(:team_membership, user: support_user, seller:, role: TeamMembership::ROLE_SUPPORT)
