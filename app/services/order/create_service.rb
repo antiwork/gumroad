@@ -111,6 +111,11 @@ class Order::CreateService
               :accepts_purchasing_power_parity_discount
             ))
             .merge({ cart_items: })
+            .merge(
+              offer_code_cart_quantity: line_items
+                .select { _1[:permalink] == product.unique_permalink }
+                .sum { _1[:quantity].to_i }
+            )
         ).merge(
           submitted_pre_discount_price_cents: submitted_pre_discount_price_cents(line_item_params, allocated_discount),
           once_per_cart_discount_allocation:

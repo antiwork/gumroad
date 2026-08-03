@@ -127,6 +127,22 @@ describe("getDiscountedPrice", () => {
     expect(getDiscountedPrice(cart, secondItem).price).toBe(2_000);
   });
 
+  it("combines repeated product quantities when checking the minimum", () => {
+    const firstItem = { ...item, quantity: 1 };
+    const secondItem = { ...item, quantity: 1 };
+    const cart = cartWith({
+      type: "fixed",
+      cents: 100,
+      once_per_cart: true,
+      ...discountConditions,
+      minimum_quantity: 2,
+    });
+    cart.items = [firstItem, secondItem];
+
+    expect(getDiscountedPrice(cart, firstItem).price).toBe(900);
+    expect(getDiscountedPrice(cart, secondItem).price).toBe(1_000);
+  });
+
   it("allocates matching codes once for each seller", () => {
     const otherProduct = {
       ...product,

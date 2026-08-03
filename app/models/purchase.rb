@@ -630,7 +630,7 @@ class Purchase < ApplicationRecord
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
                 :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited,
-                :submitted_pre_discount_price_cents, :once_per_cart_discount_allocation
+                :submitted_pre_discount_price_cents, :once_per_cart_discount_allocation, :offer_code_cart_quantity
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -5042,7 +5042,7 @@ class Purchase < ApplicationRecord
         return
       end
 
-      unless quantity >= (offer_code.minimum_quantity || 0)
+      unless (offer_code_cart_quantity || quantity) >= (offer_code.minimum_quantity || 0)
         self.error_code = PurchaseErrorCode::OFFER_CODE_INSUFFICIENT_QUANTITY
         errors.add :base, "Sorry, the discount code you wish to use has an unmet minimum quantity."
         return

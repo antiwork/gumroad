@@ -178,7 +178,12 @@ type DiscountedPrice = {
 };
 
 const hasMetCartDiscountConditions = (cart: CartState, item: CartItem, discount: Discount) =>
-  hasMetDiscountConditions(discount, item.quantity) &&
+  hasMetDiscountConditions(
+    discount,
+    cart.items
+      .filter(({ product }) => product.permalink === item.product.permalink)
+      .reduce((total, cartItem) => total + cartItem.quantity, 0),
+  ) &&
   (!discount.minimum_amount_cents ||
     cart.items
       .filter(

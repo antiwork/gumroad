@@ -642,6 +642,30 @@ describe Order::CreateService, :vcr do
         expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([nil, offer_code.id])
       end
 
+      it "combines variant quantities when checking the minimum" do
+        offer_code.update!(minimum_quantity: 2)
+        variant_category = create(:variant_category, link: product_1)
+        first_variant = create(:variant, variant_category:, name: "First")
+        second_variant = create(:variant, variant_category:, name: "Second")
+        params[:line_items] = [first_variant, second_variant].each_with_index.map do |variant, index|
+          {
+            uid: "variant-#{index}",
+            permalink: product_1.unique_permalink,
+            price_cents: price_1,
+            perceived_price_cents: index.zero? ? price_1 - 1_00 : price_1,
+            quantity: 1,
+            variants: [variant.external_id],
+            discount_code: index.zero? ? offer_code.code : nil,
+          }
+        end
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1 - 1_00, price_1])
+        expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([offer_code.id, nil])
+      end
+
       it "normalizes the submitted code before allocating the discount" do
         params[:line_items].each { _1[:discount_code] = " #{offer_code.code.upcase} " }
 
