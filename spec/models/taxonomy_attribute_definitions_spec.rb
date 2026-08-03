@@ -12,12 +12,14 @@ describe TaxonomyAttributeDefinitions do
     end
 
     it "does not match a same-named leaf under a different parent" do
-      design = Taxonomy.find_or_create_by!(slug: "design")
-      Taxonomy.find_or_create_by!(slug: "fonts", parent: design)
-      other = Taxonomy.find_or_create_by!(slug: "three-d")
-      decoy = Taxonomy.find_or_create_by!(slug: "fonts", parent: other)
+      # Decoy first, so a lookup that ignores the parent returns it by insertion order.
+      decoy_parent = Taxonomy.create!(slug: "zz-decoy-parent")
+      decoy = Taxonomy.create!(slug: "zz-shared-leaf", parent: decoy_parent)
+      wanted_parent = Taxonomy.create!(slug: "zz-wanted-parent")
+      wanted = Taxonomy.create!(slug: "zz-shared-leaf", parent: wanted_parent)
 
-      expect(described_class.taxonomy_for("design/fonts")).not_to eq(decoy)
+      expect(Taxonomy.where(slug: "zz-shared-leaf").order(:id).first).to eq(decoy)
+      expect(described_class.taxonomy_for("zz-wanted-parent/zz-shared-leaf")).to eq(wanted)
     end
 
     it "returns nil when any segment is missing" do
