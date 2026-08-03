@@ -274,6 +274,25 @@ describe UsersController, :vcr, type: :controller do
 
       expect(response).to have_http_status(:not_found)
     end
+
+    # A slice served by a lagging replica can disagree with the first page the wrapper just
+    # rendered, so this pins to primary before the seller lookup like the embed does.
+    it "sticks to primary before fetching the seller" do
+      steps = []
+      allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
+        steps << :stick_to_primary
+        method.call(*args)
+      end
+      allow(controller).to receive(:set_user_and_custom_domain_config).and_wrap_original do |method, *args|
+        steps << :fetch_user
+        method.call(*args)
+      end
+
+      get :landing_products, params: { offset: 0, limit: 1 }
+
+      expect(response).to be_successful
+      expect(steps.index(:stick_to_primary)).to be < steps.index(:fetch_user)
+    end
   end
 
   describe "#profile_custom_html_wrapper_document" do

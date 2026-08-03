@@ -315,6 +315,14 @@ describe PagesController, type: :controller, inertia: true do
       expect(response).to have_http_status(:not_found)
     end
 
+    # The seller lands here right after a save, so a replica read could serve a slice that
+    # disagrees with the first page the preview just rendered.
+    it "reads from the primary, like the public landing endpoints" do
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!)
+
+      get :products, params: { slug: "profile", offset: 0, limit: 1 }
+    end
+
     it "serves the signed-in seller's catalogue regardless of any request param" do
       other = create(:user, username: "someoneelse")
       create(:product, user: other, name: "Not mine")

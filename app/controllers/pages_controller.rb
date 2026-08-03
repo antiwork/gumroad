@@ -13,6 +13,10 @@ class PagesController < Sellers::BaseController
   layout "inertia"
 
   before_action :set_page, only: [:edit, :update, :destroy, :preview, :products]
+  # The seller reaches the preview straight off a save, so a replica read can serve a slice
+  # that disagrees with the freshly-rendered first page — same reason the public landing
+  # endpoints pin.
+  before_action :stick_to_primary_for_landing_iframe, only: [:products]
 
   def index
     authorize :page

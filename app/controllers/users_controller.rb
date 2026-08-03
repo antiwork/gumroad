@@ -11,7 +11,7 @@ class UsersController < ApplicationController
 
   after_action :verify_authorized, only: %i[deactivate edit]
 
-  before_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
+  before_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version landing_products]
   before_action :set_as_modal, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show edit coffee subscribe subscribe_preview landing_iframe_content landing_version landing_products]
   before_action :set_page_attributes, only: %i[show]
