@@ -36,6 +36,7 @@ class Checkout::PaymentMethodResolver
   LINK_PAYMENT_METHOD_TYPE = "link"
   UPI_PAYMENT_METHOD_TYPE = "upi"
   UPI_RECURRING_LAUNCH_FEATURE = :checkout_local_method_upi_recurring
+  # Global emergency stop for acquisition and every existing UPI renewal.
   UPI_RECURRING_SERVICING_FEATURE = :upi_autopay_renewals
   # Stripe caps each UPI recurring debit at INR 15,000. Gumroad stores INR in paise.
   UPI_RECURRING_MAX_INR_CENTS = 1_500_000
@@ -339,6 +340,7 @@ class Checkout::PaymentMethodResolver
       # Registering a reusable UPI authorization has its own acquisition flag. Pulling it stops
       # new registrations while existing subscriptions continue through the renewal path.
       if recurring_upi_registration
+        return [] unless Feature.active?(UPI_RECURRING_SERVICING_FEATURE)
         return [] unless Feature.active?(UPI_RECURRING_LAUNCH_FEATURE, sellers.first)
 
         methods_for_cart_currency &= [UPI_PAYMENT_METHOD_TYPE]

@@ -2143,6 +2143,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         Feature.activate_user(:buyer_local_currency, seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+        Feature.activate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
         Feature.activate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
         Feature.activate_user(:checkout_local_method_upi, seller)
         allow(Stripe).to receive(:api_key).and_return("sk_test_upi_autopay")
@@ -2152,6 +2153,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         Feature.deactivate_user(:buyer_local_currency, seller)
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+        Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
         Feature.deactivate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
         Feature.deactivate_user(:checkout_local_method_upi, seller)
       end
@@ -2204,6 +2206,18 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args.dig(:metadata, StripeChargeProcessor::UPI_RECURRING_MAX_AMOUNT_METADATA_KEY))
           .to eq(mandate_options[:amount].to_s)
         expect(order.purchases.first.reload.card_type).to eq(CardType::UPI)
+      end
+
+      it "rejects registration before Stripe when renewal servicing is disabled" do
+        Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "India") }
+
+        create_args, responses = prepare_upi_autopay(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to be(false)
+        expect(order.charges).to be_empty
       end
 
       it "preserves the Indian-card e-mandate contract when card is selected on the same element" do

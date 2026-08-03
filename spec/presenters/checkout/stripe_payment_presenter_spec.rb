@@ -1679,6 +1679,7 @@ describe Checkout::StripePaymentPresenter do
       activate_buyer_currency_flags(seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
       Feature.activate_user(:checkout_local_method_upi, seller)
+      Feature.activate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
       Feature.activate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
       stub_geoip_country("203.0.113.13", "India")
@@ -1701,6 +1702,7 @@ describe Checkout::StripePaymentPresenter do
         )
       )
     ensure
+      Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
       if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
         Feature.deactivate_user(:checkout_local_method_upi, seller)
@@ -1717,6 +1719,7 @@ describe Checkout::StripePaymentPresenter do
       activate_buyer_currency_flags(seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
       Feature.activate_user(:checkout_local_method_upi, seller)
+      Feature.activate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
       Feature.activate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
       stub_geoip_country("203.0.113.14", "India")
@@ -1748,6 +1751,7 @@ describe Checkout::StripePaymentPresenter do
         expect(Array(props.dig(:elements_options, :payment_method_types))).not_to include("upi"), "seller_merchant_account"
       end
     ensure
+      Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
       if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
         Feature.deactivate_user(:checkout_local_method_upi, seller)

@@ -603,12 +603,14 @@ describe Checkout::PaymentMethodResolver do
           allow(Stripe).to receive(:api_key).and_return("sk_test_upi_autopay")
           Feature.activate_user(:buyer_currency_charging, seller)
           Feature.activate_user(:buyer_local_currency, seller)
+          Feature.activate(described_class::UPI_RECURRING_SERVICING_FEATURE)
           Feature.activate_user(described_class::UPI_RECURRING_LAUNCH_FEATURE, seller)
         end
 
         after do
           Feature.deactivate_user(:buyer_currency_charging, seller)
           Feature.deactivate_user(:buyer_local_currency, seller)
+          Feature.deactivate(described_class::UPI_RECURRING_SERVICING_FEATURE)
           Feature.deactivate_user(described_class::UPI_RECURRING_LAUNCH_FEATURE, seller)
         end
 
@@ -640,6 +642,20 @@ describe Checkout::PaymentMethodResolver do
 
         it "requires the dedicated recurring acquisition flag even in Stripe test mode" do
           Feature.deactivate_user(described_class::UPI_RECURRING_LAUNCH_FEATURE, seller)
+
+          resolution = resolve(
+            recurring: true,
+            recurring_upi_registration: true,
+            buyer_country: "IN",
+            cart_product_currency: Currency::INR
+          )
+
+          expect(resolution.client_confirm_eligible?).to be(false)
+          expect(resolution.fallback_reason).to eq("recurring_upi_unavailable")
+        end
+
+        it "requires renewal servicing to be active before acquisition" do
+          Feature.deactivate(described_class::UPI_RECURRING_SERVICING_FEATURE)
 
           resolution = resolve(
             recurring: true,
