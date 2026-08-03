@@ -147,7 +147,7 @@ describe("useRichTextEditor", () => {
   it("sanitizes new content against the mounted editor's schema, not a freshly recomputed one", async () => {
     const LateExtension = Node.create({ name: "lateNode", group: "block", content: "text*" });
     let editor: Editor | null = null;
-    const Harness = ({ extensions, initialValue }: { extensions: typeof LateExtension[]; initialValue: unknown }) => {
+    const Harness = ({ extensions, initialValue }: { extensions: (typeof LateExtension)[]; initialValue: unknown }) => {
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- exercising the hook's public Content type
       editor = useRichTextEditor({ initialValue: initialValue as never, extensions });
       return null;
