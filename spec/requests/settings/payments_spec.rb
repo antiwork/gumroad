@@ -935,8 +935,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       visit settings_payments_path
 
       expect(page).to have_field("PayPal Email")
-      expect(page).to have_content("PayPal does not let accounts registered in Syria receive money")
-      expect(page).to_not have_content("Zambia")
+      expect(page).to have_content("PayPal does not let accounts registered in Syrian Arab Republic receive money")
+      expect(page).to have_content("bank payouts are not available there either")
     end
 
     it "does not show the no-payout-rail warning to creators in other countries" do
