@@ -53,6 +53,23 @@ describe Onetime::SeedTaxonomies do
     expect(Rails.cache.read("taxonomies_for_nav")).to be_nil
   end
 
+  # The seed file's last line applies TaxonomyAttributeDefinitions, so this task owns attribute rows
+  # too. Pinned because the deactivation is destructive-ish and invisible from the service's name.
+  it "applies the taxonomy attribute registry, deactivating rows absent from it" do
+    described_class.process
+
+    fonts = Taxonomy.find_by_path(%w[design fonts])
+    expect(TaxonomyAttribute.where(taxonomy: fonts, active: true).pluck(:name))
+      .to match_array(TaxonomyAttributeDefinitions::DEFINITIONS["design/fonts"].map { _1[:name] })
+
+    stale = TaxonomyAttribute.create!(taxonomy: fonts, name: "not_in_registry", label: "Stale",
+                                      value_type: "enum", values: [], position: 9, active: true)
+
+    described_class.process
+
+    expect(stale.reload.active).to be(false)
+  end
+
   it "refuses to run when the seed file's skip flag is set" do
     # Set the real variable rather than stub_const("ENV", hash): ENV is not a Hash, so replacing it
     # with one passes here while diverging from what the seed file's own top-level guard reads.
