@@ -262,7 +262,7 @@ export function getDiscountedPrice(cart: CartState, item: CartItem, sourceItem: 
 const getDiscountCandidates = (cart: CartState, item: CartItem, sourceItem: CartItem) => {
   const alternativeSavingsCents = (candidate: CartItem) => {
     const fullPrice = candidate.price * candidate.quantity;
-    return fullPrice - computeDiscountedPrice(fullPrice, null, candidate.product).value;
+    return fullPrice - getNonCodeDiscountedPrice(cart, candidate).price;
   };
   const candidates = cart.items.map((candidate, index) => ({
     item: candidate === sourceItem ? item : candidate,

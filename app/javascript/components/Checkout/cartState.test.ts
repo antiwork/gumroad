@@ -331,6 +331,34 @@ describe("getDiscountedPrice", () => {
     expect(getDiscountedPrice(cart, secondItem).price).toBe(1_900);
   });
 
+  it("allocates the cart discount away from a smaller accepted-offer discount", () => {
+    const secondProduct = { ...product, id: "second-id", permalink: "second" };
+    const firstItem = {
+      ...item,
+      price: 1_000,
+      quantity: 1,
+      accepted_offer: {
+        id: "upsell",
+        discount: { type: "fixed" as const, cents: 200, ...discountConditions },
+      },
+    };
+    const secondItem = { ...item, price: 1_000, quantity: 1, product: secondProduct };
+    const discount = {
+      type: "fixed" as const,
+      cents: 500,
+      once_per_cart: true,
+      once_per_cart_amount_cents: 500,
+      ...discountConditions,
+    };
+    const cart: CartState = {
+      items: [firstItem, secondItem],
+      discountCodes: [{ code: "SAVE", products: { product: discount, second: discount }, fromUrl: false }],
+    };
+
+    expect(getDiscountedPrice(cart, firstItem).price).toBe(800);
+    expect(getDiscountedPrice(cart, secondItem).price).toBe(500);
+  });
+
   it("moves the allocation when PPP wins on the first covered line", () => {
     const firstProduct = { ...product, ppp_details: { country: "US", factor: 0.5, minimum_price: 0 } };
     const secondProduct = { ...product, id: "second-id", permalink: "second" };
@@ -350,6 +378,28 @@ describe("getDiscountedPrice", () => {
 
     expect(getDiscountedPrice(cart, firstItem).price).toBe(1_000);
     expect(getDiscountedPrice(cart, secondItem).price).toBe(1_900);
+  });
+
+  it("does not move the allocation for rejected PPP", () => {
+    const firstProduct = { ...product, ppp_details: { country: "US", factor: 0.5, minimum_price: 0 } };
+    const secondProduct = { ...product, id: "second-id", permalink: "second" };
+    const firstItem = { ...item, price: 1_000, quantity: 1, product: firstProduct };
+    const secondItem = { ...item, price: 1_000, quantity: 1, product: secondProduct };
+    const discount = {
+      type: "fixed" as const,
+      cents: 100,
+      once_per_cart: true,
+      once_per_cart_amount_cents: 100,
+      ...discountConditions,
+    };
+    const cart: CartState = {
+      items: [firstItem, secondItem],
+      discountCodes: [{ code: "SAVE", products: { product: discount, second: discount }, fromUrl: false }],
+      rejectPppDiscount: true,
+    };
+
+    expect(getDiscountedPrice(cart, firstItem).price).toBe(900);
+    expect(getDiscountedPrice(cart, secondItem).price).toBe(1_000);
   });
 
   it("allocates the cart discount where it saves more than PPP", () => {

@@ -12,6 +12,7 @@ export type Discount =
       once_per_cart?: boolean;
       once_per_cart_id?: string;
       once_per_cart_amount_cents?: number;
+      once_per_cart_has_usage_limit?: boolean;
     } & DiscountConditions);
 
 type DiscountConditions = {

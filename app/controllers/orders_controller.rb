@@ -137,11 +137,18 @@ class OrdersController < ApplicationController
 
   private
     def release_failed_client_confirmation(order)
-      purchase = order.purchases.in_progress.find { _1.processor_payment_intent_id.present? }
+      purchase = order.purchases.in_progress.find do
+        _1.processor_payment_intent_id.present? || _1.processor_setup_intent_id.present?
+      end
       return false unless purchase
 
-      charge_intent = ChargeProcessor.get_charge_intent(purchase.merchant_account, purchase.processor_payment_intent_id)
-      status = charge_intent.payment_intent.status
+      payment_intent = purchase.processor_payment_intent_id.present?
+      intent = if payment_intent
+        ChargeProcessor.get_charge_intent(purchase.merchant_account, purchase.processor_payment_intent_id)
+      else
+        ChargeProcessor.get_setup_intent(purchase.merchant_account, purchase.processor_setup_intent_id)
+      end
+      status = payment_intent ? intent.payment_intent.status : intent.setup_intent.status
       safe_statuses = [
         StripeIntentStatus::REQUIRES_PAYMENT_METHOD,
         StripeIntentStatus::REQUIRES_CONFIRMATION,
@@ -151,9 +158,11 @@ class OrdersController < ApplicationController
 
       if status == StripeIntentStatus::CANCELED
         Purchase::MarkFailedService.new(purchase).perform
-        purchase.charge&.destroy_presentment_records!
-      else
+        purchase.charge&.destroy_presentment_records! if payment_intent
+      elsif payment_intent
         purchase.cancel_charge_intent!
+      else
+        purchase.cancel_setup_intent!
       end
       order.purchases.in_progress.find_each { Purchase::MarkFailedService.new(_1).perform }
       true

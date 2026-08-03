@@ -2844,6 +2844,27 @@ describe OrdersController, :vcr do
       expect(offer_code.quantity_left).to eq(1)
     end
 
+    it "releases a SetupIntent reservation when Stripe confirms the attempt is still pre-charge" do
+      params = { line_items: line_items.map(&:dup) }.merge(common_params)
+      order, = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+      purchase.update!(processor_setup_intent_id: "seti_pre_charge")
+      setup_intent = instance_double(
+        SetupIntent,
+        setup_intent: double(status: StripeIntentStatus::REQUIRES_PAYMENT_METHOD)
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      expect(ChargeProcessor).to receive(:cancel_setup_intent!).with(purchase.merchant_account, "seti_pre_charge")
+
+      post :confirm_error, params: {
+        id: order.secure_external_id(scope: "confirm"),
+        stripe_error_code: "setup_intent_unexpected_state",
+      }
+
+      expect(response.parsed_body).to include("success" => true, "reservations_released" => true)
+      expect(purchase.reload).to be_failed
+    end
+
     it "keeps the reservation when Stripe no longer shows a safely cancelable attempt" do
       params = { line_items: line_items.map(&:dup) }.merge(common_params)
       order, = Order::CreateService.new(params:).perform

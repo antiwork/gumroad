@@ -177,7 +177,7 @@ export const startOrderCreation = async (
         error instanceof Error ? error : new Error("Unknown confirmation error"),
         null,
       );
-      if (!reservationsReleased) retryOfferCodes = withoutOncePerCartOfferCodes(retryOfferCodes);
+      if (!reservationsReleased) retryOfferCodes = withoutReservedOncePerCartOfferCodes(retryOfferCodes);
     }
     const result: CartPurchaseResult = {
       lineItems: requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>(
@@ -416,7 +416,7 @@ export const startClientConfirmOrderCreation = async (
           success: false,
           error_message: confirmResult.error.message ?? "Sorry, something went wrong.",
         },
-        reservationsReleased ? retryOfferCodes : withoutOncePerCartOfferCodes(retryOfferCodes),
+        reservationsReleased ? retryOfferCodes : withoutReservedOncePerCartOfferCodes(retryOfferCodes),
       );
     }
 
@@ -461,17 +461,18 @@ export const startClientConfirmOrderCreation = async (
         error instanceof Error ? error : new Error("Unknown confirmation error"),
         selectedMethodType,
       );
-      if (!reservationsReleased) retryOfferCodes = withoutOncePerCartOfferCodes(retryOfferCodes);
+      if (!reservationsReleased) retryOfferCodes = withoutReservedOncePerCartOfferCodes(retryOfferCodes);
     }
     return ensureValidCartResult(requestData, { lineItems: {}, canBuyerSignUp: false, offerCodes: retryOfferCodes });
   }
 };
 
-const withoutOncePerCartOfferCodes = (offerCodes: OfferCodes): OfferCodes =>
+const withoutReservedOncePerCartOfferCodes = (offerCodes: OfferCodes): OfferCodes =>
   offerCodes.flatMap((offerCode) => {
     const products = Object.fromEntries(
       Object.entries(offerCode.products).filter(
-        ([, discount]) => !(discount.type === "fixed" && discount.once_per_cart),
+        ([, discount]) =>
+          !(discount.type === "fixed" && discount.once_per_cart && discount.once_per_cart_has_usage_limit),
       ),
     );
     return Object.keys(products).length > 0 ? [{ ...offerCode, products }] : [];

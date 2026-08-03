@@ -319,6 +319,7 @@ class OfferCode < ApplicationRecord
       json[:once_per_cart] = true
       json[:once_per_cart_id] = external_id
       json[:once_per_cart_amount_cents] = amount_cents
+      json[:once_per_cart_has_usage_limit] = max_purchase_count.present?
     end
     json
   end

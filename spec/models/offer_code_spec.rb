@@ -1108,8 +1108,15 @@ describe OfferCode do
         expect(offer_code.discount).to include(
           once_per_cart: true,
           once_per_cart_id: offer_code.external_id,
-          once_per_cart_amount_cents: 100
+          once_per_cart_amount_cents: 100,
+          once_per_cart_has_usage_limit: false
         )
+      end
+
+      it "identifies a once-per-cart discount with a usage limit" do
+        offer_code.update!(once_per_cart: true, max_purchase_count: 1)
+
+        expect(offer_code.discount).to include(once_per_cart_has_usage_limit: true)
       end
     end
 

@@ -42,12 +42,13 @@ const fixedDiscount = (cents: number): Extract<Discount, { type: "fixed" }> => (
   duration_in_billing_cycles: null,
   minimum_amount_cents: null,
 });
-const oncePerCartDiscount = (cents: number): Discount => ({
+const oncePerCartDiscount = (cents: number, hasUsageLimit = true): Discount => ({
   ...fixedDiscount(cents),
   type: "fixed",
   once_per_cart: true,
   once_per_cart_id: "offer-code-1",
   once_per_cart_amount_cents: 100,
+  once_per_cart_has_usage_limit: hasUsageLimit,
 });
 
 const clientConfirmPaymentMethod = {
@@ -753,6 +754,18 @@ describe("startClientConfirmOrderCreation", () => {
     requestMock
       .mockResolvedValueOnce(jsonResponse(prepareResponse))
       .mockResolvedValueOnce(jsonResponse({ success: true, reservations_released: true }));
+    confirmPaymentMock.mockResolvedValueOnce({ error: { message: "Card failed." } });
+
+    const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);
+
+    expect(result.offerCodes).toEqual(activeOfferCodes);
+  });
+
+  it("keeps an uncapped once-per-cart code when no reservation can block retry", async () => {
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-a": oncePerCartDiscount(100, false) } }];
+    requestMock
+      .mockResolvedValueOnce(jsonResponse(prepareResponse))
+      .mockResolvedValueOnce(jsonResponse({ success: true, reservations_released: false }));
     confirmPaymentMock.mockResolvedValueOnce({ error: { message: "Card failed." } });
 
     const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card", activeOfferCodes);

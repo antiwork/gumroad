@@ -306,6 +306,57 @@ describe Order::CreateService, :vcr do
         expect(cross_sell_code.quantity_left).to eq(1)
       end
 
+      it "allocates the cart discount away from a smaller accepted-offer discount" do
+        product_1.update!(price_cents: 10_00)
+        offer_code.update!(amount_cents: 5_00)
+        cross_sell_code = create(
+          :offer_code,
+          user: seller_1,
+          products: [product_1],
+          code: "CROSSSELL2",
+          amount_cents: 2_00
+        )
+        cross_sell = create(
+          :upsell,
+          seller: seller_1,
+          product: product_1,
+          selected_products: [product_2],
+          offer_code: cross_sell_code,
+          cross_sell: true
+        )
+        params[:line_items] = [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 8_00,
+            quantity: 1,
+            discount_code: offer_code.code,
+            accepted_offer: {
+              id: cross_sell.external_id,
+              original_product_id: product_2.external_id,
+            },
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 5_00,
+            quantity: 1,
+            discount_code: offer_code.code,
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        purchases = order.purchases.index_by(&:link)
+
+        expect(purchase_responses).to be_empty
+        expect(purchases.fetch(product_1).displayed_price_cents).to eq(8_00)
+        expect(purchases.fetch(product_1).offer_code).to eq(cross_sell_code)
+        expect(purchases.fetch(product_2).displayed_price_cents).to eq(5_00)
+        expect(purchases.fetch(product_2).offer_code).to eq(offer_code)
+      end
+
       it "keeps capped-code usage on a surviving fragment when the first allocation fails" do
         product_1.update!(price_cents: 10_00)
         offer_code.update!(amount_cents: 15_00, max_purchase_count: 1)

@@ -252,9 +252,10 @@ class Order::CreateService
       allocations_by_uid = {}
       zero_allocations_by_uid = Hash.new { |hash, line_item_uid| hash[line_item_uid] = [] }
       grouped_items.each do |(group_type, group_value), items|
+        consider_ppp = line_items.any? { _1[:is_purchasing_power_parity_discounted] }
         items = items.each_with_index.sort_by do |item, index|
           link = links_by_permalink[item[:permalink]]
-          [allocation_alternative_savings_cents(item, link), link&.unique_permalink.to_s, index]
+          [allocation_alternative_savings_cents(item, link, consider_ppp:), link&.unique_permalink.to_s, index]
         end.map(&:first)
         submitted_uids = items.to_set { _1.fetch(:uid) }
         ordered_items = items + line_items.reject { submitted_uids.include?(_1.fetch(:uid)) }
@@ -296,15 +297,39 @@ class Order::CreateService
       allocations_by_uid
     end
 
-    def allocation_alternative_savings_cents(line_item, product)
+    def allocation_alternative_savings_cents(line_item, product, consider_ppp:)
       return 0 unless product
 
       full_price = allocation_capacity_cents(line_item, product)
+      accepted_offer_savings = accepted_offer_savings_cents(line_item, product, full_price)
+      return accepted_offer_savings unless accepted_offer_savings.nil?
+      return 0 unless consider_ppp
+
       ppp_details = product.ppp_details(params[:ip_address])
       return 0 if ppp_details.blank? || full_price.zero?
 
       discounted_price = [(full_price * ppp_details[:factor]).round, ppp_details[:minimum_price]].max
       full_price - discounted_price
+    end
+
+    def accepted_offer_savings_cents(line_item, product, full_price)
+      accepted_offer_id = line_item.dig(:accepted_offer, :id)
+      return if accepted_offer_id.blank?
+
+      upsell = Upsell.available_to_customers.includes(:offer_code).find_by_external_id(accepted_offer_id)
+      return unless upsell&.cross_sell? && upsell.product == product
+
+      discount = upsell.offer_code&.evaluate_for_buyer(buyer, product:)
+      return unless discount
+
+      quantity = [Integer(line_item[:quantity], exception: false).to_i, 1].max
+      unit_price = full_price / quantity
+      discounted_unit_price = if discount[:type] == "fixed"
+        [unit_price - discount[:cents].to_i, 0].max
+      else
+        unit_price - (unit_price * discount[:percents].to_i / 100.0).round
+      end
+      full_price - discounted_unit_price * quantity
     end
 
     def allocation_capacity_cents(line_item, product)
