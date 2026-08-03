@@ -687,13 +687,14 @@ class ContactingCreatorMailer < ApplicationMailer
     end
   end
 
-  # `skip_if_message_present` is set by the delayed message-less render scheduled at create: when
-  # the buyer's text arrives before the delay elapses, the blank→present update has already sent
-  # this email with the message in it, so the delayed copy must not follow it.
-  def review_submitted(review_id, skip_if_message_present: false)
+  # A review notifies the seller at most once (immediately if the buyer typed before submitting,
+  # otherwise via whichever of the delayed message-less render or the blank→present arrival fires
+  # first). The claim is the enforcement: without it, the delayed job's read of `message` and its
+  # eventual delivery straddle the buyer's commit, so both paths can decide to send.
+  def review_submitted(review_id)
     @review = ProductReview.includes(:purchase, link: :user).find(review_id)
     return do_not_send if @review.deleted?
-    return do_not_send if skip_if_message_present && @review.message.present?
+    return do_not_send unless claim_review_notification(@review.id)
 
     @product = @review.link
     @seller = @product.user
@@ -790,6 +791,16 @@ class ContactingCreatorMailer < ApplicationMailer
 
     def do_not_send
       @do_not_send = true
+    end
+
+    # Atomic claim so the delayed message-less render and the blank→present arrival notify can't
+    # both win: whichever commits its render first (not whichever fires first) gets the seller's
+    # one email. TTL covers rendering + delivery, not the review's whole life — a lost claim after
+    # that just means a review-created-then-immediately-deleted row leaves no dangling key.
+    REVIEW_NOTIFICATION_CLAIM_TTL = 1.hour
+
+    def claim_review_notification(review_id)
+      $redis.set(RedisKey.product_review_seller_notified(review_id), Time.current.to_i, nx: true, ex: REVIEW_NOTIFICATION_CLAIM_TTL.to_i)
     end
 
     def format_dispute_evidence_due_at(due_at)

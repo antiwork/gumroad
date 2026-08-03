@@ -75,10 +75,10 @@ class ProductReview < ApplicationRecord
         ContactingCreatorMailer.review_submitted(id).deliver_later
       else
         # Delayed so a buyer who taps stars first gets one email with their text in it (the
-        # blank→present update above owns that send; the mailer skips this render when a message
-        # has arrived by then). Only a review that stays message-less emails star-only.
-        ContactingCreatorMailer.review_submitted(id, skip_if_message_present: true)
-          .deliver_later(wait: SELLER_NOTIFICATION_DELAY)
+        # blank→present update below wins the claim in `ContactingCreatorMailer#review_submitted`
+        # when the buyer's text has arrived by then). Only a review that stays message-less emails
+        # star-only.
+        ContactingCreatorMailer.review_submitted(id).deliver_later(wait: SELLER_NOTIFICATION_DELAY)
       end
     end
 

@@ -2695,15 +2695,16 @@ describe ContactingCreatorMailer do
       end
     end
 
-    context "skip_if_message_present" do
-      it "does not send when the buyer's message has arrived, because the blank→present update already emailed it" do
-        mail = ContactingCreatorMailer.review_submitted(review.id, skip_if_message_present: true)
+    context "the seller's notification claim" do
+      it "does not send when another render already claimed the notification" do
+        RedisKey.product_review_seller_notified(review.id).then { |key| $redis.set(key, Time.current.to_i) }
+
+        mail = ContactingCreatorMailer.review_submitted(review.id)
         expect(mail.message).to be_a(ActionMailer::Base::NullMail)
       end
 
-      it "still sends for a review that stayed message-less" do
-        review.update!(message: nil)
-        mail = ContactingCreatorMailer.review_submitted(review.id, skip_if_message_present: true)
+      it "still sends the first time nothing has claimed it" do
+        mail = ContactingCreatorMailer.review_submitted(review.id)
         expect(mail.to).to eq([review.link.user.email])
       end
     end
