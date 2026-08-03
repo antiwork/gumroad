@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require Rails.root.join("db/migrate/20261206000029_add_recurring_payment_method_context_to_credit_cards").to_s
+require Rails.root.join("db/migrate/20261206170803_add_recurring_payment_method_context_to_credit_cards").to_s
 
 describe AddRecurringPaymentMethodContextToCreditCards do
   subject(:migration) { described_class.new }
