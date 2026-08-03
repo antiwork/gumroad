@@ -72,7 +72,8 @@ class Onetime::BackfillSubscriptionCurrentEmail
         .not_is_archived_original_subscription_purchase
         .joins(subscription: :user)
         .where(
-          "LOWER(users.email) != LOWER(purchases.email) OR (users.unconfirmed_email IS NOT NULL AND LOWER(users.unconfirmed_email) != LOWER(purchases.email))"
+          "purchases.email IS NULL OR LOWER(users.email) != LOWER(purchases.email) " \
+          "OR (users.unconfirmed_email IS NOT NULL AND LOWER(users.unconfirmed_email) != LOWER(purchases.email))"
         )
       relation = relation.where(seller_id:) if seller_id
       relation

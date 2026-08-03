@@ -96,6 +96,16 @@ RSpec.describe Onetime::BackfillSubscriptionCurrentEmail do
     expect(enqueued_ids).to eq([mine.id])
   end
 
+  it "reindexes a membership whose original purchase has a NULL indexed email" do
+    buyer = create(:user, email: "newname@newdomain.example")
+    purchase = create(:membership_purchase, link: product, seller:, purchaser: buyer)
+    purchase.subscription.update!(user: buyer)
+    purchase.update_column(:email, nil)
+
+    expect(described_class.process).to eq(scanned: 1, reindexed: 1)
+    expect(enqueued_ids).to eq([purchase.id])
+  end
+
   it "counts without enqueueing anything when run dry" do
     stale_membership(signup_email: "signup@oldmail.example", current_email: "newname@newdomain.example")
 
