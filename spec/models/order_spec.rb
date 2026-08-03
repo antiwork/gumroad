@@ -317,7 +317,6 @@ describe Order do
       end
     end
   end
-
   describe "#record_charge_outcome!" do
     let(:seller_1) { create(:user) }
     let(:seller_2) { create(:user) }
@@ -325,16 +324,23 @@ describe Order do
     let(:product_2) { create(:product, user: seller_2) }
     let(:order) { create(:order) }
 
+    # The write lives in RecordOrderChargeOutcomeJob, enqueued after the purchase's transaction
+    # commits. Draining it is what a real settle does.
+    def settle
+      yield
+      RecordOrderChargeOutcomeJob.drain
+    end
+
     context "when one seller group succeeded and another failed" do
       it "flags the order partially_successful" do
         succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
         failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
         order.purchases << succeeded << failed
 
-        succeeded.update_balance_and_mark_successful!
+        settle { succeeded.update_balance_and_mark_successful! }
         expect(order.reload).not_to be_partially_successful
 
-        Purchase::MarkFailedService.new(failed).perform
+        settle { Purchase::MarkFailedService.new(failed).perform }
 
         expect(order.reload).to be_partially_successful
       end
@@ -346,8 +352,10 @@ describe Order do
         two = create(:purchase_in_progress, link: product_2, seller: seller_2)
         order.purchases << one << two
 
-        one.update_balance_and_mark_successful!
-        two.update_balance_and_mark_successful!
+        settle do
+          one.update_balance_and_mark_successful!
+          two.update_balance_and_mark_successful!
+        end
 
         expect(order.reload).not_to be_partially_successful
       end
@@ -359,22 +367,24 @@ describe Order do
         two = create(:purchase_in_progress, link: product_2, seller: seller_2)
         order.purchases << one << two
 
-        Purchase::MarkFailedService.new(one).perform
-        Purchase::MarkFailedService.new(two).perform
+        settle do
+          Purchase::MarkFailedService.new(one).perform
+          Purchase::MarkFailedService.new(two).perform
+        end
 
         expect(order.reload).not_to be_partially_successful
       end
     end
 
     # An order mid-SCA is undecided, not partial: `in_progress` must count as neither side of the
-    # AND. These two pin each half of it — drop either `exists?` call and one of them reddens.
+    # AND. These two pin each half of it - drop either `exists?` call and one of them reddens.
     context "when a line item succeeded and its sibling is still in progress" do
       it "leaves the order unflagged" do
         succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
         create(:purchase_in_progress, link: product_2, seller: seller_2).tap { order.purchases << _1 }
         order.purchases << succeeded
 
-        succeeded.update_balance_and_mark_successful!
+        settle { succeeded.update_balance_and_mark_successful! }
 
         expect(order.reload).not_to be_partially_successful
       end
@@ -386,7 +396,7 @@ describe Order do
         create(:purchase_in_progress, link: product_2, seller: seller_2).tap { order.purchases << _1 }
         order.purchases << failed
 
-        Purchase::MarkFailedService.new(failed).perform
+        settle { Purchase::MarkFailedService.new(failed).perform }
 
         expect(order.reload).not_to be_partially_successful
       end
@@ -398,12 +408,12 @@ describe Order do
         late_item = create(:purchase_in_progress, link: product_2, seller: seller_2)
         order.purchases << succeeded << late_item
 
-        succeeded.update_balance_and_mark_successful!
+        settle { succeeded.update_balance_and_mark_successful! }
         expect(order.reload).not_to be_partially_successful
 
         # SCA confirmation, FailAbandonedPurchaseWorker and the processor-sync recovery paths all
         # resolve line items after the charge loop has returned.
-        Purchase::MarkFailedService.new(late_item).perform
+        settle { Purchase::MarkFailedService.new(late_item).perform }
 
         expect(order.reload).to be_partially_successful
       end
@@ -414,8 +424,8 @@ describe Order do
         succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
         failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
         order.purchases << succeeded << failed
-        succeeded.update_balance_and_mark_successful!
-        Purchase::MarkFailedService.new(failed).perform
+        settle { succeeded.update_balance_and_mark_successful! }
+        settle { Purchase::MarkFailedService.new(failed).perform }
         expect(order.reload).to be_partially_successful
 
         expect do
@@ -432,7 +442,7 @@ describe Order do
         failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
         order.purchases << test_item << failed
 
-        Purchase::MarkFailedService.new(failed).perform
+        settle { Purchase::MarkFailedService.new(failed).perform }
 
         expect(order.reload).not_to be_partially_successful
       end
@@ -445,17 +455,84 @@ describe Order do
         succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
         failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
         order.purchases << succeeded << failed
-        succeeded.update_balance_and_mark_successful!
+        settle { succeeded.update_balance_and_mark_successful! }
 
         stale = Order.find(order.id)
         Order.where(id: order.id).update_all("flags = flags | 1")
 
-        Purchase::MarkFailedService.new(failed).perform
+        settle { Purchase::MarkFailedService.new(failed).perform }
         stale.record_charge_outcome!
 
         order.reload
         expect(order).to be_partially_successful
         expect(order.flags & 1).to eq(1)
+      end
+    end
+
+    context "when the failing line item is a declined preorder authorization" do
+      # `preorder_authorization_failed` is its own terminal checkout failure, not `failed`, so a
+      # scope keyed on `failed` alone leaves this order unflagged.
+      it "flags the order partially_successful" do
+        succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        preorder = create(:purchase_in_progress, link: product_2, seller: seller_2, is_preorder_authorization: true)
+        order.purchases << succeeded << preorder
+
+        settle { succeeded.update_balance_and_mark_successful! }
+        expect(order.reload).not_to be_partially_successful
+
+        settle { preorder.mark_preorder_authorization_failed! }
+
+        expect(order.reload).to be_partially_successful
+      end
+    end
+
+    context "when the failing line item is an uncreatable giftee purchase" do
+      it "flags the order partially_successful" do
+        succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        giftee = create(:purchase_in_progress, link: product_2, seller: seller_2, is_gift_receiver_purchase: true)
+        order.purchases << succeeded << giftee
+
+        settle { succeeded.update_balance_and_mark_successful! }
+        settle { giftee.mark_gift_receiver_purchase_failed! }
+
+        expect(order.reload).to be_partially_successful
+      end
+    end
+
+    context "when the sibling transitions have not committed yet" do
+      # `after_transition` runs inside the purchase's own transaction, so two line items settling
+      # concurrently each read the other as still in progress and both skip the write. The
+      # reconciliation therefore has to happen after commit, from the job.
+      it "writes nothing mid-transaction and reconciles once the job runs" do
+        succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << succeeded << failed
+        RecordOrderChargeOutcomeJob.jobs.clear
+
+        succeeded.update_balance_and_mark_successful!
+        Purchase::MarkFailedService.new(failed).perform
+        expect(order.reload).not_to be_partially_successful
+
+        expect(RecordOrderChargeOutcomeJob.jobs.map { _1["args"] }).to include([order.id])
+        RecordOrderChargeOutcomeJob.drain
+
+        expect(order.reload).to be_partially_successful
+      end
+    end
+
+    context "when the same order is reconciled twice" do
+      it "is idempotent" do
+        succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << succeeded << failed
+        settle { succeeded.update_balance_and_mark_successful! }
+        settle { Purchase::MarkFailedService.new(failed).perform }
+
+        expect do
+          RecordOrderChargeOutcomeJob.new.perform(order.id)
+          RecordOrderChargeOutcomeJob.new.perform(order.id)
+        end.not_to change { order.reload.updated_at }
+        expect(order.reload).to be_partially_successful
       end
     end
   end

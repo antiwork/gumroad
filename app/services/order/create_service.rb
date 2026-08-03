@@ -22,7 +22,7 @@ class Order::CreateService
   # giftee purchase that could not be created — rather than only the one the current code paths
   # produce, so that a change elsewhere cannot quietly start destroying carts. See the comment at
   # the cart-cleanup branch in `perform` for which of these are reachable today.
-  CHECKOUT_FAILURE_STATES = %w[failed preorder_authorization_failed gift_receiver_purchase_failed].freeze
+  CHECKOUT_FAILURE_STATES = Purchase::CHECKOUT_FAILURE_STATES
 
   def initialize(params:, buyer: nil)
     @params = params

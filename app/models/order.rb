@@ -77,8 +77,12 @@ class Order < ApplicationRecord
   # It also keeps this derived bookkeeping out of `after_save :schedule_review_reminder!` — the
   # order row is otherwise saved only at creation, so an ordinary save from the charge path would
   # fire the reminder hook that the purchase-success transition owns.
+  #
+  # Read the sibling states from the DB, never from a loaded association: this runs from
+  # RecordOrderChargeOutcomeJob after each line item's own transaction has committed, and the
+  # sibling that settled concurrently is only visible on a fresh read.
   def record_charge_outcome!
-    partial = purchases.all_success_states.exists? && purchases.failed.exists?
+    partial = purchases.all_success_states.exists? && purchases.checkout_failed.exists?
     return if partially_successful? == partial
 
     bit = self.class.flag_mapping["flags"][:partially_successful]

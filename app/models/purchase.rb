@@ -58,6 +58,13 @@ class Purchase < ApplicationRecord
   ALL_SUCCESS_STATES_EXCEPT_PREORDER_AUTH_AND_GIFT = ALL_SUCCESS_STATES_EXCEPT_PREORDER_AUTH.dup - ["gift_receiver_purchase_successful"]
   COUNTS_REVIEWS_STATES = %w[successful gift_receiver_purchase_successful not_charged]
 
+  # Every terminal state a line item can reach at checkout time that means it bought nothing. The
+  # mirror of ALL_SUCCESS_STATES: an ordinary decline lands in `failed`, a declined preorder card
+  # authorization in `preorder_authorization_failed`, and an uncreatable giftee purchase in
+  # `gift_receiver_purchase_failed`. `preorder_concluded_unsuccessfully` is deliberately absent —
+  # it is reached when a preorder is released and charged, long after checkout.
+  CHECKOUT_FAILURE_STATES = %w[failed preorder_authorization_failed gift_receiver_purchase_failed].freeze
+
   ACTIVE_SALES_SEARCH_OPTIONS = {
     state: NON_GIFT_SUCCESS_STATES,
     exclude_refunded_except_subscriptions: true,
@@ -288,7 +295,6 @@ class Purchase < ApplicationRecord
                                                                                                                                  }
     after_transition any => :successful, :do => :block_fraudulent_free_purchases!
     after_transition any => %i[successful not_charged gift_receiver_purchase_successful], :do => :schedule_order_review_reminder
-    after_transition any => any, :do => :record_order_charge_outcome
     after_transition any => any, :do => :log_transition
 
     # normal purchase transitions:
@@ -401,6 +407,8 @@ class Purchase < ApplicationRecord
   after_commit :enqueue_update_sales_related_products_infos_job, if: -> (purchase) {
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
+
+  after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) { purchase.purchase_state_previously_changed? }
 
   after_create :mark_inventory_new_in_txn
   before_save :snapshot_inventory_pre_save_state
@@ -667,6 +675,7 @@ class Purchase < ApplicationRecord
   scope :preorder_authorization_failed, -> { where(purchase_state: "preorder_authorization_failed") }
   scope :not_charged, -> { where(purchase_state: "not_charged") }
   scope :all_success_states, -> { where(purchase_state: Purchase::ALL_SUCCESS_STATES) }
+  scope :checkout_failed, -> { where(purchase_state: Purchase::CHECKOUT_FAILURE_STATES) }
   scope :all_success_states_including_test, -> { where(purchase_state: Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST) }
   scope :all_success_states_except_preorder_auth_and_gift, -> { where(purchase_state: Purchase::ALL_SUCCESS_STATES_EXCEPT_PREORDER_AUTH_AND_GIFT) }
   scope :exclude_not_charged_except_free_trial, -> { where("purchases.purchase_state != 'not_charged' OR purchases.flags & ? != 0", Purchase.flag_mapping["flags"][:is_free_trial_purchase]) }
@@ -3834,16 +3843,14 @@ class Purchase < ApplicationRecord
     order&.schedule_review_reminder
   end
 
-  # Recorded from the purchase transition rather than from `Order::ChargeService`, because a line
-  # item can reach its terminal state long after the charge loop returns — SCA confirmation,
-  # FailAbandonedPurchaseWorker, and the processor-sync recovery paths all land here instead.
-  # `record_charge_outcome!` no-ops while any sibling is still in progress, so the last line item
-  # to settle is the one that writes the order's outcome.
-  def record_order_charge_outcome
-    order&.record_charge_outcome!
-  rescue => e
-    # Derived bookkeeping must never break a purchase transition.
-    Rails.logger.error("Error recording order charge outcome for purchase (#{id}):: #{e.class} => #{e.message}")
+  # Recorded from an after-commit job rather than from the state-machine transition, because
+  # `after_transition` runs inside the purchase's own transaction: two line items settling
+  # concurrently each read the other as still in progress and both skip the write, leaving a
+  # partial order permanently unflagged. The job re-reads sibling states after commit and is
+  # idempotent, so Sidekiq retries and repeat transitions are both safe.
+  def enqueue_record_order_charge_outcome
+    order_id = order_purchase&.order_id
+    RecordOrderChargeOutcomeJob.perform_async(order_id) if order_id.present?
   end
 
   def check_for_blocked_customer_emails
