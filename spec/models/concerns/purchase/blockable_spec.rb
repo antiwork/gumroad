@@ -719,6 +719,20 @@ describe Purchase::Blockable do
         expect(@observed.last.sum).to be <= 2
       end
 
+      # Without this the client falls back to the global Stripe.max_network_retries of 3, which would
+      # let one slow read spend the whole budget three times over.
+      it "does not retry a read, so a slow Stripe cannot multiply the budget" do
+        allow(Stripe::Charge).to receive(:retrieve) do |_params, opts|
+          @retries = opts[:client].config.max_network_retries
+          outcome_for(type: "issuer_declined", reason: "generic_decline")
+        end
+
+        refused_purchase.processor_rule_refusal
+
+        expect(@retries).to eq(0)
+        expect(Stripe.max_network_retries).to be > 0
+      end
+
       # stripe-ruby forwards any opts key outside Util::OPTS_USER_SPECIFIED as an HTTP header, so
       # passing the timeouts as per-request opts raised before the request was made and every scan
       # reported "could not read" — invisible to the other examples, which stub `retrieve` away.
