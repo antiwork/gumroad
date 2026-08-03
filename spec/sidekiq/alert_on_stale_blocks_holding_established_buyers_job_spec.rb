@@ -235,6 +235,39 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       expect(message).to include(email, "held")
       expect(block.reload.blocked_by).to eq(admin_id)
     end
+
+    # reject_disputed and linked_to_suspended_account both run once per batch, before any row's
+    # write — a chargeback recorded (or an account suspended) in that gap must still be caught at
+    # the write, not just at enumeration time.
+    it "does not clear a block whose buyer got a chargeback after the batch's dispute check ran" do
+      purchases = settled_purchases(established_count)
+      block = block_email
+
+      original_reload = PlatformBlock.instance_method(:reload)
+      allow_any_instance_of(PlatformBlock).to receive(:reload) do |instance|
+        purchases.first.update!(chargeback_date: Time.current) if instance.id == block.id
+        original_reload.bind_call(instance)
+      end
+
+      expect(message).to include(email, "held")
+      expect(block.reload.blocked_at).to be_present
+    end
+
+    it "does not clear a block whose account got suspended after the batch's suspension check ran" do
+      settled_purchases(established_count)
+      block = block_email
+
+      original_reload = PlatformBlock.instance_method(:reload)
+      allow_any_instance_of(PlatformBlock).to receive(:reload) do |instance|
+        if instance.id == block.id && !User.exists?(email:)
+          create(:user, email:, user_risk_state: "suspended_for_fraud")
+        end
+        original_reload.bind_call(instance)
+      end
+
+      expect(message).to include(email, "held")
+      expect(block.reload.blocked_at).to be_present
+    end
   end
 
   describe "sweeping the backlog across runs" do
