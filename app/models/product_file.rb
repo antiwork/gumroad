@@ -42,6 +42,9 @@ class ProductFile < ApplicationRecord
   before_validation :set_filegroup
   after_commit :schedule_file_analyze, on: :create
   after_commit :stamp_existing_pdfs_if_needed, on: :update
+  # Extension is the classifier's signal for Fonts (gumroad-private#1788); a file attach/replace
+  # is exactly when that signal can change, so reclassify here rather than only in the backfill.
+  after_commit :classify_product_taxonomy_attributes, on: [:create, :update], if: -> { link_id.present? }
 
   has_flags 1 => :is_transcoded_for_hls,
             2 => :is_linked_to_existing_file,
@@ -522,6 +525,10 @@ class ProductFile < ApplicationRecord
       signed_download_url_for_s3_key_and_filename(s3_key, s3_filename, is_video:)
     rescue Aws::S3::Errors::NotFound
       nil
+    end
+
+    def classify_product_taxonomy_attributes
+      Discover::TaxonomyAttributeClassifier.classify!(link)
     end
 
     def schedule_rename_in_storage

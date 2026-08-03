@@ -140,6 +140,7 @@ export type Product = {
   custom_receipt_text_max_length: number;
   custom_attributes: Attribute[];
   taxonomy_attribute_values: Record<string, TaxonomyAttributeValue>;
+  inferred_taxonomy_attribute_values: Record<string, TaxonomyAttributeValue>;
   file_attributes: Attribute[];
   max_purchase_count: number | null;
   quantity_enabled: boolean;
