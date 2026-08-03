@@ -6611,10 +6611,11 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
   # --- the outer category sweep (Product::VariantsUpdaterService) ---
   #
   # A whole grouping absent from the payload is swept after each submitted
-  # grouping is processed. Marking it deleted does NOT soft-delete its versions,
-  # so intent must be judged against the versions the sweep authorised removing.
-  # Judging it from the (empty) deleted set reported every sweep as
-  # omission-driven, including fully confirmed ones.
+  # grouping is processed. The sweep soft-deletes the grouping's versions with
+  # it (gumroad-private#1784 — leaving them alive under a deleted grouping is a
+  # state the editor cannot load or save back). Intent is still judged against
+  # the versions the sweep authorised removing: judging it from the deleted set
+  # would misreport a version an earlier save had already removed.
 
   test "a swept category whose children were all confirmed records intent as confirmed ids" do
     swept = create_variant_category(link: @product, title: "Swept")
@@ -6631,10 +6632,12 @@ class LinksControllerDeletionAuditTest < ActionController::TestCase
     assert_not_nil audit, "expected an audit for the swept category"
     assert_equal [swept.external_id], audit.deleted_variant_category_external_ids
     assert_equal [child.external_id], audit.affected_variant_external_ids
+    assert_equal [child.external_id], audit.deleted_variant_external_ids
     assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
     assert_equal 0, audit.unconfirmed_affected_variant_count
-    # The no-cascade behaviour is recorded rather than left to be discovered.
-    assert_equal 1, audit.alive_child_variant_count
+    # The sweep takes the versions with the grouping, so none stay alive under it.
+    assert_equal 0, audit.alive_child_variant_count
+    assert_equal true, child.reload.deleted?
   end
 
   test "a swept category with some children confirmed records intent as mixed" do
@@ -7212,9 +7215,8 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     assert_not other_category.reload.alive?
     assert kept.reload.alive?
-    # Sweeping a grouping does not cascade to its versions (VariantCategory's
-    # `has_many :variants` has no `dependent:` option), so aliveness alone cannot
-    # say WHICH route deleted the grouping. The audit row names it.
+    # Aliveness alone cannot say WHICH route deleted the grouping; the audit
+    # row names it.
     audit = ProductVariantDeletionAudit.where(route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT).last
     assert_not_nil audit, "the grouping should have been deleted by the named-grouping sweep"
     assert_includes audit.deleted_variant_category_external_ids, other_category.external_id
