@@ -3,12 +3,13 @@
 require "spec_helper"
 
 describe "filter parameter logging configuration" do
-  it "filters OAuth device flow bearer secrets" do
+  it "filters OAuth device flow and license bearer secrets" do
     filter = ActiveSupport::ParameterFilter.new(Rails.application.config.filter_parameters)
     parameters = {
       client_secret: "secret",
       device_code: "device-code",
       user_code: "user-code",
+      license_key: "license-key",
       visible: "safe",
       nested: { "client_secret" => "nested-secret" },
     }
@@ -16,6 +17,7 @@ describe "filter parameter logging configuration" do
       client_secret: "[FILTERED]",
       device_code: "[FILTERED]",
       user_code: "[FILTERED]",
+      license_key: "[FILTERED]",
       visible: "safe",
       nested: { "client_secret" => "[FILTERED]" },
     }

@@ -4355,6 +4355,7 @@ class PurchaseTest < ActiveSupport::TestCase
     create_failed_purchase(link: create_product)
     create_purchase(purchase_state: "test_successful")
     create_purchase(purchase_state: "gift_receiver_purchase_successful")
+    create_purchase(purchase_state: "successful", is_commission_completion_purchase: true)
     original_purchase = create_recurring_membership_purchase_with_original(is_original_subscription_purchase: false).original_purchase
     create_membership_purchase(is_archived_original_subscription_purchase: true)
     assert_equal [], Purchase.where.not(id: original_purchase.id).counts_towards_offer_code_uses.to_a
@@ -5045,6 +5046,17 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal 0, purchase.minimum_paid_price_cents
   end
 
+  test "#minimum_paid_price_cents applies a fixed order-level discount once across quantity" do
+    product = create_product(price_cents: 500)
+    offer_code = create_offer_code(products: [product], amount_cents: 100, once_per_cart: true)
+    purchase = create_purchase(link: product, offer_code:, quantity: 3, price_cents: 1400)
+    purchase.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                 once_per_cart: true, pre_discount_minimum_price_cents: 500)
+    offer_code.update!(once_per_cart: false)
+
+    assert_equal 1400, purchase.minimum_paid_price_cents
+  end
+
   test "#original_offer_code returns offer_code if the offer_code is not deleted" do
     product = create_product(price_cents: 500)
     offer_code = create_offer_code(products: [product], amount_cents: 400)
@@ -5084,6 +5096,22 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase = create_purchase(link: product, offer_code:, price_cents: 900)
     purchase.create_purchase_offer_code_discount(offer_code:, offer_code_amount: 50, offer_code_is_percent: true, pre_discount_minimum_price_cents: 1800)
     assert_equal 1800, purchase.displayed_price_cents_before_offer_code
+  end
+
+  test "#displayed_price_cents_before_offer_code excludes a tip from a cached once-per-cart discount" do
+    product = create_product(price_cents: 1000)
+    offer_code = create_offer_code(products: [product], amount_cents: 100, once_per_cart: true)
+    purchase = create_purchase(link: product, offer_code:, price_cents: 1100)
+    purchase.create_tip!(value_cents: 200)
+    purchase.create_purchase_offer_code_discount!(
+      offer_code:,
+      offer_code_amount: 100,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      pre_discount_minimum_price_cents: 1000
+    )
+
+    assert_equal 1000, purchase.displayed_price_cents_before_offer_code
   end
 
   test "#displayed_price_cents_before_offer_code with an offer code uses the offer code if the purchase is missing cached offer code details" do

@@ -61,6 +61,10 @@ module StripeMerchantAccountManager
   # for a reason we do not handle specifically. See record_account_rejection_note below.
   ACCOUNT_REJECTION_NOTE_PREFIX = "Stripe rejected payout setup"
 
+  # Marks the seller-facing half of an account-rejection breadcrumb, so the publish block can point
+  # at that specific note rather than whatever seller-visible payout note happens to be newest.
+  PAYOUT_SETUP_REJECTION_NOTE_FLAG = "payout_setup_rejection"
+
   # Prefix for the breadcrumb left when Stripe refuses the service agreement we derived from the
   # seller's legal-entity country. See update_account_attributes below.
   SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX = "Stripe rejected service agreement"
@@ -324,6 +328,60 @@ module StripeMerchantAccountManager
 
     !postal_code_invalid_error?(error) && !bank_account_invalid_error?(error)
   end
+
+  # Our own words for the fields Stripe names in `param`. Stripe's paths ("individual[id_number]")
+  # are not what the settings form calls them, and its messages quote the value it refused without
+  # ever stating the rule it applied.
+  PAYOUT_SETUP_REJECTED_FIELD_LABELS = {
+    "phone" => "phone number",
+    "support_phone" => "business phone number",
+    "id_number" => "Tax ID",
+    "tax_id" => "business tax ID",
+    "dob" => "date of birth",
+    "first_name" => "first name",
+    "last_name" => "last name",
+  }.freeze
+  private_constant :PAYOUT_SETUP_REJECTED_FIELD_LABELS
+
+  # Seller-facing copy for the payout-setup rejections that have no dedicated lane of their own —
+  # everything undiagnosed_stripe_rejection? covers. Without it these fall through to Stripe's raw
+  # message or nothing at all, and a seller ends up with a saved-looking settings page, no payout
+  # rail, and a publish button that blames a missing payment method (gumroad-private#1777).
+  #
+  # nil for the rejections that are already handled specifically, so a caller can fall through to
+  # the postal-code and bank-directory branches without ordering the checks by hand.
+  def self.payout_setup_rejection_seller_message(error, user)
+    return unless undiagnosed_stripe_rejection?(error)
+
+    field = PAYOUT_SETUP_REJECTED_FIELD_LABELS[stripe_rejected_field(error)]
+    [
+      field ? "Our payment partner couldn't accept the #{field} you entered." : "Our payment partner couldn't accept the details you entered.",
+      us_individual_phone_rule_note(error, user),
+      "Please correct it here and save again — until it goes through you have no payout method, which also stops you publishing new products.",
+    ].compact.join(" ")
+  end
+
+  # Stripe requires the representative's phone to be a US number on a US individual or
+  # sole-proprietorship account, and its rejection quotes the number without saying so. Some
+  # foreign landlines are accepted, so a seller cannot infer the rule from a retry either.
+  def self.us_individual_phone_rule_note(error, user)
+    return unless phone_number_invalid_error?(error)
+
+    compliance_info = user&.alive_user_compliance_info
+    return unless compliance_info&.legal_entity_country_code == Compliance::Countries::USA.alpha2
+    # legal_entity_business_type falls back to sole proprietorship for a non-business account, so
+    # this one comparison covers both the individual and the sole-prop cases Stripe applies it to.
+    return unless compliance_info.legal_entity_business_type == UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP
+
+    "For a US individual or sole-proprietorship account it has to be a US number, even if you live elsewhere."
+  end
+  private_class_method :us_individual_phone_rule_note
+
+  def self.stripe_rejected_field(error)
+    param = error.respond_to?(:param) ? error.param.to_s : ""
+    param.split("[").last.to_s.delete("]").presence
+  end
+  private_class_method :stripe_rejected_field
 
   def self.delete_account(merchant_account)
     stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
@@ -1638,8 +1696,10 @@ module StripeMerchantAccountManager
   # recorded. `param` is the field name Stripe objected to; that single value is normally
   # enough to identify the problem without reproducing the failure.
   #
-  # Not seller-visible: the seller already saw Stripe's message, and the raw parameter path
-  # is internal vocabulary that would confuse more than it helps.
+  # Seller-visible, so a seller who navigates away from the inline error still has a way to find
+  # out. It carries our own wording rather than the raw parameter path: these rejections are not
+  # auto-retryable (RetryStripeRejectedPayoutSetupsJob only picks up the postal-code and bank-sync
+  # prefixes), so the seller has to act, and previously the one durable record was support-only.
   def self.record_account_rejection_note(user, error)
     return if user.blank?
 
@@ -1651,6 +1711,11 @@ module StripeMerchantAccountManager
     user.add_payout_note(
       content: "#{ACCOUNT_REJECTION_NOTE_PREFIX}: #{details.join(' ')} — #{error.message.to_s.truncate(300)}",
       seller_visible: false
+    )
+    user.add_payout_note(
+      content: payout_setup_rejection_seller_message(error, user),
+      seller_visible: true,
+      json_data: { PAYOUT_SETUP_REJECTION_NOTE_FLAG => true }
     )
   rescue => e
     # A missing breadcrumb must never turn into a second failure on top of the original

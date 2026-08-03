@@ -1204,6 +1204,67 @@ describe Order::PreparePaymentIntentService, :vcr do
         Feature.deactivate_user(:checkout_local_method_klarna, seller)
       end
 
+      it "reconstructs the full quantity total for a once-per-cart fixed discount" do
+        offer_code = create(:offer_code, user: seller, products: [product], amount_cents: 1_00, once_per_cart: true)
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: product.unique_permalink, price_cents: 20_00,
+                         perceived_price_cents: 19_00, quantity: 2,
+                         discount_code: offer_code.code }]
+        }.merge(common_params)
+        order, order_responses = Order::CreateService.new(params:).perform
+        expect(order_responses.values).to all(include(success: true))
+
+        service = described_class.new(order:, params:, confirmation_token: "unused")
+
+        expect(service.send(:klarna_window_price_cents, order.purchases.first)).to eq(20_00)
+      end
+
+      it "excludes the tip from the submitted Klarna window total" do
+        seller.update!(tipping_enabled: true)
+        offer_code = create(:offer_code, user: seller, products: [product], amount_cents: 1_00, once_per_cart: true)
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: product.unique_permalink, price_cents: 21_00,
+                         perceived_price_cents: 20_00, tip_cents: 1_00, quantity: 2,
+                         discount_code: offer_code.code }]
+        }.merge(common_params)
+        order, order_responses = Order::CreateService.new(params:).perform
+        expect(order_responses.values).to all(include(success: true))
+
+        service = described_class.new(order:, params:, confirmation_token: "unused")
+
+        expect(service.send(:klarna_window_price_cents, order.purchases.first)).to eq(20_00)
+      end
+
+      it "uses the submitted total when a once-per-cart discount is clamped" do
+        offer_code = create(:offer_code, user: seller, products: [product], amount_cents: 20_00, once_per_cart: true)
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: product.unique_permalink, price_cents: 10_00,
+                         perceived_price_cents: 0, quantity: 1, discount_code: offer_code.code }]
+        }.merge(common_params)
+        order, order_responses = Order::CreateService.new(params:).perform
+        expect(order_responses.values).to all(include(success: true))
+
+        service = described_class.new(order:, params:, confirmation_token: "unused")
+
+        expect(service.send(:klarna_window_price_cents, order.purchases.first)).to eq(10_00)
+      end
+
+      it "uses the saved price when an earlier duplicate line failed" do
+        offer_code = create(:offer_code, user: seller, products: [product], amount_cents: 1_00, once_per_cart: true)
+        params = {
+          line_items: [{ uid: "successful", permalink: product.unique_permalink, price_cents: 20_00,
+                         perceived_price_cents: 19_00, quantity: 2,
+                         discount_code: offer_code.code }]
+        }.merge(common_params)
+        order, order_responses = Order::CreateService.new(params:).perform
+        expect(order_responses.values).to all(include(success: true))
+        params[:line_items].unshift(uid: "failed", permalink: product.unique_permalink, price_cents: 10_00)
+
+        service = described_class.new(order:, params:, confirmation_token: "unused")
+
+        expect(service.send(:klarna_window_price_cents, order.purchases.first)).to eq(20_00)
+      end
+
       # PWYW + offer-code regression: the presenter's Klarna window input is the buyer's
       # CHOSEN pre-discount amount (cart_product.price), so prepare must reconstruct that
       # same basis. displayed_price_cents_before_offer_code would instead return the

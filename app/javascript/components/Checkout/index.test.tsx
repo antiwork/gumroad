@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -178,6 +178,76 @@ const renderCheckout = (state: State, cart: CartState) =>
   );
 
 afterEach(cleanup);
+
+describe("Checkout cart editing", () => {
+  it("previews each option with its candidate cart-discount allocation", () => {
+    const basicOption: CartProduct["options"][number] = {
+      id: "basic",
+      name: "Basic",
+      quantity_left: null,
+      description: "",
+      price_difference_cents: 0,
+      recurrence_price_values: null,
+      is_pwyw: false,
+      duration_in_minutes: null,
+      upsell_offered_variant_id: null,
+    };
+    const premiumOption = { ...basicOption, id: "premium", name: "Premium", price_difference_cents: 1_000 };
+    const firstProduct = cartProduct({
+      id: "first-product",
+      permalink: "first",
+      name: "First",
+      options: [basicOption, premiumOption],
+      has_offer_codes: true,
+    });
+    const secondProduct = cartProduct({
+      id: "second-product",
+      permalink: "second",
+      name: "Second",
+      has_offer_codes: true,
+    });
+    const discount = {
+      type: "fixed" as const,
+      cents: 1_500,
+      once_per_cart: true,
+      once_per_cart_id: "cart-discount",
+      once_per_cart_amount_cents: 1_500,
+      product_ids: null,
+      expires_at: null,
+      minimum_quantity: null,
+      duration_in_billing_cycles: null,
+      minimum_amount_cents: null,
+    };
+    const cart: CartState = {
+      items: [cartItem({ product: firstProduct, option_id: basicOption.id }), cartItem({ product: secondProduct })],
+      discountCodes: [{ code: "SAVE", products: { first: discount, second: discount }, fromUrl: false }],
+    };
+    const state = buildState({
+      products: [stateProduct({ permalink: "first", price: 0 }), stateProduct({ permalink: "second", price: 500 })],
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: 500,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    const view = renderCheckout(state, cart);
+    const [editButton] = view.getAllByText("Edit");
+    if (!editButton) throw new Error("Expected an edit button");
+    fireEvent.click(editButton);
+
+    const premium = view.getByRole("radio", { name: "Premium" });
+    expect(premium.textContent).toContain("$5");
+    expect(premium.textContent).not.toContain("$10");
+  });
+});
 
 describe("Checkout buyer-currency line amounts", () => {
   // The PR's odd-cent example: 334 + 667 cents at a 1.25 CAD rate. Rounding each line in

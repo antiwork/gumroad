@@ -3,6 +3,16 @@
 require "spec_helper"
 
 describe Purchase::Risk do
+  describe "BLOCKED_IDENTIFIER_ERROR" do
+    # The two blocks it covers can sit on an identifier the payer cannot change from the checkout
+    # they are looking at (an account IP, or an email block written beside a browser block), so any
+    # self-service instruction here is a loop with no exit. Both prior wordings were one.
+    it "routes the payer to support and suggests nothing they could change themselves" do
+      expect(Purchase::Risk::BLOCKED_IDENTIFIER_ERROR).to include("support@gumroad.com")
+      expect(Purchase::Risk::BLOCKED_IDENTIFIER_ERROR).to_not match(/browser|internet connection|different card|another/i)
+    end
+  end
+
   describe "check purchase for previous chargebacks" do
     it "returns errors if the email has charged-back" do
       product = create(:product)
@@ -230,7 +240,8 @@ describe Purchase::Risk do
       bad_purchase = build(:purchase, link: @product, ip_address: "192.378.12.1")
       bad_purchase.send(:check_for_fraud)
       expect(bad_purchase.errors.empty?).to be(false)
-      expect(bad_purchase.errors.full_messages).to eq ["Your card was not charged. Please try again on a different browser and/or internet connection."]
+      expect(bad_purchase.error_code).to eq PurchaseErrorCode::BLOCKED_IP_ADDRESS
+      expect(bad_purchase.errors.full_messages).to eq [Purchase::Risk::BLOCKED_IDENTIFIER_ERROR]
     end
 
     it "returns errors if the buyer browser_guid has been blocked" do
@@ -240,14 +251,15 @@ describe Purchase::Risk do
       bad_purchase = build(:purchase, link: @product, browser_guid:)
       bad_purchase.send(:check_for_fraud)
       expect(bad_purchase.errors.empty?).to be(false)
-      expect(bad_purchase.errors.full_messages).to eq ["Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."]
+      expect(bad_purchase.error_code).to eq PurchaseErrorCode::BLOCKED_BROWSER_GUID
+      expect(bad_purchase.errors.full_messages).to eq [Purchase::Risk::BLOCKED_IDENTIFIER_ERROR]
     end
 
-    it "returns errors if the seller ip_address has been blocked" do
+    it "does not return errors if only the seller's account_created_ip has been blocked" do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "123.121.11.1", expires_in: 1.hour)
-      bad_purchase = build(:purchase, link: @product, seller: @user)
-      bad_purchase.send(:check_for_fraud)
-      expect(bad_purchase.errors.empty?).to be(false)
+      purchase = build(:purchase, link: @product, seller: @user)
+      purchase.send(:check_for_fraud)
+      expect(purchase.errors.empty?).to be(true)
     end
 
     describe "ip_address check" do
@@ -266,7 +278,7 @@ describe Purchase::Risk do
         end.to change { purchase.error_code }
           .from(nil).to(PurchaseErrorCode::BLOCKED_IP_ADDRESS)
           .and change { purchase.errors.empty? }.from(true).to(false)
-          .and change { purchase.errors.full_messages }.from([]).to(["Your card was not charged. Please try again on a different browser and/or internet connection."])
+          .and change { purchase.errors.full_messages }.from([]).to([Purchase::Risk::BLOCKED_IDENTIFIER_ERROR])
       end
 
       it "blocks even with purchase_check_for_fraudulent_ips explicitly off, because the flag no longer gates the check" do
@@ -282,7 +294,6 @@ describe Purchase::Risk do
       it "returns error when a blocked buyer ip_address lands in the seller's slots because the seller has none" do
         seller = create(:user, current_sign_in_ip: nil, last_sign_in_ip: nil, account_created_ip: nil)
         purchase = build(:purchase, link: create(:product, user: seller), seller:, ip_address: blocked_ip_address)
-        allow(seller).to receive(:compliant?).and_return(true)
 
         expect do
           purchase.check_for_fraud
@@ -290,13 +301,36 @@ describe Purchase::Risk do
           .from(nil).to(PurchaseErrorCode::BLOCKED_IP_ADDRESS)
       end
 
-      it "still lets a compliant seller sell when it is the seller's own ip_address that is blocked" do
-        seller = create(:user, current_sign_in_ip: blocked_ip_address)
-        purchase = build(:purchase, link: create(:product, user: seller), seller:)
-        allow(seller).to receive(:compliant?).and_return(true)
+      %w[compliant not_reviewed].each do |risk_state|
+        it "lets a #{risk_state} seller sell when it is the seller's own ip_address that is blocked" do
+          seller = create(:user, current_sign_in_ip: blocked_ip_address, user_risk_state: risk_state)
+          purchase = build(:purchase, link: create(:product, user: seller), seller:)
 
-        purchase.check_for_fraud
-        expect(purchase.error_code).to be_nil
+          purchase.check_for_fraud
+          expect(purchase.error_code).to be_nil
+        end
+      end
+
+      it "still blocks the buyer's own blocked ip_address when the seller's is blocked too" do
+        buyer_ip_address = "198.51.100.7"
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: buyer_ip_address, expires_in: 1.hour)
+        seller = create(:user, current_sign_in_ip: blocked_ip_address, user_risk_state: "compliant")
+        purchase = build(:purchase, link: create(:product, user: seller), seller:, ip_address: buyer_ip_address)
+
+        expect do
+          purchase.check_for_fraud
+        end.to change { purchase.error_code }
+          .from(nil).to(PurchaseErrorCode::BLOCKED_IP_ADDRESS)
+      end
+
+      it "still blocks a buyer sitting on a blocked ip_address the seller also uses" do
+        seller = create(:user, current_sign_in_ip: blocked_ip_address, user_risk_state: "compliant")
+        purchase = build(:purchase, link: create(:product, user: seller), seller:, ip_address: blocked_ip_address)
+
+        expect do
+          purchase.check_for_fraud
+        end.to change { purchase.error_code }
+          .from(nil).to(PurchaseErrorCode::BLOCKED_IP_ADDRESS)
       end
 
       describe "subscription purchase" do
@@ -307,7 +341,7 @@ describe Purchase::Risk do
             purchase = build(:membership_purchase, is_original_subscription_purchase: true, ip_address: blocked_ip_address, subscription:)
             purchase.send(:check_for_fraud)
             expect(purchase.errors.empty?).to be(false)
-            expect(purchase.errors.full_messages).to eq ["Your card was not charged. Please try again on a different browser and/or internet connection."]
+            expect(purchase.errors.full_messages).to eq [Purchase::Risk::BLOCKED_IDENTIFIER_ERROR]
           end
         end
 
@@ -333,7 +367,7 @@ describe Purchase::Risk do
       end
     end
 
-    context "when the creator's ip_address has been blocked but the seller is compliant" do
+    context "when the creator's ip_address has been blocked" do
       let(:seller) { @product.user }
 
       before do

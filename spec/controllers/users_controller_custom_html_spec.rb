@@ -42,6 +42,13 @@ describe UsersController, :vcr, type: :controller do
       expect(response.body).to include("STORE_HOSTNAMES")
     end
 
+    it "embeds the trusted products-wrapper listener with the landing products endpoint" do
+      get :show
+      expect(response.body).to include("data-gumroad-products-wrapper")
+      expect(response.body).to include("gumroad:products:result")
+      expect(response.body).to include("/landing/products")
+    end
+
     it "falls back to the default profile page when custom_html is blank" do
       seller.update!(custom_html: nil)
 
@@ -129,6 +136,13 @@ describe UsersController, :vcr, type: :controller do
       expect(response.body).to include("gumroad:navigate")
     end
 
+    it "embeds the products bridge in the iframe document" do
+      get :landing_iframe_content
+
+      expect(response.body).to include("data-gumroad-products-bridge")
+      expect(response.body).to include("gumroad:products")
+    end
+
     it "resolves the seller by username on the root domain" do
       @request.host = "app.test.gumroad.com"
       get :landing_iframe_content, params: { username: seller.username }
@@ -171,6 +185,130 @@ describe UsersController, :vcr, type: :controller do
 
         expect(response.body).not_to include("gumroad:profile-fields")
       end
+    end
+  end
+
+  describe "GET landing_products" do
+    def create_products(count)
+      # Deterministic distinct created_at values so ordering assertions can't flake on ties.
+      count.times.map do |i|
+        create(:product, user: seller, name: "Product #{i}", created_at: Time.utc(2026, 1, 1) + i.minutes)
+      end
+    end
+
+    it "returns the requested slice with the catalogue total, newest first" do
+      products = create_products(5)
+
+      get :landing_products, params: { offset: 2, limit: 2 }
+
+      expect(response).to be_successful
+      body = response.parsed_body
+      expect(body["success"]).to be(true)
+      expect(body["offset"]).to eq(2)
+      expect(body["limit"]).to eq(2)
+      expect(body["products_total"]).to eq(5)
+      expect(body["products"].map { |p| p["name"] }).to eq([products[2].name, products[1].name])
+    end
+
+    it "slices in the same order as the injected page 1 payload" do
+      create_products(4)
+
+      page_one = Pages::ProfileData.build(seller.reload)[:products].map { |p| p[:name] }
+      get :landing_products, params: { offset: 2, limit: 2 }
+
+      expect(response.parsed_body["products"].map { |p| p["name"] }).to eq(page_one[2..3])
+    end
+
+    it "slices the prices payload in lockstep when the page references prices" do
+      seller.update!(custom_html: %(<div id="app"></div><script>document.getElementById("gumroad-prices")</script>))
+      products = create_products(3)
+
+      get :landing_products, params: { offset: 1, limit: 1 }
+
+      prices = response.parsed_body["prices"]
+      expect(prices.keys).to eq([products[1].general_permalink])
+    end
+
+    it "omits the prices build for pages that reference no price" do
+      create_products(1)
+      expect(Pages::ProductPrices).not_to receive(:build)
+
+      get :landing_products, params: { offset: 0, limit: 1 }
+
+      expect(response.parsed_body["prices"]).to eq({})
+    end
+
+    it "clamps the limit to MAX_ITEMS" do
+      create_products(1)
+
+      get :landing_products, params: { offset: 0, limit: 5000 }
+
+      expect(response.parsed_body["limit"]).to eq(Pages::ProfileData::MAX_ITEMS)
+    end
+
+    it "rejects a non-integer or negative offset/limit" do
+      aggregate_failures do
+        [{ offset: -1, limit: 10 }, { offset: "abc", limit: 10 }, { offset: 0, limit: 0 },
+         { offset: 0, limit: "abc" }, { offset: 1.5, limit: 10 }, { limit: 10 }, { offset: 0 }].each do |bad_params|
+          get :landing_products, params: bad_params
+          expect(response).to have_http_status(:bad_request), "expected 400 for #{bad_params.inspect}"
+          expect(response.parsed_body["success"]).to be(false)
+        end
+      end
+    end
+
+    it "rejects an offset past the end of the catalogue, so a huge one cannot page the table" do
+      create_products(2)
+
+      aggregate_failures do
+        # The last valid page starts at the total: it is legitimately empty, and a page asking for
+        # it is how a client confirms it has read everything.
+        get :landing_products, params: { offset: 2, limit: 2 }
+        expect(response).to have_http_status(:ok)
+
+        [3, 10_000, 10**12].each do |offset|
+          get :landing_products, params: { offset:, limit: 2 }
+          expect(response).to have_http_status(:bad_request), "expected 400 for offset #{offset}"
+          expect(response.parsed_body["success"]).to be(false)
+        end
+      end
+    end
+
+    it "is never cacheable by shared caches — the prices half derives from the visitor's IP" do
+      seller.update!(custom_html: %(<div data-gumroad-product="x"></div>))
+      create_products(1)
+
+      get :landing_products, params: { offset: 0, limit: 1 }
+
+      expect(response.headers["Cache-Control"]).to include("private")
+      expect(response.headers["Cache-Control"]).to include("no-store")
+    end
+
+    it "404s when the profile has no custom_html" do
+      seller.update!(custom_html: nil)
+
+      get :landing_products, params: { offset: 0, limit: 1 }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    # A slice served by a lagging replica can disagree with the first page the wrapper just
+    # rendered, so this pins to primary before the seller lookup like the embed does.
+    it "sticks to primary before fetching the seller" do
+      steps = []
+      allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
+        steps << :stick_to_primary
+        method.call(*args)
+      end
+      allow(controller).to receive(:set_user_and_custom_domain_config).and_wrap_original do |method, *args|
+        steps << :fetch_user
+        method.call(*args)
+      end
+
+      get :landing_products, params: { offset: 0, limit: 1 }
+
+      expect(response).to be_successful
+      expect(steps.index(:stick_to_primary)).to be < steps.index(:fetch_user)
     end
   end
 

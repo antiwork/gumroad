@@ -926,6 +926,7 @@ describe CheckoutPresenter do
                                  recurrence: "monthly",
                                  quantity: 1,
                                  price: @original_price_cents,
+                                 pre_discount_price: @original_price_cents,
                                  prorated_discount_price_cents: @subscription.prorated_discount_price_cents,
                                  alive: false,
                                  pending_cancellation: true,
@@ -1125,6 +1126,106 @@ describe CheckoutPresenter do
 
           expect(current_subscription_price).to eq @pwyw_price_cents
           expect(displayed_tier_price).to eq @original_price_cents
+        end
+
+        it "keeps the buyer's chosen price before a fixed once-per-cart discount",
+           vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/membership_for_PWYW_tier/returns_the_correct_current_subscription_price_and_tier_displayed_price" } do
+          offer_code = create(:offer_code, user: @product.user, products: [@product], amount_cents: 100, once_per_cart: true)
+          @purchase.update!(offer_code:, displayed_price_cents: @pwyw_price_cents - offer_code.amount_cents)
+          @purchase.create_purchase_offer_code_discount!(
+            offer_code:,
+            offer_code_amount: offer_code.amount_cents,
+            offer_code_is_percent: false,
+            once_per_cart: true,
+            pre_discount_minimum_price_cents: @original_price_cents,
+            pre_discount_displayed_price_cents: @pwyw_price_cents
+          )
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+          expect(result[:subscription]).to include(
+            price: @pwyw_price_cents - offer_code.amount_cents,
+            pre_discount_price: @pwyw_price_cents
+          )
+        end
+
+        it "keeps the reconstructed PWYW price when a fixed renewal discount replaces a cached percentage discount",
+           vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/membership_for_PWYW_tier/returns_the_correct_current_subscription_price_and_tier_displayed_price" } do
+          tiered_offer_code = create(:tiered_offer_code, user: @product.user, products: [@product], code: "tiered")
+          buyer = create(:user)
+          @purchase.update!(offer_code: tiered_offer_code, displayed_price_cents: @pwyw_price_cents, purchaser: buyer, email: buyer.email)
+          @purchase.create_purchase_offer_code_discount!(
+            offer_code: tiered_offer_code,
+            offer_code_amount: 50,
+            offer_code_is_percent: true,
+            pre_discount_minimum_price_cents: @original_price_cents
+          )
+          fixed_offer_code = create(:offer_code, :for_existing_customers, user: @product.user, products: [@product], code: "fixed", amount_cents: 200, once_per_cart: true)
+
+          result = described_class.new(logged_in_user: buyer, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+          expect(result[:subscription]).to include(
+            discount: hash_including(type: "fixed", cents: fixed_offer_code.amount_cents, once_per_cart: true),
+            price: 2 * @pwyw_price_cents - fixed_offer_code.amount_cents,
+            pre_discount_price: 2 * @pwyw_price_cents
+          )
+        end
+
+        it "keeps installment management at the next installment price",
+           vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/membership_for_PWYW_tier/returns_the_correct_current_subscription_price_and_tier_displayed_price" } do
+          offer_code = create(:offer_code, user: @product.user, products: [@product], amount_cents: 100, once_per_cart: true)
+          @purchase.update!(offer_code:, displayed_price_cents: @pwyw_price_cents - offer_code.amount_cents)
+          @purchase.create_purchase_offer_code_discount!(
+            offer_code:,
+            offer_code_amount: offer_code.amount_cents,
+            offer_code_is_percent: false,
+            once_per_cart: true,
+            pre_discount_minimum_price_cents: @original_price_cents,
+            pre_discount_displayed_price_cents: @pwyw_price_cents
+          )
+          allow(@subscription).to receive(:is_installment_plan).and_return(true)
+          allow(@subscription).to receive(:current_subscription_price_cents).and_return(300)
+          allow(@subscription).to receive(:recurrence).and_return("monthly")
+          allow(@subscription).to receive(:has_fixed_length?).and_return(false)
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
+
+          expect(result[:subscription]).to include(price: 300, pre_discount_price: 300)
+        end
+
+        it "keeps the chosen PWYW price when a fixed once-per-cart discount reaches exactly zero",
+           vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/membership_for_PWYW_tier/returns_the_correct_current_subscription_price_and_tier_displayed_price" } do
+          offer_code = create(:offer_code, user: @product.user, products: [@product], amount_cents: @pwyw_price_cents, once_per_cart: true)
+          @purchase.update!(offer_code:, displayed_price_cents: 0)
+          @purchase.create_purchase_offer_code_discount!(
+            offer_code:,
+            offer_code_amount: offer_code.amount_cents,
+            offer_code_is_percent: false,
+            once_per_cart: true,
+            pre_discount_minimum_price_cents: @original_price_cents,
+            pre_discount_displayed_price_cents: @pwyw_price_cents
+          )
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+          expect(result[:subscription]).to include(price: 0, pre_discount_price: @pwyw_price_cents)
+        end
+
+        it "falls back to the snapshotted floor when a fixed once-per-cart discount was clamped",
+           vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/membership_for_PWYW_tier/returns_the_correct_current_subscription_price_and_tier_displayed_price" } do
+          offer_code = create(:offer_code, user: @product.user, products: [@product], amount_cents: @pwyw_price_cents + 100, once_per_cart: true)
+          @purchase.update!(offer_code:, displayed_price_cents: 0)
+          @purchase.create_purchase_offer_code_discount!(
+            offer_code:,
+            offer_code_amount: offer_code.amount_cents,
+            offer_code_is_percent: false,
+            once_per_cart: true,
+            pre_discount_minimum_price_cents: @original_price_cents
+          )
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+          expect(result[:subscription]).to include(price: 0, pre_discount_price: @original_price_cents)
         end
 
         it "returns the tier price when the tier price is lower than the current plan price" do

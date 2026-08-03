@@ -5,6 +5,12 @@ import typia from "typia";
 
 import { confirmLineItem } from "$app/data/purchase";
 import { updateSubscription } from "$app/data/subscription";
+import {
+  initialSubscriptionUnitPrice,
+  selectedSubscriptionTotal,
+  subscriptionPWYWMinimumUnitPrice,
+  withOncePerCartMinimum,
+} from "$app/pages/Subscriptions/price";
 import { SavedCreditCard } from "$app/parsers/card";
 import { Discount } from "$app/parsers/checkout";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
@@ -64,6 +70,7 @@ type Props = {
     recurrence: RecurrenceId;
     option_id: string | null;
     price: number;
+    pre_discount_price: number;
     quantity: number;
     alive: boolean;
     pending_cancellation: boolean;
@@ -117,19 +124,24 @@ export default function SubscriptionsManage() {
   const restartable = !subscription.alive || subscription.pending_cancellation;
   const isResubscribing =
     !subscription.alive && !subscription.pending_cancellation && !subscription.is_installment_plan;
+  const pricingDiscount = subscription.is_installment_plan ? null : subscription.discount;
   const initialSelection = {
     recurrence: subscription.recurrence,
     rent: false,
     optionId: subscription.option_id,
     quantity: subscription.quantity,
-    price: { value: subscription.price / subscription.quantity, error: false },
+    price: {
+      value: initialSubscriptionUnitPrice(subscription),
+      error: false,
+    },
     callStartTime: null,
     payInInstallments: subscription.is_installment_plan,
   };
   const [selection, setSelection] = React.useState<PriceSelection>(() => initialSelection);
   const currentOption = product.options.find(({ id }) => id === subscription.option_id);
+  const currentSubscriptionUnitPrice = initialSubscriptionUnitPrice(subscription);
   const hasPriceChanged =
-    Math.round(subscription.price / subscription.quantity) !==
+    Math.round(currentSubscriptionUnitPrice) !==
     currentOption?.recurrence_price_values?.[subscription.recurrence]?.price_cents;
   const configurationSelectorProduct: ConfigurationSelectorProduct = {
     ...product,
@@ -141,7 +153,7 @@ export default function SubscriptionsManage() {
               hasPriceChanged && !isResubscribing
                 ? `Your current plan is ${formatPriceCentsWithCurrencySymbol(
                     product.currency_code,
-                    Math.round(subscription.price / subscription.quantity),
+                    Math.round(currentSubscriptionUnitPrice),
                     { symbolFormat: "long" },
                   )} ${recurrenceLabels[subscription.recurrence]}, based on previous pricing. This price will remain the same when updating your payment method.`
                 : undefined,
@@ -158,9 +170,9 @@ export default function SubscriptionsManage() {
     ppp_details: null,
   };
 
-  const { isPWYW, discountedPriceCents } = applySelection(
+  const { isPWYW, priceCents, discountedPriceCents, discountedTotalCents } = applySelection(
     configurationSelectorProduct,
-    subscription.discount,
+    pricingDiscount,
     selection,
   );
   const isQuantityChanged = selection.quantity !== subscription.quantity;
@@ -168,9 +180,20 @@ export default function SubscriptionsManage() {
   const noChangesToNonPriceOptions =
     selection.optionId === subscription.option_id && !isRecurrenceChanged && !isQuantityChanged && !isResubscribing;
 
-  const price =
-    (isPWYW || noChangesToNonPriceOptions ? (selection.price.value ?? discountedPriceCents) : discountedPriceCents) *
-    selection.quantity;
+  const selectedTotalPrice =
+    selection.price.value === null
+      ? discountedTotalCents
+      : selectedSubscriptionTotal({
+          unitPrice: selection.price.value,
+          quantity: selection.quantity,
+          discount: pricingDiscount,
+          minimumPrice: getMinPriceCents(product.currency_code),
+        });
+  const price = withOncePerCartMinimum(
+    isPWYW || noChangesToNonPriceOptions ? selectedTotalPrice : discountedTotalCents,
+    pricingDiscount,
+    getMinPriceCents(product.currency_code),
+  );
   const requirePayment = price > 0;
   const noChangesToCurrentPlan = noChangesToNonPriceOptions && (!isPWYW || price === subscription.price);
   let amountDueToday =
@@ -430,7 +453,8 @@ export default function SubscriptionsManage() {
             selection={selection}
             setSelection={setSelection}
             initialSelection={initialSelection}
-            discount={subscription.discount}
+            discount={pricingDiscount}
+            pwywMinimumPriceCents={subscriptionPWYWMinimumUnitPrice(priceCents, discountedPriceCents, pricingDiscount)}
           />
         </CardContent>
       ) : null}

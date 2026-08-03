@@ -4,12 +4,14 @@
 class Order::FinalizeConfirmedChargeService
   include Order::ResponseHelpers
 
-  attr_reader :charge_intent
+  attr_reader :charge_intent, :offer_codes
 
-  def initialize(order:, charge_intent: nil)
+  def initialize(order:, charge_intent: nil, retry_offer_codes: nil)
     @order = order
     @charge_intent = charge_intent
     @responses = {}
+    @offer_codes = []
+    @retry_offer_code_candidates = Order::OfferCodeRecoveryService.sanitize_retry_candidates(retry_offer_codes)
   end
 
   def perform
@@ -23,16 +25,25 @@ class Order::FinalizeConfirmedChargeService
 
     @charge_intent ||= ChargeProcessor.get_charge_intent(charge.merchant_account, charge.stripe_payment_intent_id)
 
+    failed_purchases = []
     order.purchases.each do |purchase|
       result = Purchase::FinalizeConfirmedChargeService.new(purchase:, charge_intent:).perform
+      failed_purchases << purchase if result.present? && result != :pending
       responses[cart_item_uid(purchase)] = response_for(purchase, result)
     end
+    @offer_codes = Order::OfferCodeRecoveryService.merge_responses(
+      Order::OfferCodeRecoveryService.new(order:, failed_purchases:).perform,
+      Order::OfferCodeRecoveryService.revalidate_retry_candidates(
+        order:,
+        candidates: retry_offer_code_candidates
+      )
+    )
     order.send_charge_receipts
     responses
   end
 
   private
-    attr_reader :order, :responses
+    attr_reader :order, :responses, :retry_offer_code_candidates
 
     # Key by cart-item uid rather than purchase id so the browser can map results back
     # even when two variants share the same permalink.

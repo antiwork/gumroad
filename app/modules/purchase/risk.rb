@@ -6,6 +6,12 @@ module Purchase::Risk
   CHARGEBACK_GRACE_PERIOD = 1.year
   CHARGEBACK_GRACE_LIMIT = 1
 
+  # Shown when an identifier-level block stopped the purchase. Deliberately suggests nothing the
+  # payer can change themselves: we cannot see from here which identifiers are blocked, and every
+  # self-service suggestion we have tried sent people around a loop that could not end
+  # (gumroad-private#1480, gumroad-private#1755). Support is the only route that always works.
+  BLOCKED_IDENTIFIER_ERROR = "Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."
+
   def check_for_fraud
     Timeout.timeout(CHECK_FOR_FRAUD_TIMEOUT_SECONDS) do
       check_for_past_blocked_email_domains
@@ -62,13 +68,9 @@ module Purchase::Risk
       return unless past_blocked_object(browser_guid)
 
       self.error_code = PurchaseErrorCode::BLOCKED_BROWSER_GUID
-      # Do not suggest another browser or connection here. A browser block may have been written
-      # alongside a block on the buyer's email address (#block_buyer! does both), in which case
-      # switching browser, network or payment method changes nothing — and the old wording sent
-      # blocked buyers around that loop until they gave up (gumroad-private#1480). We cannot tell
-      # from here which blocks exist, so point at the one route that always works: only support can
-      # look at the block and lift it.
-      errors.add :base, "Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."
+      # A browser block is usually written alongside a block on the buyer's email address
+      # (#block_buyer! does both), so switching browser, network or payment method changes nothing.
+      errors.add :base, BLOCKED_IDENTIFIER_ERROR
     end
 
     def check_for_past_chargebacks
@@ -103,14 +105,29 @@ module Purchase::Risk
 
       buyer_ip_addresses = User.where(email: blockable_emails_if_fraudulent_transaction).pluck(:current_sign_in_ip, :last_sign_in_ip, :account_created_ip).flatten.compact.uniq
       seller_ip_addresses = [seller.current_sign_in_ip, seller.last_sign_in_ip, seller.account_created_ip].compact
-      ip_addresses_to_check = (seller_ip_addresses + [ip_address].compact).concat(buyer_ip_addresses)
-      return if PlatformBlock.active.where(object_value: ip_addresses_to_check).count == 0
-      # Compacting before slicing let a nil seller slot pull the buyer's IP into the first three
-      # positions, so a blocked buyer satisfied the seller's own carve-out and checked out.
-      return if PlatformBlock.active.where(object_value: seller_ip_addresses).present? && seller.compliant?
+      buyer_side_ip_addresses = ([ip_address].compact + buyer_ip_addresses).uniq
+      ip_addresses_to_check = seller_ip_addresses + buyer_side_ip_addresses
+      blocked_ip_addresses = PlatformBlock.active.where(object_value: ip_addresses_to_check).pluck(:object_value)
+      return if blocked_ip_addresses.empty?
+
+      # Screen the buyer, never the seller. A block on the seller's own IP rejects every paid
+      # purchase on their whole storefront, from any buyer on any network, and surfaces as a card
+      # error the buyer cannot act on. If the seller is the problem, that is a flag or a suspension.
+      #
+      # Matched by SOURCE, not by subtracting the seller's values: an address can be both, and a
+      # buyer sitting on a blocked IP still has to be blocked when the seller happens to share it
+      # (same office, same CGNAT, seller buying their own product). Subtracting would drop it.
+      #
+      # The previous carve-out short-circuited on "any seller IP is blocked" and was gated on
+      # compliant?, so it both skipped the buyer check outright and excluded every never-reviewed
+      # seller — not_reviewed being the initial risk state (gumroad-private#1755).
+      return if (blocked_ip_addresses & buyer_side_ip_addresses).empty?
 
       self.error_code = PurchaseErrorCode::BLOCKED_IP_ADDRESS
-      errors.add :base, "Your card was not charged. Please try again on a different browser and/or internet connection."
+      # The blocked address may be the buyer's account IP rather than the one this request came
+      # from, and a browser switch never moves an IP at all, so the old "different browser and/or
+      # internet connection" wording was advice that frequently could not work.
+      errors.add :base, BLOCKED_IDENTIFIER_ERROR
     end
 
     def past_blocked_object(object)

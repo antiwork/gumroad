@@ -8,6 +8,10 @@ describe "RenderingExtension" do
     let(:stubbed_view_context) { StubbedViewContext.new(pundit_user) }
     let(:custom_context) { RenderingExtension.custom_context(stubbed_view_context) }
 
+    before do
+      allow_any_instance_of(User).to receive(:eligible_for_store_agent?).and_return(true)
+    end
+
     context "when user is not logged in" do
       let(:user) { nil }
       let(:seller) { nil }
@@ -147,6 +151,7 @@ describe "RenderingExtension" do
                     create: true,
                   },
                   user: {
+                    view_store_agent: true,
                     use_store_agent: true,
                   }
                 },

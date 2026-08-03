@@ -84,6 +84,7 @@ type DiscountPayload = {
   minimumQuantity: number | null;
   durationInBillingCycles: Duration | null;
   minimumAmount: number | null;
+  oncePerCart: boolean;
   existingCustomersOnly: boolean;
   ownershipProductIds: string[];
   ownershipDurationTiers: { months: number; amount_percentage: number }[] | null;
@@ -121,6 +122,7 @@ const buildDiscountPayload = (payload: DiscountPayload) => ({
   minimum_quantity: payload.minimumQuantity,
   duration_in_billing_cycles: payload.durationInBillingCycles,
   minimum_amount_cents: payload.minimumAmount,
+  once_per_cart: payload.discount.type === "cents" && payload.oncePerCart,
   existing_customers_only: payload.existingCustomersOnly,
   ownership_product_ids: payload.existingCustomersOnly ? payload.ownershipProductIds : [],
   ownership_duration_tiers: payload.ownershipDurationTiers,

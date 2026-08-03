@@ -319,6 +319,16 @@ describe Pages::ProductPrices do
       expect(described_class.build(seller, ip: nil).size).to eq(2)
     end
 
+    it "slices in lockstep with the gumroad-data payload's product slices (gumroad-private#1691)" do
+      products = [product] + 4.times.map { |i| create(:product, user: seller, name: "Paged #{i}", created_at: Time.utc(2026, 1, 1) + i.minutes) }
+
+      page_names = Pages::ProfileData.products(seller, offset: 2, limit: 2).pluck(:name)
+      price_keys = described_class.build(seller, ip: nil, offset: 2, limit: 2).keys
+
+      expect(price_keys.length).to eq(2)
+      expect(price_keys).to eq(products.select { |p| page_names.include?(p.name) }.sort_by { |p| -p.created_at.to_i }.map(&:general_permalink))
+    end
+
     # Formatting a tiered membership reads default_tier, a separate has-one-through that the
     # tiers preload does not populate. Pinning total queries as constant across catalogue sizes
     # catches that N+1 and any future per-product read this uncached public path grows.

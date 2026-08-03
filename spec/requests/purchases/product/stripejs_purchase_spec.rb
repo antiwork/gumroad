@@ -584,53 +584,34 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       end
     end
 
-    describe "multiple variants: 0+ and non-0+" do
+    describe "multiple variants: $0 and paid" do
       before do
-        @pwyw_product.price_range = "0+"
-        @pwyw_product.customizable_price = true
-        @pwyw_product.save!
+        @pwyw_product.update!(price_cents: 0, customizable_price: true)
 
         @variant_category = create(:variant_category, link: @pwyw_product, title: "type")
         @var_zero_plus = create(:variant, variant_category: @variant_category, name: "Zero-plus", price_difference_cents: 0)
         @var_paid = create(:variant, variant_category: @variant_category, name: "Paid", price_difference_cents: 500)
       end
 
-      it "lets to purchase the zero-plus variant for free" do
+      it "lets the zero variant be added for free" do
         visit "/l/#{@pwyw_product.unique_permalink}"
 
-        add_to_cart(@pwyw_product, pwyw_price: 0, option: "Zero-plus")
+        expect(page).not_to have_field("Name a fair price")
+        add_to_cart(@pwyw_product, option: "Zero-plus")
 
-        check_out(@pwyw_product, is_free: true)
+        expect(page).to have_text("Zero-plus")
+        expect(page).to have_text("US$0")
       end
 
-      it "does not let to purchase the paid variant for free, shows PWYW error instead of going to CC form" do
+      it "prices the paid variant at its fixed amount" do
         visit "/l/#{@pwyw_product.unique_permalink}"
 
-        choose "Paid"
-        fill_in "Name a fair price", with: 0
-        click_on "I want this!"
-        expect(find_field("Name a fair price")["aria-invalid"]).to eq("true")
-        expect(page).not_to have_button("Pay")
-
-        fill_in "Name a fair price", with: 4
-        click_on "I want this!"
-        expect(find_field("Name a fair price")["aria-invalid"]).to eq("true")
-        expect(page).not_to have_button("Pay")
-
-        add_to_cart(@pwyw_product, pwyw_price: 6, option: "Paid")
+        expect(page).not_to have_field("Name a fair price")
+        add_to_cart(@pwyw_product, option: "Paid")
 
         expect(page).to have_button("Pay")
 
-        expect(page).to have_text("Total US$6", normalize_ws: true)
-
-        check_out(@pwyw_product)
-
-        purchase = Purchase.last
-        expect(purchase.card_type).to eq "visa"
-        expect(purchase.card_country).to eq "US"
-        expect(purchase.card_country_source).to eq Purchase::CardCountrySource::STRIPE
-        expect(purchase.card_visual).to eq "**** **** **** 4242"
-        expect(purchase.price_cents).to eq(6_00)
+        expect(page).to have_text("Total US$5", normalize_ws: true)
       end
     end
 

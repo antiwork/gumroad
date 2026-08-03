@@ -52,4 +52,17 @@ if [ $? -eq 0 ]; then
   consul_put "database_version_${RAILS_ENV}-$(cat revision)" $schema_version
 fi
 
+# Taxonomies are reference data, not schema, so they arrive by seed rather than migration — and
+# db:seed does not run on deploy, which is why seed additions never reached production (#5764's
+# categories were still missing three weeks after shipping). Runs inside the migration lock so
+# concurrent deploys cannot race the (parent_id, slug) unique index.
+#
+# Non-fatal on purpose, and it must stay that way: `set -e` is on and `unlock_migration` is below,
+# so letting this fail the script would hold the migration lock forever and wedge every later
+# deploy. A failed seed leaves the tree as stale as it was before this step existed; a held lock
+# takes the deploy pipeline down. The `||` discards the exit status, so the task itself reports to
+# Sentry before exiting — that report, not this line, is what surfaces a stale tree.
+echo "bundle exec rake taxonomy:seed"
+bundle exec rake taxonomy:seed || echo "WARNING: taxonomy:seed failed; taxonomy tree may be stale. Deploy continues."
+
 unlock_migration

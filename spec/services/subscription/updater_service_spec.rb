@@ -3022,7 +3022,7 @@ describe Subscription::UpdaterService, :vcr do
         original_purchase = @subscription.original_purchase
         expect(original_purchase.purchase_offer_code_discount).to be_present
 
-        full_price = @original_tier_quarterly_price.price_cents
+        full_price = @product.price_cents + @original_tier_quarterly_price.price_cents
 
         expect(@subscription).to receive(:send_restart_notifications!)
         result = described_class.new(
@@ -3071,6 +3071,77 @@ describe Subscription::UpdaterService, :vcr do
         expect(new_discount.offer_code).to eq(@offer_code)
         expect(new_discount.offer_code_amount).to eq(50)
         expect(new_discount.offer_code_is_percent).to eq(true)
+      end
+
+      it "updates the discount snapshot when the seller changes its cart application mode",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/inventory_counter_cache/does_not_double-count_when_resubscribing_with_a_tier_change" } do
+        original_purchase = @subscription.original_purchase
+        original_discount = original_purchase.purchase_offer_code_discount
+        @offer_code.update!(amount_cents: 100, amount_percentage: nil)
+        original_discount.update!(offer_code_amount: 100, offer_code_is_percent: false, once_per_cart: false)
+        @offer_code.update!(once_per_cart: true)
+        new_perceived = @original_tier_quarterly_price.price_cents - @offer_code.amount_cents
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            offer_code: @offer_code,
+            perceived_price_cents: new_perceived,
+            perceived_upgrade_price_cents: new_perceived,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq true
+        new_purchase = @subscription.reload.original_purchase
+        expect(new_purchase.id).not_to eq(original_purchase.id)
+        expect(new_purchase.purchase_offer_code_discount.once_per_cart).to be(true)
+      end
+
+      it "retains the chosen PWYW price with an existing exact-zero once-per-cart discount",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/inventory_counter_cache/does_not_drift_link_or_variant_cache_on_a_non-immediate_downgrade" } do
+        chosen_price = @original_tier_yearly_price.price_cents + 2_00
+        @original_tier.update!(customizable_price: true)
+        @offer_code.update!(amount_cents: chosen_price, amount_percentage: nil, once_per_cart: true)
+        original_purchase = @subscription.original_purchase
+        original_purchase.update!(
+          displayed_price_cents: 0,
+          price_cents: 0,
+          total_transaction_cents: 0,
+          stripe_transaction_id: nil,
+          stripe_fingerprint: nil,
+          charge_processor_id: nil,
+          merchant_account: nil
+        )
+        original_purchase.purchase_offer_code_discount.update!(
+          offer_code_amount: chosen_price,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          pre_discount_displayed_price_cents: chosen_price
+        )
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            price_id: @yearly_product_price.external_id,
+            price_range: chosen_price,
+            perceived_price_cents: 0,
+            perceived_upgrade_price_cents: 0,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq(true)
+        new_purchase = @subscription.reload.original_purchase
+        expect(new_purchase.id).not_to eq(original_purchase.id)
+        expect(new_purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents).to eq(chosen_price)
+        expect(new_purchase.displayed_price_cents_before_offer_code).to eq(chosen_price)
       end
 
       it "applies a different offer code when provided" do

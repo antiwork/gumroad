@@ -186,17 +186,19 @@ describe DisputeEvidence do
       end
     end
 
-    # Stripe takes one submission per dispute. Once it is spent the seller cannot add anything, no
-    # matter what the 72-hour clock says — support quoted "68 hours" off this on a spent slot and
-    # invited a seller to assemble evidence that could never be filed (gumroad-private#1612).
-    context "when the seller has already submitted, with clock time left" do
+    # Stripe still takes one submission per dispute, but we no longer spend it on save: the response
+    # is forwarded at the deadline, so the clock the seller is quoted is the clock they really have.
+    # This inverts gumroad-private#1612's pin, whose fix was to report 0 because the slot was
+    # genuinely spent at that point.
+    context "when the seller has already saved a response, with clock time left" do
       before do
         dispute_evidence.update!(seller_contacted_at: 4.hours.ago, seller_submitted_at: 1.hour.ago)
       end
 
-      it "reports no hours left" do
-        expect(described_class.hours_left_in_window(dispute_evidence.seller_contacted_at)).to be > 0
-        expect(dispute_evidence.hours_left_to_submit_evidence).to eq(0)
+      it "still reports the hours the seller has left to revise" do
+        expect(dispute_evidence.hours_left_to_submit_evidence)
+          .to eq(described_class.hours_left_in_window(dispute_evidence.seller_contacted_at))
+        expect(dispute_evidence.hours_left_to_submit_evidence).to be > 0
       end
     end
 
@@ -246,7 +248,6 @@ describe DisputeEvidence do
       described_class.schedule_due_soon_reminder(
         dispute_id: dispute_evidence.dispute.id,
         seller_contacted_at: dispute_evidence.seller_contacted_at,
-        seller_submitted_at: nil,
         resolved_at: nil
       )
 
@@ -261,7 +262,6 @@ describe DisputeEvidence do
       described_class.schedule_due_soon_reminder(
         dispute_id: dispute_evidence.dispute.id,
         seller_contacted_at: dispute_evidence.seller_contacted_at,
-        seller_submitted_at: nil,
         resolved_at: nil
       )
 
@@ -269,14 +269,28 @@ describe DisputeEvidence do
         .not_to have_enqueued_sidekiq_job(dispute_evidence.dispute.id)
     end
 
-    it "does not schedule once the seller has submitted" do
+    # The reminder is still worth sending to a seller who saved early: they can keep adding to their
+    # response until the deadline, so "24 hours left" is a real prompt rather than a dead link.
+    it "still schedules once the seller has saved a response" do
       dispute_evidence.update!(seller_contacted_at: Time.current, seller_submitted_at: Time.current)
 
       described_class.schedule_due_soon_reminder(
         dispute_id: dispute_evidence.dispute.id,
         seller_contacted_at: dispute_evidence.seller_contacted_at,
-        seller_submitted_at: dispute_evidence.seller_submitted_at,
         resolved_at: nil
+      )
+
+      expect(DisputeEvidenceDueSoonReminderJob)
+        .to have_enqueued_sidekiq_job(dispute_evidence.dispute.id)
+    end
+
+    it "does not schedule once the row is resolved" do
+      dispute_evidence.update!(seller_contacted_at: Time.current)
+
+      described_class.schedule_due_soon_reminder(
+        dispute_id: dispute_evidence.dispute.id,
+        seller_contacted_at: dispute_evidence.seller_contacted_at,
+        resolved_at: Time.current
       )
 
       expect(DisputeEvidenceDueSoonReminderJob)
@@ -313,22 +327,26 @@ describe DisputeEvidence do
   end
 
   describe ".accepting_evidence?" do
-    def accepting?(seller_contacted_at: 1.hour.ago, seller_submitted_at: nil, resolved_at: nil)
-      described_class.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    def accepting?(seller_contacted_at: 1.hour.ago, resolved_at: nil)
+      described_class.accepting_evidence?(seller_contacted_at:, resolved_at:)
     end
 
     it "accepts an open window" do
       expect(accepting?).to be(true)
     end
 
-    # These two are what Purchases::DisputeEvidenceController#check_if_needs_redirect bounces on. A
+    # Resolution is what Purchases::DisputeEvidenceController#check_if_needs_redirect bounces on. A
     # caller that asks only about the window sends an action-required email to a page that redirects.
-    it "declines once the seller has submitted" do
-      expect(accepting?(seller_submitted_at: Time.current)).to be(false)
-    end
-
     it "declines once the row is resolved" do
       expect(accepting?(resolved_at: Time.current)).to be(false)
+    end
+
+    # A saved statement is not forwarded until the window closes, so the seller may still revise it
+    # and every notice must keep linking them back to the form.
+    it "keeps accepting after the seller has saved a response" do
+      dispute_evidence.update!(seller_contacted_at: 1.hour.ago, seller_submitted_at: Time.current)
+
+      expect(dispute_evidence.accepting_evidence?).to be(true)
     end
 
     it "declines an elapsed window" do
@@ -350,29 +368,28 @@ describe DisputeEvidence do
       dispute_evidence.update!(seller_contacted_at: 1.hour.ago)
       expect(dispute_evidence.accepting_evidence?).to be(true)
 
-      dispute_evidence.update!(seller_submitted_at: Time.current)
+      dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
       expect(dispute_evidence.accepting_evidence?).to be(false)
     end
   end
 
   describe ".notice_worth_sending?" do
-    def worth_sending?(seller_contacted_at: 1.hour.ago, seller_submitted_at: nil, resolved_at: nil)
-      described_class.notice_worth_sending?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    def worth_sending?(seller_contacted_at: 1.hour.ago, resolved_at: nil)
+      described_class.notice_worth_sending?(seller_contacted_at:, resolved_at:)
     end
 
     # This is the arm that differs from accepting_evidence?: a dispute with no evidence surface at all
     # (PayPal, Stripe Connect) never gets a window, and must still receive its plain notice.
     it "sends for an unstamped row, where asking for evidence would not" do
       expect(worth_sending?(seller_contacted_at: nil)).to be(true)
-      expect(described_class.accepting_evidence?(seller_contacted_at: nil, seller_submitted_at: nil, resolved_at: nil)).to be(false)
+      expect(described_class.accepting_evidence?(seller_contacted_at: nil, resolved_at: nil)).to be(false)
     end
 
     it "declines an unstamped row that is already resolved" do
       expect(worth_sending?(seller_contacted_at: nil, resolved_at: Time.current)).to be(false)
     end
 
-    it "declines once the seller has submitted or the row is resolved" do
-      expect(worth_sending?(seller_submitted_at: Time.current)).to be(false)
+    it "declines once the row is resolved" do
       expect(worth_sending?(resolved_at: Time.current)).to be(false)
     end
 

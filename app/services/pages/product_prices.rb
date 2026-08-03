@@ -18,8 +18,8 @@
 class Pages::ProductPrices
   include CurrencyHelper
 
-  def self.build(seller, ip:)
-    new(seller, ip:).build
+  def self.build(seller, ip:, offset: 0, limit: Pages::ProfileData::MAX_ITEMS)
+    new(seller, ip:, offset:, limit:).build
   end
 
   # Whether a page can consume this payload at all. Its only consumers live inside the page's
@@ -30,9 +30,11 @@ class Pages::ProductPrices
     html.to_s.match?(/data-gumroad-product|gumroad-prices/)
   end
 
-  def initialize(seller, ip:)
+  def initialize(seller, ip:, offset: 0, limit: Pages::ProfileData::MAX_ITEMS)
     @seller = seller
     @ip = ip
+    @offset = offset
+    @limit = limit
   end
 
   def build
@@ -44,10 +46,11 @@ class Pages::ProductPrices
   end
 
   private
-    attr_reader :seller, :ip
+    attr_reader :seller, :ip, :offset, :limit
 
-    # Same scope, ordering and cap as Pages::ProfileData#products so the two payloads describe
-    # the same set of products in the same order. The associations are the ones
+    # Same scope, ordering and slice as Pages::ProfileData#products so the two payloads describe
+    # the same set of products in the same order — a paged product array whose price map covers a
+    # different slice renders priceless cards. The associations are the ones
     # Product::Prices#lowest_variant_price_difference_cents needs to take its preloaded path
     # (:skus plus every alive variant under every alive category — miss either and it falls back
     # to two queries per product), plus what the buyer-currency gate and formatting read. This
@@ -59,7 +62,7 @@ class Pages::ProductPrices
             .includes(:alive_prices, :installment_plan, :user, :skus, :default_offer_code,
                       tiers: :alive_prices, default_tier: :alive_prices,
                       variant_categories_alive: :alive_variants)
-            .order(created_at: :desc).limit(Pages::ProfileData::MAX_ITEMS)
+            .order(created_at: :desc, id: :desc).offset(offset).limit(limit)
     end
 
     # Seeds the per-request memo discounted_price_cents reads with one grouped aggregate for

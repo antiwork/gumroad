@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { trackUserProductAction } from "$app/data/user_action_event";
+import type { Discount } from "$app/parsers/checkout";
 import { CustomButtonTextOption } from "$app/parsers/product";
 import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
@@ -13,6 +14,7 @@ import {
   buyerLocalContextFor,
   hasMetDiscountConditions,
   PriceSelection,
+  withConfiguredOncePerCartAmount,
 } from "$app/components/Product/ConfigurationSelector";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -59,6 +61,21 @@ const ctaNames = {
 };
 export const getCtaName = (cta: CustomButtonTextOption) => ctaNames[cta];
 
+export const getUndiscountedPWYWPrice = (
+  discountedPrice: number,
+  discount: Discount,
+  quantity: number,
+  minimumPrices?: { discounted: number; undiscounted: number },
+) => {
+  const configuredDiscount = withConfiguredOncePerCartAmount(discount);
+  if (configuredDiscount.type === "percent") return discountedPrice / ((100 - configuredDiscount.percents) / 100.0);
+  if (configuredDiscount.once_per_cart && quantity === 1 && discountedPrice === minimumPrices?.discounted)
+    return minimumPrices.undiscounted;
+  return !configuredDiscount.once_per_cart || quantity === 1
+    ? discountedPrice + configuredDiscount.cents
+    : discountedPrice;
+};
+
 const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
   "code",
   "option",
@@ -87,7 +104,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     const [referrer, setReferrer] = React.useState("");
     useRunOnce(() => setReferrer(document.referrer));
 
-    const { selectedOption, pppDiscounted, discountedPriceCents } = applySelection(
+    const { selectedOption, priceCents, pppDiscounted, discountedPriceCents } = applySelection(
       product,
       discountCode?.valid ? discountCode.discount : null,
       selection,
@@ -113,8 +130,10 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
       if (pppDiscounted && product.ppp_details) {
         price /= product.ppp_details.factor;
       } else if (discountCode?.valid && hasMetDiscountConditions(discountCode.discount, selection.quantity)) {
-        if (discountCode.discount.type === "percent") price /= (100 - discountCode.discount.percents) / 100.0;
-        else price += discountCode.discount.cents;
+        price = getUndiscountedPWYWPrice(price, discountCode.discount, selection.quantity, {
+          discounted: discountedPriceCents,
+          undiscounted: priceCents,
+        });
       }
 
       url.searchParams.set("price", Math.round(price).toString());

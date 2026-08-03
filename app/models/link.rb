@@ -1640,8 +1640,22 @@ class Link < ApplicationRecord
     def enforce_merchant_account_exits_for_new_users!
       return if publishable?
 
-      errors.add(:base, "You must connect at least one payment method before you can publish this product for sale.")
-      raise LinkInvalid, "You must connect at least one payment method before you can publish this product for sale."
+      errors.add(:base, publish_blocked_message)
+      raise LinkInvalid, publish_blocked_message
+    end
+
+    # A seller whose payout setup Stripe rejected has a saved bank account and no rail, so telling
+    # them to connect a payment method sends them looking for something that is already there. Point
+    # at the rejection instead — the seller-visible note recorded when Stripe refused the account
+    # (gumroad-private#1777).
+    #
+    # Keyed on the note's own marker rather than on the newest seller-visible payout note, which is
+    # usually an unrelated skipped-payout explanation.
+    def publish_blocked_message
+      rejection = user.latest_payout_setup_rejection_note
+      return "You must connect at least one payment method before you can publish this product for sale." if rejection.blank?
+
+      "Your payout setup hasn't gone through yet, so you can't publish this product for sale. #{rejection.content}"
     end
 
     def free_trial_only_enabled_if_recurring_billing

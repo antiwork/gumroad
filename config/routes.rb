@@ -1066,6 +1066,9 @@ Rails.application.routes.draw do
       # The public page can't be framed from the dashboard (its embed sends
       # X-Frame-Options: SAMEORIGIN and the dashboard is a different origin).
       get :preview, on: :member
+      # Catalogue slices for the preview pane's products bridge — the public
+      # /landing/products endpoint isn't routed on the dashboard host.
+      get :products, on: :member
     end
 
     # workflows
@@ -1252,6 +1255,10 @@ Rails.application.routes.draw do
     # custom-domain equivalents live in UserCustomDomainConstraint below.
     get "/:username/landing/embed", to: "users#landing_iframe_content", as: :user_landing
     get "/:username/landing/version", to: "users#landing_version", as: :user_landing_version
+    # Catalogue slices for the gumroad:products bridge. format: false — the
+    # Rack::Attack throttle for this endpoint matches the path by regexp, and
+    # keeping the path shape fixed keeps that match honest.
+    get "/:username/landing/products", to: "users#landing_products", as: :user_landing_products, format: false
     get "/:username/follow", to: "followers#new", as: "follow_user_page"
     get "/:username/p/:slug", to: "posts#show", as: :view_post
     get "/:username/posts_paginated", to: "users/posts#paginated", as: "user_posts_paginated"
@@ -1434,6 +1441,11 @@ Rails.application.routes.draw do
 
     get "/landing/embed", to: "users#landing_iframe_content"
     get "/landing/version", to: "users#landing_version"
+    # The gumroad:products bridge fetches this relative to the wrapper page,
+    # which is served on the seller's subdomain or custom domain — hosts this
+    # block routes. The Rack::Attack throttle matches the path by regexp, so
+    # the same limits apply here and on the root-domain route above.
+    get "/landing/products", to: "users#landing_products", format: false
     # First-class Pages: a seller's slugged pages serve at the root of their
     # subdomain / custom domain. These come last in this block so every real
     # route above wins; Page::RESERVED_SLUGS additionally blocks creating a

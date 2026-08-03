@@ -39,11 +39,12 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
 
   # The whole point of this job: no failure row anywhere, so the failure-keyed report cannot see this
   # buyer at all.
-  it "reports a buyer who has never attempted a blocked checkout" do
+  it "clears and reports a buyer who has never attempted a blocked checkout" do
     settled_purchases(established_count)
-    block_email
+    block = block_email
 
-    expect(message).to include(email, "#{established_count} settled purchases", "no recent attempt")
+    expect(message).to include(email, "#{established_count} settled purchases", "cleared")
+    expect(block.reload.blocked_at).to be_nil
   end
 
   it "names the date the block was written" do
@@ -55,55 +56,61 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
 
   it "ignores a buyer without enough settled purchases" do
     settled_purchases(established_count - 1)
-    block_email
+    block = block_email
 
     expect(InternalNotificationWorker).not_to receive(:perform_async)
     described_class.new.perform
+    expect(block.reload.blocked_at).to be_present
   end
 
   it "ignores purchases too recent to have been disputed" do
     settled_purchases(established_count, created_at: 1.day.ago)
-    block_email
+    block = block_email
 
     expect(InternalNotificationWorker).not_to receive(:perform_async)
     described_class.new.perform
+    expect(block.reload.blocked_at).to be_present
   end
 
   it "ignores free purchases, which cost a card tester nothing" do
     settled_purchases(established_count, price_cents: 0)
-    block_email
+    block = block_email
 
     expect(InternalNotificationWorker).not_to receive(:perform_async)
     described_class.new.perform
+    expect(block.reload.blocked_at).to be_present
   end
 
   it "ignores a buyer carrying a chargeback on another purchase" do
     settled_purchases(established_count)
     create(:purchase, email:, purchase_state: "successful", price_cents: 500,
                       created_at: history_starts_at, chargeback_date: 1.month.ago)
-    block_email
+    block = block_email
 
     expect(InternalNotificationWorker).not_to receive(:perform_async)
     described_class.new.perform
+    expect(block.reload.blocked_at).to be_present
   end
 
-  it "still reports a buyer whose only chargeback was reversed" do
+  it "still clears a buyer whose only chargeback was reversed" do
     settled_purchases(established_count)
     create(:purchase, email:, purchase_state: "successful", price_cents: 500,
                       created_at: history_starts_at, chargeback_date: 1.month.ago,
                       flags: Purchase.flag_mapping["flags"][:chargeback_reversed])
-    block_email
+    block = block_email
 
-    expect(message).to include(email)
+    expect(message).to include(email, "cleared")
+    expect(block.reload.blocked_at).to be_nil
   end
 
   # A named block is somebody's decision about this buyer, not a rule that outlived itself.
   it "ignores a block a human wrote" do
     settled_purchases(established_count)
-    block_email(by: create(:admin_user).id)
+    block = block_email(by: create(:admin_user).id)
 
     expect(InternalNotificationWorker).not_to receive(:perform_async)
     described_class.new.perform
+    expect(block.reload.blocked_at).to be_present
   end
 
   it "ignores a block that was already cleared" do
@@ -147,8 +154,14 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
 
   # The column collates ci, so a legacy mixed-case history row comes back under its own casing and
   # would not join to a lowercase block value without normalising both sides.
+  #
+  # Purchase#downcase_email lowercases on write, so a mixed-case row cannot be created through
+  # validation — update_column is what actually puts the legacy casing in the table. Creating it
+  # normally makes this test pass whether or not the job normalises anything.
   it "matches legacy mixed-case history to the block value" do
-    settled_purchases(established_count, buyer_email: "Established@Example.com")
+    settled_purchases(established_count).each do |purchase|
+      purchase.update_column(:email, "Established@Example.com")
+    end
     block_email
 
     expect(message).to include("#{established_count} settled purchases")
@@ -157,19 +170,101 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
   it "reports the oldest block first" do
     settled_purchases(established_count)
     settled_purchases(established_count, buyer_email: "newer@example.com")
-    block_email("newer@example.com", blocked_at: 6.months.ago)
     block_email(blocked_at: 3.years.ago)
+    block_email("newer@example.com", blocked_at: 6.months.ago)
 
     lines = message.split("\n").select { |line| line.start_with?("•") }
     expect(lines.first).to include(email)
     expect(lines.second).to include("newer@example.com")
   end
 
-  it "tells the reader these buyers have not tried recently" do
-    settled_purchases(established_count)
-    block_email
+  describe "the account-suspension veto (Sahil, gumroad-private#1746)" do
+    # The whole reason this job holds rather than clears: a block tied to a suspended account is a
+    # fraud call, not staleness, even though the block row itself carries blocked_by: nil.
+    it "holds a block whose email is a suspended account's own login email" do
+      create(:user, email:, user_risk_state: "suspended_for_fraud")
+      settled_purchases(established_count)
+      block = block_email
 
-    expect(message).to include("have NOT tried recently")
+      expect(message).to include(email, "held", "linked to a suspended account")
+      expect(block.reload.blocked_at).to be_present
+    end
+
+    it "holds a block whose purchases resolve to a suspended account as purchaser" do
+      suspended_user = create(:user, user_risk_state: "suspended_for_tos_violation")
+      settled_purchases(established_count, purchaser_id: suspended_user.id)
+      block = block_email
+
+      expect(message).to include(email, "held", "linked to a suspended account")
+      expect(block.reload.blocked_at).to be_present
+    end
+
+    it "clears a block whose account is merely flagged, not suspended" do
+      create(:user, email:, user_risk_state: "flagged_for_fraud")
+      settled_purchases(established_count)
+      block = block_email
+
+      expect(message).to include(email, "cleared")
+      expect(block.reload.blocked_at).to be_nil
+    end
+
+    it "clears a block with no linked account at all" do
+      settled_purchases(established_count)
+      block = block_email
+
+      expect(message).to include(email, "cleared")
+      expect(block.reload.blocked_at).to be_nil
+    end
+  end
+
+  describe "re-checking the block immediately before writing" do
+    # The candidate query's snapshot can go stale between enumeration and the write — a concurrent
+    # admin block is exactly the case blocked_by: nil is supposed to protect, so re-reading the row
+    # right before unblock! is what keeps a race from clearing a human's decision.
+    it "does not clear a block that was attended to after this run's candidate scan" do
+      settled_purchases(established_count)
+      block = block_email
+
+      admin_id = create(:admin_user).id
+      original_reload = PlatformBlock.instance_method(:reload)
+      allow_any_instance_of(PlatformBlock).to receive(:reload) do |instance|
+        instance.update_column(:blocked_by, admin_id) if instance.id == block.id && instance.blocked_by.nil?
+        original_reload.bind_call(instance)
+      end
+
+      expect(message).to include(email, "held")
+      expect(block.reload.blocked_by).to eq(admin_id)
+    end
+  end
+
+  describe "sweeping the backlog across runs" do
+    # The whole point of gp#1746: a fixed page re-reports the same blocks forever and never reaches
+    # the rest. Each run must resume past what the previous one judged.
+    it "resumes after the block the previous run stopped at" do
+      settled_purchases(established_count)
+      settled_purchases(established_count, buyer_email: "second@example.com")
+      first = block_email
+      block_email("second@example.com", blocked_at: 1.year.ago)
+
+      stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 1)
+
+      expect(message).to include(email)
+      expect($redis.get(RedisKey.stale_block_sweep_cursor).to_i).to eq(first.id)
+
+      # Second run: the first block is behind the cursor, so the next one surfaces.
+      second_message = message
+      expect(second_message).to include("second@example.com")
+      expect(second_message).not_to include(email)
+    end
+
+    it "wraps to the start once it runs out of blocks" do
+      settled_purchases(established_count)
+      block = block_email
+      $redis.set(RedisKey.stale_block_sweep_cursor, block.id)
+
+      # Nothing past the cursor, so the sweep restarts rather than reporting nothing forever.
+      expect(message).to include(email)
+    end
   end
 
   # A truncated scan that found nothing must still report: otherwise the bound, not the platform,
@@ -188,7 +283,7 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
     block_email(blocked_at: 3.years.ago)
     block_email("other@example.com", blocked_at: 2.years.ago)
 
-    expect(message).to include("At least 1 active email block", "floor")
+    expect(message).to include("cleared", "floor")
   end
 
   it "sends nothing when no block qualifies and the scan was not truncated" do

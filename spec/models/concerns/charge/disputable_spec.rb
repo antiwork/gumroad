@@ -852,10 +852,11 @@ describe Charge::Disputable, :vcr do
           end
         end
 
-        context "when the seller already answered the recovery notice" do
-          # The sweep can open the window, notify the seller, and have them submit before a
-          # re-delivery arrives. A second notice would ask for a statement the form no longer
-          # accepts, on a dispute already sent to the processor.
+        context "when the seller already saved a response but the window is still open" do
+          # This example used to assert silence, which was right when a save spent the one Stripe
+          # submission. It no longer does: nothing is forwarded until the deadline, so a saved
+          # statement is a draft the seller may keep revising, and the notice's link is still live.
+          # Resolution is the only state that closes the form — covered by the context below.
           before do
             allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_wrap_original do |original|
               evidence = original.call
@@ -867,12 +868,13 @@ describe Charge::Disputable, :vcr do
             end
           end
 
-          it "does not ask the seller again for a statement they have already submitted" do
-            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+          it "still links the seller back to the form they can keep revising" do
+            expect { Purchase.handle_charge_event(event) }
+              .to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice)
 
-            Purchase.handle_charge_event(event)
-
-            expect(purchase.reload.dispute.dispute_evidence.seller_submitted?).to be(true)
+            evidence = purchase.reload.dispute.dispute_evidence
+            expect(evidence.seller_submitted?).to be(true)
+            expect(evidence.accepting_evidence?).to be(true)
           end
         end
 

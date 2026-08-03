@@ -11,6 +11,7 @@ import {
   ReasonForWinningOption,
   reasonForWinningOptions,
   cancellationRebuttalOptions,
+  cancellationRebuttalOptionKeys,
 } from "$app/data/purchase/dispute_evidence_data";
 import FileUtils from "$app/utils/file";
 
@@ -40,6 +41,11 @@ type Props = {
     customer_communication_file_max_size: number;
     customer_communication_files_max_count: number;
     blobs: Blobs;
+    saved: {
+      reason_for_winning: string | null;
+      cancellation_rebuttal: string | null;
+      refund_refusal_explanation: string | null;
+    };
   };
   disputable: {
     purchase_for_dispute_evidence_id: string;
@@ -82,6 +88,22 @@ type FormData = {
   };
 };
 
+// We store the display text of the chosen radio, not the option key, so restoring a saved answer
+// means matching that text back against the options this dispute reason offers. Anything that does
+// not match was typed into "Other", which is also where an option retired since the seller answered
+// lands — a stored string with no live radio still has to be editable.
+const restoreChoice = <T extends string>(
+  savedText: string | null,
+  options: Record<string, string>,
+  available: readonly T[],
+): { option: T | "other" | null; text: string } => {
+  if (savedText === null || savedText === "") return { option: null, text: "" };
+  const matched = available.find((option) => options[option] === savedText);
+  return matched !== undefined && matched !== "other"
+    ? { option: matched, text: "" }
+    : { option: "other", text: savedText };
+};
+
 export default function Show() {
   const { dispute_evidence, disputable, products } = typia.assert<Props>(usePage().props);
 
@@ -90,20 +112,37 @@ export default function Show() {
   const refundRefusalExplanationUID = React.useId();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const userAgentInfo = useUserAgentInfo();
-  const [reasonForWinningOption, setReasonForWinningOption] = React.useState<ReasonForWinningOption | null>(null);
+  const saved = dispute_evidence.saved;
+  const savedReasonForWinning = restoreChoice(
+    saved.reason_for_winning,
+    reasonForWinningOptions,
+    disputeReasons[dispute_evidence.dispute_reason].reasonsForWinning,
+  );
+  const savedCancellationRebuttal = restoreChoice(
+    saved.cancellation_rebuttal,
+    cancellationRebuttalOptions,
+    cancellationRebuttalOptionKeys,
+  );
+  const [reasonForWinningOption, setReasonForWinningOption] = React.useState<ReasonForWinningOption | null>(
+    savedReasonForWinning.option,
+  );
   const [cancellationRebuttalOption, setCancellationRebuttalOption] = React.useState<CancellationRebuttalOption | null>(
-    null,
+    savedCancellationRebuttal.option,
   );
   const blobs = dispute_evidence.blobs;
   const [isUploading, setIsUploading] = React.useState(false);
   const [uploadedFiles, setUploadedFiles] = React.useState<UploadedFile[]>([]);
   const [isConfirming, setIsConfirming] = React.useState(false);
+  const hasSavedResponse =
+    savedReasonForWinning.option !== null ||
+    savedCancellationRebuttal.option !== null ||
+    (saved.refund_refusal_explanation ?? "") !== "";
 
   const form = useForm<FormData>({
     dispute_evidence: {
-      reason_for_winning: "",
-      cancellation_rebuttal: "",
-      refund_refusal_explanation: "",
+      reason_for_winning: savedReasonForWinning.text,
+      cancellation_rebuttal: savedCancellationRebuttal.text,
+      refund_refusal_explanation: saved.refund_refusal_explanation ?? "",
       customer_communication_file_signed_blob_ids: [],
     },
   });
@@ -276,10 +315,16 @@ export default function Show() {
           </strong>
         </p>
         <Alert variant="warning">
-          <strong>Submitting is final.</strong> We forward your response and all supporting files to our payment
-          processor straight away, and they accept one submission per dispute. You can't edit it or add anything
-          afterwards — not even by contacting support — so attach everything before you submit.
+          <strong>You can keep adding to this until the deadline.</strong> Our payment processor accepts one submission
+          per dispute, so we hold your response and send it at the deadline. Come back any time before then to add files
+          or revise what you wrote — after the deadline nothing more can be added, not even by contacting support.
         </Alert>
+        {hasSavedResponse ? (
+          <Alert variant="info">
+            <strong>Your saved response is filled in below.</strong> Change whatever you want and save again — saving
+            replaces the fields you fill in and leaves the rest as they are.
+          </Alert>
+        ) : null}
       </CardContent>
       <CardContent>
         <Fieldset className="grow basis-0">
@@ -291,6 +336,7 @@ export default function Show() {
               <Radio
                 name="reasonForWinning"
                 value={option}
+                checked={reasonForWinningOption === option}
                 onChange={(evt) => setReasonForWinningOption(typia.assert<ReasonForWinningOption>(evt.target.value))}
               />
               {reasonForWinningOptions[option]}
@@ -318,6 +364,7 @@ export default function Show() {
                 <Radio
                   name="cancellationRebuttal"
                   value={option}
+                  checked={cancellationRebuttalOption === option}
                   onChange={(evt) =>
                     setCancellationRebuttalOption(typia.assert<CancellationRebuttalOption>(evt.target.value))
                   }
@@ -408,39 +455,35 @@ export default function Show() {
         >
           {form.processing ? (
             <>
-              <LoadingSpinner /> Submitting...
+              <LoadingSpinner /> Saving...
             </>
           ) : (
-            "Submit"
+            "Save response"
           )}
         </Button>
       </CardContent>
       <Modal
         open={isConfirming}
-        title="Submit your response?"
+        title="Save your response?"
         onClose={() => setIsConfirming(false)}
         footer={
           <>
             <Button onClick={() => setIsConfirming(false)}>Cancel</Button>
             <Button color="primary" disabled={isUploading || form.processing} onClick={submitDisputeEvidence}>
-              Submit evidence
+              Confirm and save
             </Button>
           </>
         }
       >
         <p>
-          You only get one submission for this dispute. We forward this to our payment processor immediately, and
-          nothing can be added or changed afterwards.
+          We send this to our payment processor at the deadline, not now, so you can come back and add to it until then.
         </p>
         {uploadedFiles.length > 0 ? (
           <p>
-            You are attaching {uploadedFiles.length} {uploadedFiles.length === 1 ? "file" : "files"}. Anything you meant
-            to include but have not uploaded yet cannot be sent later.
+            You are attaching {uploadedFiles.length} {uploadedFiles.length === 1 ? "file" : "files"}.
           </p>
         ) : (
-          <p>
-            You have not attached any files. If you have screenshots or emails to include, cancel and upload them now.
-          </p>
+          <p>You have not attached any files. You can add them here any time before the deadline.</p>
         )}
       </Modal>
     </Card>

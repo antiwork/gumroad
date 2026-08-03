@@ -239,6 +239,21 @@ describe Purchase::CreateService, :vcr do
     end
   end
 
+  it "validates accepted-offer prices with variants, quantity, and tip" do
+    offered_product = create(:product_with_digital_versions, user:, price_cents: 100)
+    variant = offered_product.alive_variants.first
+    variant.update!(price_difference_cents: 200)
+    offer_code = create(:offer_code, user:, products: [offered_product], amount_cents: 100)
+    purchase = build(:purchase, link: offered_product, quantity: 2, perceived_price_cents: 450)
+    purchase.variant_attributes = [variant]
+    accepted_offer_params = { purchase: { perceived_price_cents: 450 }, tip_cents: 50 }
+    service = described_class.new(product: offered_product, params: accepted_offer_params, buyer:)
+    service.purchase = purchase
+
+    expect(service.send(:perceived_price_matches_accepted_offer?, offer_code)).to be(true)
+    expect(purchase.offer_code).to be_nil
+  end
+
   context "when the purchase has an upsell" do
     let(:product) { create(:product_with_digital_versions, user:) }
     let(:upsell) { create(:upsell, seller: user, product:) }
@@ -496,6 +511,47 @@ describe Purchase::CreateService, :vcr do
         ).perform
 
         expect(error).to eq("The bundle's contents have changed. Please refresh the page!")
+      end
+    end
+
+    context "when a component product is sold out" do
+      # The component is taken to its cap by real sales rather than by setting the counter directly,
+      # so remaining_for_sale_count is derived the same way it is in production.
+      let(:sold_out_component) { product.bundle_products.second.product }
+
+      before do
+        params[:purchase][:perceived_price_cents] = 100
+        params[:bundle_products] = product.bundle_products.alive.map do |bundle_product|
+          { product_id: bundle_product.product.external_id, variant_id: nil, quantity: bundle_product.quantity }
+        end
+        sold_out_component.update!(max_purchase_count: 1, sales_count_for_inventory_cache: 1)
+      end
+
+      it "fails the whole bundle purchase before charging, naming the unavailable component" do
+        purchase, error = Purchase::CreateService.new(product:, params:, buyer:).perform
+
+        expect(error).to eq("#{sold_out_component.name} is no longer available in the quantity this bundle includes. Please refresh the page!")
+        expect(purchase).not_to be_persisted
+        expect(purchase.charge_intent).to be_nil
+        # The whole point: no child row is minted for any component, not just the exhausted one.
+        expect(purchase.product_purchases).to be_empty
+      end
+    end
+
+    context "when a component product has enough inventory left" do
+      before do
+        params[:purchase][:perceived_price_cents] = 100
+        params[:bundle_products] = product.bundle_products.alive.map do |bundle_product|
+          { product_id: bundle_product.product.external_id, variant_id: nil, quantity: bundle_product.quantity }
+        end
+        product.bundle_products.second.product.update!(max_purchase_count: 5)
+      end
+
+      it "creates the purchase" do
+        purchase, error = Purchase::CreateService.new(product:, params:, buyer:).perform
+
+        expect(error).to be_nil
+        expect(purchase.purchase_state).to eq("successful")
       end
     end
   end

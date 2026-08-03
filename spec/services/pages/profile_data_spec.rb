@@ -388,15 +388,16 @@ describe Pages::ProfileData do
       end
     end
 
-    it "does not serve a v4 payload without the totals" do
+    it "does not serve a stale prior-version payload" do
       seller_profile = SellerProfile.find_by(seller_id: seller.id)
       current_key = Pages::ProfileData.cache_key(seller, seller_profile)
-      v4_key = current_key.sub("profile_data/v6/", "profile_data/v4/")
-      Rails.cache.write(v4_key, { products: [], posts: [], pages: [] })
+      prior_key = current_key.sub("profile_data/#{Pages::ProfileData::CACHE_VERSION}/", "profile_data/v6/")
+      Rails.cache.write(prior_key, { products: [], posts: [], pages: [] })
 
       data = Pages::ProfileData.build(seller)
 
-      expect(current_key).to start_with("profile_data/v6/")
+      expect(current_key).to start_with("profile_data/#{Pages::ProfileData::CACHE_VERSION}/")
+      expect(current_key).not_to eq(prior_key)
       expect(data).to include(products_total: 0, posts_total: 0)
     end
 
@@ -437,6 +438,57 @@ describe Pages::ProfileData do
 
         expect(Pages::ProfileData.build(seller.reload)[:products_total]).to eq(1)
       end
+    end
+  end
+
+  describe ".products_page" do
+    let(:seller) { create(:user) }
+
+    it "returns the slice at the requested offset, in the full payload's order, with the total" do
+      products = 5.times.map { |i| create(:product, user: seller, name: "Product #{i}", created_at: Time.utc(2026, 1, 1) + i.minutes) }
+
+      page = Pages::ProfileData.products_page(seller.reload, offset: 2, limit: 2)
+
+      expect(page[:products].pluck(:name)).to eq([products[2].name, products[1].name])
+      expect(page[:products_total]).to eq(5)
+    end
+
+    it "continues exactly where the injected page 1 payload stopped" do
+      stub_const("Pages::ProfileData::MAX_ITEMS", 2)
+      3.times { |i| create(:product, user: seller, name: "Product #{i}", created_at: Time.utc(2026, 1, 1) + i.minutes) }
+
+      page_one = Pages::ProfileData.build(seller.reload)[:products]
+      page_two = Pages::ProfileData.products_page(seller.reload, offset: 2, limit: 2)
+
+      expect(page_one.length).to eq(2)
+      expect(page_two[:products].pluck(:name)).to eq(["Product 0"])
+      expect((page_one + page_two[:products]).pluck(:url).uniq.length).to eq(3)
+    end
+
+    it "breaks created_at ties by id so adjacent slices never overlap or skip" do
+      created_at = Time.utc(2026, 1, 1)
+      6.times { |i| create(:product, user: seller, name: "Tied #{i}", created_at:) }
+
+      slices = [0, 2, 4].map { |offset| Pages::ProfileData.products_page(seller.reload, offset:, limit: 2)[:products] }
+      names = slices.flatten.pluck(:name)
+
+      expect(names.length).to eq(6)
+      expect(names.uniq.length).to eq(6)
+    end
+
+    it "caches each slice under the payload's cache version" do
+      product = create(:product, user: seller, name: "Original name")
+      first_read = Pages::ProfileData.products_page(seller.reload, offset: 0, limit: 1)
+      expect(first_read[:products].first[:name]).to eq("Original name")
+
+      # A write that skips callbacks leaves links.updated_at (the cache key's freshness source)
+      # alone, so the slice is still served from cache…
+      product.update_column(:name, "Renamed")
+      expect(Pages::ProfileData.products_page(seller.reload, offset: 0, limit: 1)[:products].first[:name]).to eq("Original name")
+
+      # …and a real save moves the key, busting it.
+      product.touch
+      expect(Pages::ProfileData.products_page(seller.reload, offset: 0, limit: 1)[:products].first[:name]).to eq("Renamed")
     end
   end
 end

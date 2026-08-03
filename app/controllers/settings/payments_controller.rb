@@ -147,6 +147,11 @@ class Settings::PaymentsController < Settings::BaseController
         # came from, and this is the path a first-time payout setup fails on.
         directory_miss = StripeMerchantAccountManager.bank_directory_miss_seller_message(e, current_seller.active_bank_account)
         return redirect_with_error(directory_miss) if directory_miss
+        # Everything else Stripe refuses at account-creation time used to fall through to its raw
+        # message, which quotes the value without naming the rule — or to nothing at all, leaving a
+        # "Thanks! You're all set." page with no payout rail behind it (gumroad-private#1777).
+        rejection_message = StripeMerchantAccountManager.payout_setup_rejection_seller_message(e, current_seller)
+        return redirect_with_error(rejection_message) if rejection_message
         return redirect_with_error(e.try(:message) || "Something went wrong.")
       end
     end
@@ -241,7 +246,7 @@ class Settings::PaymentsController < Settings::BaseController
 
     has_local_requests = current_seller.user_compliance_info_requests.requested.exists?
     if !has_local_requests && !stripe_account_has_open_requirements?(current_seller.stripe_account)
-      redirect_to settings_payments_path, notice: "Thanks! You're all set." and return
+      redirect_to settings_payments_path, **nothing_open_flash and return
     end
 
     redirect_to Stripe::AccountLink.create({
@@ -292,7 +297,9 @@ class Settings::PaymentsController < Settings::BaseController
                              future_requirements["currently_due"].blank? &&
                              future_requirements["past_due"].blank? &&
                              future_requirements["eventually_due"].blank?
-    flash[:notice] = "Thanks! You're all set." if nothing_open_on_stripe
+    if nothing_open_on_stripe
+      flash.merge!(nothing_open_flash)
+    end
 
     safe_redirect_to settings_payments_path
   end
@@ -498,6 +505,21 @@ class Settings::PaymentsController < Settings::BaseController
       error.is_a?(Stripe::InvalidRequestError) &&
         error.message.to_s.include?("account link cannot be created") &&
         error.message.to_s.include?("rejected")
+    end
+
+    # "You're all set" is only true when nothing is open ANYWHERE. Stripe can pause
+    # payouts with every requirement list empty (`disabled_reason: "other"`, an
+    # intervention Stripe raises and resolves out of band), and that state satisfies
+    # every check above while the seller still cannot be paid. Telling them they are
+    # fine is the dead end this branch exists to avoid, so the Stripe-side pause wins.
+    def nothing_open_flash
+      if current_seller.payouts_paused_internally? &&
+         current_seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
+        { alert: "Stripe has paused payouts on your account and hasn't told us what it needs. " \
+                 "There's nothing for you to submit — please contact support and we'll chase it with Stripe." }
+      else
+        { notice: "Thanks! You're all set." }
+      end
     end
 
     def stripe_account_has_open_requirements?(merchant_account)

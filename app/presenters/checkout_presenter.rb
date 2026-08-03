@@ -236,6 +236,14 @@ class CheckoutPresenter
       options << tier.to_option(subscription_attrs: tier_attrs)
     end
     discount = subscription_discount_for_next_charge(subscription, buyer: logged_in_user)
+    subscription_price = subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user)
+    pre_discount_price = if subscription.is_installment_plan
+      subscription_price
+    elsif discount&.dig(:type) == "fixed" && discount[:once_per_cart]
+      subscription.renewal_pre_discount_total_cents
+    else
+      subscription_price
+    end
     prices = product.prices.alive.is_buy.to_a
     if !prices.any? { |price| price.recurrence == subscription.recurrence }
       prices << product.prices.is_buy.where(recurrence: subscription.recurrence).order(deleted_at: :desc).take
@@ -272,7 +280,8 @@ class CheckoutPresenter
         id: subscription.external_id,
         option_id: (subscription.original_purchase.variant_attributes[0] || product.default_tier)&.external_id,
         recurrence: subscription.recurrence,
-        price: subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user),
+        price: subscription_price,
+        pre_discount_price:,
         prorated_discount_price_cents: subscription.prorated_discount_price_cents,
         quantity: subscription.original_purchase.quantity,
         alive: subscription.alive?(include_pending_cancellation: false),

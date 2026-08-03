@@ -23,6 +23,7 @@ const bankAccountDetails: BankAccountDetails = {
 
 const makeUser = (countryCode: string, supportsIban = false): User => ({
   country_supports_native_payouts: true,
+  no_payout_rail_in_country: false,
   country_supports_iban: supportsIban,
   need_full_ssn: false,
   country_code: countryCode,

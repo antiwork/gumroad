@@ -211,6 +211,17 @@ describe OfferCode do
             expect(offer_code).to be_valid
           end
         end
+
+        context "when a once-per-cart code requires multiple units" do
+          before do
+            offer_code.once_per_cart = true
+            offer_code.minimum_quantity = 2
+          end
+
+          it "validates against the eligible cart price" do
+            expect(offer_code).to be_valid
+          end
+        end
       end
 
       context "the offer code is not fixed duration" do
@@ -832,6 +843,202 @@ describe OfferCode do
 
         expect(offer_code.quantity_left).to eq 0
       end
+
+      it "counts a multi-quantity purchase once for a fixed order-level discount" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true)
+        purchase = create(:purchase, link: @product, offer_code:, seller: @product.user, price_cents: @product.price_cents * 10, quantity: 10)
+        purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                      once_per_cart: true, pre_discount_minimum_price_cents: @product.price_cents)
+
+        expect(offer_code.quantity_left).to eq offer_code.max_purchase_count - 1
+      end
+
+      it "counts one allocation across successful subscription restart fragments" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
+        subscription = create(:subscription, link: membership)
+        updated_original = create(
+          :purchase,
+          link: membership,
+          seller: offer_code.user,
+          subscription:,
+          offer_code:,
+          is_original_subscription_purchase: true,
+          is_updated_original_subscription_purchase: true
+        )
+        recurring_fragment = create(
+          :purchase,
+          link: membership,
+          seller: offer_code.user,
+          subscription:,
+          offer_code:,
+          is_original_subscription_purchase: false,
+          is_upgrade_purchase: true
+        )
+        allocation_id = SecureRandom.uuid
+        [updated_original, recurring_fragment].each do |purchase|
+          purchase.create_purchase_offer_code_discount!(
+            offer_code:,
+            offer_code_amount: 100,
+            offer_code_is_percent: false,
+            once_per_cart: true,
+            once_per_cart_allocation_id: allocation_id,
+            pre_discount_minimum_price_cents: membership.price_cents
+          )
+        end
+
+        expect(offer_code.quantity_left).to eq(0)
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+      end
+
+      it "can exclude a completed allocation when validating another fragment" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
+        allocation_id = SecureRandom.uuid
+        purchase = create(:purchase, link: @product, offer_code:, seller: offer_code.user)
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: allocation_id,
+          pre_discount_minimum_price_cents: @product.price_cents
+        )
+
+        expect(offer_code.quantity_left).to eq(0)
+        expect(offer_code.quantity_left(excluding_once_per_cart_allocation_ids: [allocation_id])).to eq(1)
+        expect(offer_code.quantity_left(excluding_once_per_cart_allocation_ids: [SecureRandom.uuid])).to eq(0)
+      end
+
+      it "does not count an archived subscription restart allocation" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
+        subscription = create(:subscription, link: membership)
+        purchase = create(
+          :purchase,
+          link: membership,
+          seller: offer_code.user,
+          subscription:,
+          offer_code:,
+          is_original_subscription_purchase: true,
+          is_updated_original_subscription_purchase: true,
+          is_archived_original_subscription_purchase: true
+        )
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: SecureRandom.uuid,
+          pre_discount_minimum_price_cents: membership.price_cents
+        )
+
+        expect(offer_code.quantity_left).to eq(1)
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => true)
+      end
+
+      it "reserves one allocation on a subscription restart awaiting payment" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
+        subscription = create(:subscription, link: membership)
+        subscription.purchases << create(:membership_purchase, link: membership, seller: offer_code.user)
+        purchase = create(
+          :purchase_in_progress,
+          link: membership,
+          seller: offer_code.user,
+          subscription:,
+          offer_code:,
+          is_original_subscription_purchase: false,
+          is_upgrade_purchase: true
+        )
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: SecureRandom.uuid,
+          pre_discount_minimum_price_cents: membership.price_cents
+        )
+
+        expect(offer_code.quantity_left).to eq(0)
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+      end
+
+      it "reserves a use while a cart-level purchase is in progress" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
+        purchase = create(:purchase, link: @product, offer_code:, seller: @product.user,
+                                     purchase_state: "in_progress", purchaser: nil)
+        purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                      once_per_cart: true, pre_discount_minimum_price_cents: @product.price_cents)
+
+        expect(offer_code.quantity_left).to eq 0
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+        expect(offer_code.is_valid_for_purchase?(excluding_purchase: purchase)).to be(true)
+
+        travel ChargeProcessor::TIME_TO_COMPLETE_SCA + 1.minute
+
+        expect(offer_code.quantity_left).to eq 1
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => true)
+
+        purchase.create_processor_payment_intent!(intent_id: "pi_live_offer_code_reservation")
+
+        expect(offer_code.quantity_left).to eq 0
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+
+        purchase.processor_payment_intent.destroy!
+        purchase.update!(processor_setup_intent_id: "seti_live_offer_code_reservation")
+
+        expect(offer_code.quantity_left).to eq 0
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+
+        purchase.update!(processor_setup_intent_id: nil)
+        purchase.update!(stripe_status: StripeIntentStatus::REQUIRES_ACTION)
+
+        expect(offer_code.quantity_left).to eq 0
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+
+        purchase.update!(purchase_state: "failed")
+
+        expect(offer_code.quantity_left).to eq 1
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => true)
+      end
+
+      it "does not reserve another use for a preorder charge" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 2)
+        preorder = create(:preorder, preorder_link: create(:preorder_link, link: @product), seller: @product.user)
+        authorization = create(
+          :preorder_authorization_purchase,
+          link: @product,
+          offer_code:,
+          seller: @product.user,
+          preorder:,
+          is_preorder_authorization: true
+        )
+        authorization.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          pre_discount_minimum_price_cents: @product.price_cents
+        )
+        charge = create(:purchase, link: @product, offer_code:, seller: @product.user, preorder:,
+                                   purchase_state: "in_progress", purchaser: nil)
+        charge.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                    once_per_cart: true, pre_discount_minimum_price_cents: @product.price_cents)
+
+        expect(offer_code.quantity_left).to eq 1
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => true)
+      end
+
+      it "keeps each purchase's recorded usage mode when the code changes" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: false)
+        legacy_purchase = create(:purchase, link: @product, offer_code:, seller: @product.user, price_cents: @product.price_cents * 2, quantity: 2)
+        legacy_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                             once_per_cart: false, pre_discount_minimum_price_cents: @product.price_cents)
+        offer_code.update!(once_per_cart: true)
+        order_level_purchase = create(:purchase, link: @product, offer_code:, seller: @product.user,
+                                                 price_cents: @product.price_cents * 10, quantity: 10)
+        order_level_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                                  once_per_cart: true, pre_discount_minimum_price_cents: @product.price_cents)
+
+        expect(offer_code.quantity_left).to eq offer_code.max_purchase_count - 3
+      end
     end
 
     describe "product offer codes" do
@@ -905,6 +1112,23 @@ describe OfferCode do
           }
         )
       end
+
+      it "includes a stable allocation identity for order-level pricing" do
+        offer_code.update!(once_per_cart: true)
+
+        expect(offer_code.discount).to include(
+          once_per_cart: true,
+          once_per_cart_id: offer_code.external_id,
+          once_per_cart_amount_cents: 100,
+          once_per_cart_has_usage_limit: false
+        )
+      end
+
+      it "identifies a once-per-cart discount with a usage limit" do
+        offer_code.update!(once_per_cart: true, max_purchase_count: 1)
+
+        expect(offer_code.discount).to include(once_per_cart_has_usage_limit: true)
+      end
     end
 
     context "when the discount is percentage" do
@@ -976,6 +1200,17 @@ describe OfferCode do
 
         it "returns false" do
           expect(offer_code.is_amount_valid?(product)).to eq(false)
+        end
+      end
+
+      context "when a once-per-cart code requires multiple units" do
+        it "validates against the eligible cart price" do
+          product.update!(price_cents: 10_00)
+          offer_code = build(:offer_code, user: seller, products: [product], amount_cents: 9_50,
+                                          once_per_cart: true, minimum_quantity: 2)
+
+          expect(offer_code).to be_valid
+          expect(offer_code.is_amount_valid?(product)).to be(true)
         end
       end
 

@@ -422,7 +422,7 @@
 - id: 252
   slug: "252-multiple-accounts"
   title: "Having multiple accounts"
-  description: "In this article: Transferring products or customers Transferring purchases Transferring ownership of account Yes, you can have as many Gumroad accounts as you w"
+  description: "In this article: Transferring products or customers Transferring purchases Transferring ownership of account Yes, you can have more than one Gumroad account for"
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 260
   slug: "260-your-payout-settings-page"
