@@ -176,26 +176,40 @@ export const buildDeletionOperations = (
   return operations;
 };
 
-// A reorder must never change WHICH rows exist. `newOrder` comes from the DOM,
+// A reorder must never change WHICH rows exist. The order comes from the DOM,
 // so a row missing from it (a drag that lands mid-render, a nested sortable
-// swallowing an id) silently drops that version from state — and dropping it
-// without a confirmed-removal id produces the save contract's silent no-op:
-// the row is gone from the editor, named in no deletion operation, and the
-// save reports success having deleted nothing (gumroad-private#1508).
+// swallowing an id) silently drops that row from state — and dropping a version
+// without a confirmed-removal id produces the save contract's silent no-op: the
+// row is gone from the editor, named in no deletion operation, and the save
+// reports success having deleted nothing (gumroad-private#1508).
 //
-// So reorder by moving what the order names and appending whatever it omitted,
-// preserving the previous relative order of the leftovers. Deletion has exactly
-// one route: the confirmation modal.
+// Both helpers below move what the order names and keep whatever it omitted,
+// appending the leftovers in their previous relative order. Rows are matched by
+// consuming one source row per named row, so a repeated id cannot duplicate a
+// row or silently drop its twin. Deletion has exactly one route: the
+// confirmation modal.
+
+// For a sortable that reports its new order as ids.
 export const reorderPreservingMembership = <T extends { id: string }>(items: T[], newOrder: string[]): T[] => {
-  const seen = new Set<string>();
-  const reordered = newOrder.flatMap((id) => {
-    if (seen.has(id)) return [];
-    const item = items.find((candidate) => candidate.id === id);
-    if (!item) return [];
-    seen.add(id);
-    return [item];
-  });
-  return [...reordered, ...items.filter((item) => !seen.has(item.id))];
+  const remaining = [...items];
+  const reordered: T[] = [];
+  for (const id of newOrder) {
+    const index = remaining.findIndex((candidate) => candidate.id === id);
+    if (index !== -1) reordered.push(...remaining.splice(index, 1));
+  }
+  return [...reordered, ...remaining];
+};
+
+// For a sortable that reports its new order as the row objects themselves.
+// Those objects are kept rather than looked up again, because the library
+// annotates them (a page's `chosen` drag flag is read straight off them).
+export const withOmittedRowsAppended = <T extends { id: string }>(ordered: T[], all: T[]): T[] => {
+  const remaining = [...all];
+  for (const row of ordered) {
+    const index = remaining.findIndex((candidate) => candidate.id === row.id);
+    if (index !== -1) remaining.splice(index, 1);
+  }
+  return [...ordered, ...remaining];
 };
 
 // True when this save asks the server to remove anything at all. Used to decide

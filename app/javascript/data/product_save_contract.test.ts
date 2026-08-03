@@ -6,6 +6,7 @@ import {
   confirmRichContentMoveSourceDeletions,
   hasDeletions,
   reorderPreservingMembership,
+  withOmittedRowsAppended,
 } from "$app/data/product_save_contract";
 
 // The editor's save used to delete whatever the payload didn't mention. Under
@@ -480,5 +481,56 @@ describe("reorderPreservingMembership", () => {
       { id: "a" },
       { id: "c" },
     ]);
+  });
+
+  // Unreachable today (external ids are unique), but a helper whose name
+  // promises membership must not quietly drop a twin if that ever changes.
+  it("keeps both rows when two share an id", () => {
+    const twins = [
+      { id: "a", n: 1 },
+      { id: "a", n: 2 },
+      { id: "b", n: 3 },
+    ];
+
+    expect(reorderPreservingMembership(twins, ["b", "a"])).toEqual([
+      { id: "b", n: 3 },
+      { id: "a", n: 1 },
+      { id: "a", n: 2 },
+    ]);
+  });
+});
+
+// The content-tab page sortable reports its new order as the row objects, not
+// ids, and the library annotates those objects (a page's `chosen` drag flag is
+// read off them) — so they are kept rather than looked up again.
+describe("withOmittedRowsAppended", () => {
+  const all = [{ id: "p1" }, { id: "p2" }, { id: "p3" }];
+
+  it("applies the reported order", () => {
+    expect(withOmittedRowsAppended([{ id: "p3" }, { id: "p1" }, { id: "p2" }], all)).toEqual([
+      { id: "p3" },
+      { id: "p1" },
+      { id: "p2" },
+    ]);
+  });
+
+  it("keeps a page the report omitted instead of dropping it", () => {
+    expect(withOmittedRowsAppended([{ id: "p3" }, { id: "p1" }], all)).toEqual([
+      { id: "p3" },
+      { id: "p1" },
+      { id: "p2" },
+    ]);
+  });
+
+  it("keeps every page when the report is empty", () => {
+    expect(withOmittedRowsAppended([], all)).toEqual(all);
+  });
+
+  it("keeps the reported objects, not the originals", () => {
+    const annotated = { id: "p1", chosen: true };
+    const result = withOmittedRowsAppended([annotated], all);
+
+    expect(result[0]).toBe(annotated);
+    expect(result).toHaveLength(3);
   });
 });

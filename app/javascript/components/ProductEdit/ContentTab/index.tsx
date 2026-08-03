@@ -40,6 +40,7 @@ import {
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
 } from "$app/data/product_edit";
+import { withOmittedRowsAppended } from "$app/data/product_save_contract";
 import { type Post } from "$app/types/workflow";
 import { escapeRegExp } from "$app/utils";
 import { assertDefined } from "$app/utils/assert";
@@ -198,12 +199,18 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     : product.variants.find((variant) => variant.id === selectedVariantId);
   const pages: (Page & { chosen?: boolean })[] = selectedVariant ? selectedVariant.rich_content : product.rich_content;
   const pagesRef = useRefToLatest(pages);
-  const updatePages = (pages: Page[]) =>
+  // The sortable reports its new order as the row objects, and a row missing
+  // from that report must not leave the list — a page dropped here has no
+  // confirmed-removal id, so it vanishes from the editor while the server
+  // correctly keeps it (gumroad-private#1508). Deletion stays on the
+  // confirm-then-remove path below.
+  const updatePages = (nextPages: Page[]) =>
     updateProduct((product) => {
-      if (selectedVariant) selectedVariant.rich_content = pages;
+      const reordered = withOmittedRowsAppended(nextPages, pagesRef.current);
+      if (selectedVariant) selectedVariant.rich_content = reordered;
       else {
         product.has_same_rich_content_for_all_variants = true;
-        product.rich_content = pages;
+        product.rich_content = reordered;
       }
     });
   // Records that the seller explicitly deleted these pages, so the server-side

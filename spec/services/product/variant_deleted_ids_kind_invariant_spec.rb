@@ -224,10 +224,10 @@ describe "deleted_ids[:variants] kind invariant" do
       expect(serializer_source).to match(/deletion_operations:\s*buildDeletionOperations\(product\),/)
     end
 
-    # A row leaving `variants` without a confirmed-removal id is the silent
-    # no-op of gumroad-private#1508. Reorder was that route: it rebuilt the list
-    # from the DOM's id order, so an id missing from that order dropped the row.
-    # Pin the call sites, not just the helper — reverting them is invisible to a
+    # A row leaving a list without a confirmed-removal id is the silent no-op of
+    # gumroad-private#1508. Reorder was that route: it rebuilt the list from
+    # whatever the sortable reported, so an omitted row was dropped. Pin the
+    # call sites, not just the helpers — reverting a call site is invisible to a
     # unit test of the helper alone.
     it "reorders the version editors without letting a row leave the list" do
       %w[VersionsEditor DurationsEditor TiersEditor].each do |editor|
@@ -241,6 +241,22 @@ describe "deleted_ids[:variants] kind invariant" do
                               "#{editor} derives its new list from newOrder directly, which cannot preserve a row " \
                               "the order omitted."
       end
+    end
+
+    # Same defect class, different sortable: the content tab's page list reports
+    # row objects rather than ids. A page dropped here has no confirmed-removal
+    # id either, so the server keeps the row while the seller watches the page
+    # vanish — and no report can see it, because there is no contradiction.
+    it "reorders the content page list without letting a page leave the list" do
+      source = File.read(javascript_root.join("components", "ProductEdit", "ContentTab", "index.tsx"))
+
+      expect(source).to match(/withOmittedRowsAppended\(nextPages, pagesRef\.current\)/),
+                        "The content page list must reorder through withOmittedRowsAppended. Assigning the " \
+                        "sortable's list straight to rich_content drops any page it omits — see " \
+                        "gumroad-private#1508."
+      expect(source).not_to match(/(?:selectedVariant\.rich_content|product\.rich_content) = pages;/),
+                            "The page list assigns the sortable's reported list directly, which cannot preserve a " \
+                            "page that report omitted."
     end
 
     it "exposes no grouping as a deletable object in the product editor" do
