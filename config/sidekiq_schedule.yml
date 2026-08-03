@@ -12,6 +12,10 @@ update_purchase_healthcheck_threshold:
   description: Recomputes the /healthcheck/purchases threshold from the prior 7 days' purchase rate
 
 # Hourly
+repair_order_charge_outcomes:
+  cron: "20 * * * *" # Every hour
+  class: RepairOrderChargeOutcomesJob
+  description: Re-derives Order#partially_successful for recent orders whose after-commit enqueue was lost
 cache_unreviewed_users_data:
   cron: "0 * * * *" # Every hour
   class: CacheUnreviewedUsersDataWorker
