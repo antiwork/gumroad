@@ -12,6 +12,18 @@
 # permanent once products carry values for it; `label` and `values` are display-side and may
 # be edited freely.
 class TaxonomyAttributeDefinitions
+  # Freezing the outer array only stops reassignment — the nested hashes and `values` arrays stay
+  # mutable, and every DEFINITIONS path sharing one of these constants points at the same objects.
+  # A caller mutating one path's definition (e.g. tailoring a facet in place) would silently alter
+  # every other taxonomy mapped to the same constant.
+  def self.deep_freeze(definitions)
+    definitions.each do |definition|
+      definition[:values].freeze
+      definition.freeze
+    end
+    definitions.freeze
+  end
+
   # `genre` and `content_type` were added after the initial ship (gumroad-private#1799 follow-up):
   # sample-pack marketplaces like Splice and Loopmasters organize primarily by genre and content
   # type, ahead of tempo bucket, so those were the real gap in the original facet set.
@@ -22,7 +34,8 @@ class TaxonomyAttributeDefinitions
     { name: "tempo", label: "Tempo", value_type: "enum", values: ["Under 90 BPM", "90–120 BPM", "120–140 BPM", "Over 140 BPM"], position: 3 },
     { name: "loopable", label: "Loopable", value_type: "boolean", values: [], position: 4 },
     { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Royalty-free"], position: 5 },
-  ].freeze
+  ]
+  deep_freeze(MUSIC_DEFINITIONS)
 
   # VRChat buyers don't shop on generic 3D-asset axes (engine/file format) — everything here is a
   # Unity upload by definition. What actually gates a purchase: what kind of item it is, which
@@ -35,7 +48,8 @@ class TaxonomyAttributeDefinitions
     { name: "performance_rank", label: "Performance rank", value_type: "enum", values: ["Excellent", "Good", "Medium", "Poor"], position: 2 },
     { name: "rigged", label: "Rigged", value_type: "boolean", values: [], position: 3 },
     { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 4 },
-  ].freeze
+  ]
+  deep_freeze(VRCHAT_DEFINITIONS)
 
   # Generic 3D-model marketplace facets (gumroad-private#1796), modeled on how TurboSquid,
   # CGTrader, and Sketchfab actually let buyers narrow a catalog: subject category first
@@ -50,7 +64,8 @@ class TaxonomyAttributeDefinitions
     { name: "animated", label: "Animated", value_type: "boolean", values: [], position: 4 },
     { name: "poly_count", label: "Poly count", value_type: "enum", values: ["Low-poly (under 10k)", "Mid-poly (10k-50k)", "High-poly (over 50k)"], position: 5 },
     { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 6 },
-  ].freeze
+  ]
+  deep_freeze(THREE_D_ASSETS_DEFINITIONS)
 
   SOFTWARE_DEVELOPMENT_DEFINITIONS = [
     # Product type comes first: code/plugin marketplaces (CodeCanyon, GitHub Marketplace, VS Code
@@ -61,7 +76,8 @@ class TaxonomyAttributeDefinitions
     { name: "framework", label: "Framework", value_type: "enum", values: ["React", "Next.js", "Vue", "Rails", "Django", "Laravel", "Flutter", "Node.js"], position: 2 },
     { name: "includes_source", label: "Includes source code", value_type: "boolean", values: [], position: 3 },
     { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "Extended commercial"], position: 4 },
-  ].freeze
+  ]
+  deep_freeze(SOFTWARE_DEVELOPMENT_DEFINITIONS)
 
   DEFINITIONS = {
     # Generic 3D assets (game-dev models, environments, props not tied to VRChat's avatar system)
