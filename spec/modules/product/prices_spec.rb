@@ -223,10 +223,13 @@ describe Product::Prices do
       it "refreshes the search index when it clears the flag" do
         product = create(:product, price_cents: 0)
         category = create(:variant_category, title: "versions", link: product)
-
-        expect_any_instance_of(Link).to receive(:enqueue_index_update_for).with(["customizable_price"])
-
         category.variants.create!(name: "premium version", price_difference_cents: 10_00)
+        # The variant save above already cleared it; put it back so this save has work to do.
+        product.update_column(:customizable_price, true)
+
+        expect(product).to receive(:enqueue_index_update_for).with(["customizable_price"])
+
+        product.save!
       end
 
       it "does not re-enqueue an index update when the flag is already right" do
