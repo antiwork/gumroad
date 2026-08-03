@@ -243,15 +243,21 @@ export const serializeEditorContentToHTML = (editor: Editor) => {
 // rather than skip just that piece — see `Schema.nodeType` / `Node.fromJSON`. Drop only the
 // offending subtree (or strip the offending mark) so the rest of the page still renders; `text`
 // nodes have no `type` to check against the schema and pass through with their marks filtered.
-export const dropUnknownNodes = (content: JSONContent[], schema: Schema): JSONContent[] =>
-  content.flatMap((node) => {
-    const marks = node.marks ? { marks: node.marks.filter((mark) => schema.marks[mark.type]) } : {};
-    if (node.type === "text") return [{ ...node, ...marks }];
+export const dropUnknownNodes = (content: JSONContent[], schema: Schema): JSONContent[] => {
+  const withKnownMarks = (node: JSONContent): JSONContent =>
+    node.marks ? { ...node, marks: node.marks.filter((mark) => schema.marks[mark.type]) } : node;
+
+  return content.flatMap((node) => {
+    if (node.type === "text") return [withKnownMarks(node)];
     if (!node.type || !schema.nodes[node.type]) return [];
     return [
-      { ...node, ...marks, content: node.content ? dropUnknownNodes(node.content, schema) : node.content },
+      {
+        ...withKnownMarks(node),
+        content: node.content ? dropUnknownNodes(node.content, schema) : node.content,
+      },
     ];
   });
+};
 
 export const useRichTextEditor = ({
   placeholder,
