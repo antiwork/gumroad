@@ -366,10 +366,10 @@ class Purchase::CreateService < Purchase::BaseService
     # and discarded.
     def validate_bundle_component_inventory(bundle_product)
       requested_quantity = bundle_product.quantity * purchase.quantity
-      component = bundle_product.product
+      component = bundle_product.product.reload
 
       remaining = if bundle_product.variant.present?
-        bundle_product.variant.quantity_left
+        bundle_product.variant.reload.quantity_left
       else
         component.remaining_for_sale_count
       end

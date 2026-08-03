@@ -509,15 +509,15 @@ describe Purchase::CreateService, :vcr do
         params[:bundle_products] = product.bundle_products.alive.map do |bundle_product|
           { product_id: bundle_product.product.external_id, variant_id: nil, quantity: bundle_product.quantity }
         end
-        sold_out_component.update!(max_purchase_count: 1)
-        create(:purchase, link: sold_out_component, purchase_state: "successful")
+        sold_out_component.update!(max_purchase_count: 1, sales_count_for_inventory_cache: 1)
       end
 
       it "fails the whole bundle purchase before charging, naming the unavailable component" do
         purchase, error = Purchase::CreateService.new(product:, params:, buyer:).perform
 
         expect(error).to eq("#{sold_out_component.name} is no longer available in the quantity this bundle includes. Please refresh the page!")
-        expect(purchase.purchase_state).to eq("failed")
+        expect(purchase).not_to be_persisted
+        expect(purchase.charge_intent).to be_nil
         # The whole point: no child row is minted for any component, not just the exhausted one.
         expect(purchase.product_purchases).to be_empty
       end
