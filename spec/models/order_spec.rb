@@ -366,18 +366,44 @@ describe Order do
       end
     end
 
-    context "when a sibling line item is still in progress" do
-      it "does not flag the order yet, and flags it once the sibling settles" do
+    # An order mid-SCA is undecided, not partial: `in_progress` must count as neither side of the
+    # AND. These two pin each half of it — drop either `exists?` call and one of them reddens.
+    context "when a line item succeeded and its sibling is still in progress" do
+      it "leaves the order unflagged" do
         succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
-        pending_item = create(:purchase_in_progress, link: product_2, seller: seller_2)
-        order.purchases << succeeded << pending_item
+        create(:purchase_in_progress, link: product_2, seller: seller_2).tap { order.purchases << _1 }
+        order.purchases << succeeded
+
+        succeeded.update_balance_and_mark_successful!
+
+        expect(order.reload).not_to be_partially_successful
+      end
+    end
+
+    context "when a line item failed and its sibling is still in progress" do
+      it "leaves the order unflagged" do
+        failed = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        create(:purchase_in_progress, link: product_2, seller: seller_2).tap { order.purchases << _1 }
+        order.purchases << failed
+
+        Purchase::MarkFailedService.new(failed).perform
+
+        expect(order.reload).not_to be_partially_successful
+      end
+    end
+
+    context "when a line item settles long after the charge loop returned" do
+      it "flags the order on that late transition" do
+        succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
+        late_item = create(:purchase_in_progress, link: product_2, seller: seller_2)
+        order.purchases << succeeded << late_item
 
         succeeded.update_balance_and_mark_successful!
         expect(order.reload).not_to be_partially_successful
 
-        # SCA confirmation / FailAbandonedPurchaseWorker resolve line items long after the
-        # charge loop returns, so the last one to settle is what writes the outcome.
-        Purchase::MarkFailedService.new(pending_item).perform
+        # SCA confirmation, FailAbandonedPurchaseWorker and the processor-sync recovery paths all
+        # resolve line items after the charge loop has returned.
+        Purchase::MarkFailedService.new(late_item).perform
 
         expect(order.reload).to be_partially_successful
       end

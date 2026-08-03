@@ -63,17 +63,19 @@ class Order < ApplicationRecord
     @_successful_charges ||= charges.select { _1.successful_purchases.any? }
   end
 
-  # Called once the charge flow has resolved every line item. Partial success is a reachable
-  # outcome of one checkout — `Order::ChargeService` rescues per seller group, so an exception in
-  # seller B's group leaves seller A's charge captured — and until this is recorded the outcome
-  # exists only as the derived states of the child purchases, so nothing can query or reconcile it.
+  # Partial success is a reachable outcome of one checkout — `Order::ChargeService` rescues per
+  # seller group, so an exception in seller B's group leaves seller A's charge captured — and until
+  # this is recorded the outcome exists only as the derived states of the child purchases, so
+  # nothing can query or reconcile it.
+  #
+  # No "all line items settled" guard: once the order holds both a success and a failure the
+  # predicate can never go back to false (purchase states are terminal), so a still-in-progress
+  # sibling cannot change the answer, only when it is written.
   #
   # Written with `update_columns` because this is derived bookkeeping: an ordinary save here would
   # be the first order-row save after a purchase succeeded and would fire `schedule_review_reminder!`
   # from the charge path rather than from the purchase-success transition that owns it.
   def record_charge_outcome!
-    return if purchases.in_progress.exists?
-
     partial = purchases.all_success_states_including_test.exists? && purchases.failed.exists?
     return if partially_successful? == partial
 
