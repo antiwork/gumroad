@@ -455,7 +455,7 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
   end
 
-  it "falls back to CardElement when a one-time purchase offers an installment plan" do
+  it "selects the buyer-currency presentment Payment Element when a one-time purchase offers an installment plan" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     create(:product_installment_plan, link: product)
@@ -463,6 +463,10 @@ describe Checkout::StripePaymentPresenter do
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    # The subscription ramp is what turns the buyer-local display on for a product offering
+    # installments (CurrencyHelper#buyer_currency_unquotable_product?), so this cart only
+    # becomes a presentment candidate for a ramped seller.
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
     add_products = [
       checkout_product_for(
         product,
@@ -474,18 +478,19 @@ describe Checkout::StripePaymentPresenter do
       )
     ]
 
-    expect(stripe_payment_props(add_products:)).to eq(
-      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
-      fallback_reason: "buyer_currency_presentment_unsupported",
-      disable_wallets: true,
-      request_apple_pay_merchant_tokens: false,
-      payment_element_wallets: false,
-      flat_payment_methods: false,
-      elements_options: nil,
-    )
+    props = stripe_payment_props(add_products:)
+
+    # Offering a plan is not choosing one: the surcharge request carries the buyer's actual
+    # selection, so a pay-in-full cart is quoted and charged like any one-time item. The
+    # selected-installment cart still falls back — covered by the pay_in_installments
+    # examples asserting "setup_or_installment_flow".
+    expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
+    expect(props[:fallback_reason]).to be_nil
+    expect(props[:elements_options][:buyer_currency_presentment]).to be(true)
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller) if seller
   end
 
   it "falls back to CardElement when the presentment candidate item is recurring" do

@@ -452,14 +452,12 @@ class Checkout::StripePaymentPresenter
         # shape (1) runs in live mode only when the resolver exposes a launched local method
         # whose Connect-account capabilities can accept the product's forced currency.
         #
-        # Shape 1 is still reachable even though props now always hands a quoted cart to the
-        # buyer-currency element. The gap between "is a candidate" and "gets the element" is a
-        # product that OFFERS an installment plan: it is a candidate (the display converts) but
-        # the element shape rejects it, because quote creation cannot see whether the buyer
-        # picked installments. Such a cart is never quoted either — quotable_product? rejects
-        # installment-plan products — so it carries no token and the client-confirm lane can
-        # charge it safely. Keeping shape 1 listed means it keeps the local-method tabs instead
-        # of being kicked back to CardElement.
+        # Shape 1 stays listed even though props now always hands a quoted cart to the
+        # buyer-currency element. Candidates the element shape still refuses — ramped
+        # sellers' recurring, preorder and commission items, whose charge differs from the
+        # locked cart total (gumroad-private#1737) — are never quoted as plain carts, so
+        # when such a cart is method-forced the client-confirm lane can charge it safely,
+        # keeping its local-method tabs instead of being kicked back to CardElement.
         supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported
@@ -471,9 +469,12 @@ class Checkout::StripePaymentPresenter
     # The cart shape whose buyer-currency presentment the CARD charge path supports, mirroring
     # the gates of Checkout::BuyerCurrencyEligibility#decision that are knowable at render time:
     # one-time, non-commission items that are each a presentment candidate (candidate? already
-    # covers the seller's flags and an active buyer-local display). Products that offer
-    # installments stay on CardElement even when the buyer chooses a one-time purchase because
-    # quote creation cannot see that choice and rejects the product.
+    # covers the seller's flags and an active buyer-local display). A product that merely
+    # OFFERS an installment plan is accepted when the buyer pays in full: its display only
+    # converts for sellers in the subscription ramp (CurrencyHelper#buyer_currency_unquotable_product?),
+    # and for those sellers the quote signs it like any one-time item — the surcharge request
+    # carries the buyer's actual choice, so a selected installment is rejected on
+    # `pay_in_installments` below rather than on what the product could have offered.
     #
     # A cart may span several sellers. The order pipeline turns it into one charge per seller,
     # and the surcharge endpoint locks one quote per prospective charge before the buyer is
@@ -514,7 +515,7 @@ class Checkout::StripePaymentPresenter
       items.all? do |item|
         buyer_currency_presentment_candidate?(item) &&
           item[:recurrence].blank? &&
-          !item[:pay_in_installments] && !item[:offers_installment_plan] &&
+          !item[:pay_in_installments] &&
           !item[:is_preorder] && !item[:has_free_trial] &&
           item[:native_type] != Link::NATIVE_TYPE_COMMISSION
       end
@@ -597,7 +598,6 @@ class Checkout::StripePaymentPresenter
           quantity: cart_product.quantity,
           recurrence: cart_product.recurrence,
           pay_in_installments: cart_product.pay_in_installments,
-          offers_installment_plan: product.installment_plan.present?,
           is_preorder: product.is_in_preorder_state,
           has_free_trial: product.free_trial_enabled,
           native_type: product.native_type,
@@ -621,7 +621,6 @@ class Checkout::StripePaymentPresenter
           quantity: checkout_product[:quantity],
           recurrence: checkout_product[:recurrence],
           pay_in_installments: checkout_product[:pay_in_installments],
-          offers_installment_plan: product[:installment_plan].present?,
           is_preorder: product[:is_preorder],
           has_free_trial: product[:free_trial].present?,
           native_type: product[:native_type],
@@ -710,14 +709,13 @@ class Checkout::StripePaymentPresenter
 
     # quantity defaults to 1: price_cents is always the per-unit price, and the only current
     # consumer of quantity (the Klarna amount-window total) must not undercount multi-unit carts.
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false, has_customizable_price: false)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false, has_customizable_price: false)
       {
         seller:,
         price_cents:,
         quantity:,
         recurrence:,
         pay_in_installments:,
-        offers_installment_plan:,
         is_preorder:,
         has_free_trial:,
         native_type:,
