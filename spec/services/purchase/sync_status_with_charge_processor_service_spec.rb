@@ -227,13 +227,44 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
       awaiting_customer_initiated_payment?: false
     )
     finalizer = instance_double(Order::FinalizeConfirmedChargeService, charge_intent:)
-    allow(Order::FinalizeConfirmedChargeService).to receive(:new).with(order:).and_return(finalizer)
+    allow(ChargeProcessor).to receive(:get_charge_intent)
+      .with(charge.merchant_account, charge.stripe_payment_intent_id)
+      .and_return(charge_intent)
+    allow(Order::FinalizeConfirmedChargeService).to receive(:new)
+      .with(order:, charge_intent:)
+      .and_return(finalizer)
     allow(finalizer).to receive(:perform)
 
     service = described_class.new(purchase, require_final_charge_status: true)
 
     expect(service.perform).to be(false)
     expect(service.charge_outcome).to eq(:succeeded)
+    expect(purchase.reload).to be_in_progress
+  end
+
+  it "does not finalize a client-confirmed purchase while its charge is pending" do
+    order = create(:order)
+    charge = create(:charge, order:, seller: @seller, client_confirmed: true,
+                             stripe_payment_intent_id: "pi_client_confirmed_pending")
+    purchase = create(:purchase_in_progress, link: @product, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+    charge.purchases << purchase
+    processor_charge = instance_double(StripeCharge, status: "pending", refunded: false, disputed: false)
+    charge_intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      charge: processor_charge,
+      processing?: false,
+      awaiting_customer_initiated_payment?: false
+    )
+    allow(ChargeProcessor).to receive(:get_charge_intent)
+      .with(charge.merchant_account, charge.stripe_payment_intent_id)
+      .and_return(charge_intent)
+    expect(Order::FinalizeConfirmedChargeService).not_to receive(:new)
+
+    service = described_class.new(purchase, require_final_charge_status: true)
+
+    expect(service.perform).to be(false)
+    expect(service.charge_outcome).to eq(:pending)
     expect(purchase.reload).to be_in_progress
   end
 

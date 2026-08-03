@@ -25,7 +25,18 @@ class Purchase::SyncStatusWithChargeProcessorService
     # persisted before fulfillment. The delegated finalizer owns its own row lock.
     if client_confirmed_charge?
       purchase.with_lock { restore_failed_purchase_to_in_progress! }
-      finalizer = Order::FinalizeConfirmedChargeService.new(order: purchase.charge.order)
+      finalizer_args = { order: purchase.charge.order }
+      if @require_final_charge_status
+        charge_intent = ChargeProcessor.get_charge_intent(
+          purchase.charge.merchant_account,
+          purchase.charge.stripe_payment_intent_id
+        )
+        @charge_outcome = classify_charge_intent(charge_intent)
+        return false unless @charge_outcome == :succeeded
+
+        finalizer_args[:charge_intent] = charge_intent
+      end
+      finalizer = Order::FinalizeConfirmedChargeService.new(**finalizer_args)
       begin
         finalizer.perform
       ensure
