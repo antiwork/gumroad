@@ -72,11 +72,20 @@ class TaxonomyAttributeDefinitions
     # from the generic 3D-assets leaf above, because the buyer question is different.
     "3d/avatars" => VRCHAT_DEFINITIONS,
     "3d/vrchat" => VRCHAT_DEFINITIONS,
+    # `classification` goes first: it's the primary browse facet on every major font marketplace
+    # (MyFonts' "Category", Fontspring's "Classification", Google Fonts' category filter chips) and
+    # was the biggest gap versus #6858's shipped set. `has_multiple_weights` is a deliberately coarse
+    # boolean rather than a weight-bucket enum — actual weight names/counts vary per family (some
+    # foundries ship Thin/Regular/Black, others ship nine intermediate weights), so a fixed bucket
+    # enum would misclassify families at the edges. The boolean still answers the question buyers
+    # filter on ("does this have more than one weight to choose from?") without that risk.
     "design/fonts" => [
-      { name: "format", label: "Format", value_type: "enum", values: ["OTF", "TTF", "WOFF2"], position: 0 },
-      { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "App embedding"], position: 1 },
-      { name: "variable_font", label: "Variable font", value_type: "boolean", values: [], position: 2 },
-      { name: "styles", label: "Styles", value_type: "number", values: [], position: 3 },
+      { name: "classification", label: "Classification", value_type: "enum", values: ["Serif", "Sans serif", "Script", "Slab serif", "Display", "Monospace", "Handwriting"], position: 0 },
+      { name: "format", label: "Format", value_type: "enum", values: ["OTF", "TTF", "WOFF2"], position: 1 },
+      { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "App embedding"], position: 2 },
+      { name: "variable_font", label: "Variable font", value_type: "boolean", values: [], position: 3 },
+      { name: "has_multiple_weights", label: "Multiple weights", value_type: "boolean", values: [], position: 4 },
+      { name: "styles", label: "Styles", value_type: "number", values: [], position: 5 },
     ],
     "design/graphics/assets-and-templates" => [
       { name: "template_type", label: "Template type", value_type: "enum", values: ["Presentation", "Social media", "Print", "Web/UI kit", "Mockup", "Branding/Logo", "Resume/CV", "Icon set"], position: 0 },
