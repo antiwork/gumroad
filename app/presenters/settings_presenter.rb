@@ -607,6 +607,7 @@ class SettingsPresenter
     def user_details(user_compliance_info)
       {
         country_supports_native_payouts: seller.native_payouts_supported?,
+        no_payout_rail_in_country: seller.no_payout_rail_in_compliance_country?,
         country_supports_iban: seller.country_supports_iban?,
         need_full_ssn: seller.has_ever_been_requested_for_user_compliance_info_field?(UserComplianceInfoFields::Individual::TAX_ID),
         country_code: user_compliance_info.legal_entity_country_code,
