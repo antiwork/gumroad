@@ -19,6 +19,22 @@ describe RecordOrderChargeOutcomeJob do
     expect(order.reload).to be_partially_successful
   end
 
+  it "sticks the connection to the primary before reading the sibling states" do
+    steps = []
+    allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
+      steps << :stick_to_primary
+      method.call(*args)
+    end
+    allow_any_instance_of(Order).to receive(:record_charge_outcome!).and_wrap_original do |method, *args|
+      steps << :read_sibling_states
+      method.call(*args)
+    end
+
+    described_class.new.perform(order.id)
+
+    expect(steps.index(:stick_to_primary)).to be < steps.index(:read_sibling_states)
+  end
+
   it "does not raise when the order no longer exists" do
     id = order.id
     order.destroy!
