@@ -282,6 +282,7 @@ const CheckoutIndexPage = () => {
   const listedProductTotalCents = listedTipLines.reduce((sum, line) => sum + line.price, 0);
   const listedTipCents = listedCurrency ? computeTipForListedLines(state, listedTipLines) : 0;
   const [results, setResults] = React.useState<Result[] | null>(null);
+  const purchaseCompletedRef = React.useRef(false);
   const [checkoutStyle, capturePurchasedCheckoutStyle] = useCheckoutStyle(
     props.checkout_style,
     cartForm.data.cart.items.map(({ product }) => product.creator.id),
@@ -715,6 +716,10 @@ const CheckoutIndexPage = () => {
       }
 
       setRedirecting(!!redirectTo);
+      if (results.some(({ result }) => result.success)) {
+        purchaseCompletedRef.current = true;
+        debouncedSaveCartState.cancel();
+      }
 
       cartForm.setData((prev) => ({
         cart: {
@@ -831,7 +836,11 @@ const CheckoutIndexPage = () => {
     router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
   });
   React.useEffect(() => {
-    debouncedSaveCartState();
+    if (state.status.type !== "input") debouncedSaveCartState.cancel();
+  }, [state.status.type]);
+  React.useEffect(() => {
+    if (!purchaseCompletedRef.current && state.status.type === "input") debouncedSaveCartState();
+    else debouncedSaveCartState.cancel();
     if (state.status.type === "input") {
       dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
     }

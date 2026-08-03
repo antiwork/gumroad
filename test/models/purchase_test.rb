@@ -2296,6 +2296,36 @@ class PurchaseTest < ActiveSupport::TestCase
     assert purchase2.valid?
   end
 
+  test "not_double_charged disallows identical successful repeat purchases seconds apart" do
+    product = create_product
+    create_purchase(link: product, seller: product.user, email: "bob@gumroad.com", total_transaction_cents: 12_34, created_at: Time.current)
+
+    purchase2 = build_purchase(link: product, email: "bob@gumroad.com", total_transaction_cents: 12_34, created_at: Time.current)
+
+    assert_not purchase2.valid?
+    assert_includes purchase2.errors.full_messages, "You have already paid for this product. It has been emailed to you."
+  end
+
+  test "not_double_charged disallows identical successful repeat purchases by the same buyer account" do
+    product = create_product
+    buyer = create_user
+    create_purchase(link: product, seller: product.user, purchaser: buyer, email: "first@example.com", total_transaction_cents: 12_34, created_at: Time.current)
+
+    purchase2 = build_purchase(link: product, purchaser: buyer, email: "second@example.com", total_transaction_cents: 12_34, created_at: Time.current)
+
+    assert_not purchase2.valid?
+    assert_includes purchase2.errors.full_messages, "You have already paid for this product. It has been emailed to you."
+  end
+
+  test "not_double_charged allows identical successful repeat purchases outside the duplicate window" do
+    product = create_product
+    create_purchase(link: product, seller: product.user, email: "bob@gumroad.com", total_transaction_cents: 12_34, created_at: 6.minutes.ago)
+
+    purchase2 = build_purchase(link: product, email: "bob@gumroad.com", total_transaction_cents: 12_34, created_at: Time.current)
+
+    assert purchase2.valid?
+  end
+
   test "not_double_charged disallows double-charges if the first purchase is in progress" do
     product = create_product
     ip = unique_ip

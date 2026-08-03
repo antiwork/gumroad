@@ -5054,6 +5054,12 @@ class Purchase < ApplicationRecord
         "in_progress"
       ]
 
+      last_allowed_successful_purchase_at = if is_upgrade_purchase? || link.quantity_enabled || link.is_physical || link.is_licensed
+        10.seconds.ago
+      else
+        5.minutes.ago
+      end
+
       last_allowed_purchase_at = if is_upgrade_purchase? || link.quantity_enabled || link.is_physical || link.is_licensed
         10.seconds.ago
       else
@@ -5096,7 +5102,31 @@ class Purchase < ApplicationRecord
       add_errors_for_existing_purchase(already)
       return if errors.present?
 
+      not_double_charged_after_success(recipient_email, last_allowed_successful_purchase_at)
+      return if errors.present?
+
       not_double_charged_while_payment_settling(recipient_email)
+    end
+
+    def not_double_charged_after_success(recipient_email, window_start)
+      return if is_gift_sender_purchase
+      return if link.quantity_enabled && is_multi_buy
+
+      successful = self.class.successful.where(
+        link_id: link.id,
+        total_transaction_cents:
+      ).where("purchases.created_at > ?", window_start)
+
+      successful = if purchaser_id.present?
+        successful.where("purchases.email = ? OR purchases.purchaser_id = ?", recipient_email, purchaser_id)
+      else
+        successful.where(email: recipient_email)
+      end
+
+      successful = successful.where("purchases.id != ?", id) if id
+      successful = successful.not_is_gift_sender_purchase unless is_gift_sender_purchase
+
+      add_errors_for_existing_purchase(successful)
     end
 
     # Blocks a repeat purchase while an earlier attempt's payment is still settling.
