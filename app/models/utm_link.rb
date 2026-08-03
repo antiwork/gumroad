@@ -96,8 +96,14 @@ class UtmLink < ApplicationRecord
     }
   end
 
+  # nil when the target (product/post) row is gone — e.g. hard-deleted via GDPR erasure —
+  # while this link's own row survives. Callers (API as_json, dashboard presenter) must
+  # tolerate nil rather than raising on the dangling reference.
   def utm_url
-    uri = Addressable::URI.parse(target_resource_url)
+    url = target_resource_url
+    return nil if url.nil?
+
+    uri = Addressable::URI.parse(url)
     params = uri.query_values || {}
     params["utm_source"] = utm_source
     params["utm_medium"] = utm_medium
@@ -110,9 +116,9 @@ class UtmLink < ApplicationRecord
 
   def target_resource_name
     if target_product_page?
-      "Product — #{target_resource.name}"
+      "Product — #{target_resource&.name || "deleted"}"
     elsif target_post_page?
-      "Post — #{target_resource.name}"
+      "Post — #{target_resource&.name || "deleted"}"
     elsif target_profile_page?
       "Profile page"
     elsif target_subscribe_page?
@@ -166,9 +172,9 @@ class UtmLink < ApplicationRecord
       elsif target_subscribe_page?
         Rails.application.routes.url_helpers.custom_domain_subscribe_url(host: seller.subdomain_with_protocol)
       elsif target_product_page?
-        target_resource.long_url
+        target_resource&.long_url
       elsif target_post_page?
-        target_resource.full_url
+        target_resource&.full_url
       end
     end
 
