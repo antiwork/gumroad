@@ -17,10 +17,10 @@ class ReindexSubscriptionCurrentEmailWorker
             .select(:id)
             .find_each do |purchase|
       ElasticsearchIndexerWorker.perform_async("update", {
-                                                "record_id" => purchase.id,
-                                                "class_name" => "Purchase",
-                                                "fields" => ["subscription_current_email"],
-                                              })
+                                                 "record_id" => purchase.id,
+                                                 "class_name" => "Purchase",
+                                                 "fields" => ["subscription_current_email"],
+                                               })
     end
   end
 end

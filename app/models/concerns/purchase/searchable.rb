@@ -273,10 +273,10 @@ module Purchase::Searchable
       return if purchase.nil?
 
       ElasticsearchIndexerWorker.perform_in(2.seconds, "update", {
-                                             "record_id" => purchase.id,
-                                             "class_name" => "Purchase",
-                                             "fields" => ["subscription_current_email"],
-                                           })
+                                              "record_id" => purchase.id,
+                                              "class_name" => "Purchase",
+                                              "fields" => ["subscription_current_email"],
+                                            })
     end
   end
 
