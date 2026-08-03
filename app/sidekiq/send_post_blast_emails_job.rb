@@ -37,7 +37,7 @@ class SendPostBlastEmailsJob
       recipients = prepare_recipients(members)
 
       begin
-        PostEmailApi.process(post: @post, recipients:, cache:, blast: @blast)
+        deliver_slice_with_retries(recipients:, cache:)
         mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
       rescue => e
         # Delete the sent_post_emails records if there's an error with PostEmailApi.process
@@ -54,6 +54,44 @@ class SendPostBlastEmailsJob
   end
 
   private
+    # A DNS or connect blip reaching the ESP lasts seconds, but raising it out of the slice
+    # loop costs an attempt at the WHOLE blast — and `retry: 10` spans roughly a day, so a
+    # resolver that flaps a few times in that window burns every attempt and the blast
+    # dead-sets partway through.
+    #
+    # Retrying in place is safe because the slice is the unit the error path below already
+    # reasons about: its SentPostEmail rows survive until the retries are exhausted, and the
+    # ESP call is the last thing in the slice, so a retry re-sends exactly these recipients.
+    # Only connection-establishment errors qualify — an ESP that rejected the payload will
+    # reject it again, so those raise straight through to Sidekiq's retry.
+    SLICE_DELIVERY_ATTEMPTS = 4
+    SLICE_DELIVERY_BACKOFF = [2, 8, 30].freeze
+    TRANSIENT_DELIVERY_ERRORS = [
+      Socket::ResolutionError,
+      Errno::ECONNREFUSED,
+      Errno::ECONNRESET,
+      Errno::EHOSTUNREACH,
+      Errno::ETIMEDOUT,
+      Net::OpenTimeout,
+      Net::ReadTimeout,
+    ].freeze
+
+    def deliver_slice_with_retries(recipients:, cache:)
+      attempt = 0
+      begin
+        attempt += 1
+        PostEmailApi.process(post: @post, recipients:, cache:, blast: @blast)
+      rescue *TRANSIENT_DELIVERY_ERRORS => e
+        raise e if attempt >= SLICE_DELIVERY_ATTEMPTS
+
+        Rails.logger.info(
+          "[#{self.class.name}] blast_id=#{@blast.id} transient delivery error on attempt #{attempt} " \
+          "(#{e.class}: #{e.message}), retrying slice of #{recipients.size}")
+        sleep(SLICE_DELIVERY_BACKOFF[attempt - 1])
+        retry
+      end
+    end
+
     # How long the audience snapshot survives in Redis. Long enough to cover the full
     # Sidekiq retry schedule of this job (10 retries spans roughly a day), short enough
     # that an abandoned blast doesn't hold hundreds of thousands of entries forever.
