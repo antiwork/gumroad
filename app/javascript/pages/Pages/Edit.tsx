@@ -6,6 +6,7 @@ import typia from "typia";
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { CustomHtmlPreview } from "$app/components/Pages/CustomHtmlPreview";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -114,6 +115,10 @@ export default function PagesEdit() {
   // the same document same-origin instead — the sanitized custom HTML for
   // agent-built pages, or the real styled document for rich text pages.
   const previewPath = page.slug ? Routes.preview_page_path(page.slug) : null;
+  // The preview's products bridge fetches its catalogue slices from the dashboard
+  // (PagesController#products) — the public /landing/products endpoint lives on the
+  // seller's storefront host and would only see the published page anyway.
+  const previewProductsPath = page.slug ? Routes.products_page_path(page.slug) : null;
 
   const save = () => {
     setIsSaving(true);
@@ -241,17 +246,19 @@ export default function PagesEdit() {
               className="h-[75vh] min-h-150 w-full bg-white"
             />,
           )
-        : page.custom_html && previewPath
+        : page.custom_html && previewPath && previewProductsPath
           ? previewChrome(
               // Agent-built pages (and a custom HTML home page) render through the
               // dashboard's same-origin preview endpoint — see the note on
               // previewPath above for why the public URL can't be framed. The
               // sandbox makes the document unreadable from here, so it can't be
               // sized to content; it gets the same tall frame as the profile.
-              <iframe
+              // CustomHtmlPreview also answers the page's products bridge so a
+              // paginated catalogue renders here, not just once published.
+              <CustomHtmlPreview
                 title="Page preview"
                 src={previewPath}
-                sandbox="allow-scripts"
+                productsSrc={previewProductsPath}
                 className="h-[75vh] min-h-150 w-full bg-white"
               />,
             )

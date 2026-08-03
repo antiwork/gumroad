@@ -948,6 +948,33 @@ module RendersCustomHtmlPages
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
     end
 
+    # One catalogue slice for the gumroad:products bridge (gumroad-private#1691). Shared by the
+    # public endpoint (UsersController#landing_products) and the editor preview's responder
+    # (PagesController#products) so a page paginates identically in both, and renders the
+    # JSON itself because the two differ only in how they resolve and authorize the seller.
+    # Everything returned is data the page 1 payload already exposes.
+    def render_custom_html_products_slice(seller)
+      offset = Integer(params[:offset], exception: false)
+      limit = Integer(params[:limit], exception: false)
+      return render json: { success: false }, status: :bad_request if offset.nil? || offset.negative? || limit.nil? || limit < 1
+
+      limit = [limit, Pages::ProfileData::MAX_ITEMS].min
+      page = Pages::ProfileData.products_page(seller, offset:, limit:)
+      # The prices half is uncached and derived from the visitor's IP, so this response must
+      # never be shared — same rule as landing_iframe_content. And same as there, the build is
+      # skipped for pages that reference no price: they cannot consume it.
+      response.cache_control.replace(private: true, no_store: true)
+      prices = Pages::ProductPrices.referenced_in?(seller.custom_html) ? Pages::ProductPrices.build(seller, ip: request.remote_ip, offset:, limit:) : {}
+      render json: {
+        success: true,
+        offset:,
+        limit:,
+        products: page[:products],
+        products_total: page[:products_total],
+        prices:,
+      }
+    end
+
     # The full sandboxed document for a profile custom-HTML page. Shared by the live
     # /landing/embed endpoint (UsersController) and the agent's proposed-change preview
     # (Api::Internal::AgentCustomHtmlPreviewsController) so a preview can never drift from what

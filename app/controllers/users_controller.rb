@@ -78,26 +78,7 @@ class UsersController < ApplicationController
   def landing_products
     return head :not_found unless custom_html_visible?
 
-    offset = Integer(params[:offset], exception: false)
-    limit = Integer(params[:limit], exception: false)
-    return render json: { success: false }, status: :bad_request if offset.nil? || offset.negative? || limit.nil? || limit < 1
-
-    limit = [limit, Pages::ProfileData::MAX_ITEMS].min
-    page = Pages::ProfileData.products_page(@user, offset:, limit:)
-    # The prices half is uncached and derived from the visitor's IP, so this
-    # response must never be shared — same rule as landing_iframe_content.
-    # And same as there, the build is skipped for pages that reference no
-    # price: they cannot consume it.
-    response.cache_control.replace(private: true, no_store: true)
-    prices = Pages::ProductPrices.referenced_in?(@user.custom_html) ? Pages::ProductPrices.build(@user, ip: request.remote_ip, offset:, limit:) : {}
-    render json: {
-      success: true,
-      offset:,
-      limit:,
-      products: page[:products],
-      products_total: page[:products_total],
-      prices:,
-    }
+    render_custom_html_products_slice(@user)
   end
 
   def edit

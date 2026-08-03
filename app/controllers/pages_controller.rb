@@ -12,7 +12,7 @@ class PagesController < Sellers::BaseController
 
   layout "inertia"
 
-  before_action :set_page, only: [:edit, :update, :destroy, :preview]
+  before_action :set_page, only: [:edit, :update, :destroy, :preview, :products]
 
   def index
     authorize :page
@@ -166,9 +166,9 @@ class PagesController < Sellers::BaseController
         data_json: ERB::Util.json_escape(Pages::ProfileData.build(current_seller).to_json),
         prices_json: prices_referenced ? ERB::Util.json_escape(prices.to_json) : nil,
         follow_bridge: FOLLOW_BRIDGE_SCRIPT,
-        # The child half only — the editor pane has no products wrapper
-        # listening, so requests never resolve here, but the page's
-        # window.gumroadProducts API exists and page scripts don't throw.
+        # The editor pane's own products wrapper answers these (see #products) —
+        # a page whose cards come from a catalogue slice has to render in the
+        # preview too, or the seller can only test it by publishing.
         products_bridge: PRODUCTS_BRIDGE_SCRIPT,
       ).html_safe, layout: false
     else
@@ -190,6 +190,20 @@ class PagesController < Sellers::BaseController
         </html>
       HTML
     end
+  end
+
+  # Catalogue slices for the editor preview's products bridge. The preview pane's
+  # wrapper (LandingPagePreview-style listener in Pages/Edit) fetches this instead of
+  # the public /landing/products endpoint: the preview renders the seller's UNSAVED
+  # profile takeover from the dashboard origin, where that endpoint is not routed and
+  # the seller may not even have a visible custom page yet. Always the signed-in
+  # seller's own catalogue — the slice params can't pick an account.
+  def products
+    authorize :page
+
+    return head :not_found unless @profile_page
+
+    render_custom_html_products_slice(current_seller)
   end
 
   private

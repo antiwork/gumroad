@@ -192,6 +192,14 @@ describe PagesController, type: :controller, inertia: true do
       expect(response.body).to include("data-gumroad-follow-bridge")
     end
 
+    it "injects the products bridge on the profile preview so paginated catalogue pages render here too" do
+      seller.update!(custom_html: "<h1>Home takeover</h1>")
+
+      get :preview, params: { slug: "profile" }
+
+      expect(response.body).to include("data-gumroad-products-bridge")
+    end
+
     it "renders the profile's custom HTML takeover for the profile slug" do
       seller.custom_html = "<h1>Home takeover</h1>"
       seller.save!
@@ -250,6 +258,60 @@ describe PagesController, type: :controller, inertia: true do
       get :preview, params: { slug: "profile" }
 
       expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe "GET products" do
+    before do
+      seller.update!(custom_html: "<h1>Home takeover</h1>")
+      # Deterministic created_at values so the ordering assertion can't flake on ties.
+      @products = 4.times.map { |i| create(:product, user: seller, name: "Product #{i}", created_at: Time.utc(2026, 1, 1) + i.minutes) }
+    end
+
+    it "answers the preview bridge with the same slice the public endpoint serves" do
+      get :products, params: { slug: "profile", offset: 1, limit: 2 }
+
+      expect(response).to be_successful
+      body = response.parsed_body
+      expect(body["success"]).to be(true)
+      expect(body["products_total"]).to eq(4)
+      expect(body["products"].map { |p| p["name"] }).to eq([@products[2].name, @products[1].name])
+    end
+
+    it "rejects a non-integer or negative offset/limit" do
+      aggregate_failures do
+        [{ offset: -1, limit: 2 }, { offset: "abc", limit: 2 }, { offset: 0, limit: 0 }, { offset: 0 }].each do |bad_params|
+          get :products, params: bad_params.merge(slug: "profile")
+          expect(response).to have_http_status(:bad_request), "expected 400 for #{bad_params.inspect}"
+        end
+      end
+    end
+
+    it "is never cacheable by shared caches — the prices half derives from the visitor's IP" do
+      get :products, params: { slug: "profile", offset: 0, limit: 1 }
+
+      expect(response.headers["Cache-Control"]).to include("private")
+      expect(response.headers["Cache-Control"]).to include("no-store")
+    end
+
+    # Slugged pages are served without the catalogue payload, so their preview has no
+    # bridge to answer.
+    it "404s for a slugged page" do
+      create(:user_page, pageable: seller, slug: "about", title: "About", custom_html: "<h1>About</h1>")
+
+      get :products, params: { slug: "about", offset: 0, limit: 1 }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "serves the signed-in seller's catalogue regardless of any request param" do
+      other = create(:user, username: "someoneelse")
+      create(:product, user: other, name: "Not mine")
+
+      get :products, params: { slug: "profile", offset: 0, limit: Pages::ProfileData::MAX_ITEMS, username: other.username, user_id: other.id }
+
+      expect(response.parsed_body["products"].map { |p| p["name"] }).not_to include("Not mine")
+      expect(response.parsed_body["products_total"]).to eq(4)
     end
   end
 end

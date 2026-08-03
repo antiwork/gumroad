@@ -1066,6 +1066,9 @@ Rails.application.routes.draw do
       # The public page can't be framed from the dashboard (its embed sends
       # X-Frame-Options: SAMEORIGIN and the dashboard is a different origin).
       get :preview, on: :member
+      # Catalogue slices for the preview pane's products bridge — the public
+      # /landing/products endpoint isn't routed on the dashboard host.
+      get :products, on: :member
     end
 
     # workflows
