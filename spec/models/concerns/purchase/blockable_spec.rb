@@ -691,9 +691,13 @@ describe Purchase::Blockable do
       it "reports an incomplete scan when a full page of scanned attempts is all Connect charges" do
         connect_account = create(:merchant_account, user: create(:user), charge_processor_id: StripeChargeProcessor.charge_processor_id)
         connect_account.update!(json_data: { "meta" => { "stripe_connect" => "true" } })
-        create_list(:purchase, Purchase::Blockable::PROCESSOR_REFUSAL_MAX_SCAN, link: product, email: buyer_email, purchaser: buyer, created_at: 1.hour.ago)
-          .each { |record| record.update_columns(stripe_transaction_id: "ch_connect", merchant_account_id: connect_account.id) }
-        refused_purchase.update_column(:created_at, 3.hours.ago)
+        # Unambiguously newer than the context's `ch_newer` row, which also sits at 1.hour.ago: the
+        # scan orders created_at DESC and takes a page of MAX_SCAN, so a tie there would let the one
+        # eligible row win the page at random and the assertion below would flake.
+        Purchase::Blockable::PROCESSOR_REFUSAL_MAX_SCAN.times do |offset|
+          create(:purchase, link: product, email: buyer_email, purchaser: buyer, created_at: (offset + 1).minutes.ago)
+            .update_columns(stripe_transaction_id: "ch_connect", merchant_account_id: connect_account.id)
+        end
         expect(Stripe::Charge).not_to receive(:retrieve)
 
         refusal = refused_purchase.processor_rule_refusal
