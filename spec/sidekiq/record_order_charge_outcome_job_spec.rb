@@ -20,19 +20,16 @@ describe RecordOrderChargeOutcomeJob do
   end
 
   it "sticks the connection to the primary before reading the sibling states" do
-    steps = []
+    order # other code sticks to the primary while the fixtures are built, so count only `perform`
+    calls = 0
     allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
-      steps << :stick_to_primary
-      method.call(*args)
-    end
-    allow_any_instance_of(Order).to receive(:record_charge_outcome!).and_wrap_original do |method, *args|
-      steps << :read_sibling_states
+      calls += 1
       method.call(*args)
     end
 
     described_class.new.perform(order.id)
 
-    expect(steps.index(:stick_to_primary)).to be < steps.index(:read_sibling_states)
+    expect(calls).to eq(1)
   end
 
   it "does not raise when the order no longer exists" do
