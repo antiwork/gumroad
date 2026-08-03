@@ -101,16 +101,25 @@ const creatorCheckbox = (name: string): HTMLInputElement => {
   return input;
 };
 
-const lastGetOptions = (): { onFinish?: (visit: { cancelled: boolean; interrupted: boolean }) => void } => {
+type VisitOutcome = { cancelled: boolean; interrupted: boolean };
+type OnFinish = (visit: VisitOutcome) => void;
+
+// router.get is a vi.fn, so its recorded options are untyped; narrow rather than assert.
+const isOnFinish = (value: unknown): value is OnFinish => typeof value === "function";
+
+const lastOnFinish = (): OnFinish => {
   const call = mocks.routerGet.mock.calls.at(-1);
   if (!call) throw new Error("expected router.get to have been called");
-  return call[2] as { onFinish?: (visit: { cancelled: boolean; interrupted: boolean }) => void };
+  const options: unknown = call[2];
+  if (typeof options !== "object" || options === null || !("onFinish" in options))
+    throw new Error("expected router.get options with an onFinish");
+  const { onFinish } = options;
+  if (!isOnFinish(onFinish)) throw new Error("expected onFinish to be a function");
+  return onFinish;
 };
 
-const settleLastVisit = (visit = { cancelled: false, interrupted: false }) => {
-  const onFinish = lastGetOptions().onFinish;
-  if (!onFinish) throw new Error("expected router.get to have been given an onFinish");
-  onFinish(visit);
+const settleLastVisit = (visit: VisitOutcome = { cancelled: false, interrupted: false }) => {
+  lastOnFinish()(visit);
 };
 
 const lastGetParams = (): Record<string, string> => {
@@ -210,8 +219,7 @@ describe("LibraryPage", () => {
     renderPage();
 
     fireEvent.click(creatorCheckbox("Ann"));
-    const supersededVisit = lastGetOptions().onFinish;
-    if (!supersededVisit) throw new Error("expected an onFinish on the first visit");
+    const supersededVisit = lastOnFinish();
     fireEvent.click(creatorCheckbox("Zoe"));
 
     // Inertia fires onFinish for the visit the second click interrupted; honouring it would
