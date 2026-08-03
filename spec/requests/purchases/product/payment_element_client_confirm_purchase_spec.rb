@@ -75,7 +75,6 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
 
     expect(checkout_payment_props["integration"]).to eq("payment_element_client_confirm")
 
-    # Client-side confirm errors never reach #finalize, so the built purchase remains in_progress.
     fill_checkout_form(@product, credit_card: nil)
     fill_in_payment_element(number: "4000000000000002")
     click_on "Pay", exact: true
@@ -86,7 +85,11 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
 
     expect(@product.sales.successful.count).to eq(0)
     leftover = @product.sales.last
-    expect(leftover.purchase_state).to eq("in_progress")
+    # #confirm_error releases the attempt once Stripe confirms the intent never charged, so the
+    # abandoned purchase settles as `failed` rather than sitting in_progress until the sweeper.
+    # The report is fire-and-forget from the browser, hence the wait.
+    wait_until_true(sleep_interval: 0.1) { leftover.reload.purchase_state == "failed" }
+    expect(leftover.purchase_state).to eq("failed")
     expect(leftover.stripe_transaction_id).to be_nil
   end
 
@@ -114,12 +117,13 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
 
     within_sca_frame { click_on "Fail" }
 
-    # A failed client-side challenge never reaches #finalize, so the purchase remains
-    # in_progress and no charge lands.
+    # A failed client-side challenge never reaches #finalize; #confirm_error releases the
+    # attempt instead, so it settles as `failed` and no charge lands.
     expect(page).to have_text(/authenticat/i, wait: 60)
     expect(@product.sales.successful.count).to eq(0)
     leftover = @product.sales.last
-    expect(leftover.purchase_state).to eq("in_progress")
+    wait_until_true(sleep_interval: 0.1) { leftover.reload.purchase_state == "failed" }
+    expect(leftover.purchase_state).to eq("failed")
     expect(leftover.stripe_transaction_id).to be_nil
   end
 end
