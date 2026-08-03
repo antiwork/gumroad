@@ -510,7 +510,6 @@ describe Checkout::BuyerCurrencyQuote do
           Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
         end
       end
-
     end
 
     it "quotes a cart priced in a non-USD currency that is not the buyer's own" do
