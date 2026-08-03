@@ -1030,6 +1030,10 @@ class Purchase < ApplicationRecord
       transaction_url_for_seller:,
       formatted_total_price:,
       currency_symbol: symbol_for(displayed_price_currency_type),
+      # ISO code of the currency this sale is denominated in — the same currency
+      # the refund endpoint reads amount_cents in. Callers need it to know how
+      # many minor units an amount has: JPY has none, so 25 means ¥25, not ¥0.25.
+      currency: (displayed_price_currency_type.to_s if version == 2),
       amount_refundable_in_currency:,
       link_id: (link.unique_permalink if version == 1),
       product_id: link.external_id,
