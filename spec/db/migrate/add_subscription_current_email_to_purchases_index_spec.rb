@@ -15,13 +15,13 @@ RSpec.describe AddSubscriptionCurrentEmailToPurchasesIndex do
                               settings: Purchase.settings.to_hash,
                               mappings: { dynamic: "strict", properties: { "email" => { "type" => "keyword" } } }
                             })
-    EsClient.index(index:, id: 1, body: { "email" => "grisha@gmail.com" })
+    EsClient.index(index:, id: 1, body: { "email" => "signup@oldmail.example" })
   end
 
   after { EsClient.indices.delete(index:, ignore: [404]) }
 
   def write_current_email
-    EsClient.update(index:, id: 1, body: { "doc" => { "subscription_current_email" => "eleazaro@konceptstudio.it" } })
+    EsClient.update(index:, id: 1, body: { "doc" => { "subscription_current_email" => "newname@newdomain.example" } })
   end
 
   it "makes the field writable, and it was not writable before" do

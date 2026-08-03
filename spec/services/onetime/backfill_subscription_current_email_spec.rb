@@ -29,7 +29,7 @@ RSpec.describe Onetime::BackfillSubscriptionCurrentEmail do
   end
 
   it "enqueues a current-email reindex for a membership whose member changed their address" do
-    purchase = stale_membership(signup_email: "grisha@gmail.com", current_email: "eleazaro@konceptstudio.it")
+    purchase = stale_membership(signup_email: "signup@oldmail.example", current_email: "newname@newdomain.example")
 
     expect(described_class.process).to eq(scanned: 1, reindexed: 1)
 
@@ -44,9 +44,9 @@ RSpec.describe Onetime::BackfillSubscriptionCurrentEmail do
 
   it "reindexes a membership whose member has an unconfirmed address pending" do
     purchase = stale_membership(
-      signup_email: "grisha@gmail.com",
-      current_email: "grisha@gmail.com",
-      unconfirmed_email: "eleazaro@konceptstudio.it"
+      signup_email: "signup@oldmail.example",
+      current_email: "signup@oldmail.example",
+      unconfirmed_email: "newname@newdomain.example"
     )
 
     expect(described_class.process).to eq(scanned: 1, reindexed: 1)
@@ -57,9 +57,9 @@ RSpec.describe Onetime::BackfillSubscriptionCurrentEmail do
   # can reject it. A prefilter-only implementation reindexes a membership that is already findable.
   it "leaves a membership alone when the pending unconfirmed address is the one already indexed" do
     stale_membership(
-      signup_email: "grisha@gmail.com",
+      signup_email: "signup@oldmail.example",
       current_email: "someone-else@gmail.com",
-      unconfirmed_email: "grisha@gmail.com"
+      unconfirmed_email: "signup@oldmail.example"
     )
 
     expect(described_class.process).to eq(scanned: 1, reindexed: 0)
@@ -67,15 +67,15 @@ RSpec.describe Onetime::BackfillSubscriptionCurrentEmail do
   end
 
   it "does not scan a membership whose indexed email still matches the member's account" do
-    stale_membership(signup_email: "grisha@gmail.com", current_email: "grisha@gmail.com")
+    stale_membership(signup_email: "signup@oldmail.example", current_email: "signup@oldmail.example")
 
     expect(described_class.process).to eq(scanned: 0, reindexed: 0)
     expect(Sidekiq::Client).not_to have_received(:push_bulk)
   end
 
   it "ignores recurring charges, which Customers search cannot reach" do
-    purchase = stale_membership(signup_email: "grisha@gmail.com", current_email: "eleazaro@konceptstudio.it")
-    recurring = create(:purchase, link: product, seller:, email: "grisha@gmail.com",
+    purchase = stale_membership(signup_email: "signup@oldmail.example", current_email: "newname@newdomain.example")
+    recurring = create(:purchase, link: product, seller:, email: "signup@oldmail.example",
                                   subscription: purchase.subscription, purchaser: purchase.purchaser)
     expect(recurring.is_original_subscription_purchase?).to be(false)
 
@@ -84,7 +84,7 @@ RSpec.describe Onetime::BackfillSubscriptionCurrentEmail do
   end
 
   it "reindexes only the requested seller's memberships" do
-    mine = stale_membership(signup_email: "grisha@gmail.com", current_email: "eleazaro@konceptstudio.it")
+    mine = stale_membership(signup_email: "signup@oldmail.example", current_email: "newname@newdomain.example")
     other_seller = create(:user)
     other_product = create(:membership_product, user: other_seller)
     other_buyer = create(:user, email: "new@elsewhere.com")
@@ -97,7 +97,7 @@ RSpec.describe Onetime::BackfillSubscriptionCurrentEmail do
   end
 
   it "counts without enqueueing anything when run dry" do
-    stale_membership(signup_email: "grisha@gmail.com", current_email: "eleazaro@konceptstudio.it")
+    stale_membership(signup_email: "signup@oldmail.example", current_email: "newname@newdomain.example")
 
     expect(described_class.process(dry_run: true)).to eq(scanned: 1, reindexed: 1)
     expect(Sidekiq::Client).not_to have_received(:push_bulk)

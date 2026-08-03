@@ -500,22 +500,22 @@ describe PurchaseSearchService do
     end
 
     it "finds a membership by the member's current email after an email change" do
-      buyer = create(:user, email: "grisha@gmail.com")
-      membership = create(:membership_purchase, purchaser: buyer, email: "grisha@gmail.com")
+      buyer = create(:user, email: "signup@oldmail.example")
+      membership = create(:membership_purchase, purchaser: buyer, email: "signup@oldmail.example")
       membership.subscription.update!(user: buyer)
       index_model_records(Purchase)
 
-      expect(get_records(seller_query: "grisha@gmail.com")).to match_array([membership])
+      expect(get_records(seller_query: "signup@oldmail.example")).to match_array([membership])
 
-      buyer.update!(email: "eleazaro@konceptstudio.it")
+      buyer.update!(email: "newname@newdomain.example")
       # The original subscription purchase keeps the signup address; only the indexed current email
       # follows the account.
       ReindexSubscriptionCurrentEmailWorker.new.perform(buyer.id)
       index_model_records(Purchase)
 
-      expect(get_records(seller_query: "eleazaro@konceptstudio.it")).to match_array([membership])
-      expect(get_records(seller_query: "eleazaro")).to match_array([membership])
-      expect(get_records(seller_query: "konceptstudio.it")).to match_array([membership])
+      expect(get_records(seller_query: "newname@newdomain.example")).to match_array([membership])
+      expect(get_records(seller_query: "newname")).to match_array([membership])
+      expect(get_records(seller_query: "newdomain.example")).to match_array([membership])
     end
 
     it "does not leak one member's current email into another seller's results" do
