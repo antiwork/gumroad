@@ -499,6 +499,36 @@ describe PurchaseSearchService do
       expect(get_records(seller_query: purchase_6.license.serial)).to match_array([purchase_6])
     end
 
+    it "finds a membership by the member's current email after an email change" do
+      buyer = create(:user, email: "grisha@gmail.com")
+      membership = create(:membership_purchase, purchaser: buyer, email: "grisha@gmail.com")
+      membership.subscription.update!(user: buyer)
+      index_model_records(Purchase)
+
+      expect(get_records(seller_query: "grisha@gmail.com")).to match_array([membership])
+
+      buyer.update!(email: "eleazaro@konceptstudio.it")
+      # The original subscription purchase keeps the signup address; only the indexed current email
+      # follows the account.
+      ReindexSubscriptionCurrentEmailWorker.new.perform(buyer.id)
+      index_model_records(Purchase)
+
+      expect(get_records(seller_query: "eleazaro@konceptstudio.it")).to match_array([membership])
+      expect(get_records(seller_query: "eleazaro")).to match_array([membership])
+      expect(get_records(seller_query: "konceptstudio.it")).to match_array([membership])
+    end
+
+    it "does not leak one member's current email into another seller's results" do
+      buyer = create(:user, email: "shared@buyer.com")
+      membership = create(:membership_purchase, purchaser: buyer, email: "old@buyer.com")
+      membership.subscription.update!(user: buyer)
+      other = create(:purchase, email: "unrelated@elsewhere.com")
+      index_model_records(Purchase)
+
+      expect(get_records(seller_query: "shared@buyer.com")).to match_array([membership])
+      expect(get_records(seller_query: "unrelated@elsewhere.com")).to match_array([other])
+    end
+
     it "supports fulltext/autocomplete search as a buyer" do
       seller_1 = create(:user, name: "Daniel Vassallo")
       product_1 = create(:product, name: "Everyone Can Build a Twitter Audience", user: seller_1, description: "Last year I left a cushy job at <strong>Amazon</strong> to work for myself.")

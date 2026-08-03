@@ -451,11 +451,12 @@ class PurchaseSearchService
         shoulds << {
           multi_match: {
             query: query_string,
-            fields: ["email", "email_domain", "full_name"]
+            fields: ["email", "email_domain", "full_name", "subscription_current_email"]
           }
         }
         if query_string.include?("@")
           shoulds << { term: { "email.raw" => query_string } }
+          shoulds << { term: { "subscription_current_email.raw" => query_string } }
           shoulds << { term: { "paypal_email.raw" => query_string } }
         end
         if query_string.match?(/\A[a-f0-9]{8}-[a-f0-9]{8}-[a-f0-9]{8}-[a-f0-9]{8}\z/)

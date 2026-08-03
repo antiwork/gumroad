@@ -66,6 +66,12 @@ module Purchase::Searchable
         indexes :raw, type: :keyword
       end
       indexes :email_domain, type: :text, analyzer: :email, search_analyzer: :search_email
+      # A membership's original purchase is the only row Customers search can reach, and it keeps
+      # the signup address forever. Without this the member becomes unfindable by the address the
+      # seller actually has in hand after an email change.
+      indexes :subscription_current_email, type: :text, analyzer: :email, search_analyzer: :search_email do
+        indexes :raw, type: :keyword
+      end
       indexes :paypal_email, type: :text, analyzer: :email, search_analyzer: :search_email do
         indexes :raw, type: :keyword
       end
@@ -123,7 +129,7 @@ module Purchase::Searchable
       ],
       "country" => "country_or_ip_country",
       "created_at" => "created_at",
-      "email" => ["email", "email_domain"],
+      "email" => ["email", "email_domain", "subscription_current_email"],
       "fee_cents" => "fee_cents",
       "flags" => %w[
         selected_flags
@@ -163,6 +169,8 @@ module Purchase::Searchable
         email&.downcase
       when "email_domain"
         email.downcase.split("@")[1] if email.present?
+      when "subscription_current_email"
+        subscription.email&.downcase if is_original_subscription_purchase? && subscription.present?
       when "selected_flags"
         selected_flags.map(&:to_s)
       when "stripe_refunded"
@@ -253,7 +261,42 @@ module Purchase::Searchable
           ElasticsearchIndexerWorker.perform_in(2.seconds, "update", options)
         end
       end
+
+      # Reassigning a subscription to another account changes what Subscription#email resolves to,
+      # so the original purchase's indexed current email is now wrong.
+      if attributes_committed&.include?("user_id")
+        Purchase::Searchable::SubscriptionCallbacks.reindex_current_email(original_purchase)
+      end
     end
+
+    def self.reindex_current_email(purchase)
+      return if purchase.nil?
+
+      ElasticsearchIndexerWorker.perform_in(2.seconds, "update", {
+                                             "record_id" => purchase.id,
+                                             "class_name" => "Purchase",
+                                             "fields" => ["subscription_current_email"],
+                                           })
+    end
+  end
+
+  # A buyer's email lives on their User, and Subscription#email reads it through form_email, so a
+  # membership's searchable current email goes stale on an account email change with nothing on the
+  # purchase itself having changed. Note this fires on unconfirmed_email too: form_email prefers it,
+  # and UpdatePurchaseEmailToMatchAccountWorker deliberately skips that case, which is precisely the
+  # window in which the seller cannot find the member.
+  module BuyerEmailCallbacks
+    extend ActiveSupport::Concern
+
+    included do
+      after_commit :reindex_subscription_current_email, on: :update,
+                                                        if: -> { email_previously_changed? || unconfirmed_email_previously_changed? }
+    end
+
+    private
+      def reindex_subscription_current_email
+        ReindexSubscriptionCurrentEmailWorker.perform_in(10.seconds, id)
+      end
   end
 
   module RelatedPurchaseCallbacks
