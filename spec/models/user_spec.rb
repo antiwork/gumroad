@@ -9,6 +9,48 @@ describe User, :vcr do
     payment_address: %w(old-paypal@example.com paypal@example.com)
   }
 
+  # `versions.object_changes` is a general-purpose store that GDPR erasure does not reach and whose
+  # rows survive ~10 weeks, so credentials must never enter a diff in the first place
+  # (gumroad-private#1781).
+  describe "paper trail credential exclusion" do
+    with_versioning do
+      let(:credential_fields) do
+        %w[encrypted_password reset_password_token confirmation_token otp_secret_key
+           twitter_oauth_token twitter_oauth_secret facebook_access_token]
+      end
+
+      it "never writes a credential into a version diff" do
+        user = create(:user)
+
+        user.update!(
+          password: "N3wPassw0rd!x",
+          reset_password_token: "reset-token-abc",
+          confirmation_token: "confirm-token-abc",
+          otp_secret_key: ROTP::Base32.random_base32,
+          twitter_oauth_token: "tw-token",
+          twitter_oauth_secret: "tw-secret",
+          facebook_access_token: "fb-token"
+        )
+
+        recorded = user.versions.filter_map do |version|
+          PaperTrail.serializer.load(version.object_changes)&.keys
+        end.flatten.uniq
+
+        expect(recorded & credential_fields).to be_empty
+      end
+
+      it "still records the email change history the admin surface reads" do
+        user = create(:user, email: "before@example.com")
+
+        user.update!(email: "after@example.com", otp_secret_key: ROTP::Base32.random_base32)
+
+        changes = user.versions_for(:email).first.changes
+        expect(changes["email"]).to eq(%w[before@example.com after@example.com])
+        expect(changes).not_to have_key("otp_secret_key")
+      end
+    end
+  end
+
   describe "associations" do
     before :each do
       @user = create(:user)
