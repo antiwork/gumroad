@@ -270,7 +270,7 @@ class Order::CreateService
         products = ordered_items.to_h do |item|
           link = links_by_permalink[item[:permalink]]
           product = item.slice(:permalink, :quantity).merge(
-            price_cents: allocation_capacity_cents(item, link),
+            price_cents: submitted_uids.include?(item.fetch(:uid)) ? allocation_capacity_cents(item, link) : 0,
             tip_cents: 0
           )
           [item.fetch(:uid), product]

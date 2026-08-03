@@ -962,8 +962,8 @@ class Order::PreparePaymentIntentService
       return purchase.displayed_price_cents if offer_code.blank?
 
       if offer_code.is_cents? && offer_code.once_per_cart?
-        submitted_price = submitted_pre_discount_price_cents_by_purchase_id[purchase.id]
-        return submitted_price if submitted_price.present?
+        verified_price = purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents
+        return verified_price if verified_price.present?
 
         if purchase.displayed_price_cents.zero?
           return purchase.purchase_offer_code_discount.pre_discount_minimum_price_cents * purchase.quantity
@@ -974,18 +974,6 @@ class Order::PreparePaymentIntentService
 
       original_per_unit = offer_code.original_price(purchase.displayed_price_per_unit_cents)
       original_per_unit.present? ? original_per_unit * purchase.quantity : purchase.displayed_price_cents
-    end
-
-    def submitted_pre_discount_price_cents_by_purchase_id
-      @submitted_pre_discount_price_cents_by_purchase_id ||= begin
-        remaining_line_items = params.fetch(:line_items, []).group_by { _1[:permalink] }.transform_values(&:dup)
-        order.purchases.each_with_object({}) do |purchase, prices|
-          line_item = remaining_line_items[purchase.link.unique_permalink]&.shift
-          if line_item&.[](:price_cents).present?
-            prices[purchase.id] = [line_item[:price_cents].to_i - line_item[:tip_cents].to_i, 0].max
-          end
-        end
-      end
     end
 
     # The cart's uniform forced pricing currency, or nil. Mirrors the presenter's

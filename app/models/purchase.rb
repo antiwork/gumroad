@@ -2519,7 +2519,7 @@ class Purchase < ApplicationRecord
   def prepare_for_charge!
     reservable_offer_code = offer_code if offer_code&.is_cents? && offer_code.once_per_cart? &&
       offer_code.max_purchase_count.present? &&
-      (!does_not_count_towards_max_purchases || is_updated_original_subscription_purchase) && !is_test_purchase?
+      !does_not_count_towards_max_purchases && !is_test_purchase?
 
     self.chargeable = process_without_charging!(reservable_offer_code:)
   end
@@ -4249,7 +4249,7 @@ class Purchase < ApplicationRecord
       set_price_and_rate
       calculate_fees
       if reservable_offer_code
-        # Keep the lock to the validation and reservation write; tax and processor calls run after commit.
+        # Serialize the final availability check with the reservation write.
         reservable_offer_code.with_lock do
           save if reservable_offer_code_available?(reservable_offer_code)
         end
@@ -5057,13 +5057,13 @@ class Purchase < ApplicationRecord
 
     def reservable_offer_code_available?(reservable_offer_code)
       return false if errors.present?
-      return true if offer_code_usage_available?(reservable_offer_code)
+      return true if offer_code_usage_available?(reservable_offer_code, lock: true)
 
-      add_offer_code_usage_error(reservable_offer_code)
+      add_offer_code_usage_error(reservable_offer_code, lock: true)
       false
     end
 
-    def offer_code_usage_available?(offer_code)
+    def offer_code_usage_available?(offer_code, lock: false)
       return true if offer_code.max_purchase_count.nil?
 
       discount = purchase_offer_code_discount
@@ -5072,12 +5072,13 @@ class Purchase < ApplicationRecord
       units = once_per_cart ? 1 : quantity
       offer_code.quantity_left(
         excluding_purchase: self,
-        excluding_once_per_cart_allocation_ids: allocation_ids
+        excluding_once_per_cart_allocation_ids: allocation_ids,
+        lock:
       ) >= units
     end
 
-    def add_offer_code_usage_error(offer_code)
-      if offer_code.quantity_left(excluding_purchase: self).positive?
+    def add_offer_code_usage_error(offer_code, lock: false)
+      if offer_code.quantity_left(excluding_purchase: self, lock:).positive?
         self.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
         errors.add :base, "Sorry, the discount code you are using is invalid for the quantity you have selected."
       else

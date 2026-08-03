@@ -66,6 +66,8 @@ class OfferCodeDiscountComputingService
       end
     end
 
+    apply_deferred_once_per_cart_entries(products_data)
+
     {
       products_data:,
       error_code: error_code(products_data),
@@ -128,6 +130,11 @@ class OfferCodeDiscountComputingService
 
     def apply_discount_to_entries(products_data, entries, link, offer_code, resolved_discount, split_once_per_cart:)
       entries.each do |input_key, product|
+        if split_once_per_cart && key_by_input
+          deferred_once_per_cart_entries[input_key] = { product:, link:, offer_code:, resolved_discount: }
+          next
+        end
+
         output_key = key_by_input ? input_key : link.unique_permalink
         discount = if split_once_per_cart
           allocate_once_per_cart_discount(resolved_discount, offer_code, product, link, product[:quantity].to_i)
@@ -136,6 +143,27 @@ class OfferCodeDiscountComputingService
         end
         products_data[output_key] = { discount: }
         offer_code_ids_by_permalink[output_key] = offer_code.id
+      end
+    end
+
+    def deferred_once_per_cart_entries
+      @deferred_once_per_cart_entries ||= {}
+    end
+
+    def apply_deferred_once_per_cart_entries(products_data)
+      products.each_key do |input_key|
+        entry = deferred_once_per_cart_entries[input_key]
+        next unless entry
+
+        discount = allocate_once_per_cart_discount(
+          entry[:resolved_discount],
+          entry[:offer_code],
+          entry[:product],
+          entry[:link],
+          entry[:product][:quantity].to_i
+        )
+        products_data[input_key] = { discount: }
+        offer_code_ids_by_permalink[input_key] = entry[:offer_code].id
       end
     end
 

@@ -273,6 +273,28 @@ describe OfferCodeDiscountComputingService do
       expect(result[:error_code]).to be_nil
       expect(result[:products_data].transform_values { _1[:discount][:cents] }).to eq("first" => 300, "second" => 200)
     end
+
+    it "allocates duplicate products in checkout input order" do
+      fixed_code.update!(amount_cents: 700)
+      interleaved_lines = {
+        "first" => { quantity: "1", permalink: product.unique_permalink, price_cents: 300 },
+        "middle" => { quantity: "1", permalink: product2.unique_permalink, price_cents: 400 },
+        "last" => { quantity: "1", permalink: product.unique_permalink, price_cents: 500 }
+      }
+
+      result = OfferCodeDiscountComputingService.new(
+        fixed_code.code,
+        interleaved_lines,
+        key_by_input: true
+      ).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].transform_values { _1[:discount][:cents] }).to eq(
+        "first" => 300,
+        "middle" => 400,
+        "last" => 0
+      )
+    end
   end
 
   it "returns sold_out error_code in result when offer code is sold out" do

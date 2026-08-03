@@ -336,13 +336,11 @@ class Purchase::CreateService < Purchase::BaseService
     def perceived_price_matches_accepted_offer?(offer_code)
       return false unless offer_code
 
-      quantity = params[:quantity].to_i.positive? ? params[:quantity].to_i : 1
-      full_price_cents = product.price_cents * quantity
-      discount_cents = offer_code.is_cents? ? offer_code.amount_cents : (full_price_cents * offer_code.amount_percentage / 100.0).round
-      price_after_discount = [full_price_cents - discount_cents, 0].max
-      minimum_price_cents = product.currency["min_price"]
-      price_after_discount = minimum_price_cents if price_after_discount.positive? && price_after_discount < minimum_price_cents
-      price_after_discount == purchase_params[:perceived_price_cents].to_i
+      original_offer_code = purchase.offer_code
+      purchase.offer_code = offer_code
+      purchase.minimum_paid_price_cents + params[:tip_cents].to_i == purchase_params[:perceived_price_cents].to_i
+    ensure
+      purchase.offer_code = original_offer_code if purchase
     end
 
     def validate_perceived_free_trial_params
