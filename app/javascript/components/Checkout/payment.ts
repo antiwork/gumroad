@@ -440,9 +440,8 @@ export function getStripePaymentElementAmount(state: State) {
     state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
   )
     return null;
-  // Method-forced local-method surface: the element is mounted in the payment method's forced
-  // currency (e.g. EUR for iDEAL/Bancontact), so the USD total below would be the wrong unit.
-  // The server supplies the listed amount in the element's currency instead.
+  // Direct-listed surfaces mount in the listed currency, so the USD total below would be the
+  // wrong unit. The server supplies the listed amount instead.
   if (
     state.checkoutPayment.integration === "payment_element_client_confirm" &&
     state.checkoutPayment.elements_options.presentment_amount_cents !== null &&
@@ -479,15 +478,10 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   return { currency: display.currencyCode, amountCents: display.chargePresentmentTotalCents };
 }
 
-// The currency the server-confirm Payment Element should mount in, or null while it cannot be
-// known. On the buyer-currency presentment lane the currency lives in the FX quote of the
-// surcharge response, and every surcharge refresh (tip, address, VAT ID, or cart edits) passes
-// through pending/loading states with no quote. Returning null in that window — rather than
-// prematurely reporting canonical USD — lets PaymentElementInput keep the last mounted
-// currency, because a currency change destroys and recreates the Stripe element (it is part of
-// the Elements provider key), wiping any card details the buyer already entered. Definite
-// canonical states (a loaded response without a quote, or the buyer opting to save the card)
-// return "usd" so those transitions genuinely remount.
+// The currency the Payment Element should mount in. Direct-listed client-confirm checkouts use
+// the server-selected listed currency only while their cart stays eligible. The server-confirm
+// FX lane derives its currency from the surcharge quote; returning null while that quote reloads
+// preserves the current Element instead of remounting and wiping entered card details.
 export function getStripePaymentElementMountCurrency(state: State): string | null {
   if (state.checkoutPayment.integration === "payment_element_client_confirm") {
     const elementsOptions = state.checkoutPayment.elements_options;

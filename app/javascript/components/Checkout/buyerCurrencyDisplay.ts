@@ -37,7 +37,7 @@ export type CheckoutBuyerCurrencyDisplay = {
 // Everything the checkout table needs to render a non-USD amount: which currency to label it
 // with, how many minor units make one unit of it, and the rate that turns a canonical USD cent
 // figure into that currency. Both non-USD checkout lanes produce one of these — the FX-quoted
-// buyer-currency lane (rate from the locked quote) and the method-forced listed-currency lane
+// buyer-currency lane (rate from the locked quote) and the direct-listed lane
 // (rate from the product's stored USD exchange rate) — so every formatting helper below works
 // the same way for either, and the rest of the checkout never has to know which lane it is on.
 export type CheckoutLocalCurrencyFormat = Pick<CheckoutBuyerCurrencyDisplay, "currencyCode" | "rate" | "subunitToUnit">;
@@ -231,7 +231,7 @@ export const formatPresentmentCents = (
   buyerCurrencyDisplay: Pick<CheckoutBuyerCurrencyDisplay, "currencyCode" | "subunitToUnit">,
 ) => formatMinorUnitPriceWithIntl(buyerCurrencyDisplay.currencyCode, cents, buyerCurrencyDisplay.subunitToUnit);
 
-// All the listed-currency amounts the checkout table displays on the method-forced lane. Two
+// All the listed-currency amounts the checkout table displays on the direct-listed lane. Two
 // different kinds of input meet here, and keeping them straight is the whole point of this
 // function:
 //

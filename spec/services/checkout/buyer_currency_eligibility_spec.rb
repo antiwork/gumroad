@@ -374,7 +374,7 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
   end
 
-  it "allows direct listed charging when every purchase is priced in the buyer's own currency" do
+  it "allows direct listed charging when the purchase is priced in the buyer's own currency" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),

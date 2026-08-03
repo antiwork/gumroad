@@ -206,7 +206,7 @@ class Checkout::StripePaymentPresenter
     # take the canonical server-confirm lane rather than the client-confirm one, because everything
     # the client-confirm lane fixes at page load is derived from a total that does not exist yet:
     #
-    #   1. The method-forced surface mounts the Element with a server-rendered
+    #   1. A listed-currency surface mounts the Element with a server-rendered
     #      presentment_amount_cents — the cart's listed subtotal in the forced currency. On a
     #      pay-what-you-want cart that number is 0, and the browser prefers it over its own total
     #      for the whole session (getStripePaymentElementAmount returns it whenever it is non-null),
@@ -470,8 +470,8 @@ class Checkout::StripePaymentPresenter
     # excluded case — a product priced in the buyer's own currency, which is withheld from
     # quoting so an FX round trip cannot misprice it — is already excluded by
     # buyer_currency_presentment_candidate?: the buyer-local display only turns on when the
-    # buyer's currency differs from the product's. (That cart pays its listed price only via
-    # the method-forced local-method lane; a card checkout for it charges canonical USD.)
+    # buyer's currency differs from the product's. The direct-listed client-confirm surface
+    # handles that cart when its ramp is enabled; otherwise it stays canonical USD.
     #
     # Charge-time-only gates (merchant account model, wallet params, GeoIP re-check, quote
     # verification) stay in the eligibility service — when any of them falls back, the charge
