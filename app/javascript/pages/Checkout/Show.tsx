@@ -1143,11 +1143,21 @@ const CheckoutIndexPage = () => {
       </Modal>
       <Modal
         open={duplicatePurchaseConfirmation !== null}
-        onClose={() => setDuplicatePurchaseConfirmation(null)}
+        onClose={() => {
+          setDuplicatePurchaseConfirmation(null);
+          dispatch({ type: "cancel" });
+        }}
         title="You already own this"
         footer={
           <>
-            <Button onClick={() => setDuplicatePurchaseConfirmation(null)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setDuplicatePurchaseConfirmation(null);
+                dispatch({ type: "cancel" });
+              }}
+            >
+              Cancel
+            </Button>
             <Button
               color="primary"
               onClick={() => {
