@@ -5104,19 +5104,26 @@ class Purchase < ApplicationRecord
     def offer_code_usage_available?(offer_code, lock: false)
       return true if offer_code.max_purchase_count.nil?
 
+      units = offer_code_applied_once_per_cart?(offer_code) ? 1 : quantity
+      offer_code_quantity_left(offer_code, lock:) >= units
+    end
+
+    def offer_code_applied_once_per_cart?(offer_code)
       discount = purchase_offer_code_discount
-      once_per_cart = discount.present? ? discount.once_per_cart? && !discount.offer_code_is_percent : offer_code.is_cents? && offer_code.once_per_cart?
-      allocation_ids = [discount&.once_per_cart_allocation_id].compact if once_per_cart
-      units = once_per_cart ? 1 : quantity
+      discount.present? ? discount.once_per_cart? && !discount.offer_code_is_percent : offer_code.is_cents? && offer_code.once_per_cart?
+    end
+
+    def offer_code_quantity_left(offer_code, lock: false)
+      allocation_ids = [purchase_offer_code_discount&.once_per_cart_allocation_id].compact if offer_code_applied_once_per_cart?(offer_code)
       offer_code.quantity_left(
         excluding_purchase: self,
         excluding_once_per_cart_allocation_ids: allocation_ids,
         lock:
-      ) >= units
+      )
     end
 
     def add_offer_code_usage_error(offer_code, lock: false)
-      if offer_code.quantity_left(excluding_purchase: self, lock:).positive?
+      if offer_code_quantity_left(offer_code, lock:).positive?
         self.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
         errors.add :base, "Sorry, the discount code you are using is invalid for the quantity you have selected."
       else
