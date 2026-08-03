@@ -2714,6 +2714,12 @@ describe ContactingCreatorMailer do
       expect(mail.message).to be_a(ActionMailer::Base::NullMail)
     end
 
+    it "does not send if the seller turned off review emails after the job was enqueued" do
+      review.link.user.update!(disable_reviews_email: true)
+      mail = ContactingCreatorMailer.review_submitted(review.id)
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+
     context "when the review has a pending video" do
       let!(:pending_video) do
         create(

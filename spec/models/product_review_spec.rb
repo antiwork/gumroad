@@ -159,7 +159,7 @@ describe ProductReview do
         product_review.save!
       end.to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
         .at(ProductReview::SELLER_NOTIFICATION_DELAY.from_now)
-        .with { |id, opts| # rubocop:disable Style/BlockDelimiters — `.with(product_review.id)` would capture nil, the id before save
+        .with { |id, opts| # `.with(product_review.id)` would capture nil, the id before save
           expect(id).to eq(product_review.id)
           expect(opts).to eq(skip_if_message_present: true)
         }

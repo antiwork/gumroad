@@ -697,6 +697,10 @@ class ContactingCreatorMailer < ApplicationMailer
 
     @product = @review.link
     @seller = @product.user
+    # Re-checked here, not just at enqueue: the delayed message-less render can still be
+    # sitting in the queue when the seller flips this off, and the job's own preference
+    # check at enqueue time can't see a later change.
+    return do_not_send if @seller.disable_reviews_email?
     full_name = @review.purchase.full_name
     email = @review.purchase.email
     @buyer = full_name.present? ? "#{full_name} (#{email})" : email
