@@ -21,16 +21,31 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
     end
 
-    context "when the seller has already submitted" do
+    # Nothing reaches Stripe until the window closes, so a seller who saved early must be able to
+    # come back and add to their response rather than being bounced to the dashboard.
+    context "when the seller has already saved a response" do
       before do
         dispute_evidence.update_as_seller_submitted!
+      end
+
+      it "renders the form again" do
+        get :show, params: { purchase_id: purchase.external_id }
+
+        expect(response).to be_successful
+        expect(flash[:alert]).to be_nil
+      end
+    end
+
+    context "when the window has elapsed without the row being resolved" do
+      before do
+        dispute_evidence.update!(seller_contacted_at: DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours.ago)
       end
 
       it "redirects" do
         get :show, params: { purchase_id: purchase.external_id }
 
         expect(response).to redirect_to(dashboard_url)
-        expect(flash[:alert]).to eq("Additional information has already been submitted for this dispute.")
+        expect(flash[:alert]).to eq("The deadline for submitting additional information for this dispute has passed.")
       end
     end
 
@@ -126,6 +141,56 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
     end
 
+    it "saves without forwarding to the processor while the window is open" do
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: { reason_for_winning: "Reason for winning" }
+      }
+
+      expect(dispute_evidence.reload.seller_submitted?).to be(true)
+      expect(FightDisputeJob.jobs.size).to eq(0)
+    end
+
+    # CreateMissingDisputeEvidenceJob backdates the window on a row it rescues late, so waiting for
+    # FightDisputesJob's hourly tick could cost an hour of a cutoff measured in hours.
+    it "forwards immediately when the window has already elapsed" do
+      dispute_evidence.update!(seller_contacted_at: DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours.ago)
+
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: { reason_for_winning: "Reason for winning" }
+      }
+
+      expect(FightDisputeJob.jobs.size).to eq(1)
+    end
+
+    # The form posts all three fields every time, so assigning them wholesale would let a seller who
+    # returns only to add a file blank the statement they wrote yesterday.
+    it "keeps fields the seller left blank on a later revision" do
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: {
+          reason_for_winning: "First answer",
+          cancellation_rebuttal: "First rebuttal",
+          refund_refusal_explanation: "First refusal"
+        }
+      }
+
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: {
+          reason_for_winning: "Revised answer",
+          cancellation_rebuttal: "",
+          refund_refusal_explanation: ""
+        }
+      }
+
+      dispute_evidence.reload
+      expect(dispute_evidence.reason_for_winning).to eq("Revised answer")
+      expect(dispute_evidence.cancellation_rebuttal).to eq("First rebuttal")
+      expect(dispute_evidence.refund_refusal_explanation).to eq("First refusal")
+    end
+
     context "when a signed_id for a PNG file is provided" do
       let(:blob) do
         ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "receipt_image.png", content_type: "image/png")
@@ -212,7 +277,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
         expect((first_page_media_box[2] - first_page_media_box[0]).round).to eq(1280)
 
         expect(dispute_evidence.seller_submitted?).to be(true)
-        expect(FightDisputeJob.jobs.size).to eq(1)
+        expect(FightDisputeJob.jobs.size).to eq(0)
         expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
       end
 
