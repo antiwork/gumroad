@@ -550,6 +550,13 @@ jobs:
         run: |
           mkdir -p ./test-logs
           chmod 777 ./test-logs
+          # Override the image's baked-in Stripe key only when this shard has an account
+          # assigned; an empty -e would blank it.
+          STRIPE_SHARD_ENV=""
+          [ -n "$STRIPE_SHARD_API_KEY" ] && STRIPE_SHARD_ENV="$STRIPE_SHARD_ENV -e STRIPE_API_KEY=$STRIPE_SHARD_API_KEY"
+          [ -n "$STRIPE_SHARD_PUBLIC_KEY" ] && STRIPE_SHARD_ENV="$STRIPE_SHARD_ENV -e STRIPE_PUBLIC_KEY_TEST=$STRIPE_SHARD_PUBLIC_KEY"
+          [ -n "$STRIPE_SHARD_PLATFORM_ID" ] && STRIPE_SHARD_ENV="$STRIPE_SHARD_ENV -e STRIPE_PLATFORM_ACCOUNT_ID=$STRIPE_SHARD_PLATFORM_ID"
+          [ -n "$STRIPE_SHARD_CONNECT_ID" ] && STRIPE_SHARD_ENV="$STRIPE_SHARD_ENV -e STRIPE_CONNECT_CLIENT_ID=$STRIPE_SHARD_CONNECT_ID"
           docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -v "$(pwd)/test-logs:/app/log" \
             -e RUBY_YJIT_ENABLE \
@@ -568,6 +575,7 @@ jobs:
             -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
             -e CI \
             -e IN_DOCKER \
+            $STRIPE_SHARD_ENV \
             $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
             /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
         env:
@@ -587,6 +595,13 @@ jobs:
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
           IN_DOCKER: true
+          # Stripe's rate limits are per ACCOUNT and up to 68 shards run at once against one
+          # test account, so throttling scales with queue depth, not with what a spec does.
+          # Empty unless the suffixed secrets exist, which leaves .env.test's key in force.
+          STRIPE_SHARD_API_KEY: ${{ secrets[format('STRIPE_API_KEY_{0}', matrix.ci_node_index % 2)] }}
+          STRIPE_SHARD_PUBLIC_KEY: ${{ secrets[format('STRIPE_PUBLIC_KEY_TEST_{0}', matrix.ci_node_index % 2)] }}
+          STRIPE_SHARD_PLATFORM_ID: ${{ secrets[format('STRIPE_PLATFORM_ACCOUNT_ID_{0}', matrix.ci_node_index % 2)] }}
+          STRIPE_SHARD_CONNECT_ID: ${{ secrets[format('STRIPE_CONNECT_CLIENT_ID_{0}', matrix.ci_node_index % 2)] }}
           WEB_REPO: gumroadteam/web
       - name: Archive flaky specs log
         if: always()
@@ -735,6 +750,13 @@ jobs:
           chmod 777 ./capybara-artifacts
           mkdir -p ./test-logs
           chmod 777 ./test-logs
+          # Override the image's baked-in Stripe key only when this shard has an account
+          # assigned; an empty -e would blank it.
+          STRIPE_SHARD_ENV=""
+          [ -n "$STRIPE_SHARD_API_KEY" ] && STRIPE_SHARD_ENV="$STRIPE_SHARD_ENV -e STRIPE_API_KEY=$STRIPE_SHARD_API_KEY"
+          [ -n "$STRIPE_SHARD_PUBLIC_KEY" ] && STRIPE_SHARD_ENV="$STRIPE_SHARD_ENV -e STRIPE_PUBLIC_KEY_TEST=$STRIPE_SHARD_PUBLIC_KEY"
+          [ -n "$STRIPE_SHARD_PLATFORM_ID" ] && STRIPE_SHARD_ENV="$STRIPE_SHARD_ENV -e STRIPE_PLATFORM_ACCOUNT_ID=$STRIPE_SHARD_PLATFORM_ID"
+          [ -n "$STRIPE_SHARD_CONNECT_ID" ] && STRIPE_SHARD_ENV="$STRIPE_SHARD_ENV -e STRIPE_CONNECT_CLIENT_ID=$STRIPE_SHARD_CONNECT_ID"
           docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
             -v "$(pwd)/test-logs:/app/log" \
@@ -753,6 +775,7 @@ jobs:
             -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
             -e CI \
             -e IN_DOCKER \
+            $STRIPE_SHARD_ENV \
             $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
             /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
         env:
@@ -771,6 +794,13 @@ jobs:
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
           IN_DOCKER: true
+          # Stripe's rate limits are per ACCOUNT and up to 68 shards run at once against one
+          # test account, so throttling scales with queue depth, not with what a spec does.
+          # Empty unless the suffixed secrets exist, which leaves .env.test's key in force.
+          STRIPE_SHARD_API_KEY: ${{ secrets[format('STRIPE_API_KEY_{0}', matrix.ci_node_index % 2)] }}
+          STRIPE_SHARD_PUBLIC_KEY: ${{ secrets[format('STRIPE_PUBLIC_KEY_TEST_{0}', matrix.ci_node_index % 2)] }}
+          STRIPE_SHARD_PLATFORM_ID: ${{ secrets[format('STRIPE_PLATFORM_ACCOUNT_ID_{0}', matrix.ci_node_index % 2)] }}
+          STRIPE_SHARD_CONNECT_ID: ${{ secrets[format('STRIPE_CONNECT_CLIENT_ID_{0}', matrix.ci_node_index % 2)] }}
           WEB_REPO: gumroadteam/web
       - name: Archive capybara artifacts
         if: failure()
