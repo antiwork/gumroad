@@ -9425,6 +9425,39 @@ describe StripeMerchantAccountManager, :vcr do
         end
       end
 
+      describe "the phone Stripe validates against the account country" do
+        let(:user_compliance_info_2) do
+          create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Seoul",
+                                        phone: "+821012345678")
+        end
+
+        it "keeps the phone off the payload so the rest of the fields still land" do
+          calls = []
+          allow(Stripe::Account).to receive(:update) { |_id, attributes| calls << attributes }
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(calls).to be_present
+          calls.each do |attributes|
+            expect(attributes.fetch(:individual, {})).not_to have_key(:phone)
+            expect(attributes.fetch(:company, {})).not_to have_key(:phone)
+          end
+          expect(calls.first[:individual]).to include(:email)
+        end
+
+        # The whole point of withholding it: a foreign number on a mismatched account is refused
+        # with wording about the number, and the all-or-nothing API takes the payload down with it.
+        it "does not raise when Stripe would reject a foreign number on the mismatched account" do
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            if attributes.dig(:individual, :phone).present? || attributes.dig(:company, :phone).present?
+              raise Stripe::InvalidRequestError.new('"+821012345678" is not a valid phone number', "individual[phone]")
+            end
+          end
+
+          expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
+        end
+      end
+
       # gumroad-private#1575. The address is withheld because Stripe will never accept it; an
       # identifier is different — it may be the exact thing Stripe is waiting on to lift a
       # verification requirement, so withholding it silently parks the seller. It is sent on its

@@ -1460,6 +1460,18 @@ describe PurchasesController, :vcr do
         expect(member.details["purchases"].map { _1["id"] }).to eq([purchase.id])
       end
 
+      it "clears can_contact_reason so a later restore cannot read a stale buyer unsubscribe" do
+        purchase = create(:purchase, can_contact: true)
+        purchase.unsubscribe_buyer
+        expect(purchase.reload.can_contact_reason).to eq(Purchase::CAN_CONTACT_REASON_BUYER_UNSUBSCRIBE)
+
+        post :subscribe, params: { id: purchase.external_id }
+
+        expect(response).to be_successful
+        expect(purchase.reload.can_contact).to eq true
+        expect(purchase.can_contact_reason).to be_nil
+      end
+
       it "keeps re-subscribing the remaining purchases when one fails validation" do
         purchase = create(:purchase, can_contact: false)
         invalid = create(:purchase, seller_id: purchase.seller.id, link: create(:product, user: purchase.seller), email: purchase.email, can_contact: false)

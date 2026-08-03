@@ -6237,6 +6237,7 @@ class LinksControllerSearchTest < ActionController::TestCase
       "total" => 1,
       "filetypes_data" => [],
       "tags_data" => [],
+      "taxonomy_attributes_data" => [],
       "products" => [product_json(@sao_product, "discover")]
     }
     get :search
@@ -6266,6 +6267,7 @@ class LinksControllerSearchTest < ActionController::TestCase
                    "total" => 23,
                    "filetypes_data" => [{ "doc_count" => 1, "key" => "pdf" }],
                    "tags_data" => [{ "doc_count" => 1, "key" => "mustelid" }],
+                   "taxonomy_attributes_data" => [],
                    "products" => shown_products[0...9].map { |p| product_json(p, "profile") }
                  }, response.parsed_body)
   end
@@ -6287,17 +6289,17 @@ class LinksControllerSearchTest < ActionController::TestCase
   test "GET search returns an empty response when searching by non-existent user" do
     setting_and_ordering_setup
     get :search, params: { user_id: 1640736000000, section_id: @section.id }
-    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "taxonomy_attributes_data" => [], "products" => [] }, response.parsed_body)
   end
 
   test "GET search returns an empty response when searching by non-existent section" do
     setting_and_ordering_setup
     get :search, params: { user_id: @creator.external_id, section_id: 1640736000000 }
-    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "taxonomy_attributes_data" => [], "products" => [] }, response.parsed_body)
 
     section = create_seller_profile_posts_section(seller: @creator)
     get :search, params: { user_id: @creator.external_id, section_id: section.id }
-    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "taxonomy_attributes_data" => [], "products" => [] }, response.parsed_body)
   end
 
   test "GET search returns all the creator's live profile products for the virtual default products section" do
@@ -6319,7 +6321,7 @@ class LinksControllerSearchTest < ActionController::TestCase
     setting_and_ordering_setup
     get :search, params: { user_id: @creator.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
 
-    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "products" => [] }, response.parsed_body)
+    assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "taxonomy_attributes_data" => [], "products" => [] }, response.parsed_body)
   end
 
   test "GET search searches only for recommendable products" do
@@ -6337,6 +6339,7 @@ class LinksControllerSearchTest < ActionController::TestCase
                    "total" => 1,
                    "filetypes_data" => [{ "doc_count" => 1, "key" => "pdf" }],
                    "tags_data" => [{ "doc_count" => 1, "key" => "mustelid" }],
+                   "taxonomy_attributes_data" => [],
                    "products" => [product_json(@sao_product, "discover")]
                  }, response.parsed_body)
   end

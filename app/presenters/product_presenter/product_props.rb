@@ -34,6 +34,9 @@ class ProductPresenter::ProductProps
         long_url: product.long_url,
         is_sales_limited: product.max_purchase_count?,
         ratings: product.display_product_reviews? ? product.bundle_rating_stats : nil,
+        # Excludes this product so its own reviews never inflate the seller
+        # rollup shown on its page (gumroad-private#1669).
+        **(seller.reputation_summary_enabled? ? { seller_reputation: seller.seller_reputation_summary(exclude_product: product) } : {}),
         custom_button_text_option: product.custom_button_text_option,
         is_compliance_blocked: product.compliance_blocked(request.remote_ip),
         is_published: !product.draft && product.alive?,

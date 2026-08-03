@@ -1155,6 +1155,33 @@ class Link < ApplicationRecord
     self.json_data.present? && self.json_data["custom_attributes"].present? ? self.json_data["custom_attributes"] : []
   end
 
+  def taxonomy_attribute_values
+    self.json_data.present? && self.json_data["taxonomy_attribute_values"].present? ? self.json_data["taxonomy_attribute_values"] : {}
+  end
+
+  def save_taxonomy_attribute_values(argument)
+    submitted_values = (argument || {}).to_h
+    values = taxonomy_attributes_for_current_taxonomy.each_with_object({}) do |attribute, normalized_values|
+      value = attribute.normalize_value(submitted_values[attribute.name])
+      normalized_values[attribute.name] = value if value.present?
+    end
+
+    self.json_data ||= {}
+    self.json_data["taxonomy_attribute_values"] = values
+    saved = save
+    enqueue_index_update_for(["taxonomy_attribute_filters"]) if saved
+    saved
+  end
+
+  def taxonomy_attribute_filter_tokens
+    values = taxonomy_attribute_values
+    taxonomy_attributes_for_current_taxonomy.filter_map { |attribute| attribute.filter_token_for(values[attribute.name]) }
+  end
+
+  def taxonomy_attributes_for_current_taxonomy
+    taxonomy&.taxonomy_attributes || TaxonomyAttribute.none
+  end
+
   def checkout_custom_fields
     user.custom_fields.not_is_post_purchase.global.to_a.concat(custom_fields.not_is_post_purchase)
   end

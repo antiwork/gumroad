@@ -23,7 +23,8 @@ class HandleEmailEventInfo::ForReceiptEmail
       email_info.mark_opened!(email_event_info.created_at)
     when EmailEventInfo::EVENT_COMPLAINED
       unless email_event_info.email_provider == MailerInfo::EMAIL_PROVIDER_RESEND
-        Purchase.find_by(id: email_event_info.purchase_id)&.unsubscribe_buyer
+        Purchase.find_by(id: email_event_info.purchase_id)
+                &.unsubscribe_buyer(reason: Purchase::CAN_CONTACT_REASON_SPAM_REPORT)
       end
     end
   end

@@ -41,4 +41,27 @@ describe GenerateSubscribePreviewJob do
       end
     end
   end
+
+  describe "avatar requirement" do
+    let(:subscribe_preview) { File.binread("#{Rails.root}/spec/support/fixtures/subscribe_preview.png") }
+
+    before do
+      allow(SubscribePreviewGeneratorService).to receive(:generate_pngs).and_return([subscribe_preview])
+    end
+
+    it "requires the avatar on a normal attempt" do
+      described_class.new.perform(user.id)
+
+      expect(SubscribePreviewGeneratorService).to have_received(:generate_pngs).with([user], require_avatar: true)
+    end
+
+    it "gives up on the avatar once retries are exhausted" do
+      described_class.sidekiq_retries_exhausted_block.call({ "args" => [user.id] }, StandardError.new)
+
+      expect(SubscribePreviewGeneratorService).to have_received(:generate_pngs).with(
+        [an_object_having_attributes(id: user.id)], require_avatar: false
+      )
+      expect(user.reload.subscribe_preview).to be_attached
+    end
+  end
 end

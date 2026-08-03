@@ -103,15 +103,20 @@ class Admin::PurchasesController < Admin::BaseController
                                              purchase: @purchase)
       end
 
-      if surviving.any?
+      refusal = @purchase.processor_rule_refusal
+      refusal_note = refusal.present? ? " #{@purchase.processor_rule_refusal_note(refusal)}" : ""
+
+      if surviving.any? || refusal.present?
         # Same disclosure the internal API makes: the alert this message feeds is the only thing
         # the agent sees, and a bare "Buyer unblocked!" over a surviving row is the silence that
         # hid gumroad-private#1648.
         return render json: {
           success: true,
           status: "partially_unblocked",
-          message: "Unblocked buyer, but #{surviving.size} block(s) still hold this buyer: " \
-                   "#{surviving.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}"
+          message: "Unblocked buyer." +
+                   (surviving.any? ? " #{surviving.size} block(s) still hold this buyer: " \
+                                     "#{surviving.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}." : "") +
+                   refusal_note
         }
       end
     end
