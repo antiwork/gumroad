@@ -14,6 +14,10 @@ describe Api::Internal::AgentConversationsController do
 
   include_context "with user signed in as admin for seller"
 
+  before do
+    allow_any_instance_of(User).to receive(:eligible_for_store_agent?).and_return(true)
+  end
+
   describe "GET latest" do
     it_behaves_like "authentication required for action", :get, :latest
 

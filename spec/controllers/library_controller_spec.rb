@@ -316,13 +316,20 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
       let(:request_params) { { id: purchase.external_id } }
     end
 
-    it "deletes the purchase" do
+    it "hides the purchase from the library without deleting the row" do
       expect do
         patch :delete, params: { id: purchase.external_id }
 
         expect(response).to redirect_to(library_path)
-        expect(flash[:notice]).to eq("Product deleted!")
+        expect(flash[:notice]).to eq("Removed from your library!")
       end.to change { purchase.reload.is_deleted_by_buyer }.from(false).to(true)
+
+      # The copy promises the buyer keeps access and support can restore the card, so removal must
+      # stay a reversible flag flip (gumroad-private#1762).
+      expect(Purchase.exists?(purchase.id)).to be(true)
+      expect(purchase.reload.purchase_state).to eq("successful")
+      purchase.update!(is_deleted_by_buyer: false)
+      expect(user.purchases.visible_in_library).to include(purchase)
     end
   end
 end

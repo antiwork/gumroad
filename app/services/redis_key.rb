@@ -89,6 +89,8 @@ class RedisKey
     def stale_block_sweep_cursor = "stale_block_sweep:cursor"
     # High-water mark for RepairOrderChargeOutcomesJob's backlog pass: the last orders id it walked.
     def order_charge_outcome_repair_cursor = "order_charge_outcome_repair:cursor"
+    # High-water mark for AlertOnStripeDobDriftJob: the last merchant_accounts id it compared.
+    def stripe_dob_drift_sweep_cursor = "stripe_dob_drift_sweep:cursor"
     # Purchases whose notice was claimed but never transmitted. The cursor is already past their
     # email_infos rows, so this set is the only thing that brings them back.
     def undelivered_receipt_pending_retry = "undelivered_receipt_sweep:pending_retry"

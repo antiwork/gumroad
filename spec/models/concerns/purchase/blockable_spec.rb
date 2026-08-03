@@ -760,9 +760,9 @@ describe Purchase::Blockable do
         expect(Stripe::Charge).to have_received(:retrieve).once
       end
 
-      # A slow scan over more attempts than the cap trips both limits. The cap has to win: a re-run
-      # reads the same four attempts, so the timeout's "run it again" is the one useless answer here.
-      it "prefers the read cap over the time budget when a slow scan trips both" do
+      # Both limits trip, and the timeout copy is the one that helps: reads were left unmade, so a
+      # re-run can genuinely read further, and that copy already says to check Stripe as well.
+      it "prefers the time budget over the read cap when a slow scan trips both" do
         create_list(:purchase, 5, link: product, email: buyer_email, purchaser: buyer, created_at: 2.hours.ago)
           .each { |record| record.update_column(:stripe_transaction_id, "ch_extra") }
         allow(Stripe::Charge).to receive(:retrieve) do
@@ -773,8 +773,39 @@ describe Purchase::Blockable do
         refusal = refused_purchase.processor_rule_refusal
 
         expect(Stripe::Charge).to have_received(:retrieve).once
+        expect(refusal).to eq({ incomplete: true, truncated_by: :time_budget })
+        note = refused_purchase.processor_rule_refusal_note(refusal)
+        expect(note).to include("re-run it")
+        expect(note).to include("inspect their recent charges in Stripe")
+      end
+
+      # The row scan is bounded, so a buyer with more attempts than the bound must still be reported
+      # incomplete: eligible refusals can sit behind it.
+      it "reports an incomplete scan when the row bound itself is reached" do
+        stub_const("Purchase::Blockable::PROCESSOR_REFUSAL_MAX_SCAN", 2)
+        allow(Stripe::Charge).to receive(:retrieve).and_return(outcome_for(type: "issuer_declined", reason: "generic_decline"))
+
+        refusal = refused_purchase.processor_rule_refusal
+
         expect(refusal).to eq({ incomplete: true, truncated_by: :read_cap })
-        expect(refused_purchase.processor_rule_refusal_note(refusal)).to include("more attempts in the last day")
+        expect(Stripe::Charge).to have_received(:retrieve).twice
+      end
+
+      it "does not load more rows than the scan bound" do
+        create_list(:purchase, 8, link: product, email: buyer_email, purchaser: buyer, created_at: 2.hours.ago)
+          .each { |record| record.update_column(:stripe_transaction_id, "ch_extra") }
+        stub_const("Purchase::Blockable::PROCESSOR_REFUSAL_MAX_SCAN", 5)
+        allow(Stripe::Charge).to receive(:retrieve).and_return(outcome_for(type: "issuer_declined", reason: "generic_decline"))
+
+        loaded = nil
+        callback = ->(_name, _start, _finish, _id, payload) do
+          loaded = payload[:sql] if payload[:sql]&.include?("FROM `purchases`") && payload[:sql]&.include?("LIMIT")
+        end
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          refused_purchase.processor_rule_refusal
+        end
+
+        expect(loaded).to include("LIMIT 5")
       end
     end
 

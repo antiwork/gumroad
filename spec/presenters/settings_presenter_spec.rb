@@ -870,6 +870,36 @@ describe SettingsPresenter do
         expect(account_status[:show_section]).to eq(false)
       end
 
+      describe "Stripe intervention with no local compliance request" do
+        # gumroad-private#1751: a Stripe intervention puts a requirement in
+        # past_due without creating a UserComplianceInfoRequest, so the seller
+        # saw a "payouts paused" banner with no way to act on it for five weeks.
+        before do
+          create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_intervention_test")
+          seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        end
+
+        it "offers the remediation link even though no compliance request exists" do
+          expect(seller.user_compliance_info_requests.requested).to be_empty
+
+          expect(presenter.payments_props[:account_status][:compliance_actions]).to contain_exactly(
+            { message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }
+          )
+        end
+
+        it "does not offer it when the pause came from an admin rather than Stripe" do
+          seller.update!(payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN)
+
+          expect(presenter.payments_props[:account_status][:compliance_actions]).to eq([])
+        end
+
+        it "does not offer it when the seller paused their own payouts" do
+          seller.update!(payouts_paused_internally: false, payouts_paused_by: nil, payouts_paused_by_user: true)
+
+          expect(presenter.payments_props[:account_status][:compliance_actions]).to eq([])
+        end
+      end
+
       describe "bank-account rejection banner" do
         let(:bank_note_content) { "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: invalid_bank_account — Bank code unrecognized" }
 
