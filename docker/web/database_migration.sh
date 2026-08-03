@@ -52,4 +52,11 @@ if [ $? -eq 0 ]; then
   consul_put "database_version_${RAILS_ENV}-$(cat revision)" $schema_version
 fi
 
+# Taxonomies are reference data, not schema, so they arrive by seed rather than migration — and
+# db:seed does not run on deploy, which is why seed additions never reached production (#5764's
+# categories were still missing three weeks after shipping). Idempotent, and inside the migration
+# lock so concurrent deploys cannot race the (parent_id, slug) unique index.
+echo "bundle exec rake taxonomy:seed"
+bundle exec rake taxonomy:seed
+
 unlock_migration
