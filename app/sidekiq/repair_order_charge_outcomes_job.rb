@@ -18,8 +18,9 @@ class RepairOrderChargeOutcomesJob
   RECENT_WINDOW = 3.days
 
   # Completeness pass: everything older is reached by a resumable keyset walk instead, bounded per
-  # run and wrapping at the end, so an order is delayed rather than excluded.
-  BACKLOG_HORIZON = Purchase::UnstickStuckInProgressService::MAX_AGE
+  # run and wrapping at the end, so an order is delayed rather than excluded. Deliberately
+  # unbounded on the old side — a preorder has no maximum release date, so any horizon here is a
+  # guess about settlement time that would permanently exclude whatever settles after it.
   MAX_BACKLOG_SCANNED = 2_000
 
   def perform
@@ -58,7 +59,7 @@ class RepairOrderChargeOutcomesJob
     end
 
     def backlog_page(after_id)
-      candidates.where(created_at: BACKLOG_HORIZON.ago...RECENT_WINDOW.ago)
+      candidates.where(created_at: ...RECENT_WINDOW.ago)
                 .where("orders.id > ?", after_id)
                 .order(:id)
                 .limit(MAX_BACKLOG_SCANNED)

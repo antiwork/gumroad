@@ -43,13 +43,15 @@ describe RepairOrderChargeOutcomesJob do
     expect(order.reload).to be_partially_successful
   end
 
-  it "leaves an order older than the backlog horizon alone" do
+  # nyomanjyotisa reproduced this at 120 days: a preorder has no maximum release date, so any
+  # old-side horizon permanently excludes whatever settles after it. The walk now has none.
+  it "flags an order that settled beyond every settlement horizon" do
     order = settle_with_lost_enqueue(create(:order))
     order.update_column(:created_at, 120.days.ago)
 
     described_class.new.perform
 
-    expect(order.reload).not_to be_partially_successful
+    expect(order.reload).to be_partially_successful
   end
 
   it "does not flag an order that is not partial" do
