@@ -668,12 +668,10 @@ describe CheckoutPresenter do
       # The whole reason this is a separate prop: the answer depends on the cart's contents, and the
       # checkout page re-requests it after every cart edit.
       #
-      # Multi-seller carts CAN now be presented in the buyer's currency, but only behind their own
-      # ramp (Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME). These sellers are
-      # deliberately outside it, so the two-seller cart falls back to CardElement — and removing one
-      # seller's item makes the very same cart a single-seller one, which is quotable and mounts the
-      # buyer-currency element. The lane changes under an edit, which is only possible if this prop
-      # is recomputed rather than frozen at page load.
+      # A cart holding more sellers than the quote lane serves falls back to CardElement — and
+      # removing one seller's item brings the very same cart under the limit, which is quotable and
+      # mounts the buyer-currency element. The lane changes under an edit, which is only possible if
+      # this prop is recomputed rather than frozen at page load.
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
       # A Canadian buyer: the display currency has to differ from the product's USD pricing for the
       # cart to be a presentment candidate at all.
@@ -682,7 +680,7 @@ describe CheckoutPresenter do
       # The USD→CAD rate is normally kept warm in the cache by UpdateCurrenciesWorker; without it
       # the display falls back to canonical USD and no item is a presentment candidate.
       allow_any_instance_of(Checkout::StripePaymentPresenter).to receive(:buyer_local_currency_rate).and_return(BigDecimal("1.35"))
-      sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
+      sellers = Array.new(Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES + 1) { create(:user, disable_buyer_local_currency: false) }
       sellers.each do |seller|
         Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
         Feature.activate_user(Checkout::StripePaymentPresenter::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
@@ -693,16 +691,16 @@ describe CheckoutPresenter do
       cart = create(:cart)
       products.each { create(:cart_product, cart:, product: _1, price: _1.price_cents) }
 
-      multi_seller = instance.checkout_payment_props(params: {}, cart:)
-      expect(multi_seller[:integration]).to eq(Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION)
-      expect(multi_seller[:fallback_reason]).to eq("buyer_currency_presentment_unsupported")
+      over_limit = instance.checkout_payment_props(params: {}, cart:)
+      expect(over_limit[:integration]).to eq(Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION)
+      expect(over_limit[:fallback_reason]).to eq("buyer_currency_presentment_unsupported")
 
       cart.cart_products.find_by(product: products.last).mark_deleted!
       cart.reload
 
-      single_seller = instance.checkout_payment_props(params: {}, cart:)
-      expect(single_seller[:integration]).to eq(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
-      expect(single_seller[:elements_options][:buyer_currency_presentment]).to be(true)
+      under_limit = instance.checkout_payment_props(params: {}, cart:)
+      expect(under_limit[:integration]).to eq(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
+      expect(under_limit[:elements_options][:buyer_currency_presentment]).to be(true)
     ensure
       (sellers || []).each do |seller|
         Feature.deactivate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
@@ -712,11 +710,11 @@ describe CheckoutPresenter do
       end
     end
 
-    it "recomputes the configuration for a cart inside the multi-seller ramp too" do
-      # The companion to the case above, and the one that matters for where this is heading: with
-      # every seller in the multi-seller ramp, a cart spanning them presents in the buyer's currency
-      # rather than falling back. Dropping to one seller keeps that lane, so what the recompute
-      # proves here is that the ramped cart is quoted at all — not that the lane flips.
+    it "recomputes the configuration for a multi-seller cart too" do
+      # The companion to the case above: a cart spanning several sellers presents in the buyer's
+      # currency rather than falling back. Dropping to one seller keeps that lane, so what the
+      # recompute proves here is that the multi-seller cart is quoted at all — not that the lane
+      # flips.
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
       allow(GeoIp).to receive(:lookup).and_call_original
       allow(GeoIp).to receive(:lookup).with("104.193.168.19").and_return(double(country_name: "Canada", country_code: "CA", region_name: nil))
@@ -727,7 +725,6 @@ describe CheckoutPresenter do
         Feature.activate_user(Checkout::StripePaymentPresenter::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
         Feature.activate_user(:buyer_local_currency, seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-        Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
       end
       products = sellers.map { create(:product, user: _1, price_cents: 1234) }
       cart = create(:cart)
@@ -749,7 +746,6 @@ describe CheckoutPresenter do
         Feature.deactivate_user(Checkout::StripePaymentPresenter::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
         Feature.deactivate_user(:buyer_local_currency, seller)
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
       end
     end
 

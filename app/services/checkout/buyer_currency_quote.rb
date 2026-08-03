@@ -318,11 +318,6 @@ class Checkout::BuyerCurrencyQuote
 
     sellers = line_items_by_seller.keys.map { sellers_by_id.fetch(_1) }
     return unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
-    # Multi-seller carts have their own ramp on top of the buyer-currency flags, so this
-    # lane can be turned on and rolled back without touching single-seller checkouts. A
-    # cart falls back unless EVERY seller in it is ramped: one seller opting in must not
-    # change how another seller's items are priced.
-    return if sellers.many? && !Checkout::BuyerCurrencyEligibility.multi_seller_enabled?(sellers)
 
     buyer_currency = buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
@@ -755,13 +750,12 @@ class Checkout::BuyerCurrencyQuote
     # A single-charge cart ALSO repeats its one entry's fields at the top level — the shape
     # this token had before multi-seller quoting. Required for the deploy/rollback windows in
     # both directions: older code reads those fields flat and fails the payment outright if
-    # they are missing, and single-seller carts are all of today's buyer-currency traffic, so
-    # omitting them would break live checkouts on rollback. Removable once the ramp completes.
+    # they are missing, so omitting them would break live single-seller checkouts on rollback.
     #
-    # A MULTI-charge cart needs no flat shape: rolled-back code rejects any multi-seller order
-    # with `:multi_seller_checkout` before verification runs, and Charge::CreateService fails
-    # the charge closed, so an in-flight checkout gets the "price changed or expired" message
-    # (which re-quotes into canonical USD) rather than a payment at the wrong amount.
+    # A MULTI-charge cart needs no flat shape: a token with no flat amount is unreadable by
+    # pre-multi-seller code, and Charge::CreateService fails the charge closed when a token it
+    # cannot verify is submitted, so an in-flight checkout gets the "price changed or expired"
+    # message (which re-quotes into canonical USD) rather than a payment at the wrong amount.
     def signed_token(buyer_currency:, charge_quotes:)
       charges = charge_quotes.map do |charge_quote|
         {

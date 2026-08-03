@@ -478,10 +478,7 @@ class Checkout::StripePaymentPresenter
     # A cart may span several sellers. The order pipeline turns it into one charge per seller,
     # and the surcharge endpoint locks one quote per prospective charge before the buyer is
     # shown a total, so each charge is priced from its own locked amount and the cart total is
-    # their sum — no locked figure is ever split across intents. Every seller in the cart must
-    # be in the multi-seller ramp (Checkout::BuyerCurrencyEligibility.multi_seller_enabled?),
-    # which is the same predicate the quote service and the charge path apply, so the surface
-    # the buyer sees and the charge the server will accept cannot disagree.
+    # their sum — no locked figure is ever split across intents.
     #
     # The seller count is capped for the same reason the quote service caps it
     # (Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES): past that many sellers the endpoint
@@ -506,7 +503,6 @@ class Checkout::StripePaymentPresenter
 
       cart_sellers = items.map { _1[:seller] }.uniq
       return false if cart_sellers.length > Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES
-      return false if cart_sellers.many? && !Checkout::BuyerCurrencyEligibility.multi_seller_enabled?(cart_sellers)
 
       # Each charge's quote locks that charge's total, so every item must individually pass the
       # presentment gates: one unsupported item means the charge path could not honor its

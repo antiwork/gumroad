@@ -39,12 +39,6 @@ class Checkout::BuyerCurrencyEligibility
   # the one-off checkouts that already have it (gumroad-private#1322).
   SUBSCRIPTION_FEATURE_NAME = :buyer_currency_subscriptions
 
-  # This lane's own ramp for carts spanning several sellers, on top of the buyer-currency
-  # flags every seller in the cart already needs. Its own flag because a multi-seller cart is
-  # several PaymentIntents rather than one, so it can be turned off — and rolled back —
-  # without disturbing the single-seller checkouts that have been live since 2026-07-23.
-  MULTI_SELLER_FEATURE_NAME = :buyer_currency_multi_seller
-
   # Some local payment methods only work in a single currency: iDEAL and Bancontact
   # charges must be made in euros; UPI charges must be made in rupees. When a checkout wants one of these
   # methods, the payment method itself decides the presentment currency — there is
@@ -151,17 +145,6 @@ class Checkout::BuyerCurrencyEligibility
     seller.present? &&
       Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller) &&
       Feature.active?(WALLETS_FEATURE_NAME, seller)
-  end
-
-  # Whether a cart spanning several sellers may be quoted and charged in the buyer's
-  # currency. Every seller in the cart must be in this lane's own ramp on top of the
-  # buyer-currency flags they already need: a cart is one decision for the buyer, and one
-  # seller being ramped must never change how another seller's items are priced. Pulling the
-  # flag drops multi-seller carts back to canonical US dollars and leaves every single-seller
-  # buyer-currency checkout untouched.
-  def self.multi_seller_enabled?(sellers)
-    sellers = Array(sellers)
-    sellers.present? && sellers.all? { _1.present? && Feature.active?(MULTI_SELLER_FEATURE_NAME, _1) }
   end
 
   def self.buyer_presentment_display?(buyer_currency_display)
@@ -344,13 +327,6 @@ class Checkout::BuyerCurrencyEligibility
     # "save my card" checkout and mixed carts still fall back.
     return fallback(:future_charge_setup) if setup_future_charges && !later_charge_setup_in_ramp?
     return fallback(:no_purchases) if purchases.empty?
-    # A cart spanning several sellers becomes several charges (the order pipeline groups
-    # purchases into one charge per seller), and this service sees ONE of them. That is fine
-    # for presentment: the quote token carries a separately locked amount per charge, minted
-    # before the buyer saw any total, so this charge is priced from its own locked entry and
-    # never from a share of some cart-wide figure. It is gated on its own ramp flag so the
-    # lane can be rolled back without touching single-seller checkouts.
-    return fallback(:multi_seller_checkout) if multi_seller_order? && !multi_seller_lane_allowed?
     # Off-session means no buyer is available to answer an authentication challenge, so by
     # default presentment falls back: the amount would be re-derived from today's rate for a
     # buyer who is not there to agree to it. Two shapes are exempt, for different reasons.
@@ -628,29 +604,6 @@ class Checkout::BuyerCurrencyEligibility
 
       subscription = purchases.first.subscription
       subscription.present? && subscription.current_later_charge_presentment.present?
-    end
-
-    # Every seller the order will charge, for the multi-seller ramp check. Read from the
-    # whole order for the same reason multi_seller_order? is: the ramp is a decision about
-    # the cart the buyer saw, so one seller in the cart being unramped must withhold the
-    # lane from all of it, not only from their own charge.
-    #
-    # The seller rows are loaded in one query rather than one per purchase, because this runs
-    # on the synchronous charge path once for every charge the order produces. Mapping the
-    # distinct ids back through the lookup (instead of returning only the rows that came back)
-    # keeps a purchase whose seller row is missing as a nil, which
-    # multi_seller_enabled? rejects — a missing seller must withhold the lane, not silently
-    # shrink the set being checked.
-    def order_sellers
-      return [] if order.blank?
-
-      seller_ids = order.purchases.map(&:seller_id).uniq
-      sellers_by_id = User.where(id: seller_ids.compact).index_by(&:id)
-      seller_ids.map { sellers_by_id[_1] }
-    end
-
-    def multi_seller_lane_allowed?
-      self.class.multi_seller_enabled?(order_sellers)
     end
 
     # These shapes remain unsupported by the method-forced lane. The card quote lane lifts

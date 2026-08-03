@@ -301,13 +301,11 @@ describe Checkout::BuyerCurrencyQuote do
       before do
         Feature.activate_user(:buyer_local_currency, other_seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller)
-        [seller, other_seller].each { Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
       end
 
       after do
         Feature.deactivate_user(:buyer_local_currency, other_seller)
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller)
-        [seller, other_seller].each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
       end
 
       it "locks one quote per seller and reports their sum as the cart total" do
@@ -462,22 +460,12 @@ describe Checkout::BuyerCurrencyQuote do
         expect(result).to be_nil
       end
 
-      it "falls back to canonical USD when one seller is not in the multi-seller ramp" do
-        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, other_seller)
-        expect(StripeFxQuote).not_to receive(:create)
-
-        result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
-
-        expect(result).to be_nil
-      end
-
       it "quotes a cart holding as many sellers as the lane will quote" do
         # One FX round trip per seller, right at the limit.
         extra_sellers = Array.new(described_class::MAX_QUOTED_CHARGES - 2) do
           create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true).tap do |extra_seller|
             Feature.activate_user(:buyer_local_currency, extra_seller)
             Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
-            Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
           end
         end
         extra_products = extra_sellers.map { create(:product, user: _1, price_cents: 1_00, price_currency_type: Currency::USD) }
@@ -493,7 +481,6 @@ describe Checkout::BuyerCurrencyQuote do
         extra_sellers&.each do |extra_seller|
           Feature.deactivate_user(:buyer_local_currency, extra_seller)
           Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
-          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
         end
       end
 
@@ -505,7 +492,6 @@ describe Checkout::BuyerCurrencyQuote do
           create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true).tap do |extra_seller|
             Feature.activate_user(:buyer_local_currency, extra_seller)
             Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
-            Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
           end
         end
         extra_products = extra_sellers.map { create(:product, user: _1, price_cents: 1_00, price_currency_type: Currency::USD) }
@@ -522,19 +508,9 @@ describe Checkout::BuyerCurrencyQuote do
         extra_sellers&.each do |extra_seller|
           Feature.deactivate_user(:buyer_local_currency, extra_seller)
           Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
-          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
         end
       end
 
-      it "still quotes a single-seller cart when the multi-seller ramp is off" do
-        # The ramp gates only multi-seller carts; pulling it must not touch the checkouts
-        # that have been live since 2026-07-23.
-        [seller, other_seller].each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
-
-        result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
-
-        expect(result.presentment_total_cents).to eq(12_50)
-      end
     end
 
     it "quotes a cart priced in a non-USD currency that is not the buyer's own" do
