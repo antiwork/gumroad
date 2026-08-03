@@ -21,7 +21,7 @@ describe("post-purchase cart save cancellation", () => {
     expect(resets.length).toBeGreaterThanOrEqual(2);
 
     for (const match of resets) {
-      const preceding = source.slice(Math.max(0, (match.index ?? 0) - 400), match.index);
+      const preceding = source.slice(Math.max(0, match.index - 400), match.index);
       expect(preceding).toContain("debouncedSaveCartState.cancel()");
     }
   });
