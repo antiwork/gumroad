@@ -165,6 +165,10 @@ class DisputeEvidence::GenerateAccessActivityLogsService
         sends.first.sent_at,
         [sends.filter_map(&:delivered_at).min, sends.filter_map(&:opened_at).min]
       )
+      # Each timestamp is the earliest across all sends independently, so an open from
+      # one send can beat the delivery selected from another. Drop that open rather than
+      # print it before its own delivery — it is real, it is just not attributable here.
+      opened_at = nil if opened_at.present? && delivered_at.present? && opened_at < delivered_at
 
       content = +""
       content << " A receipt was delivered at #{delivered_at}." if delivered_at.present?
