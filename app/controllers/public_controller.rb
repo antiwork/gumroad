@@ -36,6 +36,28 @@ class PublicController < ApplicationController
     end
   end
 
+  def license_key_lookup_data
+    all_purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
+    purchases = all_purchases
+    if params[:product_query].present?
+      query = extract_permalink_from_query(params[:product_query].strip)
+      scoped = all_purchases.joins(:link).where(
+        "links.name LIKE ? OR links.unique_permalink = ? OR links.custom_permalink = ?",
+        "%#{Purchase.sanitize_sql_like(query)}%", query, query
+      )
+      # Fall back to the full set rather than reporting `false` on no match: an unauthenticated
+      # caller who already knows the email must not learn whether it purchased ANY specific
+      # product from the response alone.
+      purchases = scoped if scoped.exists?
+    end
+    if purchases.none?
+      render json: { success: false }
+    else
+      CustomerMailer.grouped_receipt(purchases.ids).deliver_later(queue: "critical")
+      render json: { success: true }
+    end
+  end
+
   def paypal_charge_data
     return render json: { success: false } if params[:invoice_id].nil?
 
@@ -76,5 +98,15 @@ class PublicController < ApplicationController
   private
     def set_on_public_page
       @body_class = "public"
+    end
+
+    # A buyer may paste the product's URL (any /l/:permalink form, with or without host)
+    # rather than typing its name — take the last non-empty path segment as the permalink
+    # candidate and fall through to the LIKE/permalink match unchanged if it doesn't parse.
+    def extract_permalink_from_query(query)
+      return query unless query.match?(%r{\Ahttps?://}i) || query.include?("/")
+
+      path = URI.parse(query).path rescue query
+      path.split("/").reverse.find(&:present?) || query
     end
 end
