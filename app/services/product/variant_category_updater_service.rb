@@ -231,6 +231,24 @@ class Product::VariantCategoryUpdaterService
           # editor needs to offer the seller an explicit choice. The generic
           # re-raise below would flatten it into a plain Link::LinkInvalid.
           raise
+        rescue ActiveRecord::RecordNotFound
+          # `create_or_update_variant!` raises this (via `find_by_external_id!`)
+          # when the submitted variant id no longer resolves to a live variant
+          # under this product — e.g. the editor's in-memory snapshot still
+          # references a version another session (or an earlier save in the
+          # SAME request) has since deleted. Left unrescued this propagated all
+          # the way out of the `ActiveRecord::Base.transaction` in
+          # `LinksController#update` as a bare 500: the transaction rolled back
+          # (so nothing was silently half-saved), but the response was neither
+          # the JSON error shape the editor's save handler expects nor a
+          # message a seller could read — from the browser it looked exactly
+          # like the hang gumroad-private#1784 reported ("Saving changes..."
+          # never resolves, nothing persists, no visible error). Converting it
+          # here to the same `Link::LinkInvalid` path every other per-variant
+          # failure already uses gives the seller an actual message and asks
+          # them to refresh, instead of letting the request die silently.
+          errors.add(:base, "This save would remove content pages that weren't explicitly deleted. The content shown in the editor may be out of date — please refresh the page and try again.")
+          raise Link::LinkInvalid
         rescue ActiveRecord::RecordInvalid, Link::LinkInvalid, ArgumentError => e
           error_message = variant.present? ? variant.errors.full_messages.to_sentence : e.message
           errors.add(:base, error_message)

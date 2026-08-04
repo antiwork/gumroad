@@ -667,6 +667,22 @@ class LinksController < ApplicationController
         error_message = @product.errors.full_messages.first || e.message
       end
       return render json: { error_message: }, status: :unprocessable_entity
+    rescue => e
+      # Defense in depth for gumroad-private#1784: every guard above this line
+      # translates its own failure mode into a specific rescue with a seller-
+      # readable message. Anything NOT already one of those — a bug in a
+      # service this save flow calls, a transient DB error, anything we
+      # haven't anticipated — used to propagate straight out of this method as
+      # a bare 500. The transaction still rolls back either way (nothing is
+      # ever half-persisted), but an uncaught exception here previously left
+      # the editor's save request with no readable JSON body: from the
+      # browser that is indistinguishable from a hang, which is exactly what
+      # gp1784 reported ("Saving changes..." never resolves, nothing
+      # persists, no visible error). Mirrors the existing catch-all in
+      # `publish` above. Every branch of this method must end in an
+      # unambiguous "saved" or "here's why not" — never a bare timeout.
+      ErrorNotifier.notify(e)
+      return render json: { error_message: "Something went wrong while saving your changes. Please refresh the page and try again — if the problem continues, contact support." }, status: :unprocessable_entity
     end
     report_unapplied_deletions!
     report_unstated_confirmed_removals!
