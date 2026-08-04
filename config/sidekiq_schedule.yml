@@ -131,6 +131,10 @@ wishlist_sitemap_refresh_daily:
   cron: "30 0 * * *" # UTC 00:30, offset from the product sitemap run
   class: RefreshWishlistSitemapDailyWorker
   description: Refresh the sitemap of SEO-indexable public wishlists
+generate_merchant_center_feed:
+  cron: "30 1 * * *" # UTC 01:30 — after the sitemap refresh, off the payout/report hours
+  class: GenerateMerchantCenterFeedWorker
+  description: Regenerates the Google Merchant Center product feed
 create_missing_purchase_events_worker: # Duration: 2sec
   cron: "5 10 * * *" # UTC 10:05
   class: CreateMissingPurchaseEventsWorker
