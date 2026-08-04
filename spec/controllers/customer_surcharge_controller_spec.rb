@@ -176,7 +176,8 @@ describe CustomerSurchargeController, :vcr do
 
       expect(response.parsed_body.fetch("buyer_currency_quote")).to include(
         "presentment_total_cents" => 12_50,
-        "charge_presentment_total_cents" => 4_18
+        "charge_presentment_total_cents" => 4_18,
+        "future_installments_presentment_total_cents" => 8_32
       )
     end
 

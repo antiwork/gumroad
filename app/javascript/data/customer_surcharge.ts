@@ -37,6 +37,8 @@ export type SurchargesResponse = {
     // The exact local-currency amount charged now when the cart total is an agreement that
     // also includes a preorder, commission balance, or future installments.
     charge_presentment_total_cents?: number | undefined;
+    // The sum of the fixed local-currency prices for every remaining installment.
+    future_installments_presentment_total_cents?: number | undefined;
     // What one canonical US dollar cent is worth in the buyer's currency, used only for the
     // amounts the browser still converts itself (the discount row and the tip the buyer types).
     // A single-seller cart reports the exact rate from its one locked quote; a cart spanning

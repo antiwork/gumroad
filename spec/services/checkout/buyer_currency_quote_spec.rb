@@ -797,7 +797,11 @@ describe Checkout::BuyerCurrencyQuote do
           later_charge_canonical_line_items: [{ permalink: product.unique_permalink, canonical_price_cents: 3_33 }]
         )
 
-        expect(result).to have_attributes(presentment_total_cents: 12_50, charge_presentment_total_cents: 4_18)
+        expect(result).to have_attributes(
+          presentment_total_cents: 12_50,
+          charge_presentment_total_cents: 4_18,
+          future_installments_presentment_total_cents: 8_32
+        )
         expect(verified).to have_attributes(canonical_total_cents: 3_34, presentment_total_cents: 4_18, rounding_delta_cents: 0)
       end
 

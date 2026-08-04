@@ -103,6 +103,7 @@ class CustomerSurchargeController < ApplicationController
         canonical_total_cents: quote.canonical_total_cents,
         presentment_total_cents: quote.presentment_total_cents,
         charge_presentment_total_cents: quote.charge_presentment_total_cents,
+        future_installments_presentment_total_cents: quote.future_installments_presentment_total_cents,
         # What one canonical US dollar cent is worth in the buyer's currency. The browser uses
         # this only for the two amounts it still converts itself, the discount row and the tip
         # the buyer types; every amount that is actually charged comes from the per-line
