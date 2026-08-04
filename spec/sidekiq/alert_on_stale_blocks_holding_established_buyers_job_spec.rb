@@ -298,6 +298,24 @@ describe AlertOnStaleBlocksHoldingEstablishedBuyersJob do
       # Nothing past the cursor, so the sweep restarts rather than reporting nothing forever.
       expect(message).to include(email)
     end
+
+    # gp#1746 P1: the cursor used to be saved right after fetching the page, before the history
+    # queries ran, so a raise on the FIRST run would still commit an advanced cursor and the retry
+    # (or next scheduled run) would resume past the failed page rather than re-scanning it.
+    it "does not advance the cursor when a history query raises mid-page" do
+      settled_purchases(established_count)
+      block = block_email
+
+      allow(Purchase).to receive(:successful).and_raise("boom")
+
+      expect { described_class.new.perform }.to raise_error("boom")
+      expect($redis.get(RedisKey.stale_block_sweep_cursor)).to be_nil
+
+      # Retry re-scans the same block instead of skipping it, now that the query works again.
+      allow(Purchase).to receive(:successful).and_call_original
+      expect(message).to include(email)
+      expect($redis.get(RedisKey.stale_block_sweep_cursor).to_i).to eq(block.id)
+    end
   end
 
   # A truncated scan that found nothing must still report: otherwise the bound, not the platform,
