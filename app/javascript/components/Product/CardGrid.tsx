@@ -227,6 +227,21 @@ export const CardGrid = ({
     return () => observer.disconnect();
   }, [pagination, results?.products]);
 
+  // Drop taxonomy_attribute_filters tokens the server no longer recognizes for this taxonomy
+  // (stale cross-taxonomy value, category switch, malformed input) so they can't keep rendering
+  // as a checked 0-count facet indefinitely.
+  React.useEffect(() => {
+    if (!results) return;
+    const validTokens = new Set(
+      results.taxonomy_attributes_data.flatMap((attribute) => attribute.filters.map((f) => f.key)),
+    );
+    const current = searchParams.taxonomy_attribute_filters;
+    if (!current?.length) return;
+    const pruned = current.filter((token) => validTokens.has(token));
+    if (pruned.length !== current.length)
+      updateParams({ taxonomy_attribute_filters: pruned.length ? pruned : undefined });
+  }, [results]);
+
   const uid = React.useId();
   const minPriceUid = React.useId();
   const maxPriceUid = React.useId();
@@ -336,8 +351,9 @@ export const CardGrid = ({
             </CardContent>
           ) : null}
           {results?.taxonomy_attributes_data.map((attribute) => {
-            const selectedAttributeFilters = searchParams.taxonomy_attribute_filters?.filter((token) =>
-              token.startsWith(`${attribute.name}:`),
+            const validKeys = new Set(attribute.filters.map((f) => f.key));
+            const selectedAttributeFilters = searchParams.taxonomy_attribute_filters?.filter(
+              (token) => token.startsWith(`${attribute.name}:`) && validKeys.has(token),
             );
             return (
               <CardContent key={attribute.name} asChild details>
