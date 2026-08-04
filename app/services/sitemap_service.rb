@@ -4,7 +4,25 @@ class SitemapService
   HOST = UrlService.root_domain_with_protocol
   MAX_SITEMAP_LINKS = 50_000
   SITEMAP_PATH_MONTHLY = "sitemap/products/monthly"
+  SITEMAP_PATH_CATEGORIES = "sitemap/categories/"
   SITEMAP_PATH_WISHLISTS = "sitemap/wishlists"
+
+  def generate_categories
+    sitemap_config("sitemap", SITEMAP_PATH_CATEGORIES, false)
+
+    SitemapGenerator::Sitemap.create do
+      presenter = Discover::TaxonomyPresenter.new
+      Taxonomy.find_each do |taxonomy|
+        path = presenter.category_for_taxonomy_id(taxonomy.id)&.fetch(:path) || next
+        add "/#{path}", changefreq: "weekly", priority: 0.8,
+                        host: UrlService.discover_domain_with_protocol
+      end
+    end
+
+    RobotsService.new.expire_sitemap_configs_cache
+
+    SitemapGenerator::Sitemap.ping_search_engines if ping_search_engines?
+  end
 
   # Flattens the per-row seller and cover lookups the `add` loop below makes. The
   # variant_records leg matters: with it loaded, `.processed` finds the retina variant in

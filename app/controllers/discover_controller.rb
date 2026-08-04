@@ -54,6 +54,7 @@ class DiscoverController < ApplicationController
     create_discover_search!(query: params[:query], taxonomy: @taxonomy) if is_searching?
 
     prepare_discover_page(search_results:)
+    prepare_category_seo(search_results:)
 
     curated_product_ids = curated_products.map { _1.product.external_id }
     render inertia: "Discover/Index", props: {
@@ -164,6 +165,65 @@ class DiscoverController < ApplicationController
         set_meta_tag(name: "description", content: description)
         set_meta_tag(property: "og:description", content: description)
       end
+    end
+
+    # Category/subcategory pages (taxonomy path with at most a `from` offset) are landing
+    # pages for organic search, so they get a dedicated title/description plus BreadcrumbList
+    # and ItemList JSON-LD in the server-rendered head. Any other raw query param (sort,
+    # rating, query, tags, ...) means a filtered variant whose canonical self-references with
+    # those params — SEO treatment there would spawn duplicate titles, and its search offset
+    # follows different rules than the pagination links assume.
+    def category_seo_page?
+      taxonomy.present? && request.query_parameters.except("from").blank?
+    end
+
+    def prepare_category_seo(search_results:)
+      if taxonomy.blank? && params.values_at(:query, :tags).all?(&:blank?)
+        @discover_category_links = Discover::CategoryPagePresenter.root_category_links
+        return
+      end
+      return unless category_seo_page?
+
+      presenter = Discover::CategoryPagePresenter.new(taxonomy_path: params[:taxonomy], taxonomy:, search_results:)
+
+      set_meta_tag(title: presenter.title)
+      set_meta_tag(property: "og:title", content: presenter.title)
+      set_meta_tag(name: "description", content: presenter.meta_description)
+      set_meta_tag(property: "og:description", content: presenter.meta_description)
+
+      set_meta_tag(tag_name: "script", type: "application/ld+json", inner_content: presenter.breadcrumb_list_json_ld, head_key: "breadcrumb-list-json-ld")
+      item_list = presenter.item_list_json_ld
+      set_meta_tag(tag_name: "script", type: "application/ld+json", inner_content: item_list, head_key: "item-list-json-ld") if item_list
+
+      @discover_category_links = presenter.subcategory_links
+      @discover_pagination_links = pagination_links(search_results:)
+    end
+
+    # params[:from] (not the raw request query param) is the actual ES offset behind
+    # search_results — index mutates it to RECOMMENDED_PRODUCTS_COUNT + 1 on the canonical
+    # first page to skip products already shown in the recommendations strip, so pagination
+    # math has to agree with that offset or "Next" repeats the recommended-strip products.
+    # `from` is 1-indexed (search_options subtracts 1), so a missing/zero param means the
+    # page starts at result 1. A "Previous" landing at or before the canonical first page's
+    # offset links the bare category URL instead of a `?from=` twin of it; the bare first
+    # page itself gets no self-referencing "Previous" at all.
+    #
+    # Beyond MAX_RESULT_WINDOW, search_options clamps the ES `from` — so an unbounded
+    # requested `from` and the max clamped `from` return the same terminal slice.
+    # effective_offset mirrors that clamp so pagination always describes what search_results
+    # actually served, and Next stops once we're already at the terminal slice (an unbounded
+    # crawl would otherwise keep generating distinct URLs for the same final page forever).
+    def pagination_links(search_results:)
+      offset = [params[:from].to_i, 1].max
+      max_offset = Link::MAX_RESULT_WINDOW - INITIAL_PRODUCTS_COUNT + 1
+      effective_offset = [offset, max_offset].min
+      first_page = request.query_parameters["from"].blank?
+      previous_from = effective_offset - INITIAL_PRODUCTS_COUNT
+      previous_from = nil if previous_from <= RECOMMENDED_PRODUCTS_COUNT + 1
+      links = []
+      links << { label: "Previous page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", { from: previous_from }.compact) } unless first_page
+      links << { label: "Next page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", from: effective_offset + INITIAL_PRODUCTS_COUNT) } if effective_offset < max_offset && search_results[:total].to_i >= effective_offset + INITIAL_PRODUCTS_COUNT
+      links
     end
 
     def black_friday_feature_active?
