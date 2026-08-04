@@ -53,9 +53,12 @@ class SaveContentUpsellsService
 
     # Rich-content nodes nest arbitrarily (e.g. an upsellCard inside a blockquote), so a
     # top-level-only scan misses those cards and never mints or retires their Upsell rows.
+    # Nodes arrive as plain Hashes from specs/services but as ActionController::Parameters
+    # from controller request params (e.g. links_controller, SellerProfileSections::SaveService) —
+    # Parameters is not a Hash subclass, so both must be accepted or the scan silently sees nothing.
     def collect_upsell_nodes(nodes)
       Array(nodes).flat_map do |node|
-        next [] unless node.is_a?(Hash)
+        next [] unless node.is_a?(Hash) || node.is_a?(ActionController::Parameters)
         nested = collect_upsell_nodes(node["content"])
         node["type"] == "upsellCard" ? [node, *nested] : nested
       end
