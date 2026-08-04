@@ -163,18 +163,21 @@ describe AlertOnNegativeDestinationBalancesJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
-  it "ignores a negative row dated after the payout cutoff, which the next payout run will not take" do
+  it "reports a negative row dated after the payout cutoff, marked, because the instant payout paths read past the cutoff" do
     residue_row(-728_50, date: User::PayoutSchedule.next_scheduled_payout_end_date + 1)
     make_payable
 
     described_class.new.perform
 
-    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include(seller.email)
+      expect(message).to include("[post-cutoff — instant payout paths only until the cycle rolls]")
+    end
   end
 
   it "reports in-cycle residue even when a positive row dated after the cutoff would net the account positive" do
-    # The payout run sums only up to the cutoff, so the post-cutoff credit does not save it —
-    # a whole-ledger read would net positive here and miss the payout that is about to fail.
+    # The weekly payout run sums only up to the cutoff, so the post-cutoff credit does not save it —
+    # a whole-ledger-only read would net positive here and miss the payout that is about to fail.
     residue_row(-728_50)
     create(:balance, user: seller, merchant_account:,
                      date: User::PayoutSchedule.next_scheduled_payout_end_date + 1,
@@ -186,6 +189,7 @@ describe AlertOnNegativeDestinationBalancesJob do
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
       expect(message).to include(seller.email)
       expect(message).to include("-72850 php cents")
+      expect(message).not_to include("[post-cutoff")
     end
   end
 

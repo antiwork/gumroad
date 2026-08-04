@@ -52,9 +52,22 @@ class AlertOnNegativeDestinationBalancesJob
         # Dead accounts are reported, not skipped: `mark_balances_processing` takes a seller's unpaid
         # balances regardless of their merchant account's liveness, so residue parked on a RETIRED
         # account still fails the real payout. The report line says which.
-        set = Balance.unpaid.where(user_id:, merchant_account_id:).where("date <= ?", payout_cutoff_date)
+        #
+        # Two sums, trip on either. The cycle-bounded one mirrors what the weekly payout run takes
+        # (`unpaid_balances_up_to_date` at the cutoff), so a post-cutoff credit cannot hide residue
+        # that run WILL trip on. The unbounded one covers the payout paths that read past the cutoff
+        # (`PerformDailyInstantPayoutsWorker` at `Date.yesterday`, `InstantPayoutsService` at
+        # `Date.today`) — bounding everything to the cutoff would blind the job to fresh residue for
+        # up to six days.
+        full_set = Balance.unpaid.where(user_id:, merchant_account_id:)
+        set = full_set.where("date <= ?", payout_cutoff_date)
         set_total = set.sum(:holding_amount_cents)
-        next unless set_total.negative?
+        in_cycle = set_total.negative?
+        unless in_cycle
+          set = full_set
+          set_total = set.sum(:holding_amount_cents)
+          next unless set_total.negative?
+        end
 
         # Same trip condition as the payout guard: a negative destination total matched by a negative
         # USD ledger is refund netting, which pays out coherently. Reporting those would bury the
@@ -64,14 +77,19 @@ class AlertOnNegativeDestinationBalancesJob
         user = User.find_by(id: user_id)
         next if user.nil? || user.suspended?
 
-        if payable?(user)
+        # Read payability on the same window that tripped, so the two numbers on a report line are
+        # on one scope: the weekly run pays up to the cutoff, the instant paths read the full ledger.
+        unpaid_usd_cents = in_cycle ? user.unpaid_balance_cents_up_to_date(payout_cutoff_date) : user.unpaid_balance_cents
+
+        if unpaid_usd_cents >= user.minimum_payout_amount_cents
           payable << {
             user:,
             merchant_account:,
             set_total:,
             row_count: set.count,
             retired: !merchant_account.alive?,
-            unpaid_usd_cents: user.unpaid_balance_cents,
+            unpaid_usd_cents:,
+            post_cutoff: !in_cycle,
           }
         else
           not_payable += 1
@@ -81,7 +99,10 @@ class AlertOnNegativeDestinationBalancesJob
       { payable: report_order(payable), not_payable:, truncated: }
     end
 
-    # One entry per (seller, merchant account) whose Stripe-held set nets negative.
+    # One entry per (seller, merchant account) whose Stripe-held set nets negative on EITHER window —
+    # the whole ledger (instant payout paths) or the cycle-bounded slice (the weekly run; a
+    # post-cutoff credit can make the whole ledger positive while the slice the weekly run pays is
+    # still negative). Both sums come out of one grouped statement.
     #
     # Walked with a keyset cursor over `user_id` rather than a single ordered GROUP BY. There is no
     # index on `holding_amount_cents`, so filtering on it first scans every unpaid row; and
@@ -91,15 +112,16 @@ class AlertOnNegativeDestinationBalancesJob
     def candidate_pairs
       pairs = []
       last_user_id = 0
+      in_cycle_sum = Arel.sql(ActiveRecord::Base.sanitize_sql_array(
+                                ["SUM(CASE WHEN date <= ? THEN holding_amount_cents ELSE 0 END)", payout_cutoff_date]))
 
       loop do
         batch = Balance.unpaid
                        .where("user_id > ?", last_user_id)
-                       .where("date <= ?", payout_cutoff_date)
                        .group(:user_id, :merchant_account_id)
                        .order(:user_id)
                        .limit(USER_BATCH_SIZE)
-                       .pluck(:user_id, :merchant_account_id, Arel.sql("SUM(holding_amount_cents)"))
+                       .pluck(:user_id, :merchant_account_id, Arel.sql("SUM(holding_amount_cents)"), in_cycle_sum)
         break if batch.empty?
 
         # The cursor moves by user, but the rows are one per (user, merchant account). A full
@@ -108,11 +130,11 @@ class AlertOnNegativeDestinationBalancesJob
         # slower one.
         if batch.size == USER_BATCH_SIZE && batch.first.first != batch.last.first
           boundary_user_id = batch.last.first
-          batch = batch.reject { |user_id, _, _| user_id == boundary_user_id }
+          batch = batch.reject { |user_id, _, _, _| user_id == boundary_user_id }
         end
 
-        pairs.concat(batch.filter_map do |user_id, merchant_account_id, holding_cents|
-          [user_id, merchant_account_id] if holding_cents.negative? && merchant_account_id.present?
+        pairs.concat(batch.filter_map do |user_id, merchant_account_id, holding_cents, in_cycle_cents|
+          [user_id, merchant_account_id] if (holding_cents.negative? || in_cycle_cents.negative?) && merchant_account_id.present?
         end)
         last_user_id = batch.last.first
         break if pairs.size > MAX_CANDIDATES_SCANNED
@@ -121,24 +143,9 @@ class AlertOnNegativeDestinationBalancesJob
       pairs
     end
 
-    # A deliberately WIDER bar than the payout run's. `Payouts.is_user_payable` also gates on
-    # compliance, payout pauses, in-flight payments and a usable bank account; this reads only
-    # balance against minimum, so the report can name a seller no cycle would currently reach —
-    # including one this guard has already had paused. That is the right direction for a report
-    # whose job is to surface the row before it costs anyone money.
-    #
-    # Bounded to the same cutoff as the scan: an unbounded read can flip the verdict either way —
-    # a post-cutoff credit makes an in-cutoff shortfall look payable when the payout run can't see
-    # it yet, and a post-cutoff debit can hide a seller the payout run will actually pay.
-    def payable?(user)
-      user.unpaid_balance_cents_up_to_date(payout_cutoff_date) >= user.minimum_payout_amount_cents
-    end
-
-    # The same cutoff the payout run applies (`unpaid_balances_up_to_date(date)` with
-    # `next_scheduled_payout_end_date`). Without it the detector reads balances dated after the
-    # cutoff, so its verdict can disagree with what the next payout run will actually sum — in
-    # both directions: a post-cutoff positive row can hide residue the payout WILL trip on, and
-    # a post-cutoff negative row can report a set the payout will pay out fine.
+    # The cutoff the weekly payout run applies (`unpaid_balances_up_to_date(date)` with
+    # `next_scheduled_payout_end_date`). Memoized so the window cannot roll mid-scan and hand
+    # `candidate_pairs`' consumers a different cutoff than the verdict sums used.
     def payout_cutoff_date
       @payout_cutoff_date ||= User::PayoutSchedule.next_scheduled_payout_end_date
     end
@@ -173,8 +180,9 @@ class AlertOnNegativeDestinationBalancesJob
       currency = entry[:merchant_account].currency
       rows = entry[:row_count] > 1 ? " across #{entry[:row_count]} balances" : ""
       retired = entry[:retired] ? " [RETIRED account]" : ""
+      post_cutoff = entry[:post_cutoff] ? " [post-cutoff — instant payout paths only until the cycle rolls]" : ""
       "• #{entry[:user].email} (user #{entry[:user].id}) — #{entry[:set_total]} #{currency} cents#{rows} " \
-        "on #{entry[:merchant_account].charge_processor_merchant_id}#{retired}, " \
+        "on #{entry[:merchant_account].charge_processor_merchant_id}#{retired}#{post_cutoff}, " \
         "against #{entry[:unpaid_usd_cents]} USD cents payable, next payout #{entry[:user].next_payout_date}"
     end
 
