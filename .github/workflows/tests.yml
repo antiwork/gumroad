@@ -23,6 +23,40 @@ jobs:
     steps:
       - run: true
 
+  run_scope:
+    # Decides whether this run gets the full Fast/Slow suite or the trimmed
+    # test_relevant job. Full suite: every push to main (deploy gate), or a
+    # PR carrying the run-all-specs label. Push events have no PR payload,
+    # so the label is looked up via the commit's PRs.
+    name: Run scope
+    runs-on: ubicloud-standard-2
+    needs: ci_gate
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    permissions:
+      pull-requests: read
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "pull_request_target" ]; then
+            LABELS=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${{ github.event.pull_request.number }}" --jq '[.labels[].name] | join("\n")')
+          else
+            LABELS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '[.[].labels[].name] | join("\n")' || true)
+          fi
+          if echo "$LABELS" | grep -qx 'run-all-specs'; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "full=false" >> "$GITHUB_OUTPUT"
+          fi
+
   lint_js:
     name: Lint JS/TS
     runs-on: ubicloud-standard-4
@@ -479,9 +513,10 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
     runs-on: ubicloud-standard-4
-    needs: build
-    # Full suite is a main-only deploy gate; branches run test_relevant.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build, run_scope]
+    # Full suite: main pushes (deploy gate) and PRs labeled run-all-specs.
+    # Everything else runs test_relevant instead.
+    if: needs.run_scope.outputs.full == 'true'
     strategy:
       fail-fast: true
       matrix:
@@ -612,9 +647,10 @@ jobs:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_slow_${{ matrix.ci_node_index }}
       WEB_REPO: gumroadteam/web
     runs-on: ubicloud-standard-4
-    needs: build
-    # Full suite is a main-only deploy gate; branches run test_relevant.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build, run_scope]
+    # Full suite: main pushes (deploy gate) and PRs labeled run-all-specs.
+    # Everything else runs test_relevant instead.
+    if: needs.run_scope.outputs.full == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -808,18 +844,18 @@ jobs:
           docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
 
-  test_relevant:
-    name: Test Relevant${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
-    env:
-      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_relevant
-      WEB_REPO: gumroadteam/web
-    runs-on: ubicloud-standard-4
-    needs: build
-    # Branch-only counterpart of test_fast/test_slow: runs the specs mapped
-    # from the diff (bin/branch-specs) plus the money-path smoke set, instead
-    # of the whole suite. Main still runs everything before a deploy.
-    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository) }}
-    timeout-minutes: 30
+  relevant_specs:
+    # Runs the fork-controlled bin/branch-specs in a job with NO secrets and
+    # no Docker login, so untrusted code can never sit in front of a
+    # credential-bearing step (a $GITHUB_PATH write here can't reach
+    # test_relevant — PATH edits don't cross jobs). The list crosses over as
+    # a plain data output.
+    name: Compute relevant specs
+    runs-on: ubicloud-standard-2
+    needs: run_scope
+    if: ${{ needs.run_scope.outputs.full != 'true' && (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository) }}
+    outputs:
+      files_csv: ${{ steps.specs.outputs.files_csv }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -836,17 +872,42 @@ jobs:
           git fetch --no-tags --quiet origin main
           SPECS=$(ruby bin/branch-specs)
           COUNT=$(echo "$SPECS" | grep -c . || true)
-          # Bare rspec runs the WHOLE suite; an empty list must fail loudly
-          # instead. The smoke set makes this unreachable unless those specs
-          # are deleted.
+          # An empty list would make Knapsack fall back to its full-suite
+          # pattern; fail loudly instead. The smoke set makes this
+          # unreachable unless those specs are deleted.
           if [ "$COUNT" -eq 0 ]; then
-            echo "bin/branch-specs returned no specs — refusing to run bare rspec"
+            echo "bin/branch-specs returned no specs — refusing to run"
             exit 1
           fi
           echo "Running $COUNT spec file(s):"
           echo "$SPECS" | sed 's/^/  /'
-          # Single line for the docker run below.
-          echo "files=$(echo "$SPECS" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+          echo "files_csv=$(echo "$SPECS" | paste -sd, -)" >> "$GITHUB_OUTPUT"
+
+  test_relevant:
+    name: Test Relevant ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
+    env:
+      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_relevant_${{ matrix.ci_node_index }}
+      WEB_REPO: gumroadteam/web
+    runs-on: ubicloud-standard-4
+    needs: [build, run_scope, relevant_specs]
+    # Branch/PR counterpart of test_fast/test_slow: the same docker setup and
+    # Knapsack queue distribution, restricted to the specs relevant_specs
+    # mapped from the diff plus the money-path smoke set. Main pushes and
+    # run-all-specs PRs run the full suite instead.
+    if: needs.run_scope.outputs.full != 'true' && (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository)
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        ci_node_total: [4]
+        ci_node_index: [0, 1, 2, 3]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Login to Docker Hub
         uses: nick-fields/retry@v3
         with:
@@ -894,7 +955,7 @@ jobs:
             wait $DB_PID || exit 1
             wait $ES_PID || exit 1
             wait $MINIO_PID || exit 1
-      - name: Run relevant specs
+      - name: Run tests
         timeout-minutes: 25
         run: |
           mkdir -p ./capybara-artifacts ./test-logs
@@ -903,19 +964,41 @@ jobs:
             -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
             -v "$(pwd)/test-logs:/app/log" \
             -e RUBY_YJIT_ENABLE \
+            -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
+            -e KNAPSACK_PRO_CI_NODE_TOTAL \
+            -e KNAPSACK_PRO_CI_NODE_INDEX \
+            -e KNAPSACK_PRO_LOG_LEVEL \
+            -e KNAPSACK_PRO_TEST_FILE_LIST \
+            -e KNAPSACK_PRO_COMMIT_HASH \
+            -e KNAPSACK_PRO_BRANCH \
+            -e KNAPSACK_PRO_CI_NODE_BUILD_ID \
+            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \
+            -e KNAPSACK_PRO_PROJECT_DIR \
+            -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
             -e CI \
             -e IN_DOCKER \
             $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
-            /usr/local/bin/gosu app bundle exec rspec --format RSpec::Github::Formatter --format progress --tag ~skip ${{ steps.specs.outputs.files }}
+            /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
         env:
           RUBY_YJIT_ENABLE: 1
+          KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }}
+          KNAPSACK_PRO_CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
+          KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
+          KNAPSACK_PRO_LOG_LEVEL: info
+          KNAPSACK_PRO_TEST_FILE_LIST: ${{ needs.relevant_specs.outputs.files_csv }}
+          KNAPSACK_PRO_COMMIT_HASH: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
+          KNAPSACK_PRO_CI_NODE_BUILD_ID: ${{ github.run_id }}
+          KNAPSACK_PRO_CI_NODE_RETRY_COUNT: ${{ github.run_attempt }}
+          KNAPSACK_PRO_PROJECT_DIR: /app
+          KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
           IN_DOCKER: true
       - name: Archive capybara artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: capybara-screenshots-relevant-attempt-${{ github.run_attempt }}
+          name: capybara-screenshots-relevant-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
           path: ./capybara-artifacts/*.png
           retention-days: 7
           if-no-files-found: ignore
@@ -923,7 +1006,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-logs-relevant-attempt-${{ github.run_attempt }}
+          name: test-logs-relevant-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
           path: ./test-logs/test.log
           retention-days: 7
           if-no-files-found: ignore
