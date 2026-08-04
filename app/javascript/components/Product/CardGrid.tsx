@@ -238,10 +238,12 @@ export const CardGrid = ({
   // as a checked 0-count facet indefinitely.
   React.useEffect(() => {
     if (!results) return;
-    // Only prune against a facet set fetched for the tokens we're about to judge. Requests are
-    // not cancelled on a param change, so a slow older response can land last; its facets
-    // legitimately omit a newer token and pruning on them would silently clear the user's
-    // just-picked filter and re-search broadened.
+    // Only prune against a facet set fetched for the taxonomy AND tokens we're about to judge.
+    // Requests are not cancelled on a param change, so a slow older response can land last; a
+    // response for another taxonomy (or older tokens) legitimately omits a token that is valid
+    // here, and pruning on it would silently clear the user's just-picked filter and re-search
+    // broadened.
+    if (state.resultsParams?.taxonomy !== searchParams.taxonomy) return;
     const fetchedTokens = state.resultsParams?.taxonomy_attribute_filters;
     const current = searchParams.taxonomy_attribute_filters;
     if (!current?.length) return;
