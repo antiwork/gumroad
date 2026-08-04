@@ -11,6 +11,7 @@ export type User = {
   individual_tax_id_needed_countries: string[];
   individual_tax_id_entered: boolean;
   individual_tax_id_last_four: string | null;
+  individual_tax_id_is_last_four: boolean;
   business_tax_id_entered: boolean;
   business_tax_id_last_four: string | null;
   requires_credit_card: boolean;

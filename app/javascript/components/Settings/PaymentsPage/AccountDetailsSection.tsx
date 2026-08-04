@@ -433,6 +433,12 @@ const AccountDetailsSection = ({
       user.individual_tax_id_needed_countries.includes(complianceInfo.business_country)) ||
     (complianceInfo.country !== null && user.individual_tax_id_needed_countries.includes(complianceInfo.country));
 
+  // Stripe now requires the full 9-digit SSN (individual.id_number) but we only hold the last 4,
+  // so the sync job can never clear the requirement — the masked "done" display would strand the
+  // seller. Force the input open with an explanation instead.
+  const mustReenterFullSsn =
+    user.need_full_ssn && user.individual_tax_id_is_last_four && complianceInfo.country === "US";
+
   return (
     <section className="grid gap-8">
       {showAccountTypeSection ? (
@@ -1308,7 +1314,7 @@ const AccountDetailsSection = ({
             <FieldsetTitle>
               <Label htmlFor={`${uid}-${individualTaxIdConfig.idSuffix}`}>{individualTaxIdConfig.label}</Label>
             </FieldsetTitle>
-            {user.individual_tax_id_entered && !isEditingIndividualTaxId ? (
+            {user.individual_tax_id_entered && !isEditingIndividualTaxId && !mustReenterFullSsn ? (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <Input
@@ -1343,17 +1349,25 @@ const AccountDetailsSection = ({
                 </button>
               </div>
             ) : (
-              <Input
-                id={`${uid}-${individualTaxIdConfig.idSuffix}`}
-                type="text"
-                minLength={individualTaxIdConfig.minLength}
-                maxLength={individualTaxIdConfig.maxLength}
-                placeholder={individualTaxIdConfig.placeholder}
-                required={!user.individual_tax_id_entered}
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("individual_tax_id")}
-                onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
-              />
+              <div className="flex flex-col gap-2">
+                <Input
+                  id={`${uid}-${individualTaxIdConfig.idSuffix}`}
+                  type="text"
+                  minLength={individualTaxIdConfig.minLength}
+                  maxLength={individualTaxIdConfig.maxLength}
+                  placeholder={individualTaxIdConfig.placeholder}
+                  required={!user.individual_tax_id_entered || mustReenterFullSsn}
+                  disabled={isFormDisabled}
+                  aria-invalid={errorFieldNames.has("individual_tax_id")}
+                  onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
+                />
+                {mustReenterFullSsn ? (
+                  <div className="small">
+                    Our payments provider now requires your full 9-digit Social Security Number. Please re-enter it to
+                    continue receiving payouts.
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
         </Fieldset>

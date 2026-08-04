@@ -657,6 +657,7 @@ describe SettingsPresenter do
                                                Compliance::Countries::PAK.alpha2],
           individual_tax_id_entered: false,
           individual_tax_id_last_four: nil,
+          individual_tax_id_is_last_four: false,
           business_tax_id_entered: false,
           business_tax_id_last_four: nil,
           requires_credit_card: false,
@@ -813,6 +814,7 @@ describe SettingsPresenter do
                                                                                         Compliance::Countries::PAK.alpha2],
                                                    individual_tax_id_entered: true,
                                                    individual_tax_id_last_four: "0000",
+                                                   individual_tax_id_is_last_four: false,
                                                  })
 
         @compliance_info_details = @base_props[:compliance_info].merge({
@@ -1445,6 +1447,32 @@ describe SettingsPresenter do
         expect(props[:user][:business_tax_id_last_four]).to eq("4331")
         expect(props[:user][:individual_tax_id_last_four]).to eq("5678")
         expect { JSON.generate(props) }.not_to raise_error
+      end
+    end
+
+    describe "individual_tax_id_is_last_four" do
+      it "is true when only the last four digits of the SSN are on file" do
+        create(:user_compliance_info, user: seller, individual_tax_id: "1234")
+
+        expect(presenter.payments_props[:user][:individual_tax_id_is_last_four]).to be(true)
+      end
+
+      it "is true when a formatted last-four value decrypts to four digits" do
+        create(:user_compliance_info, user: seller, individual_tax_id: " 12 34 ")
+
+        expect(presenter.payments_props[:user][:individual_tax_id_is_last_four]).to be(true)
+      end
+
+      it "is false when the full nine-digit SSN is on file" do
+        create(:user_compliance_info, user: seller, individual_tax_id: "123-45-6789")
+
+        expect(presenter.payments_props[:user][:individual_tax_id_is_last_four]).to be(false)
+      end
+
+      it "is false when no tax ID is on file" do
+        create(:user_compliance_info, user: seller, individual_tax_id: nil)
+
+        expect(presenter.payments_props[:user][:individual_tax_id_is_last_four]).to be(false)
       end
     end
 
