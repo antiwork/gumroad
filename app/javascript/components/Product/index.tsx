@@ -1082,7 +1082,7 @@ const RefundPolicyInfo = ({ refundPolicy, permalink }: { refundPolicy: RefundPol
     }
   }, [viewingRefundPolicy]);
 
-  const formattedDate = new Date(refundPolicy.updated_at).toLocaleString(userAgentInfo.locale, { dateStyle: "medium" });
+  const formattedDate = parseISO(refundPolicy.updated_at).toLocaleString(userAgentInfo.locale, { dateStyle: "medium" });
   const lastUpdated = `Last updated ${formattedDate}`;
 
   const handleCloseModal = () => {
