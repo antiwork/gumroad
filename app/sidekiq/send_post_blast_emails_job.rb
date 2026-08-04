@@ -17,9 +17,13 @@ class SendPostBlastEmailsJob
   # the recovered-attempt arithmetic, not from one attempt. Duplicate delivery past an expired
   # lock: safe on the normal path (`SentPostEmail` unique index dedupes), while the
   # `to_non_openers?` branch dedupes via a Redis set read once at job start — sequential re-runs
-  # are safe there, concurrent overlap is not, which is why `audience_load_timeout_seconds` is
-  # clamped below this TTL.
-  sidekiq_options retry: 10, queue: :default, lock: :until_executed, lock_ttl: 8.hours.to_i
+  # are safe there, concurrent overlap is not, so each attempt stops before the live
+  # digest's remaining TTL can be exhausted.
+  LOCK_TTL = 8.hours
+  LOCK_SAFETY_MARGIN = 30.minutes
+  LockLifeTooShort = Class.new(StandardError)
+
+  sidekiq_options retry: 10, queue: :default, lock: :until_executed, lock_ttl: LOCK_TTL.to_i
 
   def perform(blast_id)
     @blast = PostEmailBlast.find(blast_id)
@@ -27,6 +31,7 @@ class SendPostBlastEmailsJob
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
 
+    ensure_lock_life_remaining!
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
     @filters = @post.audience_members_filter_params
@@ -35,6 +40,7 @@ class SendPostBlastEmailsJob
     @members = load_audience_members
 
     if @blast.to_non_openers?
+      ensure_lock_life_remaining!
       keep_emails = load_non_opener_emails
       @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
       remove_members_already_sent_in_this_blast
@@ -51,6 +57,7 @@ class SendPostBlastEmailsJob
     @members.each_slice(recipients_slice_size) do |members_slice|
       members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
         provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
+          ensure_lock_life_remaining!
           send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
         end
       end
@@ -83,6 +90,36 @@ class SendPostBlastEmailsJob
 
     # Redis list/set writes only — no SQL — so this can stay large.
     REDIS_WRITE_SLICE_SIZE = 10_000
+
+    def ensure_lock_life_remaining!
+      return if Time.current < attempt_deadline
+
+      raise LockLifeTooShort, "#{self.class.name} blast_id=#{@blast.id} reached its unique-lock deadline before finishing"
+    end
+
+    def attempt_deadline
+      @attempt_deadline ||= begin
+        deadline = Time.current + LOCK_TTL - LOCK_SAFETY_MARGIN
+        remaining_life = remaining_unique_lock_life
+        remaining_life ? [deadline, Time.current + remaining_life - LOCK_SAFETY_MARGIN].min : deadline
+      end
+    end
+
+    def remaining_unique_lock_life
+      item = {
+        "class" => self.class.name,
+        "queue" => self.class.get_sidekiq_options["queue"].to_s,
+        "args" => [@blast.id],
+      }
+      SidekiqUniqueJobs::Job.prepare(item)
+      pttl = Sidekiq.redis { _1.pttl(item["lock_digest"]) }
+      return if pttl.nil? || pttl.negative?
+
+      (pttl / 1000.0).seconds
+    rescue Redis::BaseError, RedisClient::Error, ConnectionPool::TimeoutError, SidekiqUniqueJobs::UniqueJobsError => e
+      Rails.logger.warn("[#{self.class.name}] blast_id=#{@blast.id} could not read unique-lock pttl: #{e.class}: #{e.message}")
+      nil
+    end
 
     # The provider slice — not the mixed slice — is the retry unit. An ESP that has
     # already accepted its recipients must not be handed them again because a later
@@ -409,9 +446,9 @@ class SendPostBlastEmailsJob
       end.to_i.clamp(1..PostEmailApi.max_recipients)
     end
 
-    # Tunable via Redis so a stuck blast can be unblocked without a deploy. Clamped under the
-    # `lock_ttl` because an attempt that outlives the lock permits the concurrent overlap the
-    # `to_non_openers?` dedupe cannot survive (its Redis set is read once at job start).
+    # Tunable via Redis so a stuck blast can be unblocked without a deploy. The whole attempt is
+    # still bounded by the live `lock_ttl`, because a non-opener attempt that outlives the lock can
+    # overlap with a second worker after reading its one-time Redis dedupe set.
     def audience_load_timeout_seconds
       ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i.clamp(1..4.hours.to_i)
     end
