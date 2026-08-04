@@ -6,13 +6,18 @@ describe Pages::ProductPrices do
   let(:seller) { create(:user, disable_buyer_local_currency: false) }
   let!(:product) { create(:product, user: seller, name: "Quicklauncher", price_cents: 1400, price_currency_type: "usd") }
   let(:french_ip) { "2.2.2.2" }
+  let(:us_ip) { "8.8.8.8" }
 
   # Stubbed rather than Feature.activate'd: Flipper's adapter is Redis, which is shared with
   # every other spec process on the machine, so writing the flag globally makes these examples
   # depend on — and interfere with — unrelated runs.
-  def enable_buyer_local_currency(for_seller = seller)
+  def enable_buyer_local_currency(for_seller = seller, charging: false, subscriptions: false)
     allow(Feature).to receive(:active?).and_call_original
     allow(Feature).to receive(:active?).with(:buyer_local_currency, for_seller).and_return(true)
+    # Both rollout flags are stubbed in the off states too — a fall-through to and_call_original
+    # reads shared Redis, where another spec process can have enabled them for the same actor.
+    allow(Feature).to receive(:active?).with(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, for_seller).and_return(charging || subscriptions)
+    allow(Feature).to receive(:active?).with(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, for_seller).and_return(subscriptions)
   end
 
   def stub_geoip(ip, country_code)
@@ -27,6 +32,13 @@ describe Pages::ProductPrices do
         longitude: nil
       )
     )
+  end
+
+  # The acceptance bar for localization is the native card: both surfaces must show one
+  # product in one currency. The card reads the visitor from request.remote_ip.
+  def native_card_props(product, ip)
+    request = ActionDispatch::TestRequest.create("REMOTE_ADDR" => ip)
+    ProductPresenter::Card.new(product:).for_web(request:)
   end
 
   describe ".build" do
@@ -89,18 +101,93 @@ describe Pages::ProductPrices do
       expect(entry[:price]).to eq("€11.20+")
     end
 
-    # A membership's price carries a recurrence suffix that a converted amount cannot honor,
-    # and buyer_currency_settleable? refuses recurring products for exactly that reason.
-    it "leaves a membership on the seller's own price and recurrence wording" do
+    # While charging is display-only, buyer_currency_settleable? accepts every shape, so the
+    # native card localizes a membership (recurrence wording rendered client-side). This blob
+    # must localize it too — with the suffix composed into the string — or one screen shows
+    # the same membership in two currencies.
+    it "localizes a membership, recurrence wording included, while charging is display-only" do
       membership = create(:membership_product, user: seller, price_cents: 500)
       enable_buyer_local_currency
       stub_geoip(french_ip, "FR")
       allow_any_instance_of(described_class).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+      allow_any_instance_of(ProductPresenter::Card).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
 
       entry = described_class.build(seller, ip: french_ip)[membership.general_permalink]
+      native = native_card_props(membership, french_ip)
 
-      expect(entry[:localized]).to be(false)
-      expect(entry[:price]).to eq(membership.price_formatted_verbose)
+      expect(entry).to eq(price: "€4 a month", price_cents: 400, currency_code: "eur", localized: true)
+      expect(entry[:price_cents]).to eq(native[:buyer_local_price_cents])
+      expect(entry[:currency_code]).to eq(native[:buyer_currency_display][:buyer_currency_shown])
+    end
+
+    # Once charging is enforced, a USD buyer is a case buyer_currency_settleable? accepts even
+    # outside the subscriptions ramp — the charge is created in USD through the same cached
+    # rate, so the converted price is the amount charged. The native card already localized
+    # this; the blob kept the membership in GBP on the same screen.
+    it "shows a US buyer a GBP membership in USD once charging is enforced, matching the native card" do
+      membership = create(:membership_product, user: seller, price_cents: 500, price_currency_type: "gbp")
+      enable_buyer_local_currency(charging: true)
+      stub_geoip(us_ip, "US")
+      allow_any_instance_of(described_class).to receive(:buyer_local_currency_rate).and_return(BigDecimal("1.25"))
+      allow_any_instance_of(ProductPresenter::Card).to receive(:buyer_local_currency_rate).and_return(BigDecimal("1.25"))
+
+      entry = described_class.build(seller, ip: us_ip)[membership.general_permalink]
+      native = native_card_props(membership, us_ip)
+
+      expect(entry).to eq(price: "$6.25 a month", price_cents: 625, currency_code: "usd", localized: true)
+      expect(entry[:price_cents]).to eq(native[:buyer_local_price_cents])
+      expect(entry[:currency_code]).to eq(native[:buyer_currency_display][:buyer_currency_shown])
+    end
+
+    # With the seller in the subscriptions ramp, checkout quotes a plain membership in the
+    # buyer's own currency and renewals reuse the amount fixed at signup — so the card
+    # localizes it for every buyer, and this blob must follow.
+    it "localizes a membership for a non-USD buyer once the seller is in the subscriptions ramp" do
+      membership = create(:membership_product, user: seller, price_cents: 500)
+      enable_buyer_local_currency(charging: true, subscriptions: true)
+      stub_geoip(french_ip, "FR")
+      allow_any_instance_of(described_class).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+      allow_any_instance_of(ProductPresenter::Card).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+
+      entry = described_class.build(seller, ip: french_ip)[membership.general_permalink]
+      native = native_card_props(membership, french_ip)
+
+      expect(entry).to eq(price: "€4 a month", price_cents: 400, currency_code: "eur", localized: true)
+      expect(entry[:price_cents]).to eq(native[:buyer_local_price_cents])
+      expect(entry[:currency_code]).to eq(native[:buyer_currency_display][:buyer_currency_shown])
+    end
+
+    # Outside the ramp, a non-USD buyer's membership is still charged canonical USD, so a
+    # converted price would be a number no buyer pays. The card withholds the local price
+    # there — so must this.
+    it "keeps a membership on the seller's price for a non-USD buyer outside the subscriptions ramp" do
+      membership = create(:membership_product, user: seller, price_cents: 500)
+      enable_buyer_local_currency(charging: true)
+      stub_geoip(french_ip, "FR")
+      allow_any_instance_of(described_class).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+      allow_any_instance_of(ProductPresenter::Card).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+
+      entry = described_class.build(seller, ip: french_ip)[membership.general_permalink]
+      native = native_card_props(membership, french_ip)
+
+      expect(entry).to eq(price: "$5 a month", price_cents: 500, currency_code: "usd", localized: false)
+      expect(native[:buyer_currency_display][:display_mode]).to eq("default")
+      expect(native[:buyer_local_price_cents]).to be_nil
+    end
+
+    it "keeps the fixed-term wording on a localized membership" do
+      once = create(:membership_product, user: seller, price_cents: 500)
+      once.update!(duration_in_months: 1)
+      fixed = create(:membership_product, user: seller, price_cents: 700)
+      fixed.update!(duration_in_months: 6)
+      enable_buyer_local_currency
+      stub_geoip(french_ip, "FR")
+      allow_any_instance_of(described_class).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+
+      prices = described_class.build(seller, ip: french_ip)
+
+      expect(prices[once.general_permalink][:price]).to eq("€4 once")
+      expect(prices[fixed.general_permalink][:price]).to eq("€5.60 a month x 6")
     end
 
     # A membership lasting exactly one recurrence period charges once, and a longer fixed term
