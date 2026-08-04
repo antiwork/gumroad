@@ -41,12 +41,12 @@ module ValidateRecaptcha
   # Default score thresholds used when the per-surface Redis key is unset.
   # Surfaces not listed here default to nil (no score gating — token validity
   # alone). The score-based checkout key returns a score for ~every valid token,
-  # so it gates at 0.5 out of the box; trusted buyers (see CheckoutRecaptcha) get
+  # so it gates at 0.4 out of the box; trusted buyers (see CheckoutRecaptcha) get
   # a more lenient 0.3 bar. Override at runtime per surface by setting
   # RedisKey.recaptcha_score_threshold(surface), e.g.
   # $redis.set(RedisKey.recaptcha_score_threshold(:checkout_score), "0.4").
   RECAPTCHA_SCORE_THRESHOLD_DEFAULTS = {
-    checkout_score: 0.5,
+    checkout_score: 0.4,
     checkout_score_trusted: 0.3,
   }.freeze
   RECAPTCHA_SCORE_LOG_PREFIX = "[recaptcha_score]"

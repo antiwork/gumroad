@@ -219,7 +219,7 @@ describe ValidateRecaptcha, type: :controller do
         expect(parsed_body["success"]).to be true
       end
 
-      it "rejects a low score using the default 0.5 threshold when Redis is unset" do
+      it "rejects a low score using the default 0.4 threshold when Redis is unset" do
         stub_recaptcha_response(valid: true, score: 0.1)
 
         post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
@@ -228,8 +228,8 @@ describe ValidateRecaptcha, type: :controller do
         expect(parsed_body["error"]).to eq("captcha_failed")
       end
 
-      it "passes a score at or above the default 0.5 threshold when Redis is unset" do
-        stub_recaptcha_response(valid: true, score: 0.7)
+      it "passes a score at or above the default 0.4 threshold when Redis is unset" do
+        stub_recaptcha_response(valid: true, score: 0.4)
 
         post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
 
@@ -249,7 +249,7 @@ describe ValidateRecaptcha, type: :controller do
 
       describe "#recaptcha_failure_message" do
         it "does not blame ad blockers when a genuine, correctly-hosted token failed on score alone" do
-          stub_recaptcha_response(valid: true, score: 0.4)
+          stub_recaptcha_response(valid: true, score: 0.3)
 
           post :checkout_score_message_action, params: { "g-recaptcha-response" => "test_token" }
 
