@@ -534,6 +534,20 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect { job.send(:remaining_unique_lock_life) }
         .to raise_error(SendPostBlastEmailsJob::LockLifeTooShort, /could not read unique-lock pttl/)
     end
+
+    it "fails closed when Redis reports a missing or non-expiring lock (negative PTTL) instead of falling back to a fresh window" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      job = described_class.new
+      job.instance_variable_set(:@blast, blast)
+
+      [-2, -1].each do |pttl|
+        redis = instance_double(Redis, pttl: pttl)
+        allow(Sidekiq).to receive(:redis) { |&block| block.call(redis) }
+
+        expect { job.send(:remaining_unique_lock_life) }
+          .to raise_error(SendPostBlastEmailsJob::LockLifeTooShort, /unique-lock pttl was #{pttl}/)
+      end
+    end
   end
 
   describe "audience snapshot for retry resume" do
