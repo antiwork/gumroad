@@ -52,7 +52,7 @@ class AlertOnNegativeDestinationBalancesJob
         # Dead accounts are reported, not skipped: `mark_balances_processing` takes a seller's unpaid
         # balances regardless of their merchant account's liveness, so residue parked on a RETIRED
         # account still fails the real payout. The report line says which.
-        set = Balance.unpaid.where(user_id:, merchant_account_id:)
+        set = Balance.unpaid.where(user_id:, merchant_account_id:).where("date <= ?", payout_cutoff_date)
         set_total = set.sum(:holding_amount_cents)
         next unless set_total.negative?
 
@@ -95,6 +95,7 @@ class AlertOnNegativeDestinationBalancesJob
       loop do
         batch = Balance.unpaid
                        .where("user_id > ?", last_user_id)
+                       .where("date <= ?", payout_cutoff_date)
                        .group(:user_id, :merchant_account_id)
                        .order(:user_id)
                        .limit(USER_BATCH_SIZE)
@@ -127,6 +128,15 @@ class AlertOnNegativeDestinationBalancesJob
     # whose job is to surface the row before it costs anyone money.
     def payable?(user)
       user.unpaid_balance_cents >= user.minimum_payout_amount_cents
+    end
+
+    # The same cutoff the payout run applies (`unpaid_balances_up_to_date(date)` with
+    # `next_scheduled_payout_end_date`). Without it the detector reads balances dated after the
+    # cutoff, so its verdict can disagree with what the next payout run will actually sum — in
+    # both directions: a post-cutoff positive row can hide residue the payout WILL trip on, and
+    # a post-cutoff negative row can report a set the payout will pay out fine.
+    def payout_cutoff_date
+      @payout_cutoff_date ||= User::PayoutSchedule.next_scheduled_payout_end_date
     end
 
     def message_for(scan)
