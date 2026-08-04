@@ -45,6 +45,7 @@ describe CheckoutPresenter do
         saved_credit_card: { expiration_date: "12/23", number: "**** **** **** 4242", type: "visa", requires_mandate: false },
         recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
         recaptcha_score_based: false,
+        recaptcha_challenge_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
         paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
         max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
         cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
@@ -65,6 +66,15 @@ describe CheckoutPresenter do
 
         expect(props[:recaptcha_key]).to eq("money_score_site_key")
         expect(props[:recaptcha_score_based]).to be(true)
+      end
+
+      # The score key can never render a challenge, so the page also needs the challenge key up
+      # front to run the fallback the server offers after a score-only refusal.
+      it "also returns the challenge key so a score-only refusal can be retried interactively" do
+        props = @instance.checkout_props(params: {}, browser_guid:)
+
+        expect(props[:recaptcha_challenge_key]).to eq(GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"))
+        expect(props[:recaptcha_challenge_key]).not_to eq(props[:recaptcha_key])
       end
     end
 
@@ -161,6 +171,7 @@ describe CheckoutPresenter do
         saved_credit_card: { expiration_date: "12/23", number: "**** **** **** 4242", type: "visa", requires_mandate: false },
         recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
         recaptcha_score_based: false,
+        recaptcha_challenge_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
         paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
         gift: nil,
         clear_cart: false,

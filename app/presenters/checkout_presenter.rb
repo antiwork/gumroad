@@ -32,6 +32,9 @@ class CheckoutPresenter
       **checkout_common,
       recaptcha_key: CheckoutRecaptcha.site_key(logged_in_user),
       recaptcha_score_based: CheckoutRecaptcha.score_based?(logged_in_user),
+      # The key to fall back to when the score key refuses the buyer on score alone — the page
+      # can't be given it later, since by then the order request has already been refused.
+      recaptcha_challenge_key: CheckoutRecaptcha.challenge_site_key,
       country: Compliance::Countries.find_by_name(country)&.alpha2,
       state: logged_in_user&.state || detected_state,
       address: logged_in_user ? {

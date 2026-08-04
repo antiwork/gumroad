@@ -117,6 +117,14 @@ module ValidateRecaptcha
       @recaptcha_failed_on_score_only ? CAPTCHA_LOW_SCORE_MESSAGE : CAPTCHA_FAILURE_MESSAGE
     end
 
+    # A score-only refusal is the only CAPTCHA failure with recourse: the token was minted by
+    # Google for a host we allow, so the visitor can still be asked to prove humanity against a
+    # key that renders a challenge (see OrdersController). Every other failure — invalid token,
+    # wrong hostname, no score at all, infra error — is about evidence a challenge cannot supply.
+    def recaptcha_failed_on_score_only?
+      @recaptcha_failed_on_score_only.present?
+    end
+
     def recaptcha_assessment(site_key:)
       token = params["g-recaptcha-response"]
       if token.is_a?(String) && token.length > MAX_RECAPTCHA_TOKEN_LENGTH
