@@ -152,6 +152,29 @@ describe AlertOnNegativeDestinationBalancesJob do
     end
   end
 
+  it "reports a seller's later merchant account when a full scan page is entirely that seller's own groups" do
+    # USER_BATCH_SIZE = 1: the seller's first account alone fills a page, so
+    # `batch.first.first == batch.last.first` on every page — the boundary case the straddle test
+    # above cannot reach, since there is no *other* user in the page to make the ids differ. A
+    # cursor keyed on user_id alone would advance past this seller after page 1 and never read the
+    # second account's negative row.
+    stub_const("#{described_class}::USER_BATCH_SIZE", 1)
+    second_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                               charge_processor_merchant_id: "acct_negdest_#{SecureRandom.hex(6)}",
+                                               currency: Currency::PHP, country: "PH")
+    residue_row(100_00)
+    create(:balance, user: seller, merchant_account: second_account, date: in_cycle_date,
+                     amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -728_50)
+    make_payable
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include(seller.email)
+      expect(message).to include(second_account.charge_processor_merchant_id)
+    end
+  end
+
   it "does not report a negative row that healthy rows on the same account outweigh, because the payout guard lets that set through" do
     residue_row(-100_00)
     create(:balance, user: seller, merchant_account:, date: in_cycle_date - 1,

@@ -21,7 +21,8 @@ class AlertOnNegativeDestinationBalancesJob
   # Measured 7,962 such rows in production (2026-08-02), of which 117 sellers were payable.
   MAX_CANDIDATES_SCANNED = 12_000
 
-  # Users aggregated per statement by the keyset walk in `candidate_pairs`.
+  # (user_id, merchant_account_id) pairs aggregated per statement by the keyset walk in
+  # `candidate_pairs`.
   USER_BATCH_SIZE = 25_000
 
   def perform
@@ -104,39 +105,33 @@ class AlertOnNegativeDestinationBalancesJob
     # post-cutoff credit can make the whole ledger positive while the slice the weekly run pays is
     # still negative). Both sums come out of one grouped statement.
     #
-    # Walked with a keyset cursor over `user_id` rather than a single ordered GROUP BY. There is no
-    # index on `holding_amount_cents`, so filtering on it first scans every unpaid row; and
-    # `Payouts.holding_balance_user_ids` carries the note that a whole-table aggregate over unpaid
-    # balances kept blowing MySQL's statement cap. Grouping by user_id never splits a user's SUM, so
-    # batching cannot change the answer.
+    # Walked with a keyset cursor over the (user_id, merchant_account_id) pair itself, not just
+    # user_id — a seller with more merchant-account groups than USER_BATCH_SIZE would otherwise
+    # fill a page on their own, and dropping+re-reading "the boundary user" (the old approach)
+    # never advances past them. There is no index on `holding_amount_cents`, so filtering on it
+    # first scans every unpaid row; and `Payouts.holding_balance_user_ids` carries the note that a
+    # whole-table aggregate over unpaid balances kept blowing MySQL's statement cap.
     def candidate_pairs
       pairs = []
       last_user_id = 0
+      last_merchant_account_id = 0
       in_cycle_sum = Arel.sql(ActiveRecord::Base.sanitize_sql_array(
                                 ["SUM(CASE WHEN date <= ? THEN holding_amount_cents ELSE 0 END)", payout_cutoff_date]))
 
       loop do
         batch = Balance.unpaid
-                       .where("user_id > ?", last_user_id)
+                       .where("(user_id > :u) OR (user_id = :u AND merchant_account_id > :m)",
+                              u: last_user_id, m: last_merchant_account_id)
                        .group(:user_id, :merchant_account_id)
-                       .order(:user_id)
+                       .order(:user_id, :merchant_account_id)
                        .limit(USER_BATCH_SIZE)
                        .pluck(:user_id, :merchant_account_id, Arel.sql("SUM(holding_amount_cents)"), in_cycle_sum)
         break if batch.empty?
 
-        # The cursor moves by user, but the rows are one per (user, merchant account). A full
-        # batch can cut a user's accounts in half, so drop the boundary user's rows and re-read
-        # them whole on the next pass — a detector that silently skips a seller is worse than a
-        # slower one.
-        if batch.size == USER_BATCH_SIZE && batch.first.first != batch.last.first
-          boundary_user_id = batch.last.first
-          batch = batch.reject { |user_id, _, _, _| user_id == boundary_user_id }
-        end
-
         pairs.concat(batch.filter_map do |user_id, merchant_account_id, holding_cents, in_cycle_cents|
           [user_id, merchant_account_id] if (holding_cents.negative? || in_cycle_cents.negative?) && merchant_account_id.present?
         end)
-        last_user_id = batch.last.first
+        last_user_id, last_merchant_account_id = batch.last.first(2)
         break if pairs.size > MAX_CANDIDATES_SCANNED
       end
 
