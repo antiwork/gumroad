@@ -28,7 +28,9 @@ Rails.application.routes.draw do
   # IndexNow key verification file (https://www.indexnow.org/documentation).
   # Deliberately unconstrained by host: the spec requires the key file to be
   # served on every host we submit URLs for, including seller subdomains.
-  get "/:key.txt" => "indexnow_keys#show", constraints: { key: /[a-f0-9]{16,128}/ }, as: :indexnow_key
+  # Charset matches the IndexNow key spec (a-z, A-Z, 0-9, hyphens, 8-128 chars) —
+  # not just hex — so a differently-formatted configured key still routes.
+  get "/:key.txt" => "indexnow_keys#show", constraints: { key: /[a-zA-Z0-9-]{8,128}/ }, as: :indexnow_key
 
   use_doorkeeper do
     controllers applications: "oauth/applications"

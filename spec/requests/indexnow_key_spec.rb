@@ -34,6 +34,16 @@ describe "IndexNow key file", type: :request do
       expect(response.status).to eq(404)
     end
 
+    it "serves a key using the full IndexNow charset (uppercase and hyphens)" do
+      mixed_key = "AbCd-1234-EfGh-5678"
+
+      allow(GlobalConfig).to receive(:get).with("INDEXNOW_KEY").and_return(mixed_key)
+      get "/#{mixed_key}.txt", headers: { "HOST" => DOMAIN }
+
+      expect(response.status).to eq(200)
+      expect(response.body).to eq(mixed_key)
+    end
+
     context "when the key is not configured" do
       let(:key) { nil }
 
