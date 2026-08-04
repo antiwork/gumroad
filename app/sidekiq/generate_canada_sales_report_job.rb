@@ -19,6 +19,13 @@ class GenerateCanadaSalesReportJob
         starts_at = Date.new(year, month).beginning_of_month.beginning_of_day
         ends_at = Date.new(year, month).end_of_month.end_of_day
 
+        # Canadian rows are a tiny fraction of the period's purchases, so every leg is
+        # scoped to sellers who could possibly resolve to Canada. The set is a superset of
+        # the per-row gate (see canadian_candidate_seller_ids), so determine_country_name_
+        # and_province_name below stays the single source of truth and the output is
+        # unchanged — the prefilter only skips rows the gate would have discarded.
+        candidate_seller_ids = canadian_candidate_seller_ids(starts_at, ends_at)
+
         # Sales leg. not_chargedback_for_tax_reporting keeps, on top of the reversed (won)
         # chargebacks the old scope kept, event-dated chargebacks (see
         # Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER): their sale stays reported in
@@ -28,6 +35,7 @@ class GenerateCanadaSalesReportJob
         Purchase.successful
           .not_fully_refunded_for_tax_reporting
           .not_chargedback_for_tax_reporting
+          .where(seller_id: candidate_seller_ids)
           .where.not(stripe_transaction_id: nil)
           .where("purchases.created_at BETWEEN ? AND ?", starts_at, ends_at)
           .find_each do |purchase|
@@ -56,6 +64,7 @@ class GenerateCanadaSalesReportJob
           .merge(
             Purchase.successful
               .not_chargedback_for_tax_reporting
+              .where(purchases: { seller_id: candidate_seller_ids })
               .where.not(purchases: { stripe_transaction_id: nil })
           )
           .find_each do |refund|
@@ -75,6 +84,7 @@ class GenerateCanadaSalesReportJob
         # refund was relieved by the refund's own reporting path and is not clawed back again.
         Purchase.chargebacks_for_tax_period_reporting(starts_at, ends_at)
           .successful
+          .where(seller_id: candidate_seller_ids)
           .where.not(stripe_transaction_id: nil)
           .find_each do |purchase|
             country_name, province_name = determine_country_name_and_province_name(purchase)
@@ -92,6 +102,7 @@ class GenerateCanadaSalesReportJob
         # reversal dates are never synthesized).
         Purchase.chargeback_reversals_for_tax_period_reporting(starts_at, ends_at)
           .successful
+          .where(seller_id: candidate_seller_ids)
           .where.not(stripe_transaction_id: nil)
           .find_each do |purchase|
             won_at = purchase.chargeback_reversal_reporting_date
@@ -123,6 +134,58 @@ class GenerateCanadaSalesReportJob
   end
 
   private
+    # Sellers that could resolve to Canada under any leg of
+    # determine_country_name_and_province_name, restricted to sellers with reportable
+    # activity in the window. A superset by construction: stored values are normalized
+    # through the same find_by_name the per-row gate uses, and the per-row GeoIP fallback
+    # is only reachable when users.country is blank (a seller's compliance rows may all
+    # postdate a given purchase, so having one does not exempt them from the GeoIP leg).
+    def canadian_candidate_seller_ids(starts_at, ends_at)
+      canada = Compliance::Countries::CAN.common_name
+      resolves_to_canada = ->(name) { Compliance::Countries.find_by_name(name)&.common_name == canada }
+
+      active_seller_ids = active_seller_ids_for_window(starts_at, ends_at)
+      candidates = Set.new
+
+      active_seller_ids.each_slice(10_000) do |ids|
+        UserComplianceInfo.where(user_id: ids)
+          .where("country IS NOT NULL OR business_country IS NOT NULL")
+          .pluck(:user_id, :country, :business_country)
+          .each do |user_id, country, business_country|
+            candidates << user_id if resolves_to_canada.call(country) || resolves_to_canada.call(business_country)
+          end
+
+        users = User.where(id: ids).pluck(:id, :country, :account_created_ip)
+        users.each do |id, country, _ip|
+          candidates << id if resolves_to_canada.call(country)
+        end
+
+        users.each do |id, country, ip|
+          next if country.present? || candidates.include?(id)
+          candidates << id if resolves_to_canada.call(GeoIp.lookup(ip)&.country_name)
+        end
+      end
+
+      candidates.to_a
+    end
+
+    # One windowed DISTINCT per leg, mirroring each leg's own filters minus the
+    # seller-independent ones that only narrow the set further.
+    def active_seller_ids_for_window(starts_at, ends_at)
+      seller_ids = Purchase.successful
+        .where.not(stripe_transaction_id: nil)
+        .where("purchases.created_at BETWEEN ? AND ?", starts_at, ends_at)
+        .distinct.pluck(:seller_id)
+      seller_ids |= Refund.for_tax_period_reporting(starts_at, ends_at)
+        .joins(:purchase)
+        .distinct.pluck("purchases.seller_id")
+      seller_ids |= Purchase.chargebacks_for_tax_period_reporting(starts_at, ends_at)
+        .distinct.pluck(:seller_id)
+      seller_ids |= Purchase.chargeback_reversals_for_tax_period_reporting(starts_at, ends_at)
+        .distinct.pluck(:seller_id)
+      seller_ids
+    end
+
     def purchase_row(purchase, country_name, province_name)
       [
         purchase.created_at,

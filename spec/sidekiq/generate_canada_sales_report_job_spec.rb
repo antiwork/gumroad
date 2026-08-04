@@ -362,4 +362,86 @@ describe GenerateCanadaSalesReportJob do
       expect(ids).not_to include(fully_refunded.external_id)    # zero clawback ⇒ no spurious all-zero row
     end
   end
+
+  describe "Canadian-candidate seller prefilter" do
+    let(:s3_bucket_double) do
+      s3_bucket_double = double
+      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
+      s3_bucket_double
+    end
+
+    before :context do
+      @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/canada-sales-fees-prefilter-spec-#{SecureRandom.hex(18)}.csv")
+    end
+
+    before do
+      travel_to(Time.find_zone("UTC").local(2022, 7, 1)) do
+        canada_creator = create(:user).tap do |creator|
+          creator.fetch_or_build_user_compliance_info.dup_and_save! do |new_compliance_info|
+            new_compliance_info.country = "Canada"
+            new_compliance_info.state = "BC"
+          end
+        end
+        @canada_product = create(:product, user: canada_creator, price_cents: 100_00, native_type: "digital")
+
+        spain_creator = create(:user).tap do |creator|
+          creator.fetch_or_build_user_compliance_info.dup_and_save! do |new_compliance_info|
+            new_compliance_info.country = "Spain"
+          end
+        end
+        @spain_product = create(:product, user: spain_creator, price_cents: 100_00, native_type: "digital")
+
+        # No compliance country and no users.country: only the GeoIP leg can classify this
+        # seller, so the prefilter must keep them as a candidate.
+        geoip_only_creator = create(:user, account_created_ip: "76.66.210.142") # mocked to Toronto, ON
+        @geoip_product = create(:product, user: geoip_only_creator, price_cents: 100_00, native_type: "digital")
+      end
+
+      travel_to(Time.find_zone("UTC").local(2022, 8, 10)) do
+        @canada_purchase = create(:purchase, link: @canada_product, seller: @canada_product.user,
+                                             price_cents: 100_00, country: "Canada", state: "ON")
+        @spain_purchase = create(:purchase, link: @spain_product, seller: @spain_product.user,
+                                            price_cents: 100_00, country: "Spain")
+        @geoip_purchase = create(:purchase, link: @geoip_product, seller: @geoip_product.user,
+                                            price_cents: 100_00, country: "Canada", state: "ON")
+      end
+    end
+
+    def perform_and_read(month, year)
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+
+      described_class.new.perform(month, year)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      CSV.read(temp_file)
+    ensure
+      temp_file&.close(true)
+    end
+
+    it "never yields non-candidate sellers' purchases to the per-row country gate" do
+      job = described_class.new
+      scanned_purchase_ids = []
+      allow(job).to receive(:determine_country_name_and_province_name).and_wrap_original do |original, purchase|
+        scanned_purchase_ids << purchase.id
+        original.call(purchase)
+      end
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+
+      job.perform(8, 2022)
+
+      expect(scanned_purchase_ids).to include(@canada_purchase.id)
+      expect(scanned_purchase_ids).not_to include(@spain_purchase.id)
+    end
+
+    it "keeps a seller classifiable only by GeoIP in the report" do
+      payload = perform_and_read(8, 2022)
+
+      rows_by_id = payload.drop(1).index_by { |row| row[1] }
+      expect(rows_by_id.keys).to match_array([@canada_purchase.external_id, @geoip_purchase.external_id])
+      expect(rows_by_id[@geoip_purchase.external_id][5]).to eq("Canada")
+      expect(rows_by_id[@geoip_purchase.external_id][6]).to eq("Ontario")
+    end
+  end
 end
