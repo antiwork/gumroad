@@ -254,7 +254,6 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     product = create(:product, user: seller, price_cents: 1000)
     create(:product_installment_plan, link: product, number_of_installments: 3)
-    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     visit product.long_url
     click_on "Pay in 3 installments"
