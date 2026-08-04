@@ -189,11 +189,15 @@ describe("ProfileSectionsForm", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Duplicate section" }));
 
+    const hasArrayContent = (node: unknown): node is { content: unknown[] } =>
+      typeof node === "object" && node !== null && "content" in node && Array.isArray(node.content);
+
     const nestedCard = (section: Section): unknown => {
       if (section.type !== "SellerProfileRichTextSection") throw new Error("expected a rich text section");
       const content: unknown = section.text.content;
       if (!Array.isArray(content)) throw new Error("expected rich text content");
-      const blockquote = content[0] as { content: unknown[] };
+      const blockquote: unknown = content[0];
+      if (!hasArrayContent(blockquote)) throw new Error("expected a blockquote node with content");
       return blockquote.content[0];
     };
 

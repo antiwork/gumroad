@@ -209,15 +209,16 @@ const OptionRow = ({
 // Strips persisted `attrs.id` from every upsellCard node, at any depth (e.g. inside a
 // blockquote), so a duplicated section never shares an Upsell row with its original — see
 // withFreshUpsellCards below for why that sharing is dangerous.
+const isRecord = (node: unknown): node is Record<string, unknown> => typeof node === "object" && node !== null;
+
 const stripUpsellCardIds = (node: unknown): unknown => {
-  if (typeof node !== "object" || node === null) return node;
-  const record = node as Record<string, unknown>;
-  const content = Array.isArray(record.content) ? record.content.map(stripUpsellCardIds) : record.content;
-  if (isUpsellCard(record)) {
-    const { id: _id, ...attrs } = record.attrs;
-    return { ...record, attrs, ...(content !== undefined ? { content } : {}) };
+  if (!isRecord(node)) return node;
+  const content = Array.isArray(node.content) ? node.content.map(stripUpsellCardIds) : node.content;
+  if (isUpsellCard(node)) {
+    const { id: _id, ...attrs } = node.attrs;
+    return { ...node, attrs, ...(content !== undefined ? { content } : {}) };
   }
-  return content !== undefined ? { ...record, content } : record;
+  return content !== undefined ? { ...node, content } : node;
 };
 
 const withFreshUpsellCards = (section: Section): Section => {
