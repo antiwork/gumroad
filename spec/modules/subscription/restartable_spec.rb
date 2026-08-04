@@ -136,6 +136,44 @@ describe Subscription::Restartable, :sidekiq_inline do
       end
     end
 
+    context "when the product has been banned" do
+      let!(:subscription) do
+        create_subscription_with_purchase(
+          product: product,
+          purchaser: buyer,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      before { product.update!(banned_at: 1.day.ago) }
+
+      it "returns nil (a banned product cannot be restarted)" do
+        result = Subscription.restartable_for_product_and_buyer(product: product, buyer: buyer)
+        expect(result).to be_nil
+      end
+    end
+
+    context "when the product has purchases disabled" do
+      let!(:subscription) do
+        create_subscription_with_purchase(
+          product: product,
+          purchaser: buyer,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      before { product.update!(purchase_disabled_at: 1.day.ago) }
+
+      it "returns nil (purchases are disabled)" do
+        result = Subscription.restartable_for_product_and_buyer(product: product, buyer: buyer)
+        expect(result).to be_nil
+      end
+    end
+
     context "with multiple subscriptions" do
       let!(:older_subscription) do
         sub = create_subscription_with_purchase(
@@ -204,6 +242,25 @@ describe Subscription::Restartable, :sidekiq_inline do
       end
 
       it "returns nil (test subscriptions are excluded)" do
+        result = Subscription.restartable_for_product_and_email(product: product, email: buyer.email)
+        expect(result).to be_nil
+      end
+    end
+
+    context "when the product has been banned (e.g. seller suspension bans every link)" do
+      let!(:subscription) do
+        create_subscription_with_purchase(
+          product: product,
+          purchaser: buyer,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      before { product.update!(banned_at: 1.day.ago) }
+
+      it "returns nil (a banned product cannot be restarted)" do
         result = Subscription.restartable_for_product_and_email(product: product, email: buyer.email)
         expect(result).to be_nil
       end
