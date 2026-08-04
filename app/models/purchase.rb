@@ -4544,7 +4544,7 @@ class Purchase < ApplicationRecord
       upi_autopay = credit_card&.recurring_upi?
       if upi_autopay
         if Feature.inactive?(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
-          fail_upi_recurring_authorization!("servicing flag inactive")
+          defer_upi_recurring_renewal!("servicing flag inactive")
         end
         fail_upi_recurring_authorization!("charge processor changed") unless charge_processor_id == StripeChargeProcessor.charge_processor_id
         fail_upi_recurring_authorization!("merchant account changed") unless merchant_account&.stripe_charge_processor?
@@ -4578,6 +4578,11 @@ class Purchase < ApplicationRecord
         PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED,
         StripeChargeProcessor::UPI_PAYMENT_METHOD_UPDATE_MESSAGE
       )
+    end
+
+    def defer_upi_recurring_renewal!(reason)
+      ErrorNotifier.notify("UPI Autopay renewal deferred before Stripe submit", reason:, purchase_id: id)
+      raise ChargeProcessorUnavailableError, "UPI Autopay renewals are temporarily paused"
     end
 
     # Converts the RBI e-mandate cap into the currency this charge will actually settle in. See

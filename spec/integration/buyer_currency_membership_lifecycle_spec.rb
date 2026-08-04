@@ -33,7 +33,7 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
       # A membership signup mid-charge: the Subscription does not exist yet (that is the whole
       # point — the earlier broken version wrote the fixing before this moment), but the purchase
       # carries the recurring price the payment option is built from.
-      purchase = build(:membership_purchase, link: product, seller:, price_cents: 1000,
+      purchase = build(:membership_purchase, link: product, seller:, merchant_account:, price_cents: 1000,
                                              purchase_state: "in_progress", subscription: nil)
       purchase.price = product.prices.alive.first || product.prices.first
       purchase.variant_attributes = []
@@ -57,7 +57,7 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
 
     it "stores the product rate for a direct-listed INR signup that has no FX quote" do
       inr_product = create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 83_000)
-      purchase = create(:membership_purchase, link: inr_product, seller:, price_cents: 1000,
+      purchase = create(:membership_purchase, link: inr_product, seller:, merchant_account:, price_cents: 1000,
                                               rate_converted_to_usd: BigDecimal("83"))
       charge_presentment = create(
         :charge_presentment,
@@ -82,7 +82,7 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
     it "writes nothing when the signup charged canonical dollars" do
       # A normal membership signup with no purchase_presentment: nothing to fix, so later charges
       # keep billing canonical dollars exactly as they did before this feature.
-      purchase = create(:membership_purchase, link: product, seller:, price_cents: 1000)
+      purchase = create(:membership_purchase, link: product, seller:, merchant_account:, price_cents: 1000)
 
       expect { subject_service(purchase).send(:fix_later_charge_presentment) }
         .not_to change(LaterChargePresentment, :count)
@@ -112,7 +112,7 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
     end
 
     it "writes nothing for a gift, whose subscription belongs to someone who never saw the price" do
-      purchase = create(:membership_purchase, link: product, seller:, price_cents: 1000)
+      purchase = create(:membership_purchase, link: product, seller:, merchant_account:, price_cents: 1000)
       charge = create(:charge, seller:, merchant_account:)
       charge_presentment = create(:charge_presentment, charge:, presentment_currency: "eur", fx_rate: 0.9)
       create(:purchase_presentment, purchase:, charge_presentment:,
@@ -128,7 +128,7 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
   describe "the renewal bills the fixed amount" do
     let(:subscription) { create(:subscription, link: product, user: create(:user)) }
     let!(:original) do
-      create(:membership_purchase, link: product, seller:, subscription:,
+      create(:membership_purchase, link: product, seller:, subscription:, merchant_account:,
                                    is_original_subscription_purchase: true, price_cents: 1000)
     end
     let!(:fixing) do
@@ -334,19 +334,24 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
         renewal.update!(credit_card: upi_card)
       end
 
-      it "requests a payment-method update without calling Stripe when servicing is disabled" do
+      it "defers the renewal without calling Stripe when servicing is disabled" do
         Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+        allow(renewal).to receive(:process!) do
+          renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+        end
         expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
         expect(ErrorNotifier).to receive(:notify).with(
-          "UPI Autopay renewal rejected before Stripe submit",
+          "UPI Autopay renewal deferred before Stripe submit",
           reason: "servicing flag inactive",
           purchase_id: renewal.id
         )
+        expect(subscription).to receive(:schedule_charge).with(be_within(2.seconds).of(1.hour.from_now))
+        expect(CustomerLowPriorityMailer).not_to receive(:subscription_card_declined)
 
-        result = renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+        subscription.process_purchase!(renewal)
 
-        expect(result).to be_nil
-        expect(renewal.stripe_error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+        expect(renewal.error_code).to eq(PurchaseErrorCode::STRIPE_UNAVAILABLE)
+        expect(renewal).to be_has_payment_network_error
       end
 
       it "hands INR to the processor without consulting the acquisition flags" do

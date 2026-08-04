@@ -8,14 +8,14 @@ describe Purchase::LaterChargePresentmentService do
   let(:product) { create(:membership_product, user: seller, price_cents: 1000) }
   let(:subscription) { create(:subscription, link: product, user: create(:user)) }
   let(:original_purchase) do
-    create(:membership_purchase, link: product, seller:, subscription:,
+    create(:membership_purchase, link: product, seller:, subscription:, merchant_account:,
                                  is_original_subscription_purchase: true, price_cents: 1000)
   end
   let(:renewal_purchase) do
     # The membership_purchase factory flags purchases as the original subscription purchase by
     # default, so a renewal has to clear that bit explicitly — RecurringChargeWorker's charges
     # are exactly the ones without it (Purchase.recurring_charge scope).
-    create(:membership_purchase, link: product, seller:, subscription:, price_cents: 1000,
+    create(:membership_purchase, link: product, seller:, subscription:, merchant_account:, price_cents: 1000,
                                  is_original_subscription_purchase: false)
   end
   let(:charge) { create(:charge, seller:, merchant_account:) }
@@ -201,10 +201,10 @@ describe Purchase::LaterChargePresentmentService do
 
   it "reads an installment plan fixing from its subscription" do
     installment_product = create(:product, :with_installment_plan, user: seller)
-    signup = create(:installment_plan_purchase, link: installment_product, seller:)
+    signup = create(:installment_plan_purchase, link: installment_product, seller:, merchant_account:)
     plan = signup.subscription
     installment = create(:recurring_installment_plan_purchase, link: installment_product, seller:,
-                                                               subscription: plan)
+                                                               subscription: plan, merchant_account:)
     create(:later_charge_presentment, owner: plan, presentment_currency: "eur",
                                       presentment_price_cents: 899, canonical_price_cents: 1000)
 
@@ -216,7 +216,7 @@ describe Purchase::LaterChargePresentmentService do
     authorization = create(:preorder_authorization_purchase, link: product, seller:,
                                                              displayed_price_cents: 1000, price_cents: 1000)
     authorization.update!(preorder:)
-    release = create(:purchase, link: product, seller:, preorder:, price_cents: 1000,
+    release = create(:purchase, link: product, seller:, preorder:, merchant_account:, price_cents: 1000,
                                 total_transaction_cents: 1000)
     create(:later_charge_presentment, owner: preorder, presentment_currency: "eur",
                                       presentment_price_cents: 899, canonical_price_cents: 1000)
@@ -226,9 +226,9 @@ describe Purchase::LaterChargePresentmentService do
 
   it "reads a commission fixing and converts its tip at today's rate" do
     commission_product = create(:commission_product, user: seller, price_cents: 2000)
-    deposit = create(:purchase, link: commission_product, seller:, price_cents: 1000,
+    deposit = create(:purchase, link: commission_product, seller:, merchant_account:, price_cents: 1000,
                                 total_transaction_cents: 1000, is_commission_deposit_purchase: true)
-    completion = create(:purchase, link: commission_product, seller:, price_cents: 1000,
+    completion = create(:purchase, link: commission_product, seller:, merchant_account:, price_cents: 1000,
                                    total_transaction_cents: 1100)
     completion.update!(is_commission_completion_purchase: true)
     completion.create_tip!(value_cents: 100, value_usd_cents: 100)
