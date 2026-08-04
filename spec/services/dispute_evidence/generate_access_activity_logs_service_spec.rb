@@ -408,6 +408,73 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
           end
         end
 
+        # Each aggregate timestamp is the earliest across ALL sends independently, so an
+        # open from one send can beat the delivery selected from a different send. The
+        # earliest open that still lands at or after that delivery is reported instead.
+        context "when the earliest open and earliest delivery come from different sends" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at + 3.hours,
+              opened_at: sent_at + 4.hours
+            )
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+              delivered_at: sent_at + 5.days + 2.hours,
+              opened_at: sent_at + 1.hour
+            )
+          end
+
+          it "reports the earliest delivery and the earliest open at or after it, from either send" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at " \
+              "2024-05-12 00:00:00 UTC. A receipt was delivered at 2024-05-07 03:00:00 UTC. " \
+              "A receipt was opened at 2024-05-07 04:00:00 UTC."
+            )
+          end
+
+          it "never claims the receipt was opened before it was delivered" do
+            expect(email_activity).to_not match(/opened at 2024-05-07 01:00:00 UTC/)
+          end
+        end
+
+        # When no open from any send lands at or after the selected delivery, there is
+        # nothing attributable left to report — unlike the case above, dropping the open
+        # entirely is correct here rather than a lost later one.
+        context "when every open precedes the earliest delivery" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at + 3.hours,
+              opened_at: sent_at + 1.hour
+            )
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+              delivered_at: sent_at + 5.days + 2.hours,
+              opened_at: sent_at + 2.hours
+            )
+          end
+
+          it "reports the delivery and drops all opens" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at " \
+              "2024-05-12 00:00:00 UTC. A receipt was delivered at 2024-05-07 03:00:00 UTC."
+            )
+          end
+        end
+
         # Whichever send a provider's event routed to, the evidence reads the
         # same — so a misrouted event cannot change what we tell the card
         # network. This is the property that makes timestamp routing's
