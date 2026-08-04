@@ -12,6 +12,16 @@ export const lookupCharges = async (data: { email: string; last4: string | null 
   throw new ResponseError();
 };
 
+export const lookupLicenseKey = async (data: { email: string; productQuery: string | null }) => {
+  const response = await request({
+    method: "GET",
+    accept: "json",
+    url: Routes.license_key_lookup_data_path({ email: data.email, product_query: data.productQuery, format: "json" }),
+  });
+  if (response.ok) return typia.assert<{ success: boolean }>(await response.json());
+  throw new ResponseError();
+};
+
 export const lookupPaypalCharges = async (data: { invoiceId: string }) => {
   const response = await request({
     method: "GET",

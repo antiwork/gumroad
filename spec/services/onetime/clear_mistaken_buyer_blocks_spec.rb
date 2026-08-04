@@ -201,10 +201,10 @@ describe Onetime::ClearMistakenBuyerBlocks do
   describe "blocks a card-testing rule also wanted" do
     # Distinct failed cards, enough of them to trip a velocity rule, that are not themselves
     # candidates for this cleanup (their decline code is not one of the fraud-related ones).
-    def create_failed_card_attempts(count:, created_at:, **attributes)
+    def create_failed_card_attempts(count:, created_at:, fingerprint_prefix: "card-tester-fingerprint", **attributes)
       count.times do |index|
         create(:purchase, purchase_state: "failed", stripe_error_code: "card_declined_insufficient_funds",
-                          stripe_fingerprint: "card-tester-fingerprint-#{index}", created_at:, **attributes)
+                          stripe_fingerprint: "#{fingerprint_prefix}-#{index}", created_at:, **attributes)
       end
     end
 
@@ -256,6 +256,24 @@ describe Onetime::ClearMistakenBuyerBlocks do
       end
 
       expect { described_class.new(dry_run: false).process }.to change { PlatformBlock.active.count }.from(3).to(0)
+    end
+
+    # ban_fraudulent_buyer_browser_guid! counts qualifying failures for a browser over ALL time,
+    # with no window at all. A reconstruction bounded by this purchase's possible_failure_window
+    # misses failures that land after it, so it can clear a browser block the live rule's lifetime
+    # count still wants. Regression for the P1 Greptile flagged on gp1701's PR: fails against a
+    # window-bounded reconstruction because the fourth qualifying failure lands after window.end.
+    it "keeps the browser block when a later failure is what trips the live lifetime threshold" do
+      create_failed_card_attempts(count: Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS - 2,
+                                  created_at: 30.days.ago, browser_guid: failed_purchase.browser_guid)
+      create_failed_card_attempts(count: 1, fingerprint_prefix: "later-fingerprint",
+                                  created_at: ChargeProcessor::TIME_TO_COMPLETE_SCA.from_now + 1.hour,
+                                  browser_guid: failed_purchase.browser_guid)
+
+      described_class.new(dry_run: false).process
+
+      expect(PlatformBlock.active.pluck(:object_type, :object_value))
+        .to eq([[PlatformBlock::TYPES[:browser_guid], failed_purchase.browser_guid]])
     end
   end
 

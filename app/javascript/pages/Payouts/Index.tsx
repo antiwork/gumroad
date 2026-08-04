@@ -1,6 +1,7 @@
 import { ArrowInDownSquareHalf, Calendar, CheckCircle, Clock, Cog } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import classNames from "classnames";
+import { parseISO } from "date-fns";
 import * as React from "react";
 
 import { exportPayouts } from "$app/data/balance";
@@ -647,7 +648,7 @@ export default function PayoutsIndex() {
                   >
                     {instant_payout.payable_balances.map((balance) => (
                       <option key={balance.id} value={balance.id}>
-                        {new Date(balance.date).toLocaleDateString(userAgentInfo.locale, {
+                        {parseISO(balance.date).toLocaleDateString(userAgentInfo.locale, {
                           month: "long",
                           day: "numeric",
                           year: "numeric",

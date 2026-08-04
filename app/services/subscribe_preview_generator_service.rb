@@ -22,17 +22,19 @@ class SubscribePreviewGeneratorService
   # `complete && naturalWidth > 0` only means the bytes arrived; Chromium still
   # decodes afterwards and screenshots taken in that window get an empty circle.
   # decode() is the event that says the frame is paintable, so the poll kicks it
-  # off once and then reports the flag it sets. A rejected decode counts as done
-  # so a permanently broken avatar cannot hold the wait open.
+  # off once and then reports the flag it sets. A rejected decode is reported as
+  # "failed", not "ready" — a broken image must not look identical to a decoded
+  # one, or a normal attempt would attach an incomplete card instead of retrying.
   AVATAR_READY_SCRIPT = <<~JS
     const img = document.querySelector("[data-subscribe-preview-avatar]");
     if (!img) return false;
     if (window.__gumroadAvatarDecoded) return true;
+    if (window.__gumroadAvatarDecodeFailed) return "failed";
     if (!window.__gumroadAvatarDecodeStarted) {
       window.__gumroadAvatarDecodeStarted = true;
       img.decode()
         .then(() => { window.__gumroadAvatarDecoded = true; })
-        .catch(() => { window.__gumroadAvatarDecoded = true; });
+        .catch(() => { window.__gumroadAvatarDecodeFailed = true; });
     }
     return false;
   JS
@@ -60,7 +62,13 @@ class SubscribePreviewGeneratorService
       driver.navigate.to url
       wait = Selenium::WebDriver::Wait.new(timeout: AVATAR_WAIT_SECONDS)
       begin
-        wait.until { driver.execute_script(AVATAR_READY_SCRIPT) }
+        # A rejected decode only satisfies the wait when the avatar is optional —
+        # otherwise it must time out like a slow one, so retries get a chance
+        # before a card without an avatar is ever attached.
+        wait.until do
+          result = driver.execute_script(AVATAR_READY_SCRIPT)
+          result == true || (result == "failed" && !require_avatar)
+        end
       rescue Selenium::WebDriver::Error::TimeoutError
         raise if require_avatar
         Rails.logger.error("SubscribePreviewGeneratorService: avatar never loaded for user.id=#{user.id}, generating card without it")

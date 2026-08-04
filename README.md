@@ -26,8 +26,6 @@ We don't run an inbound review queue on this repo. To contribute a change: **for
 
 Your PR still has to meet the same bar as our own work — visual evidence for anything user-facing, QA steps, test results, and an AI disclosure naming the model. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guidelines and the substitutions that apply when working from a fork.
 
-**Issues and bug reports are still welcome here** — this is about pull requests only.
-
 ## Table of Contents
 
 - [Contributing](#contributing)

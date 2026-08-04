@@ -903,6 +903,23 @@ describe "Balance Pages Scenario", js: true, type: :system do
             expect(page).to_not have_status(text: "Your balance exceeds the maximum amount for a single instant payout, so we'll automatically split your balance into multiple payouts.")
           end
         end
+
+        it "keeps date-only balance labels unchanged west of UTC" do
+          page.driver.browser.execute_cdp("Emulation.setTimezoneOverride", timezoneId: "America/Los_Angeles")
+
+          visit balance_path
+          click_on "Get paid!"
+
+          within_modal "Instant payout" do
+            expect(page).to have_select(
+              "Pay out balance up to",
+              options: ["January 3, 2025", "January 2, 2025", "January 1, 2025"],
+              selected: "January 3, 2025"
+            )
+          end
+        ensure
+          page.driver.browser.execute_cdp("Emulation.setTimezoneOverride", timezoneId: "")
+        end
       end
 
       context "when the user has a single balance that exceeds the maximum instant payout amount" do

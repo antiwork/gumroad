@@ -1334,6 +1334,21 @@ describe PaypalPayoutProcessor do
     end
   end
 
+  describe "IPN fee recording" do
+    it "records a regular payout's fractional fee in integer cents without truncating" do
+      payment = create(:payment, processor_fee_cents: 0)
+
+      described_class.handle_paypal_event(
+        "masspay_txn_id_0" => "sometxn",
+        "status_0" => "Completed",
+        "unique_id_0" => payment.id.to_s,
+        "mc_fee_0" => "1.15"
+      )
+
+      expect(payment.reload.processor_fee_cents).to eq 115
+    end
+  end
+
   describe ".split_payment_by_cents" do
     it "returns the value from the database if is present and less than the maximum" do
       user = create(:user, split_payment_by_cents: 5000_00)
