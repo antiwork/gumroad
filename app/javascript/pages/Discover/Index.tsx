@@ -231,19 +231,26 @@ const parseUrlParams = (href: string, curatedProductIds: string[], defaultSortOr
     }
   }
 
+  const sortWasExplicit = url.searchParams.has("sort");
   parseParams(["sort", "query", "offer_code"], (value) => value);
   parseParams(["min_price", "max_price", "rating"], (value) => Number(value));
   parseParams(["filetypes", "tags", "taxonomy_attribute_filters"], (value) => value.split(","));
   if (!parsedParams.sort) parsedParams.sort = defaultSortOrder;
-  return parsedParams;
+  return { params: parsedParams, sortWasExplicit };
 };
 
 function DiscoverIndex() {
   const props = typia.assert<Props>(usePage().props);
   const defaultSortOrder = props.curated_product_ids.length > 0 ? "curated" : undefined;
 
+  const initialParsed = parseUrlParams(window.location.href, props.curated_product_ids, defaultSortOrder);
+  // Whether the CURRENT sort came from an explicit `?sort=` param (URL nav, popstate) vs. only
+  // the implicit curated default — used to keep the SEO title suffix off a page the user
+  // explicitly navigated to with `?sort=curated`, even though that equals the default value.
+  const sortWasExplicitRef = React.useRef(initialParsed.sortWasExplicit);
+
   const [state, dispatch] = useSearchReducer({
-    params: addInitialOffset(parseUrlParams(window.location.href, props.curated_product_ids, defaultSortOrder)),
+    params: addInitialOffset(initialParsed.params),
     results: props.search_results,
   });
 
@@ -280,7 +287,7 @@ function DiscoverIndex() {
       const shouldFetchRecommendations =
         url.pathname !== new URL(window.location.href).pathname ||
         state.params.offer_code !==
-          parseUrlParams(window.location.href, props.curated_product_ids, defaultSortOrder).offer_code;
+          parseUrlParams(window.location.href, props.curated_product_ids, defaultSortOrder).params.offer_code;
 
       if (shouldFetchRecommendations) {
         router.get(
@@ -304,12 +311,22 @@ function DiscoverIndex() {
       }
     }
 
-    document.title = discoverTitleGenerator(state.params, props.taxonomies_for_nav, url.search, defaultSortOrder);
+    document.title = discoverTitleGenerator(
+      state.params,
+      props.taxonomies_for_nav,
+      url.search,
+      sortWasExplicitRef.current ? undefined : defaultSortOrder,
+    );
   }, [state.params, props.taxonomies_for_nav, defaultSortOrder, props.curated_product_ids]);
 
   React.useEffect(() => {
     const handlePopstate = () => {
-      const newParams = parseUrlParams(window.location.href, props.curated_product_ids, defaultSortOrder);
+      const { params: newParams, sortWasExplicit } = parseUrlParams(
+        window.location.href,
+        props.curated_product_ids,
+        defaultSortOrder,
+      );
+      sortWasExplicitRef.current = sortWasExplicit;
       dispatch({
         type: "set-params",
         params: addInitialOffset(newParams),
@@ -321,8 +338,10 @@ function DiscoverIndex() {
 
   const taxonomyPath = state.params.taxonomy;
 
-  const updateParams = (newParams: Partial<SearchRequest>) =>
+  const updateParams = (newParams: Partial<SearchRequest>) => {
+    if ("sort" in newParams) sortWasExplicitRef.current = true;
     dispatch({ type: "set-params", params: { ...state.params, from: undefined, ...newParams } });
+  };
 
   const hasOfferCode = !!state.params.offer_code;
 
