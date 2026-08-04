@@ -66,7 +66,6 @@ export const discoverTitleGenerator = (params: SearchRequest, taxonomies: Taxono
   // client state always carries a default sort, so state params can't distinguish /3d from /3d?sort=featured.
   const searchParams = new URLSearchParams(window.location.search);
   searchParams.delete("from");
-  if (taxonomyTitle && [...searchParams].length === 0)
-    taxonomyTitle += " — digital products by independent creators";
+  if (taxonomyTitle && [...searchParams].length === 0) taxonomyTitle += " — digital products by independent creators";
   return [searchOrTagsTitle, taxonomyTitle, "Gumroad"].filter((s) => s).join(" | ");
 };
