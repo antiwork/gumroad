@@ -197,10 +197,11 @@ class DiscoverController < ApplicationController
       @discover_pagination_links = pagination_links(search_results:)
     end
 
-    # `from` is the existing search offset param, so these are real server-rendered pages;
-    # they canonicalize to the unpaginated category URL via CanonicalUrlPresenter.
+    # Uses the request's own `from`, not params[:from], which index mutates to skip the
+    # products shown in the recommendations strip. These are real hrefs for crawlers; they
+    # canonicalize to the unpaginated category URL via CanonicalUrlPresenter.
     def pagination_links(search_results:)
-      offset = params[:from].to_i
+      offset = request.query_parameters["from"].to_i
       links = []
       links << { label: "Previous page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", { from: [offset - INITIAL_PRODUCTS_COUNT, 0].max.nonzero? }.compact) } if offset > 0
       links << { label: "Next page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", from: offset + INITIAL_PRODUCTS_COUNT) } if search_results[:total].to_i > offset + INITIAL_PRODUCTS_COUNT

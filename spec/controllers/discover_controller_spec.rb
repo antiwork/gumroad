@@ -307,7 +307,9 @@ describe DiscoverController, type: :controller, inertia: true do
       end
 
       it "renders BreadcrumbList and ItemList JSON-LD for category pages" do
-        create(:product, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
+        # index skips the first RECOMMENDED_PRODUCTS_COUNT results (shown via the
+        # recommendations strip), so seed past that for a non-empty ItemList.
+        create_list(:product, DiscoverController::RECOMMENDED_PRODUCTS_COUNT + 2, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
         Link.import(refresh: true, force: true)
 
         get :index, params: { taxonomy: "3d" }
