@@ -133,6 +133,34 @@ class LinksControllerGp1784RichContentSaveTest < ActionController::TestCase
     assert_response :unprocessable_entity
   end
 
+  test "a RecordNotFound raised after variant lookup (e.g. a missing ProductFile) is not mislabeled as a stale variant" do
+    # Pins the Greptile P1 finding: only the `find_by_external_id!` lookup
+    # inside `create_or_update_variant!` should map to the stale-variant
+    # message. A RecordNotFound from anything downstream of that lookup is a
+    # different failure and must fall through to the generic catch-all
+    # instead of being reported to the seller as "content pages were removed".
+    Product::VariantCategoryUpdaterService.any_instance.stubs(:save_rich_content).raises(ActiveRecord::RecordNotFound, "Couldn't find ProductFile with 'id'=999999999")
+    rich_content_before = @free_trial_rich_content.updated_at
+
+    ErrorNotifier.expects(:notify).with(instance_of(ActiveRecord::RecordNotFound))
+
+    put :update, params: @base_params.merge(
+      variants: @variants.map do |variant|
+        rich_content = variant.alive_rich_contents.sole
+        {
+          id: variant.external_id,
+          name: variant.name,
+          rich_content: [{ id: rich_content.external_id, title: rich_content.title, description: rich_content.description }],
+        }
+      end
+    ), as: :json
+
+    assert_response :unprocessable_entity
+    assert_not_equal "This save would remove content pages that weren't explicitly deleted. The content shown in the editor may be out of date — please refresh the page and try again.",
+                     response.parsed_body["error_message"]
+    assert_equal rich_content_before, @free_trial_rich_content.reload.updated_at
+  end
+
   test "an entirely unanticipated exception during save also fails loudly instead of propagating as a bare 500" do
     # Defense in depth: even a failure mode nobody wrote a specific rescue for
     # must still surface as a readable JSON error, not an unhandled 500 that
