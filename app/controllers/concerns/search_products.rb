@@ -74,7 +74,8 @@ module SearchProducts
 
       if search_params[:taxonomy_attribute_filters].is_a?(Array)
         search_params[:taxonomy_attribute_filters] =
-          search_params[:taxonomy_attribute_filters].uniq.first(Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS)
+          search_params[:taxonomy_attribute_filters].uniq.first(Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS) &
+          TaxonomyAttribute.valid_filter_tokens.to_a
       end
 
       # search_options coerces each of these unconditionally (`.to_i`, `.to_f`) or hands it to ES

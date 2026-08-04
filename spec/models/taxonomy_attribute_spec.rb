@@ -18,4 +18,17 @@ describe TaxonomyAttribute do
       expect(styles.filter_token_for(12)).to be_nil
     end
   end
+
+  describe ".valid_filter_tokens" do
+    it "includes tokens from active attributes/values and excludes retired ones" do
+      taxonomy = create(:taxonomy)
+      described_class.create!(taxonomy:, name: "format", label: "Format", value_type: "enum", values: %w[OTF TTF])
+      retired = described_class.create!(taxonomy:, name: "license", label: "License", value_type: "enum", values: %w[Commercial], active: false)
+
+      tokens = described_class.valid_filter_tokens
+
+      expect(tokens).to include("format:otf", "format:ttf")
+      expect(tokens).not_to include(retired.filter_token_for("Commercial"))
+    end
+  end
 end
