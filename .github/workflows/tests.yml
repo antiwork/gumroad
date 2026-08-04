@@ -902,11 +902,14 @@ jobs:
         ci_node_total: [4]
         ci_node_index: [0, 1, 2, 3]
     steps:
-      - name: Check out repository
+      - name: Check out trusted workflow files
         uses: actions/checkout@v4
         timeout-minutes: 5
         with:
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          # This checkout feeds docker compose after Docker Hub auth, so fork PRs
+          # must use the trusted base revision. The image under test still comes
+          # from the fork build via needs.build.outputs.test_image_tag.
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
       - name: Login to Docker Hub
         uses: nick-fields/retry@v3
