@@ -61,8 +61,22 @@ export const discoverTitleGenerator = (params: SearchRequest, taxonomies: Taxono
     ?.split("/")
     .map((slug) => taxonomies.find((t) => t.slug === slug)?.label ?? slug)
     .join(" » ");
-  // Taxonomy-only pages are server-rendered with this SEO suffix (Discover::CategoryPagePresenter#title);
-  // client-side navigation must produce the same title or it flips on every Inertia visit.
-  if (taxonomyTitle && !searchOrTagsTitle) taxonomyTitle += " — digital products by independent creators";
+  // Mirror DiscoverController#category_seo_page? — the server only renders the SEO suffix when
+  // the ONLY params are `taxonomy` (and `from`); any other filter (sort, rating, price, etc.) makes
+  // it a filtered variant with its own canonical, not the indexable category landing page.
+  const isCategorySeoPage =
+    !searchOrTagsTitle &&
+    !params.filetypes?.length &&
+    !params.offer_code &&
+    !params.sort &&
+    params.min_price == null &&
+    params.max_price == null &&
+    params.rating == null &&
+    !params.user_id &&
+    !params.section_id &&
+    !params.recommended_by &&
+    !params.curated_product_ids?.length &&
+    !params.taxonomy_attribute_filters?.length;
+  if (taxonomyTitle && isCategorySeoPage) taxonomyTitle += " — digital products by independent creators";
   return [searchOrTagsTitle, taxonomyTitle, "Gumroad"].filter((s) => s).join(" | ");
 };
