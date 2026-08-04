@@ -250,6 +250,32 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state({ products: [product({ hasFreeTrial: true })] }))).toBe(false);
   });
 
+  it("allows pay-in-installments on the buyer-currency (FX-quoted) presentment lane", () => {
+    // gumroad-private#1312/#1322 + #6981: the server only sets buyer_currency_presentment on a
+    // pay_in_installments cart once Checkout::StripePaymentPresenter has already proven the cart
+    // is a presentment candidate whose seller is in the later-charge ramp — see
+    // Checkout::BuyerCurrencyEligibility#later_charge_purchase_in_ramp?. Trusting the flag here
+    // cannot widen eligibility past what the server decided.
+    expect(
+      canUseStripePaymentElement(
+        state({
+          checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+          products: [product({ payInInstallments: true })],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("still falls back for pay-in-installments on the canonical (non-presentment) server-confirm lane", () => {
+    // An unramped seller's cart never actually mounts integration "payment_element" for
+    // pay_in_installments per stripe_payment_presenter_spec (the server routes it to
+    // CardElement instead), but the client guard must independently refuse to widen past what
+    // buyer_currency_presentment says, regardless of how it got here.
+    expect(
+      canUseStripePaymentElement(state({ products: [product({ payInInstallments: true, hasFreeTrial: false })] })),
+    ).toBe(false);
+  });
+
   it("allows setup-mode checkout for preorder and free-trial flows", () => {
     expect(
       canUseStripePaymentElement(

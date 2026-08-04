@@ -395,7 +395,20 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
     if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
   }
 
-  return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
+  // pay_in_installments is excluded UNLESS the server put this cart on the buyer-currency
+  // (FX-quoted) presentment lane — the one server-confirm shape that can honor it (see
+  // Checkout::StripePaymentPresenter#fallback_reason_for, gumroad-private#1312/#1322). That
+  // element charges the quote's locked first-installment amount, the same figure a plain USD
+  // installment checkout charges today, so quoting it changes only the currency, not what is
+  // billed. A cart whose seller is not in the later-charge ramp never gets
+  // buyer_currency_presentment: true for an installment purchase — the server keeps it on
+  // CardElement (fallback_reason "setup_or_installment_flow") — so trusting this flag here
+  // cannot widen eligibility past what the server already decided.
+  if (state.products.some((product) => product.payInInstallments)) {
+    return !!state.checkoutPayment.elements_options.buyer_currency_presentment;
+  }
+
+  return !state.products.some((product) => product.hasFreeTrial || product.isPreorder);
 }
 
 // The browser must not widen server eligibility for client-confirm: single-seller,
