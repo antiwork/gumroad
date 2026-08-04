@@ -31,6 +31,58 @@ RSpec.describe LastReadCommunityChatMessage do
           )
         end.to change(described_class, :count).by(1)
       end
+
+      it "uses the winning record when validation detects a concurrent insert" do
+        winning_record = create(
+          :last_read_community_chat_message,
+          user:,
+          community:,
+          community_chat_message: message1
+        )
+        losing_record = build(
+          :last_read_community_chat_message,
+          user:,
+          community:,
+          community_chat_message: message2
+        )
+        losing_record.errors.add(:user_id, :taken)
+
+        allow(described_class).to receive(:find_by).with(user_id: user.id, community_id: community.id)
+          .and_return(nil, winning_record)
+        allow(described_class).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(losing_record))
+
+        result = described_class.set!(
+          user_id: user.id,
+          community_id: community.id,
+          community_chat_message_id: message2.id
+        )
+
+        expect(result).to eq(winning_record)
+        expect(winning_record.reload.community_chat_message).to eq(message2)
+      end
+
+      it "uses the winning record when the unique index detects a concurrent insert" do
+        winning_record = create(
+          :last_read_community_chat_message,
+          user:,
+          community:,
+          community_chat_message: message1
+        )
+
+        allow(described_class).to receive(:find_by).with(user_id: user.id, community_id: community.id).and_return(nil)
+        allow(described_class).to receive(:create!).and_raise(ActiveRecord::RecordNotUnique)
+        allow(described_class).to receive(:find_by!).with(user_id: user.id, community_id: community.id)
+          .and_return(winning_record)
+
+        result = described_class.set!(
+          user_id: user.id,
+          community_id: community.id,
+          community_chat_message_id: message2.id
+        )
+
+        expect(result).to eq(winning_record)
+        expect(winning_record.reload.community_chat_message).to eq(message2)
+      end
     end
 
     context "when record already exists" do

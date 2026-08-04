@@ -117,6 +117,28 @@ describe SaveContentUpsellsService do
       end
     end
 
+    context "when the upsell node is nested inside a container node" do
+      let(:old_content) { [{ "type" => "paragraph", "content" => "Old content" }] }
+      let(:content) do
+        [
+          {
+            "type" => "blockquote",
+            "content" => [
+              { "type" => "upsellCard", "attrs" => { "productId" => product.external_id } }
+            ]
+          }
+        ]
+      end
+
+      it "creates an upsell and assigns its id on the nested node" do
+        expect { service.from_rich_content }.to change(Upsell, :count).by(1)
+
+        nested_node = content.first["content"].first
+        expect(nested_node["attrs"]["id"]).to be_present
+        expect(nested_node["attrs"]["id"]).to eq(Upsell.last.external_id)
+      end
+    end
+
     context "when removing an upsell" do
       let!(:upsell) { create(:upsell, seller:, product:, is_content_upsell: true) }
       let!(:offer_code) { create(:offer_code, user: seller, product_ids: [product.id]) }

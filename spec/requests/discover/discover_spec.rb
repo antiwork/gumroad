@@ -496,7 +496,7 @@ describe("Discover", js: true, type: :system) do
         click_on "Programming"
       end
       expect(page).to have_current_path("/software-development/programming")
-      expect(page).to have_title("Software Development » Programming | Gumroad")
+      expect(page).to have_title("Software Development » Programming — digital products by independent creators | Gumroad")
       expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming")
 
       within_section "Featured products", section_element: :section do
@@ -522,7 +522,7 @@ describe("Discover", js: true, type: :system) do
       page.go_forward
       wait_for_ajax
       expect(page).to have_current_path("/software-development/programming")
-      expect(page).to have_title("Software Development » Programming | Gumroad")
+      expect(page).to have_title("Software Development » Programming — digital products by independent creators | Gumroad")
       expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming")
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 2", "product 3")

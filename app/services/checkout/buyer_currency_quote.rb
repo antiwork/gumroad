@@ -35,6 +35,10 @@ class Checkout::BuyerCurrencyQuote
     def expires_at
       stripe_fx_quote_expires_at
     end
+
+    def future_installments_presentment_total_cents
+      charges.to_a.sum { _1.future_installments_presentment_total_cents.to_i }
+    end
   end
 
   # One cart line's canonical (USD) money, as computed by the surcharge endpoint. The
@@ -173,6 +177,7 @@ class Checkout::BuyerCurrencyQuote
                            :canonical_line_items,
                            :charge_canonical_line_items,
                            :line_allocations,
+                           :future_installments_presentment_total_cents,
                            :later_charge_presentments,
                            keyword_init: true)
 
@@ -593,6 +598,7 @@ class Checkout::BuyerCurrencyQuote
         presentment_cents_for(current_canonical_total_cents, quote.fx_rate, buyer_currency)
       end
       line_allocations = line_allocations_for(charge_line_items, converted_total_cents, rounding.delta_cents)
+      future_installments_presentment_total_cents = 0
       later_charge_presentments = charge_line_items.each_with_index.filter_map do |line_item, index|
         next if line_item.later_charge_kind.blank?
 
@@ -602,6 +608,10 @@ class Checkout::BuyerCurrencyQuote
           line_allocations[index].presentment_price_cents
         else
           presentment_cents_for(line_item.later_charge_price_cents, quote.fx_rate, buyer_currency)
+        end
+        if line_item.later_charge_kind == "installment"
+          remaining_installments = line_item.product.installment_plan.number_of_installments - 1
+          future_installments_presentment_total_cents += presentment_price_cents * remaining_installments
         end
         {
           permalink: line_item.permalink.to_s,
@@ -641,6 +651,7 @@ class Checkout::BuyerCurrencyQuote
         # checkout displays is the true converted tax and the cosmetic difference shows up on
         # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).
         line_allocations:,
+        future_installments_presentment_total_cents:,
         later_charge_presentments:
       )
     end

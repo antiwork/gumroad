@@ -399,12 +399,13 @@ const PriceChangeSettings = ({ tier, updateTier }: { tier: Tier; updateTier: (up
 
   const { product, uniquePermalink, currencyType, earliestMembershipPriceChangeDate } = useProductEditContext();
 
-  const [effectiveDate, setEffectiveDate] = React.useState<{ value: Date; error?: boolean }>({
-    value: tier.subscription_price_change_effective_date
-      ? new Date(tier.subscription_price_change_effective_date)
-      : earliestMembershipPriceChangeDate,
-  });
-  effectiveDate.value = getDateWithUTCOffset(effectiveDate.value);
+  const [effectiveDate, setEffectiveDate] = React.useState<{ value: Date; error?: boolean }>(() => ({
+    value: getDateWithUTCOffset(
+      tier.subscription_price_change_effective_date
+        ? new Date(tier.subscription_price_change_effective_date)
+        : earliestMembershipPriceChangeDate,
+    ),
+  }));
   React.useEffect(
     () => updateTier({ subscription_price_change_effective_date: effectiveDate.value.toISOString() }),
     [effectiveDate],

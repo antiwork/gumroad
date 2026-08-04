@@ -505,7 +505,14 @@ export const Checkout = ({
                         {futureInstallmentsWithoutTipsTotal > 0 ? (
                           <CartPriceItem
                             title="Future installments"
-                            price={formatCheckoutPrice(futureInstallmentsWithoutTipsTotal, localCurrency)}
+                            price={
+                              buyerCurrencyDisplay?.futureInstallmentsPresentmentTotalCents != null
+                                ? formatPresentmentCents(
+                                    buyerCurrencyDisplay.futureInstallmentsPresentmentTotalCents,
+                                    buyerCurrencyDisplay,
+                                  )
+                                : formatCheckoutPrice(futureInstallmentsWithoutTipsTotal, localCurrency)
+                            }
                           />
                         ) : null}
                       </div>

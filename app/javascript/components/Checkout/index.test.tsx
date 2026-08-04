@@ -349,7 +349,8 @@ describe("Checkout buyer-currency line amounts", () => {
             currency: "cad",
             canonical_total_cents: 1_000,
             presentment_total_cents: 1_250,
-            charge_presentment_total_cents: 417,
+            charge_presentment_total_cents: 418,
+            future_installments_presentment_total_cents: 832,
             rate: 1.25,
             subunit_to_unit: 100,
             expires_at: "2999-01-01T00:00:00Z",
@@ -380,7 +381,9 @@ describe("Checkout buyer-currency line amounts", () => {
     const { getByText } = renderCheckout(state, cart);
 
     expect(getByText("Payment today")).toBeTruthy();
-    expect(getByText("CA$4.17")).toBeTruthy();
+    expect(getByText("CA$4.18")).toBeTruthy();
+    expect(getByText("Future installments")).toBeTruthy();
+    expect(getByText("CA$8.32")).toBeTruthy();
   });
 });
 

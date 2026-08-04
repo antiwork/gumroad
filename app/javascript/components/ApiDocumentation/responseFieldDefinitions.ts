@@ -762,6 +762,126 @@ export const INSTALLMENT_FIELDS: FieldDefinition[] = [
   { name: "updated_at", type: "string", description: "ISO 8601 timestamp of when the email was last updated" },
 ];
 
+const WORKFLOW_FILTER_FIELDS: FieldDefinition[] = [
+  { name: "bought_products", type: "array", description: "Product permalinks that recipients must have bought" },
+  {
+    name: "not_bought_products",
+    type: "array",
+    description: "Product permalinks that recipients must not have bought",
+  },
+  { name: "bought_variants", type: "array", description: "Variant IDs that recipients must have bought" },
+  {
+    name: "not_bought_variants",
+    type: "array",
+    description: "Variant IDs that recipients must not have bought",
+  },
+  { name: "paid_more_than", type: "string", description: "Minimum purchase amount in the seller's currency" },
+  { name: "paid_less_than", type: "string", description: "Maximum purchase amount in the seller's currency" },
+  { name: "created_after", type: "string", description: "Earliest purchase or signup date" },
+  { name: "created_before", type: "string", description: "Latest purchase or signup date" },
+  { name: "bought_from", type: "string", description: "Purchase country" },
+  {
+    name: "active_customers_only",
+    type: "boolean",
+    description: "Whether recipients with canceled subscriptions are excluded",
+  },
+  { name: "minimum_license_uses", type: "number", description: "Minimum number of license uses" },
+  {
+    name: "affiliate_products",
+    type: "array",
+    description: "Product permalinks that recipients must promote as affiliates",
+  },
+];
+
+export const WORKFLOW_EMAIL_FIELDS: FieldDefinition[] = [
+  { name: "id", type: "string", description: "Unique identifier for the workflow email" },
+  { name: "subject", type: "string | null", description: "Subject line" },
+  { name: "message", type: "string | null", description: "HTML body" },
+  {
+    name: "audience_type",
+    type: "string",
+    description:
+      'Audience type, one of "audience", "seller", "follower", "product", "variant", "affiliate", or "abandoned_cart"',
+  },
+  { name: "product_id", type: "string | null", description: "Target product ID, if any" },
+  { name: "state", type: "string", description: 'Current state, one of "draft", "scheduled", or "published"' },
+  { name: "published_at", type: "string | null", description: "Timestamp when the email was published" },
+  { name: "send_emails", type: "boolean", description: "Whether this step sends an email" },
+  {
+    name: "delay",
+    type: "object",
+    description: "Delay after the workflow trigger",
+    children: [
+      { name: "amount", type: "number", description: "Delay amount" },
+      { name: "unit", type: "string", description: 'Delay unit, one of "hour", "day", "week", or "month"' },
+    ],
+  },
+  { name: "sent_count", type: "number", description: "Number of emails sent for this step" },
+  { name: "open_count", type: "number", description: "Number of unique opens for this step" },
+  {
+    name: "open_rate",
+    type: "number | null",
+    description: "Unique opens as a percentage of sent emails; null before any emails are sent",
+  },
+  { name: "click_count", type: "number", description: "Number of unique clicks for this step" },
+  {
+    name: "click_rate",
+    type: "number | null",
+    description: "Unique clicks as a percentage of sent emails; null before any emails are sent",
+  },
+  { name: "created_at", type: "string", description: "ISO 8601 timestamp of when the email was created" },
+  { name: "updated_at", type: "string", description: "ISO 8601 timestamp of when the email was last updated" },
+];
+
+export const WORKFLOW_FIELDS: FieldDefinition[] = [
+  { name: "id", type: "string", description: "Unique identifier for the workflow" },
+  { name: "name", type: "string", description: "Workflow name" },
+  {
+    name: "audience_type",
+    type: "string",
+    description:
+      'Audience type, one of "audience", "seller", "follower", "product", "variant", "affiliate", or "abandoned_cart"',
+  },
+  {
+    name: "trigger",
+    type: "string | null",
+    description: 'Trigger override, "member_cancellation" or null for the default audience trigger',
+  },
+  { name: "product_id", type: "string | null", description: "Target product ID, if any" },
+  { name: "variant_id", type: "string | null", description: "Target variant ID, if any" },
+  { name: "state", type: "string", description: 'Current state, either "draft" or "published"' },
+  { name: "published_at", type: "string | null", description: "Timestamp when the workflow was published" },
+  {
+    name: "first_published_at",
+    type: "string | null",
+    description: "Timestamp when the workflow was first published",
+  },
+  {
+    name: "send_to_past_customers",
+    type: "boolean",
+    description: "Whether new steps also send to prior eligible recipients",
+  },
+  { name: "emails_count", type: "number", description: "Number of active email steps" },
+  {
+    name: "filters",
+    type: "object",
+    description: "Active audience filters; omitted filters do not restrict the audience",
+    children: WORKFLOW_FILTER_FIELDS,
+  },
+  { name: "created_at", type: "string", description: "ISO 8601 timestamp of when the workflow was created" },
+  { name: "updated_at", type: "string", description: "ISO 8601 timestamp of when the workflow was last updated" },
+];
+
+export const WORKFLOW_DETAIL_FIELDS: FieldDefinition[] = [
+  ...WORKFLOW_FIELDS,
+  {
+    name: "emails",
+    type: "array",
+    description: "Active email steps ordered by delay",
+    children: WORKFLOW_EMAIL_FIELDS,
+  },
+];
+
 export const OFFER_CODE_FIELDS: FieldDefinition[] = [
   { name: "id", type: "string", description: "Unique identifier for the offer code" },
   { name: "name", type: "string", description: "Coupon code used at checkout" },

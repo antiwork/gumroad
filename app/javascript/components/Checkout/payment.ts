@@ -454,20 +454,21 @@ export function getStripePaymentElementAmount(state: State) {
   )
     return state.checkoutPayment.elements_options.presentment_amount_cents;
   // Buyer-currency presentment lane: the element mounts in the quote currency, so the amount
-  // must be the quote's locked local-currency total, not the USD total below.
+  // must be the quote's locked local-currency total, not the USD amount below.
   const presentment = getStripePaymentElementPresentment(state);
   if (presentment) return presentment.amountCents;
-  const total = getTotalPrice(state);
-  if (total === null) return null;
-  // Real carts can charge less than Stripe's mount floor (a discounted installment's first
-  // payment, offer-code drift), and a payment-mode element refuses to mount below it. The mount
-  // amount only feeds display plumbing on these lanes — the server prices the charge — so clamp
-  // it; stripePaymentElementAmountClamped keeps wallets off such carts so no sheet shows it.
-  return Math.max(total, STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS);
+  // Partial-payment carts mount with the amount the server will charge now, not the agreement
+  // total. Real charges can still land under Stripe's mount floor (a discounted installment's
+  // first payment, offer-code drift), and a payment-mode element refuses to mount below it. The
+  // mount amount only feeds display plumbing on these lanes — the server prices the charge — so
+  // clamp it; stripePaymentElementAmountClamped keeps wallets off such carts so no sheet shows it.
+  const chargeToday = getChargeTodayPrice(state);
+  if (chargeToday === null) return null;
+  return Math.max(chargeToday, STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS);
 }
 
-// Whether the element is mounted at the clamped floor rather than the real total. Wallet
-// surfaces must stay off then: a wallet sheet would promise the clamped amount, not the charge.
+// Whether the element is mounted at the clamped floor rather than the real charge-today amount.
+// Wallet surfaces must stay off then: a wallet sheet would promise the clamped amount, not the charge.
 export function stripePaymentElementAmountClamped(state: State) {
   if (state.surcharges.type !== "loaded") return false;
   if (!canUseStripePaymentElement(state) && !canUseStripePaymentElementClientConfirm(state)) return false;
@@ -482,8 +483,8 @@ export function stripePaymentElementAmountClamped(state: State) {
   )
     return false;
   if (getStripePaymentElementPresentment(state)) return false;
-  const total = getTotalPrice(state);
-  return total !== null && total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS;
+  const chargeToday = getChargeTodayPrice(state);
+  return chargeToday !== null && chargeToday < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS;
 }
 
 // The mount currency + amount for the buyer-currency presentment lane, or null everywhere else.
@@ -692,10 +693,9 @@ export function getTotalPrice(state: State) {
     : null;
 }
 
-// The pre-tax sum of all future (not-charged-today) installment payments in the cart — the
-// checkout table's "Future installments" row. Tips are excluded because the full tip amount is
-// charged upfront with the first payment; taxes are excluded because the checkout table
-// presents the full tax amount as part of "Payment today".
+// The pre-tax sum of all future installment payments. Besides the summary row, this is the
+// rolling-deploy fallback for the charge-now mount amount and its Stripe floor check. Tips are
+// charged upfront; taxes remain in the checkout table's "Payment today" display.
 //
 // Items with remainingInstallments set (subscription manage page) are skipped: there `price` is
 // today's charge alone — future installments were never part of it, so nothing needs deducting.
@@ -710,13 +710,14 @@ export function getFutureInstallmentsTotal(state: State) {
   }, 0);
 }
 
-// What the buyer pays TODAY as the checkout table presents it ("Payment today"): the cart's full
-// value minus the future installment payments. Wallet payment sheets (Apple Pay / Google Pay)
-// display this as their total, so it must match the table the buyer just read — a single source
-// of numbers for both, derived from the same server surcharges quote the table renders.
+// What the server will charge now, including only the tax on today's installment. The fallback
+// keeps a response from an older server usable during a rolling deploy.
 export function getChargeTodayPrice(state: State) {
   const total = getTotalPrice(state);
   if (total === null) return null;
+  const serverChargeTotal =
+    state.surcharges.type === "loaded" ? state.surcharges.result.charge_canonical_total_cents : null;
+  if (serverChargeTotal != null) return serverChargeTotal;
   return total - getFutureInstallmentsTotal(state);
 }
 

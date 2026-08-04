@@ -10,6 +10,8 @@ class LinksController < ApplicationController
   include RendersCustomHtmlPages
 
   DEFAULT_PRICE = 500
+  PRICE_INPUT_MAX_LENGTH = 64
+  PRICE_INPUT_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
 
@@ -125,7 +127,7 @@ class LinksController < ApplicationController
       BasePrice::Recurrence::ALLOWED_RECURRENCES.each do |r|
         params[:recurrence] ||= r if params[r] == "true"
       end
-      params[:price] = (params[:price].to_f * 100).to_i if params[:price].present?
+      params[:price] = price_cents_from_units(params[:price]) if params[:price].present?
       cart_item = @product.cart_item(params)
 
       unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
@@ -510,7 +512,15 @@ class LinksController < ApplicationController
         @product.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
         @product.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
         @product.save_custom_attributes((product_permitted_params[:custom_attributes] || []).filter { _1[:name].present? || _1[:description].present? })
-        @product.save_taxonomy_attribute_values(product_permitted_params[:taxonomy_attribute_values]) unless product_permitted_params[:taxonomy_attribute_values].nil?
+        # A taxonomy switch invalidates the prior taxonomy's attribute values even when the
+        # request is category-only and omits taxonomy_attribute_values entirely (e.g. older
+        # clients, the API). Re-run the save so values are normalized against the new taxonomy.
+        # `taxonomy_id_changed?` alone would miss this: the save_custom_* calls above already
+        # persisted the assigned taxonomy_id, so dirty tracking has cleared by the time we get
+        # here — saved_change_to_taxonomy_id? reads the change from that just-committed save.
+        if !product_permitted_params[:taxonomy_attribute_values].nil? || @product.taxonomy_id_changed? || @product.saved_change_to_taxonomy_id?
+          @product.save_taxonomy_attribute_values(product_permitted_params[:taxonomy_attribute_values])
+        end
         @product.save_tags!(product_permitted_params[:tags] || [])
         @product.reorder_previews((product_permitted_params[:covers] || []).map.with_index.to_h)
         if !current_seller.account_level_refund_policy_enabled?
@@ -777,12 +787,15 @@ class LinksController < ApplicationController
     tier = @product.tiers.find_by_external_id(params.require(:tier_id))
     return e404_json unless tier.present?
 
+    new_price = price_cents_from_units(params.require(:amount))
+    return render json: { success: false, error: "Invalid amount" }, status: :unprocessable_entity if new_price.nil?
+
     CustomerLowPriorityMailer.sample_subscription_price_change_notification(
       user: logged_in_user,
       tier:,
       effective_date: params[:effective_date].present? ? Date.parse(params[:effective_date]) : tier.subscription_price_change_effective_date,
       recurrence: params.require(:recurrence),
-      new_price: (params.require(:amount).to_f * 100).to_i,
+      new_price:,
       custom_message: strip_tags(params[:custom_message]).present? ? params[:custom_message] : nil,
     ).deliver_later
 
@@ -790,6 +803,18 @@ class LinksController < ApplicationController
   end
 
   private
+    def price_cents_from_units(value)
+      value = value.to_s
+      return if value.length > PRICE_INPUT_MAX_LENGTH || !value.match?(PRICE_INPUT_PATTERN)
+
+      decimal_value = BigDecimal(value)
+      return if decimal_value.negative?
+
+      scaling_factor = @product.single_unit_currency? ? 1 : 100
+      price_cents = (decimal_value * scaling_factor).round
+      price_cents if price_cents.in?(0..BasePrice::Shared::MAX_PRICE_CENTS)
+    end
+
     NAME_OVERRIDE_MAX = 250
     DESCRIPTION_OVERRIDE_MAX = 5_000
 
