@@ -1220,6 +1220,7 @@ Rails.application.routes.draw do
     get "/charge", to: "public#charge", as: "charge"
     get "/license-key-lookup", to: "public#license_key_lookup"
     get "/charge_data", to: "public#charge_data", as: :charge_data
+    get "/license_key_lookup_data", to: "public#license_key_lookup_data", as: :license_key_lookup_data
     get "/paypal_charge_data", to: "public#paypal_charge_data", as: :paypal_charge_data
     get "/CHARGE" => redirect("/charge")
 

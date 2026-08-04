@@ -110,6 +110,58 @@ describe PublicController, type: :controller, inertia: true do
     end
   end
 
+  describe "GET license_key_lookup_data" do
+    let(:email) { "buyer@example.com" }
+    let(:wanted_product) { create(:product, name: "Photo Editor Pro", unique_permalink: "photoed") }
+    let(:other_product) { create(:product, name: "Unrelated Course") }
+    let!(:other_purchase) { create(:purchase, link: other_product, email:, price_cents: 100, fee_cents: 30) }
+    let!(:wanted_purchase) { create(:purchase, link: wanted_product, email:, price_cents: 100, fee_cents: 30) }
+
+    it "returns false when no purchases match the email" do
+      get :license_key_lookup_data, params: { email: "nobody@example.com" }
+      expect(response.parsed_body["success"]).to be(false)
+    end
+
+    it "emails only the purchases matching the product query" do
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with([wanted_purchase.id]).and_return(mail_double)
+      get :license_key_lookup_data, params: { email:, product_query: "Photo Editor" }
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "matches by permalink" do
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with([wanted_purchase.id]).and_return(mail_double)
+      get :license_key_lookup_data, params: { email:, product_query: "photoed" }
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "returns false when the product query matches none of the buyer's purchases" do
+      expect(CustomerMailer).not_to receive(:grouped_receipt)
+      get :license_key_lookup_data, params: { email:, product_query: "some product I never bought" }
+      expect(response.parsed_body["success"]).to be(false)
+    end
+
+    it "emails all purchases when no product query is given" do
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([other_purchase.id, wanted_purchase.id])).and_return(mail_double)
+      get :license_key_lookup_data, params: { email: }
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "does not treat LIKE wildcards in the query as wildcards" do
+      expect(CustomerMailer).not_to receive(:grouped_receipt)
+      get :license_key_lookup_data, params: { email:, product_query: "%" }
+      expect(response.parsed_body["success"]).to be(false)
+    end
+  end
+
   describe "paypal_charge_data" do
     context "when there is no invoice_id value passed" do
       let(:params) { { invoice_id: nil } }

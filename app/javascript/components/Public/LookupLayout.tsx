@@ -1,7 +1,7 @@
 import { Paypal } from "@boxicons/react";
 import React, { useEffect, useRef } from "react"
 
-import { lookupCharges, lookupPaypalCharges } from "$app/data/charge"
+import { lookupCharges, lookupLicenseKey, lookupPaypalCharges } from "$app/data/charge"
 import { assertResponseError } from "$app/utils/request"
 
 import { Button } from "$app/components/Button"
@@ -20,6 +20,7 @@ const LookupLayout = ({ children, title, type }: {
 }) => {
   const [email, setEmail] = React.useState<{ value: string; error?: boolean }>({ value: "" })
   const [last4, setLast4] = React.useState<{ value: string; error?: boolean }>({ value: "" })
+  const [productQuery, setProductQuery] = React.useState("")
   const [invoiceId, setInvoiceId] = React.useState<{ value: string; error?: boolean }>({ value: "" })
   const [isCardLoading, setIsCardLoading] = React.useState(false)
   const [isPaypalLoading, setIsPaypalLoading] = React.useState(false)
@@ -45,10 +46,10 @@ const LookupLayout = ({ children, title, type }: {
 
     setIsCardLoading(true)
     try {
-      const result = await lookupCharges({
-        email: email.value,
-        last4: type === "charge" ? last4.value : null
-      })
+      const result =
+        type === "licenseKey"
+          ? await lookupLicenseKey({ email: email.value, productQuery: productQuery.trim() || null })
+          : await lookupCharges({ email: email.value, last4: last4.value })
       setSuccess(result.success)
     } catch (error) {
       assertResponseError(error);
@@ -135,6 +136,18 @@ const LookupLayout = ({ children, title, type }: {
                 onChange={(evt) => setEmail({ value: evt.target.value })}
               />
             </Fieldset>
+            {type === "licenseKey" && (
+              <Fieldset>
+                <Label htmlFor="product_query">Which product? (optional)</Label>
+                <Input
+                  id="product_query"
+                  type="text"
+                  placeholder="Product name"
+                  value={productQuery}
+                  onChange={(evt) => setProductQuery(evt.target.value)}
+                />
+              </Fieldset>
+            )}
             {type === "charge" && (
               <Fieldset state={last4.error ? "danger" : undefined}>
                 <Label htmlFor="cc_last_four">Last 4 digits of your card</Label>

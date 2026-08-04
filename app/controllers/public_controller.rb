@@ -36,6 +36,23 @@ class PublicController < ApplicationController
     end
   end
 
+  def license_key_lookup_data
+    purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
+    if params[:product_query].present?
+      query = params[:product_query].strip
+      purchases = purchases.joins(:link).where(
+        "links.name LIKE ? OR links.unique_permalink = ? OR links.custom_permalink = ?",
+        "%#{Purchase.sanitize_sql_like(query)}%", query, query
+      )
+    end
+    if purchases.none?
+      render json: { success: false }
+    else
+      CustomerMailer.grouped_receipt(purchases.ids).deliver_later(queue: "critical")
+      render json: { success: true }
+    end
+  end
+
   def paypal_charge_data
     return render json: { success: false } if params[:invoice_id].nil?
 
