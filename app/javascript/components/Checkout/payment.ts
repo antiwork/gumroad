@@ -668,10 +668,9 @@ export function getTotalPrice(state: State) {
     : null;
 }
 
-// The pre-tax sum of all future (not-charged-today) installment payments in the cart — the
-// checkout table's "Future installments" row. Tips are excluded because the full tip amount is
-// charged upfront with the first payment; taxes are excluded because the checkout table
-// presents the full tax amount as part of "Payment today".
+// The pre-tax sum of all future installment payments. Besides the summary row, this is the
+// rolling-deploy fallback for the charge-now mount amount and its Stripe floor check. Tips are
+// charged upfront; taxes remain in the checkout table's "Payment today" display.
 //
 // Items with remainingInstallments set (subscription manage page) are skipped: there `price` is
 // today's charge alone — future installments were never part of it, so nothing needs deducting.

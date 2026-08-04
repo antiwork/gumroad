@@ -234,10 +234,7 @@ class Checkout::StripePaymentPresenter
     def payment_method_resolver
       @payment_method_resolver ||= Checkout::PaymentMethodResolver.new(
         sellers:,
-        # Installments count as recurring on the same basis as
-        # Order::PreparePaymentIntentService#payment_method_resolution: the first installment
-        # charges now and the rest charge off-session later. This is also what keeps installment
-        # carts off the client-confirm lane — the resolver fails recurring carts closed there.
+        # Later installments charge off-session, so they need recurring-capable methods.
         recurring: items.any? { _1[:recurrence].present? || _1[:pay_in_installments] },
         commission: items.any? { _1[:native_type] == Link::NATIVE_TYPE_COMMISSION },
         setup_for_future: setup_for_future_charges_without_charging?(items),
@@ -423,9 +420,8 @@ class Checkout::StripePaymentPresenter
         # items (a partial quote would mix local-currency and dollar lines, so the quote
         # service refuses them) and carts past the quote's seller cap. The method-forced arm
         # keeps uniform forced-currency carts on their local-method element when a
-        # non-candidate line breaks the presentment shape — never installment carts, whose
-        # recurring resolution fails client-confirm closed, so a mixed candidate/installment
-        # cart lands here on CardElement.
+        # non-candidate line breaks the presentment shape. Installments cannot use that arm
+        # because the resolver treats their later off-session payments as recurring.
         supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported

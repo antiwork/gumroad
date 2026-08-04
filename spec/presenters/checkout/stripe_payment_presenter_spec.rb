@@ -449,12 +449,6 @@ describe Checkout::StripePaymentPresenter do
   end
 
   it "mounts the buyer-currency element for a buyer who picked pay-in-installments on a presentment candidate" do
-    # Sahil's follow-up on #6975: the buyer choosing installments must not kick a
-    # presentment-candidate cart back to CardElement any more than the product merely
-    # OFFERING an installment plan does above. The quote's later_charge_kind == "installment"
-    # component (CustomerSurchargeController#buyer_currency_charge_details) already derives the
-    # first-installment amount the buyer is charged today, so quoting it in the buyer's
-    # currency changes only the display/charge currency, not what is billed.
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     create(:product_installment_plan, link: product)
@@ -482,9 +476,6 @@ describe Checkout::StripePaymentPresenter do
   end
 
   it "mounts the canonical USD element for a buyer who picked pay-in-installments when the cart is not a presentment candidate" do
-    # The unramped-seller / no-buyer-currency-display case: with no FX quote path the element
-    # mounts canonical USD, the exact charge basis the CardElement lane used for installments.
-    # The client-confirm lane stays closed to it — the resolver counts installments as recurring.
     expect(stripe_payment_props(add_products: [flagged_seller_product(pay_in_installments: true)]))
       .to eq(payment_element_props)
   end
@@ -672,11 +663,6 @@ describe Checkout::StripePaymentPresenter do
 
   it "selects Stripe Payment Element for a commission product" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(native_type: Link::NATIVE_TYPE_COMMISSION)]))
-      .to eq(payment_element_props)
-  end
-
-  it "selects Stripe Payment Element for an installment-plan product" do
-    expect(stripe_payment_props(add_products: [flagged_seller_product(pay_in_installments: true)]))
       .to eq(payment_element_props)
   end
 
@@ -1188,8 +1174,7 @@ describe Checkout::StripePaymentPresenter do
     end
 
     it "keeps an installment cart on the server-confirm element even with both flags" do
-      # The resolver counts installments as recurring, so client-confirm — whose deferred
-      # ConfirmationToken cannot fund the later installments — never claims one.
+      # A deferred ConfirmationToken cannot fund later off-session installments.
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(pay_in_installments: true)]))
         .to eq(payment_element_props)
     end
@@ -1584,10 +1569,7 @@ describe Checkout::StripePaymentPresenter do
     end
 
     it "kicks a mixed candidate/installment cart to CardElement instead of client-confirm, which cannot charge an installment purchase" do
-      # The method-forced arm cannot claim an installment cart — the resolver counts
-      # installments as recurring, which fails client-confirm eligibility closed (and
-      # PreparePaymentIntentService would fail the confirm anyway). With neither arm supporting
-      # it, the mixed cart falls back to CardElement as buyer-currency-unsupported.
+      # A mixed cart cannot be quoted, and installments keep method-forced client-confirm closed.
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       installment_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 3000)
       create(:product_installment_plan, link: installment_product)

@@ -290,6 +290,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(purchase.price_cents).to eq(334)
     expect(purchase.subscription).to be_alive
     expect(purchase.credit_card).to be_present
+    expect(purchase.credit_card.stripe_customer_id).to be_present
     expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
     expect(payment_element_payment_method_ids).not_to be_empty
   end
