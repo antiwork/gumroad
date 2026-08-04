@@ -37,7 +37,7 @@ class TaxRemittances::WiseTransferMatcher
   MatchResult = Struct.new(:remittance, :transfer, keyword_init: true)
   AmbiguousResult = Struct.new(:remittance, :candidates, keyword_init: true)
 
-  attr_reader :period, :matched, :ambiguous, :unmatched
+  attr_reader :period, :matched, :ambiguous, :unmatched, :unclaimed_transfers
 
   def initialize(period)
     raise ArgumentError, "period must look like 2026-Q1 (got #{period.inspect})" unless period.to_s.match?(TaxRemittance::PERIOD_FORMAT)
@@ -46,6 +46,7 @@ class TaxRemittances::WiseTransferMatcher
     @matched = []
     @ambiguous = []
     @unmatched = []
+    @unclaimed_transfers = []
   end
 
   # transfers — an array of Wise transfer hashes from GET /v1/transfers, each
@@ -62,6 +63,14 @@ class TaxRemittances::WiseTransferMatcher
     @ambiguous = []
     @unmatched = []
 
+    sent_transfers = transfers.select { |t| t[:status] == "outgoing_payment_sent" }
+    # Any sent transfer that was never even a candidate for a remittance
+    # (id never lands in `claimed_ids`) would otherwise vanish silently —
+    # it isn't matched, ambiguous, or unmatched (those buckets are keyed by
+    # remittance, not by transfer), so nothing on the rail with no matching
+    # row goes unreported without tracking this separately.
+    claimed_ids = Set.new
+
     # Two passes: a remittance with exactly one candidate here can still be
     # contested by a SIBLING remittance that also uniquely lands on the same
     # transfer (same currency/amount/window, e.g. two authorities paid the
@@ -70,8 +79,9 @@ class TaxRemittances::WiseTransferMatcher
     # ambiguous for all of them instead of being written to whichever
     # remittance happened to be iterated first.
     tentative = candidates_for_period.filter_map do |remittance|
-      sent_transfers = transfers.select { |t| t[:status] == "outgoing_payment_sent" && t[:targetCurrency] == remittance.currency }
-      matches = sent_transfers.select { |t| within_tolerance?(t, remittance) }
+      currency_transfers = sent_transfers.select { |t| t[:targetCurrency] == remittance.currency }
+      matches = currency_transfers.select { |t| within_tolerance?(t, remittance) }
+      matches.each { |t| claimed_ids << t[:id] }
 
       case matches.size
       when 0
@@ -99,9 +109,12 @@ class TaxRemittances::WiseTransferMatcher
       end
     end
 
+    @unclaimed_transfers = sent_transfers.reject { |t| claimed_ids.include?(t[:id]) }
+
     Rails.logger.info(
       "#{self.class.name}: period=#{period} matched=#{matched.size} " \
-      "ambiguous=#{ambiguous.size} unmatched=#{unmatched.size}"
+      "ambiguous=#{ambiguous.size} unmatched=#{unmatched.size} " \
+      "unclaimed_transfers=#{unclaimed_transfers.size}"
     )
 
     self

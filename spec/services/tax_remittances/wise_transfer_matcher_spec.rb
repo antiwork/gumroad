@@ -135,4 +135,29 @@ describe TaxRemittances::WiseTransferMatcher do
     expect(result.matched).to be_empty
     expect(result.unmatched.size).to eq(1)
   end
+
+  it "reports a sent transfer no remittance ever candidated for as unclaimed, instead of dropping it" do
+    create(:tax_remittance, :completed, currency: "GBP", period: "2026-Q2",
+                                        target_amount_cents: 18_284_755, paid_at: Time.utc(2026, 7, 22),
+                                        transfer_id: nil)
+    stray = { id: 900_099, status: "outgoing_payment_sent", targetCurrency: "EUR",
+              targetValue: 999.00, sourceValue: 1_050.00, created: "2026-07-22 10:00:00" }
+
+    result = described_class.new("2026-Q2").process([hmrc_transfer, stray])
+
+    expect(result.matched.size).to eq(1)
+    expect(result.unclaimed_transfers).to eq([stray])
+  end
+
+  it "does not report a transfer that was considered (even ambiguously) as unclaimed" do
+    hmrc = create(:tax_remittance, :completed, currency: "GBP", period: "2026-Q2",
+                                               target_amount_cents: 18_284_755, paid_at: Time.utc(2026, 7, 22),
+                                               transfer_id: nil)
+    duplicate = hmrc_transfer.merge(id: 900_003)
+
+    result = described_class.new("2026-Q2").process([hmrc_transfer, duplicate])
+
+    expect(result.ambiguous.first.remittance).to eq(hmrc)
+    expect(result.unclaimed_transfers).to be_empty
+  end
 end
