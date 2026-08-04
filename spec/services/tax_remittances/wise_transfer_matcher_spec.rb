@@ -171,6 +171,18 @@ describe TaxRemittances::WiseTransferMatcher do
     expect(result.unmatched.size).to eq(1)
   end
 
+  it "treats a transfer with an unparseable created timestamp as nonmatching, reporting it unclaimed" do
+    create(:tax_remittance, :completed, currency: "GBP", period: "2026-Q2",
+                                        target_amount_cents: 18_284_755, paid_at: Time.utc(2026, 7, 22),
+                                        transfer_id: nil)
+    malformed = hmrc_transfer.merge(id: 900_777, created: "definitely-not-a-time")
+
+    result = described_class.new("2026-Q2").process([malformed])
+
+    expect(result.matched).to be_empty
+    expect(result.unclaimed_transfers).to eq([malformed])
+  end
+
   it "reports a sent transfer no remittance ever candidated for as unclaimed, instead of dropping it" do
     create(:tax_remittance, :completed, currency: "GBP", period: "2026-Q2",
                                         target_amount_cents: 18_284_755, paid_at: Time.utc(2026, 7, 22),
