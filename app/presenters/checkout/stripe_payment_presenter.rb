@@ -234,7 +234,11 @@ class Checkout::StripePaymentPresenter
     def payment_method_resolver
       @payment_method_resolver ||= Checkout::PaymentMethodResolver.new(
         sellers:,
-        recurring: items.any? { _1[:recurrence].present? },
+        # Installments count as recurring on the same basis as
+        # Order::PreparePaymentIntentService#payment_method_resolution: the first installment
+        # charges now and the rest charge off-session later. This is also what keeps installment
+        # carts off the client-confirm lane — the resolver fails recurring carts closed there.
+        recurring: items.any? { _1[:recurrence].present? || _1[:pay_in_installments] },
         commission: items.any? { _1[:native_type] == Link::NATIVE_TYPE_COMMISSION },
         setup_for_future: setup_for_future_charges_without_charging?(items),
         buyer_country:,
@@ -419,22 +423,13 @@ class Checkout::StripePaymentPresenter
         # items (a partial quote would mix local-currency and dollar lines, so the quote
         # service refuses them) and carts past the quote's seller cap. The method-forced arm
         # keeps uniform forced-currency carts on their local-method element when a
-        # non-candidate line breaks the presentment shape.
+        # non-candidate line breaks the presentment shape — never installment carts, whose
+        # recurring resolution fails client-confirm closed, so a mixed candidate/installment
+        # cart lands here on CardElement.
         supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported
-
-        # Only the quote element can honor an installment cart (its quote already prices the
-        # first-installment amount). The method-forced arm routes to client-confirm, which
-        # PreparePaymentIntentService rejects for installments (resolved as recurring), so a
-        # mixed candidate/installment cart must keep the CardElement kick-back below.
-        return nil if buyer_currency_presentment_element_shape?(items)
       end
-
-      # Installments have no client-confirm path (PreparePaymentIntentService resolves them as
-      # recurring, so the ConfirmationToken's method set would mismatch) and no quote path
-      # outside the candidate shape above, so CardElement is the only lane left for them.
-      return "setup_or_installment_flow" if items.any? { _1[:pay_in_installments] }
 
       nil
     end

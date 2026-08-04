@@ -253,6 +253,47 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(payment_element_payment_method_ids).not_to be_empty
   end
 
+  it "allows the buyer to pay in installments using the Payment Element" do
+    seller = create(:user)
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    product = create(:product, user: seller, price_cents: 1000)
+    create(:product_installment_plan, link: product, number_of_installments: 3)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+
+    visit product.long_url
+    click_on "Pay in 3 installments"
+
+    platform_payment_method = StripePaymentMethodHelper.success.with_zip_code("94107").to_stripejs_payment_method
+    payment_element_payment_method_ids = []
+    allow(StripeChargeablePaymentMethod).to receive(:new).and_wrap_original do |original, payment_method_id, *args, **kwargs|
+      payment_element_payment_method_ids << payment_method_id
+      original.call(platform_payment_method.id, *args, **kwargs)
+    end
+
+    checkout_payment = checkout_payment_props
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
+
+    expect(page).to have_text("Payment today US$3.34", normalize_ws: true)
+    expect(page).to have_text("Future installments US$6.66", normalize_ws: true)
+
+    # check_out's subscription-count expectation assumes only recurring-billing products create
+    # subscriptions, which installment purchases also do — so drive the form directly.
+    fill_checkout_form(product, payment_element: true)
+    click_on "Pay"
+    expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.", visible: :all, wait: 60)
+
+    purchase = Purchase.last
+    expect(purchase.successful?).to be(true)
+    expect(purchase.is_installment_payment).to be(true)
+    expect(purchase.price_cents).to eq(334)
+    expect(purchase.subscription).to be_alive
+    expect(purchase.credit_card).to be_present
+    expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
+    expect(payment_element_payment_method_ids).not_to be_empty
+  end
+
   it "lets a buyer with a saved card pay with it while the Payment Element is enabled" do
     seller = create(:user)
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||

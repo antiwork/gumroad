@@ -393,20 +393,20 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
     return canUseStripePaymentElementForFutureChargeSetup(state);
   }
 
-  // Rails chooses the initial lane, but discount/surcharge reloads can lower the final total before Elements updates.
+  // Rails chooses the initial lane, but discount/surcharge reloads can lower the final total
+  // before Elements updates. Gated on the charge-today amount because that is what the element
+  // mounts with (see getStripePaymentElementAmount) — for an installment cart the first
+  // installment is the charge Stripe's floor applies to, not the cart total.
   if (state.surcharges.type === "loaded") {
-    const total = getTotalPrice(state);
-    if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
+    const chargeToday = getChargeTodayPrice(state);
+    if (chargeToday === null || chargeToday < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
   }
 
-  // Installments stay on the CardElement path except on the buyer-currency presentment lane,
-  // whose FX quote already prices the first-installment charge (the server only sets the flag
-  // for carts its quote service accepts). Free trials and preorders charge nothing today, so
-  // payment mode is never right for them.
-  const buyerCurrencyPresentment = state.checkoutPayment.elements_options.buyer_currency_presentment;
-  return !state.products.some(
-    (product) => (product.payInInstallments && !buyerCurrencyPresentment) || product.hasFreeTrial || product.isPreorder,
-  );
+  // Free trials and preorders charge nothing today, so payment mode is never right for them.
+  // Installments are fine on both server-confirm lanes: the buyer-currency quote prices the
+  // first-installment charge, and the canonical USD element mounts the same charge-today
+  // amount the CardElement lane used to charge.
+  return !state.products.some((product) => product.hasFreeTrial || product.isPreorder);
 }
 
 // The browser must not widen server eligibility for client-confirm: single-seller,
@@ -460,10 +460,13 @@ export function getStripePaymentElementAmount(state: State) {
   )
     return state.checkoutPayment.elements_options.presentment_amount_cents;
   // Buyer-currency presentment lane: the element mounts in the quote currency, so the amount
-  // must be the quote's locked local-currency total, not the USD total below.
+  // must be the quote's locked local-currency total, not the USD amount below.
   const presentment = getStripePaymentElementPresentment(state);
   if (presentment) return presentment.amountCents;
-  return getTotalPrice(state);
+  // Charge-today, not the cart total: an installment cart charges only the first installment
+  // now, and the element amount is what wallet sheets show as their total. Identical to the
+  // total for every other cart.
+  return getChargeTodayPrice(state);
 }
 
 // The mount currency + amount for the buyer-currency presentment lane, or null everywhere else.

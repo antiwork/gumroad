@@ -417,8 +417,8 @@ describe Order::PreparePaymentIntentService, :vcr do
     # An installment-plan purchase charges only its first installment now and the rest off-session
     # later, so it must resolve as recurring — the one-time set (Klarna included, for a flagged
     # seller) can never fund the later installments. The presenter already keeps installment carts
-    # off the client-confirm lane (its setup_or_installment_flow fallback), so this pins the
-    # server-side re-check against a crafted #prepare request.
+    # off the client-confirm lane (its resolver counts installments as recurring too), so this pins
+    # the server-side re-check against a crafted #prepare request.
     context "with an installment-plan purchase" do
       before { create(:merchant_account, user: seller) }
 

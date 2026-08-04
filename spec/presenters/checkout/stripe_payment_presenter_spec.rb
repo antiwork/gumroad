@@ -481,12 +481,12 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
   end
 
-  it "still falls back to CardElement for a buyer who picked pay-in-installments when the cart is not a presentment candidate" do
-    # The unramped-seller / no-buyer-currency-display case: pay_in_installments must still route
-    # to CardElement here, because there is no FX quote path for it and the client-confirm lane
-    # cannot take an installment purchase (PreparePaymentIntentService resolves it as recurring).
+  it "mounts the canonical USD element for a buyer who picked pay-in-installments when the cart is not a presentment candidate" do
+    # The unramped-seller / no-buyer-currency-display case: with no FX quote path the element
+    # mounts canonical USD, the exact charge basis the CardElement lane used for installments.
+    # The client-confirm lane stays closed to it — the resolver counts installments as recurring.
     expect(stripe_payment_props(add_products: [flagged_seller_product(pay_in_installments: true)]))
-      .to eq(card_element_fallback("setup_or_installment_flow"))
+      .to eq(payment_element_props)
   end
 
   it "mounts the buyer-currency element for a recurring presentment candidate" do
@@ -675,9 +675,9 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props)
   end
 
-  it "falls back to CardElement for an installment-plan product" do
+  it "selects Stripe Payment Element for an installment-plan product" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(pay_in_installments: true)]))
-      .to eq(card_element_fallback("setup_or_installment_flow"))
+      .to eq(payment_element_props)
   end
 
   it "selects Stripe Payment Element SetupIntent mode for a preorder product" do
@@ -1187,6 +1187,13 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props)
     end
 
+    it "keeps an installment cart on the server-confirm element even with both flags" do
+      # The resolver counts installments as recurring, so client-confirm — whose deferred
+      # ConfirmationToken cannot fund the later installments — never claims one.
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(pay_in_installments: true)]))
+        .to eq(payment_element_props)
+    end
+
     it "launches Cash App Pay alongside card for a US buyer — ACH Direct Debit stays withdrawn platform-wide" do
       stub_geoip_country("104.28.0.1", "United States")
 
@@ -1577,10 +1584,10 @@ describe Checkout::StripePaymentPresenter do
     end
 
     it "kicks a mixed candidate/installment cart to CardElement instead of client-confirm, which cannot charge an installment purchase" do
-      # The method-forced arm keeps a mixed candidate cart supported, but its lane is
-      # client-confirm — and PreparePaymentIntentService resolves an installment purchase as
-      # recurring, failing every confirm closed. Only the quote element can honor installments,
-      # so a mixed cart with one falls back to CardElement.
+      # The method-forced arm cannot claim an installment cart — the resolver counts
+      # installments as recurring, which fails client-confirm eligibility closed (and
+      # PreparePaymentIntentService would fail the confirm anyway). With neither arm supporting
+      # it, the mixed cart falls back to CardElement as buyer-currency-unsupported.
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       installment_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 3000)
       create(:product_installment_plan, link: installment_product)
@@ -1608,7 +1615,7 @@ describe Checkout::StripePaymentPresenter do
       # disable_wallets: the fallback keeps the candidate cart's PRB suppression, matching the
       # buyer-currency element it would otherwise mount.
       expect(stripe_payment_props(add_products:))
-        .to eq(card_element_fallback("setup_or_installment_flow").merge(disable_wallets: true))
+        .to eq(card_element_fallback("buyer_currency_presentment_unsupported").merge(disable_wallets: true))
     ensure
       deactivate_buyer_currency_flags(seller) if seller
     end
@@ -2087,15 +2094,15 @@ describe Checkout::StripePaymentPresenter do
     end
 
     it "requests merchant tokens on the CardElement fallback when the seller is flagged" do
-      # The wallet button renders on CardElement checkouts too (installment plans and other
+      # The wallet button renders on CardElement checkouts too (below-minimum carts and other
       # Payment Element fallbacks), so the flag must reach the frontend on every integration.
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, seller)
 
-      expect(stripe_payment_props(add_products: [checkout_product_for(product, pay_in_installments: true)]))
-        .to eq(card_element_fallback("setup_or_installment_flow", request_apple_pay_merchant_tokens: true))
+      expect(stripe_payment_props(add_products: [checkout_product_for(product, price: described_class::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS - 1)]))
+        .to eq(card_element_fallback("stripe_payment_element_amount_below_minimum", request_apple_pay_merchant_tokens: true))
     end
 
     it "requests merchant tokens on the client-confirm integration when the seller is flagged" do
@@ -2156,15 +2163,16 @@ describe Checkout::StripePaymentPresenter do
     end
 
     it "never enables element wallets on the CardElement fallback, even when the seller is flagged" do
-      # CardElement carts (installment plans and other fallbacks) never mount a Payment Element,
-      # so there is no element wallet surface to enable — they keep the Payment Request Button.
+      # CardElement carts (below-minimum carts and other fallbacks) never mount a Payment
+      # Element, so there is no element wallet surface to enable — they keep the Payment
+      # Request Button.
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
 
-      expect(stripe_payment_props(add_products: [checkout_product_for(product, pay_in_installments: true)]))
-        .to eq(card_element_fallback("setup_or_installment_flow"))
+      expect(stripe_payment_props(add_products: [checkout_product_for(product, price: described_class::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS - 1)]))
+        .to eq(card_element_fallback("stripe_payment_element_amount_below_minimum"))
     end
 
     it "keeps element wallets off when the cart disables wallets, even with the seller flagged" do

@@ -244,10 +244,26 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state({ products: [product({ nativeType: "commission" })] }))).toBe(true);
   });
 
-  it("falls back for future-charge and installment flows in PaymentIntent mode", () => {
-    expect(canUseStripePaymentElement(state({ products: [product({ payInInstallments: true })] }))).toBe(false);
+  it("falls back for future-charge flows in PaymentIntent mode", () => {
     expect(canUseStripePaymentElement(state({ products: [product({ isPreorder: true })] }))).toBe(false);
     expect(canUseStripePaymentElement(state({ products: [product({ hasFreeTrial: true })] }))).toBe(false);
+  });
+
+  it("allows installments on the canonical USD server-confirm element", () => {
+    expect(canUseStripePaymentElement(state({ products: [product({ payInInstallments: true })] }))).toBe(true);
+  });
+
+  it("falls back when the first installment is below Stripe's minimum even though the total is not", () => {
+    // $1.20 in 3 installments charges 40¢ today — below the 50¢ mount floor the element's
+    // charge-today amount is held to, while the full total would have passed.
+    expect(
+      canUseStripePaymentElement(
+        state({
+          products: [product({ price: 120, payInInstallments: true, installmentPlan: { numberOfInstallments: 3 } })],
+          surcharges: loadedSurcharges({ subtotal: 120 }),
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("allows installments on the buyer-currency presentment lane, whose quote prices the first installment", () => {
@@ -614,6 +630,19 @@ describe("getStripePaymentElementAmount", () => {
 
   it("returns null until surcharges load", () => {
     expect(getStripePaymentElementAmount(state({ surcharges: { type: "pending" } }))).toBeNull();
+  });
+
+  it("returns the charge-today amount for an installment cart", () => {
+    // $10 in 2 installments at $2 tax: the wallet sheet and element mount must carry the $7
+    // charged today, not the $12 cart total.
+    expect(
+      getStripePaymentElementAmount(
+        state({
+          products: [product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } })],
+          surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 200 }),
+        }),
+      ),
+    ).toBe(700);
   });
 
   it("returns null for setup-mode checkout", () => {
