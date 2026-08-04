@@ -64,11 +64,23 @@ class Pages::ProfileData
       seller.installments.visible_on_profile.cache_key_with_version,
       seller_profile&.cache_key_with_version,
       # Review writes touch product_review_stats, not links, so the products key
-      # above never moves when a rating lands; the flag state and stat high-water
-      # mark keep the cached seller_rating honest.
+      # above never moves when a rating lands; the flag state and this signature
+      # keep the cached seller_rating honest.
       seller.reputation_summary_enabled?,
-      seller.reputation_summary_enabled? ? ProductReviewStat.joins(:link).where(links: { user_id: seller.id }).maximum(:updated_at) : nil,
+      seller.reputation_summary_enabled? ? reputation_summary_cache_signature(seller) : nil,
     ].join("/")
+  end
+
+  # A digest of the values seller_reputation_summary aggregates, not a timestamp:
+  # updated_at has second precision, so two review-stat mutations in the same
+  # second would produce an identical maximum(:updated_at) and serve a stale
+  # cached rollup. Summing the actual counters changes whenever the rollup's
+  # output could change, regardless of how many writes land in one second.
+  def self.reputation_summary_cache_signature(seller)
+    ProductReviewStat.joins(:link).where(links: { user_id: seller.id })
+      .pick(Arel.sql("SUM(reviews_count), SUM(ratings_of_one_count), SUM(ratings_of_two_count), " \
+                      "SUM(ratings_of_three_count), SUM(ratings_of_four_count), SUM(ratings_of_five_count), COUNT(*)"))
+      &.join(",")
   end
 
   def self.products(seller, base_url = seller.store_host_with_protocol, offset: 0, limit: MAX_ITEMS)
