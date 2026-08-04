@@ -40,6 +40,11 @@ class SitemapService
       end
     end
 
+    # sitemap_generator only writes a file when it has at least one link, so a run that
+    # finds zero qualifying wishlists leaves the PRIOR run's file (or S3 object) in place —
+    # previously-indexed URLs stay published after their wishlists drop below the gate.
+    remove_wishlist_sitemap_artifact if SitemapGenerator::Sitemap.link_count.zero?
+
     RobotsService.new.expire_sitemap_configs_cache
 
     if ping_search_engines?
@@ -92,5 +97,14 @@ class SitemapService
 
     def upload_sitemap_to_s3?
       Rails.env.production? || Rails.env.staging?
+    end
+
+    def remove_wishlist_sitemap_artifact
+      key = "#{SITEMAP_PATH_WISHLISTS}/sitemap.xml.gz"
+      if upload_sitemap_to_s3?
+        Aws::S3::Client.new.delete_object(bucket: PUBLIC_STORAGE_S3_BUCKET, key:)
+      else
+        FileUtils.rm_f(Rails.public_path.join(key))
+      end
     end
 end

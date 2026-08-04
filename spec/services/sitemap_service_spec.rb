@@ -115,6 +115,23 @@ describe SitemapService do
       expect(File.exist?(sitemap_file_path)).to be false
     end
 
+    it "removes a previously published sitemap once no wishlist remains indexable" do
+      seller = create(:user, username: "shrinkingseller")
+      wishlist = create(:wishlist, name: "Shrinking List", user: seller)
+      products = create_list(:wishlist_product, Wishlist::MINIMUM_SEO_INDEXABLE_PRODUCTS, wishlist: wishlist)
+
+      service.generate_wishlists
+      expect(File.exist?(sitemap_file_path)).to be true
+      xml = Zlib::GzipReader.open(sitemap_file_path, &:read)
+      expect(xml).to include(wishlist.url_slug)
+
+      products.each(&:mark_deleted!)
+
+      service.generate_wishlists
+
+      expect(File.exist?(sitemap_file_path)).to be false
+    end
+
     it "deletes /robots.txt sitemap configs cache" do
       cache_key = "sitemap_configs"
       redis_namespace = Redis::Namespace.new(:robots_redis_namespace, redis: $redis)
