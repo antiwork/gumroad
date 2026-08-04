@@ -661,6 +661,7 @@ class SettingsPresenter
         individual_tax_id_entered: user_compliance_info.individual_tax_id.present?,
         individual_tax_id_last_four: tax_id_last_four(user_compliance_info.individual_tax_id),
         individual_tax_id_is_last_four: tax_id_is_last_four_only?(user_compliance_info.individual_tax_id),
+        has_outstanding_full_ssn_requirement: has_outstanding_full_ssn_requirement?,
         business_tax_id_entered: user_compliance_info.business_tax_id.present?,
         business_tax_id_last_four: tax_id_last_four(user_compliance_info.business_tax_id),
         requires_credit_card: seller.requires_credit_card?,
@@ -680,6 +681,18 @@ class SettingsPresenter
       return nil if encrypted_tax_id.blank?
       decrypted = encrypted_tax_id.decrypt(GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).to_s
       decrypted.force_encoding(Encoding::UTF_8).scrub("").gsub(/[[:space:]]/, "")[-4..]
+    end
+
+    # Only an OUTSTANDING full (not partial/ssn_last_4) TAX_ID request should force re-entry.
+    # `has_ever_been_requested_...` is ever-based, so a seller who long ago cleared id_number via
+    # document upload (last-4 still on file) would otherwise be forced to re-enter an SSN Stripe
+    # no longer wants — on every payments-form save, forever.
+    def has_outstanding_full_ssn_requirement?
+      seller.user_compliance_info_requests
+            .requested
+            .where(field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+            .only_needs_field_to_be_partially_provided(false)
+            .exists?
     end
 
     # Stripe can require a full 9-digit SSN (individual.id_number) after onboarding, but sellers

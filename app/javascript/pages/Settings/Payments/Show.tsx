@@ -895,7 +895,7 @@ export default function PaymentsPage() {
     ) {
       markFieldInvalid("individual_tax_id");
     }
-    if (props.user.need_full_ssn && form.data.user.country === "US") {
+    if (props.user.has_outstanding_full_ssn_requirement && form.data.user.country === "US") {
       const typedSsnDigits = (form.data.user.individual_tax_id ?? "").replace(/\D/gu, "");
       // Only last-4 (or nothing) on file can never satisfy Stripe's id_number requirement, so the
       // seller must type a fresh full SSN; and any newly typed value must itself be 9 digits so a

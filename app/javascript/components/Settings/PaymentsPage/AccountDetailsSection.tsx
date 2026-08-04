@@ -433,11 +433,13 @@ const AccountDetailsSection = ({
       user.individual_tax_id_needed_countries.includes(complianceInfo.business_country)) ||
     (complianceInfo.country !== null && user.individual_tax_id_needed_countries.includes(complianceInfo.country));
 
-  // Stripe now requires the full 9-digit SSN (individual.id_number) but we only hold the last 4,
-  // so the sync job can never clear the requirement — the masked "done" display would strand the
-  // seller. Force the input open with an explanation instead.
+  // Stripe currently requires the full 9-digit SSN (individual.id_number) but we only hold the
+  // last 4, so the sync job can never clear the requirement — the masked "done" display would
+  // strand the seller. Force the input open with an explanation instead. Gated on the OUTSTANDING
+  // requirement (not need_full_ssn, which is ever-requested) so sellers who satisfied an old
+  // request another way aren't forced to re-enter an SSN Stripe no longer wants.
   const mustReenterFullSsn =
-    user.need_full_ssn && user.individual_tax_id_is_last_four && complianceInfo.country === "US";
+    user.has_outstanding_full_ssn_requirement && user.individual_tax_id_is_last_four && complianceInfo.country === "US";
 
   return (
     <section className="grid gap-8">

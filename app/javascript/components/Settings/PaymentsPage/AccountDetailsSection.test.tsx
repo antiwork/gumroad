@@ -21,6 +21,7 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   individual_tax_id_entered: true,
   individual_tax_id_last_four: "6789",
   individual_tax_id_is_last_four: false,
+  has_outstanding_full_ssn_requirement: false,
   business_tax_id_entered: false,
   business_tax_id_last_four: null,
   requires_credit_card: false,
@@ -74,7 +75,13 @@ const renderSection = (user: User) =>
 
 describe("AccountDetailsSection SSN field", () => {
   it("renders the masked completed display when the full SSN is already on file", () => {
-    renderSection(makeUser({ need_full_ssn: true, individual_tax_id_is_last_four: false }));
+    renderSection(
+      makeUser({
+        need_full_ssn: true,
+        has_outstanding_full_ssn_requirement: true,
+        individual_tax_id_is_last_four: false,
+      }),
+    );
 
     const input = screen.getByLabelText<HTMLInputElement>("Social Security Number");
     expect(input.disabled).toBe(true);
@@ -82,19 +89,44 @@ describe("AccountDetailsSection SSN field", () => {
   });
 
   it("renders the masked completed display when only last-4 is on file and the full SSN is not required", () => {
-    renderSection(makeUser({ need_full_ssn: false, individual_tax_id_is_last_four: true }));
+    renderSection(
+      makeUser({
+        need_full_ssn: false,
+        has_outstanding_full_ssn_requirement: false,
+        individual_tax_id_is_last_four: true,
+      }),
+    );
 
     const input = screen.getByLabelText<HTMLInputElement>("Last 4 digits of SSN");
     expect(input.disabled).toBe(true);
   });
 
   it("forces the full-SSN input open with an explanation when Stripe requires id_number but only last-4 is on file", () => {
-    renderSection(makeUser({ need_full_ssn: true, individual_tax_id_is_last_four: true }));
+    renderSection(
+      makeUser({
+        need_full_ssn: true,
+        has_outstanding_full_ssn_requirement: true,
+        individual_tax_id_is_last_four: true,
+      }),
+    );
 
     const input = screen.getByLabelText<HTMLInputElement>("Social Security Number");
     expect(input.disabled).toBe(false);
     expect(input.required).toBe(true);
     expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
     expect(screen.getByText(/payments provider now requires your full 9-digit Social Security Number/u)).toBeTruthy();
+  });
+  it("keeps the masked display when the full-SSN request was already satisfied another way (e.g. document upload)", () => {
+    renderSection(
+      makeUser({
+        need_full_ssn: true,
+        has_outstanding_full_ssn_requirement: false,
+        individual_tax_id_is_last_four: true,
+      }),
+    );
+
+    const input = screen.getByLabelText<HTMLInputElement>("Social Security Number");
+    expect(input.disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Change" })).toBeTruthy();
   });
 });

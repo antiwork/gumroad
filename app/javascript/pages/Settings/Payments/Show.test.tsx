@@ -58,6 +58,7 @@ const user = (overrides: Partial<User> = {}): User => ({
   individual_tax_id_entered: true,
   individual_tax_id_last_four: "6789",
   individual_tax_id_is_last_four: false,
+  has_outstanding_full_ssn_requirement: false,
   business_tax_id_entered: false,
   business_tax_id_last_four: null,
   requires_credit_card: false,
@@ -197,7 +198,11 @@ const typeSsn = (value: string) => {
 
 describe("full-SSN re-entry validation", () => {
   it("blocks saving when Stripe requires the full SSN and only last-4 is on file", () => {
-    renderPage({ need_full_ssn: true, individual_tax_id_is_last_four: true });
+    renderPage({
+      need_full_ssn: true,
+      has_outstanding_full_ssn_requirement: true,
+      individual_tax_id_is_last_four: true,
+    });
 
     save();
 
@@ -206,7 +211,11 @@ describe("full-SSN re-entry validation", () => {
   });
 
   it("blocks saving a fresh value with fewer than 9 digits into a full-SSN requirement", () => {
-    renderPage({ need_full_ssn: true, individual_tax_id_is_last_four: true });
+    renderPage({
+      need_full_ssn: true,
+      has_outstanding_full_ssn_requirement: true,
+      individual_tax_id_is_last_four: true,
+    });
 
     typeSsn("6789");
     save();
@@ -216,7 +225,11 @@ describe("full-SSN re-entry validation", () => {
   });
 
   it("saves when a full 9-digit SSN is re-entered", () => {
-    renderPage({ need_full_ssn: true, individual_tax_id_is_last_four: true });
+    renderPage({
+      need_full_ssn: true,
+      has_outstanding_full_ssn_requirement: true,
+      individual_tax_id_is_last_four: true,
+    });
 
     typeSsn("123-45-6789");
     save();
@@ -226,7 +239,11 @@ describe("full-SSN re-entry validation", () => {
   });
 
   it("saves without re-entry when the full SSN is already on file", () => {
-    renderPage({ need_full_ssn: true, individual_tax_id_is_last_four: false });
+    renderPage({
+      need_full_ssn: true,
+      has_outstanding_full_ssn_requirement: true,
+      individual_tax_id_is_last_four: false,
+    });
 
     save();
 
@@ -235,7 +252,23 @@ describe("full-SSN re-entry validation", () => {
   });
 
   it("saves without re-entry when only last-4 is on file but the full SSN is not required", () => {
-    renderPage({ need_full_ssn: false, individual_tax_id_is_last_four: true });
+    renderPage({
+      need_full_ssn: false,
+      has_outstanding_full_ssn_requirement: false,
+      individual_tax_id_is_last_four: true,
+    });
+
+    save();
+
+    expect(fullSsnError()).toBeNull();
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+  it("saves without re-entry when an old full-SSN request was satisfied another way (no outstanding requirement)", () => {
+    renderPage({
+      need_full_ssn: true,
+      has_outstanding_full_ssn_requirement: false,
+      individual_tax_id_is_last_four: true,
+    });
 
     save();
 
