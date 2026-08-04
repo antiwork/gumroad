@@ -444,6 +444,39 @@ describe SendPostBlastEmailsJob, :freeze_time do
         expect_sent_count 2
         expect($redis.exists?("#{checkpoint_key}:tmp")).to eq(false)
       end
+
+      it "skips a recipient already reserved in the sent-emails set instead of sending to them again" do
+        # Simulates a second worker admitted after the unique lock expired mid-slice: the
+        # dedupe set already holds the recipient because a still-running first worker
+        # reserved them before delivery, not after.
+        $redis.sadd(RedisKey.blast_sent_emails(blast.id), [delivered_sale.email])
+
+        described_class.new.perform(blast.id)
+
+        expect(PostSendgridApi.mails[delivered_sale.email]).to be_blank
+        expect(PostSendgridApi.mails[sent_sale.email]).to be_present
+      end
+
+      it "reserves a recipient before delivery, not after" do
+        reserved_during_send = nil
+        allow(PostSendgridApi).to receive(:process) do |recipients:, **_kwargs|
+          reserved_during_send = $redis.smembers(RedisKey.blast_sent_emails(blast.id))
+        end
+
+        described_class.new.perform(blast.id)
+
+        expect(reserved_during_send).to match_array([delivered_sale.email, sent_sale.email])
+      end
+
+      it "un-reserves a recipient when the provider send fails, so a retry can send to them" do
+        allow(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
+
+        expect do
+          described_class.new.perform(blast.id)
+        end.to raise_error(StandardError, "API failure")
+
+        expect($redis.smembers(RedisKey.blast_sent_emails(blast.id))).to be_empty
+      end
     end
   end
 

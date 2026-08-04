@@ -135,21 +135,30 @@ class SendPostBlastEmailsJob
     # The provider slice — not the mixed slice — is the retry unit. An ESP that has
     # already accepted its recipients must not be handed them again because a later
     # provider failed, so the cleanup below only rolls back the slice that raised.
+    #
+    # Dedup must land BEFORE delivery, not after: a second worker admitted once the
+    # unique lock expires (deploy kill mid-slice, an ESP call that outlasts the
+    # attempt deadline) reads whatever dedup state exists at ITS start, so recording
+    # "sent" only on success leaves every in-flight slice unprotected regardless of
+    # how tightly the deadline is checked. Reserving first — insert for the normal
+    # path, Redis SADD for non-openers — makes both paths safe under concurrent
+    # overlap the same way, not just under sequential retries.
     def send_provider_slice(provider:, members:, cache:)
-      members = store_recipients_as_sent(members)
+      members = @blast.to_non_openers? ? reserve_members_for_this_blast(members) : store_recipients_as_sent(members)
       recipients = prepare_recipients(members)
 
       begin
         deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
-        mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
       rescue Exception => e
-        # Delete the sent_post_emails records if there's an error with the provider send.
+        # Roll back the reservation if there's an error with the provider send.
         # We cannot use `transaction` here because it exceeds the lock timeout.
         # Rescuing Exception, not StandardError: a deploy's hard shutdown raises
         # Sidekiq::Shutdown (an Interrupt), and letting that skip the cleanup would leave
         # these recipients marked sent but never emailed — the retry filters them out as
         # already-emailed, so they are silently dropped from the blast.
-        unless @blast.to_non_openers?
+        if @blast.to_non_openers?
+          unreserve_members_for_this_blast(members)
+        else
           emails = members.map(&:email)
           SentPostEmail.where(post: @post, email: emails).delete_all
         end
@@ -332,15 +341,26 @@ class SendPostBlastEmailsJob
       @members.delete_if { already_sent_set.include?(_1.email) }
     end
 
-    def mark_members_sent_in_this_blast(members)
+    # Redis SADD's bulk return is a count, not which members were new, and we need
+    # to know exactly that: a member already reserved (retry re-running a slice, or
+    # a second worker racing an expired lock) must not be sent again. Per-member
+    # SADD in one pipeline gets the per-member added/not-added result cheaply —
+    # slices here are already bounded by the provider's max-recipients batch size.
+    def reserve_members_for_this_blast(members)
+      return members if members.empty?
+
+      key = RedisKey.blast_sent_emails(@blast.id)
+      added = $redis.pipelined { |pipe| members.each { pipe.sadd(key, _1.email) } }
+      $redis.expire(key, BLAST_DEDUPE_TTL.to_i)
+
+      members.select.with_index { |_, i| added[i] }
+    end
+
+    def unreserve_members_for_this_blast(members)
       emails = members.map(&:email)
       return if emails.empty?
 
-      key = RedisKey.blast_sent_emails(@blast.id)
-      $redis.pipelined do |pipe|
-        pipe.sadd(key, emails)
-        pipe.expire(key, BLAST_DEDUPE_TTL.to_i)
-      end
+      $redis.srem(RedisKey.blast_sent_emails(@blast.id), emails)
     end
 
     def enrich_with_gathered_records(members_with_specifics)
