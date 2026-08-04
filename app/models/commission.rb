@@ -47,6 +47,13 @@ class Commission < ApplicationRecord
     # completed/failed completion_purchase or raises. The charge itself runs inside the lock too
     # — commission completion is a rare, single-seller-initiated action, not a hot path, so
     # serializing it is the simplest correct fix.
+
+    # `ensure_completion`'s contract is to mark a failed charge attempt `failed` even as it
+    # raises — but a raise from inside `with_lock`'s transaction rolls that write back out
+    # along with everything else. Capture the error and re-raise once the transaction (and the
+    # failure write within it) has committed, instead of raising through the lock directly.
+    completion_error = nil
+
     with_lock do
       self.deposit_purchase = frozen_deposit_purchase
       return if is_completed?
@@ -86,17 +93,19 @@ class Commission < ApplicationRecord
         pending_completion.process!
 
         if pending_completion.errors.present?
-          raise ActiveRecord::RecordInvalid.new(pending_completion)
+          completion_error = ActiveRecord::RecordInvalid.new(pending_completion)
+        else
+          self.completion_purchase = pending_completion
+          unless pending_completion.pending_buyer_presentment_settlement?
+            pending_completion.update_balance_and_mark_successful!
+            self.status = STATUS_COMPLETED
+          end
+          save!
         end
-
-        self.completion_purchase = pending_completion
-        unless pending_completion.pending_buyer_presentment_settlement?
-          pending_completion.update_balance_and_mark_successful!
-          self.status = STATUS_COMPLETED
-        end
-        save!
       end
     end
+
+    raise completion_error if completion_error
   end
 
   def completion_price_cents
