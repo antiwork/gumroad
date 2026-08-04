@@ -79,7 +79,7 @@ describe Api::V2::WorkflowsController do
     it_behaves_like "authorized oauth v1 api method"
     it_behaves_like "authorized oauth v1 api method only for edit_emails scope"
 
-    it "returns ordered emails with delay and per-email stats" do
+    it "returns ordered emails with delay and caches per-email stats" do
       token = create_access_token("edit_emails")
       later_email = create(
         :workflow_installment,
@@ -128,6 +128,10 @@ describe Api::V2::WorkflowsController do
       open_events_collection = CreatorEmailOpenEvent.collection
       expect(CreatorEmailOpenEvent).to receive(:collection).once.and_return(open_events_collection)
       expect(CreatorEmailClickSummary).to receive(:in).once.and_call_original
+
+      get @action, params: @params.merge(access_token: token.token)
+      expect(Rails.cache.read(first_email.key_for_cache(:unique_open_count))).to eq(4)
+      expect(Rails.cache.read(first_email.key_for_cache(:unique_click_count))).to eq(2)
 
       get @action, params: @params.merge(access_token: token.token)
 

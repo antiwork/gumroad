@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Api::WorkflowPresenter
+  CACHE_FILL_EXPIRATION = 1.minute
+
   def initialize(workflow:, include_emails: false, emails_count: nil)
     @workflow = workflow
     @include_emails = include_emails
@@ -113,6 +115,10 @@ class Api::WorkflowPresenter
       return counts if missing_ids.empty?
 
       queried_counts = missing_ids.index_with(0).merge(yield(missing_ids))
+      queried_counts.each do |id, count|
+        # A refresh can race this fill, so request-filled values must expire even if the refresh reads an older value.
+        Rails.cache.write(keys_by_id.fetch(id), count, expires_in: CACHE_FILL_EXPIRATION, unless_exist: true)
+      end
       counts.merge(queried_counts)
     end
 
