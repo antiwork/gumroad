@@ -136,7 +136,7 @@ describe WishlistsController, type: :controller, inertia: true do
     describe "SEO meta tags" do
       before { request.host = URI.parse(user.subdomain_with_protocol).host }
 
-      let(:canonical_url) { wishlist_url(wishlist.url_slug, host: user.subdomain_with_protocol) }
+      let(:canonical_url) { Rails.application.routes.url_helpers.wishlist_url(wishlist.url_slug, host: user.subdomain_with_protocol) }
 
       def parsed_head
         Nokogiri::HTML.parse(response.body)
