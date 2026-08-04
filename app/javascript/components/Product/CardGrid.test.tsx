@@ -35,7 +35,7 @@ describe("CardGrid taxonomy attribute filters", () => {
 
     render(<CardGrid state={state} dispatchAction={dispatchAction} currencyCode="usd" />);
 
-    expect(screen.queryByText(/cross-taxonomy-value/i)).toBeNull();
+    expect(screen.queryByText(/cross-taxonomy-value/iu)).toBeNull();
     expect(lastAction).toEqual({
       type: "set-params",
       params: { taxonomy: "design/fonts", taxonomy_attribute_filters: undefined },
