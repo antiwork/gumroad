@@ -63,6 +63,32 @@ describe PaypalChargeProcessor, ".build_paypal_rejection" do
     expect(error.message).to eq("Failed PayPal create order: |nope")
   end
 
+  describe ".determine_capture_order_error" do
+    it "falls back to invalid-request instead of raising when UNPROCESSABLE_ENTITY has no details array" do
+      response = api_response(name: "UNPROCESSABLE_ENTITY")
+
+      error_class = nil
+      expect { error_class = described_class.determine_capture_order_error(response) }.not_to raise_error
+      expect(error_class).to eq(ChargeProcessorInvalidRequestError)
+    end
+
+    it "still maps a named capture rejection when details are present" do
+      response = api_response(name: "UNPROCESSABLE_ENTITY", details: [detail(issue: "TRANSACTION_REFUSED")])
+
+      expect(described_class.determine_capture_order_error(response)).to eq(ChargeProcessorPaymentDeclinedByPayerAccountError)
+    end
+  end
+
+  describe ".determine_refund_order_error" do
+    it "falls back to invalid-request instead of raising when UNPROCESSABLE_ENTITY has no details array" do
+      response = api_response(name: "UNPROCESSABLE_ENTITY")
+
+      error_class = nil
+      expect { error_class = described_class.new.send(:determine_refund_order_error, response) }.not_to raise_error
+      expect(error_class).to eq(ChargeProcessorInvalidRequestError)
+    end
+  end
+
   describe ".paypal_rejection_description" do
     it "returns the first detail's description" do
       response = api_response(name: "UNPROCESSABLE_ENTITY", details: [detail(description: "The requested action could not be performed.")])
