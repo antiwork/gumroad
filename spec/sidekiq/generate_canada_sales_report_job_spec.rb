@@ -362,4 +362,112 @@ describe GenerateCanadaSalesReportJob do
       expect(ids).not_to include(fully_refunded.external_id)    # zero clawback ⇒ no spurious all-zero row
     end
   end
+
+  describe "Canadian-candidate seller prefilter" do
+    let(:s3_bucket_double) do
+      s3_bucket_double = double
+      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
+      s3_bucket_double
+    end
+
+    before :context do
+      @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/canada-sales-prefilter-spec-#{SecureRandom.hex(18)}.csv")
+    end
+
+    before do
+      # The user factory assigns a random IP; pin GeoIP so a lucky Canadian resolution can't
+      # make these tests flaky. Tests that need a Canadian IP stub it per address.
+      allow(GeoIp).to receive(:lookup).and_return(nil)
+    end
+
+    let(:setup_time) { Time.find_zone("UTC").local(2022, 7, 1) }
+    let(:sale_time) { Time.find_zone("UTC").local(2022, 8, 10) }
+
+    def create_seller_with_compliance_country(country, state: nil)
+      travel_to(setup_time) do
+        create(:user).tap do |seller|
+          seller.fetch_or_build_user_compliance_info.dup_and_save! do |new_compliance_info|
+            new_compliance_info.country = country
+            new_compliance_info.state = state if state
+          end
+        end
+      end
+    end
+
+    def create_reportable_purchase(seller)
+      product = travel_to(setup_time) { create(:product, user: seller, price_cents: 100_00, native_type: "digital") }
+      travel_to(sale_time) do
+        create(:purchase, link: product, seller: seller, price_cents: 100_00, country: "Canada", state: "ON")
+      end
+    end
+
+    def perform_and_read(job = described_class.new)
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+
+      job.perform(8, 2022)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      CSV.read(temp_file)
+    ensure
+      temp_file&.close(true)
+    end
+
+    it "excludes a non-Canadian seller's purchase without scanning it or running per-purchase country lookups" do
+      spain_seller = create_seller_with_compliance_country("Spain")
+      excluded_purchase = create_reportable_purchase(spain_seller)
+
+      job = described_class.new
+      scanned_purchase_ids = []
+      allow(job).to receive(:determine_country_name_and_province_name).and_wrap_original do |original, purchase|
+        scanned_purchase_ids << purchase.id
+        original.call(purchase)
+      end
+
+      per_purchase_compliance_queries = 0
+      query_counter = lambda do |_name, _start, _finish, _id, payload|
+        per_purchase_compliance_queries += 1 if payload[:sql].to_s.match?(/user_compliance_info.*created_at </m)
+      end
+
+      payload = nil
+      ActiveSupport::Notifications.subscribed(query_counter, "sql.active_record") do
+        payload = perform_and_read(job)
+      end
+
+      expect(payload.length).to eq(1) # header only
+      expect(scanned_purchase_ids).not_to include(excluded_purchase.id)
+      expect(scanned_purchase_ids).to eq([])
+      expect(per_purchase_compliance_queries).to eq(0)
+    end
+
+    it "reports a seller whose only Canada signal is users.country" do
+      seller = travel_to(setup_time) { create(:user, country: "Canada", state: "BC") }
+      purchase = create_reportable_purchase(seller)
+
+      payload = perform_and_read
+
+      expect(payload.length).to eq(2)
+      expect(payload[1][1]).to eq(purchase.external_id)
+      expect(payload[1][5]).to eq("Canada")
+      expect(payload[1][6]).to eq("British Columbia")
+    end
+
+    it "reports a seller whose only Canada signal is GeoIP on the account creation IP" do
+      canadian_ip = "24.114.0.1"
+      seller = travel_to(setup_time) { create(:user, country: nil, account_created_ip: canadian_ip) }
+      allow(GeoIp).to receive(:lookup).with(canadian_ip).and_return(
+        GeoIp::Result.new(country_name: "Canada", country_code: "CA", region_name: "BC",
+                          city_name: nil, postal_code: nil, latitude: nil, longitude: nil)
+      )
+      purchase = create_reportable_purchase(seller)
+
+      payload = perform_and_read
+
+      expect(payload.length).to eq(2)
+      expect(payload[1][1]).to eq(purchase.external_id)
+      expect(payload[1][5]).to eq("Canada")
+      expect(payload[1][6]).to eq("British Columbia")
+    end
+  end
 end
