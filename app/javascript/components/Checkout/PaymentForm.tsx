@@ -676,6 +676,15 @@ const CreditCardContent = ({
 
   const [cardError, setCardError] = React.useState(false);
 
+  // A refused submit must put the buyer's focus on the invalid card, like every other invalid
+  // field. The error-focus effect walks the top document's `[aria-invalid=true]` controls,
+  // which reached the legacy CardElement through the helper input it rendered alongside its
+  // iframe — the Payment Element keeps every field inside the iframe, out of that walk's
+  // reach, so checkout has to ask the element to take focus itself.
+  const focusPaymentElement = React.useCallback(() => {
+    paymentElementRef.current?.elements.getElement("payment")?.focus();
+  }, []);
+
   // The in-flight elements.submit() started synchronously by the pay-button click for a wallet
   // payment (see walletClickSubmitRef above). Consumed (and cleared) by the tokenization
   // effects below so Stripe keeps Safari's user-activation window for the Apple Pay sheet.
@@ -872,6 +881,7 @@ const CreditCardContent = ({
         });
         if (tokenResult.status === "error") {
           setCardError(true);
+          focusPaymentElement();
           return dispatch({ type: "cancel" });
         }
         // A wallet paid through the Payment Element: adopt the wallet sheet's billing address as
@@ -987,6 +997,7 @@ const CreditCardContent = ({
         paymentMethod.cardParamsResult.cardParams.stripe_error.type === "validation_error"
       ) {
         setCardError(true);
+        focusPaymentElement();
         return dispatch({ type: "cancel" });
       }
       // A wallet paid through the Payment Element (server-confirm lane): adopt the wallet
