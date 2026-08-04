@@ -13,15 +13,27 @@ describe Onetime::BackfillQ22026TaxRemittances do
     hmrc = TaxRemittance.find_by!(authority: "HMRC", period: "2026-Q2")
     expect(hmrc.jurisdiction).to eq("GB")
     expect(hmrc.currency).to eq("GBP")
-    expect(hmrc.usd_amount_cents).to eq(24_456_761)
-    expect(hmrc.target_amount_cents).to eq(18_284_755)
     expect(hmrc.rail).to eq("wise")
     expect(hmrc.status).to eq("completed")
-    expect(hmrc.paid_at).to eq(Time.utc(2026, 7, 22))
     expect(hmrc.transfer_id).to be_nil # left open for the Phase 3 rail sync to enrich
 
-    oss = TaxRemittance.find_by!(jurisdiction: "EU_OSS", period: "2026-Q2")
-    expect(oss.usd_amount_cents).to eq(64_359_570)
+    # Every remittance's amounts and date, individually — a shared total or a
+    # single spot-checked row can stay green while any other row is wrong
+    # (gp#6990 review, nyomanjyotisa: all six passed with ATO's target wrong).
+    expected = {
+      "Irish Revenue (EU VAT OSS)" => [64_359_570, 56_393_915, Time.utc(2026, 7, 22)],
+      "HMRC" => [24_456_761, 18_284_755, Time.utc(2026, 7, 22)],
+      "Australian Taxation Office" => [7_614_969, 10_882_400, Time.utc(2026, 7, 22)],
+      "Norwegian Tax Administration" => [2_094_888, 20_207_900, Time.utc(2026, 7, 18)],
+      "Inland Revenue Department (NZ)" => [1_592_102, 2_737_221, Time.utc(2026, 7, 22)],
+      "IRAS Singapore" => [1_023_136, 1_314_679, Time.utc(2026, 7, 31)],
+    }
+    expected.each do |authority, (usd_cents, target_cents, paid_at)|
+      row = TaxRemittance.find_by!(authority:, period: "2026-Q2")
+      expect(row.usd_amount_cents).to eq(usd_cents), "#{authority}: usd_amount_cents"
+      expect(row.target_amount_cents).to eq(target_cents), "#{authority}: target_amount_cents"
+      expect(row.paid_at).to eq(paid_at), "#{authority}: paid_at"
+    end
 
     total = TaxRemittance.for_period("2026-Q2").sum(:usd_amount_cents)
     expect(total).to eq(101_141_426) # ~$1.01M across the six confirmed Q2 sends, matching the 2026-08-03 rail read
