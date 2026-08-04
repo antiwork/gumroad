@@ -290,6 +290,25 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d">Previous page))
         expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d?from=11"))
       end
+
+      it "stops emitting Next once the requested offset is past what Elasticsearch can serve" do
+        create_list(:product, DiscoverController::RECOMMENDED_PRODUCTS_COUNT + 20, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
+        Link.import(refresh: true, force: true)
+        stub_const("DiscoverController::INITIAL_PRODUCTS_COUNT", 1)
+        stub_const("Link::MAX_RESULT_WINDOW", 10)
+
+        # from=100 is well past MAX_RESULT_WINDOW (10); search_options clamps it to the same
+        # terminal ES offset as from=10, so both requests must serve identical results with no
+        # further Next link — otherwise a crawler can walk an unbounded chain of distinct URLs.
+        get :index, params: { taxonomy: "3d", from: "100" }
+        far_body = response.body
+
+        get :index, params: { taxonomy: "3d", from: "10" }
+        terminal_body = response.body
+
+        expect(far_body).not_to include("Next page")
+        expect(terminal_body).not_to include("Next page")
+      end
     end
 
     context "meta tags" do

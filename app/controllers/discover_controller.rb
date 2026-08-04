@@ -207,14 +207,22 @@ class DiscoverController < ApplicationController
     # page starts at result 1. A "Previous" landing at or before the canonical first page's
     # offset links the bare category URL instead of a `?from=` twin of it; the bare first
     # page itself gets no self-referencing "Previous" at all.
+    #
+    # Beyond MAX_RESULT_WINDOW, search_options clamps the ES `from` — so an unbounded
+    # requested `from` and the max clamped `from` return the same terminal slice.
+    # effective_offset mirrors that clamp so pagination always describes what search_results
+    # actually served, and Next stops once we're already at the terminal slice (an unbounded
+    # crawl would otherwise keep generating distinct URLs for the same final page forever).
     def pagination_links(search_results:)
       offset = [params[:from].to_i, 1].max
+      max_offset = Link::MAX_RESULT_WINDOW - INITIAL_PRODUCTS_COUNT + 1
+      effective_offset = [offset, max_offset].min
       first_page = request.query_parameters["from"].blank?
-      previous_from = offset - INITIAL_PRODUCTS_COUNT
+      previous_from = effective_offset - INITIAL_PRODUCTS_COUNT
       previous_from = nil if previous_from <= RECOMMENDED_PRODUCTS_COUNT + 1
       links = []
       links << { label: "Previous page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", { from: previous_from }.compact) } unless first_page
-      links << { label: "Next page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", from: offset + INITIAL_PRODUCTS_COUNT) } if search_results[:total].to_i >= offset + INITIAL_PRODUCTS_COUNT
+      links << { label: "Next page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", from: effective_offset + INITIAL_PRODUCTS_COUNT) } if effective_offset < max_offset && search_results[:total].to_i >= effective_offset + INITIAL_PRODUCTS_COUNT
       links
     end
 
