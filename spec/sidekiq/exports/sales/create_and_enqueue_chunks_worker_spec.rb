@@ -23,7 +23,7 @@ describe Exports::Sales::CreateAndEnqueueChunksWorker do
     expect(Exports::Sales::ProcessChunkWorker).to have_enqueued_sidekiq_job(@export.chunks.first.id)
     expect(Exports::Sales::ProcessChunkWorker).to have_enqueued_sidekiq_job(@export.chunks.second.id)
 
-    expect(Exports::Sales::CompileChunksWorker).not_to have_enqueued_sidekiq_job(@export.id)
+    expect(Exports::Sales::CompileChunksWorker.jobs.size).to eq(0)
   end
 
   context "when the query matches no purchases" do
