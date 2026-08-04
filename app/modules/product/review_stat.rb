@@ -47,9 +47,13 @@ module Product::ReviewStat
 
   def update_review_stat_via_rating_change(old_rating, new_rating)
     if product_review_stat.nil?
-      # Serialize only the first aggregate row creation. The locking lookup is a current read, so
-      # a callback transaction waiting here sees the row committed by the winner.
-      with_lock do
+      # Serialize only the first aggregate row creation. `with_lock` reloads `self`, and Rails
+      # refuses to reload a record carrying unpersisted changes (e.g. `content_updated_at` set by
+      # `save_files!` without a save) -- lock via the class instead so a caller's dirty instance
+      # is never touched. The locking lookup is a current read, so a callback transaction waiting
+      # here sees the row committed by the winner.
+      self.class.transaction do
+        self.class.lock.find(id)
         review_stat_association = association(:product_review_stat)
         review_stat_association.reset
         review_stat = ProductReviewStat.lock.find_by(link_id: id) || create_product_review_stat!
