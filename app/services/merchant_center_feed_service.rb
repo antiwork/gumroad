@@ -81,7 +81,7 @@ class MerchantCenterFeedService
       builder.item do
         builder.tag!("g:id", product.external_id)
         builder.tag!("g:title", product.name)
-        builder.tag!("g:description", product.plaintext_description.truncate(MAX_DESCRIPTION_LENGTH))
+        builder.tag!("g:description", feed_description(product))
         builder.tag!("g:link", product.long_url)
         builder.tag!("g:image_link", product.social_share_image)
         builder.tag!("g:price", formatted_price(product))
@@ -89,6 +89,13 @@ class MerchantCenterFeedService
         builder.tag!("g:brand", product.user.name_or_username)
         builder.tag!("g:condition", "new")
       end
+    end
+
+    # plaintext_description strips tags but leaves HTML entities encoded ("Fish &amp;
+    # Chips"); decode them so Builder's XML escaping is the only encoding layer —
+    # otherwise Google renders the literal "&amp;".
+    def feed_description(product)
+      CGI.unescapeHTML(product.plaintext_description).truncate(MAX_DESCRIPTION_LENGTH)
     end
 
     def formatted_price(product)

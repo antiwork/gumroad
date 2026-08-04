@@ -51,6 +51,12 @@ describe MerchantCenterFeedService do
       expect(g_field(items(xml).first, "title")).to eq "Bells & <Whistles>"
     end
 
+    it "decodes HTML entities in descriptions so the feed carries plain text" do
+      create_eligible_product(description: "<p>Fish &amp; Chips — 100% café</p>")
+
+      expect(g_field(items(service.generate).first, "description")).to eq "Fish & Chips — 100% café"
+    end
+
     it "excludes products that are not recommendable for Discover" do
       not_recommendable = create(:product, price_cents: 999)
       create(:asset_preview, link: not_recommendable)
