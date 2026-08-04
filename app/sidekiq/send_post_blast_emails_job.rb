@@ -3,7 +3,12 @@
 class SendPostBlastEmailsJob
   include Sidekiq::Job
   include ActionView::Helpers::SanitizeHelper
-  sidekiq_options retry: 10, queue: :default, lock: :until_executed
+  # `lock_ttl` bounds the `until_executed` digest: a hard-killed worker (OOM, deploy reap) skips the
+  # release, and a held digest silently drops every later `perform_async(blast_id)` — no exception,
+  # no dead entry — which turns "re-enqueue the stalled blast" into a no-op (gumroad-private#1816).
+  # 24h covers the full 10-retry schedule (~1 day) plus a worst-case attempt; duplicate delivery
+  # past an expired lock is already handled, since `SentPostEmail` dedupes recipients on every run.
+  sidekiq_options retry: 10, queue: :default, lock: :until_executed, lock_ttl: 24.hours.to_i
 
   def perform(blast_id)
     @blast = PostEmailBlast.find(blast_id)
