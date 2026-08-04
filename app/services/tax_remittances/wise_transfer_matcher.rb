@@ -56,6 +56,8 @@ class TaxRemittances::WiseTransferMatcher
   # written via an audited update. When false, this only reports what WOULD
   # match — used for a dry-run report before anything is written.
   def process(transfers, enrich: true)
+    # JSON.parse gives String keys; the matcher reads Symbols throughout.
+    transfers = transfers.map { |t| t.to_h.symbolize_keys }
     @matched = []
     @ambiguous = []
     @unmatched = []

@@ -96,6 +96,18 @@ describe TaxRemittances::WiseTransferMatcher do
     expect(hmrc.reload.transfer_id).to be_nil
   end
 
+  it "matches transfers parsed from JSON with String keys (the shape a live GET /v1/transfers read produces)" do
+    hmrc = create(:tax_remittance, :completed, currency: "GBP", period: "2026-Q2",
+                                               target_amount_cents: 18_284_755, paid_at: Time.utc(2026, 7, 22),
+                                               transfer_id: nil)
+    string_keyed = JSON.parse(hmrc_transfer.to_json)
+
+    result = described_class.new("2026-Q2").process([string_keyed])
+
+    expect(result.matched.size).to eq(1)
+    expect(hmrc.reload.transfer_id).to eq("900001")
+  end
+
   it "rejects a transfer outside the date window" do
     create(:tax_remittance, :completed, currency: "GBP", period: "2026-Q2",
                                         target_amount_cents: 18_284_755, paid_at: Time.utc(2026, 7, 1),
