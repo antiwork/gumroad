@@ -30,8 +30,8 @@ class SaveContentUpsellsService
   end
 
   def from_rich_content
-    old_upsell_ids = old_content&.filter_map { |node| node["type"] == "upsellCard" ? node.dig("attrs", "id") : nil } || []
-    new_upsell_nodes = content&.select { |node| node["type"] == "upsellCard" } || []
+    old_upsell_ids = collect_upsell_nodes(old_content).filter_map { |node| node.dig("attrs", "id") }
+    new_upsell_nodes = collect_upsell_nodes(content)
     new_upsell_ids = new_upsell_nodes.map { |node| node.dig("attrs", "id") }.compact
 
     delete_removed_upsells!(old_upsell_ids - new_upsell_ids)
@@ -50,6 +50,19 @@ class SaveContentUpsellsService
 
   private
     attr_reader :seller, :content, :old_content, :error
+
+    # Rich-content nodes nest arbitrarily (e.g. an upsellCard inside a blockquote), so a
+    # top-level-only scan misses those cards and never mints or retires their Upsell rows.
+    # Nodes arrive as plain Hashes from specs/services but as ActionController::Parameters
+    # from controller request params (e.g. links_controller, SellerProfileSections::SaveService) —
+    # Parameters is not a Hash subclass, so both must be accepted or the scan silently sees nothing.
+    def collect_upsell_nodes(nodes)
+      Array(nodes).flat_map do |node|
+        next [] unless node.is_a?(Hash) || node.is_a?(ActionController::Parameters)
+        nested = collect_upsell_nodes(node["content"])
+        node["type"] == "upsellCard" ? [node, *nested] : nested
+      end
+    end
 
     def delete_removed_upsells!(upsell_ids)
       upsell_ids.each do |upsell_id|

@@ -253,6 +253,64 @@ describe DiscoverController, type: :controller, inertia: true do
       end
     end
 
+    context "server-rendered crawl links" do
+      render_views
+
+      it "renders top-level category links in the initial HTML of /discover" do
+        get :index
+
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d"))
+      end
+
+      it "renders subcategory links and pagination hrefs on category pages" do
+        # The canonical (no `from` param) request has params[:from] mutated to
+        # RECOMMENDED_PRODUCTS_COUNT + 1 to skip the recommendations-strip products, so the
+        # real ES offset is 9 — seed past that plus INITIAL_PRODUCTS_COUNT for a genuine next page.
+        create_list(:product, DiscoverController::RECOMMENDED_PRODUCTS_COUNT + 3, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
+        Link.import(refresh: true, force: true)
+        stub_const("DiscoverController::INITIAL_PRODUCTS_COUNT", 1)
+
+        get :index, params: { taxonomy: "3d" }
+
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d/3d-assets"))
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d?from=10"))
+        expect(response.body).not_to include("Previous page")
+      end
+
+      it "links Previous back to the bare category page when the previous page is the first" do
+        create_list(:product, DiscoverController::RECOMMENDED_PRODUCTS_COUNT + 4, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
+        Link.import(refresh: true, force: true)
+        stub_const("DiscoverController::INITIAL_PRODUCTS_COUNT", 1)
+
+        # The bare page serves offset 9 (from mutated to RECOMMENDED_PRODUCTS_COUNT + 1) and
+        # links Next to from=10, so from=10 must continue from there without overlap.
+        get :index, params: { taxonomy: "3d", from: "10" }
+
+        expect(response.body).to include(%(>Previous page</a>))
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d">Previous page))
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d?from=11"))
+      end
+
+      it "stops emitting Next once the requested offset is past what Elasticsearch can serve" do
+        create_list(:product, DiscoverController::RECOMMENDED_PRODUCTS_COUNT + 20, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
+        Link.import(refresh: true, force: true)
+        stub_const("DiscoverController::INITIAL_PRODUCTS_COUNT", 1)
+        stub_const("Link::MAX_RESULT_WINDOW", 10)
+
+        # from=100 is well past MAX_RESULT_WINDOW (10); search_options clamps it to the same
+        # terminal ES offset as from=10, so both requests must serve identical results with no
+        # further Next link — otherwise a crawler can walk an unbounded chain of distinct URLs.
+        get :index, params: { taxonomy: "3d", from: "100" }
+        far_body = response.body
+
+        get :index, params: { taxonomy: "3d", from: "10" }
+        terminal_body = response.body
+
+        expect(far_body).not_to include("Next page")
+        expect(terminal_body).not_to include("Next page")
+      end
+    end
+
     context "meta tags" do
       let(:default_description) { "Browse over 1.6 million free and premium digital products in education, tech, design, and more categories from Gumroad creators and online entrepreneurs." }
 
@@ -278,10 +336,43 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["canonical"][:href]).to eq("#{discover_domain_with_protocol}/?query=tests")
       end
 
-      it "sets the proper title when only taxonomy is present" do
+      it "sets the SEO title and description when only taxonomy is present" do
         get :index, params: { taxonomy: "software-development/programming/c-sharp" }
 
-        expect(meta_tags["title"][:inner_content]).to eq("Software Development » Programming » C# | Gumroad")
+        expect(meta_tags["title"][:inner_content]).to eq("Software Development » Programming » C# — digital products by independent creators | Gumroad")
+        expect(meta_tags["meta-name-description"][:content]).to include("C# products from independent creators on Gumroad")
+      end
+
+      it "renders BreadcrumbList and ItemList JSON-LD for category pages" do
+        # index skips the first RECOMMENDED_PRODUCTS_COUNT results (shown via the
+        # recommendations strip), so seed past that for a non-empty ItemList.
+        create_list(:product, DiscoverController::RECOMMENDED_PRODUCTS_COUNT + 2, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
+        Link.import(refresh: true, force: true)
+
+        get :index, params: { taxonomy: "3d" }
+
+        breadcrumbs = meta_tags["breadcrumb-list-json-ld"][:inner_content]
+        expect(breadcrumbs["@type"]).to eq("BreadcrumbList")
+        expect(breadcrumbs["itemListElement"].first).to include(
+          "position" => 1,
+          "name" => "Discover",
+        )
+        expect(breadcrumbs["itemListElement"].last["item"]).to eq("#{discover_domain_with_protocol}/3d")
+
+        item_list = meta_tags["item-list-json-ld"][:inner_content]
+        expect(item_list["@type"]).to eq("ItemList")
+        product_item = item_list["itemListElement"].first["item"]
+        expect(product_item["@type"]).to eq("Product")
+        expect(product_item["name"]).to be_present
+        expect(product_item["url"]).to be_present
+        expect(product_item["offers"]).to include("@type" => "Offer", "priceCurrency" => "USD")
+      end
+
+      it "does not render category JSON-LD when a query or tags are present" do
+        get :index, params: { taxonomy: "3d", query: "dragons" }
+
+        expect(meta_tags["breadcrumb-list-json-ld"]).to be_nil
+        expect(meta_tags["item-list-json-ld"]).to be_nil
       end
 
       it "sets the proper title when tags and taxonomy are present" do

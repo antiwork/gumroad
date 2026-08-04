@@ -57,9 +57,12 @@ export const discoverTitleGenerator = (params: SearchRequest, taxonomies: Taxono
   const searchOrTagsTitle = params.query
     ? `Search results for “${params.query}”`
     : params.tags?.map((t) => t.trim().replace(/[-\s]+/gu, " ")).join(", ");
-  const taxonomyTitle = params.taxonomy
+  let taxonomyTitle = params.taxonomy
     ?.split("/")
     .map((slug) => taxonomies.find((t) => t.slug === slug)?.label ?? slug)
     .join(" » ");
+  // Taxonomy-only pages are server-rendered with this SEO suffix (Discover::CategoryPagePresenter#title);
+  // client-side navigation must produce the same title or it flips on every Inertia visit.
+  if (taxonomyTitle && !searchOrTagsTitle) taxonomyTitle += " — digital products by independent creators";
   return [searchOrTagsTitle, taxonomyTitle, "Gumroad"].filter((s) => s).join(" | ");
 };

@@ -46,13 +46,18 @@ module Product::ReviewStat
   end
 
   def update_review_stat_via_rating_change(old_rating, new_rating)
-    create_product_review_stat if product_review_stat.nil?
-    if old_rating.nil?
-      product_review_stat.update_with_added_rating(new_rating)
-    elsif new_rating.nil?
-      product_review_stat.update_with_removed_rating(old_rating)
+    if product_review_stat.nil?
+      # Serialize only the first aggregate row creation. The locking lookup is a current read, so
+      # a callback transaction waiting here sees the row committed by the winner.
+      with_lock do
+        review_stat_association = association(:product_review_stat)
+        review_stat_association.reset
+        review_stat = ProductReviewStat.lock.find_by(link_id: id) || create_product_review_stat!
+        review_stat_association.target = review_stat
+        apply_rating_change_to_review_stat(review_stat, old_rating, new_rating)
+      end
     else
-      product_review_stat.update_with_changed_rating(old_rating, new_rating)
+      apply_rating_change_to_review_stat(product_review_stat, old_rating, new_rating)
     end
     enqueue_index_update_for_reviews
   end
@@ -110,6 +115,16 @@ module Product::ReviewStat
   # /Admin methods.
 
   private
+    def apply_rating_change_to_review_stat(review_stat, old_rating, new_rating)
+      if old_rating.nil?
+        review_stat.update_with_added_rating(new_rating)
+      elsif new_rating.nil?
+        review_stat.update_with_removed_rating(old_rating)
+      else
+        review_stat.update_with_changed_rating(old_rating, new_rating)
+      end
+    end
+
     def review_stat_proxy
       product_review_stat || ProductReviewStat::TEMPLATE
     end

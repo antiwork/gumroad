@@ -18,5 +18,9 @@ class RefreshSitemapMonthlyWorker
     product_created_months.each_with_index do |month, index|
       RefreshSitemapDailyWorker.perform_in((30 * index).minutes, month.to_s)
     end
+
+    # After the product enqueue loop: retry is 0, so a category failure must not
+    # cost the product sitemaps their refresh.
+    SitemapService.new.generate_categories
   end
 end
