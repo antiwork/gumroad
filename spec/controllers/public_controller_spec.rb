@@ -140,6 +140,15 @@ describe PublicController, type: :controller, inertia: true do
       expect(response.parsed_body["success"]).to be(true)
     end
 
+    it "matches by a pasted product URL" do
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with([wanted_purchase.id]).and_return(mail_double)
+      get :license_key_lookup_data, params: { email:, product_query: wanted_product.long_url }
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
     it "falls back to all purchases, rather than reporting false, when the query matches none of the buyer's purchases" do
       # A non-matching query must respond identically to a matching one — otherwise an
       # unauthenticated caller who knows the email learns whether it bought a given product.

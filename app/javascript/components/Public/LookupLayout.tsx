@@ -138,11 +138,11 @@ const LookupLayout = ({ children, title, type }: {
             </Fieldset>
             {type === "licenseKey" && (
               <Fieldset>
-                <Label htmlFor="product_query">Which product? (optional)</Label>
+                <Label htmlFor="product_query">Which product? (optional, name/permalink/URL)</Label>
                 <Input
                   id="product_query"
                   type="text"
-                  placeholder="Product name"
+                  placeholder="Product name, permalink, or URL"
                   value={productQuery}
                   onChange={(evt) => setProductQuery(evt.target.value)}
                 />
