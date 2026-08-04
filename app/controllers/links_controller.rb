@@ -804,8 +804,11 @@ class LinksController < ApplicationController
       value = value.to_s
       return if value.length > PWYW_PRICE_MAX_LENGTH || !value.match?(PWYW_PRICE_PATTERN)
 
+      decimal_value = BigDecimal(value)
+      return if decimal_value.negative?
+
       scaling_factor = @product.single_unit_currency? ? 1 : 100
-      price_cents = (BigDecimal(value) * scaling_factor).round
+      price_cents = (decimal_value * scaling_factor).round
       price_cents if price_cents.in?(0..BasePrice::Shared::MAX_PRICE_CENTS)
     end
 

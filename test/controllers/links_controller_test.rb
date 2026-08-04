@@ -5150,7 +5150,7 @@ class LinksControllerShowTest < ActionController::TestCase
   test "GET show safely rejects non-decimal and out-of-range PWYW prefills" do
     product = create_product(user: @user, customizable_price: true, price_cents: 0)
 
-    ["not-a-price", "Infinity", "NaN", "1e1000000", "9" * 65].each do |price|
+    ["not-a-price", "Infinity", "NaN", "1e1000000", "9" * 65, "-0.001", "-1"].each do |price|
       get :show, params: { id: product.to_param, wanted: "true", price: }
 
       assert_response :success, "Expected #{price.inspect} to render the product page"
