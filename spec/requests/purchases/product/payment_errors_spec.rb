@@ -12,9 +12,7 @@ describe("Purchase from a product page", type: :system, js: true) do
   # alternatives fill_in_stripe_field does.
   def expect_focused_payment_element_field(labels)
     within_payment_element_frame do
-      field = labels.lazy.filter_map { |label| first(:fillable_field, label, visible: false, wait: 0) }.first
-      field ||= first(:fillable_field, labels.first, visible: false)
-      expect_focused field
+      expect_focused find_stripe_field(labels)
     end
   end
 

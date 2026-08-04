@@ -62,58 +62,35 @@ describe "Checkout with Payment Request API", :js, type: :system do
           return pr;
         }
 
-        // Build a fake Stripe instance that wraps the real one when available,
-        // but patches paymentRequest to return our fake.
-        function makeFakeStripe(publicKey, opts) {
-          const self = {
-            paymentRequest: makeFakePaymentRequest,
-            elements: function(opts) {
-              // Minimal Elements stub sufficient for the payment form to render.
-              return {
-                create: function(type, opts) {
-                  const el = {
-                    _type: type,
-                    mount: function() {},
-                    unmount: function() {},
-                    destroy: function() {},
-                    on: function() {},
-                    off: function() {},
-                    update: function() {},
-                    focus: function() {},
-                    blur: function() {},
-                    clear: function() {}
-                  };
-                  return el;
-                },
-                update: function() {},
-                getElement: function() { return null; },
-                fetchUpdates: function() { return Promise.resolve({}); }
-              };
-            },
-            confirmCardPayment: function() {
-              return Promise.resolve({ paymentIntent: { status: 'succeeded' } });
-            },
-            confirmPayment: function() {
-              return Promise.resolve({ paymentIntent: { status: 'succeeded' } });
-            },
-            createToken: function() {
-              return Promise.resolve({ token: { id: 'tok_test_mock' } });
-            },
-            createPaymentMethod: function() {
-              return Promise.resolve({ paymentMethod: { id: 'pm_test_mock' } });
-            },
-            retrievePaymentIntent: function() {
-              return Promise.resolve({ paymentIntent: null });
-            },
-            handleCardAction: function() {
-              return Promise.resolve({ paymentIntent: { status: 'succeeded' } });
-            }
+        // Wrap the REAL Stripe factory, patching only paymentRequest. A full replacement
+        // (the previous approach) breaks the Payment Element: @stripe/stripe-js's loadStripe
+        // short-circuits onto a pre-existing window.Stripe without ever loading js.stripe.com,
+        // and a stubbed elements() renders an empty element — the "Card information" fieldset
+        // then has zero height and every visibility assertion on it fails.
+        function wrapStripeFactory(realFactory) {
+          const wrapped = function(publicKey, opts) {
+            const instance = realFactory(publicKey, opts);
+            instance.paymentRequest = makeFakePaymentRequest;
+            return instance;
           };
-          return self;
+          for (const key in realFactory) {
+            try { wrapped[key] = realFactory[key]; } catch (e) {}
+          }
+          return wrapped;
         }
 
-        // Override window.Stripe with our mock factory (before stripe.js loads).
-        window.Stripe = makeFakeStripe;
+        if (window.Stripe) {
+          window.Stripe = wrapStripeFactory(window.Stripe);
+        } else {
+          // Keep window.Stripe undefined until js.stripe.com assigns the real factory, so
+          // loadStripe still injects the script; wrap the factory the moment it lands.
+          let stored;
+          Object.defineProperty(window, 'Stripe', {
+            configurable: true,
+            get: function() { return stored; },
+            set: function(realFactory) { stored = wrapStripeFactory(realFactory); }
+          });
+        }
       })();
     JS
 

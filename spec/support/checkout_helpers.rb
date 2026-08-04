@@ -233,12 +233,23 @@ def within_payment_element_frame(&block)
   within_frame(stripe_frame, &block)
 end
 
-def fill_in_stripe_field(labels, with:)
-  field = labels.lazy.filter_map { |label| first(:fillable_field, label, visible: false, wait: 0) }.first
-  field ||= first(:fillable_field, labels.first, visible: false)
-  raise Capybara::ElementNotFound, "Unable to find Stripe field matching #{labels.join(', ')}" if field.nil?
+# Stripe varies the element's field labels across layouts (plain card form vs Link-optimized,
+# e.g. "Expiration date" vs "Expiration (MM/YY)"), so the finder probes label aliases.
+# `minimum: 0` is what makes a non-matching alias return nil instead of raising — without it
+# `first` raises on the first alias and the others are never tried. The synchronize block
+# retries the whole alias sweep for the default wait, since the element re-renders its form
+# (and swaps labels) when Link reacts to the buyer's email.
+def find_stripe_field(labels)
+  page.document.synchronize do
+    field = labels.lazy.filter_map { |label| first(:fillable_field, label, visible: false, wait: 0, minimum: 0) }.first
+    raise Capybara::ElementNotFound, "Unable to find Stripe field matching #{labels.join(', ')}" if field.nil?
 
-  field.fill_in(with:)
+    field
+  end
+end
+
+def fill_in_stripe_field(labels, with:)
+  find_stripe_field(labels).fill_in(with:)
 end
 
 SCA_CHALLENGE_IFRAME = "iframe[src^='https://js.stripe.com/v3/three-ds-2-challenge']"
