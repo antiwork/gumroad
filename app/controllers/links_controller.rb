@@ -510,7 +510,15 @@ class LinksController < ApplicationController
         @product.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
         @product.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
         @product.save_custom_attributes((product_permitted_params[:custom_attributes] || []).filter { _1[:name].present? || _1[:description].present? })
-        @product.save_taxonomy_attribute_values(product_permitted_params[:taxonomy_attribute_values]) unless product_permitted_params[:taxonomy_attribute_values].nil?
+        # A taxonomy switch invalidates the prior taxonomy's attribute values even when the
+        # request is category-only and omits taxonomy_attribute_values entirely (e.g. older
+        # clients, the API). Re-run the save so values are normalized against the new taxonomy.
+        # `taxonomy_id_changed?` alone would miss this: the save_custom_* calls above already
+        # persisted the assigned taxonomy_id, so dirty tracking has cleared by the time we get
+        # here — saved_change_to_taxonomy_id? reads the change from that just-committed save.
+        if !product_permitted_params[:taxonomy_attribute_values].nil? || @product.taxonomy_id_changed? || @product.saved_change_to_taxonomy_id?
+          @product.save_taxonomy_attribute_values(product_permitted_params[:taxonomy_attribute_values])
+        end
         @product.save_tags!(product_permitted_params[:tags] || [])
         @product.reorder_previews((product_permitted_params[:covers] || []).map.with_index.to_h)
         if !current_seller.account_level_refund_policy_enabled?
