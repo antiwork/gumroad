@@ -117,10 +117,23 @@ describe AlertOnNegativeDestinationBalancesJob do
 
   it "does not treat a seller as payable on a post-cutoff USD credit the payout run cannot see yet" do
     residue_row(-728_50)
-    make_payable(50_00) # below minimum through the cutoff
+    make_payable(5_00) # below the $10 default minimum through the cutoff
     create(:balance, user: seller, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
                      date: User::PayoutSchedule.next_scheduled_payout_end_date + 1,
                      amount_cents: 500_00, holding_amount_cents: 500_00)
+    seller.reload
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include(seller.email)
+      expect(message).to include("[post-cutoff — instant payout paths only until the cycle rolls]")
+    end
+  end
+
+  it "stays silent when the seller is under minimum on both the cycle window and the whole ledger" do
+    residue_row(-728_50)
+    make_payable(5_00) # below the $10 default minimum on either window — no post-cutoff credit at all
     seller.reload
 
     described_class.new.perform

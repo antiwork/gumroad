@@ -54,35 +54,20 @@ class AlertOnNegativeDestinationBalancesJob
         # balances regardless of their merchant account's liveness, so residue parked on a RETIRED
         # account still fails the real payout. The report line says which.
         full_set = Balance.unpaid.where(user_id:, merchant_account_id:)
-        set, set_total, in_cycle = tripped_window(full_set)
-        next if set.nil?
-
-        # A cycle-window trip can sit on top of further post-cutoff residue; carry the whole-ledger
-        # total when it is worse, so the line and the ranking reflect the full repair size rather
-        # than just this cycle's slice. When post-cutoff credits make the whole ledger better, the
-        # cycle total stays the honest figure — that credit is not available to the tripping run.
-        full_total = in_cycle ? [full_set.sum(:holding_amount_cents), set_total].min : set_total
-
         user = User.find_by(id: user_id)
         next if user.nil? || user.suspended?
 
-        # Read payability on the same window that tripped, so the two numbers on a report line are
-        # on one scope: the weekly run pays up to the cutoff, the instant paths read the full ledger.
-        unpaid_usd_cents = in_cycle ? user.unpaid_balance_cents_up_to_date(payout_cutoff_date) : user.unpaid_balance_cents
-
-        if unpaid_usd_cents >= user.minimum_payout_amount_cents
-          payable << {
-            user:,
-            merchant_account:,
-            set_total:,
-            full_total:,
-            row_count: set.count,
-            retired: !merchant_account.alive?,
-            unpaid_usd_cents:,
-            post_cutoff: !in_cycle,
-          }
+        # Judge EACH window's payability, not just whichever trips first — a seller can be below
+        # minimum at the cutoff (cycle window not payable) while a post-cutoff credit clears their
+        # minimum on the whole ledger, which the instant payout paths read and will still trip on.
+        # Preferring a payable cycle-window hit keeps the weekly-run framing when it applies; only
+        # falling through to the whole ledger when the cycle window isn't payable is what stops that
+        # fallthrough from hiding an instant-payable failure behind a not-yet-payable cycle slice.
+        entry = resolve_entry(full_set, user, merchant_account)
+        if entry
+          payable << entry
         else
-          not_payable += 1
+          not_payable += 1 if tripped_window(full_set)
         end
       end
 
@@ -150,6 +135,46 @@ class AlertOnNegativeDestinationBalancesJob
         next if set.sum(:amount_cents).negative?
 
         return [set, set_total, in_cycle]
+      end
+      nil
+    end
+
+    # Builds the report entry for a candidate, or nil when neither tripped window is payable.
+    #
+    # Tries the cycle window first (the weekly run's own scope) and only falls through to the whole
+    # ledger when the cycle window isn't payable — a cycle-not-payable seller can still be payable on
+    # the whole ledger via a post-cutoff credit, and the instant payout paths read that full ledger,
+    # so skipping the fallthrough would hide exactly the failure this job exists to catch.
+    def resolve_entry(full_set, user, merchant_account)
+      windows = [
+        [full_set.where("date <= ?", payout_cutoff_date), true],
+        [full_set, false],
+      ]
+
+      windows.each do |set, in_cycle|
+        set_total = set.sum(:holding_amount_cents)
+        next unless set_total.negative?
+        next if set.sum(:amount_cents).negative?
+
+        unpaid_usd_cents = in_cycle ? user.unpaid_balance_cents_up_to_date(payout_cutoff_date) : user.unpaid_balance_cents
+        next if unpaid_usd_cents < user.minimum_payout_amount_cents
+
+        # A cycle-window trip can sit on top of further post-cutoff residue; carry the whole-ledger
+        # total when it is worse, so the line and the ranking reflect the full repair size rather
+        # than just this cycle's slice. When post-cutoff credits make the whole ledger better, the
+        # cycle total stays the honest figure — that credit is not available to the tripping run.
+        full_total = in_cycle ? [full_set.sum(:holding_amount_cents), set_total].min : set_total
+
+        return {
+          user:,
+          merchant_account:,
+          set_total:,
+          full_total:,
+          row_count: set.count,
+          retired: !merchant_account.alive?,
+          unpaid_usd_cents:,
+          post_cutoff: !in_cycle,
+        }
       end
       nil
     end
