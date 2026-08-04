@@ -11,7 +11,8 @@ HEAD: eaf2a880eda3845bf60566471ff34faef1647fd3
 --- Two receipt sends; earliest OPEN and earliest DELIVERY come from DIFFERENT sends ---
   send #1: delivered 2024-05-07 03:00 UTC, opened 2024-05-07 04:00 UTC
   send #2 (5 days later): delivered +5d 02:00 UTC, but its OWN open is 2024-05-07 01:00 UTC
-                          (earlier than send #1's delivery, and earlier than send #1's sent_at)
+                          (earlier than send #1's delivery at 03:00 UTC, and unattributable to
+                          send #2 at all — its send wasn't even sent_at yet)
 
 --- Evidence text produced ---
 The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at
