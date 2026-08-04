@@ -480,6 +480,8 @@ jobs:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
     runs-on: ubicloud-standard-4
     needs: build
+    # Full suite is a main-only deploy gate; branches run test_relevant.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
       fail-fast: true
       matrix:
@@ -611,6 +613,8 @@ jobs:
       WEB_REPO: gumroadteam/web
     runs-on: ubicloud-standard-4
     needs: build
+    # Full suite is a main-only deploy gate; branches run test_relevant.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
       matrix:
@@ -795,6 +799,133 @@ jobs:
           name: flaky-specs-slow-${{ matrix.ci_node_index }}-attempt-${{ github.run_attempt }}
           path: ./test-logs/flaky_specs.log
           retention-days: 14
+          if-no-files-found: ignore
+      - name: Clean up
+        if: always()
+        run: |
+          docker compose -f docker/docker-compose-test-and-ci.yml down -v 2>/dev/null || true
+          docker rm -f $(docker ps -aq -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
+          docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
+
+  test_relevant:
+    name: Test Relevant${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
+    env:
+      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_relevant
+      WEB_REPO: gumroadteam/web
+    runs-on: ubicloud-standard-4
+    needs: build
+    # Branch-only counterpart of test_fast/test_slow: runs the specs mapped
+    # from the diff (bin/branch-specs) plus the money-path smoke set, instead
+    # of the whole suite. Main still runs everything before a deploy.
+    if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository) }}
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          # bin/branch-specs diffs against origin/main, so the base has to be
+          # in the clone.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compute relevant specs
+        id: specs
+        run: |
+          git fetch --no-tags --quiet origin main
+          SPECS=$(ruby bin/branch-specs)
+          COUNT=$(echo "$SPECS" | grep -c . || true)
+          # Bare rspec runs the WHOLE suite; an empty list must fail loudly
+          # instead. The smoke set makes this unreachable unless those specs
+          # are deleted.
+          if [ "$COUNT" -eq 0 ]; then
+            echo "bin/branch-specs returned no specs — refusing to run bare rspec"
+            exit 1
+          fi
+          echo "Running $COUNT spec file(s):"
+          echo "$SPECS" | sed 's/^/  /'
+          # Single line for the docker run below.
+          echo "files=$(echo "$SPECS" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+      - name: Login to Docker Hub
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 120
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Start services and pull test image
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            docker pull --quiet $WEB_REPO:${{ needs.build.outputs.test_image_tag }} &
+            PULL_PID=$!
+            docker compose -f docker/docker-compose-test-and-ci.yml up -d
+            COMPOSE_EXIT=$?
+            wait $PULL_PID
+            PULL_EXIT=$?
+            exit $((COMPOSE_EXIT + PULL_EXIT))
+        env:
+          COMPOSE_HTTP_TIMEOUT: "300"
+      - name: Wait for services and prepare test database
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            IMG=$WEB_REPO:${{ needs.build.outputs.test_image_tag }}
+            NET=${{ env.COMPOSE_PROJECT_NAME }}_default
+            (
+              docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh db_test 3306 \
+                && docker/ci/restore_test_db.sh $NET $IMG
+            ) &
+            DB_PID=$!
+            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh elasticsearch 9200 &
+            ES_PID=$!
+            docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh minio 9000 &
+            MINIO_PID=$!
+            wait $DB_PID || exit 1
+            wait $ES_PID || exit 1
+            wait $MINIO_PID || exit 1
+      - name: Run relevant specs
+        timeout-minutes: 25
+        run: |
+          mkdir -p ./capybara-artifacts ./test-logs
+          chmod 777 ./capybara-artifacts ./test-logs
+          docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
+            -v "$(pwd)/test-logs:/app/log" \
+            -e RUBY_YJIT_ENABLE \
+            -e CI \
+            -e IN_DOCKER \
+            $WEB_REPO:${{ needs.build.outputs.test_image_tag }} \
+            /usr/local/bin/gosu app bundle exec rspec --format RSpec::Github::Formatter --format progress --tag ~skip ${{ steps.specs.outputs.files }}
+        env:
+          RUBY_YJIT_ENABLE: 1
+          CI: true
+          IN_DOCKER: true
+      - name: Archive capybara artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capybara-screenshots-relevant-attempt-${{ github.run_attempt }}
+          path: ./capybara-artifacts/*.png
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Archive test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-relevant-attempt-${{ github.run_attempt }}
+          path: ./test-logs/test.log
+          retention-days: 7
           if-no-files-found: ignore
       - name: Clean up
         if: always()
