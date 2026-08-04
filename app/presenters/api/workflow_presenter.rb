@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 class Api::WorkflowPresenter
-  CACHE_FILL_EXPIRATION = 1.minute
+  API_CACHE_EXPIRATION = 5.seconds
+  API_CACHE_PREFIX = "api_workflow"
 
   def initialize(workflow:, include_emails: false, emails_count: nil)
     @workflow = workflow
@@ -99,14 +100,19 @@ class Api::WorkflowPresenter
     end
 
     def batched_counts(cache_key)
-      keys_by_id = emails.to_h { |email| [email.id, email.key_for_cache(cache_key)] }
-      cached_counts = Rails.cache.read_multi(*keys_by_id.values)
+      keys_by_id = emails.to_h do |email|
+        event_key = email.key_for_cache(cache_key)
+        [email.id, { event: event_key, api: "#{API_CACHE_PREFIX}_#{event_key}" }]
+      end
+      cached_counts = Rails.cache.read_multi(*keys_by_id.values.flat_map(&:values))
       counts = {}
       missing_ids = []
 
-      keys_by_id.each do |id, key|
-        if cached_counts.key?(key)
-          counts[id] = cached_counts.fetch(key).to_i
+      keys_by_id.each do |id, keys|
+        if cached_counts.key?(keys.fetch(:event))
+          counts[id] = cached_counts.fetch(keys.fetch(:event)).to_i
+        elsif cached_counts.key?(keys.fetch(:api))
+          counts[id] = cached_counts.fetch(keys.fetch(:api)).to_i
         else
           missing_ids << id
         end
@@ -115,10 +121,8 @@ class Api::WorkflowPresenter
       return counts if missing_ids.empty?
 
       queried_counts = missing_ids.index_with(0).merge(yield(missing_ids))
-      queried_counts.each do |id, count|
-        # A refresh can race this fill, so request-filled values must expire even if the refresh reads an older value.
-        Rails.cache.write(keys_by_id.fetch(id), count, expires_in: CACHE_FILL_EXPIRATION, unless_exist: true)
-      end
+      api_counts = queried_counts.transform_keys { |id| keys_by_id.fetch(id).fetch(:api) }
+      Rails.cache.write_multi(api_counts, expires_in: API_CACHE_EXPIRATION)
       counts.merge(queried_counts)
     end
 

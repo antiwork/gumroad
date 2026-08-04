@@ -79,7 +79,7 @@ describe Api::V2::WorkflowsController do
     it_behaves_like "authorized oauth v1 api method"
     it_behaves_like "authorized oauth v1 api method only for edit_emails scope"
 
-    it "returns ordered emails with delay and caches per-email stats" do
+    it "caches ordered email stats without writing event-owned keys" do
       token = create_access_token("edit_emails")
       later_email = create(
         :workflow_installment,
@@ -130,9 +130,12 @@ describe Api::V2::WorkflowsController do
       expect(CreatorEmailClickSummary).to receive(:in).once.and_call_original
 
       get @action, params: @params.merge(access_token: token.token)
-      expect(Rails.cache.read(first_email.key_for_cache(:unique_open_count))).to eq(4)
-      expect(Rails.cache.read(first_email.key_for_cache(:unique_click_count))).to eq(2)
+      expect(Rails.cache.read(first_email.key_for_cache(:unique_open_count))).to be_nil
+      expect(Rails.cache.read(first_email.key_for_cache(:unique_click_count))).to be_nil
+      expect(Rails.cache.read("api_workflow_#{first_email.key_for_cache(:unique_open_count)}")).to eq(4)
+      expect(Rails.cache.read("api_workflow_#{first_email.key_for_cache(:unique_click_count)}")).to eq(2)
 
+      Rails.cache.write(first_email.key_for_cache(:unique_open_count), 5)
       get @action, params: @params.merge(access_token: token.token)
 
       workflow_json = response.parsed_body.fetch("workflow")
@@ -154,8 +157,8 @@ describe Api::V2::WorkflowsController do
         "send_emails" => true,
         "delay" => { "amount" => 2, "unit" => InstallmentRule::DAY },
         "sent_count" => 10,
-        "open_count" => 4,
-        "open_rate" => 40.0,
+        "open_count" => 5,
+        "open_rate" => 50.0,
         "click_count" => 2,
         "click_rate" => 20.0,
       )
