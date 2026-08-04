@@ -23,4 +23,18 @@ describe Exports::Sales::CompileChunksWorker do
     expect(SalesExport.count).to eq(0)
     expect(SalesExportChunk.count).to eq(0)
   end
+
+  context "with an export that has no chunks (zero-match query)" do
+    before do
+      @export.chunks.delete_all
+      allow(@worker).to receive(:generate_compiled_tempfile).and_call_original
+    end
+
+    it "still emails a header+Totals-only CSV and destroys the export" do
+      expect(ContactingCreatorMailer).to receive(:user_sales_data).with(@export.recipient_id, anything).and_call_original
+      @worker.perform(@export.id)
+
+      expect(SalesExport.count).to eq(0)
+    end
+  end
 end
