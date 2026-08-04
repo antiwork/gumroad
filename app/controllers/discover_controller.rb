@@ -167,12 +167,14 @@ class DiscoverController < ApplicationController
       end
     end
 
-    # Category/subcategory pages (taxonomy present, no query/tags) are landing pages for
-    # organic search, so they get a dedicated title/description plus BreadcrumbList and
-    # ItemList JSON-LD in the server-rendered head. Skipped for filtered/search views to
-    # keep the canonical page the only indexable variant.
+    # Category/subcategory pages (taxonomy path with at most a `from` offset) are landing
+    # pages for organic search, so they get a dedicated title/description plus BreadcrumbList
+    # and ItemList JSON-LD in the server-rendered head. Any other raw query param (sort,
+    # rating, query, tags, ...) means a filtered variant whose canonical self-references with
+    # those params — SEO treatment there would spawn duplicate titles, and its search offset
+    # follows different rules than the pagination links assume.
     def category_seo_page?
-      taxonomy.present? && params.values_at(:query, :tags).all?(&:blank?)
+      taxonomy.present? && request.query_parameters.except("from").blank?
     end
 
     def prepare_category_seo(search_results:)
@@ -201,14 +203,18 @@ class DiscoverController < ApplicationController
     # search_results — index mutates it to RECOMMENDED_PRODUCTS_COUNT + 1 on the canonical
     # first page to skip products already shown in the recommendations strip, so pagination
     # math has to agree with that offset or "Next" repeats the recommended-strip products.
-    # first_page suppresses a self-referencing "Previous" link on that mutated first page,
-    # since the raw request has no `from` at all there.
+    # `from` is 1-indexed (search_options subtracts 1), so a missing/zero param means the
+    # page starts at result 1. A "Previous" landing at or before the canonical first page's
+    # offset links the bare category URL instead of a `?from=` twin of it; the bare first
+    # page itself gets no self-referencing "Previous" at all.
     def pagination_links(search_results:)
-      offset = params[:from].to_i
+      offset = [params[:from].to_i, 1].max
       first_page = request.query_parameters["from"].blank?
+      previous_from = offset - INITIAL_PRODUCTS_COUNT
+      previous_from = nil if previous_from <= RECOMMENDED_PRODUCTS_COUNT + 1
       links = []
-      links << { label: "Previous page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", { from: [offset - INITIAL_PRODUCTS_COUNT, 0].max.nonzero? }.compact) } if offset > 0 && !first_page
-      links << { label: "Next page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", from: offset + INITIAL_PRODUCTS_COUNT) } if search_results[:total].to_i > offset + INITIAL_PRODUCTS_COUNT
+      links << { label: "Previous page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", { from: previous_from }.compact) } unless first_page
+      links << { label: "Next page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", from: offset + INITIAL_PRODUCTS_COUNT) } if search_results[:total].to_i >= offset + INITIAL_PRODUCTS_COUNT
       links
     end
 

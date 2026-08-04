@@ -5,8 +5,6 @@ class RefreshSitemapMonthlyWorker
   sidekiq_options retry: 0, queue: :low
 
   def perform
-    SitemapService.new.generate_categories
-
     # Update sitemap of products updated in the last month
     last_month_start = 1.month.ago.beginning_of_month
     last_month_end = last_month_start.end_of_month
@@ -20,5 +18,9 @@ class RefreshSitemapMonthlyWorker
     product_created_months.each_with_index do |month, index|
       RefreshSitemapDailyWorker.perform_in((30 * index).minutes, month.to_s)
     end
+
+    # After the product enqueue loop: retry is 0, so a category failure must not
+    # cost the product sitemaps their refresh.
+    SitemapService.new.generate_categories
   end
 end

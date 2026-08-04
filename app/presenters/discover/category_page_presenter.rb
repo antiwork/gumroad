@@ -5,6 +5,7 @@
 # subcategory/pagination links crawlers need in the initial HTML.
 class Discover::CategoryPagePresenter
   include ActionView::Helpers::NumberHelper
+  include CurrencyHelper
 
   SCHEMA_ORG_CONTEXT = "https://schema.org"
 
@@ -67,7 +68,9 @@ class Discover::CategoryPagePresenter
         if product[:price_cents].present?
           item["offers"] = {
             "@type" => "Offer",
-            "price" => product[:price_cents] / 100.0,
+            # price_cents is in the currency's minor unit except for single-unit
+            # currencies (JPY), where it already holds whole units.
+            "price" => product[:price_cents] / unit_scaling_factor(product[:currency_code]).to_f,
             "priceCurrency" => product[:currency_code].to_s.upcase
           }
         end

@@ -276,6 +276,20 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d?from=10"))
         expect(response.body).not_to include("Previous page")
       end
+
+      it "links Previous back to the bare category page when the previous page is the first" do
+        create_list(:product, DiscoverController::RECOMMENDED_PRODUCTS_COUNT + 4, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
+        Link.import(refresh: true, force: true)
+        stub_const("DiscoverController::INITIAL_PRODUCTS_COUNT", 1)
+
+        # The bare page serves offset 9 (from mutated to RECOMMENDED_PRODUCTS_COUNT + 1) and
+        # links Next to from=10, so from=10 must continue from there without overlap.
+        get :index, params: { taxonomy: "3d", from: "10" }
+
+        expect(response.body).to include(%(>Previous page</a>))
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d">Previous page))
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d?from=11"))
+      end
     end
 
     context "meta tags" do
