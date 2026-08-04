@@ -9,10 +9,14 @@ describe("Purchase from a product page", type: :system, js: true) do
   end
 
   # Stripe varies the Payment Element's field labels across layouts, so accept the same
-  # alternatives fill_in_stripe_field does.
+  # alternatives fill_in_stripe_field does. Asserted via the live :focus pseudo-class with
+  # Capybara's retry, not expect_focused's captured-node identity compare: the element focuses
+  # its first invalid field while re-rendering error decorations, so the node reference goes
+  # stale in the same beat the focus lands.
   def expect_focused_payment_element_field(labels)
     within_payment_element_frame do
-      expect_focused find_stripe_field(labels)
+      field = find_stripe_field(labels)
+      expect(page).to have_css("##{field[:id]}:focus", visible: :all)
     end
   end
 
