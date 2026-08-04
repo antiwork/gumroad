@@ -51,7 +51,7 @@ class TaxRemittances::WiseTransferMatcher
 
   # transfers — an array of Wise transfer hashes from GET /v1/transfers, each
   # expected to have at least :status, :targetCurrency, :targetValue,
-  # :sourceValue, :created, :id.
+  # :sourceCurrency, :sourceValue, :created, :id.
   #
   # enrich: — when true (the default), matched rows have their transfer_id
   # written via an audited update. When false, this only reports what WOULD
@@ -136,12 +136,16 @@ class TaxRemittances::WiseTransferMatcher
       target_amount = remittance.target_amount_cents
       # No recorded target amount (the April backfill's rows): compare the
       # transfer's own USD-equivalent leg instead. sourceValue is the transfer's
-      # funding currency amount; every remittance so far is funded in USD, so
-      # this is directly comparable to usd_amount_cents.
-      compare_cents = target_amount || remittance.usd_amount_cents
-      transfer_cents = target_amount ? cents(transfer[:targetValue]) : cents(transfer[:sourceValue])
+      # funding currency amount, so it is only comparable to usd_amount_cents
+      # when the transfer was actually funded in USD — a EUR-funded transfer can
+      # collide numerically with a USD figure and would be written as a match.
+      if target_amount
+        (cents(transfer[:targetValue]) - target_amount).abs <= AMOUNT_TOLERANCE_CENTS
+      else
+        return false unless transfer[:sourceCurrency].to_s.upcase == "USD"
 
-      (transfer_cents - compare_cents).abs <= AMOUNT_TOLERANCE_CENTS
+        (cents(transfer[:sourceValue]) - remittance.usd_amount_cents).abs <= AMOUNT_TOLERANCE_CENTS
+      end
     end
 
     def transfer_time(transfer)

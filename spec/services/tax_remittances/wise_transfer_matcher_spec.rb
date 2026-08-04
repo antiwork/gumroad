@@ -5,11 +5,11 @@ require "spec_helper"
 describe TaxRemittances::WiseTransferMatcher do
   let(:hmrc_transfer) do
     { id: 900_001, status: "outgoing_payment_sent", targetCurrency: "GBP",
-      targetValue: 182_847.55, sourceValue: 244_567.61, created: "2026-07-22 10:00:00" }
+      targetValue: 182_847.55, sourceCurrency: "USD", sourceValue: 244_567.61, created: "2026-07-22 10:00:00" }
   end
   let(:cancelled_sibling) do
     { id: 900_002, status: "cancelled", targetCurrency: "GBP",
-      targetValue: 182_800.00, sourceValue: 244_500.00, created: "2026-07-22 09:00:00" }
+      targetValue: 182_800.00, sourceCurrency: "USD", sourceValue: 244_500.00, created: "2026-07-22 09:00:00" }
   end
 
   it "matches a transfer to a paid, unenriched remittance by target amount and writes transfer_id" do
@@ -41,12 +41,47 @@ describe TaxRemittances::WiseTransferMatcher do
                                                      usd_amount_cents: 25_333_498, target_amount_cents: nil,
                                                      paid_at: Time.utc(2026, 4, 28), transfer_id: nil)
     transfer = { id: 700_001, status: "outgoing_payment_sent", targetCurrency: "GBP",
-                 targetValue: 20_000.00, sourceValue: 253_334.98, created: "2026-04-28 12:00:00" }
+                 targetValue: 20_000.00, sourceCurrency: "USD", sourceValue: 253_334.98, created: "2026-04-28 12:00:00" }
 
     result = described_class.new("2026-Q1").process([transfer])
 
     expect(result.matched.map(&:remittance)).to eq([remittance])
     expect(remittance.reload.transfer_id).to eq("700001")
+  end
+
+  # The usd_amount_cents fallback compares Wise's sourceValue, which is the
+  # FUNDING currency amount. A transfer funded in something other than USD can
+  # collide numerically with a USD figure, so the fallback must require USD
+  # funding rather than assume it.
+  it "refuses the usd_amount_cents fallback when the transfer was not funded in USD" do
+    remittance = create(:tax_remittance, :completed, currency: "GBP", period: "2026-Q1",
+                                                     usd_amount_cents: 25_333_498, target_amount_cents: nil,
+                                                     paid_at: Time.utc(2026, 4, 28), transfer_id: nil)
+    eur_funded = { id: 700_002, status: "outgoing_payment_sent", targetCurrency: "GBP",
+                   targetValue: 20_000.00, sourceCurrency: "EUR", sourceValue: 253_334.98,
+                   created: "2026-04-28 12:00:00" }
+
+    result = described_class.new("2026-Q1").process([eur_funded])
+
+    expect(result.matched).to be_empty
+    expect(result.unmatched).to eq([remittance])
+    expect(remittance.reload.transfer_id).to be_nil
+    # and it must still be surfaced, not silently dropped
+    expect(result.unclaimed_transfers.map { |t| t[:id] }).to eq([700_002])
+  end
+
+  it "still applies the fallback when USD funding is spelled lowercase" do
+    remittance = create(:tax_remittance, :completed, currency: "GBP", period: "2026-Q1",
+                                                     usd_amount_cents: 25_333_498, target_amount_cents: nil,
+                                                     paid_at: Time.utc(2026, 4, 28), transfer_id: nil)
+    transfer = { id: 700_003, status: "outgoing_payment_sent", targetCurrency: "GBP",
+                 targetValue: 20_000.00, sourceCurrency: "usd", sourceValue: 253_334.98,
+                 created: "2026-04-28 12:00:00" }
+
+    result = described_class.new("2026-Q1").process([transfer])
+
+    expect(result.matched.map(&:remittance)).to eq([remittance])
+    expect(remittance.reload.transfer_id).to eq("700003")
   end
 
   it "reports ambiguous rather than guessing when two transfers tie on amount" do
@@ -141,7 +176,7 @@ describe TaxRemittances::WiseTransferMatcher do
                                         target_amount_cents: 18_284_755, paid_at: Time.utc(2026, 7, 22),
                                         transfer_id: nil)
     stray = { id: 900_099, status: "outgoing_payment_sent", targetCurrency: "EUR",
-              targetValue: 999.00, sourceValue: 1_050.00, created: "2026-07-22 10:00:00" }
+              targetValue: 999.00, sourceCurrency: "USD", sourceValue: 1_050.00, created: "2026-07-22 10:00:00" }
 
     result = described_class.new("2026-Q2").process([hmrc_transfer, stray])
 
