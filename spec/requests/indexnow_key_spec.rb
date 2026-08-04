@@ -12,7 +12,7 @@ describe "IndexNow key file", type: :request do
 
   describe "GET /{key}.txt" do
     it "serves the key as plain text" do
-      get "/#{key}.txt"
+      get "/#{key}.txt", headers: { "HOST" => DOMAIN }
 
       expect(response.status).to eq(200)
       expect(response.body).to eq(key)
@@ -20,7 +20,7 @@ describe "IndexNow key file", type: :request do
     end
 
     it "returns 404 for a different key" do
-      get "/#{"c" * 32}.txt"
+      get "/#{"c" * 32}.txt", headers: { "HOST" => DOMAIN }
 
       expect(response.status).to eq(404)
     end
@@ -29,7 +29,7 @@ describe "IndexNow key file", type: :request do
       let(:key) { nil }
 
       it "returns 404" do
-        get "/#{"d" * 32}.txt"
+        get "/#{"d" * 32}.txt", headers: { "HOST" => DOMAIN }
 
         expect(response.status).to eq(404)
       end
