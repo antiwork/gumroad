@@ -131,7 +131,10 @@ class TaxRemittances::WiseTransferMatcher
     end
 
     def within_tolerance?(transfer, remittance)
-      return false unless transfer[:created] && (transfer_time(transfer) - remittance.paid_at).abs <= DATE_WINDOW
+      # Malformed `created` values parse to nil; treat them as nonmatching so one
+      # bad transfer surfaces in unclaimed_transfers instead of aborting the batch.
+      time = transfer_time(transfer)
+      return false unless time && (time - remittance.paid_at).abs <= DATE_WINDOW
 
       target_amount = remittance.target_amount_cents
       # No recorded target amount (the April backfill's rows): compare the
@@ -150,6 +153,8 @@ class TaxRemittances::WiseTransferMatcher
 
     def transfer_time(transfer)
       Time.zone.parse(transfer[:created].to_s)
+    rescue ArgumentError
+      nil
     end
 
     def cents(major_units)
