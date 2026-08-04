@@ -73,9 +73,14 @@ module SearchProducts
       end
 
       if search_params[:taxonomy_attribute_filters].is_a?(Array)
+        valid_tokens = TaxonomyAttribute.valid_filter_tokens
+        # Allowlist before the cap: otherwise 20 junk tokens can push the one real token past
+        # the limit and silently widen the result set.
         search_params[:taxonomy_attribute_filters] =
-          search_params[:taxonomy_attribute_filters].uniq.first(Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS) &
-          TaxonomyAttribute.valid_filter_tokens.to_a
+          search_params[:taxonomy_attribute_filters]
+            .uniq
+            .select { |token| valid_tokens.include?(token) }
+            .first(Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS)
       end
 
       # search_options coerces each of these unconditionally (`.to_i`, `.to_f`) or hands it to ES

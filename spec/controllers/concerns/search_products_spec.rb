@@ -130,6 +130,13 @@ describe SearchProducts do
         expect(JSON.parse(response.body)["taxonomy_attribute_filters"]).to eq(["format:otf", "license:commercial"])
       end
 
+      it "applies the allowlist before the cap so junk tokens cannot crowd out a valid one" do
+        tokens = (1..Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS).map { |i| "attr#{i}:value" } + ["format:otf"]
+        get :index, params: { taxonomy_attribute_filters: tokens.join(",") }
+
+        expect(JSON.parse(response.body)["taxonomy_attribute_filters"]).to eq(["format:otf"])
+      end
+
       it "drops tokens for attributes/values that are no longer active" do
         get :index, params: { taxonomy_attribute_filters: "format:otf,format:tiff" }
 
