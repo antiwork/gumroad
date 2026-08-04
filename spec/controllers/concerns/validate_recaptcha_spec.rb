@@ -39,6 +39,12 @@ describe ValidateRecaptcha, type: :controller do
       end
     end
 
+    # Mirrors how OrdersController decides whether to offer the buyer a challenge retry.
+    def checkout_score_fallback_action
+      passed = valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score)
+      render json: { success: passed, challenge_available: recaptcha_failed_on_score_only? }
+    end
+
     # Two checks in one request: the message must describe the LAST one.
     def checkout_score_twice_action
       valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score)
@@ -69,6 +75,7 @@ describe ValidateRecaptcha, type: :controller do
       post :checkout_score_trusted_action, to: "anonymous#checkout_score_trusted_action"
       post :follow_action, to: "anonymous#follow_action"
       post :checkout_score_message_action, to: "anonymous#checkout_score_message_action"
+      post :checkout_score_fallback_action, to: "anonymous#checkout_score_fallback_action"
       post :checkout_score_twice_action, to: "anonymous#checkout_score_twice_action"
     end
 
@@ -293,7 +300,7 @@ describe ValidateRecaptcha, type: :controller do
           allow(GlobalConfig).to receive(:get).with("RECAPTCHA_FAIL_OPEN_CHECKOUT_SCORE").and_return("false")
           low_score = instance_double(
             HTTParty::Response,
-            parsed_response: { "tokenProperties" => { "valid" => true, "hostname" => DOMAIN }, "riskAnalysis" => { "score" => 0.4 } },
+            parsed_response: { "tokenProperties" => { "valid" => true, "hostname" => DOMAIN }, "riskAnalysis" => { "score" => 0.3 } },
             code: 200
           )
           call = 0
@@ -308,6 +315,68 @@ describe ValidateRecaptcha, type: :controller do
           expect(response).to have_http_status(:unprocessable_entity)
           expect(parsed_body["error"]).to eq(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
           expect(parsed_body["error"]).not_to include("scored this browser session as risky")
+        end
+      end
+
+      # The machine-readable half of a score-only refusal: it is what lets checkout offer the buyer
+      # a challenge instead of a dead end (gumroad-private#1590). Everything a challenge could not
+      # establish must stay out of it.
+      describe "#recaptcha_failed_on_score_only?" do
+        it "is true when a valid, correctly-hosted token was refused on score alone" do
+          stub_recaptcha_response(valid: true, score: 0.3)
+
+          post :checkout_score_fallback_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(parsed_body["success"]).to be false
+          expect(parsed_body["challenge_available"]).to be true
+        end
+
+        it "is false when the token itself was not valid" do
+          stub_recaptcha_response(valid: false, score: 0.4)
+
+          post :checkout_score_fallback_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(parsed_body["success"]).to be false
+          expect(parsed_body["challenge_available"]).to be false
+        end
+
+        it "is false when a high-scoring token came from a disallowed host" do
+          allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("production"))
+          allow(CustomDomain).to receive(:find_by_host).and_return(nil)
+          stub_recaptcha_response(valid: true, score: 0.9, hostname: "evil.example.com")
+
+          post :checkout_score_fallback_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(parsed_body["success"]).to be false
+          expect(parsed_body["challenge_available"]).to be false
+        end
+
+        it "is false when the response carried no score at all" do
+          stub_recaptcha_response(valid: true, score: nil)
+
+          post :checkout_score_fallback_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(parsed_body["success"]).to be false
+          expect(parsed_body["challenge_available"]).to be false
+        end
+
+        it "is false on an infrastructure error that failed closed" do
+          allow(GlobalConfig).to receive(:get).with("RECAPTCHA_FAIL_OPEN_CHECKOUT_SCORE").and_return("false")
+          allow(HTTParty).to receive(:post).and_raise(Net::OpenTimeout.new("execution expired"))
+
+          post :checkout_score_fallback_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(parsed_body["success"]).to be false
+          expect(parsed_body["challenge_available"]).to be false
+        end
+
+        it "is false when the token passed" do
+          stub_recaptcha_response(valid: true, score: 0.9)
+
+          post :checkout_score_fallback_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(parsed_body["success"]).to be true
+          expect(parsed_body["challenge_available"]).to be false
         end
       end
     end

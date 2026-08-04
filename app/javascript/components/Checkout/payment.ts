@@ -263,11 +263,20 @@ export type State = {
     | { type: "offering" }
     | { type: "validating" }
     | { type: "starting" }
-    | { type: "captcha"; paymentMethod: PurchasePaymentMethod }
-    | { type: "finished"; recaptchaResponse?: string; paymentMethod: PurchasePaymentMethod };
+    // `challengeFallback` marks the second pass through the CAPTCHA step after the server refused
+    // the order on risk score alone: the token comes from the challenge key rather than the score
+    // key, and the order request says so (see "retry-recaptcha-challenge").
+    | { type: "captcha"; paymentMethod: PurchasePaymentMethod; challengeFallback?: boolean }
+    | {
+        type: "finished";
+        recaptchaResponse?: string;
+        paymentMethod: PurchasePaymentMethod;
+        challengeFallback?: boolean;
+      };
   payLabel?: string;
   recaptchaKey: string | null;
   recaptchaScoreBased: boolean;
+  recaptchaChallengeKey: string | null;
   paypalClientId?: string;
   tip: Tip;
   warning?: string | null;
@@ -317,6 +326,10 @@ type PublicAction =
   | { type: "validate" }
   | { type: "start-payment" }
   | { type: "set-recaptcha-response"; recaptchaResponse?: string }
+  // The order was refused because the score key scored the session as risky. Send the buyer back
+  // through the CAPTCHA step against the challenge key, which can ask them to prove humanity
+  // instead of only scoring them (gumroad-private#1590).
+  | { type: "retry-recaptcha-challenge" }
   | { type: "set-payment-method"; paymentMethod: PurchasePaymentMethod }
   | { type: "acknowledge-email-typo"; email: string }
   | {
@@ -1044,6 +1057,13 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       state.status = { ...state.status, type: "finished", ...recaptchaData };
       break;
     }
+    case "retry-recaptcha-challenge":
+      // Only from "finished" — the refused pay attempt — and only once. A fallback attempt that is
+      // refused again is terminal, so a buyer can't be bounced through challenges indefinitely;
+      // the server withholds the offer there too.
+      if (state.status.type !== "finished" || state.status.challengeFallback) return;
+      state.status = { type: "captcha", paymentMethod: state.status.paymentMethod, challengeFallback: true };
+      break;
     case "set-payment-method": {
       if (state.status.type !== "starting") return;
       const errors = validatePaymentMethodIndependentFields(state);
@@ -1155,6 +1175,7 @@ export function createReducer(initial: {
   payLabel?: string;
   recaptchaKey: string | null;
   recaptchaScoreBased?: boolean;
+  recaptchaChallengeKey?: string | null;
   paypalClientId: string;
   gift: Gift | null;
   requireEmailTypoAcknowledgment: boolean;
@@ -1175,6 +1196,7 @@ export function createReducer(initial: {
       fullName: "",
       ...initial,
       recaptchaScoreBased: initial.recaptchaScoreBased ?? false,
+      recaptchaChallengeKey: initial.recaptchaChallengeKey ?? null,
       country: initial.country ?? "US",
       vatId: "",
       address: initial.address?.street ?? "",

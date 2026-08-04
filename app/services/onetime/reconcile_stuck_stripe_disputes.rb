@@ -74,7 +74,13 @@ module Onetime
     private
       # Everything that makes a row unbookable on OUR side, checked before we spend a Stripe call.
       def internal_refusal(dispute)
-        return "no_disputable" if dispute.charge.nil? && dispute.purchase.nil?
+        if dispute.charge.nil? && dispute.purchase.nil?
+          # A service_charge dispute has a real disputable, just not one this script can book —
+          # ServiceCharge has no handle_event_dispute_won!/lost! and no seller (dispute.rb's own
+          # comment). Keep it out of no_disputable so that stat stays a signal for actual data gaps.
+          return "unsupported_disputable_type" if dispute.service_charge.present?
+          return "no_disputable"
+        end
 
         # The seller-side debit happens in the FORMALIZED side effects. A row that never got
         # there has no debit on our books, so booking WON would credit a debit that never
@@ -96,10 +102,17 @@ module Onetime
       # (user_id nil), which carries ordinary direct charges — the bulk of this cohort and exactly
       # what we are here to book. Require a seller before refusing.
       def destination_charge?(dispute)
-        merchant_account = disputed_purchases(dispute).first&.merchant_account
+        merchant_account = resolve_merchant_account(dispute)
         return false if merchant_account.nil? || merchant_account.is_managed_by_gumroad?
 
         merchant_account.is_a_gumroad_managed_stripe_account?
+      end
+
+      # The Charge owns the Stripe account the dispute actually lives on; a purchase's
+      # merchant_account can be blank (nil for older rows) or point at a different account
+      # (e.g. an affiliate's) even though it's one of the disputed purchases. Prefer the Charge.
+      def resolve_merchant_account(dispute)
+        dispute.charge&.merchant_account || disputed_purchases(dispute).first&.merchant_account
       end
 
       # Only a dispute Stripe considers finished can be booked. `warning_*` and `needs_response`
@@ -133,7 +146,7 @@ module Onetime
       end
 
       def stripe_account_options(dispute)
-        merchant_account = disputed_purchases(dispute).first&.merchant_account
+        merchant_account = resolve_merchant_account(dispute)
         return {} unless merchant_account&.is_a_stripe_connect_account?
         return {} if merchant_account.charge_processor_merchant_id.blank?
 

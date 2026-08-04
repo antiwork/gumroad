@@ -256,6 +256,12 @@ class Charge < ApplicationRecord
   end
 
   def receipt_email_info
+    receipt_email_infos.last
+  end
+
+  # Every send attempt for this charge, oldest first. See
+  # Purchase::Receipt#receipt_email_infos.
+  def receipt_email_infos
     # Queries `email_info_charges` first to leverage the index since there is no `purchase_id` on the associated
     # `email_infos` record (`email_infos` has > 1b records, and relies on `purchase_id` index)
     EmailInfoCharge.includes(:email_info)
@@ -266,7 +272,8 @@ class Charge < ApplicationRecord
           type: CustomerEmailInfo.name
         }
       )
-      .last&.email_info
+      .order(:email_info_id)
+      .map(&:email_info)
   end
 
   def first_purchase_for_subscription

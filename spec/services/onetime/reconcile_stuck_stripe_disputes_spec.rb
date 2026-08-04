@@ -93,6 +93,19 @@ describe Onetime::ReconcileStuckStripeDisputes do
       expect(result[:stats][:refused_not_found_on_account_tried]).to eq(1)
     end
 
+    # service_charge is a valid disputable per Dispute's own validation — this must not fall into
+    # no_disputable, which is reserved for a genuine data-integrity gap (neither charge nor purchase
+    # nor service_charge).
+    it "refuses a service_charge dispute as unsupported, not as no_disputable" do
+      dispute.update!(purchase: nil, service_charge: create(:service_charge))
+      expect(Stripe::Dispute).to_not receive(:retrieve)
+
+      result = described_class.process(dry_run: false)
+
+      expect(result[:stats][:refused_unsupported_disputable_type]).to eq(1)
+      expect(result[:stats][:refused_no_disputable]).to eq(0)
+    end
+
     it "refuses a dispute carrying no processor id" do
       dispute.update!(charge_processor_dispute_id: nil)
 
@@ -170,6 +183,35 @@ describe Onetime::ReconcileStuckStripeDisputes do
       expect(result[:stats][:scanned]).to eq(2)
       expect(result[:stats][:failed_won]).to eq(1)
       expect(result[:stats][:booked_won]).to eq(1)
+    end
+  end
+
+  describe "resolving the Stripe account for a connected Charge" do
+    let(:connect_merchant_account) { create(:merchant_account_stripe_connect) }
+    let(:charge) { create(:charge, merchant_account: connect_merchant_account) }
+    # The purchase's own merchant_account is nil, the shape flagged by Greptile on #6852: the
+    # Charge is on a real connected account but the purchase row never got one assigned.
+    let!(:charge_dispute) do
+      create(:dispute, charge:, purchase: nil, state: "formalized",
+                       formalized_side_effects_finished_at: 1.year.ago,
+                       charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                       charge_processor_dispute_id: "dp_connected")
+    end
+
+    before do
+      charge.purchases << create(:purchase, price_cents: 0, merchant_account: nil, chargeback_date: 1.year.ago)
+      charge.update!(disputed_at: 1.year.ago)
+    end
+
+    it "scopes the Stripe retrieval to the Charge's connected account, not the purchase's" do
+      expect(Stripe::Dispute).to receive(:retrieve)
+        .with(hash_including(id: "dp_connected"), { stripe_account: connect_merchant_account.charge_processor_merchant_id })
+        .and_return(stripe_dispute(status: "won", id: "dp_connected"))
+
+      result = described_class.process(dry_run: false, dispute_ids: [charge_dispute.id])
+
+      expect(result[:stats][:booked_won]).to eq(1)
+      expect(charge_dispute.reload.state).to eq("won")
     end
   end
 

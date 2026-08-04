@@ -118,9 +118,9 @@ class AlertOnStalledPostEmailBlastsJob
         "",
         "RUNNING/QUEUED may just be a very large blast mid-pass; DEAD and UNACCOUNTED are stranded — " \
           "every audience member past the delivered count silently got nothing. Resume a DEAD blast by " \
-          "retrying its dead-set entry (`job.retry`). For UNACCOUNTED (hard-killed worker, no dead " \
-          "entry), the job's `lock: :until_executed` digest can still be held, silently suppressing a " \
-          "fresh `perform_async` — check and clear the SidekiqUniqueJobs digest first. Confirm with the " \
+          "retrying its dead-set entry (`job.retry`). Resume an UNACCOUNTED blast (hard-killed worker, " \
+          "no dead entry) with `SendPostBlastEmailsJob.perform_async(blast_id)` — it picks up from the " \
+          "Redis audience snapshot. Confirm with the " \
           "seller before resuming a time-boxed blast. See gumroad-private#1750 for a worked run.",
       ].compact.join("\n")
     end

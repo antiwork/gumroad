@@ -31,6 +31,7 @@ class RedisKey
     def agent_custom_html_preview_index(user_id) = "agent_custom_html_preview_index:#{user_id}"
     def fraudulent_free_purchases_block_hours = "fraudulent_free_purchases_block_hours"
     def recaptcha_score_threshold(surface) = "recaptcha_score_threshold:#{surface}"
+    def recaptcha_challenge_offer(browser_guid) = "recaptcha_challenge_offer:#{browser_guid}"
     def sales_related_products_internal_limit = "sales_related_products_internal_limit"
     def recommended_products_associated_product_ids_limit = "recommended_products_associated_product_ids_limit"
     def blast_recipients_slice_size = "blast:recipients_slice_size"

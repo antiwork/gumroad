@@ -101,6 +101,7 @@ describe "Purchase can_contact_reason" do
         purchase_id: purchase.id,
         charge_id: nil,
         mailer_method: "receipt",
+        created_at: Time.current,
       )
 
       HandleEmailEventInfo::ForReceiptEmail.perform(email_event_info)

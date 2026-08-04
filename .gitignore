@@ -50,6 +50,7 @@ public/assets/
 public/cache/*
 public/javascripts
 public/js/*.js
+public/merchant-center/
 public/sitemap/
 public/stylesheets/*
 public/system

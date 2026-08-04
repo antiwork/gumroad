@@ -16,7 +16,7 @@ Your PR on your fork is held to the same bar as anything we write. Concretely, a
 - **An AI disclosure** naming the specific model, after a `---` separator.
 - **A self-review** comment on your own diff, and a **What / Why / Before-After / Test Results** description.
 
-The rest of the guidelines below apply too, with the obvious substitutions for working outside this repo: reference `qa-media/` files by your own fork's raw URL (`raw.githubusercontent.com/<your-username>/gumroad/<branch>/...`, not `antiwork/gumroad`), name them `pr-<your-fork-pr-number>-<description>`, and skip the steps that depend on this repo's own infrastructure — preview-app deploys and `@claude review once` both need org credentials you won't have, so we run those ourselves once we pull the change in. Substituting for those is expected; skipping the evidence itself is not.
+The rest of the guidelines below apply too, with the obvious substitutions for working outside this repo: reference `qa-media/` files by your own fork's raw URL (`raw.githubusercontent.com/<your-username>/gumroad/<branch>/...`, not `antiwork/gumroad`), name them `pr-<your-fork-pr-number>-<description>`, and skip the steps that depend on this repo's own infrastructure — preview-app deploys need org credentials you won't have, so we run those ourselves once we pull the change in. Substituting for those is expected; skipping the evidence itself is not.
 
 A fork PR that skips the evidence gets the same answer as one of ours that skips it: it isn't ready. If your change is good and documented well, the fork is not a barrier — it's just where the work lives until we pull it in.
 
@@ -100,10 +100,6 @@ git rebase origin/main
 Resolve conflicts locally before pushing. PRs with stale branches will not be merged.
 
 Working from a fork, `origin` is your fork — and your fork's `main` goes stale the moment this repo moves. Add this repo as `upstream` once (`git remote add upstream https://github.com/antiwork/gumroad.git`) and rebase onto `upstream/main` instead.
-
-### Code review
-
-Claude Code Review is set to manual mode. After opening a PR, request a review by posting a `@claude review once` comment on the PR. This triggers an AI-powered review of your changes — it won't run automatically.
 
 ### Before pushing
 

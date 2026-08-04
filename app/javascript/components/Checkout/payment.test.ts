@@ -184,6 +184,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   status: { type: "input", errors: new Set() },
   recaptchaKey: null,
   recaptchaScoreBased: false,
+  recaptchaChallengeKey: null,
   paypalClientId: "",
   tip: { type: "percentage", percentage: 0 },
   emailTypoSuggestion: null,
@@ -1707,6 +1708,74 @@ describe("reduceCheckoutState", () => {
         type: "offer",
       });
       expect(next.status).toEqual({ type: "offering" });
+    });
+  });
+
+  // A score key only ever scores the session, so a buyer it scores as risky has nothing to answer
+  // with. The server offers a retry against the challenge key, which can escalate to an interactive
+  // challenge (gumroad-private#1590).
+  describe("retrying a score-only CAPTCHA refusal against the challenge key", () => {
+    const paymentMethod = { type: "not-applicable" } as const;
+
+    it("sends the buyer back through the CAPTCHA step marked as a challenge fallback", () => {
+      const refused = state({ status: { type: "finished", recaptchaResponse: "score-token", paymentMethod } });
+
+      const next = reduceCheckoutState(refused, { type: "retry-recaptcha-challenge" });
+
+      // Back to "captcha" so PaymentForm executes a key again — this time the challenge one. The
+      // score token is dropped: the resubmission has to carry the challenge token instead.
+      expect(next.status).toEqual({ type: "captcha", paymentMethod, challengeFallback: true });
+    });
+
+    it("carries the marker onto the resubmitted order alongside the challenge token", () => {
+      const retrying = reduceCheckoutState(
+        state({ status: { type: "finished", recaptchaResponse: "score-token", paymentMethod } }),
+        { type: "retry-recaptcha-challenge" },
+      );
+
+      const next = reduceCheckoutState(retrying, {
+        type: "set-recaptcha-response",
+        recaptchaResponse: "challenge-token",
+      });
+
+      expect(next.status).toEqual({
+        type: "finished",
+        recaptchaResponse: "challenge-token",
+        paymentMethod,
+        challengeFallback: true,
+      });
+    });
+
+    // Terminal after one retry, matching the server withholding the offer on a fallback attempt.
+    it("refuses a second retry once the failed attempt was already a challenge fallback", () => {
+      const refusedFallback = state({
+        status: { type: "finished", recaptchaResponse: "challenge-token", paymentMethod, challengeFallback: true },
+      });
+
+      const next = reduceCheckoutState(refusedFallback, { type: "retry-recaptcha-challenge" });
+
+      expect(next.status).toEqual(refusedFallback.status);
+    });
+
+    it("ignores the retry outside a finished payment attempt", () => {
+      const idle = state({ status: { type: "input", errors: new Set() } });
+
+      const next = reduceCheckoutState(idle, { type: "retry-recaptcha-challenge" });
+
+      expect(next.status).toEqual({ type: "input", errors: new Set() });
+    });
+
+    // A dismissed challenge is a plain cancel: the buyer lands back in the form and can press Pay
+    // again, which starts a fresh attempt against the score key.
+    it("drops the fallback marker when the buyer cancels out of the challenge", () => {
+      const retrying = reduceCheckoutState(
+        state({ status: { type: "finished", recaptchaResponse: "score-token", paymentMethod } }),
+        { type: "retry-recaptcha-challenge" },
+      );
+
+      const next = reduceCheckoutState(retrying, { type: "cancel" });
+
+      expect(next.status).toEqual({ type: "input", errors: new Set() });
     });
   });
 });

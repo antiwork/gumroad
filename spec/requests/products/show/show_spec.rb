@@ -362,8 +362,13 @@ describe("ProductShowScenario", type: :system, js: true) do
     let(:seller) { product.user }
 
     before do
+      page.driver.browser.execute_cdp("Emulation.setTimezoneOverride", timezoneId: "America/Los_Angeles")
       seller.update!(refund_policy_enabled: false)
       product.update!(product_refund_policy_enabled: true)
+    end
+
+    after do
+      page.driver.browser.execute_cdp("Emulation.setTimezoneOverride", timezoneId: "")
     end
 
     it "renders product-level refund policy" do

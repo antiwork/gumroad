@@ -1,5 +1,5 @@
 import { Link } from "@inertiajs/react";
-import { subDays } from "date-fns";
+import { parseISO, subDays } from "date-fns";
 import React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
@@ -75,7 +75,7 @@ const Payout = ({ payout }: Props) => (
       <dt>Payout period end date</dt>
       <dd>
         {payout.payout_period_end_date
-          ? formatDate(new Date(payout.payout_period_end_date), { dateStyle: "long" })
+          ? formatDate(parseISO(payout.payout_period_end_date), { dateStyle: "long" })
           : "None"}
       </dd>
 

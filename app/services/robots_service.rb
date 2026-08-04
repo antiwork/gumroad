@@ -13,6 +13,10 @@ class RobotsService
     end
   end
 
+  # Policy: AI crawlers (GPTBot, ClaudeBot, Claude-Web, PerplexityBot,
+  # Google-Extended, CCBot, …) are intentionally ALLOWED — the wildcard rule is
+  # the only one we serve, so don't add per-bot Disallow groups without a
+  # product decision. AI-assistant discoverability is the point (see /llms.txt).
   def user_agent_rules
     [
       "User-agent: *",

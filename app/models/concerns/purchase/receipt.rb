@@ -18,6 +18,18 @@ module Purchase::Receipt
     end
   end
 
+  # Every send attempt, oldest first. A resend adds a row rather than
+  # overwriting the last one (gumroad-private#1635), so callers that need the
+  # ORIGINAL send — chargeback evidence especially — read this instead of
+  # `receipt_email_info`, which is the newest.
+  def receipt_email_infos
+    if uses_charge_receipt?
+      charge.receipt_email_infos
+    else
+      email_infos.where(type: CustomerEmailInfo.name, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).order(:id)
+    end
+  end
+
   def send_receipt
     after_commit do
       next if destroyed?

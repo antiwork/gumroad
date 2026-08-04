@@ -1395,6 +1395,24 @@ describe PaypalChargeProcessor, :vcr do
         end
       end
 
+      context "when PayPal omits error details" do
+        it "raises the mapped invalid-request error instead of crashing while building the message" do
+          api_response = JSON.parse({ result: { name: "UNPROCESSABLE_ENTITY" } }.to_json, object_class: OpenStruct)
+          paypal_rest_api = instance_double(PaypalRestApi)
+          allow(PaypalRestApi).to receive(:new).and_return(paypal_rest_api)
+          allow(paypal_rest_api).to receive(:refund).with(capture_id: "capture-without-details",
+                                                          merchant_account:, amount: 2.0).and_return(api_response)
+          allow(paypal_rest_api).to receive(:successful_response?).with(api_response).and_return(false)
+
+          expect do
+            subject.refund!("capture-without-details",
+                            amount_cents: 200,
+                            merchant_account:,
+                            paypal_order_purchase_unit_refund: true)
+          end.to raise_error(ChargeProcessorInvalidRequestError, /Failed refund capture id - capture-without-details/)
+        end
+      end
+
       context "when it is a full refund" do
         it "refunds entire amount" do
           expect_any_instance_of(PaypalRestApi).to receive(:refund).with(capture_id: "2CL11631PW424125C",

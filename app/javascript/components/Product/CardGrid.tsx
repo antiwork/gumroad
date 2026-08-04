@@ -43,13 +43,17 @@ export const SORT_BY_LABELS = {
 export type State = {
   params: SearchRequest;
   results: SearchResults | null;
+  // The params `results` was actually fetched with. Requests are not cancelled on a param
+  // change, so a slow older response can land after a newer one; anything reasoning about
+  // whether `results` describes the current params must compare against this, not `params`.
+  resultsParams?: SearchRequest | undefined;
   offset?: number | undefined;
   loading?: boolean;
 };
 
 export type Action =
   | { type: "set-params"; params: SearchRequest }
-  | { type: "set-results"; results: SearchResults }
+  | { type: "set-results"; results: SearchResults; params: SearchRequest }
   | { type: "load-more" }
   | { type: "load-error" };
 
@@ -64,10 +68,10 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
             ...action.params,
             taxonomy: action.params.taxonomy === "discover" ? undefined : action.params.taxonomy,
           };
-          return { params, results: null, offset: action.params.from, loading: false };
+          return { params, results: null, resultsParams: undefined, offset: action.params.from, loading: false };
         }
         case "set-results":
-          return { ...state, results: action.results, loading: false };
+          return { ...state, results: action.results, resultsParams: action.params, loading: false };
         case "load-error":
           return { ...state, loading: false };
         case "load-more":
@@ -90,11 +94,13 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
   useOnChange(
     asyncVoid(async () => {
       try {
-        const request = getSearchResults(state.params);
+        const requestParams = state.params;
+        const request = getSearchResults(requestParams);
         activeRequest.current = request;
         const results = await request.response;
         dispatch({
           type: "set-results",
+          params: requestParams,
           results:
             state.results == null
               ? results
@@ -227,6 +233,34 @@ export const CardGrid = ({
     return () => observer.disconnect();
   }, [pagination, results?.products]);
 
+  // Drop taxonomy_attribute_filters tokens the server no longer recognizes for this taxonomy
+  // (stale cross-taxonomy value, category switch, malformed input) so they can't keep rendering
+  // as a checked 0-count facet indefinitely.
+  React.useEffect(() => {
+    if (!results) return;
+    // Only prune against a facet set fetched for the taxonomy AND tokens we're about to judge.
+    // Requests are not cancelled on a param change, so a slow older response can land last; a
+    // response for another taxonomy (or older tokens) legitimately omits a token that is valid
+    // here, and pruning on it would silently clear the user's just-picked filter and re-search
+    // broadened.
+    if (state.resultsParams?.taxonomy !== searchParams.taxonomy) return;
+    const fetchedTokens = state.resultsParams?.taxonomy_attribute_filters;
+    const current = searchParams.taxonomy_attribute_filters;
+    if (!current?.length) return;
+    if (
+      !fetchedTokens ||
+      fetchedTokens.length !== current.length ||
+      fetchedTokens.some((token, i) => token !== current[i])
+    )
+      return;
+    const validTokens = new Set(
+      results.taxonomy_attributes_data.flatMap((attribute) => attribute.filters.map((f) => f.key)),
+    );
+    const pruned = current.filter((token) => validTokens.has(token));
+    if (pruned.length !== current.length)
+      updateParams({ taxonomy_attribute_filters: pruned.length ? pruned : undefined });
+  }, [results]);
+
   const uid = React.useId();
   const minPriceUid = React.useId();
   const maxPriceUid = React.useId();
@@ -336,8 +370,9 @@ export const CardGrid = ({
             </CardContent>
           ) : null}
           {results?.taxonomy_attributes_data.map((attribute) => {
-            const selectedAttributeFilters = searchParams.taxonomy_attribute_filters?.filter((token) =>
-              token.startsWith(`${attribute.name}:`),
+            const validKeys = new Set(attribute.filters.map((f) => f.key));
+            const selectedAttributeFilters = searchParams.taxonomy_attribute_filters?.filter(
+              (token) => token.startsWith(`${attribute.name}:`) && validKeys.has(token),
             );
             return (
               <CardContent key={attribute.name} asChild details>

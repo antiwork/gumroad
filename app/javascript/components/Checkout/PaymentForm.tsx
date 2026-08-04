@@ -1830,6 +1830,14 @@ export const PaymentForm = ({
     scoreBased: state.recaptchaScoreBased,
     action: "checkout",
   });
+  // A score key can only ever score the session — there is nothing for a buyer it scores as risky
+  // to do about it. The challenge key can escalate to an interactive challenge, so it is mounted
+  // alongside for the retry the server offers after a score-only refusal (gumroad-private#1590).
+  // Only the score cohort can be refused that way; everyone else already runs the challenge key.
+  const challengeRecaptcha = useRecaptcha({
+    siteKey: state.recaptchaScoreBased ? state.recaptchaChallengeKey : null,
+    action: "checkout",
+  });
 
   const paymentFormRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -1862,7 +1870,7 @@ export const PaymentForm = ({
       if ((process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") && state.recaptchaKey === null) {
         dispatch({ type: "set-recaptcha-response" });
       } else {
-        recaptcha
+        (state.status.challengeFallback ? challengeRecaptcha : recaptcha)
           .execute()
           .then((recaptchaResponse) => dispatch({ type: "set-recaptcha-response", recaptchaResponse }))
           .catch((e: unknown) => {
@@ -1921,6 +1929,7 @@ export const PaymentForm = ({
         </Card>
       )}
       {recaptcha.container}
+      {challengeRecaptcha.container}
     </div>
   );
 };

@@ -33,7 +33,16 @@ module CheckoutRecaptcha
       score_site_key.present? && Feature.active?(COHORT_FEATURE, user)
     end
 
-    def site_key(user)
+    # `challenge_fallback` is a buyer coming back after a score-only refusal, re-proving
+    # themselves against the challenge key (gumroad-private#1590). That key is the only one that
+    # can escalate to an interactive image challenge, and CHALLENGE_SURFACE carries no score
+    # threshold — which is the whole point: a score can only ever refuse a risky-looking session,
+    # while a passed challenge is positive evidence. It is the same key and surface every buyer
+    # outside the cohort already checks out against, so no threshold moves and the cohort's
+    # standard bar is untouched.
+    def site_key(user, challenge_fallback: false)
+      return challenge_site_key if challenge_fallback
+
       score_based?(user) ? score_site_key : challenge_site_key
     end
 
@@ -42,10 +51,17 @@ module CheckoutRecaptcha
     # RECAPTCHA_SCORE_THRESHOLD_DEFAULTS). The site key is identical to the
     # untrusted score surface — only the server-side threshold differs — so the
     # frontend is unaffected.
-    def surface(user)
-      return CHALLENGE_SURFACE unless score_based?(user)
+    def surface(user, challenge_fallback: false)
+      return CHALLENGE_SURFACE if challenge_fallback || !score_based?(user)
 
       trusted_buyer?(user) ? SCORE_TRUSTED_SURFACE : SCORE_SURFACE
+    end
+
+    # Public because the challenge fallback needs it in two places the cohort logic can't answer:
+    # the checkout page has to be given the key to execute, and the verifying controller has to
+    # know the key exists at all before it honours a fallback marker.
+    def challenge_site_key
+      GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY")
     end
 
     private
@@ -68,10 +84,6 @@ module CheckoutRecaptcha
             .where(created_at: ..MIN_TRUSTED_PURCHASE_AGE.ago)
             .joins(:seller).merge(User.compliant)
             .exists?
-      end
-
-      def challenge_site_key
-        GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY")
       end
 
       def score_site_key
