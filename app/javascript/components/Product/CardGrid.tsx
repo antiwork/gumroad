@@ -43,13 +43,17 @@ export const SORT_BY_LABELS = {
 export type State = {
   params: SearchRequest;
   results: SearchResults | null;
+  // The params `results` was actually fetched with. Requests are not cancelled on a param
+  // change, so a slow older response can land after a newer one; anything reasoning about
+  // whether `results` describes the current params must compare against this, not `params`.
+  resultsParams?: SearchRequest | undefined;
   offset?: number | undefined;
   loading?: boolean;
 };
 
 export type Action =
   | { type: "set-params"; params: SearchRequest }
-  | { type: "set-results"; results: SearchResults }
+  | { type: "set-results"; results: SearchResults; params: SearchRequest }
   | { type: "load-more" }
   | { type: "load-error" };
 
@@ -64,10 +68,10 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
             ...action.params,
             taxonomy: action.params.taxonomy === "discover" ? undefined : action.params.taxonomy,
           };
-          return { params, results: null, offset: action.params.from, loading: false };
+          return { params, results: null, resultsParams: undefined, offset: action.params.from, loading: false };
         }
         case "set-results":
-          return { ...state, results: action.results, loading: false };
+          return { ...state, results: action.results, resultsParams: action.params, loading: false };
         case "load-error":
           return { ...state, loading: false };
         case "load-more":
@@ -90,11 +94,13 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
   useOnChange(
     asyncVoid(async () => {
       try {
-        const request = getSearchResults(state.params);
+        const requestParams = state.params;
+        const request = getSearchResults(requestParams);
         activeRequest.current = request;
         const results = await request.response;
         dispatch({
           type: "set-results",
+          params: requestParams,
           results:
             state.results == null
               ? results
@@ -232,11 +238,22 @@ export const CardGrid = ({
   // as a checked 0-count facet indefinitely.
   React.useEffect(() => {
     if (!results) return;
+    // Only prune against a facet set fetched for the tokens we're about to judge. Requests are
+    // not cancelled on a param change, so a slow older response can land last; its facets
+    // legitimately omit a newer token and pruning on them would silently clear the user's
+    // just-picked filter and re-search broadened.
+    const fetchedTokens = state.resultsParams?.taxonomy_attribute_filters;
+    const current = searchParams.taxonomy_attribute_filters;
+    if (!current?.length) return;
+    if (
+      !fetchedTokens ||
+      fetchedTokens.length !== current.length ||
+      fetchedTokens.some((token, i) => token !== current[i])
+    )
+      return;
     const validTokens = new Set(
       results.taxonomy_attributes_data.flatMap((attribute) => attribute.filters.map((f) => f.key)),
     );
-    const current = searchParams.taxonomy_attribute_filters;
-    if (!current?.length) return;
     const pruned = current.filter((token) => validTokens.has(token));
     if (pruned.length !== current.length)
       updateParams({ taxonomy_attribute_filters: pruned.length ? pruned : undefined });
