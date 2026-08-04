@@ -76,8 +76,15 @@ class Pages::ProfileData
   # second would produce an identical maximum(:updated_at) and serve a stale
   # cached rollup. Summing the actual counters changes whenever the rollup's
   # output could change, regardless of how many writes land in one second.
+  #
+  # Scoped to match seller_reputation_summary's eligibility exactly (Link.alive.not_draft,
+  # reviews_count != 0, display_product_reviews flag) — otherwise a review-hidden or
+  # zero-review product's writes churn this cache key without changing seller_rating.
   def self.reputation_summary_cache_signature(seller)
-    ProductReviewStat.joins(:link).where(links: { user_id: seller.id })
+    ProductReviewStat.joins(:link).merge(Link.alive.not_draft)
+      .where(links: { user_id: seller.id })
+      .where.not(reviews_count: 0)
+      .where(Arel.sql("links.flags & #{Link.flag_mapping["flags"][:display_product_reviews]} != 0"))
       .pick(Arel.sql("SUM(reviews_count), SUM(ratings_of_one_count), SUM(ratings_of_two_count), " \
                       "SUM(ratings_of_three_count), SUM(ratings_of_four_count), SUM(ratings_of_five_count), COUNT(*)"))
       &.join(",")
