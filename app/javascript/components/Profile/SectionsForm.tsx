@@ -206,6 +206,21 @@ const OptionRow = ({
   </Row>
 );
 
+// Strips persisted `attrs.id` from every upsellCard node, at any depth (e.g. inside a
+// blockquote), so a duplicated section never shares an Upsell row with its original — see
+// withFreshUpsellCards below for why that sharing is dangerous.
+const isRecord = (node: unknown): node is Record<string, unknown> => typeof node === "object" && node !== null;
+
+const stripUpsellCardIds = (node: unknown): unknown => {
+  if (!isRecord(node)) return node;
+  const content = Array.isArray(node.content) ? node.content.map(stripUpsellCardIds) : node.content;
+  if (isUpsellCard(node)) {
+    const { id: _id, ...attrs } = node.attrs;
+    return { ...node, attrs, ...(content !== undefined ? { content } : {}) };
+  }
+  return content !== undefined ? { ...node, content } : node;
+};
+
 const withFreshUpsellCards = (section: Section): Section => {
   if (section.type !== "SellerProfileRichTextSection") return section;
   // An upsellCard's `attrs.id` is a persisted Upsell row. SaveContentUpsellsService only mints a
@@ -218,11 +233,7 @@ const withFreshUpsellCards = (section: Section): Section => {
     ...section,
     text: {
       ...section.text,
-      content: content.map((node: unknown) => {
-        if (!isUpsellCard(node)) return node;
-        const { id: _id, ...attrs } = node.attrs;
-        return { ...node, attrs };
-      }),
+      content: content.map(stripUpsellCardIds),
     },
   };
 };
