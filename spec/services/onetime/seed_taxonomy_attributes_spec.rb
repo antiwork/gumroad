@@ -15,8 +15,8 @@ describe Onetime::SeedTaxonomyAttributes do
   it "creates the registry's definitions for the matched taxonomy" do
     result = described_class.process(dry_run: false)
 
-    expect(result[:created]).to eq(4)
-    expect(TaxonomyAttribute.where(taxonomy: fonts).pluck(:name)).to match_array(%w[format license variable_font styles])
+    expect(result[:created]).to eq(6)
+    expect(TaxonomyAttribute.where(taxonomy: fonts).pluck(:name)).to match_array(%w[classification format license variable_font has_multiple_weights styles])
 
     format = TaxonomyAttribute.find_by(taxonomy: fonts, name: "format")
     expect(format.label).to eq("Format")

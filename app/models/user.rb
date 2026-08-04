@@ -27,6 +27,7 @@ class User < ApplicationRecord
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
           AttributeBlockable, PayoutInfo, EmailNormalization, SingleUseResetPasswordToken,
           DashboardNavItems, ReputationSummary
+  include Purchase::Searchable::BuyerEmailCallbacks
 
   has_many :user_external_authentications, dependent: :destroy
 
