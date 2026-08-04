@@ -39,8 +39,8 @@ class MerchantCenterFeedService
       scanned = 0
       Link.alive.not_archived.preload(*FEED_PRELOADS).find_each do |product|
         break if products.size >= max_products
+        break if scanned >= MAX_SCANNED_PRODUCTS
         scanned += 1
-        break if scanned > MAX_SCANNED_PRODUCTS
         products << product if eligible?(product)
       end
       products
