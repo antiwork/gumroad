@@ -93,6 +93,19 @@ describe Onetime::ReconcileStuckStripeDisputes do
       expect(result[:stats][:refused_not_found_on_account_tried]).to eq(1)
     end
 
+    # service_charge is a valid disputable per Dispute's own validation — this must not fall into
+    # no_disputable, which is reserved for a genuine data-integrity gap (neither charge nor purchase
+    # nor service_charge).
+    it "refuses a service_charge dispute as unsupported, not as no_disputable" do
+      dispute.update!(purchase: nil, service_charge: create(:service_charge))
+      expect(Stripe::Dispute).to_not receive(:retrieve)
+
+      result = described_class.process(dry_run: false)
+
+      expect(result[:stats][:refused_unsupported_disputable_type]).to eq(1)
+      expect(result[:stats][:refused_no_disputable]).to eq(0)
+    end
+
     it "refuses a dispute carrying no processor id" do
       dispute.update!(charge_processor_dispute_id: nil)
 

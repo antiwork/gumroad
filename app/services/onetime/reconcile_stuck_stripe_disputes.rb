@@ -74,7 +74,13 @@ module Onetime
     private
       # Everything that makes a row unbookable on OUR side, checked before we spend a Stripe call.
       def internal_refusal(dispute)
-        return "no_disputable" if dispute.charge.nil? && dispute.purchase.nil?
+        if dispute.charge.nil? && dispute.purchase.nil?
+          # A service_charge dispute has a real disputable, just not one this script can book —
+          # ServiceCharge has no handle_event_dispute_won!/lost! and no seller (dispute.rb's own
+          # comment). Keep it out of no_disputable so that stat stays a signal for actual data gaps.
+          return "unsupported_disputable_type" if dispute.service_charge.present?
+          return "no_disputable"
+        end
 
         # The seller-side debit happens in the FORMALIZED side effects. A row that never got
         # there has no debit on our books, so booking WON would credit a debit that never
