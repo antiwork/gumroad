@@ -31,51 +31,71 @@ class Commission < ApplicationRecord
 
   def create_completion_purchase!
     return if is_completed?
-    # A completion still settling in the buyer's presentment currency leaves the commission
-    # in_progress with the buyer already charged, so `is_completed?` alone would charge them a
-    # second time here. A failed attempt stays retryable.
-    return if completion_purchase.present? && !completion_purchase.failed?
-    ensure_deposit_is_chargeable!
-    ensure_deliverable_is_attached!
 
-    completion_purchase_attributes = deposit_purchase.slice(
-      :link, :purchaser, :credit_card_id, :email, :full_name, :street_address,
-      :country, :state, :zip_code, :city, :ip_address, :ip_state, :ip_country,
-      :browser_guid, :referrer, :quantity, :was_product_recommended, :seller,
-      :credit_card_zipcode, :offer_code, :variant_attributes, :is_purchasing_power_parity_discounted
-    ).merge(
-      perceived_price_cents: completion_display_price_cents,
-      affiliate: deposit_purchase.affiliate.try(:alive?) ? deposit_purchase.affiliate : nil,
-      is_commission_completion_purchase: true
-    )
+    # `with_lock` reloads this record before yielding, which busts the memoized `deposit_purchase`
+    # association — a bare `deposit_purchase` call inside the block would re-query it fresh,
+    # including a fresh `variant_attributes` join that reads the variant's CURRENT price rather
+    # than the price at the time this purchase was made, silently repricing the completion charge
+    # if a seller edits variant prices while a commission is in progress. Capture the reference
+    # (with its association already loaded) before the lock and hand it straight back to the
+    # reloaded record, rather than letting the block re-derive it.
+    frozen_deposit_purchase = deposit_purchase.tap(&:variant_attributes)
 
-    completion_purchase = build_completion_purchase(completion_purchase_attributes)
-    completion_purchase.inherit_offer_code_from(deposit_purchase)
+    # Row-locked for the whole method: without it, two concurrent complete requests can both
+    # pass the guards below, then each build and charge their own completion purchase, charging
+    # the buyer twice. A second caller blocks here until the first either commits a
+    # completed/failed completion_purchase or raises. The charge itself runs inside the lock too
+    # — commission completion is a rare, single-seller-initiated action, not a hot path, so
+    # serializing it is the simplest correct fix.
+    with_lock do
+      self.deposit_purchase = frozen_deposit_purchase
+      return if is_completed?
+      # A completion still settling in the buyer's presentment currency leaves the commission
+      # in_progress with the buyer already charged, so `is_completed?` alone would charge them a
+      # second time here. A failed attempt stays retryable.
+      return if completion_purchase.present? && !completion_purchase.failed?
+      ensure_deposit_is_chargeable!
+      ensure_deliverable_is_attached!
 
-    if completion_tip_value_cents.positive?
-      completion_purchase.build_tip(value_cents: completion_tip_value_cents)
-    end
-
-    if deposit_purchase.is_purchasing_power_parity_discounted &&
-        deposit_purchase.purchasing_power_parity_info.present?
-      completion_purchase.build_purchasing_power_parity_info(
-        factor: deposit_purchase.purchasing_power_parity_info.factor
+      completion_purchase_attributes = deposit_purchase.slice(
+        :link, :purchaser, :credit_card_id, :email, :full_name, :street_address,
+        :country, :state, :zip_code, :city, :ip_address, :ip_state, :ip_country,
+        :browser_guid, :referrer, :quantity, :was_product_recommended, :seller,
+        :credit_card_zipcode, :offer_code, :variant_attributes, :is_purchasing_power_parity_discounted
+      ).merge(
+        perceived_price_cents: completion_display_price_cents,
+        affiliate: deposit_purchase.affiliate.try(:alive?) ? deposit_purchase.affiliate : nil,
+        is_commission_completion_purchase: true
       )
-    end
 
-    completion_purchase.ensure_completion do
-      completion_purchase.process!
+      pending_completion = build_completion_purchase(completion_purchase_attributes)
+      pending_completion.inherit_offer_code_from(deposit_purchase)
 
-      if completion_purchase.errors.present?
-        raise ActiveRecord::RecordInvalid.new(completion_purchase)
+      if completion_tip_value_cents.positive?
+        pending_completion.build_tip(value_cents: completion_tip_value_cents)
       end
 
-      self.completion_purchase = completion_purchase
-      unless completion_purchase.pending_buyer_presentment_settlement?
-        completion_purchase.update_balance_and_mark_successful!
-        self.status = STATUS_COMPLETED
+      if deposit_purchase.is_purchasing_power_parity_discounted &&
+          deposit_purchase.purchasing_power_parity_info.present?
+        pending_completion.build_purchasing_power_parity_info(
+          factor: deposit_purchase.purchasing_power_parity_info.factor
+        )
       end
-      save!
+
+      pending_completion.ensure_completion do
+        pending_completion.process!
+
+        if pending_completion.errors.present?
+          raise ActiveRecord::RecordInvalid.new(pending_completion)
+        end
+
+        self.completion_purchase = pending_completion
+        unless pending_completion.pending_buyer_presentment_settlement?
+          pending_completion.update_balance_and_mark_successful!
+          self.status = STATUS_COMPLETED
+        end
+        save!
+      end
     end
   end
 
