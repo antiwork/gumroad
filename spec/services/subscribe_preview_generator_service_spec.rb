@@ -59,11 +59,52 @@ describe SubscribePreviewGeneratorService, type: :system, js: true do
       expect(images.first).to start_with("\x89PNG".b)
     end
 
+    it "raises on a rejected decode rather than attaching an incomplete card" do
+      driver = stub_subscribe_preview_driver(script_result: "failed")
+
+      expect { described_class.generate_pngs([@user1]) }.to raise_error(Selenium::WebDriver::Error::TimeoutError)
+      expect(driver).not_to have_received(:screenshot_as)
+    end
+
+    it "treats a rejected decode as settled only when the avatar is not required" do
+      stub_subscribe_preview_driver(script_result: "failed")
+
+      images = described_class.generate_pngs([@user1], require_avatar: false)
+
+      expect(images.first).to eq("\x89PNG".b)
+    end
+
     it "always quits the webdriver on error" do
       error = "FAILURE"
       expect_any_instance_of(Selenium::WebDriver::Driver).to receive(:quit)
       allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:screenshot_as).and_raise(error)
       expect { described_class.generate_pngs([@user2]) }.to raise_error(error)
+    end
+
+    def stub_subscribe_preview_driver(script_result:)
+      navigate = double(to: nil)
+      window = double
+      allow(window).to receive(:size=)
+      manage = double(window:)
+      driver = instance_double(
+        Selenium::WebDriver::Driver,
+        navigate:,
+        manage:,
+        execute_script: script_result,
+        screenshot_as: "\x89PNG".b,
+        quit: nil,
+      )
+      wait = instance_double(Selenium::WebDriver::Wait)
+
+      allow(Selenium::WebDriver).to receive(:for).and_return(driver)
+      allow(Selenium::WebDriver::Wait).to receive(:new).and_return(wait)
+      allow(wait).to receive(:until) do |&block|
+        next true if block.call
+
+        raise Selenium::WebDriver::Error::TimeoutError
+      end
+
+      driver
     end
   end
 end
