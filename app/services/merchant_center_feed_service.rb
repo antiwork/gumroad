@@ -9,6 +9,8 @@ class MerchantCenterFeedService
   FEED_TITLE = "Gumroad products"
   # Google rejects descriptions over 5,000 characters.
   MAX_DESCRIPTION_LENGTH = 5_000
+  # Google truncates (and may warn on) titles over 150 characters.
+  MAX_TITLE_LENGTH = 150
   # First-run safety bound; raise deliberately once feed size/ingest behavior is known.
   DEFAULT_MAX_PRODUCTS = 100_000
   # Hard bound on rows SCANNED (not accepted): a catalog dense with ineligible
@@ -80,7 +82,7 @@ class MerchantCenterFeedService
     def build_item(builder, product)
       builder.item do
         builder.tag!("g:id", product.external_id)
-        builder.tag!("g:title", product.name)
+        builder.tag!("g:title", feed_title(product))
         builder.tag!("g:description", feed_description(product))
         builder.tag!("g:link", product.long_url)
         builder.tag!("g:image_link", product.social_share_image)
@@ -96,6 +98,10 @@ class MerchantCenterFeedService
     # otherwise Google renders the literal "&amp;".
     def feed_description(product)
       CGI.unescapeHTML(product.plaintext_description).truncate(MAX_DESCRIPTION_LENGTH)
+    end
+
+    def feed_title(product)
+      product.name.truncate(MAX_TITLE_LENGTH)
     end
 
     def formatted_price(product)

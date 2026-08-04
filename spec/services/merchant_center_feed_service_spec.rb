@@ -57,6 +57,13 @@ describe MerchantCenterFeedService do
       expect(g_field(items(service.generate).first, "description")).to eq "Fish & Chips — 100% café"
     end
 
+    it "truncates titles over Google's 150-character limit" do
+      create_eligible_product(name: "a" * 151)
+
+      title = g_field(items(service.generate).first, "title")
+      expect(title.length).to eq 150
+    end
+
     it "excludes products that are not recommendable for Discover" do
       not_recommendable = create(:product, price_cents: 999)
       create(:asset_preview, link: not_recommendable)
