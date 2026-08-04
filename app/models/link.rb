@@ -265,6 +265,7 @@ class Link < ApplicationRecord
   after_update :create_licenses_for_existing_customers,
                if: ->(link) { link.saved_change_to_is_licensed? && link.is_licensed? }
   after_update :delete_unused_prices, if: :saved_change_to_purchase_type?
+  after_commit :submit_to_indexnow, on: :update, if: :indexnow_submission_needed?
 
   enum subscription_duration: %i[monthly yearly quarterly biannually every_two_years]
   enum purchase_type: %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
@@ -1706,6 +1707,17 @@ class Link < ApplicationRecord
     end
 
   private
+    # Publish/unpublish flips these columns; content edits to a live listing also
+    # warrant a ping so search engines re-crawl the updated page.
+    def indexnow_submission_needed?
+      saved_change_to_purchase_disabled_at? || saved_change_to_deleted_at? || saved_change_to_draft? ||
+        (published? && (saved_change_to_name? || saved_change_to_description? || saved_change_to_custom_permalink?))
+    end
+
+    def submit_to_indexnow
+      SubmitToIndexnowJob.perform_async([id])
+    end
+
     # Looks up a purchase of this product by external id and verifies the caller also
     # holds that purchase's email digest (an HMAC of purchase id + email). Both values
     # come from review-reminder email links, so a match proves the visitor received the
