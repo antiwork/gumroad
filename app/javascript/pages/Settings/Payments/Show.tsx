@@ -895,7 +895,10 @@ export default function PaymentsPage() {
     ) {
       markFieldInvalid("individual_tax_id");
     }
-    if (props.user.has_outstanding_full_ssn_requirement && form.data.user.country === "US") {
+    // Stripe's id_number requirement follows the account country — business_country for
+    // businesses (same rule as the Peru DNI check below).
+    const ssnRequirementCountry = form.data.user.is_business ? form.data.user.business_country : form.data.user.country;
+    if (props.user.has_outstanding_full_ssn_requirement && ssnRequirementCountry === "US") {
       const typedSsnDigits = (form.data.user.individual_tax_id ?? "").replace(/\D/gu, "");
       // Only last-4 (or nothing) on file can never satisfy Stripe's id_number requirement, so the
       // seller must type a fresh full SSN; and any newly typed value must itself be 9 digits so a

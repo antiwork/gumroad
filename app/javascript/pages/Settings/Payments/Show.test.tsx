@@ -93,7 +93,7 @@ const complianceInfo = (overrides: Partial<ComplianceInfo> = {}): ComplianceInfo
   ...overrides,
 });
 
-const pageProps = (userOverrides: Partial<User> = {}) => ({
+const pageProps = (userOverrides: Partial<User> = {}, complianceOverrides: Partial<ComplianceInfo> = {}) => ({
   settings_pages: ["payments"],
   is_form_disabled: false,
   should_show_country_modal: false,
@@ -134,7 +134,7 @@ const pageProps = (userOverrides: Partial<User> = {}) => ({
   },
   min_dob_year: 2008,
   user: user(userOverrides),
-  compliance_info: complianceInfo(),
+  compliance_info: complianceInfo(complianceOverrides),
   uae_business_types: [],
   india_business_types: [],
   canada_business_types: [],
@@ -180,8 +180,8 @@ const pageProps = (userOverrides: Partial<User> = {}) => ({
   legal_guardian: { required: false, unsupported: false, blocking_payouts: false, guardian: null },
 });
 
-const renderPage = (userOverrides: Partial<User> = {}) => {
-  mocks.usePage.mockReturnValue({ props: pageProps(userOverrides) });
+const renderPage = (userOverrides: Partial<User> = {}, complianceOverrides: Partial<ComplianceInfo> = {}) => {
+  mocks.usePage.mockReturnValue({ props: pageProps(userOverrides, complianceOverrides) });
   render(<PaymentsPage />);
 };
 
@@ -274,5 +274,33 @@ describe("full-SSN re-entry validation", () => {
 
     expect(fullSsnError()).toBeNull();
     expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+  it("blocks saving for a US business whose individual country is not US (requirement follows business_country)", () => {
+    renderPage(
+      {
+        need_full_ssn: true,
+        has_outstanding_full_ssn_requirement: true,
+        individual_tax_id_is_last_four: true,
+        business_tax_id_entered: true,
+      },
+      {
+        is_business: true,
+        country: "CA",
+        // Complete business fields so no later validation overwrites the SSN error message.
+        business_type: "llc",
+        business_name: "Test LLC",
+        business_street_address: "123 Main St",
+        business_city: "San Francisco",
+        business_state: "CA",
+        business_country: "US",
+        business_zip_code: "94103",
+        business_phone: "+14155552671",
+      },
+    );
+
+    save();
+
+    expect(fullSsnError()).toBeTruthy();
+    expect(mocks.put).not.toHaveBeenCalled();
   });
 });

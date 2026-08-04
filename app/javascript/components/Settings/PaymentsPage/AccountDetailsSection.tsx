@@ -437,9 +437,12 @@ const AccountDetailsSection = ({
   // last 4, so the sync job can never clear the requirement — the masked "done" display would
   // strand the seller. Force the input open with an explanation instead. Gated on the OUTSTANDING
   // requirement (not need_full_ssn, which is ever-requested) so sellers who satisfied an old
-  // request another way aren't forced to re-enter an SSN Stripe no longer wants.
+  // request another way aren't forced to re-enter an SSN Stripe no longer wants. Stripe's
+  // requirement follows the account country — business_country for businesses (same rule as the
+  // Peru DNI check).
+  const ssnRequirementCountry = complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country;
   const mustReenterFullSsn =
-    user.has_outstanding_full_ssn_requirement && user.individual_tax_id_is_last_four && complianceInfo.country === "US";
+    user.has_outstanding_full_ssn_requirement && user.individual_tax_id_is_last_four && ssnRequirementCountry === "US";
 
   return (
     <section className="grid gap-8">
