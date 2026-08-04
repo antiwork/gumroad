@@ -539,6 +539,10 @@ describe SendPostBlastEmailsJob, :freeze_time do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
       job = described_class.new
       job.instance_variable_set(:@blast, blast)
+      # Only a real worker can rely on the digest existing — the client middleware that
+      # creates it never runs for a direct `new.perform`, which is how every other example
+      # in this file invokes the job.
+      allow(Sidekiq).to receive(:server?).and_return(true)
 
       [-2, -1].each do |pttl|
         redis = instance_double(Redis, pttl: pttl)

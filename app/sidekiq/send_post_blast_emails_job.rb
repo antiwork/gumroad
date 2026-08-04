@@ -116,10 +116,14 @@ class SendPostBlastEmailsJob
       # Redis returns -2 (key missing) or -1 (no expiry) rather than raising, so a bare
       # nil/negative check here would read as "can't tell" and let attempt_deadline fall
       # back to a fresh local window — exactly the unbounded-overlap risk this lock exists
-      # to prevent. Fail closed the same as the rescue clause below.
-      if pttl.nil? || pttl.negative?
+      # to prevent. Fail closed the same as the rescue clause below, but only inside a real
+      # worker: the client middleware that creates the digest never runs for a direct
+      # `new.perform(id)` (specs, console backfills), where a missing digest means "no lock
+      # was ever taken" rather than "the lock we rely on vanished".
+      if (pttl.nil? || pttl.negative?) && Sidekiq.server?
         raise LockLifeTooShort, "#{self.class.name} blast_id=#{@blast.id} unique-lock pttl was #{pttl.inspect}, expected a live lock"
       end
+      return if pttl.nil? || pttl.negative?
 
       (pttl / 1000.0).seconds
     rescue Redis::BaseError, RedisClient::Error, ConnectionPool::TimeoutError, SidekiqUniqueJobs::UniqueJobsError => e
