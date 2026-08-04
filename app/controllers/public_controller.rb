@@ -37,13 +37,18 @@ class PublicController < ApplicationController
   end
 
   def license_key_lookup_data
-    purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
+    all_purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
+    purchases = all_purchases
     if params[:product_query].present?
       query = params[:product_query].strip
-      purchases = purchases.joins(:link).where(
+      scoped = all_purchases.joins(:link).where(
         "links.name LIKE ? OR links.unique_permalink = ? OR links.custom_permalink = ?",
         "%#{Purchase.sanitize_sql_like(query)}%", query, query
       )
+      # Fall back to the full set rather than reporting `false` on no match: an unauthenticated
+      # caller who already knows the email must not learn whether it purchased ANY specific
+      # product from the response alone.
+      purchases = scoped if scoped.exists?
     end
     if purchases.none?
       render json: { success: false }

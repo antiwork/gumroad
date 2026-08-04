@@ -140,10 +140,15 @@ describe PublicController, type: :controller, inertia: true do
       expect(response.parsed_body["success"]).to be(true)
     end
 
-    it "returns false when the product query matches none of the buyer's purchases" do
-      expect(CustomerMailer).not_to receive(:grouped_receipt)
+    it "falls back to all purchases, rather than reporting false, when the query matches none of the buyer's purchases" do
+      # A non-matching query must respond identically to a matching one — otherwise an
+      # unauthenticated caller who knows the email learns whether it bought a given product.
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([other_purchase.id, wanted_purchase.id])).and_return(mail_double)
       get :license_key_lookup_data, params: { email:, product_query: "some product I never bought" }
-      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["success"]).to be(true)
     end
 
     it "emails all purchases when no product query is given" do
@@ -155,10 +160,24 @@ describe PublicController, type: :controller, inertia: true do
       expect(response.parsed_body["success"]).to be(true)
     end
 
-    it "does not treat LIKE wildcards in the query as wildcards" do
-      expect(CustomerMailer).not_to receive(:grouped_receipt)
+    it "does not treat LIKE wildcards in the query as wildcards, falling back to all purchases" do
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([other_purchase.id, wanted_purchase.id])).and_return(mail_double)
       get :license_key_lookup_data, params: { email:, product_query: "%" }
-      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "responds identically for a matching and a non-matching product query (no purchase oracle)" do
+      get :license_key_lookup_data, params: { email:, product_query: "Photo Editor" }
+      matching_body = response.parsed_body
+
+      get :license_key_lookup_data, params: { email:, product_query: "some product I never bought" }
+      nonmatching_body = response.parsed_body
+
+      expect(matching_body).to eq(nonmatching_body)
+      expect(matching_body["success"]).to be(true)
     end
   end
 
