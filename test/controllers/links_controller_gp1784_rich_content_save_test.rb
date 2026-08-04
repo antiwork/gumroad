@@ -98,11 +98,39 @@ class LinksControllerGp1784RichContentSaveTest < ActionController::TestCase
     # could read — indistinguishable, from the browser, from a hang.
     assert_response :unprocessable_entity
     body = response.parsed_body
-    assert body["error_message"].present?, "expected a seller-readable error_message, got: #{response.body}"
+    # Pin the SERVICE-level rescue specifically: the controller's catch-all
+    # would also render 422, but with a generic message and an ErrorNotifier
+    # report. Asserting the service's refresh message (and no error report,
+    # below) means this test fails if the targeted rescue is removed and the
+    # failure merely falls through to defense-in-depth.
+    assert_includes body["error_message"].to_s, "may be out of date — please refresh",
+                    "expected the variant-not-found seller message from " \
+                    "VariantCategoryUpdaterService, got: #{response.body}"
 
     # The whole transaction rolled back: the unrelated Free Trial edit in the
     # SAME request must NOT have been silently partially applied.
     assert_equal rich_content_before, @free_trial_rich_content.reload.updated_at
+  end
+
+  test "a stale variant id takes the anticipated service rescue, not the catch-all (no error report for an expected editor-staleness case)" do
+    stale_variant = @variants.last
+    stale_variant_id = ObfuscateIds.encrypt(stale_variant.id + 999_999_999)
+    stale_variant.mark_deleted!
+
+    ErrorNotifier.expects(:notify).never
+
+    put :update, params: @base_params.merge(
+      variants: (@variants - [stale_variant]).map do |variant|
+        rich_content = variant.alive_rich_contents.sole
+        {
+          id: variant.external_id,
+          name: variant.name,
+          rich_content: [{ id: rich_content.external_id, title: rich_content.title, description: rich_content.description }],
+        }
+      end + [{ id: stale_variant_id, name: stale_variant.name }]
+    ), as: :json
+
+    assert_response :unprocessable_entity
   end
 
   test "an entirely unanticipated exception during save also fails loudly instead of propagating as a bare 500" do
@@ -111,6 +139,11 @@ class LinksControllerGp1784RichContentSaveTest < ActionController::TestCase
     # looks like a hang from the browser.
     Product::VariantCategoryUpdaterService.any_instance.stubs(:save_rich_content).raises(RuntimeError, "boom")
     rich_content_before = @free_trial_rich_content.updated_at
+
+    # The catch-all's contract is fail-loudly-BOTH-ways: readable JSON for the
+    # seller AND a report for on-call. Without this expectation, removing the
+    # ErrorNotifier call would silently regress 500-visibility to nothing.
+    ErrorNotifier.expects(:notify).with(instance_of(RuntimeError))
 
     put :update, params: @base_params.merge(
       variants: @variants.map do |variant|
