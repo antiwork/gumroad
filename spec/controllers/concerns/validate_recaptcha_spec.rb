@@ -322,7 +322,7 @@ describe ValidateRecaptcha, type: :controller do
         expect(parsed_body["error"]).to eq("captcha_failed")
       end
 
-      it "passes a score that clears the lenient 0.3 default but would fail the untrusted 0.5 surface" do
+      it "passes a score that clears the lenient 0.3 default and would also clear the untrusted 0.4 surface" do
         stub_recaptcha_response(valid: true, score: 0.4)
 
         post :checkout_score_trusted_action, params: { "g-recaptcha-response" => "test_token" }
