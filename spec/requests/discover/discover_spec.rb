@@ -477,7 +477,8 @@ describe("Discover", js: true, type: :system) do
     it "shows breadcrumbs with taxonomy links and handles back and forward buttons" do
       visit "#{discover_host}/software-development/programming/c-sharp?sort=featured"
 
-      expect(page).to have_title("Software Development » Programming » C# — digital products by independent creators | Gumroad")
+      # ?sort=featured is not a category_seo_page, so no SEO suffix (server and client agree).
+      expect(page).to have_title("Software Development » Programming » C# | Gumroad")
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 3")
       end
@@ -511,7 +512,7 @@ describe("Discover", js: true, type: :system) do
       page.go_back
       wait_for_ajax
       expect(page).to have_current_path("/software-development/programming/c-sharp?sort=featured")
-      expect(page).to have_title("Software Development » Programming » C# — digital products by independent creators | Gumroad")
+      expect(page).to have_title("Software Development » Programming » C# | Gumroad")
       expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development\n/Programming\n/C#")
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 3")

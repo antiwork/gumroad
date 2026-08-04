@@ -61,8 +61,12 @@ export const discoverTitleGenerator = (params: SearchRequest, taxonomies: Taxono
     ?.split("/")
     .map((slug) => taxonomies.find((t) => t.slug === slug)?.label ?? slug)
     .join(" » ");
-  // Taxonomy-only pages are server-rendered with this SEO suffix (Discover::CategoryPagePresenter#title);
-  // client-side navigation must produce the same title or it flips on every Inertia visit.
-  if (taxonomyTitle && !searchOrTagsTitle) taxonomyTitle += " — digital products by independent creators";
+  // Taxonomy-only pages are server-rendered with this SEO suffix (Discover::CategoryPagePresenter#title,
+  // gated by category_seo_page?: no query params besides "from"). Mirror that gate on the actual URL —
+  // client state always carries a default sort, so state params can't distinguish /3d from /3d?sort=featured.
+  const searchParams = new URLSearchParams(window.location.search);
+  searchParams.delete("from");
+  if (taxonomyTitle && [...searchParams].length === 0)
+    taxonomyTitle += " — digital products by independent creators";
   return [searchOrTagsTitle, taxonomyTitle, "Gumroad"].filter((s) => s).join(" | ");
 };

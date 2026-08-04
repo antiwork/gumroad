@@ -47,15 +47,20 @@ module Product::ReviewStat
 
   def update_review_stat_via_rating_change(old_rating, new_rating)
     if product_review_stat.nil?
-      # Serialize only the first aggregate row creation. The locking lookup is a current read, so
-      # a callback transaction waiting here sees the row committed by the winner.
-      with_lock do
-        review_stat_association = association(:product_review_stat)
-        review_stat_association.reset
-        review_stat = ProductReviewStat.lock.find_by(link_id: id) || create_product_review_stat!
-        review_stat_association.target = review_stat
-        apply_rating_change_to_review_stat(review_stat, old_rating, new_rating)
+      # First-row creation: plain read, then insert, with the unique link_id index as the
+      # arbiter — the loser's insert raises RecordNotUnique and a locking re-read (a current
+      # read under REPEATABLE READ) picks up the winner's committed row. Do NOT lock the
+      # pre-insert read: two transactions gap-locking the missing row and then both inserting
+      # deadlock each other. And locking the parent product row isn't an option — callers
+      # often hold unpersisted product changes (e.g. content_updated_at), which with_lock refuses.
+      review_stat = begin
+        ProductReviewStat.find_by(link_id: id) || create_product_review_stat!
+      rescue ActiveRecord::RecordNotUnique
+        association(:product_review_stat).reset
+        ProductReviewStat.lock.find_by!(link_id: id)
       end
+      association(:product_review_stat).target = review_stat
+      apply_rating_change_to_review_stat(review_stat, old_rating, new_rating)
     else
       apply_rating_change_to_review_stat(product_review_stat, old_rating, new_rating)
     end
