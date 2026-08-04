@@ -453,6 +453,34 @@ describe GenerateCanadaSalesReportJob do
       expect(payload[1][6]).to eq("British Columbia")
     end
 
+    it "reports a refund whose seller has no other activity in the window" do
+      # Pins the refund-activity union in seller_ids_with_reportable_activity: this
+      # seller's only in-window event is a refund of a prior-month purchase, so without
+      # that union they are not a candidate and the refund row silently disappears.
+      cutover = Purchase::Reportable::REFUND_REPORTING_CUTOVER.beginning_of_day
+      prior_sale_time = (cutover + 1.month).beginning_of_month - 10.days
+      refund_time = (cutover + 1.month).beginning_of_month + 5.days
+
+      seller = travel_to(prior_sale_time - 1.month) { create(:user, country: "Canada", state: "BC") }
+      product = travel_to(prior_sale_time - 1.month) { create(:product, user: seller, price_cents: 100_00, native_type: "digital") }
+      purchase = travel_to(prior_sale_time) do
+        create(:purchase, link: product, seller: seller, price_cents: 100_00, country: "Canada", state: "ON")
+      end
+      travel_to(refund_time) { create(:refund, purchase:, amount_cents: purchase.price_cents) }
+
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+      described_class.new.perform(refund_time.month, refund_time.year)
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      payload = CSV.read(temp_file)
+      temp_file.close(true)
+
+      expect(payload.length).to eq(2)
+      expect(payload[1][1]).to eq(purchase.external_id)
+      expect(payload[1][19]).to eq("-10000") # negated refund amount
+    end
+
     it "reports a seller whose only Canada signal is GeoIP on the account creation IP" do
       canadian_ip = "24.114.0.1"
       seller = travel_to(setup_time) { create(:user, country: nil, account_created_ip: canadian_ip) }
