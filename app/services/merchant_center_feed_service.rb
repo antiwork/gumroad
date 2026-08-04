@@ -5,7 +5,7 @@
 # sitemaps in public storage. Eligibility intentionally mirrors Discover: a product that
 # is not recommendable there should not be advertised in Shopping either.
 class MerchantCenterFeedService
-  FEED_KEY = "merchant-center/feed.xml"
+  FEED_KEY = "sitemap/merchant-center/feed.xml"
   FEED_TITLE = "Gumroad products"
   # Google rejects descriptions over 5,000 characters.
   MAX_DESCRIPTION_LENGTH = 5_000
