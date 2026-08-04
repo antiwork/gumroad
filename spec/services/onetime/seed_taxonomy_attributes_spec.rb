@@ -44,11 +44,22 @@ describe Onetime::SeedTaxonomyAttributes do
     expect(format.active).to eq(true)
   end
 
-  it "deactivates a row the registry no longer defines instead of deleting it" do
+  it "leaves a row the registry no longer defines active by default" do
     described_class.process(dry_run: false)
     orphan = TaxonomyAttribute.create!(taxonomy: fonts, name: "retired_facet", label: "Retired", value_type: "enum", values: ["A"], position: 9, active: true)
 
+    result = described_class.process(dry_run: false)
+
+    expect(orphan.reload.active).to eq(true)
+    expect(result[:deactivated]).to eq(0)
+    expect(result[:stale_candidates]).to include("fonts/retired_facet")
+  end
+
+  it "deactivates a row the registry no longer defines instead of deleting it, when deactivate: true is passed explicitly" do
     described_class.process(dry_run: false)
+    orphan = TaxonomyAttribute.create!(taxonomy: fonts, name: "retired_facet", label: "Retired", value_type: "enum", values: ["A"], position: 9, active: true)
+
+    described_class.process(dry_run: false, deactivate: true)
 
     expect(orphan.reload.active).to eq(false)
     expect(TaxonomyAttribute.exists?(orphan.id)).to eq(true)
