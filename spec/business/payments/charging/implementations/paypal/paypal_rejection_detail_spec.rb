@@ -79,7 +79,7 @@ describe PaypalChargeProcessor, ".build_paypal_rejection" do
     end
   end
 
-  describe ".determine_refund_order_error" do
+  describe "#determine_refund_order_error" do
     it "falls back to invalid-request instead of raising when UNPROCESSABLE_ENTITY has no details array" do
       response = api_response(name: "UNPROCESSABLE_ENTITY")
 
