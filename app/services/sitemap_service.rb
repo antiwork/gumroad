@@ -102,7 +102,13 @@ class SitemapService
     def remove_wishlist_sitemap_artifact
       key = "#{SITEMAP_PATH_WISHLISTS}/sitemap.xml.gz"
       if upload_sitemap_to_s3?
-        Aws::S3::Client.new.delete_object(bucket: PUBLIC_STORAGE_S3_BUCKET, key:)
+        # Must use the same dedicated sitemap-uploader identity as the upload path (sitemap_config
+        # above) — the default AWS credentials may not be authorized to delete from this bucket.
+        Aws::S3::Client.new(
+          access_key_id: GlobalConfig.get("S3_SITEMAP_UPLOADER_ACCESS_KEY"),
+          secret_access_key: GlobalConfig.get("S3_SITEMAP_UPLOADER_SECRET_ACCESS_KEY"),
+          region: AWS_DEFAULT_REGION
+        ).delete_object(bucket: PUBLIC_STORAGE_S3_BUCKET, key:)
       else
         FileUtils.rm_f(Rails.public_path.join(key))
       end
