@@ -912,7 +912,7 @@ class PaypalChargeProcessor
       if paypal_rest_api.successful_response?(api_response)
         api_response.result
       else
-        error_message = PaypalChargeProcessor.build_error_message("Failed refund capture id - #{capture_id}", api_response.result.details[0].description)
+        error_message = PaypalChargeProcessor.build_error_message("Failed refund capture id - #{capture_id}", self.class.paypal_rejection_description(api_response))
         raise determine_refund_order_error(api_response), error_message
       end
     end

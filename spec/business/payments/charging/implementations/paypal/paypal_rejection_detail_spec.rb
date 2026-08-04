@@ -89,6 +89,22 @@ describe PaypalChargeProcessor, ".build_paypal_rejection" do
     end
   end
 
+  describe "#refund_order_purchase_unit!" do
+    it "raises the mapped error instead of NoMethodError when the rejection carries no details array" do
+      processor = described_class.new
+      allow(processor).to receive(:refund_amount_in_merchant_currency_cents).and_return(100)
+      rejection = api_response(name: "UNPROCESSABLE_ENTITY")
+      paypal_rest_api = instance_double(PaypalRestApi, refund: rejection, successful_response?: false)
+      allow(PaypalRestApi).to receive(:new).and_return(paypal_rest_api)
+      allow(described_class).to receive(:log_paypal_api_response)
+      merchant_account = instance_double(MerchantAccount, currency: "usd")
+
+      expect do
+        processor.send(:refund_order_purchase_unit!, "CAPTURE123", merchant_account, 100)
+      end.to raise_error(ChargeProcessorInvalidRequestError)
+    end
+  end
+
   describe ".paypal_rejection_description" do
     it "returns the first detail's description" do
       response = api_response(name: "UNPROCESSABLE_ENTITY", details: [detail(description: "The requested action could not be performed.")])
