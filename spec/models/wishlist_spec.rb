@@ -98,6 +98,24 @@ describe Wishlist do
         expect(default_name_wishlist.reload.seo_indexable?).to be false
       end
 
+      it "counts distinct products, not wishlist_products rows" do
+        # Same membership product wished twice (different recurrences) is two
+        # alive rows but one product.
+        membership = create(:membership_product_with_preset_tiered_pricing)
+        create(:wishlist_product, wishlist:, product: membership, variant: membership.alive_variants.first, recurrence: "monthly")
+        create(:wishlist_product, wishlist:, product: membership, variant: membership.alive_variants.first, recurrence: "yearly")
+        create(:wishlist_product, wishlist:)
+
+        expect(wishlist.alive_wishlist_products.count).to eq(3)
+        expect(Wishlist.seo_indexable).to be_empty
+        expect(wishlist.reload.seo_indexable?).to be false
+
+        create(:wishlist_product, wishlist:)
+
+        expect(Wishlist.seo_indexable).to contain_exactly(wishlist)
+        expect(wishlist.reload.seo_indexable?).to be true
+      end
+
       it "does not count deleted wishlist products toward the minimum" do
         create_list(:wishlist_product, Wishlist::MINIMUM_SEO_INDEXABLE_PRODUCTS, wishlist:)
         wishlist.wishlist_products.first.mark_deleted!

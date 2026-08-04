@@ -105,6 +105,16 @@ describe SitemapService do
       expect(xml).not_to include(opted_out_wishlist.url_slug)
     end
 
+    it "does not raise when no wishlist is indexable" do
+      FileUtils.rm_f(sitemap_file_path) # earlier examples' output persists on disk
+      create(:wishlist_product, wishlist: create(:wishlist, name: "Thin List"))
+
+      expect { service.generate_wishlists }.not_to raise_error
+
+      # sitemap_generator skips writing a file with zero links.
+      expect(File.exist?(sitemap_file_path)).to be false
+    end
+
     it "deletes /robots.txt sitemap configs cache" do
       cache_key = "sitemap_configs"
       redis_namespace = Redis::Namespace.new(:robots_redis_namespace, redis: $redis)

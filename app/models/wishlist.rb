@@ -36,11 +36,14 @@ class Wishlist < ApplicationRecord
       .where(recommendable: true)
       .joins(:alive_wishlist_products)
       .group(:id)
-      .having("COUNT(wishlist_products.id) >= ?", MINIMUM_SEO_INDEXABLE_PRODUCTS)
+      .having("COUNT(DISTINCT wishlist_products.product_id) >= ?", MINIMUM_SEO_INDEXABLE_PRODUCTS)
   end
 
+  # DISTINCT product_id: the same product can appear on a wishlist as several
+  # alive rows (per variant/recurrence — see WishlistProduct's uniqueness scope),
+  # and the thin-content floor is about distinct products, not rows.
   def seo_indexable?
-    recommendable? && alive_wishlist_products.size >= MINIMUM_SEO_INDEXABLE_PRODUCTS
+    recommendable? && alive_wishlist_products.distinct.count(:product_id) >= MINIMUM_SEO_INDEXABLE_PRODUCTS
   end
 
   def url_slug
