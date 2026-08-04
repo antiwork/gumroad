@@ -958,6 +958,57 @@ class LinksControllerSellerAreaTest < ActionController::TestCase
     end
   end
 
+  test "POST send_sample_price_change_email converts a decimal amount to exact cents" do
+    assert_enqueued_email_with(
+      CustomerLowPriorityMailer,
+      :sample_subscription_price_change_notification,
+      args: [{
+        user: @logged_in_user,
+        tier: sample_email_tier,
+        effective_date: sample_email_tier.subscription_price_change_effective_date,
+        recurrence: "yearly",
+        new_price: 19_99,
+        custom_message: nil,
+      }]
+    ) do
+      post :send_sample_price_change_email, params: sample_email_required_params.merge(amount: "19.99")
+    end
+  end
+
+  test "POST send_sample_price_change_email preserves single-unit currency amounts" do
+    product = create_membership_product(user: @seller, price_currency_type: "jpy")
+    tier = product.default_tier
+
+    assert_enqueued_email_with(
+      CustomerLowPriorityMailer,
+      :sample_subscription_price_change_notification,
+      args: [{
+        user: @logged_in_user,
+        tier:,
+        effective_date: tier.subscription_price_change_effective_date,
+        recurrence: "yearly",
+        new_price: 199,
+        custom_message: nil,
+      }]
+    ) do
+      post :send_sample_price_change_email, params: {
+        id: product.unique_permalink,
+        tier_id: tier.external_id,
+        amount: "199",
+        recurrence: "yearly",
+      }
+    end
+  end
+
+  test "POST send_sample_price_change_email rejects malformed amounts" do
+    assert_no_enqueued_emails do
+      post :send_sample_price_change_email, params: sample_email_required_params.merge(amount: "1e1000000")
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal({ "success" => false, "error" => "Invalid amount" }, response.parsed_body)
+  end
+
   # --- misc -------------------------------------------------------------------
 
   test "allows updating and publishing a product without files" do
