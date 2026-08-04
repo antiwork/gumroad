@@ -304,7 +304,7 @@ function DiscoverIndex() {
       }
     }
 
-    document.title = discoverTitleGenerator(state.params, props.taxonomies_for_nav, url.search);
+    document.title = discoverTitleGenerator(state.params, props.taxonomies_for_nav, url.search, defaultSortOrder);
   }, [state.params, props.taxonomies_for_nav, defaultSortOrder, props.curated_product_ids]);
 
   React.useEffect(() => {
