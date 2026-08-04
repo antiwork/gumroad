@@ -58,6 +58,11 @@ class SitemapService
       end
     end
 
+    # sitemap_generator only writes a file when it has at least one link, so a run that
+    # finds zero qualifying wishlists leaves the PRIOR run's file (or S3 object) in place —
+    # previously-indexed URLs stay published after their wishlists drop below the gate.
+    remove_wishlist_sitemap_artifact if SitemapGenerator::Sitemap.link_count.zero?
+
     RobotsService.new.expire_sitemap_configs_cache
 
     if ping_search_engines?
@@ -110,5 +115,20 @@ class SitemapService
 
     def upload_sitemap_to_s3?
       Rails.env.production? || Rails.env.staging?
+    end
+
+    def remove_wishlist_sitemap_artifact
+      key = "#{SITEMAP_PATH_WISHLISTS}/sitemap.xml.gz"
+      if upload_sitemap_to_s3?
+        # Must use the same dedicated sitemap-uploader identity as the upload path (sitemap_config
+        # above) — the default AWS credentials may not be authorized to delete from this bucket.
+        Aws::S3::Client.new(
+          access_key_id: GlobalConfig.get("S3_SITEMAP_UPLOADER_ACCESS_KEY"),
+          secret_access_key: GlobalConfig.get("S3_SITEMAP_UPLOADER_SECRET_ACCESS_KEY"),
+          region: AWS_DEFAULT_REGION
+        ).delete_object(bucket: PUBLIC_STORAGE_S3_BUCKET, key:)
+      else
+        FileUtils.rm_f(Rails.public_path.join(key))
+      end
     end
 end
