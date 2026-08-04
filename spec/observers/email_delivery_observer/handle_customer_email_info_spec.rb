@@ -24,12 +24,17 @@ describe EmailDeliveryObserver::HandleCustomerEmailInfo do
         context "when CustomerEmailInfo record exists" do
           let!(:customer_email_info) { create(:customer_email_info, purchase: purchase, email_name: "receipt") }
 
-          it "finds the record and marks as sent" do
+          it "records the send on a new row and leaves the earlier one intact" do
             expect do
               CustomerMailer.receipt(purchase.id, nil, for_email: true).deliver_now
-            end.not_to change { CustomerEmailInfo.count }
+            end.to change { CustomerEmailInfo.count }.by(1)
 
-            expect(customer_email_info.reload.sent_at).to be_present
+            expect(customer_email_info.reload.sent_at).to be_nil
+
+            email_info = CustomerEmailInfo.last
+            expect(email_info).not_to eq(customer_email_info)
+            expect(email_info.purchase).to eq(purchase)
+            expect(email_info.sent_at).to be_present
           end
         end
       end
@@ -64,21 +69,31 @@ describe EmailDeliveryObserver::HandleCustomerEmailInfo do
             email_info
           end
 
-          it "finds the record and marks as sent" do
+          it "records the send on a new row and leaves the earlier one intact" do
             expect do
               CustomerMailer.receipt(nil, charge.id, for_email: true).deliver_now
-            end.not_to change { CustomerEmailInfo.count }
+            end.to change { CustomerEmailInfo.count }.by(1)
 
-            expect(customer_email_info.reload.sent_at).to be_present
+            expect(customer_email_info.reload.sent_at).to be_nil
+
+            email_info = CustomerEmailInfo.last
+            expect(email_info).not_to eq(customer_email_info)
+            expect(email_info.email_info_charge.charge_id).to eq(charge.id)
+            expect(email_info.sent_at).to be_present
           end
 
           context "when using purchase_id as argument" do
-            it "finds the record and marks as sent" do
+            it "records the send against the charge on a new row" do
               expect do
                 CustomerMailer.receipt(purchase.id, nil, for_email: true).deliver_now
-              end.not_to change { CustomerEmailInfo.count }
+              end.to change { CustomerEmailInfo.count }.by(1)
 
-              expect(customer_email_info.reload.sent_at).to be_present
+              expect(customer_email_info.reload.sent_at).to be_nil
+
+              email_info = CustomerEmailInfo.last
+              expect(email_info).not_to eq(customer_email_info)
+              expect(email_info.email_info_charge.charge_id).to eq(charge.id)
+              expect(email_info.sent_at).to be_present
             end
           end
         end
@@ -110,12 +125,17 @@ describe EmailDeliveryObserver::HandleCustomerEmailInfo do
       context "when CustomerEmailInfo record exists" do
         let!(:customer_email_info) { create(:customer_email_info, purchase: purchase, email_name: "preorder_receipt") }
 
-        it "finds the record and marks as sent" do
+        it "records the send on a new row and leaves the earlier one intact" do
           expect do
             CustomerMailer.preorder_receipt(preorder.id).deliver_now
-          end.not_to change { CustomerEmailInfo.count }
+          end.to change { CustomerEmailInfo.count }.by(1)
 
-          expect(customer_email_info.reload.sent_at).to be_present
+          expect(customer_email_info.reload.sent_at).to be_nil
+
+          email_info = CustomerEmailInfo.last
+          expect(email_info).not_to eq(customer_email_info)
+          expect(email_info.email_name).to eq("preorder_receipt")
+          expect(email_info.sent_at).to be_present
         end
       end
     end
