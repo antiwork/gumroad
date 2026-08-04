@@ -300,7 +300,7 @@ describe ValidateRecaptcha, type: :controller do
           allow(GlobalConfig).to receive(:get).with("RECAPTCHA_FAIL_OPEN_CHECKOUT_SCORE").and_return("false")
           low_score = instance_double(
             HTTParty::Response,
-            parsed_response: { "tokenProperties" => { "valid" => true, "hostname" => DOMAIN }, "riskAnalysis" => { "score" => 0.4 } },
+            parsed_response: { "tokenProperties" => { "valid" => true, "hostname" => DOMAIN }, "riskAnalysis" => { "score" => 0.3 } },
             code: 200
           )
           call = 0
@@ -323,7 +323,7 @@ describe ValidateRecaptcha, type: :controller do
       # establish must stay out of it.
       describe "#recaptcha_failed_on_score_only?" do
         it "is true when a valid, correctly-hosted token was refused on score alone" do
-          stub_recaptcha_response(valid: true, score: 0.4)
+          stub_recaptcha_response(valid: true, score: 0.3)
 
           post :checkout_score_fallback_action, params: { "g-recaptcha-response" => "test_token" }
 
