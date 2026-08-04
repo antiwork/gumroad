@@ -234,7 +234,8 @@ class Checkout::StripePaymentPresenter
     def payment_method_resolver
       @payment_method_resolver ||= Checkout::PaymentMethodResolver.new(
         sellers:,
-        recurring: items.any? { _1[:recurrence].present? },
+        # Later installments charge off-session, so they need recurring-capable methods.
+        recurring: items.any? { _1[:recurrence].present? || _1[:pay_in_installments] },
         commission: items.any? { _1[:native_type] == Link::NATIVE_TYPE_COMMISSION },
         setup_for_future: setup_for_future_charges_without_charging?(items),
         buyer_country:,
@@ -385,7 +386,6 @@ class Checkout::StripePaymentPresenter
       return "empty_cart" if items.empty?
       return "unknown_seller" if sellers.any?(&:blank?)
       return "stripe_payment_element_flag_disabled" unless sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, _1) }
-      return "setup_or_installment_flow" if items.any? { _1[:pay_in_installments] }
       return nil if sellers.one? && setup_for_future_charges_without_charging?(items)
       return "setup_or_installment_flow" if items.any? { future_charge_setup_item?(_1) }
 
@@ -420,7 +420,8 @@ class Checkout::StripePaymentPresenter
         # items (a partial quote would mix local-currency and dollar lines, so the quote
         # service refuses them) and carts past the quote's seller cap. The method-forced arm
         # keeps uniform forced-currency carts on their local-method element when a
-        # non-candidate line breaks the presentment shape.
+        # non-candidate line breaks the presentment shape. Installments cannot use that arm
+        # because the resolver treats their later off-session payments as recurring.
         supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported

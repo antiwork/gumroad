@@ -52,6 +52,7 @@ describe("getCheckoutBuyerCurrencyDisplay", () => {
       subunitToUnit: 100,
       presentmentTotalCents: 1_250,
       chargePresentmentTotalCents: 500,
+      futureInstallmentsPresentmentTotalCents: null,
       lineAllocations: [
         { permalink: "prod", price_cents: 1_250, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1_250 },
       ],
