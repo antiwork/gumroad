@@ -59,6 +59,9 @@ export const Navigation = () => (
             <a href="#emails">Emails</a>
           </li>
           <li>
+            <a href="#workflows">Workflows</a>
+          </li>
+          <li>
             <a href="#custom-fields">Custom fields</a>
           </li>
           <li>

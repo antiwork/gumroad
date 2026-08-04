@@ -139,6 +139,7 @@ Rails.application.routes.draw do
           post :send, action: :send_email
         end
       end
+      resources :workflows, only: [:index, :show]
       post "sales/exports", to: "sales#export"
       get "sales/summary", to: "sales#summary"
       resources :sales, only: [:index, :show] do
