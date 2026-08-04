@@ -89,6 +89,15 @@ class Commission < ApplicationRecord
         )
       end
 
+      # Link and persist BEFORE re-raising anything, not just in the success branch: `process!`
+      # (via `prepare_for_charge!`) is what fills in price_cents/total_transaction_cents/fee_cents,
+      # so pending_completion can't be saved validly until after it runs — but any raise between a
+      # successful charge and this method's final `save!` would otherwise leave a
+      # charged-and-successful Purchase with no commission pointing at it. The retry guard above
+      # (`completion_purchase.present? && !completion_purchase.failed?`) reads that link off THIS
+      # commission, so an orphaned row lets a retry charge the buyer again with nothing to
+      # reconcile against. `update_column` bypasses Commission's own validations/callbacks so this
+      # write can't itself raise and mask `completion_error`.
       pending_completion.ensure_completion do
         # Rescue broadly, not just the errors-present branch below: `update_balance_and_mark_successful!`
         # or `save!` can also raise after `process!` has already charged the buyer, and letting
@@ -109,6 +118,14 @@ class Commission < ApplicationRecord
         end
       rescue StandardError => e
         completion_error = e
+      ensure
+        # `ensure_completion`'s own `ensure` block (above, inside `process!`'s caller chain) has
+        # already run by the time we get here, so a charged-then-failed purchase is already
+        # persisted as `failed` — link it even on that path, not just the success `save!` above,
+        # so the guard sees this attempt on the next call instead of orphaning it.
+        if pending_completion.persisted? && completion_purchase_id != pending_completion.id
+          update_column(:completion_purchase_id, pending_completion.id)
+        end
       end
     end
 

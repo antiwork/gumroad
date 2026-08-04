@@ -243,7 +243,9 @@ describe Commission, :vcr do
           purchase = Purchase.last
           expect(purchase).to be_failed
           expect(purchase.is_commission_completion_purchase).to eq(true)
-          expect(commission.reload.completion_purchase).to be_nil
+          # Linked even on failure (not nil) so a retry's guard sees this attempt instead of an
+          # orphaned, unreconcilable charge — see the with_lock fix in Commission#create_completion_purchase!.
+          expect(commission.reload.completion_purchase).to eq(purchase)
         end
       end
 
