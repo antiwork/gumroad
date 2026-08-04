@@ -53,7 +53,12 @@ export const getRootTaxonomy = (taxonomyPath: string | undefined) => {
   return typia.is<RootTaxonomySlug>(root) ? root : null;
 };
 
-export const discoverTitleGenerator = (params: SearchRequest, taxonomies: Taxonomy[]) => {
+export const discoverTitleGenerator = (
+  params: SearchRequest,
+  taxonomies: Taxonomy[],
+  locationSearch: string,
+  defaultSortOrder?: string,
+) => {
   const searchOrTagsTitle = params.query
     ? `Search results for “${params.query}”`
     : params.tags?.map((t) => t.trim().replace(/[-\s]+/gu, " ")).join(", ");
@@ -61,11 +66,16 @@ export const discoverTitleGenerator = (params: SearchRequest, taxonomies: Taxono
     ?.split("/")
     .map((slug) => taxonomies.find((t) => t.slug === slug)?.label ?? slug)
     .join(" » ");
-  // Taxonomy-only pages are server-rendered with this SEO suffix (Discover::CategoryPagePresenter#title,
-  // gated by category_seo_page?: no query params besides "from"). Mirror that gate on the actual URL —
-  // client state always carries a default sort, so state params can't distinguish /3d from /3d?sort=featured.
-  const searchParams = new URLSearchParams(window.location.search);
-  searchParams.delete("from");
-  if (taxonomyTitle && [...searchParams].length === 0) taxonomyTitle += " — digital products by independent creators";
+  // Mirror DiscoverController#category_seo_page? exactly, off the URL itself — not `params`,
+  // which also carries client-only defaults (e.g. sort defaults to "curated", curated_product_ids
+  // is populated from server props) that aren't real user filters and shouldn't disqualify the page.
+  const urlParams = new URLSearchParams(locationSearch);
+  urlParams.delete("from");
+  // The effect that builds `locationSearch` serializes state.params.sort into the URL even when
+  // it's the implicit curated default (never chosen by the user), so drop it here too — otherwise
+  // an unfiltered taxonomy URL with curated products reads as filtered and loses the SEO suffix.
+  if (defaultSortOrder && urlParams.get("sort") === defaultSortOrder) urlParams.delete("sort");
+  const isCategorySeoPage = urlParams.size === 0;
+  if (taxonomyTitle && isCategorySeoPage) taxonomyTitle += " — digital products by independent creators";
   return [searchOrTagsTitle, taxonomyTitle, "Gumroad"].filter((s) => s).join(" | ");
 };
