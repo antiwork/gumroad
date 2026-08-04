@@ -65,11 +65,16 @@ describe SubmitToIndexnowJob do
   end
 
   context "when a product uses a seller subdomain" do
-    it "submits using the seller's host, not the root domain" do
-      seller_host = URI(product.long_url).host
+    it "submits using the seller's host with a matching keyLocation" do
+      product_uri = URI(product.long_url)
+      seller_host = product_uri.host
 
       stub = stub_request(:post, described_class::ENDPOINT)
-        .with(body: hash_including("host" => seller_host, "urlList" => [product.long_url]))
+        .with(body: hash_including(
+          "host" => seller_host,
+          "keyLocation" => "#{product_uri.scheme}://#{product_uri.authority}/#{key}.txt",
+          "urlList" => [product.long_url]
+        ))
         .to_return(status: 200)
 
       described_class.new.perform([product.id])

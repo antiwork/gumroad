@@ -17,10 +17,13 @@ class SubmitToIndexnowJob
     # IndexNow requires every URL in a submission to share the `host` param — seller
     # subdomains (custom_permalink) don't match DOMAIN, so submissions are grouped per host.
     urls.group_by { |url| URI(url).host }.each do |host, host_urls|
+      # The key file must live on the submitted host (IndexNow spec), so the
+      # keyLocation follows each group's host; the route serves it on any host.
+      key_location = URI.join(host_urls.first, "/#{key}.txt").to_s
       host_urls.each_slice(MAX_URLS_PER_SUBMISSION) do |url_list|
         response = HTTParty.post(
           ENDPOINT,
-          body: { host:, key:, keyLocation: "#{UrlService.domain_with_protocol}/#{key}.txt", urlList: url_list }.to_json,
+          body: { host:, key:, keyLocation: key_location, urlList: url_list }.to_json,
           headers: { "Content-Type" => "application/json; charset=utf-8" },
           timeout: 10
         )

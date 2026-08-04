@@ -19,6 +19,15 @@ describe "IndexNow key file", type: :request do
       expect(response.media_type).to eq("text/plain")
     end
 
+    it "serves the key on a seller subdomain host" do
+      seller = create(:user, username: "indexnowseller")
+
+      get "/#{key}.txt", headers: { "HOST" => URI("#{seller.subdomain_with_protocol}").host }
+
+      expect(response.status).to eq(200)
+      expect(response.body).to eq(key)
+    end
+
     it "returns 404 for a different key" do
       get "/#{"c" * 32}.txt", headers: { "HOST" => DOMAIN }
 

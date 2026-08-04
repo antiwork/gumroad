@@ -25,6 +25,11 @@ Rails.application.routes.draw do
   get "/healthcheck/purchases" => "healthcheck#purchases"
   get "/healthcheck/apple_pay_domain" => "healthcheck#apple_pay_domain"
 
+  # IndexNow key verification file (https://www.indexnow.org/documentation).
+  # Deliberately unconstrained by host: the spec requires the key file to be
+  # served on every host we submit URLs for, including seller subdomains.
+  get "/:key.txt" => "indexnow_keys#show", constraints: { key: /[a-f0-9]{16,128}/ }, as: :indexnow_key
+
   use_doorkeeper do
     controllers applications: "oauth/applications"
     controllers authorized_applications: "oauth/authorized_applications"
@@ -519,9 +524,6 @@ Rails.application.routes.draw do
 
     # /robots.txt
     get "/robots.:format" => "robots#index"
-
-    # IndexNow key verification file (https://www.indexnow.org/documentation)
-    get "/:key.txt" => "indexnow_keys#show", constraints: { key: /[a-f0-9]{16,128}/ }, as: :indexnow_key
 
     # Redirect Devise's default auth paths to our custom routes.
     # Must be defined before devise_for so they match first, preventing Devise's
