@@ -470,7 +470,7 @@ class PaypalPayoutProcessor
 
     payment.with_lock do
       payment.txn_id = paypal_event["masspay_txn_id"]
-      payment.processor_fee_cents = 100 * paypal_event["mc_fee"].to_f if paypal_event["mc_fee"]
+      payment.processor_fee_cents = (paypal_event["mc_fee"].to_d * 100).to_i if paypal_event["mc_fee"]
       payment.save!
       new_payment_state = paypal_event["status"].try(:downcase)
       # PayPal is sending incorrect payment status ('Pending') in the IPN callback for some of the payments where the
