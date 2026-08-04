@@ -117,8 +117,9 @@ class SendPostBlastEmailsJob
 
       (pttl / 1000.0).seconds
     rescue Redis::BaseError, RedisClient::Error, ConnectionPool::TimeoutError, SidekiqUniqueJobs::UniqueJobsError => e
-      Rails.logger.warn("[#{self.class.name}] blast_id=#{@blast.id} could not read unique-lock pttl: #{e.class}: #{e.message}")
-      nil
+      # Fail closed: falling back to a fresh window here could outlive a stale recovered
+      # lock and let a second worker overlap the to_non_openers path.
+      raise LockLifeTooShort, "#{self.class.name} blast_id=#{@blast.id} could not read unique-lock pttl (#{e.class}: #{e.message})"
     end
 
     # The provider slice — not the mixed slice — is the retry unit. An ESP that has

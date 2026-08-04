@@ -523,6 +523,17 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(prepared_item["args"]).to eq([blast.id])
       expect(redis).to have_received(:pttl).with(prepared_item["lock_digest"])
     end
+
+    it "fails closed when the unique-lock TTL cannot be read" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      job = described_class.new
+      job.instance_variable_set(:@blast, blast)
+
+      allow(Sidekiq).to receive(:redis).and_raise(Redis::BaseError, "read timeout")
+
+      expect { job.send(:remaining_unique_lock_life) }
+        .to raise_error(SendPostBlastEmailsJob::LockLifeTooShort, /could not read unique-lock pttl/)
+    end
   end
 
   describe "audience snapshot for retry resume" do
