@@ -108,6 +108,22 @@ describe TaxRemittances::WiseTransferMatcher do
     expect(hmrc.reload.transfer_id).to eq("900001")
   end
 
+  it "does not assign one transfer to two remittances that each uniquely match it" do
+    hmrc = create(:tax_remittance, :completed, authority: "HMRC", currency: "GBP", period: "2026-Q2",
+                                               target_amount_cents: 18_284_755, paid_at: Time.utc(2026, 7, 22),
+                                               transfer_id: nil)
+    other = create(:tax_remittance, :completed, authority: "IE Revenue", currency: "GBP", period: "2026-Q2",
+                                                target_amount_cents: 18_284_755, paid_at: Time.utc(2026, 7, 23),
+                                                transfer_id: nil)
+
+    result = described_class.new("2026-Q2").process([hmrc_transfer])
+
+    expect(result.matched).to be_empty
+    expect(result.ambiguous.map(&:remittance)).to contain_exactly(hmrc, other)
+    expect(hmrc.reload.transfer_id).to be_nil
+    expect(other.reload.transfer_id).to be_nil
+  end
+
   it "rejects a transfer outside the date window" do
     create(:tax_remittance, :completed, currency: "GBP", period: "2026-Q2",
                                         target_amount_cents: 18_284_755, paid_at: Time.utc(2026, 7, 1),

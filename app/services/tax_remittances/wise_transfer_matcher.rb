@@ -62,19 +62,40 @@ class TaxRemittances::WiseTransferMatcher
     @ambiguous = []
     @unmatched = []
 
-    candidates_for_period.each do |remittance|
+    # Two passes: a remittance with exactly one candidate here can still be
+    # contested by a SIBLING remittance that also uniquely lands on the same
+    # transfer (same currency/amount/window, e.g. two authorities paid the
+    # same amount the same week). Tally claims per transfer id first, then
+    # resolve — a transfer claimed by more than one remittance goes to
+    # ambiguous for all of them instead of being written to whichever
+    # remittance happened to be iterated first.
+    tentative = candidates_for_period.filter_map do |remittance|
       sent_transfers = transfers.select { |t| t[:status] == "outgoing_payment_sent" && t[:targetCurrency] == remittance.currency }
       matches = sent_transfers.select { |t| within_tolerance?(t, remittance) }
 
       case matches.size
       when 0
         @unmatched << remittance
+        nil
       when 1
-        transfer = matches.first
+        [remittance, matches.first]
+      else
+        @ambiguous << AmbiguousResult.new(remittance:, candidates: matches)
+        nil
+      end
+    end
+
+    claims = tentative.group_by { |(_, transfer)| transfer[:id] }
+
+    claims.each_value do |claimants|
+      if claimants.size == 1
+        remittance, transfer = claimants.first
         enrich_transfer_id!(remittance, transfer) if enrich
         @matched << MatchResult.new(remittance:, transfer:)
       else
-        @ambiguous << AmbiguousResult.new(remittance:, candidates: matches)
+        claimants.each do |remittance, transfer|
+          @ambiguous << AmbiguousResult.new(remittance:, candidates: [transfer])
+        end
       end
     end
 
