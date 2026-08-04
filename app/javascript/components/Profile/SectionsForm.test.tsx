@@ -166,6 +166,48 @@ describe("ProfileSectionsForm", () => {
     });
   });
 
+  it("gives a duplicated rich text section its own upsell cards even when nested in a blockquote", () => {
+    const withNestedUpsell = props();
+    withNestedUpsell.sections = [
+      {
+        id: "section-1",
+        type: "SellerProfileRichTextSection",
+        header: "Pitch",
+        hide_header: false,
+        text: {
+          content: [
+            {
+              type: "blockquote",
+              content: [{ type: "upsellCard", attrs: { id: "upsell-1", productId: "prod-1" } }],
+            },
+          ],
+        },
+      },
+    ];
+    const tracked = trackState();
+    render(<ProfileSectionsForm {...withNestedUpsell} onChange={tracked.onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate section" }));
+
+    const hasArrayContent = (node: unknown): node is { content: unknown[] } =>
+      typeof node === "object" && node !== null && "content" in node && Array.isArray(node.content);
+
+    const nestedCard = (section: Section): unknown => {
+      if (section.type !== "SellerProfileRichTextSection") throw new Error("expected a rich text section");
+      const content: unknown = section.text.content;
+      if (!Array.isArray(content)) throw new Error("expected rich text content");
+      const blockquote: unknown = content[0];
+      if (!hasArrayContent(blockquote)) throw new Error("expected a blockquote node with content");
+      return blockquote.content[0];
+    };
+
+    const state = tracked.latest();
+    const copiedSection = assertDefined(state.sections.find(({ id }) => id !== "section-1"));
+    expect(nestedCard(copiedSection)).toEqual({ type: "upsellCard", attrs: { productId: "prod-1" } });
+    const originalSection = assertDefined(state.sections.find(({ id }) => id === "section-1"));
+    expect(nestedCard(originalSection)).toEqual({ type: "upsellCard", attrs: { id: "upsell-1", productId: "prod-1" } });
+  });
+
   it("creates a subscribe section with an empty heading like every other section type", () => {
     const empty = props();
     empty.tabs = [{ name: "Home", sections: [] }];

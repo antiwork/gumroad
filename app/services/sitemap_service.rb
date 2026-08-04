@@ -4,6 +4,7 @@ class SitemapService
   HOST = UrlService.root_domain_with_protocol
   MAX_SITEMAP_LINKS = 50_000
   SITEMAP_PATH_MONTHLY = "sitemap/products/monthly"
+  SITEMAP_PATH_WISHLISTS = "sitemap/wishlists"
 
   # Flattens the per-row seller and cover lookups the `add` loop below makes. The
   # variant_records leg matters: with it loaded, `.processed` finds the retina variant in
@@ -22,6 +23,28 @@ class SitemapService
     year = date.year
 
     create_sitemap(period, "sitemap", "#{SITEMAP_PATH_MONTHLY}/#{year}/#{date.month}/")
+  end
+
+  # Unlike products, indexable wishlists are few enough for a single non-partitioned
+  # sitemap, and the quality gate (Wishlist.seo_indexable) can flip either way as
+  # products are added/removed — so the whole file is regenerated each run.
+  def generate_wishlists
+    sitemap_config("sitemap", "#{SITEMAP_PATH_WISHLISTS}/", false)
+
+    SitemapGenerator::Sitemap.create do
+      # seo_indexable is grouped, which find_each can't batch — page via an id subquery.
+      Wishlist.where(id: Wishlist.seo_indexable.select(:id)).preload(:user).find_each do |wishlist|
+        relative_url = Rails.application.routes.url_helpers.wishlist_path(wishlist.url_slug)
+        add relative_url, changefreq: "daily", priority: 0.7, lastmod: wishlist.updated_at,
+                          host: wishlist.user.subdomain_with_protocol
+      end
+    end
+
+    RobotsService.new.expire_sitemap_configs_cache
+
+    if ping_search_engines?
+      SitemapGenerator::Sitemap.ping_search_engines
+    end
   end
 
   private
