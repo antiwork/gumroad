@@ -6,9 +6,16 @@ class SendPostBlastEmailsJob
   # `lock_ttl` bounds the `until_executed` digest: a hard-killed worker (OOM, deploy reap) skips the
   # release, and a held digest silently drops every later `perform_async(blast_id)` — no exception,
   # no dead entry — which turns "re-enqueue the stalled blast" into a no-op (gumroad-private#1816).
-  # 24h covers the full 10-retry schedule (~1 day) plus a worst-case attempt; duplicate delivery
-  # past an expired lock is already handled, since `SentPostEmail` dedupes recipients on every run.
-  sidekiq_options retry: 10, queue: :default, lock: :until_executed, lock_ttl: 24.hours.to_i
+  #
+  # The TTL only has to cover one enqueue→completion cycle: a failed attempt releases the lock in
+  # `ensure`, and each retry re-pushes through client middleware, acquiring a fresh lock. Sized like
+  # `RecurringLockTtl` (~3x a worst-case attempt — large resumed blasts legitimately run a couple of
+  # hours, see AlertOnStalledPostEmailBlastsJob), so a strand self-heals a few hours after the 4h
+  # stalled-blast alert instead of a day later. Duplicate delivery past an expired lock: safe on the
+  # normal path (`SentPostEmail` unique index dedupes), while the `to_non_openers?` branch dedupes
+  # via a Redis set read once at job start — sequential re-runs are safe there, concurrent overlap
+  # is not, which is why the TTL stays well above any plausible attempt rather than tight.
+  sidekiq_options retry: 10, queue: :default, lock: :until_executed, lock_ttl: 8.hours.to_i
 
   def perform(blast_id)
     @blast = PostEmailBlast.find(blast_id)

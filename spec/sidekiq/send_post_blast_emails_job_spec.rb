@@ -22,11 +22,11 @@ describe SendPostBlastEmailsJob, :freeze_time do
   end
 
   # A held digest with no TTL survives a hard-killed worker forever, silently dropping every
-  # re-enqueue for the same blast (gumroad-private#1816). The TTL must outlive the retry schedule,
-  # or a strand mid-retry could admit a duplicate job alongside the retrying one.
+  # re-enqueue for the same blast (gumroad-private#1816). Failed attempts release the lock and
+  # retries re-acquire fresh, so the TTL only needs to outlive one enqueue→completion cycle.
   it "bounds the until_executed lock so a hard-killed run cannot strand the blast forever" do
     expect(described_class.get_sidekiq_options["lock"]).to eq(:until_executed)
-    expect(described_class.get_sidekiq_options["lock_ttl"]).to eq(24.hours.to_i)
+    expect(described_class.get_sidekiq_options["lock_ttl"]).to eq(8.hours.to_i)
   end
 
   describe "#perform" do
