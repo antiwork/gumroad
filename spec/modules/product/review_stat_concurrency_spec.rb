@@ -11,7 +11,7 @@ describe Product::ReviewStat, "concurrency" do
   before do
     @seller = create(:user)
     @product = create(:product, user: @seller)
-    @purchases = 2.times.map { create(:purchase, link: @product, seller: @seller) }
+    @purchases = 3.times.map { create(:purchase, link: @product, seller: @seller) }
   end
 
   after do
@@ -25,7 +25,9 @@ describe Product::ReviewStat, "concurrency" do
     @seller.destroy!
   end
 
-  it "counts concurrent first ratings without losing either update" do
+  # Three writers matter: with one winner and two losers, both losers hold InnoDB's
+  # duplicate-key shared lock, which is the setup for the lock-upgrade deadlock.
+  it "counts concurrent first ratings without losing any update" do
     ready = Queue.new
     release = Queue.new
     allow_any_instance_of(Link).to receive(:product_review_stat).and_wrap_original do |method, *args|
@@ -40,7 +42,7 @@ describe Product::ReviewStat, "concurrency" do
 
     errors = Queue.new
     observed_counts = Queue.new
-    threads = @purchases.zip([2, 5]).map do |purchase, rating|
+    threads = @purchases.zip([2, 5, 5]).map do |purchase, rating|
       Thread.new do
         ActiveRecord::Base.connection_pool.with_connection do
           Thread.current[:review_stat_concurrency] = true
@@ -52,20 +54,20 @@ describe Product::ReviewStat, "concurrency" do
       end
     end
 
-    2.times { Timeout.timeout(10) { ready.pop } }
-    2.times { release << true }
+    3.times { Timeout.timeout(10) { ready.pop } }
+    3.times { release << true }
     threads.each { expect(_1.join(20)).to be_present }
 
     expect(errors.size).to eq(0), -> { errors.size.times.map { errors.pop.full_message }.join("\n") }
-    expect(2.times.map { observed_counts.pop }.sort).to eq([1, 2])
+    expect(3.times.map { observed_counts.pop }.sort).to eq([1, 2, 3])
     expect(@product.reload.product_review_stat).to have_attributes(
-      reviews_count: 2,
-      average_rating: 3.5,
+      reviews_count: 3,
+      average_rating: 4.0,
       ratings_of_two_count: 1,
-      ratings_of_five_count: 1
+      ratings_of_five_count: 2
     )
   ensure
-    2.times { release << true } if release
+    3.times { release << true } if release
     threads&.each do |thread|
       next if thread.join(1)
 

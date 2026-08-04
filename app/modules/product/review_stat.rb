@@ -47,18 +47,18 @@ module Product::ReviewStat
 
   def update_review_stat_via_rating_change(old_rating, new_rating)
     if product_review_stat.nil?
-      # First-row creation: plain read, then insert, with the unique link_id index as the
-      # arbiter — the loser's insert raises RecordNotUnique and a locking re-read (a current
-      # read under REPEATABLE READ) picks up the winner's committed row. Do NOT lock the
-      # pre-insert read: two transactions gap-locking the missing row and then both inserting
-      # deadlock each other. And locking the parent product row isn't an option — callers
-      # often hold unpersisted product changes (e.g. content_updated_at), which with_lock refuses.
-      review_stat = begin
-        ProductReviewStat.find_by(link_id: id) || create_product_review_stat!
-      rescue ActiveRecord::RecordNotUnique
-        association(:product_review_stat).reset
-        ProductReviewStat.lock.find_by!(link_id: id)
-      end
+      # First-row creation must not go through a plain INSERT: on a duplicate key it takes a
+      # SHARED lock on the winner's row, held until the transaction ends, so two losers that
+      # then request exclusive locks deadlock each other and roll back a review. The no-op
+      # ON DUPLICATE KEY UPDATE takes an exclusive lock instead, so losers queue up. Locking
+      # the parent product row is not an option either — callers often hold unpersisted
+      # product changes (e.g. content_updated_at), which with_lock refuses.
+      ProductReviewStat.upsert({ link_id: id }, on_duplicate: Arel.sql("link_id = link_id"))
+      association(:product_review_stat).reset
+      # A plain re-read could miss the winner's row: under REPEATABLE READ it reads a snapshot
+      # that may predate the winner's commit. The locking read is a current read, and the
+      # upsert already holds this row's exclusive lock, so it cannot block or deadlock.
+      review_stat = ProductReviewStat.lock.find_by!(link_id: id)
       association(:product_review_stat).target = review_stat
       apply_rating_change_to_review_stat(review_stat, old_rating, new_rating)
     else
