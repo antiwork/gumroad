@@ -911,6 +911,29 @@ jobs:
           # from the fork build via needs.build.outputs.test_image_tag.
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
           persist-credentials: false
+      - name: Check out fork fixtures
+        # The base checkout above pins Compose/workflow files, but its
+        # spec/support/fixtures is base-revision data, not what the fork
+        # image under test was built against. Fetch the fork's fixture
+        # files into a side directory (no execution of fork code) and
+        # overlay them onto the trusted checkout before Compose runs.
+        if: github.event_name == 'pull_request_target'
+        uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          path: fork-head-fixtures
+          sparse-checkout: |
+            spec/support/fixtures
+          sparse-checkout-cone-mode: false
+      - name: Overlay fork fixtures onto the trusted checkout
+        if: github.event_name == 'pull_request_target'
+        run: |
+          rm -rf spec/support/fixtures
+          mkdir -p spec/support
+          cp -a fork-head-fixtures/spec/support/fixtures spec/support/fixtures
+          rm -rf fork-head-fixtures
       - name: Login to Docker Hub
         uses: nick-fields/retry@v3
         with:
