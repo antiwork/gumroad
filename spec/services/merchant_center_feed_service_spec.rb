@@ -132,6 +132,10 @@ describe MerchantCenterFeedService do
       expect(g_field(items(service.generate).first, "price")).to eq "500 JPY"
     end
 
+    it "keeps the feed under the sitemap uploader's allowed S3 prefix" do
+      expect(described_class::FEED_KEY).to start_with("sitemap/")
+    end
+
     it "writes to S3 with the sitemap uploader's ACL and content type when uploading" do
       create_eligible_product
       client = instance_double(Aws::S3::Client)

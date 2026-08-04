@@ -657,6 +657,8 @@ describe SettingsPresenter do
                                                Compliance::Countries::PAK.alpha2],
           individual_tax_id_entered: false,
           individual_tax_id_last_four: nil,
+          individual_tax_id_is_last_four: false,
+          has_outstanding_full_ssn_requirement: false,
           business_tax_id_entered: false,
           business_tax_id_last_four: nil,
           requires_credit_card: false,
@@ -813,6 +815,7 @@ describe SettingsPresenter do
                                                                                         Compliance::Countries::PAK.alpha2],
                                                    individual_tax_id_entered: true,
                                                    individual_tax_id_last_four: "0000",
+                                                   individual_tax_id_is_last_four: false,
                                                  })
 
         @compliance_info_details = @base_props[:compliance_info].merge({
@@ -915,7 +918,7 @@ describe SettingsPresenter do
                                               verification_error: { code: "verification_failed_keyed_identity" })
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
-                                                                       user: @base_us_props[:user].merge({ need_full_ssn: true }),
+                                                                       user: @base_us_props[:user].merge({ need_full_ssn: true, has_outstanding_full_ssn_requirement: true }),
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
@@ -1445,6 +1448,60 @@ describe SettingsPresenter do
         expect(props[:user][:business_tax_id_last_four]).to eq("4331")
         expect(props[:user][:individual_tax_id_last_four]).to eq("5678")
         expect { JSON.generate(props) }.not_to raise_error
+      end
+    end
+
+    describe "individual_tax_id_is_last_four" do
+      it "is true when only the last four digits of the SSN are on file" do
+        create(:user_compliance_info, user: seller, individual_tax_id: "1234")
+
+        expect(presenter.payments_props[:user][:individual_tax_id_is_last_four]).to be(true)
+      end
+
+      it "is true when a formatted last-four value decrypts to four digits" do
+        create(:user_compliance_info, user: seller, individual_tax_id: " 12 34 ")
+
+        expect(presenter.payments_props[:user][:individual_tax_id_is_last_four]).to be(true)
+      end
+
+      it "is false when the full nine-digit SSN is on file" do
+        create(:user_compliance_info, user: seller, individual_tax_id: "123-45-6789")
+
+        expect(presenter.payments_props[:user][:individual_tax_id_is_last_four]).to be(false)
+      end
+
+      it "is false when no tax ID is on file" do
+        create(:user_compliance_info, user: seller, individual_tax_id: nil)
+
+        expect(presenter.payments_props[:user][:individual_tax_id_is_last_four]).to be(false)
+      end
+    end
+
+    describe "has_outstanding_full_ssn_requirement" do
+      before { create(:user_compliance_info, user: seller, individual_tax_id: "1234") }
+
+      it "is true when a full TAX_ID request is outstanding" do
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+        expect(presenter.payments_props[:user][:has_outstanding_full_ssn_requirement]).to be(true)
+      end
+
+      it "is false when the only TAX_ID request is partial (ssn_last_4)" do
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID,
+                                              only_needs_field_to_be_partially_provided: true)
+
+        expect(presenter.payments_props[:user][:has_outstanding_full_ssn_requirement]).to be(false)
+      end
+
+      it "is false when the full TAX_ID request was already provided (e.g. cleared via document upload)" do
+        request = create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+        request.mark_provided!
+
+        expect(presenter.payments_props[:user][:has_outstanding_full_ssn_requirement]).to be(false)
+      end
+
+      it "is false when no TAX_ID request exists" do
+        expect(presenter.payments_props[:user][:has_outstanding_full_ssn_requirement]).to be(false)
       end
     end
 

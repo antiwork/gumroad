@@ -23,9 +23,10 @@ module User::ReputationSummary
     counts = Hash.new(0)
     products_count = 0
     # display_product_reviews is a Link flag bit, not a column, so opted-out
-    # products are rejected in Ruby rather than in SQL.
+    # products are rejected in Ruby rather than in SQL. Link.alive alone
+    # does not exclude drafts, hence not_draft.
     stats = ProductReviewStat.joins(:link)
-      .merge(Link.alive)
+      .merge(Link.alive.not_draft)
       .where(links: { user_id: id })
       .where.not(reviews_count: 0)
       .preload(:link)

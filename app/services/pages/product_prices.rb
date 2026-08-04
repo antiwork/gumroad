@@ -86,9 +86,16 @@ class Pages::ProductPrices
       # quotes its cheapest recurrence's amount here and its default recurrence's amount there.
       base_price_cents = product.display_price_cents(for_default_duration: true)
       price_cents = product.discounted_price_cents(base_price_cents)
-      display = localizable?(product) ? buyer_currency_display_props(product:, price_cents:, ip:) : nil
+      # buyer_currency_display_props is the native card's own localization decision — including
+      # for the later-charge shapes (memberships, preorders, free trials, commissions,
+      # installment plans), which localize while charging is display-only, for USD buyers once
+      # it is enforced, and for every buyer once the seller is in the subscriptions ramp.
+      # Re-gating on product shape here made this blob keep a membership in GBP while the grid
+      # alongside it showed the visitor's currency. Recurring shapes keep their wording:
+      # localized_price_formatted composes the recurrence suffix back in.
+      display = buyer_currency_display_props(product:, price_cents:, ip:)
 
-      if display && display[:display_mode] == "buyer_local" && display[:buyer_local_price_cents].present?
+      if display[:display_mode] == "buyer_local" && display[:buyer_local_price_cents].present?
         localized_entry(product, display, base_price_cents:, price_cents:)
       else
         own_currency_entry(product, base_price_cents:, price_cents:)
@@ -136,21 +143,13 @@ class Pages::ProductPrices
       entry
     end
 
-    # The product shapes checkout refuses to quote (memberships, preorders, free trials,
-    # commissions, installment plans) are charged in canonical USD, so a converted price here
-    # would be a number no buyer is ever charged. buyer_currency_settleable? already excludes
-    # them, but only while the checkout-eligibility flag is on — it short-circuits to true
-    # otherwise, which for a membership would drop the recurrence wording from a price whose
-    # amount only makes sense with it ("€11.20" for what is €11.20 a month).
-    def localizable?(product)
-      !buyer_currency_unquotable_product?(product)
-    end
-
-    # Mirrors Link#price_formatted_verbose, in the buyer's currency, minus the recurrence suffix
-    # that method appends — localizable? above keeps every recurring shape out of this branch.
+    # Mirrors Link#price_formatted_verbose in the buyer's currency: amount, "+", then the same
+    # recurrence wording — recurrence_label is the server twin of formatRecurrenceWithDuration,
+    # which is how the native card suffixes its own localized amount client-side.
     def localized_price_formatted(product, display)
       formatted = format_in_buyer_currency(display[:buyer_local_price_cents], display[:buyer_currency_shown])
-      "#{formatted}#{product.has_customizable_price_option? ? '+' : ''}"
+      recurrence = recurrence_label(product.subscription_duration, product.duration_in_months) if product.is_recurring_billing?
+      "#{formatted}#{product.has_customizable_price_option? ? '+' : ''}#{recurrence ? " #{recurrence}" : ''}"
     end
 
     def format_in_buyer_currency(cents, currency)

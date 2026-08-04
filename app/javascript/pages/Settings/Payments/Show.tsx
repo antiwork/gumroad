@@ -166,6 +166,7 @@ const missingFieldsErrorMessageFromDom = (form: HTMLElement, fieldNames: Set<For
 };
 
 const PERU_DNI_DIGIT_COUNT = 9;
+const FULL_SSN_DIGIT_COUNT = 9;
 // A Singapore NRIC/FIN is a leading letter (S/T/F/G/M), seven digits, and a trailing checksum
 // letter — e.g. S1234567A. Mirrors the authoritative server-side check in
 // UpdateUserComplianceInfo; this one just gives the seller fast inline feedback.
@@ -893,6 +894,22 @@ export default function PaymentsPage() {
       !form.data.user.individual_tax_id
     ) {
       markFieldInvalid("individual_tax_id");
+    }
+    // Stripe's id_number requirement follows the account country — business_country for
+    // businesses (same rule as the Peru DNI check below).
+    const ssnRequirementCountry = form.data.user.is_business ? form.data.user.business_country : form.data.user.country;
+    if (props.user.has_outstanding_full_ssn_requirement && ssnRequirementCountry === "US") {
+      const typedSsnDigits = (form.data.user.individual_tax_id ?? "").replace(/\D/gu, "");
+      // Only last-4 (or nothing) on file can never satisfy Stripe's id_number requirement, so the
+      // seller must type a fresh full SSN; and any newly typed value must itself be 9 digits so a
+      // fresh 4-digit entry can't be saved into a full-SSN requirement.
+      const mustReenterFullSsn = props.user.individual_tax_id_is_last_four || !props.user.individual_tax_id_entered;
+      if ((mustReenterFullSsn || form.data.user.individual_tax_id) && typedSsnDigits.length !== FULL_SSN_DIGIT_COUNT) {
+        markFieldInvalid("individual_tax_id");
+        setClientErrorMessage({
+          message: "Our payments provider requires your full 9-digit Social Security Number.",
+        });
+      }
     }
     const peruDniRequired = form.data.user.is_business
       ? form.data.user.business_country === "PE"

@@ -10,8 +10,8 @@ class LinksController < ApplicationController
   include RendersCustomHtmlPages
 
   DEFAULT_PRICE = 500
-  PWYW_PRICE_MAX_LENGTH = 64
-  PWYW_PRICE_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
+  PRICE_INPUT_MAX_LENGTH = 64
+  PRICE_INPUT_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
 
@@ -127,7 +127,7 @@ class LinksController < ApplicationController
       BasePrice::Recurrence::ALLOWED_RECURRENCES.each do |r|
         params[:recurrence] ||= r if params[r] == "true"
       end
-      params[:price] = pwyw_price_cents(params[:price]) if params[:price].present?
+      params[:price] = price_cents_from_units(params[:price]) if params[:price].present?
       cart_item = @product.cart_item(params)
 
       unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
@@ -787,12 +787,15 @@ class LinksController < ApplicationController
     tier = @product.tiers.find_by_external_id(params.require(:tier_id))
     return e404_json unless tier.present?
 
+    new_price = price_cents_from_units(params.require(:amount))
+    return render json: { success: false, error: "Invalid amount" }, status: :unprocessable_entity if new_price.nil?
+
     CustomerLowPriorityMailer.sample_subscription_price_change_notification(
       user: logged_in_user,
       tier:,
       effective_date: params[:effective_date].present? ? Date.parse(params[:effective_date]) : tier.subscription_price_change_effective_date,
       recurrence: params.require(:recurrence),
-      new_price: (params.require(:amount).to_f * 100).to_i,
+      new_price:,
       custom_message: strip_tags(params[:custom_message]).present? ? params[:custom_message] : nil,
     ).deliver_later
 
@@ -800,9 +803,9 @@ class LinksController < ApplicationController
   end
 
   private
-    def pwyw_price_cents(value)
+    def price_cents_from_units(value)
       value = value.to_s
-      return if value.length > PWYW_PRICE_MAX_LENGTH || !value.match?(PWYW_PRICE_PATTERN)
+      return if value.length > PRICE_INPUT_MAX_LENGTH || !value.match?(PRICE_INPUT_PATTERN)
 
       decimal_value = BigDecimal(value)
       return if decimal_value.negative?

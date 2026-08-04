@@ -161,9 +161,14 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     # needs "it was delivered and read", and a per-send claim here would be
     # evidence we cannot stand behind. Tracked in gumroad-private#1635.
     def unattributed_event_activity(sends)
-      delivered_at, opened_at = events_after(
+      delivered_at, = events_after(sends.first.sent_at, [sends.filter_map(&:delivered_at).min])
+      # The earliest open across all sends can predate the delivery selected from a
+      # different send, which would claim the receipt was read before it arrived. Pick
+      # the earliest open that is not earlier than that delivery instead of the raw min,
+      # so a later valid open still gets reported rather than discarding open activity outright.
+      opened_at, = events_after(
         sends.first.sent_at,
-        [sends.filter_map(&:delivered_at).min, sends.filter_map(&:opened_at).min]
+        [sends.filter_map(&:opened_at).select { delivered_at.blank? || _1 >= delivered_at }.min]
       )
 
       content = +""
