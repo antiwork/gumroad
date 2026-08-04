@@ -53,7 +53,7 @@ export const getRootTaxonomy = (taxonomyPath: string | undefined) => {
   return typia.is<RootTaxonomySlug>(root) ? root : null;
 };
 
-export const discoverTitleGenerator = (params: SearchRequest, taxonomies: Taxonomy[]) => {
+export const discoverTitleGenerator = (params: SearchRequest, taxonomies: Taxonomy[], locationSearch: string) => {
   const searchOrTagsTitle = params.query
     ? `Search results for “${params.query}”`
     : params.tags?.map((t) => t.trim().replace(/[-\s]+/gu, " ")).join(", ");
@@ -61,22 +61,12 @@ export const discoverTitleGenerator = (params: SearchRequest, taxonomies: Taxono
     ?.split("/")
     .map((slug) => taxonomies.find((t) => t.slug === slug)?.label ?? slug)
     .join(" » ");
-  // Mirror DiscoverController#category_seo_page? — the server only renders the SEO suffix when
-  // the ONLY params are `taxonomy` (and `from`); any other filter (sort, rating, price, etc.) makes
-  // it a filtered variant with its own canonical, not the indexable category landing page.
-  const isCategorySeoPage =
-    !searchOrTagsTitle &&
-    !params.filetypes?.length &&
-    !params.offer_code &&
-    !params.sort &&
-    params.min_price == null &&
-    params.max_price == null &&
-    params.rating == null &&
-    !params.user_id &&
-    !params.section_id &&
-    !params.recommended_by &&
-    !params.curated_product_ids?.length &&
-    !params.taxonomy_attribute_filters?.length;
+  // Mirror DiscoverController#category_seo_page? exactly, off the URL itself — not `params`,
+  // which also carries client-only defaults (e.g. sort defaults to "curated", curated_product_ids
+  // is populated from server props) that aren't real user filters and shouldn't disqualify the page.
+  const urlParams = new URLSearchParams(locationSearch);
+  urlParams.delete("from");
+  const isCategorySeoPage = urlParams.size === 0;
   if (taxonomyTitle && isCategorySeoPage) taxonomyTitle += " — digital products by independent creators";
   return [searchOrTagsTitle, taxonomyTitle, "Gumroad"].filter((s) => s).join(" | ");
 };
