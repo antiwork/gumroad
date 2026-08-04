@@ -71,6 +71,9 @@ class CustomerSurchargeController < ApplicationController
       tax_cents: tax_rate.round.to_i,
       tax_included_cents: tax_included_rate.round.to_i,
       subtotal: subtotal.round.to_i,
+      # Unlike the agreement total above, this includes only the tax due on an installment's
+      # first payment. Payment surfaces must use the amount the charge path will create now.
+      charge_canonical_total_cents: all_lines_quotable ? quote_line_items.sum(&:charge_canonical_total_cents) : nil,
       buyer_currency_quote: buyer_currency_quote_props(
         line_items: all_lines_quotable ? quote_line_items : nil,
         # Sum the per-line integer totals rather than rounding the fractional running

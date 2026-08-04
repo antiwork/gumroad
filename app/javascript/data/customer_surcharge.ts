@@ -27,6 +27,8 @@ export type SurchargesResponse = {
   tax_cents: number;
   tax_included_cents: number;
   subtotal: number;
+  // The canonical-currency amount charged now. Optional for rolling deploy compatibility.
+  charge_canonical_total_cents?: number | null | undefined;
   buyer_currency_quote: {
     token: string;
     currency: CurrencyCode;

@@ -393,19 +393,14 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
     return canUseStripePaymentElementForFutureChargeSetup(state);
   }
 
-  // Rails chooses the initial lane, but discount/surcharge reloads can lower the final total
-  // before Elements updates. Gated on the charge-today amount because that is what the element
-  // mounts with (see getStripePaymentElementAmount) — for an installment cart the first
-  // installment is the charge Stripe's floor applies to, not the cart total.
+  // A surcharge reload can lower the amount charged now after Rails chooses the lane. Apply
+  // Stripe's floor to the same server-owned amount the Element mounts with.
   if (state.surcharges.type === "loaded") {
     const chargeToday = getChargeTodayPrice(state);
     if (chargeToday === null || chargeToday < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
   }
 
   // Free trials and preorders charge nothing today, so payment mode is never right for them.
-  // Installments are fine on both server-confirm lanes: the buyer-currency quote prices the
-  // first-installment charge, and the canonical USD element mounts the same charge-today
-  // amount the CardElement lane used to charge.
   return !state.products.some((product) => product.hasFreeTrial || product.isPreorder);
 }
 
@@ -463,9 +458,7 @@ export function getStripePaymentElementAmount(state: State) {
   // must be the quote's locked local-currency total, not the USD amount below.
   const presentment = getStripePaymentElementPresentment(state);
   if (presentment) return presentment.amountCents;
-  // Charge-today, not the cart total: an installment cart charges only the first installment
-  // now, and the element amount is what wallet sheets show as their total. Identical to the
-  // total for every other cart.
+  // Partial-payment carts mount with the amount the server will charge now, not the agreement total.
   return getChargeTodayPrice(state);
 }
 
@@ -693,13 +686,14 @@ export function getFutureInstallmentsTotal(state: State) {
   }, 0);
 }
 
-// What the buyer pays TODAY as the checkout table presents it ("Payment today"): the cart's full
-// value minus the future installment payments. Wallet payment sheets (Apple Pay / Google Pay)
-// display this as their total, so it must match the table the buyer just read — a single source
-// of numbers for both, derived from the same server surcharges quote the table renders.
+// What the server will charge now, including only the tax on today's installment. The fallback
+// keeps a response from an older server usable during a rolling deploy.
 export function getChargeTodayPrice(state: State) {
   const total = getTotalPrice(state);
   if (total === null) return null;
+  const serverChargeTotal =
+    state.surcharges.type === "loaded" ? state.surcharges.result.charge_canonical_total_cents : null;
+  if (serverChargeTotal != null) return serverChargeTotal;
   return total - getFutureInstallmentsTotal(state);
 }
 

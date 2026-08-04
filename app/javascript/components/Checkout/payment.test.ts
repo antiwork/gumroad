@@ -253,14 +253,13 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state({ products: [product({ payInInstallments: true })] }))).toBe(true);
   });
 
-  it("falls back when the first installment is below Stripe's minimum even though the total is not", () => {
-    // $1.20 in 3 installments charges 40¢ today — below the 50¢ mount floor the element's
-    // charge-today amount is held to, while the full total would have passed.
+  it("falls back when the server-owned first charge is below Stripe's minimum", () => {
+    // The agreement total plus full tax would clear the floor, but the actual first charge does not.
     expect(
       canUseStripePaymentElement(
         state({
           products: [product({ price: 120, payInInstallments: true, installmentPlan: { numberOfInstallments: 3 } })],
-          surcharges: loadedSurcharges({ subtotal: 120 }),
+          surcharges: loadedSurcharges({ subtotal: 120, tax_cents: 60, charge_canonical_total_cents: 48 }),
         }),
       ),
     ).toBe(false);
@@ -632,17 +631,17 @@ describe("getStripePaymentElementAmount", () => {
     expect(getStripePaymentElementAmount(state({ surcharges: { type: "pending" } }))).toBeNull();
   });
 
-  it("returns the charge-today amount for an installment cart", () => {
-    // $10 in 2 installments at $2 tax: the wallet sheet and element mount must carry the $7
-    // charged today, not the $12 cart total.
+  it("returns the server-owned charge-now amount for a taxed installment cart", () => {
+    // This mirrors the request spec: $10 in three installments with 5.5% tax charges
+    // $3.34 + $0.18 today, while the full agreement is $10.55.
     expect(
       getStripePaymentElementAmount(
         state({
-          products: [product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } })],
-          surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 200 }),
+          products: [product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 3 } })],
+          surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 55, charge_canonical_total_cents: 352 }),
         }),
       ),
-    ).toBe(700);
+    ).toBe(352);
   });
 
   it("returns null for setup-mode checkout", () => {
@@ -817,13 +816,18 @@ describe("buyer-currency presentment lane", () => {
   it("mounts canonical USD when the surcharge response has no quote", () => {
     const s = state({
       checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      products: [product({ payInInstallments: true, installmentPlan: { numberOfInstallments: 3 } })],
       surcharges: {
         type: "loaded",
-        result: { ...loadedSurchargesWithQuote.result, buyer_currency_quote: null },
+        result: {
+          ...loadedSurchargesWithQuote.result,
+          charge_canonical_total_cents: 352,
+          buyer_currency_quote: null,
+        },
       },
     });
     expect(getStripePaymentElementPresentment(s)).toBeNull();
-    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+    expect(getStripePaymentElementAmount(s)).toBe(352);
   });
 
   it("mounts canonical USD when the quote allocation does not match the cart", () => {
@@ -852,11 +856,15 @@ describe("buyer-currency presentment lane", () => {
   it("mounts canonical USD when the buyer opts to save the card (canonical charge path)", () => {
     const s = state({
       checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
-      surcharges: loadedSurchargesWithQuote,
+      products: [product({ payInInstallments: true, installmentPlan: { numberOfInstallments: 3 } })],
+      surcharges: {
+        ...loadedSurchargesWithQuote,
+        result: { ...loadedSurchargesWithQuote.result, charge_canonical_total_cents: 352 },
+      },
       willSaveCard: true,
     });
     expect(getStripePaymentElementPresentment(s)).toBeNull();
-    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+    expect(getStripePaymentElementAmount(s)).toBe(352);
   });
 
   it("mounts canonical USD while a non-card payment method is selected", () => {
@@ -1704,7 +1712,12 @@ describe("reduceCheckoutState", () => {
 });
 
 const loadedSurcharges = (
-  overrides: Partial<{ subtotal: number; tax_cents: number; shipping_rate_cents: number }> = {},
+  overrides: Partial<{
+    subtotal: number;
+    tax_cents: number;
+    shipping_rate_cents: number;
+    charge_canonical_total_cents: number;
+  }> = {},
 ) =>
   ({
     type: "loaded",
@@ -1731,9 +1744,18 @@ describe("getChargeTodayPrice", () => {
     ).toBe(1_150);
   });
 
-  it("matches the checkout table's Payment today row for an installment cart", () => {
-    // $10 in 2 installments at 20% tax: the table presents the full tax with "Payment today"
-    // ($5 first installment + $2 tax = $7) and "Future installments" pre-tax ($5).
+  it("uses the server-owned amount for a taxed installment cart", () => {
+    expect(
+      getChargeTodayPrice(
+        state({
+          products: [product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } })],
+          surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 200, charge_canonical_total_cents: 600 }),
+        }),
+      ),
+    ).toBe(600);
+  });
+
+  it("falls back to the display-derived amount for an older surcharge response", () => {
     expect(
       getChargeTodayPrice(
         state({
