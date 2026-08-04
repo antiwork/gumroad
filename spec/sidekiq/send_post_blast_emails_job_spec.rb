@@ -21,12 +21,12 @@ describe SendPostBlastEmailsJob, :freeze_time do
     post
   end
 
-  # A held digest with no TTL survives a hard-killed worker forever, silently dropping every
-  # re-enqueue for the same blast (gumroad-private#1816). The runtime deadline below stops a live
-  # attempt before the digest can expire and admit a concurrent worker.
-  it "bounds the until_executed lock so a hard-killed run cannot strand the blast forever" do
-    expect(described_class.get_sidekiq_options["lock"]).to eq(:until_executed)
-    expect(described_class.get_sidekiq_options["lock_ttl"]).to eq(described_class::LOCK_TTL.to_i)
+  # Asserted on the options rather than on behaviour because SidekiqUniqueJobs is disabled outright
+  # in test (`config.enabled = !Rails.env.test?`), so a re-enqueue succeeds here either way. A
+  # stranded digest silently drops every later `perform_async` for the blast, which is what made
+  # resuming a hard-killed blast a no-op (gumroad-private#1816).
+  it "declares no unique lock, so a stranded digest cannot suppress a resume" do
+    expect(described_class.get_sidekiq_options).not_to have_key("lock")
   end
 
   describe "#perform" do
@@ -444,39 +444,6 @@ describe SendPostBlastEmailsJob, :freeze_time do
         expect_sent_count 2
         expect($redis.exists?("#{checkpoint_key}:tmp")).to eq(false)
       end
-
-      it "skips a recipient already reserved in the sent-emails set instead of sending to them again" do
-        # Simulates a second worker admitted after the unique lock expired mid-slice: the
-        # dedupe set already holds the recipient because a still-running first worker
-        # reserved them before delivery, not after.
-        $redis.sadd(RedisKey.blast_sent_emails(blast.id), [delivered_sale.email])
-
-        described_class.new.perform(blast.id)
-
-        expect(PostSendgridApi.mails[delivered_sale.email]).to be_blank
-        expect(PostSendgridApi.mails[sent_sale.email]).to be_present
-      end
-
-      it "reserves a recipient before delivery, not after" do
-        reserved_during_send = nil
-        allow(PostSendgridApi).to receive(:process) do |recipients:, **_kwargs|
-          reserved_during_send = $redis.smembers(RedisKey.blast_sent_emails(blast.id))
-        end
-
-        described_class.new.perform(blast.id)
-
-        expect(reserved_during_send).to match_array([delivered_sale.email, sent_sale.email])
-      end
-
-      it "un-reserves a recipient when the provider send fails, so a retry can send to them" do
-        allow(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
-
-        expect do
-          described_class.new.perform(blast.id)
-        end.to raise_error(StandardError, "API failure")
-
-        expect($redis.smembers(RedisKey.blast_sent_emails(blast.id))).to be_empty
-      end
     end
   end
 
@@ -501,89 +468,6 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 1
     ensure
       $redis.del(RedisKey.audience_member_load_max_execution_time_seconds)
-    end
-
-    it "clamps the Redis override so one SQL statement cannot consume the full lock TTL" do
-      $redis.set(RedisKey.audience_member_load_max_execution_time_seconds, 12.hours.to_i)
-      blast = create(:blast, :just_requested, post: basic_post_with_audience)
-
-      expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 4.hours.to_i).and_call_original
-      described_class.new.perform(blast.id)
-
-      expect_sent_count 1
-    ensure
-      $redis.del(RedisKey.audience_member_load_max_execution_time_seconds)
-    end
-  end
-
-  describe "unique lock deadline" do
-    it "stops before the next provider slice when the live lock is near expiry" do
-      post = basic_post_with_audience
-      create(:active_follower, user: @seller)
-      blast = create(:blast, :just_requested, post:)
-      job = described_class.new
-      processed_batches = 0
-
-      allow(job).to receive(:remaining_unique_lock_life).and_return(31.minutes)
-      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
-      allow(PostEmailApi).to receive(:max_recipients_for).and_return(1)
-      allow(PostSendgridApi).to receive(:process) do |**_kwargs|
-        processed_batches += 1
-        travel 2.minutes
-      end
-
-      expect { job.perform(blast.id) }.to raise_error(SendPostBlastEmailsJob::LockLifeTooShort)
-      expect(processed_batches).to eq(1)
-      expect(blast.reload.completed_at).to be_blank
-    end
-
-    it "reads the remaining TTL from the unique digest for this blast" do
-      blast = create(:blast, :just_requested, post: basic_post_with_audience)
-      job = described_class.new
-      job.instance_variable_set(:@blast, blast)
-      prepared_item = nil
-      redis = instance_double(Redis, pttl: 123_000)
-
-      allow(SidekiqUniqueJobs::Job).to receive(:prepare).and_wrap_original do |original, item|
-        prepared_item = item
-        original.call(item)
-      end
-      allow(Sidekiq).to receive(:redis) { |&block| block.call(redis) }
-
-      expect(job.send(:remaining_unique_lock_life)).to eq(123.seconds)
-      expect(prepared_item["class"]).to eq("SendPostBlastEmailsJob")
-      expect(prepared_item["queue"]).to eq("default")
-      expect(prepared_item["args"]).to eq([blast.id])
-      expect(redis).to have_received(:pttl).with(prepared_item["lock_digest"])
-    end
-
-    it "fails closed when the unique-lock TTL cannot be read" do
-      blast = create(:blast, :just_requested, post: basic_post_with_audience)
-      job = described_class.new
-      job.instance_variable_set(:@blast, blast)
-
-      allow(Sidekiq).to receive(:redis).and_raise(Redis::BaseError, "read timeout")
-
-      expect { job.send(:remaining_unique_lock_life) }
-        .to raise_error(SendPostBlastEmailsJob::LockLifeTooShort, /could not read unique-lock pttl/)
-    end
-
-    it "fails closed when Redis reports a missing or non-expiring lock (negative PTTL) instead of falling back to a fresh window" do
-      blast = create(:blast, :just_requested, post: basic_post_with_audience)
-      job = described_class.new
-      job.instance_variable_set(:@blast, blast)
-      # Only a real worker can rely on the digest existing — the client middleware that
-      # creates it never runs for a direct `new.perform`, which is how every other example
-      # in this file invokes the job.
-      allow(Sidekiq).to receive(:server?).and_return(true)
-
-      [-2, -1].each do |pttl|
-        redis = instance_double(Redis, pttl: pttl)
-        allow(Sidekiq).to receive(:redis) { |&block| block.call(redis) }
-
-        expect { job.send(:remaining_unique_lock_life) }
-          .to raise_error(SendPostBlastEmailsJob::LockLifeTooShort, /unique-lock pttl was #{pttl}/)
-      end
     end
   end
 

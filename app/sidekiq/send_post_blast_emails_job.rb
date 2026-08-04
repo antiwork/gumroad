@@ -3,27 +3,11 @@
 class SendPostBlastEmailsJob
   include Sidekiq::Job
   include ActionView::Helpers::SanitizeHelper
-  # `lock_ttl` bounds the `until_executed` digest: a hard-killed worker (OOM, deploy reap) skips the
-  # release, and a held digest silently drops every later `perform_async(blast_id)` — no exception,
-  # no dead entry — which turns "re-enqueue the stalled blast" into a no-op (gumroad-private#1816).
-  #
-  # The TTL covers one enqueue→completion cycle: a failed attempt releases the lock in `ensure`,
-  # and a retry re-acquires it server-side at execution start (under `reliable_scheduler!` retries
-  # skip client middleware, so the re-acquisition happens in `Locksmith#lock!`, not at re-push).
-  # The stretch case is a hard kill: super_fetch recovers the orphan under the SAME jid, which
-  # passes the still-held lock without refreshing its pttl — so one logical run can burn a partial
-  # attempt + up to 1h orphan-check idle + a full recovered attempt (~6.3h at the 2-3h worst-case
-  # attempt AlertOnStalledPostEmailBlastsJob documents). 8h clears that with margin; resize from
-  # the recovered-attempt arithmetic, not from one attempt. Duplicate delivery past an expired
-  # lock: safe on the normal path (`SentPostEmail` unique index dedupes), while the
-  # `to_non_openers?` branch dedupes via a Redis set read once at job start — sequential re-runs
-  # are safe there, concurrent overlap is not, so each attempt stops before the live
-  # digest's remaining TTL can be exhausted.
-  LOCK_TTL = 8.hours
-  LOCK_SAFETY_MARGIN = 30.minutes
-  LockLifeTooShort = Class.new(StandardError)
-
-  sidekiq_options retry: 10, queue: :default, lock: :until_executed, lock_ttl: LOCK_TTL.to_i
+  # Deliberately no `lock: :until_executed`. The digest keys on the blast id, and every caller
+  # creates a fresh blast row before enqueuing, so it never deduplicated anything — but a hard-killed
+  # worker skips its release, and the held digest then drops every later `perform_async` for that
+  # blast silently, which is what made the documented recovery a no-op (gumroad-private#1816).
+  sidekiq_options retry: 10, queue: :default
 
   def perform(blast_id)
     @blast = PostEmailBlast.find(blast_id)
@@ -31,7 +15,6 @@ class SendPostBlastEmailsJob
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
 
-    ensure_lock_life_remaining!
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
     @filters = @post.audience_members_filter_params
@@ -40,7 +23,6 @@ class SendPostBlastEmailsJob
     @members = load_audience_members
 
     if @blast.to_non_openers?
-      ensure_lock_life_remaining!
       keep_emails = load_non_opener_emails
       @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
       remove_members_already_sent_in_this_blast
@@ -57,7 +39,6 @@ class SendPostBlastEmailsJob
     @members.each_slice(recipients_slice_size) do |members_slice|
       members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
         provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
-          ensure_lock_life_remaining!
           send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
         end
       end
@@ -91,74 +72,24 @@ class SendPostBlastEmailsJob
     # Redis list/set writes only — no SQL — so this can stay large.
     REDIS_WRITE_SLICE_SIZE = 10_000
 
-    def ensure_lock_life_remaining!
-      return if Time.current < attempt_deadline
-
-      raise LockLifeTooShort, "#{self.class.name} blast_id=#{@blast.id} reached its unique-lock deadline before finishing"
-    end
-
-    def attempt_deadline
-      @attempt_deadline ||= begin
-        deadline = Time.current + LOCK_TTL - LOCK_SAFETY_MARGIN
-        remaining_life = remaining_unique_lock_life
-        remaining_life ? [deadline, Time.current + remaining_life - LOCK_SAFETY_MARGIN].min : deadline
-      end
-    end
-
-    def remaining_unique_lock_life
-      item = {
-        "class" => self.class.name,
-        "queue" => self.class.get_sidekiq_options["queue"].to_s,
-        "args" => [@blast.id],
-      }
-      SidekiqUniqueJobs::Job.prepare(item)
-      pttl = Sidekiq.redis { _1.pttl(item["lock_digest"]) }
-      # Redis returns -2 (key missing) or -1 (no expiry) rather than raising, so a bare
-      # nil/negative check here would read as "can't tell" and let attempt_deadline fall
-      # back to a fresh local window — exactly the unbounded-overlap risk this lock exists
-      # to prevent. Fail closed the same as the rescue clause below, but only inside a real
-      # worker: the client middleware that creates the digest never runs for a direct
-      # `new.perform(id)` (specs, console backfills), where a missing digest means "no lock
-      # was ever taken" rather than "the lock we rely on vanished".
-      if (pttl.nil? || pttl.negative?) && Sidekiq.server?
-        raise LockLifeTooShort, "#{self.class.name} blast_id=#{@blast.id} unique-lock pttl was #{pttl.inspect}, expected a live lock"
-      end
-      return if pttl.nil? || pttl.negative?
-
-      (pttl / 1000.0).seconds
-    rescue Redis::BaseError, RedisClient::Error, ConnectionPool::TimeoutError, SidekiqUniqueJobs::UniqueJobsError => e
-      # Fail closed: falling back to a fresh window here could outlive a stale recovered
-      # lock and let a second worker overlap the to_non_openers path.
-      raise LockLifeTooShort, "#{self.class.name} blast_id=#{@blast.id} could not read unique-lock pttl (#{e.class}: #{e.message})"
-    end
-
     # The provider slice — not the mixed slice — is the retry unit. An ESP that has
     # already accepted its recipients must not be handed them again because a later
     # provider failed, so the cleanup below only rolls back the slice that raised.
-    #
-    # Dedup must land BEFORE delivery, not after: a second worker admitted once the
-    # unique lock expires (deploy kill mid-slice, an ESP call that outlasts the
-    # attempt deadline) reads whatever dedup state exists at ITS start, so recording
-    # "sent" only on success leaves every in-flight slice unprotected regardless of
-    # how tightly the deadline is checked. Reserving first — insert for the normal
-    # path, Redis SADD for non-openers — makes both paths safe under concurrent
-    # overlap the same way, not just under sequential retries.
     def send_provider_slice(provider:, members:, cache:)
-      members = @blast.to_non_openers? ? reserve_members_for_this_blast(members) : store_recipients_as_sent(members)
+      members = store_recipients_as_sent(members)
       recipients = prepare_recipients(members)
 
       begin
         deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
+        mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
       rescue Exception => e
-        # Roll back the reservation if there's an error with the provider send.
+        # Delete the sent_post_emails records if there's an error with the provider send.
         # We cannot use `transaction` here because it exceeds the lock timeout.
         # Rescuing Exception, not StandardError: a deploy's hard shutdown raises
         # Sidekiq::Shutdown (an Interrupt), and letting that skip the cleanup would leave
         # these recipients marked sent but never emailed — the retry filters them out as
         # already-emailed, so they are silently dropped from the blast.
-        if @blast.to_non_openers?
-          unreserve_members_for_this_blast(members)
-        else
+        unless @blast.to_non_openers?
           emails = members.map(&:email)
           SentPostEmail.where(post: @post, email: emails).delete_all
         end
@@ -341,26 +272,15 @@ class SendPostBlastEmailsJob
       @members.delete_if { already_sent_set.include?(_1.email) }
     end
 
-    # Redis SADD's bulk return is a count, not which members were new, and we need
-    # to know exactly that: a member already reserved (retry re-running a slice, or
-    # a second worker racing an expired lock) must not be sent again. Per-member
-    # SADD in one pipeline gets the per-member added/not-added result cheaply —
-    # slices here are already bounded by the provider's max-recipients batch size.
-    def reserve_members_for_this_blast(members)
-      return members if members.empty?
-
-      key = RedisKey.blast_sent_emails(@blast.id)
-      added = $redis.pipelined { |pipe| members.each { pipe.sadd(key, _1.email) } }
-      $redis.expire(key, BLAST_DEDUPE_TTL.to_i)
-
-      members.select.with_index { |_, i| added[i] }
-    end
-
-    def unreserve_members_for_this_blast(members)
+    def mark_members_sent_in_this_blast(members)
       emails = members.map(&:email)
       return if emails.empty?
 
-      $redis.srem(RedisKey.blast_sent_emails(@blast.id), emails)
+      key = RedisKey.blast_sent_emails(@blast.id)
+      $redis.pipelined do |pipe|
+        pipe.sadd(key, emails)
+        pipe.expire(key, BLAST_DEDUPE_TTL.to_i)
+      end
     end
 
     def enrich_with_gathered_records(members_with_specifics)
@@ -477,10 +397,8 @@ class SendPostBlastEmailsJob
       end.to_i.clamp(1..PostEmailApi.max_recipients)
     end
 
-    # Tunable via Redis so a stuck blast can be unblocked without a deploy. The whole attempt is
-    # still bounded by the live `lock_ttl`, because a non-opener attempt that outlives the lock can
-    # overlap with a second worker after reading its one-time Redis dedupe set.
+    # Tunable via Redis so a stuck blast can be unblocked without a deploy.
     def audience_load_timeout_seconds
-      ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i.clamp(1..4.hours.to_i)
+      ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
     end
 end
