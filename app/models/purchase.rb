@@ -652,7 +652,8 @@ class Purchase < ApplicationRecord
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
                 :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited,
-                :submitted_pre_discount_price_cents, :once_per_cart_discount_allocation, :offer_code_cart_quantity
+                :submitted_pre_discount_price_cents, :once_per_cart_discount_allocation, :offer_code_cart_quantity,
+                :confirmed_duplicate_purchase
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -5368,6 +5369,11 @@ class Purchase < ApplicationRecord
         end
       end
 
+      # An explicit buyer confirmation only gets past a SUCCESSFUL prior purchase — an
+      # in_progress/settling one hasn't finished, so a second charge there would be an actual
+      # double charge rather than a deliberate repeat buy.
+      already = already.reject(&:successful?) if confirmed_duplicate_purchase
+
       add_errors_for_existing_purchase(already)
       return if errors.present?
 
@@ -5480,7 +5486,10 @@ class Purchase < ApplicationRecord
         elsif is_gift_sender_purchase
           "#{giftee_email} just bought this product themselves. Check with them before sending it as a gift."
         else
-          "You have already paid for this product. It has been emailed to you."
+          # Gift cases are left without this code: "buy it again anyway" isn't the right
+          # resolution for either gift reader, so the client has nothing to offer them.
+          self.error_code = PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED
+          "You have already paid for this product. It has been emailed to you. Do you want to buy it again?"
         end
       elsif purchases.any?(&:preorder_authorization_successful?)
         errors.add :base, "You have already pre-ordered this product. A confirmation has been emailed to you."

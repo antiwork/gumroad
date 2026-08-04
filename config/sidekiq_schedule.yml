@@ -191,6 +191,11 @@ alert_on_negative_destination_balances:
   class: AlertOnNegativeDestinationBalancesJob
   queue: low
   description: Reports payable sellers whose Gumroad-managed Stripe account carries a negative destination ledger from FX residue
+alert_on_stalled_post_email_blasts:
+  cron: "40 11 * * *" # UTC 11:40
+  class: AlertOnStalledPostEmailBlastsJob
+  queue: low
+  description: Reports email blasts that started sending hours ago and never completed, so a killed blast job is found before a seller writes in
 alert_on_stripe_dob_drift:
   cron: "30 12 * * 1" # UTC 12:30 Monday
   class: AlertOnStripeDobDriftJob

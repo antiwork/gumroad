@@ -62,6 +62,15 @@ class Checkout::StripePaymentPresenter
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason, disable_wallets:) if fallback_reason.present?
 
+    # Setup carts (every item a preorder or free trial) charge nothing today, so there is no
+    # amount to present in the buyer's currency — they keep the SetupIntent-mode element even
+    # when every item is a presentment candidate. Checked before the presentment branch so
+    # removing the per-item shape conditions cannot mount a payment-mode element on a cart
+    # with no charge.
+    if setup_for_future_charges_without_charging?(checkout_items)
+      return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
+    end
+
     # FX-quoted buyer-currency candidates use server-confirm because the deferred-intent path does
     # not consume their locked quote token. Its currency-less PaymentMethod lets the charge path
     # price the intent from the verified quote after the Element displays that same amount.
@@ -114,16 +123,13 @@ class Checkout::StripePaymentPresenter
       )
     end
 
-    # Paid-upfront UPI Autopay also uses PaymentIntent mode while registering reuse.
+    # Client-confirm carts charge now, so the setup branch above can never have claimed one:
+    # one-time carts are one-time, and the UPI Autopay membership shape is paid upfront (it
+    # excludes preorders and free trials), registering reuse on a PaymentIntent rather than a
+    # SetupIntent.
     return client_confirm_props if client_confirm_eligible?
 
-    stripe_elements_mode =
-      if setup_for_future_charges_without_charging?(checkout_items)
-        STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
-      else
-        STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT
-      end
-    payment_element_props(stripe_elements_mode)
+    payment_element_props(STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT)
   end
 
   private
@@ -415,33 +421,14 @@ class Checkout::StripePaymentPresenter
         return "stripe_payment_element_amount_below_minimum"
       end
       if items.any? { buyer_currency_presentment_candidate?(_1) }
-        # PR-1 safety gate, progressively narrowed: presentment candidates originally rode
-        # CardElement because the canonical USD Payment Element couldn't carry buyer-currency
-        # presentment. Two shapes now stay on the Payment Element:
-        #   1. The method-forced shape (a single item priced in a forced currency with a
-        #      resolver-available local method) when the cart is client-confirm eligible — that path handles
-        #      presentment end-to-end (forced-currency element in client_confirm_props,
-        #      forced-currency intent in Order::PreparePaymentIntentService); kicking it back
-        #      to CardElement would make the iDEAL/Bancontact tabs unreachable for any tester
-        #      whose GeoIP currency differs from the product's.
-        #   2. The buyer-currency card shape (one seller's one-time items, each priced in a
-        #      currency other than the buyer's own — the same cart shape the eligibility
-        #      service's card mode accepts), which mounts the
-        #      server-confirm Payment Element in the buyer's quote currency (see props).
-        # Non-flagged sellers never produce a candidate (buyer_presentment_candidate? checks
-        # the seller flags), so neither branch changes behavior for unflagged checkouts. The
-        # card shape (2) runs in live mode since the production rollout; the method-forced
-        # shape (1) runs in live mode only when the resolver exposes a launched local method
-        # whose Connect-account capabilities can accept the product's forced currency.
-        #
-        # Shape 1 is still reachable even though props now always hands a quoted cart to the
-        # buyer-currency element. The gap between "is a candidate" and "gets the element" is a
-        # product that OFFERS an installment plan: it is a candidate (the display converts) but
-        # the element shape rejects it, because quote creation cannot see whether the buyer
-        # picked installments. Such a cart is never quoted either — quotable_product? rejects
-        # installment-plan products — so it carries no token and the client-confirm lane can
-        # charge it safely. Keeping shape 1 listed means it keeps the local-method tabs instead
-        # of being kicked back to CardElement.
+        # A candidate cart must mount a lane that can honor an FX quote (the buyer-currency
+        # element, or CardElement via this fallback) — the client-confirm lane fails a quoted
+        # payment closed. The only candidate carts still kicked back to CardElement are the
+        # ones the element shape cannot represent: carts mixing candidate and non-candidate
+        # items (a partial quote would mix local-currency and dollar lines, so the quote
+        # service refuses them) and carts past the quote's seller cap. The method-forced arm
+        # keeps uniform forced-currency carts on their local-method element when a
+        # non-candidate line breaks the presentment shape.
         supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported
@@ -450,52 +437,24 @@ class Checkout::StripePaymentPresenter
       nil
     end
 
-    # The cart shape whose buyer-currency presentment the CARD charge path supports, mirroring
-    # the gates of Checkout::BuyerCurrencyEligibility#decision that are knowable at render time:
-    # one-time, non-commission items that are each a presentment candidate (candidate? already
-    # covers the seller's flags and an active buyer-local display). Products that offer
-    # installments stay on CardElement even when the buyer chooses a one-time purchase because
-    # quote creation cannot see that choice and rejects the product.
+    # Whether every item is a presentment candidate (candidate? covers the seller's flags and
+    # an active buyer-local display), within the number of charges the quote service prices
+    # (Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES — past it the endpoint withholds the
+    # quote, and the element would just fall back to dollars a moment later).
     #
-    # A cart may span several sellers. The order pipeline turns it into one charge per seller,
-    # and the surcharge endpoint locks one quote per prospective charge before the buyer is
-    # shown a total, so each charge is priced from its own locked amount and the cart total is
-    # their sum — no locked figure is ever split across intents.
-    #
-    # The seller count is capped for the same reason the quote service caps it
-    # (Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES): past that many sellers the endpoint
-    # withholds the quote, and mounting the element for a currency no quote will arrive for
-    # would only make the browser fall back to canonical US dollars a moment later.
-    #
-    # There is deliberately no condition on the currency the SELLER priced in. The quote
-    # converts the cart's canonical USD total into the buyer's currency, which works the same
-    # whether the seller listed in dollars, euros or reais. The one
-    # excluded case — a product priced in the buyer's own currency, which is withheld from
-    # quoting so an FX round trip cannot misprice it — is already excluded by
-    # buyer_currency_presentment_candidate?: the buyer-local display only turns on when the
-    # buyer's currency differs from the product's. The direct-listed client-confirm surface
-    # handles that cart when its ramp is enabled; otherwise it stays canonical USD.
-    #
-    # Charge-time-only gates (merchant account model, wallet params, GeoIP re-check, quote
-    # verification) stay in the eligibility service — when any of them falls back, the charge
-    # simply runs canonical USD, which the currency-less card PaymentMethod the server-confirm
-    # element mints supports just as well.
+    # There are deliberately no product-shape conditions here. The buyer-local display and the
+    # quote service own that policy (CurrencyHelper#buyer_currency_unquotable_product? and
+    # BuyerCurrencyQuote#quotable_line_item?, kept in lockstep), and a cart the quote service
+    # declines is safe on this element: no quote arrives, no token is minted, and the browser
+    # mounts canonical USD. Charge-time-only gates (merchant account model, GeoIP re-check,
+    # quote verification) stay in the eligibility service for the same reason.
     def buyer_currency_presentment_element_shape?(items)
       return false if items.empty?
 
       cart_sellers = items.map { _1[:seller] }.uniq
       return false if cart_sellers.length > Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES
 
-      # Each charge's quote locks that charge's total, so every item must individually pass the
-      # presentment gates: one unsupported item means the charge path could not honor its
-      # locked total, and the whole cart falls back.
-      items.all? do |item|
-        buyer_currency_presentment_candidate?(item) &&
-          item[:recurrence].blank? &&
-          !item[:pay_in_installments] && !item[:offers_installment_plan] &&
-          !item[:is_preorder] && !item[:has_free_trial] &&
-          item[:native_type] != Link::NATIVE_TYPE_COMMISSION
-      end
+      items.all? { buyer_currency_presentment_candidate?(_1) }
     end
 
     # The method-forced cart shape, mirroring the gates under which

@@ -97,12 +97,14 @@ class ProductVariantDeletionAudit < ApplicationRecord
   #   Not what it proposed to delete — a version an earlier save already deleted
   #   must not be attributed to this one.
   # - `affected_variant_external_ids`: versions whose removal this operation
-  #   AUTHORISED, which is what intent is judged against. Usually the same as the
-  #   deleted set, but not for a category sweep: marking a category deleted
-  #   removes the grouping without soft-deleting its rows (no `dependent:` on the
-  #   association), so the deleted set is empty while the seller may still have
-  #   explicitly confirmed every child. Judging intent from the deleted set there
-  #   reports a fully confirmed removal as `payload_omission`.
+  #   AUTHORISED, which is what intent is judged against. Usually the same as
+  #   the deleted set, but not always: a version an earlier save already
+  #   removed is authorised but not deleted here, and the API's category
+  #   destroy (`Api::V2::VariantCategoriesController`) removes the grouping
+  #   without soft-deleting its rows (no `dependent:` on the association), so
+  #   its deleted set is empty while the seller may still have explicitly
+  #   confirmed every child. Judging intent from the deleted set there reports
+  #   a fully confirmed removal as `payload_omission`.
   # - `confirmed_removed_variant_ids`: the raw confirmation list off the request.
   #   Only its intersection with the affected set is stored, because the list can
   #   name rows this request never touched.

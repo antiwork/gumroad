@@ -33,20 +33,10 @@ class SendPostBlastEmailsJob
 
     cache = {}
     @members.each_slice(recipients_slice_size) do |members_slice|
-      members = store_recipients_as_sent(members_slice)
-      recipients = prepare_recipients(members)
-
-      begin
-        PostEmailApi.process(post: @post, recipients:, cache:, blast: @blast)
-        mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
-      rescue => e
-        # Delete the sent_post_emails records if there's an error with PostEmailApi.process
-        # We cannot use `transaction` here because it exceeds the lock timeout.
-        unless @blast.to_non_openers?
-          emails = members.map(&:email)
-          SentPostEmail.where(post: @post, email: emails).delete_all
+      members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
+        provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
+          send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
         end
-        raise e
       end
     end
 
@@ -77,6 +67,42 @@ class SendPostBlastEmailsJob
 
     # Redis list/set writes only — no SQL — so this can stay large.
     REDIS_WRITE_SLICE_SIZE = 10_000
+
+    # The provider slice — not the mixed slice — is the retry unit. An ESP that has
+    # already accepted its recipients must not be handed them again because a later
+    # provider failed, so the cleanup below only rolls back the slice that raised.
+    def send_provider_slice(provider:, members:, cache:)
+      members = store_recipients_as_sent(members)
+      recipients = prepare_recipients(members)
+
+      begin
+        deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
+        mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
+      rescue Exception => e
+        # Delete the sent_post_emails records if there's an error with the provider send.
+        # We cannot use `transaction` here because it exceeds the lock timeout.
+        # Rescuing Exception, not StandardError: a deploy's hard shutdown raises
+        # Sidekiq::Shutdown (an Interrupt), and letting that skip the cleanup would leave
+        # these recipients marked sent but never emailed — the retry filters them out as
+        # already-emailed, so they are silently dropped from the blast.
+        unless @blast.to_non_openers?
+          emails = members.map(&:email)
+          SentPostEmail.where(post: @post, email: emails).delete_all
+        end
+        raise e
+      end
+    end
+
+    def deliver_provider_slice(provider:, recipients:, cache:)
+      case provider
+      when MailerInfo::EMAIL_PROVIDER_RESEND
+        PostResendApi.process(post: @post, recipients: recipients, cache: cache, blast: @blast)
+      when MailerInfo::EMAIL_PROVIDER_SENDGRID
+        PostSendgridApi.process(post: @post, recipients: recipients, cache: cache, blast: @blast)
+      else
+        raise ArgumentError, "Unknown email provider: #{provider}"
+      end
+    end
 
     # Loads the recipient list for the blast. For sellers with very large audiences
     # (hundreds of thousands of members) the filter query is the slowest, most fragile

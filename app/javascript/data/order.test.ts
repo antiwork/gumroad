@@ -106,6 +106,7 @@ const requestData: StartCartPurchaseRequestPayload = {
       referrer: "direct",
       isPppDiscounted: false,
       forceNewSubscription: false,
+      confirmedDuplicatePurchase: false,
       acceptedOffer: null,
       bundleProducts: [],
     },

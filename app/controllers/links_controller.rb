@@ -1469,11 +1469,10 @@ class LinksController < ApplicationController
     end
 
     # Survivors are looked up by the requested id rather than by walking the
-    # product's live parents. Deleting a grouping does not soft-delete the
-    # versions inside it, so a version (or its page) whose grouping went away in
-    # this same save is still alive and still unapplied, while being unreachable
-    # through `current_base_variants` — exactly the rows this report exists to
-    # name.
+    # product's live parents. A version that survived under a grouping this
+    # save deleted (the API's category destroy leaves live children; older
+    # editor saves did too, gumroad-private#1784) is unreachable through
+    # `current_base_variants` — exactly the rows this report exists to name.
     def surviving_variant_ids(requested_ids)
       return [] if requested_ids.empty?
 

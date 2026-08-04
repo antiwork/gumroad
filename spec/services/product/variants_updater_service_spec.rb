@@ -242,6 +242,25 @@ describe Product::VariantsUpdaterService do
         expect(@size_category.reload).not_to be_alive
       end
 
+      it "soft-deletes the swept category's variants and schedules their content cleanup" do
+        # Regression for gumroad-private#1784: the sweep marked only the
+        # category deleted, leaving its variants (and their pages) alive under
+        # a soft-deleted parent — a state the editor cannot load or save back.
+        small = create(:variant, variant_category: @size_category, name: "Small")
+        medium = create(:variant, variant_category: @size_category, name: "Medium")
+
+        Product::VariantsUpdaterService.new(
+          product: @product,
+          variants_params: @variant_categories
+        ).perform
+
+        expect(@size_category.reload).not_to be_alive
+        expect(small.reload).to be_deleted
+        expect(medium.reload).to be_deleted
+        expect(DeleteProductRichContentWorker.jobs.map { _1["args"] }).to include([@product.id, small.id], [@product.id, medium.id])
+        expect(DeleteProductFilesArchivesWorker.jobs.map { _1["args"] }).to include([@product.id, small.id], [@product.id, medium.id])
+      end
+
       it "does not mark a category deleted if it has purchases and files" do
         small_variant = create(:variant, :with_product_file, variant_category: @size_category, name: "Small")
         create(:purchase, link: @product, variant_attributes: [small_variant])

@@ -18,11 +18,11 @@ import {
   Underline as UnderlineIcon,
   Undo,
 } from "@boxicons/react";
-import { Content, createDocument, Editor, isList } from "@tiptap/core";
+import { Content, createDocument, Editor, getSchema, isList, JSONContent } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
 import { redoDepth, undoDepth } from "@tiptap/pm/history";
-import { DOMSerializer } from "@tiptap/pm/model";
+import { DOMSerializer, Schema } from "@tiptap/pm/model";
 import { EditorState, Selection } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import { EditorContent, Extensions, useEditor } from "@tiptap/react";
@@ -238,6 +238,27 @@ export const serializeEditorContentToHTML = (editor: Editor) => {
   return container.innerHTML;
 };
 
+// A stray node or mark type the schema doesn't recognize (bad seller-authoring tooling, a removed
+// extension, hand-edited API payloads) makes ProseMirror's parser throw for the WHOLE document
+// rather than skip just that piece — see `Schema.nodeType` / `Node.fromJSON`. Drop only the
+// offending subtree (or strip the offending mark) so the rest of the page still renders; `text`
+// nodes have no `type` to check against the schema and pass through with their marks filtered.
+export const dropUnknownNodes = (content: JSONContent[], schema: Schema): JSONContent[] => {
+  const withKnownMarks = (node: JSONContent): JSONContent =>
+    node.marks ? { ...node, marks: node.marks.filter((mark) => schema.marks[mark.type]) } : node;
+
+  return content.flatMap((node) => {
+    if (node.type === "text") return [withKnownMarks(node)];
+    if (!node.type || !schema.nodes[node.type]) return [];
+    return [
+      {
+        ...withKnownMarks(node),
+        content: node.content ? dropUnknownNodes(node.content, schema) : node.content,
+      },
+    ];
+  });
+};
+
 export const useRichTextEditor = ({
   placeholder,
   initialValue,
@@ -277,6 +298,28 @@ export const useRichTextEditor = ({
     }
   }
 
+  const allExtensions = [...extensions, ...(placeholder ? [Placeholder.configure({ placeholder })] : []), UpsellCard];
+  const dedupedExtensions = allExtensions.filter(
+    (ext, index) => allExtensions.findIndex((e) => e.name === ext.name) === index,
+  );
+  // Read through a ref, never a dep: this list is rebuilt on every render, and the effect below
+  // rebuilds the whole EditorState whenever `content`'s identity changes — depending on it here
+  // would discard the seller's unsaved edits on any re-render.
+  const extensionsRef = React.useRef(dedupedExtensions);
+  extensionsRef.current = dedupedExtensions;
+
+  // `useEditor` below is called with `deps: []`, so the mounted editor is never recreated when
+  // `dedupedExtensions` changes shape (e.g. a workflow's trigger swapping which extension is
+  // included) — it keeps parsing with whatever schema it was first created with. Sanitizing
+  // against `extensionsRef.current` (this render's, possibly newer, schema) can therefore let a
+  // node type through that the STILL-MOUNTED editor doesn't recognize, reintroducing the same
+  // "Unknown node type" throw this function exists to prevent. `editorSchemaRef` is populated
+  // after each render with the schema the live editor actually parses against, so sanitization
+  // always targets that schema; only before the first mount (editor undefined) do we fall back to
+  // computing it fresh, which is safe because that's the schema the editor is about to be created
+  // with in this same pass.
+  const editorSchemaRef = React.useRef<Schema | null>(null);
+
   const content: Content = React.useMemo(() => {
     if (!SSR && typeof initialValue === "string") {
       const dom = document.createElement("div");
@@ -297,7 +340,12 @@ export const useRichTextEditor = ({
       return { type: "doc", content: [{ type: "paragraph" }] };
     }
 
-    return initialValue;
+    if (typeof initialValue !== "object" || initialValue === null) return initialValue;
+
+    const schema = editorSchemaRef.current ?? getSchema(baseEditorOptions(extensionsRef.current).extensions);
+    if (Array.isArray(initialValue)) return dropUnknownNodes(initialValue, schema);
+    if (!initialValue.content) return initialValue;
+    return { ...initialValue, content: dropUnknownNodes(initialValue.content, schema) };
   }, [initialValue]);
   const imageSettings = useImageUploadSettings();
   const uploadFiles = ({ view, files }: { view: EditorView; files: File[] }) => {
@@ -305,11 +353,6 @@ export const useRichTextEditor = ({
     onInputNonImageFiles?.(nonImages);
     uploadImages({ view, files: images, imageSettings });
   };
-
-  const allExtensions = [...extensions, ...(placeholder ? [Placeholder.configure({ placeholder })] : []), UpsellCard];
-  const dedupedExtensions = allExtensions.filter(
-    (ext, index) => allExtensions.findIndex((e) => e.name === ext.name) === index,
-  );
 
   const editor = useEditor({
     ...baseEditorOptions(dedupedExtensions),
@@ -353,6 +396,9 @@ export const useRichTextEditor = ({
     onUpdate: ({ editor }) => onUpdate(editor),
     onCreate: ({ editor }) => onCreate?.(editor),
   });
+  // Mutated directly during render, not in an effect: the content memo above reads this ref on
+  // the NEXT render, and an effect wouldn't run until after that render's commit, one render late.
+  if (editor) editorSchemaRef.current = editor.state.schema;
 
   React.useEffect(() => editor?.setOptions({ editable }), [editable]);
 

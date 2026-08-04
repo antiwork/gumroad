@@ -362,7 +362,8 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
     it "does not delete sent_post_emails when a resend raises an error" do
       blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
-      expect(PostEmailApi).to receive(:process).and_raise(StandardError.new("API failure"))
+      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
 
       expect do
         described_class.new.perform(blast.id)
@@ -390,7 +391,8 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
       it "checkpoints the resolved non-opener emails while the blast is running and clears them on completion" do
         checkpoint_during_run = nil
-        allow(PostEmailApi).to receive(:process) do |**_kwargs|
+        allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+        allow(PostSendgridApi).to receive(:process) do |**_kwargs|
           checkpoint_during_run = $redis.smembers(checkpoint_key)
         end
 
@@ -413,7 +415,8 @@ describe SendPostBlastEmailsJob, :freeze_time do
       end
 
       it "keeps the checkpoint when the send fails so the next attempt can reuse it" do
-        expect(PostEmailApi).to receive(:process).and_raise(StandardError.new("API failure"))
+        allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+        expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
 
         expect do
           described_class.new.perform(blast.id)
@@ -467,7 +470,8 @@ describe SendPostBlastEmailsJob, :freeze_time do
       snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
 
       snapshot_during_run = nil
-      allow(PostEmailApi).to receive(:process) do |**_kwargs|
+      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      allow(PostSendgridApi).to receive(:process) do |**_kwargs|
         snapshot_during_run = $redis.lrange(snapshot_key, 0, -1)
       end
 
@@ -642,7 +646,8 @@ describe SendPostBlastEmailsJob, :freeze_time do
       blast = create(:blast, :just_requested, post:)
       snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
 
-      expect(PostEmailApi).to receive(:process).and_raise(StandardError.new("API failure"))
+      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
       expect do
         described_class.new.perform(blast.id)
       end.to raise_error(StandardError, "API failure")
@@ -651,17 +656,48 @@ describe SendPostBlastEmailsJob, :freeze_time do
     ensure
       $redis.del(snapshot_key)
     end
+
+    it "keeps earlier provider sends when a later provider fails" do
+      post = basic_post_with_audience
+      first_follower = post.seller.followers.first
+      second_follower = create(:active_follower, user: @seller)
+      blast = create(:blast, :just_requested, post:)
+
+      # `group_by` preserves first-seen order, so routing the first address the job asks
+      # about to Resend is what puts the succeeding provider ahead of the failing one.
+      # Keying on a fixed address instead would depend on the audience query's ordering.
+      resend_email = nil
+      allow(PostEmailApi).to receive(:provider_for) do |email:, **|
+        resend_email ||= email
+        email == resend_email ? MailerInfo::EMAIL_PROVIDER_RESEND : MailerInfo::EMAIL_PROVIDER_SENDGRID
+      end
+      allow(PostResendApi).to receive(:process)
+      expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(StandardError, "API failure")
+
+      emails = [first_follower.email, second_follower.email]
+      failed_email = (emails - [resend_email]).sole
+      # The provider that already accepted its slice keeps its rows; only the slice that
+      # raised is rolled back.
+      expect(SentPostEmail.where(post:, email: resend_email).count).to eq(1)
+      expect(SentPostEmail.where(post:, email: failed_email).count).to eq(0)
+      expect(blast.reload.completed_at).to be_blank
+    end
   end
 
   describe "error handling" do
-    it "deletes sent_post_emails records if PostEmailApi.process raises an error" do
+    it "deletes sent_post_emails records if a provider send raises an error" do
       # Setup post and blast
       post = create(:audience_post, :published, seller: @seller)
       create(:active_follower, user: @seller)
       blast = create(:blast, :just_requested, post: post)
 
-      # Mock PostEmailApi to raise an error
-      expect(PostEmailApi).to receive(:process).and_raise(StandardError.new("API failure"))
+      # Mock the provider send to raise an error
+      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
 
       # Run the job and expect it to raise the error
       expect do
