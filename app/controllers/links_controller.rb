@@ -10,6 +10,8 @@ class LinksController < ApplicationController
   include RendersCustomHtmlPages
 
   DEFAULT_PRICE = 500
+  PWYW_PRICE_MAX_LENGTH = 64
+  PWYW_PRICE_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
 
@@ -125,7 +127,7 @@ class LinksController < ApplicationController
       BasePrice::Recurrence::ALLOWED_RECURRENCES.each do |r|
         params[:recurrence] ||= r if params[r] == "true"
       end
-      params[:price] = (params[:price].to_f * 100).to_i if params[:price].present?
+      params[:price] = pwyw_price_cents(params[:price]) if params[:price].present?
       cart_item = @product.cart_item(params)
 
       unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
@@ -798,6 +800,15 @@ class LinksController < ApplicationController
   end
 
   private
+    def pwyw_price_cents(value)
+      value = value.to_s
+      return if value.length > PWYW_PRICE_MAX_LENGTH || !value.match?(PWYW_PRICE_PATTERN)
+
+      scaling_factor = @product.single_unit_currency? ? 1 : 100
+      price_cents = (BigDecimal(value) * scaling_factor).round
+      price_cents if price_cents.in?(0..BasePrice::Shared::MAX_PRICE_CENTS)
+    end
+
     NAME_OVERRIDE_MAX = 250
     DESCRIPTION_OVERRIDE_MAX = 5_000
 
