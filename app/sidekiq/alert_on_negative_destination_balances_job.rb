@@ -57,6 +57,12 @@ class AlertOnNegativeDestinationBalancesJob
         set, set_total, in_cycle = tripped_window(full_set)
         next if set.nil?
 
+        # A cycle-window trip can sit on top of further post-cutoff residue; carry the whole-ledger
+        # total when it is worse, so the line and the ranking reflect the full repair size rather
+        # than just this cycle's slice. When post-cutoff credits make the whole ledger better, the
+        # cycle total stays the honest figure — that credit is not available to the tripping run.
+        full_total = in_cycle ? [full_set.sum(:holding_amount_cents), set_total].min : set_total
+
         user = User.find_by(id: user_id)
         next if user.nil? || user.suspended?
 
@@ -69,6 +75,7 @@ class AlertOnNegativeDestinationBalancesJob
             user:,
             merchant_account:,
             set_total:,
+            full_total:,
             row_count: set.count,
             retired: !merchant_account.alive?,
             unpaid_usd_cents:,
@@ -102,6 +109,7 @@ class AlertOnNegativeDestinationBalancesJob
 
       loop do
         batch = Balance.unpaid
+                       .where.not(merchant_account_id: nil)
                        .where("(user_id > :u) OR (user_id = :u AND merchant_account_id > :m)",
                               u: last_user_id, m: last_merchant_account_id)
                        .group(:user_id, :merchant_account_id)
@@ -111,7 +119,7 @@ class AlertOnNegativeDestinationBalancesJob
         break if batch.empty?
 
         pairs.concat(batch.filter_map do |user_id, merchant_account_id, holding_cents, in_cycle_cents|
-          [user_id, merchant_account_id] if (holding_cents.negative? || in_cycle_cents.negative?) && merchant_account_id.present?
+          [user_id, merchant_account_id] if holding_cents.negative? || in_cycle_cents.negative?
         end)
         last_user_id, last_merchant_account_id = batch.last.first(2)
         break if pairs.size > MAX_CANDIDATES_SCANNED
@@ -167,9 +175,10 @@ class AlertOnNegativeDestinationBalancesJob
       ].compact.join("\n")
     end
 
-    # Most negative first: what ranks a line is how much of the seller's wire the residue eats.
+    # Most negative first, by the account's full repair size: what ranks a line is how much of the
+    # seller's wire the residue eats, including post-cutoff residue behind an in-cycle trip.
     def report_order(payable)
-      payable.sort_by { |entry| entry[:set_total] }
+      payable.sort_by { |entry| entry[:full_total] }
     end
 
     def line_for(entry)
@@ -177,7 +186,8 @@ class AlertOnNegativeDestinationBalancesJob
       rows = entry[:row_count] > 1 ? " across #{entry[:row_count]} balances" : ""
       retired = entry[:retired] ? " [RETIRED account]" : ""
       post_cutoff = entry[:post_cutoff] ? " [post-cutoff — instant payout paths only until the cycle rolls]" : ""
-      "• #{entry[:user].email} (user #{entry[:user].id}) — #{entry[:set_total]} #{currency} cents#{rows} " \
+      more = entry[:full_total] < entry[:set_total] ? " (#{entry[:full_total]} including post-cutoff residue)" : ""
+      "• #{entry[:user].email} (user #{entry[:user].id}) — #{entry[:set_total]} #{currency} cents#{rows}#{more} " \
         "on #{entry[:merchant_account].charge_processor_merchant_id}#{retired}#{post_cutoff}, " \
         "against #{entry[:unpaid_usd_cents]} USD cents payable, next payout #{entry[:user].next_payout_date}"
     end

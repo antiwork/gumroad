@@ -208,7 +208,7 @@ describe AlertOnNegativeDestinationBalancesJob do
     residue_row(-728_50, date: User::PayoutSchedule.next_scheduled_payout_end_date + 1)
     create(:balance, user: seller, merchant_account:,
                      date: User::PayoutSchedule.next_scheduled_payout_end_date + 1,
-                     amount_cents: 400_00, holding_currency: Currency::PHP, holding_amount_cents: 0)
+                     amount_cents: 400_00, holding_currency: Currency::PHP, holding_amount_cents: 400_00)
     make_payable(1_500_00)
 
     described_class.new.perform
@@ -216,6 +216,18 @@ describe AlertOnNegativeDestinationBalancesJob do
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
       expect(message).to include(seller.email)
       expect(message).to include("[post-cutoff")
+    end
+  end
+
+  it "shows the whole-ledger total beside an in-cycle trip that sits on top of post-cutoff residue" do
+    residue_row(-300_00)
+    residue_row(-728_50, date: User::PayoutSchedule.next_scheduled_payout_end_date + 1)
+    make_payable
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include("-30000 php cents (-102850 including post-cutoff residue)")
     end
   end
 
