@@ -22,5 +22,23 @@ describe Exports::Sales::CreateAndEnqueueChunksWorker do
 
     expect(Exports::Sales::ProcessChunkWorker).to have_enqueued_sidekiq_job(@export.chunks.first.id)
     expect(Exports::Sales::ProcessChunkWorker).to have_enqueued_sidekiq_job(@export.chunks.second.id)
+
+    expect(Exports::Sales::CompileChunksWorker.jobs.size).to eq(0)
+  end
+
+  context "when the query matches no purchases" do
+    before do
+      other_seller = create(:user)
+      @export.update!(query: PurchaseSearchService.new(seller: other_seller).query.deep_stringify_keys)
+    end
+
+    it "compiles directly so the empty CSV is still emailed and the export row is not orphaned" do
+      described_class.new.perform(@export.id)
+      @export.reload
+
+      expect(@export.chunks.count).to eq(0)
+      expect(Exports::Sales::ProcessChunkWorker.jobs).to be_empty
+      expect(Exports::Sales::CompileChunksWorker).to have_enqueued_sidekiq_job(@export.id)
+    end
   end
 end
