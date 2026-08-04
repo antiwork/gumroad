@@ -8,6 +8,16 @@ describe("Purchase from a product page", type: :system, js: true) do
     @product = create(:product, user: @creator)
   end
 
+  # Stripe varies the Payment Element's field labels across layouts, so accept the same
+  # alternatives fill_in_stripe_field does.
+  def expect_focused_payment_element_field(labels)
+    within_payment_element_frame do
+      field = labels.lazy.filter_map { |label| first(:fillable_field, label, visible: false, wait: 0) }.first
+      field ||= first(:fillable_field, labels.first, visible: false)
+      expect_focused field
+    end
+  end
+
   it "displays card expired error if input card is expired as per stripe" do
     visit "/l/#{@product.unique_permalink}"
 
@@ -65,17 +75,16 @@ describe("Purchase from a product page", type: :system, js: true) do
 
     fill_in "ZIP code", with: "94107"
 
-    fill_in_credit_card(number: "", expiry: "", cvc: "")
     click_on "Pay"
-    expect(page).to have_selector("[aria-label='Card information'][aria-invalid='true']")
+    expect(page).to have_selector("fieldset[aria-label='Card information'].danger")
 
-    fill_in_credit_card(expiry: "", cvc: "")
+    fill_in_payment_element(expiry: "", cvc: "")
     click_on "Pay"
-    expect(page).to have_selector("[aria-label='Card information'][aria-invalid='true']")
+    expect(page).to have_selector("fieldset[aria-label='Card information'].danger")
 
-    fill_in_credit_card(cvc: "")
+    fill_in_payment_element(cvc: "")
     click_on "Pay"
-    expect(page).to have_selector("[aria-label='Card information'][aria-invalid='true']")
+    expect(page).to have_selector("fieldset[aria-label='Card information'].danger")
 
     check_out(@product)
   end
@@ -102,26 +111,20 @@ describe("Purchase from a product page", type: :system, js: true) do
     add_to_cart(product)
 
     click_on "Pay"
-    within_fieldset "Card information" do
-      within_credit_card_frame { expect_focused find_field("Card number") }
-    end
+    expect_focused_payment_element_field ["Card number"]
 
-    fill_in_credit_card(expiry: nil, cvc: nil)
+    fill_in_payment_element(expiry: "", cvc: "")
     click_on "Pay"
-    within_fieldset "Card information" do
-      within_credit_card_frame { expect_focused find_field("MM / YY") }
-    end
+    expect_focused_payment_element_field ["Expiration date", "Expiration", "MM / YY"]
 
-    fill_in_credit_card(cvc: nil)
+    fill_in_payment_element(cvc: "")
     click_on "Pay"
-    within_fieldset "Card information" do
-      within_credit_card_frame { expect_focused find_field("CVC") }
-    end
+    expect_focused_payment_element_field ["Security code", "CVC", "CVV"]
 
     # Error focus lands on the first invalid field in DOM order. With the one-box checkout
     # layout, the email address lives inside the "Pay with" box, which renders AFTER the
     # shipping card — so for shippable carts the shipping fields now come first and email last.
-    fill_in_credit_card
+    fill_in_payment_element
     click_on "Pay"
     expect_focused find_field("Full name")
 

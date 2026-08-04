@@ -54,24 +54,20 @@ const cardPaymentMethod: PurchasePaymentMethod = {
 };
 
 describe("getPaymentDetailsSource", () => {
-  it("reports payment_element for a new card collected via the Payment Element", () => {
-    expect(getPaymentDetailsSource(cardPaymentMethod, true)).toBe("payment_element");
+  it("reports payment_element for a new card, which can only come from the Payment Element", () => {
+    expect(getPaymentDetailsSource(cardPaymentMethod)).toBe("payment_element");
   });
 
-  it("reports card_element for a new card collected via the CardElement", () => {
-    expect(getPaymentDetailsSource(cardPaymentMethod, false)).toBe("card_element");
-  });
-
-  it("reports payment_request for a wallet payment regardless of the element flag", () => {
+  it("reports payment_request for a wallet payment", () => {
     const walletPaymentMethod: PurchasePaymentMethod = {
       type: "new",
       cardParamsResult: { type: "cc-payment-request", cardParams: paymentRequestParams },
     };
-    expect(getPaymentDetailsSource(walletPaymentMethod, true)).toBe("payment_request");
+    expect(getPaymentDetailsSource(walletPaymentMethod)).toBe("payment_request");
   });
 
   it("reports saved_payment_method for a stored card", () => {
-    expect(getPaymentDetailsSource({ type: "saved" }, false)).toBe("saved_payment_method");
+    expect(getPaymentDetailsSource({ type: "saved" })).toBe("saved_payment_method");
   });
 
   it("reports the element surface for a failed card creation so failed attempts are still recorded", () => {
@@ -79,8 +75,7 @@ describe("getPaymentDetailsSource", () => {
       type: "new",
       cardParamsResult: { type: "error", cardParams: stripeErrorParams },
     };
-    expect(getPaymentDetailsSource(erroredPaymentMethod, true)).toBe("payment_element");
-    expect(getPaymentDetailsSource(erroredPaymentMethod, false)).toBe("card_element");
+    expect(getPaymentDetailsSource(erroredPaymentMethod)).toBe("payment_element");
   });
 
   it("reports nothing for PayPal, which is outside the Stripe payment-flow dimensions", () => {
@@ -88,11 +83,11 @@ describe("getPaymentDetailsSource", () => {
       type: "new",
       cardParamsResult: { type: "paypal", cardParams: paypalParams, keepOnFile: false },
     };
-    expect(getPaymentDetailsSource(paypalPaymentMethod, false)).toBeNull();
+    expect(getPaymentDetailsSource(paypalPaymentMethod)).toBeNull();
   });
 
   it("reports nothing when there is no applicable payment method", () => {
-    expect(getPaymentDetailsSource({ type: "not-applicable" }, true)).toBeNull();
+    expect(getPaymentDetailsSource({ type: "not-applicable" })).toBeNull();
   });
 
   it("reports payment_element for a client-confirm card, which always uses the Payment Element", () => {
@@ -105,8 +100,7 @@ describe("getPaymentDetailsSource", () => {
       methodListToken: null,
       selectedMethodType: "card",
     };
-    expect(getPaymentDetailsSource(clientConfirmPaymentMethod, true)).toBe("payment_element");
-    expect(getPaymentDetailsSource(clientConfirmPaymentMethod, false)).toBe("payment_element");
+    expect(getPaymentDetailsSource(clientConfirmPaymentMethod)).toBe("payment_element");
   });
 });
 
@@ -124,7 +118,6 @@ describe("createPurchasesRequestData wallet_type threading", () => {
     eventAttributes: { plugins: null, friend: null, url_parameters: null, locale: "en-US" },
     lineItems: [],
     recaptchaResponse: null,
-    usedStripePaymentElement: true,
     buyerCurrencyQuote: null,
   });
 

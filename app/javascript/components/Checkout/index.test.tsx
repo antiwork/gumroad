@@ -596,11 +596,10 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15"]);
   });
 
-  it("stays in canonical USD when the loaded total falls below the Payment Element minimum", () => {
-    // PaymentForm re-checks canUseStripePaymentElementClientConfirm after surcharges load: a
-    // discount can drop the canonical total below Stripe's Payment Element minimum, at which
-    // point the form falls back to the CardElement and charges canonical USD. The summary must
-    // follow the same predicate, or it would show listed-currency totals for a USD charge.
+  it("keeps the listed currency when the loaded canonical total falls below the Payment Element minimum", () => {
+    // The element no longer degrades below Stripe's USD floor (there is no CardElement to fall
+    // back to; the canonical mount amount is clamped instead). The method-forced lane keeps
+    // charging the listed BRL amount, so the summary keeps showing it.
     const { getAllByLabelText } = renderCheckout(
       brlState({
         products: [stateProduct({ permalink: "brl", price: 40 })],
@@ -620,7 +619,7 @@ describe("Checkout method-forced listed-currency amounts", () => {
       brlCart(),
     );
 
-    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15"]);
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["R$49.90"]);
   });
 
   it("stays in canonical USD when the buyer toggles pay-in-installments after the page rendered", () => {

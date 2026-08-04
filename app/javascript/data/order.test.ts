@@ -78,7 +78,6 @@ const requestData: StartCartPurchaseRequestPayload = {
     locale: "en-US",
   },
   recaptchaResponse: null,
-  usedStripePaymentElement: true,
   buyerCurrencyQuote: null,
   lineItems: [
     {

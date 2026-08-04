@@ -154,11 +154,11 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
       choose "Apple Pay"
       expect(page).to have_checked_field("Apple Pay")
-      expect(page).not_to have_text("Card information")
+      expect(page).not_to have_selector("fieldset[aria-label='Card information']")
       expect(page).to have_button("Pay")
 
       choose "Card"
-      expect(page).to have_text("Card information")
+      expect(page).to have_selector("fieldset[aria-label='Card information']")
     end
 
     it "returns to input state when payment is cancelled" do
@@ -192,11 +192,11 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
       choose "Google Pay"
       expect(page).to have_checked_field("Google Pay")
-      expect(page).not_to have_text("Card information")
+      expect(page).not_to have_selector("fieldset[aria-label='Card information']")
       expect(page).to have_button("Pay")
 
       choose "Card"
-      expect(page).to have_text("Card information")
+      expect(page).to have_selector("fieldset[aria-label='Card information']")
     end
 
     it "returns to input state when payment is cancelled" do
@@ -240,11 +240,11 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
       choose "Google Pay"
       expect(page).to have_checked_field("Google Pay")
-      expect(page).not_to have_text("Card information")
+      expect(page).not_to have_selector("fieldset[aria-label='Card information']")
 
       choose "Card"
       expect(page).to have_checked_field("Card")
-      expect(page).to have_text("Card information")
+      expect(page).to have_selector("fieldset[aria-label='Card information']")
     end
   end
 
@@ -259,7 +259,7 @@ describe "Checkout with Payment Request API", :js, type: :system do
       expect(page).not_to have_field("Apple Pay", type: "radio")
       # When no payment request methods are available, card is shown without radio (single option)
       expect(page).not_to have_field("Card", type: "radio")
-      expect(page).to have_text("Card information")
+      expect(page).to have_selector("fieldset[aria-label='Card information']")
     end
   end
 end

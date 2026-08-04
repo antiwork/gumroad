@@ -138,12 +138,10 @@ module CheckoutHelpers
     elsif logged_in_user&.credit_card.present? && logged_in_user.credit_card.charge_processor_id != PaypalChargeProcessor.charge_processor_id
       expect(page).to have_command("Use a different card?")
       expect(page).to have_selector("[aria-label='Saved credit card']", text: logged_in_user.credit_card.visual)
-    elsif payment_element && !is_free
-      # Forward a caller-supplied card into the Payment Element (e.g. a decline or 3DS card); defaults to
-      # 4242 when no card is given, so existing payment_element callers are unaffected.
-      fill_in_payment_element(**(credit_card || {}).slice(:number, :expiry, :cvc).compact)
     elsif !credit_card.nil? && !is_free
-      fill_in_credit_card(**credit_card)
+      # Every checkout mounts the Payment Element now; forward a caller-supplied card into it
+      # (e.g. a decline or 3DS card), defaulting to 4242.
+      fill_in_payment_element(**(credit_card || {}).slice(:number, :expiry, :cvc).compact)
     end
   end
 

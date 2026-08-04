@@ -959,7 +959,7 @@ class Order::PreparePaymentIntentService
         # a recurring-billing (membership) product: the first installment charges now and the
         # rest charge off-session later, so it needs the same future-charge card machinery as a
         # subscription. The presenter already keeps installment carts off the client-confirm
-        # lane entirely (its "setup_or_installment_flow" fallback), so this only matters for a
+        # lane entirely (client_confirm_eligible? gates them out), so this only matters for a
         # crafted #prepare request — without it, such a request would resolve the one-time
         # method set (Klarna included, for a flagged seller) and mint a deferred intent that
         # cannot fund the later installments.
