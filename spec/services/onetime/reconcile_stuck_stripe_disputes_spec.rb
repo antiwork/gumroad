@@ -173,6 +173,35 @@ describe Onetime::ReconcileStuckStripeDisputes do
     end
   end
 
+  describe "resolving the Stripe account for a connected Charge" do
+    let(:connect_merchant_account) { create(:merchant_account_stripe_connect) }
+    let(:charge) { create(:charge, merchant_account: connect_merchant_account) }
+    # The purchase's own merchant_account is nil, the shape flagged by Greptile on #6852: the
+    # Charge is on a real connected account but the purchase row never got one assigned.
+    let!(:charge_dispute) do
+      create(:dispute, charge:, purchase: nil, state: "formalized",
+                       formalized_side_effects_finished_at: 1.year.ago,
+                       charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                       charge_processor_dispute_id: "dp_connected")
+    end
+
+    before do
+      charge.purchases << create(:purchase, price_cents: 0, merchant_account: nil, chargeback_date: 1.year.ago)
+      charge.update!(disputed_at: 1.year.ago)
+    end
+
+    it "scopes the Stripe retrieval to the Charge's connected account, not the purchase's" do
+      expect(Stripe::Dispute).to receive(:retrieve)
+        .with(hash_including(id: "dp_connected"), { stripe_account: connect_merchant_account.charge_processor_merchant_id })
+        .and_return(stripe_dispute(status: "won", id: "dp_connected"))
+
+      result = described_class.process(dry_run: false, dispute_ids: [charge_dispute.id])
+
+      expect(result[:stats][:booked_won]).to eq(1)
+      expect(charge_dispute.reload.state).to eq("won")
+    end
+  end
+
   describe "scoping" do
     it "only touches the ids it was given" do
       other = create(:dispute, purchase: create(:purchase, chargeback_date: 1.year.ago),
