@@ -7,14 +7,18 @@ class SendPostBlastEmailsJob
   # release, and a held digest silently drops every later `perform_async(blast_id)` — no exception,
   # no dead entry — which turns "re-enqueue the stalled blast" into a no-op (gumroad-private#1816).
   #
-  # The TTL only has to cover one enqueue→completion cycle: a failed attempt releases the lock in
-  # `ensure`, and each retry re-pushes through client middleware, acquiring a fresh lock. Sized like
-  # `RecurringLockTtl` (~3x a worst-case attempt — large resumed blasts legitimately run a couple of
-  # hours, see AlertOnStalledPostEmailBlastsJob), so a strand self-heals a few hours after the 4h
-  # stalled-blast alert instead of a day later. Duplicate delivery past an expired lock: safe on the
-  # normal path (`SentPostEmail` unique index dedupes), while the `to_non_openers?` branch dedupes
-  # via a Redis set read once at job start — sequential re-runs are safe there, concurrent overlap
-  # is not, which is why the TTL stays well above any plausible attempt rather than tight.
+  # The TTL covers one enqueue→completion cycle: a failed attempt releases the lock in `ensure`,
+  # and a retry re-acquires it server-side at execution start (under `reliable_scheduler!` retries
+  # skip client middleware, so the re-acquisition happens in `Locksmith#lock!`, not at re-push).
+  # The stretch case is a hard kill: super_fetch recovers the orphan under the SAME jid, which
+  # passes the still-held lock without refreshing its pttl — so one logical run can burn a partial
+  # attempt + up to 1h orphan-check idle + a full recovered attempt (~6.3h at the 2-3h worst-case
+  # attempt AlertOnStalledPostEmailBlastsJob documents). 8h clears that with margin; resize from
+  # the recovered-attempt arithmetic, not from one attempt. Duplicate delivery past an expired
+  # lock: safe on the normal path (`SentPostEmail` unique index dedupes), while the
+  # `to_non_openers?` branch dedupes via a Redis set read once at job start — sequential re-runs
+  # are safe there, concurrent overlap is not, which is why `audience_load_timeout_seconds` is
+  # clamped below this TTL.
   sidekiq_options retry: 10, queue: :default, lock: :until_executed, lock_ttl: 8.hours.to_i
 
   def perform(blast_id)
@@ -405,8 +409,10 @@ class SendPostBlastEmailsJob
       end.to_i.clamp(1..PostEmailApi.max_recipients)
     end
 
-    # Tunable via Redis so a stuck blast can be unblocked without a deploy.
+    # Tunable via Redis so a stuck blast can be unblocked without a deploy. Clamped under the
+    # `lock_ttl` because an attempt that outlives the lock permits the concurrent overlap the
+    # `to_non_openers?` dedupe cannot survive (its Redis set is read once at job start).
     def audience_load_timeout_seconds
-      ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
+      ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i.clamp(1..4.hours.to_i)
     end
 end

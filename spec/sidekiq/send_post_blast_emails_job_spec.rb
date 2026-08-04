@@ -469,6 +469,18 @@ describe SendPostBlastEmailsJob, :freeze_time do
     ensure
       $redis.del(RedisKey.audience_member_load_max_execution_time_seconds)
     end
+
+    it "clamps the Redis override below the lock TTL, so one attempt cannot outlive its own lock" do
+      $redis.set(RedisKey.audience_member_load_max_execution_time_seconds, 12.hours.to_i)
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 4.hours.to_i).and_call_original
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+    ensure
+      $redis.del(RedisKey.audience_member_load_max_execution_time_seconds)
+    end
   end
 
   describe "audience snapshot for retry resume" do
