@@ -129,12 +129,11 @@ class Onetime::ClearMistakenBuyerBlocks
       return blocked_pairs_for(purchase) if velocity_threshold_met?(recent_email_or_browser_failures)
 
       # Purchase::Blockable#ban_fraudulent_buyer_browser_guid! blocks the browser only, and counts
-      # over all time rather than a window. Same countable scope as the live rule: counting rows
-      # it ignores would retain exactly the outage-manufactured blocks this cleanup exists to
-      # clear.
+      # over all time with no window at all — so this must too. Capping at window.end misses
+      # qualifying failures the live rule sees after this purchase, which can let it clear a block
+      # the live threshold still wants.
       if purchase.browser_guid.present?
         browser_failures = Purchase.countable_card_testing_failures
-                                   .where(created_at: ..window.end)
                                    .where(browser_guid: purchase.browser_guid)
         protected_pairs << [PlatformBlock::TYPES[:browser_guid], purchase.browser_guid] if velocity_threshold_met?(browser_failures)
       end
