@@ -113,6 +113,26 @@ describe MerchantCenterFeedService do
       expect(image_link).not_to include("/embed/")
     end
 
+    it "formats single-unit currency prices as whole units" do
+      create_eligible_product(price_currency_type: "jpy", price_cents: 500)
+
+      expect(g_field(items(service.generate).first, "price")).to eq "500 JPY"
+    end
+
+    it "writes to S3 with the sitemap uploader's ACL and content type when uploading" do
+      create_eligible_product
+      client = instance_double(Aws::S3::Client)
+      allow(Aws::S3::Client).to receive(:new).and_return(client)
+      allow(service).to receive(:upload_to_s3?).and_return(true)
+
+      expect(client).to receive(:put_object).with(
+        hash_including(bucket: PUBLIC_STORAGE_S3_BUCKET, key: described_class::FEED_KEY,
+                       content_type: "application/xml", acl: "public-read")
+      )
+
+      service.generate
+    end
+
     it "caps the feed at max_products" do
       2.times { create_eligible_product }
 

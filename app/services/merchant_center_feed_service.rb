@@ -24,7 +24,7 @@ class MerchantCenterFeedService
   private_constant :FEED_PRELOADS
 
   def generate(max_products: DEFAULT_MAX_PRODUCTS)
-    xml = build_xml(eligible_products(max_products))
+    xml = build_xml(max_products)
     upload(xml)
     xml
   end
@@ -34,16 +34,20 @@ class MerchantCenterFeedService
   end
 
   private
-    def eligible_products(max_products)
-      products = []
-      scanned = 0
-      Link.alive.not_archived.preload(*FEED_PRELOADS).find_each do |product|
-        break if products.size >= max_products
-        break if scanned >= MAX_SCANNED_PRODUCTS
-        scanned += 1
-        products << product if eligible?(product)
+    # Streams eligible rows straight into the builder instead of accumulating them:
+    # holding up to max_products Links (plus their preloaded seller/cover chains) in an
+    # array would dominate the job's memory; find_each batches are droppable this way.
+    # The scan cap lives on the relation (find_each honors limit since Rails 6.1) so it
+    # bounds rows FETCHED from the catalog, not just rows the block gets to see.
+    def each_eligible_product(max_products)
+      accepted = 0
+      Link.alive.not_archived.limit(MAX_SCANNED_PRODUCTS).preload(*FEED_PRELOADS).find_each do |product|
+        break if accepted >= max_products
+        if eligible?(product)
+          accepted += 1
+          yield product
+        end
       end
-      products
     end
 
     # recommendable? is the Discover gate (alive, not archived, taxonomy, sale made,
@@ -59,7 +63,7 @@ class MerchantCenterFeedService
         product.social_share_image.present?
     end
 
-    def build_xml(products)
+    def build_xml(max_products)
       builder = Builder::XmlMarkup.new(indent: 2)
       builder.instruct!(:xml, version: "1.0", encoding: "UTF-8")
       builder.rss(version: "2.0", "xmlns:g": "http://base.google.com/ns/1.0") do
@@ -67,7 +71,7 @@ class MerchantCenterFeedService
           builder.title FEED_TITLE
           builder.link UrlService.root_domain_with_protocol
           builder.description "Products for sale on Gumroad"
-          products.each { |product| build_item(builder, product) }
+          each_eligible_product(max_products) { |product| build_item(builder, product) }
         end
       end
       builder.target!
@@ -98,17 +102,31 @@ class MerchantCenterFeedService
 
     def upload(xml)
       if upload_to_s3?
-        Aws::S3::Client.new.put_object(
+        s3_client.put_object(
           bucket: PUBLIC_STORAGE_S3_BUCKET,
           key: FEED_KEY,
           body: xml,
-          content_type: "application/xml"
+          content_type: "application/xml",
+          acl: "public-read",
+          cache_control: "private, max-age=0, no-cache"
         )
       else
         path = Rails.public_path.join(FEED_KEY)
         FileUtils.mkdir_p(path.dirname)
         File.write(path, xml)
       end
+    end
+
+    # Same uploader identity, ACL, and cache headers as the sitemap writes to this
+    # bucket (SitemapGenerator::AwsSdkAdapter defaults); the web app's default AWS
+    # credentials are not guaranteed PutObject on the public storage bucket.
+    def s3_client
+      Aws::S3::Client.new(
+        credentials: Aws::Credentials.new(
+          GlobalConfig.get("S3_SITEMAP_UPLOADER_ACCESS_KEY"),
+          GlobalConfig.get("S3_SITEMAP_UPLOADER_SECRET_ACCESS_KEY")
+        )
+      )
     end
 
     def upload_to_s3?
