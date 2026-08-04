@@ -126,8 +126,12 @@ class AlertOnNegativeDestinationBalancesJob
     # balance against minimum, so the report can name a seller no cycle would currently reach —
     # including one this guard has already had paused. That is the right direction for a report
     # whose job is to surface the row before it costs anyone money.
+    #
+    # Bounded to the same cutoff as the scan: an unbounded read can flip the verdict either way —
+    # a post-cutoff credit makes an in-cutoff shortfall look payable when the payout run can't see
+    # it yet, and a post-cutoff debit can hide a seller the payout run will actually pay.
     def payable?(user)
-      user.unpaid_balance_cents >= user.minimum_payout_amount_cents
+      user.unpaid_balance_cents_up_to_date(payout_cutoff_date) >= user.minimum_payout_amount_cents
     end
 
     # The same cutoff the payout run applies (`unpaid_balances_up_to_date(date)` with

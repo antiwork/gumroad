@@ -115,6 +115,19 @@ describe AlertOnNegativeDestinationBalancesJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
+  it "does not treat a seller as payable on a post-cutoff USD credit the payout run cannot see yet" do
+    residue_row(-728_50)
+    make_payable(50_00) # below minimum through the cutoff
+    create(:balance, user: seller, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+                     date: User::PayoutSchedule.next_scheduled_payout_end_date + 1,
+                     amount_cents: 500_00, holding_amount_cents: 500_00)
+    seller.reload
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
   it "reports a seller whose accounts straddle a scan batch boundary" do
     # Two merchant accounts on one seller, with the batch cut between them: cursoring on user_id
     # alone would advance past the seller and never read the second account's negative row.
