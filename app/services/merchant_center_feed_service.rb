@@ -11,6 +11,9 @@ class MerchantCenterFeedService
   MAX_DESCRIPTION_LENGTH = 5_000
   # First-run safety bound; raise deliberately once feed size/ingest behavior is known.
   DEFAULT_MAX_PRODUCTS = 100_000
+  # Hard bound on rows SCANNED (not accepted): a catalog dense with ineligible
+  # products must not turn a small max_products into a full-table walk.
+  MAX_SCANNED_PRODUCTS = 500_000
 
   # Same preload shape as SitemapService: keeps the per-row seller and cover lookups flat
   # across a full-catalog walk.
@@ -33,8 +36,11 @@ class MerchantCenterFeedService
   private
     def eligible_products(max_products)
       products = []
+      scanned = 0
       Link.alive.not_archived.preload(*FEED_PRELOADS).find_each do |product|
         break if products.size >= max_products
+        scanned += 1
+        break if scanned > MAX_SCANNED_PRODUCTS
         products << product if eligible?(product)
       end
       products
@@ -42,13 +48,15 @@ class MerchantCenterFeedService
 
     # recommendable? is the Discover gate (alive, not archived, taxonomy, sale made,
     # seller payable/compliant). The extra checks are Merchant Center requirements it
-    # doesn't cover: no adult content, a nonzero price, and an image.
+    # doesn't cover: no adult content, a nonzero price, and a real image resource
+    # (social_share_image is the cover image, an oEmbed THUMBNAIL, or a video poster —
+    # never the oEmbed iframe URL, which Merchant Center rejects for g:image_link).
     def eligible?(product)
       product.recommendable? &&
         !product.rated_as_adult? &&
         !product.user.suspended? &&
         product.price_cents.to_i.positive? &&
-        product.preview_url.present?
+        product.social_share_image.present?
     end
 
     def build_xml(products)
@@ -71,7 +79,7 @@ class MerchantCenterFeedService
         builder.tag!("g:title", product.name)
         builder.tag!("g:description", product.plaintext_description.truncate(MAX_DESCRIPTION_LENGTH))
         builder.tag!("g:link", product.long_url)
-        builder.tag!("g:image_link", product.preview_url)
+        builder.tag!("g:image_link", product.social_share_image)
         builder.tag!("g:price", formatted_price(product))
         builder.tag!("g:availability", "in stock")
         builder.tag!("g:brand", product.user.name_or_username)

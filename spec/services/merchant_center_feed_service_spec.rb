@@ -35,7 +35,7 @@ describe MerchantCenterFeedService do
       expect(g_field(item, "title")).to eq "Great product"
       expect(g_field(item, "description")).to eq "Rich description"
       expect(g_field(item, "link")).to eq product.long_url
-      expect(g_field(item, "image_link")).to eq product.preview_url
+      expect(g_field(item, "image_link")).to eq product.social_share_image
       expect(g_field(item, "price")).to eq "9.99 USD"
       expect(g_field(item, "availability")).to eq "in stock"
       expect(g_field(item, "brand")).to eq product.user.name_or_username
@@ -93,10 +93,40 @@ describe MerchantCenterFeedService do
       expect(items(service.generate)).to be_empty
     end
 
+    it "excludes products whose only preview is an oEmbed embed with no thumbnail" do
+      product = create(:product, :recommendable, price_cents: 999)
+      preview = create(:asset_preview_youtube, link: product)
+      preview.oembed["info"].delete("thumbnail_url")
+      preview.save!
+      product.reload
+
+      expect(items(service.generate)).to be_empty
+    end
+
+    it "uses the oEmbed thumbnail, not the iframe URL, for oEmbed-preview products" do
+      product = create(:product, :recommendable, price_cents: 999)
+      create(:asset_preview_youtube, link: product)
+      product.reload
+
+      image_link = g_field(items(service.generate).first, "image_link")
+      expect(image_link).to eq product.social_share_image
+      expect(image_link).not_to include("/embed/")
+    end
+
     it "caps the feed at max_products" do
       2.times { create_eligible_product }
 
       expect(items(service.generate(max_products: 1)).size).to eq 1
+    end
+
+    it "bounds the catalog scan even when products are ineligible" do
+      create(:product, :recommendable, price_cents: 999) # alive but imageless — never accepted
+      create_eligible_product
+
+      stub_const("#{described_class}::MAX_SCANNED_PRODUCTS", 1)
+
+      # Scan stops after 1 row, so the eligible product created second is never reached.
+      expect(items(service.generate)).to be_empty
     end
 
     it "writes the feed to the public path outside production" do
