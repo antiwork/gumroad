@@ -47,15 +47,20 @@ module Product::ReviewStat
 
   def update_review_stat_via_rating_change(old_rating, new_rating)
     if product_review_stat.nil?
-      # Serialize only the first aggregate row creation. The locking lookup is a current read, so
-      # a callback transaction waiting here sees the row committed by the winner.
-      with_lock do
-        review_stat_association = association(:product_review_stat)
-        review_stat_association.reset
-        review_stat = ProductReviewStat.lock.find_by(link_id: id) || create_product_review_stat!
-        review_stat_association.target = review_stat
-        apply_rating_change_to_review_stat(review_stat, old_rating, new_rating)
-      end
+      # First-row creation must not go through a plain INSERT: on a duplicate key it takes a
+      # SHARED lock on the winner's row, held until the transaction ends, so two losers that
+      # then request exclusive locks deadlock each other and roll back a review. The no-op
+      # ON DUPLICATE KEY UPDATE takes an exclusive lock instead, so losers queue up. Locking
+      # the parent product row is not an option either — callers often hold unpersisted
+      # product changes (e.g. content_updated_at), which with_lock refuses.
+      ProductReviewStat.upsert({ link_id: id }, on_duplicate: Arel.sql("link_id = link_id"))
+      association(:product_review_stat).reset
+      # A plain re-read could miss the winner's row: under REPEATABLE READ it reads a snapshot
+      # that may predate the winner's commit. The locking read is a current read, and the
+      # upsert already holds this row's exclusive lock, so it cannot block or deadlock.
+      review_stat = ProductReviewStat.lock.find_by!(link_id: id)
+      association(:product_review_stat).target = review_stat
+      apply_rating_change_to_review_stat(review_stat, old_rating, new_rating)
     else
       apply_rating_change_to_review_stat(product_review_stat, old_rating, new_rating)
     end
