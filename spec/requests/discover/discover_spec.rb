@@ -477,7 +477,6 @@ describe("Discover", js: true, type: :system) do
     it "shows breadcrumbs with taxonomy links and handles back and forward buttons" do
       visit "#{discover_host}/software-development/programming/c-sharp?sort=featured"
 
-      # ?sort=featured is not a category_seo_page, so no SEO suffix (server and client agree).
       expect(page).to have_title("Software Development » Programming » C# | Gumroad")
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 3")
