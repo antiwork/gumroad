@@ -58,6 +58,22 @@ describe Pages::ProfileData do
 
         expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(key_before)
       end
+
+      it "changes the cache key when two review-stat mutations land in the same second" do
+        # maximum(:updated_at) has second precision, so a naive timestamp-based key would
+        # reuse the same value for both writes below and silently serve the stale rollup.
+        Feature.activate_user(:seller_reputation_summary, seller)
+        product = create(:product, user: seller)
+        seller_profile = SellerProfile.find_by(seller_id: seller.id)
+        stat = ProductReviewStat.create!(link: product, reviews_count: 1, average_rating: 5, ratings_of_five_count: 1)
+        key_before = Pages::ProfileData.cache_key(seller.reload, seller_profile)
+
+        travel_to(stat.updated_at) do
+          stat.update!(reviews_count: 2, ratings_of_five_count: 1, ratings_of_one_count: 1)
+        end
+
+        expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(key_before)
+      end
     end
 
     it "does not expose draft products in the public profile data payload" do
