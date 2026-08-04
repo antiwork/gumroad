@@ -5113,11 +5113,77 @@ class LinksControllerShowTest < ActionController::TestCase
   test "GET show honors a PWYW price prefill at or above the minimum" do
     product = create_product(user: @user, customizable_price: true, price_cents: 100)
 
-    get :show, params: { id: product.to_param, wanted: "true", price: "9.99" }
+    get :show, params: { id: product.to_param, wanted: "true", price: "19.99" }
 
     assert_response :redirect
     query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
-    assert(Array(query_params["price"]).all? { |value| value == "999" })
+    assert_equal ["1999"], Array(query_params["price"]).uniq
+  end
+
+  test "GET show preserves whole-unit PWYW prefills for a single-unit currency" do
+    product = create_product(user: @user, customizable_price: true, price_cents: 100, price_currency_type: "jpy")
+
+    get :show, params: { id: product.to_param, wanted: "true", price: "199" }
+
+    assert_response :redirect
+    query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+    assert_equal ["199"], Array(query_params["price"]).uniq
+  end
+
+  test "GET show rounds PWYW prefills to the product currency precision" do
+    product = create_product(user: @user, customizable_price: true, price_cents: 100)
+
+    get :show, params: { id: product.to_param, wanted: "true", price: "19.995" }
+
+    assert_response :redirect
+    query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+    assert_equal ["2000"], Array(query_params["price"]).uniq
+
+    jpy_product = create_product(user: @user, customizable_price: true, price_cents: 100, price_currency_type: "jpy")
+    get :show, params: { id: jpy_product.to_param, wanted: "true", price: "199.5" }
+
+    assert_response :redirect
+    query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+    assert_equal ["200"], Array(query_params["price"]).uniq
+  end
+
+  test "GET show safely rejects non-decimal and out-of-range PWYW prefills" do
+    product = create_product(user: @user, customizable_price: true, price_cents: 0)
+
+    ["not-a-price", "Infinity", "NaN", "1e1000000", "9" * 65, "-0.001", "-1"].each do |price|
+      get :show, params: { id: product.to_param, wanted: "true", price: }
+
+      assert_response :success, "Expected #{price.inspect} to render the product page"
+    end
+
+    get :show, params: { id: product.to_param, wanted: "true", price: "0" }
+
+    assert_response :redirect
+    query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+    assert_equal ["0"], Array(query_params["price"]).uniq
+  end
+
+  test "GET show accepts the maximum PWYW prefill and rejects the next currency unit" do
+    product = create_product(user: @user, customizable_price: true, price_cents: 100)
+
+    get :show, params: { id: product.to_param, wanted: "true", price: "21474836.47" }
+
+    assert_response :redirect
+    query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+    assert_equal [BasePrice::Shared::MAX_PRICE_CENTS.to_s], Array(query_params["price"]).uniq
+
+    get :show, params: { id: product.to_param, wanted: "true", price: "21474836.48" }
+    assert_response :success
+
+    jpy_product = create_product(user: @user, customizable_price: true, price_cents: 100, price_currency_type: "jpy")
+    get :show, params: { id: jpy_product.to_param, wanted: "true", price: "2147483647" }
+
+    assert_response :redirect
+    query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+    assert_equal [BasePrice::Shared::MAX_PRICE_CENTS.to_s], Array(query_params["price"]).uniq
+
+    get :show, params: { id: jpy_product.to_param, wanted: "true", price: "2147483648" }
+    assert_response :success
   end
 
   test "GET show resolves a recurrence prefill on a membership product" do
