@@ -380,6 +380,31 @@ describe "Profile custom HTML rendering", type: :request do
       # blob, just never a localized one.
       expect(GeoIp).to have_received(:lookup).with("127.0.0.1").at_least(:once)
     end
+
+    # The served page must localize a membership the way the native card does — recurrence
+    # wording included — now that checkout can charge one in the buyer's currency (#6495).
+    # The service specs pin the gate; this pins the page a visitor actually receives, on
+    # both price surfaces at once (the blob and the interpolated markup).
+    it "serves a localized membership price with its recurrence wording, in the blob and the markup" do
+      membership = create(:membership_product, user: seller, price_cents: 500)
+      seller.update!(custom_html: %(<main><span data-gumroad-product="#{membership.general_permalink}" data-gumroad-field="price">$5 a month</span><script>document.getElementById("gumroad-prices")</script></main>))
+      allow(Feature).to receive(:active?).and_call_original
+      allow(Feature).to receive(:active?).with(:buyer_local_currency, seller).and_return(true)
+      allow(GeoIp).to receive(:lookup).and_return(
+        GeoIp::Result.new(country_name: "France", country_code: "FR", region_name: nil,
+                          city_name: nil, postal_code: nil, latitude: nil, longitude: nil)
+      )
+      allow_any_instance_of(Pages::ProductPrices).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+
+      get "http://seller.example.com/landing/embed"
+
+      prices = JSON.parse(response.body[%r{<script id="gumroad-prices"[^>]*>(.*?)</script>}m, 1])
+      expect(prices[membership.general_permalink]).to eq(
+        "price" => "€4 a month", "price_cents" => 400, "currency_code" => "eur", "localized" => true
+      )
+      expect(response.body).to include(">€4 a month<")
+      expect(response.body).not_to include(">$5 a month<")
+    end
   end
 
   describe "preview field sync" do
