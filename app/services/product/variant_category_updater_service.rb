@@ -3,6 +3,11 @@
 class Product::VariantCategoryUpdaterService
   include CurrencyHelper
 
+  # Distinct from ActiveRecord::RecordNotFound so the per-variant rescue in
+  # `perform` can't also catch a downstream missing-record failure (e.g. a
+  # missing ProductFile) raised later in the same begin block.
+  StaleVariantReferenceError = Class.new(StandardError)
+
   attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :legacy_dead_file_embed_ids_by_rich_content_id, :deletion_audit_context, :contract
   attr_accessor :variant_category
 
@@ -206,21 +211,33 @@ class Product::VariantCategoryUpdaterService
       validate_variant_recurrences!(category_params[:options])
       category_params[:options].each_with_index do |option, index|
         begin
-          variant = create_or_update_variant!(option[:id],
-                                              name: option[:name],
-                                              description: option[:description],
-                                              duration_in_minutes: option[:duration_in_minutes],
-                                              price_difference_cents: string_to_price_cents(
-                                                price_currency_type.to_sym,
-                                                option[:price_difference].to_s
-                                              ),
-                                              customizable_price: option[:customizable_price],
-                                              max_purchase_count: option[:max_purchase_count],
-                                              position_in_category: index,
-                                              variant_category:,
-                                              apply_price_changes_to_existing_memberships: !!option[:apply_price_changes_to_existing_memberships],
-                                              subscription_price_change_effective_date: option[:subscription_price_change_effective_date],
-                                              subscription_price_change_message: option[:subscription_price_change_message])
+          variant =
+            begin
+              create_or_update_variant!(option[:id],
+                                        name: option[:name],
+                                        description: option[:description],
+                                        duration_in_minutes: option[:duration_in_minutes],
+                                        price_difference_cents: string_to_price_cents(
+                                          price_currency_type.to_sym,
+                                          option[:price_difference].to_s
+                                        ),
+                                        customizable_price: option[:customizable_price],
+                                        max_purchase_count: option[:max_purchase_count],
+                                        position_in_category: index,
+                                        variant_category:,
+                                        apply_price_changes_to_existing_memberships: !!option[:apply_price_changes_to_existing_memberships],
+                                        subscription_price_change_effective_date: option[:subscription_price_change_effective_date],
+                                        subscription_price_change_message: option[:subscription_price_change_message])
+            rescue StaleVariantReferenceError
+              # Raised only by the lookup inside `create_or_update_variant!`
+              # (via `find_by_external_id!`), never by anything downstream —
+              # see that method for why a plain `ActiveRecord::RecordNotFound`
+              # can't be rescued here without also mislabeling a later
+              # missing-record failure (e.g. a missing `ProductFile`) as a
+              # stale variant.
+              errors.add(:base, "This save would remove content pages that weren't explicitly deleted. The content shown in the editor may be out of date — please refresh the page and try again.")
+              raise Link::LinkInvalid
+            end
           save_integrations(variant, option)
           visited_variant_external_ids << variant.external_id
           save_rich_content(variant, option)
@@ -357,7 +374,17 @@ class Product::VariantCategoryUpdaterService
     def create_or_update_variant!(external_id, params)
       return Variant.create!(params.slice(*ALLOWED_ATTRIBUTES)) if external_id.blank?
 
-      variant = product.variants.find_by_external_id!(external_id)
+      begin
+        variant = product.variants.find_by_external_id!(external_id)
+      rescue ActiveRecord::RecordNotFound
+        # The submitted variant id no longer resolves under this product —
+        # e.g. the editor's in-memory snapshot still references a version
+        # another session (or an earlier variant in the SAME save request,
+        # via the deletion-audit/keep-variants bookkeeping) has since
+        # deleted. Wrapped in its own class so callers can't also catch a
+        # RecordNotFound raised later by save!/assign_attributes below.
+        raise StaleVariantReferenceError
+      end
       variant.assign_attributes(params.slice(*ALLOWED_ATTRIBUTES))
 
       if variant.apply_price_changes_to_existing_memberships_changed? && !variant.apply_price_changes_to_existing_memberships?

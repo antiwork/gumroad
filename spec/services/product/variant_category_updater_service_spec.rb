@@ -21,8 +21,15 @@ describe Product::VariantCategoryUpdaterService do
         }
       end
 
-      it "raises an error and does not update the variant" do
-        expect { Product::VariantCategoryUpdaterService.new(product: product, category_params: variant_category_params).perform }.to raise_error(ActiveRecord::RecordNotFound)
+      # An id that doesn't resolve under this product used to escape as a bare
+      # ActiveRecord::RecordNotFound, which reached the editor as a 500 with no
+      # JSON body (gumroad-private#1784). It is now translated into the same
+      # Link::LinkInvalid every other save failure uses, carrying a message the
+      # seller can act on.
+      it "raises a seller-readable error and does not update the variant" do
+        expect { Product::VariantCategoryUpdaterService.new(product: product, category_params: variant_category_params).perform }
+          .to raise_error(Link::LinkInvalid)
+        expect(product.errors.full_messages).to include(a_string_matching(/content shown in the editor may be out of date/))
         expect(variant.reload.name).not_to eq other_variant.name
       end
     end

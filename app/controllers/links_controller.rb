@@ -667,6 +667,12 @@ class LinksController < ApplicationController
         error_message = @product.errors.full_messages.first || e.message
       end
       return render json: { error_message: }, status: :unprocessable_entity
+    rescue => e
+      # Catch-all so an unanticipated failure never leaves the editor's save
+      # request with no JSON body (gumroad-private#1784) — mirrors `publish`
+      # above.
+      ErrorNotifier.notify(e)
+      return render json: { error_message: "Something went wrong while saving your changes. Please refresh the page and try again — if the problem continues, contact support." }, status: :unprocessable_entity
     end
     report_unapplied_deletions!
     report_unstated_confirmed_removals!
