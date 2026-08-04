@@ -198,6 +198,27 @@ describe AlertOnNegativeDestinationBalancesJob do
     end
   end
 
+  it "still reports post-cutoff residue when in-cycle refund netting silences the cycle window" do
+    # The cycle window trips negative but is refund netting (matched negative USD), which the
+    # payout guard passes — each window is judged whole, so the netted cycle must not swallow
+    # post-cutoff residue that leaves the whole ledger in the guard's trip shape (negative
+    # destination, non-negative USD), which an instant payout will still fail on.
+    create(:balance, user: seller, merchant_account:, date: in_cycle_date,
+                     amount_cents: -300_00, holding_currency: Currency::PHP, holding_amount_cents: -300_00)
+    residue_row(-728_50, date: User::PayoutSchedule.next_scheduled_payout_end_date + 1)
+    create(:balance, user: seller, merchant_account:,
+                     date: User::PayoutSchedule.next_scheduled_payout_end_date + 1,
+                     amount_cents: 400_00, holding_currency: Currency::PHP, holding_amount_cents: 0)
+    make_payable(1_500_00)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include(seller.email)
+      expect(message).to include("[post-cutoff")
+    end
+  end
+
   it "reports in-cycle residue even when a positive row dated after the cutoff would net the account positive" do
     # The weekly payout run sums only up to the cutoff, so the post-cutoff credit does not save it —
     # a whole-ledger-only read would net positive here and miss the payout that is about to fail.

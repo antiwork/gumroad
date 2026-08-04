@@ -53,27 +53,9 @@ class AlertOnNegativeDestinationBalancesJob
         # Dead accounts are reported, not skipped: `mark_balances_processing` takes a seller's unpaid
         # balances regardless of their merchant account's liveness, so residue parked on a RETIRED
         # account still fails the real payout. The report line says which.
-        #
-        # Two sums, trip on either. The cycle-bounded one mirrors what the weekly payout run takes
-        # (`unpaid_balances_up_to_date` at the cutoff), so a post-cutoff credit cannot hide residue
-        # that run WILL trip on. The unbounded one covers the payout paths that read past the cutoff
-        # (`PerformDailyInstantPayoutsWorker` at `Date.yesterday`, `InstantPayoutsService` at
-        # `Date.today`) — bounding everything to the cutoff would blind the job to fresh residue for
-        # up to six days.
         full_set = Balance.unpaid.where(user_id:, merchant_account_id:)
-        set = full_set.where("date <= ?", payout_cutoff_date)
-        set_total = set.sum(:holding_amount_cents)
-        in_cycle = set_total.negative?
-        unless in_cycle
-          set = full_set
-          set_total = set.sum(:holding_amount_cents)
-          next unless set_total.negative?
-        end
-
-        # Same trip condition as the payout guard: a negative destination total matched by a negative
-        # USD ledger is refund netting, which pays out coherently. Reporting those would bury the
-        # residue rows under ~4x their number of sellers nobody needs to act on.
-        next if set.sum(:amount_cents).negative?
+        set, set_total, in_cycle = tripped_window(full_set)
+        next if set.nil?
 
         user = User.find_by(id: user_id)
         next if user.nil? || user.suspended?
@@ -143,6 +125,25 @@ class AlertOnNegativeDestinationBalancesJob
     # `candidate_pairs`' consumers a different cutoff than the verdict sums used.
     def payout_cutoff_date
       @payout_cutoff_date ||= User::PayoutSchedule.next_scheduled_payout_end_date
+    end
+
+    # First window that trips, or nil. Two windows, each judged INDEPENDENTLY on both conditions:
+    # negative destination total, not refund netting (a negative destination matched by a negative
+    # USD ledger pays out coherently — same trip condition as the payout guard). The cycle-bounded
+    # window mirrors the weekly run (`unpaid_balances_up_to_date` at the cutoff); the whole ledger
+    # covers the payout paths that read past it (`PerformDailyInstantPayoutsWorker` at
+    # `Date.yesterday`, `InstantPayoutsService` at `Date.today`). Judging each window whole is what
+    # keeps refund netting inside the cycle from hiding post-cutoff residue the instant paths will
+    # still trip on.
+    def tripped_window(full_set)
+      [[full_set.where("date <= ?", payout_cutoff_date), true], [full_set, false]].each do |set, in_cycle|
+        set_total = set.sum(:holding_amount_cents)
+        next unless set_total.negative?
+        next if set.sum(:amount_cents).negative?
+
+        return [set, set_total, in_cycle]
+      end
+      nil
     end
 
     def message_for(scan)
