@@ -520,6 +520,9 @@ Rails.application.routes.draw do
     # /robots.txt
     get "/robots.:format" => "robots#index"
 
+    # /llms.txt — AI-assistant discoverability (https://llmstxt.org)
+    get "/llms.:format" => "llms#index"
+
     # Redirect Devise's default auth paths to our custom routes.
     # Must be defined before devise_for so they match first, preventing Devise's
     # require_no_authentication filter from showing "You are already signed in." flash.

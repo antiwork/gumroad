@@ -1,0 +1,17 @@
+# Gumroad
+
+> Gumroad is an e-commerce marketplace where independent creators sell digital products — ebooks, courses, music, software, design assets, memberships, and more — directly to their audiences.
+
+Every product is sold by an individual creator. Each creator has a storefront on their own subdomain, and every product has a canonical short URL. Discover is the marketplace-wide browse and search surface, organized as a taxonomy of categories with nested subcategories (for example 3D, Design, Education, Software Development), each addressable at its own path.
+
+## URL patterns
+
+- [Product pages](https://gumroad.com/l/): `https://gumroad.com/l/{permalink}` — canonical page for a single product
+- [Creator storefronts](https://gumroad.com/): `https://{username}.gumroad.com` — a creator's profile and product listing
+- [Discover](https://gumroad.com/discover): marketplace browse and search; categories and subcategories are paths like `https://gumroad.com/{category}` and `https://gumroad.com/{category}/{subcategory}`
+- [Wishlists](https://gumroad.com/wishlists): `https://gumroad.com/wishlists/{slug}` — public, shareable product lists curated by users
+
+## API
+
+- [API documentation](https://gumroad.com/api): public REST API for products, sales, subscribers, and licenses
+- [Help Center](https://help.gumroad.com): documentation for creators and customers
