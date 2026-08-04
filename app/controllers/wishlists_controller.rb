@@ -3,6 +3,7 @@
 class WishlistsController < ApplicationController
   include CustomDomainConfig, DiscoverCuratedProducts
   include PageMeta::Favicon
+  include PageMeta::Wishlist
 
   before_action :authenticate_user!, except: :show
   after_action :verify_authorized, except: :show
@@ -49,7 +50,7 @@ class WishlistsController < ApplicationController
     e404 if wishlist.blank?
 
     @user = wishlist.user
-    set_meta_tag(title: wishlist.name)
+    set_wishlist_page_meta(wishlist)
     set_favicon_meta_tags(@user)
 
     layout = params[:layout]

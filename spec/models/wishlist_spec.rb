@@ -75,6 +75,72 @@ describe Wishlist do
     end
   end
 
+  describe "SEO indexability" do
+    let(:wishlist) { create(:wishlist, name: "Curated Things") }
+
+    describe ".seo_indexable and #seo_indexable?" do
+      it "includes only recommendable wishlists with at least the minimum products" do
+        create_list(:wishlist_product, Wishlist::MINIMUM_SEO_INDEXABLE_PRODUCTS, wishlist:)
+
+        thin_wishlist = create(:wishlist, name: "Thin List")
+        create(:wishlist_product, wishlist: thin_wishlist)
+
+        opted_out_wishlist = create(:wishlist, name: "Hidden List", discover_opted_out: true)
+        create_list(:wishlist_product, Wishlist::MINIMUM_SEO_INDEXABLE_PRODUCTS, wishlist: opted_out_wishlist)
+
+        default_name_wishlist = create(:wishlist)
+        create_list(:wishlist_product, Wishlist::MINIMUM_SEO_INDEXABLE_PRODUCTS, wishlist: default_name_wishlist)
+
+        expect(Wishlist.seo_indexable).to contain_exactly(wishlist)
+        expect(wishlist.reload.seo_indexable?).to be true
+        expect(thin_wishlist.reload.seo_indexable?).to be false
+        expect(opted_out_wishlist.reload.seo_indexable?).to be false
+        expect(default_name_wishlist.reload.seo_indexable?).to be false
+      end
+
+      it "does not count deleted wishlist products toward the minimum" do
+        create_list(:wishlist_product, Wishlist::MINIMUM_SEO_INDEXABLE_PRODUCTS, wishlist:)
+        wishlist.wishlist_products.first.mark_deleted!
+
+        expect(Wishlist.seo_indexable).to be_empty
+        expect(wishlist.reload.seo_indexable?).to be false
+      end
+    end
+  end
+
+  describe "#structured_data" do
+    let(:wishlist) { create(:wishlist, name: "Curated Things") }
+
+    it "returns an ItemList with product name, url, and price" do
+      products = create_list(:product, 3, price_cents: 1500)
+      products.each { create(:wishlist_product, wishlist:, product: _1) }
+
+      data = wishlist.structured_data
+
+      expect(data["@type"]).to eq("ItemList")
+      expect(data["name"]).to eq("Curated Things")
+      expect(data["numberOfItems"]).to eq(3)
+      expect(data["itemListElement"].map { _1["position"] }).to eq([1, 2, 3])
+      expect(data["itemListElement"].first["item"]).to eq(
+        "@type" => "Product",
+        "name" => products.first.name,
+        "url" => products.first.long_url,
+        "offers" => {
+          "@type" => "Offer",
+          "price" => 15.0,
+          "priceCurrency" => "USD",
+          "url" => products.first.long_url
+        }
+      )
+    end
+
+    it "returns an empty hash when there are no alive products" do
+      create(:wishlist_product, wishlist:, deleted_at: Time.current)
+
+      expect(wishlist.structured_data).to eq({})
+    end
+  end
+
   describe "#update_recommendable" do
     let(:wishlist) { create(:wishlist, name: "My Wishlist") }
 

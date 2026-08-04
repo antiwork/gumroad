@@ -2,8 +2,13 @@
 
 class Wishlist < ApplicationRecord
   include ExternalId, Deletable, FlagShihTzu
+  include Wishlist::StructuredData
 
   DEFAULT_NAME_MATCHER = /\AWishlist \d+\z/
+
+  # Below this, a wishlist page is too thin to be worth a slot in the index —
+  # it gets a noindex robots meta and stays out of the sitemap.
+  MINIMUM_SEO_INDEXABLE_PRODUCTS = 3
 
   belongs_to :user
 
@@ -21,6 +26,21 @@ class Wishlist < ApplicationRecord
 
   def self.find_by_url_slug(url_slug)
     find_by_external_id_numeric(url_slug.split("-").last.to_i)
+  end
+
+  # `recommendable` already encodes the discoverability gates (not opted out of
+  # Discover, non-default name, non-adult content, has products) — reuse it as
+  # the visibility signal and only add the thin-content floor on top.
+  def self.seo_indexable
+    alive
+      .where(recommendable: true)
+      .joins(:alive_wishlist_products)
+      .group(:id)
+      .having("COUNT(wishlist_products.id) >= ?", MINIMUM_SEO_INDEXABLE_PRODUCTS)
+  end
+
+  def seo_indexable?
+    recommendable? && alive_wishlist_products.size >= MINIMUM_SEO_INDEXABLE_PRODUCTS
   end
 
   def url_slug
