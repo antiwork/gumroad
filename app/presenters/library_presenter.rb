@@ -67,7 +67,14 @@ class LibraryPresenter
     def filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:)
       scope = show_archived_only ? cards.is_archived : cards.not_is_archived
 
-      scope = scope.joins(link: :user).where(users: { external_id: creator_ids }) if creator_ids.any?
+      # Filtering by links.user_id (not a users join keyed on external_id) keeps MySQL's plan
+      # anchored on the cheap purchaser_id index; joining users on external_id sometimes made it
+      # drive from links/purchase_state instead, turning Pagy's COUNT(*) into a 100s+ scan
+      # (gumroad-private#1824).
+      if creator_ids.any?
+        creator_user_ids = User.where(external_id: creator_ids).pluck(:id)
+        scope = scope.joins(:link).where(links: { user_id: creator_user_ids })
+      end
 
       if bundle_ids.any?
         bundle_link_ids = bundle_ids.filter_map { Link.from_external_id(_1) }
