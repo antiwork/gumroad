@@ -114,6 +114,24 @@ describe "Product::Searchable - Search scenarios" do
         assert_equal expected, records.map(&:id)
       end
 
+      it "converts decimal price boundaries to exact cents" do
+        search_options = Link.search_options(min_price: "19.99", max_price: "19.99")
+
+        expect(search_options.dig(:query, :bool, :filter)).to include(
+          range: { available_price_cents: { gte: 1_999, lte: 1_999 } }
+        )
+      end
+
+      it "rounds fractional-cent boundaries inward and ignores malformed values" do
+        rounded = Link.search_options(min_price: "19.991", max_price: "20.009")
+        expect(rounded.dig(:query, :bool, :filter)).to include(
+          range: { available_price_cents: { gte: 2_000, lte: 2_000 } }
+        )
+
+        malformed = Link.search_options(min_price: "not-a-price", max_price: "1e1000000")
+        expect(malformed.dig(:query, :bool, :filter)).to be_nil
+      end
+
       it "clamps extremely large price filter values to prevent Elasticsearch long overflow" do
         # Values like 2_344_444_444_444.44 would produce floats exceeding ES long max (~9.22E18)
         params = { min_price: "0", max_price: "2344444444444444" }
