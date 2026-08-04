@@ -17,7 +17,20 @@ class LlmsControllerTest < ActionController::TestCase
 
     assert_match(/\A# Gumroad\n\n> /, response.body)
     assert_includes response.body, "## URL patterns"
+    assert_includes response.body, "## Pricing"
     assert_includes response.body, "## API"
+  end
+
+  test "llms.txt pricing matches the fee constants" do
+    get :index, format: :txt
+
+    flat_pct = Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND / 10
+    fixed_fee = Purchase::GUMROAD_FIXED_FEE_CENTS / 100.0
+    discover_pct = Purchase::GUMROAD_DISCOVER_FEE_PER_THOUSAND / 10
+
+    assert_includes response.body, "#{flat_pct}% + $#{format("%.2f", fixed_fee)} per transaction"
+    assert_includes response.body, "#{discover_pct}% per transaction"
+    assert_includes response.body, "https://gumroad.com/pricing"
   end
 
   test "llms.txt documents canonical URL patterns and API docs" do
