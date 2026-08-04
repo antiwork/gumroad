@@ -65,9 +65,6 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
 
       truncated = candidates.size > MAX_CANDIDATES_SCANNED
       candidates = candidates.first(MAX_CANDIDATES_SCANNED)
-      # Advance past what this run judged. Saved before the clearing work so a later failure cannot
-      # pin the cursor and re-report the same page forever.
-      save_cursor(candidates.last.id) if candidates.any?
 
       cleared = []
       held = []
@@ -107,6 +104,12 @@ class AlertOnStaleBlocksHoldingEstablishedBuyersJob
           end
         end
       end
+
+      # Advance past what this run judged. Only reached if every batch's history-count and dispute
+      # queries completed without raising — an exception mid-page propagates before this line, so
+      # Sidekiq's retry re-reads the same unmoved cursor and re-scans the failed page instead of
+      # skipping past it.
+      save_cursor(candidates.last.id) if candidates.any?
 
       { cleared: report_order(cleared), held: report_order(held), truncated: }
     end
