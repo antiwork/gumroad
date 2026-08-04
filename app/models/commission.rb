@@ -90,6 +90,11 @@ class Commission < ApplicationRecord
       end
 
       pending_completion.ensure_completion do
+        # Rescue broadly, not just the errors-present branch below: `update_balance_and_mark_successful!`
+        # or `save!` can also raise after `process!` has already charged the buyer, and letting
+        # any of those propagate straight out would roll back this transaction — erasing the
+        # completion purchase row (and its Stripe charge id) for a charge that already succeeded,
+        # so a retry would charge the buyer again with nothing left to reconcile against.
         pending_completion.process!
 
         if pending_completion.errors.present?
@@ -102,6 +107,8 @@ class Commission < ApplicationRecord
           end
           save!
         end
+      rescue StandardError => e
+        completion_error = e
       end
     end
 
