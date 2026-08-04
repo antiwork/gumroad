@@ -1576,6 +1576,43 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
+    it "kicks a mixed candidate/installment cart to CardElement instead of client-confirm, which cannot charge an installment purchase" do
+      # The method-forced arm keeps a mixed candidate cart supported, but its lane is
+      # client-confirm — and PreparePaymentIntentService resolves an installment purchase as
+      # recurring, failing every confirm closed. Only the quote element can honor installments,
+      # so a mixed cart with one falls back to CardElement.
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      installment_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 3000)
+      create(:product_installment_plan, link: installment_product)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      platform_merchant_account
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::CAD,
+          }
+        ),
+        checkout_product_for(
+          installment_product,
+          pay_in_installments: true,
+          buyer_currency_display: {
+            display_mode: "default",
+            buyer_currency_shown: Currency::EUR,
+          }
+        )
+      ]
+
+      # disable_wallets: the fallback keeps the candidate cart's PRB suppression, matching the
+      # buyer-currency element it would otherwise mount.
+      expect(stripe_payment_props(add_products:))
+        .to eq(card_element_fallback("setup_or_installment_flow").merge(disable_wallets: true))
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
     it "never mounts the client-confirm element for a cart Checkout::BuyerCurrencyQuote would really quote" do
       # The two examples above pin the routing against a hand-written expectation of which carts
       # get quoted. This one asserts the underlying rule against the quote service ITSELF, so the

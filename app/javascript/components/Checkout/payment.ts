@@ -366,7 +366,11 @@ export function requiresPaymentElementReusablePaymentMethod(state: State) {
   return (
     requiresReusablePaymentMethod(state) ||
     state.products.some(
-      (product) => !!product.recurrence || !!product.subscription_id || product.nativeType === "commission",
+      (product) =>
+        !!product.recurrence ||
+        !!product.subscription_id ||
+        product.nativeType === "commission" ||
+        product.payInInstallments,
     )
   );
 }
@@ -395,7 +399,14 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
     if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
   }
 
-  return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
+  // Installments stay on the CardElement path except on the buyer-currency presentment lane,
+  // whose FX quote already prices the first-installment charge (the server only sets the flag
+  // for carts its quote service accepts). Free trials and preorders charge nothing today, so
+  // payment mode is never right for them.
+  const buyerCurrencyPresentment = state.checkoutPayment.elements_options.buyer_currency_presentment;
+  return !state.products.some(
+    (product) => (product.payInInstallments && !buyerCurrencyPresentment) || product.hasFreeTrial || product.isPreorder,
+  );
 }
 
 // The browser must not widen server eligibility for client-confirm: single-seller,

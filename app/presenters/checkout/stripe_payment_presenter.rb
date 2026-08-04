@@ -424,30 +424,16 @@ class Checkout::StripePaymentPresenter
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported
 
-        # A supported candidate cart is routed by props() before this reason would matter
-        # (buyer_currency_presentment_element_shape? runs ahead of the pay-in-installments
-        # check there too), so return here rather than falling into the check below: a
-        # buyer who both picked installments AND is a presentment candidate must not be
-        # bounced back to CardElement just because they picked installments.
-        return nil
+        # Only the quote element can honor an installment cart (its quote already prices the
+        # first-installment amount). The method-forced arm routes to client-confirm, which
+        # PreparePaymentIntentService rejects for installments (resolved as recurring), so a
+        # mixed candidate/installment cart must keep the CardElement kick-back below.
+        return nil if buyer_currency_presentment_element_shape?(items)
       end
 
-      # A buyer choosing to pay in installments is always kicked back to CardElement UNLESS
-      # the cart above already proved it can be honored by the buyer-currency (FX-quoted)
-      # element. That element charges the quote's `charge_presentment_total_cents`, which the
-      # quote already derives from the SAME first-installment amount
-      # (Checkout::BuyerCurrencyQuote::LineItem#later_charge_kind == "installment", built by
-      # CustomerSurchargeController#buyer_currency_charge_details from calculate_installment_payment_price_cents)
-      # that a plain USD installment checkout charges — so quoting it does not change what is
-      # billed today, only what currency it is billed in. The remaining case fails safe here
-      # because there is no such quote path: the client-confirm (deferred PaymentIntent) lane
-      # cannot take it at all — Order::PreparePaymentIntentService#payment_method_resolution
-      # treats an installment purchase as a recurring cart (the first payment funds a future
-      # charge schedule), and this presenter's own resolver call above does not pass
-      # `recurring:` for a pay_in_installments item, so the two would resolve different method
-      # sets and Stripe would reject the mismatched ConfirmationToken. Checked last (after the
-      # candidate branch, which already returned) so it only fires for the non-candidate,
-      # non-ramped-seller carts client-confirm was never going to reach anyway.
+      # Installments have no client-confirm path (PreparePaymentIntentService resolves them as
+      # recurring, so the ConfirmationToken's method set would mismatch) and no quote path
+      # outside the candidate shape above, so CardElement is the only lane left for them.
       return "setup_or_installment_flow" if items.any? { _1[:pay_in_installments] }
 
       nil

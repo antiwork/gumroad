@@ -250,6 +250,26 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state({ products: [product({ hasFreeTrial: true })] }))).toBe(false);
   });
 
+  it("allows installments on the buyer-currency presentment lane, whose quote prices the first installment", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({
+          checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+          products: [product({ payInInstallments: true })],
+        }),
+      ),
+    ).toBe(true);
+    // The lane does not admit the other future-charge shapes.
+    expect(
+      canUseStripePaymentElement(
+        state({
+          checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+          products: [product({ isPreorder: true })],
+        }),
+      ),
+    ).toBe(false);
+  });
+
   it("allows setup-mode checkout for preorder and free-trial flows", () => {
     expect(
       canUseStripePaymentElement(
@@ -523,6 +543,9 @@ describe("requiresPaymentElementReusablePaymentMethod", () => {
       requiresPaymentElementReusablePaymentMethod(
         state({ products: [product(), product({ permalink: "commission", nativeType: "commission" })] }),
       ),
+    ).toBe(true);
+    expect(
+      requiresPaymentElementReusablePaymentMethod(state({ products: [product({ payInInstallments: true })] })),
     ).toBe(true);
   });
 });
