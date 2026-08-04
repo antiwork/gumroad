@@ -144,6 +144,32 @@ describe SitemapService do
       expect(File.exist?(sitemap_file_path)).to be false
     end
 
+    it "deletes the S3 sitemap object with the dedicated sitemap-uploader credentials when no wishlist remains indexable" do
+      allow(Rails.env).to receive(:production?).and_return(true)
+      allow(GlobalConfig).to receive(:get).and_call_original
+      allow(GlobalConfig).to receive(:get).with("S3_SITEMAP_UPLOADER_ACCESS_KEY").and_return("uploader-access-key")
+      allow(GlobalConfig).to receive(:get).with("S3_SITEMAP_UPLOADER_SECRET_ACCESS_KEY").and_return("uploader-secret-key")
+
+      s3_client = instance_double(Aws::S3::Client)
+      expect(Aws::S3::Client).to receive(:new).with(
+        access_key_id: "uploader-access-key",
+        secret_access_key: "uploader-secret-key",
+        region: AWS_DEFAULT_REGION
+      ).and_return(s3_client)
+      expect(s3_client).to receive(:delete_object).with(
+        bucket: PUBLIC_STORAGE_S3_BUCKET,
+        key: "#{SitemapService::SITEMAP_PATH_WISHLISTS}/sitemap.xml.gz"
+      )
+      # The upload path in sitemap_config also builds an AwsSdkAdapter that reads S3
+      # credentials via GlobalConfig, but that adapter never touches Aws::S3::Client
+      # directly, so this expectation binds only to the deletion call being pinned here.
+      allow(SitemapGenerator::Sitemap).to receive(:ping_search_engines)
+
+      create(:wishlist_product, wishlist: create(:wishlist, name: "Thin List"))
+
+      service.generate_wishlists
+    end
+
     it "deletes /robots.txt sitemap configs cache" do
       cache_key = "sitemap_configs"
       redis_namespace = Redis::Namespace.new(:robots_redis_namespace, redis: $redis)
