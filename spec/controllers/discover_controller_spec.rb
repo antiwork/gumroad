@@ -263,14 +263,18 @@ describe DiscoverController, type: :controller, inertia: true do
       end
 
       it "renders subcategory links and pagination hrefs on category pages" do
-        create_list(:product, 2, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
+        # The canonical (no `from` param) request has params[:from] mutated to
+        # RECOMMENDED_PRODUCTS_COUNT + 1 to skip the recommendations-strip products, so the
+        # real ES offset is 9 — seed past that plus INITIAL_PRODUCTS_COUNT for a genuine next page.
+        create_list(:product, DiscoverController::RECOMMENDED_PRODUCTS_COUNT + 3, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
         Link.import(refresh: true, force: true)
         stub_const("DiscoverController::INITIAL_PRODUCTS_COUNT", 1)
 
         get :index, params: { taxonomy: "3d" }
 
         expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d/3d-assets"))
-        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d?from=1"))
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d?from=10"))
+        expect(response.body).not_to include("Previous page")
       end
     end
 

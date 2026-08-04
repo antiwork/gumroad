@@ -197,13 +197,17 @@ class DiscoverController < ApplicationController
       @discover_pagination_links = pagination_links(search_results:)
     end
 
-    # Uses the request's own `from`, not params[:from], which index mutates to skip the
-    # products shown in the recommendations strip. These are real hrefs for crawlers; they
-    # canonicalize to the unpaginated category URL via CanonicalUrlPresenter.
+    # params[:from] (not the raw request query param) is the actual ES offset behind
+    # search_results — index mutates it to RECOMMENDED_PRODUCTS_COUNT + 1 on the canonical
+    # first page to skip products already shown in the recommendations strip, so pagination
+    # math has to agree with that offset or "Next" repeats the recommended-strip products.
+    # first_page suppresses a self-referencing "Previous" link on that mutated first page,
+    # since the raw request has no `from` at all there.
     def pagination_links(search_results:)
-      offset = request.query_parameters["from"].to_i
+      offset = params[:from].to_i
+      first_page = request.query_parameters["from"].blank?
       links = []
-      links << { label: "Previous page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", { from: [offset - INITIAL_PRODUCTS_COUNT, 0].max.nonzero? }.compact) } if offset > 0
+      links << { label: "Previous page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", { from: [offset - INITIAL_PRODUCTS_COUNT, 0].max.nonzero? }.compact) } if offset > 0 && !first_page
       links << { label: "Next page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", from: offset + INITIAL_PRODUCTS_COUNT) } if search_results[:total].to_i > offset + INITIAL_PRODUCTS_COUNT
       links
     end
