@@ -81,4 +81,16 @@ describe SitemapService do
       expect(xml).to include(product.reload.preview_url)
     end
   end
+
+  describe "#generate_categories" do
+    it "generates a sitemap entry for every taxonomy path on the discover host" do
+      path = "#{Rails.public_path}/#{SitemapService::SITEMAP_PATH_CATEGORIES}sitemap.xml.gz"
+      service.generate_categories
+
+      expect(File.exist?(path)).to be true
+      xml = Zlib::GzipReader.open(path, &:read)
+      expect(xml).to include("#{UrlService.discover_domain_with_protocol}/3d")
+      expect(xml).to include("#{UrlService.discover_domain_with_protocol}/software-development/programming")
+    end
+  end
 end

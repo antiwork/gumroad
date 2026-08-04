@@ -54,6 +54,7 @@ class DiscoverController < ApplicationController
     create_discover_search!(query: params[:query], taxonomy: @taxonomy) if is_searching?
 
     prepare_discover_page(search_results:)
+    prepare_category_seo(search_results:)
 
     curated_product_ids = curated_products.map { _1.product.external_id }
     render inertia: "Discover/Index", props: {
@@ -164,6 +165,46 @@ class DiscoverController < ApplicationController
         set_meta_tag(name: "description", content: description)
         set_meta_tag(property: "og:description", content: description)
       end
+    end
+
+    # Category/subcategory pages (taxonomy present, no query/tags) are landing pages for
+    # organic search, so they get a dedicated title/description plus BreadcrumbList and
+    # ItemList JSON-LD in the server-rendered head. Skipped for filtered/search views to
+    # keep the canonical page the only indexable variant.
+    def category_seo_page?
+      taxonomy.present? && params.values_at(:query, :tags).all?(&:blank?)
+    end
+
+    def prepare_category_seo(search_results:)
+      if taxonomy.blank? && params.values_at(:query, :tags).all?(&:blank?)
+        @discover_category_links = Discover::CategoryPagePresenter.root_category_links
+        return
+      end
+      return unless category_seo_page?
+
+      presenter = Discover::CategoryPagePresenter.new(taxonomy_path: params[:taxonomy], taxonomy:, search_results:)
+
+      set_meta_tag(title: presenter.title)
+      set_meta_tag(property: "og:title", content: presenter.title)
+      set_meta_tag(name: "description", content: presenter.meta_description)
+      set_meta_tag(property: "og:description", content: presenter.meta_description)
+
+      set_meta_tag(tag_name: "script", type: "application/ld+json", inner_content: presenter.breadcrumb_list_json_ld, head_key: "breadcrumb-list-json-ld")
+      item_list = presenter.item_list_json_ld
+      set_meta_tag(tag_name: "script", type: "application/ld+json", inner_content: item_list, head_key: "item-list-json-ld") if item_list
+
+      @discover_category_links = presenter.subcategory_links
+      @discover_pagination_links = pagination_links(search_results:)
+    end
+
+    # `from` is the existing search offset param, so these are real server-rendered pages;
+    # they canonicalize to the unpaginated category URL via CanonicalUrlPresenter.
+    def pagination_links(search_results:)
+      offset = params[:from].to_i
+      links = []
+      links << { label: "Previous page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", { from: [offset - INITIAL_PRODUCTS_COUNT, 0].max.nonzero? }.compact) } if offset > 0
+      links << { label: "Next page", href: UrlService.discover_full_path("/#{params[:taxonomy]}", from: offset + INITIAL_PRODUCTS_COUNT) } if search_results[:total].to_i > offset + INITIAL_PRODUCTS_COUNT
+      links
     end
 
     def black_friday_feature_active?

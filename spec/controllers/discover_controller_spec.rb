@@ -253,6 +253,27 @@ describe DiscoverController, type: :controller, inertia: true do
       end
     end
 
+    context "server-rendered crawl links" do
+      render_views
+
+      it "renders top-level category links in the initial HTML of /discover" do
+        get :index
+
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d"))
+      end
+
+      it "renders subcategory links and pagination hrefs on category pages" do
+        create_list(:product, 2, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
+        Link.import(refresh: true, force: true)
+        stub_const("DiscoverController::INITIAL_PRODUCTS_COUNT", 1)
+
+        get :index, params: { taxonomy: "3d" }
+
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d/3d-assets"))
+        expect(response.body).to include(%(href="#{UrlService.discover_domain_with_protocol}/3d?from=1"))
+      end
+    end
+
     context "meta tags" do
       let(:default_description) { "Browse over 1.6 million free and premium digital products in education, tech, design, and more categories from Gumroad creators and online entrepreneurs." }
 
@@ -278,10 +299,41 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["canonical"][:href]).to eq("#{discover_domain_with_protocol}/?query=tests")
       end
 
-      it "sets the proper title when only taxonomy is present" do
+      it "sets the SEO title and description when only taxonomy is present" do
         get :index, params: { taxonomy: "software-development/programming/c-sharp" }
 
-        expect(meta_tags["title"][:inner_content]).to eq("Software Development » Programming » C# | Gumroad")
+        expect(meta_tags["title"][:inner_content]).to eq("Software Development » Programming » C# — digital products by independent creators | Gumroad")
+        expect(meta_tags["meta-name-description"][:content]).to include("C# products from independent creators on Gumroad")
+      end
+
+      it "renders BreadcrumbList and ItemList JSON-LD for category pages" do
+        create(:product, :recommendable, taxonomy: Taxonomy.find_by(slug: "3d"))
+        Link.import(refresh: true, force: true)
+
+        get :index, params: { taxonomy: "3d" }
+
+        breadcrumbs = meta_tags["breadcrumb-list-json-ld"][:inner_content]
+        expect(breadcrumbs["@type"]).to eq("BreadcrumbList")
+        expect(breadcrumbs["itemListElement"].first).to include(
+          "position" => 1,
+          "name" => "Discover",
+        )
+        expect(breadcrumbs["itemListElement"].last["item"]).to eq("#{discover_domain_with_protocol}/3d")
+
+        item_list = meta_tags["item-list-json-ld"][:inner_content]
+        expect(item_list["@type"]).to eq("ItemList")
+        product_item = item_list["itemListElement"].first["item"]
+        expect(product_item["@type"]).to eq("Product")
+        expect(product_item["name"]).to be_present
+        expect(product_item["url"]).to be_present
+        expect(product_item["offers"]).to include("@type" => "Offer", "priceCurrency" => "USD")
+      end
+
+      it "does not render category JSON-LD when a query or tags are present" do
+        get :index, params: { taxonomy: "3d", query: "dragons" }
+
+        expect(meta_tags["breadcrumb-list-json-ld"]).to be_nil
+        expect(meta_tags["item-list-json-ld"]).to be_nil
       end
 
       it "sets the proper title when tags and taxonomy are present" do

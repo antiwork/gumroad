@@ -5,6 +5,8 @@ class RefreshSitemapMonthlyWorker
   sidekiq_options retry: 0, queue: :low
 
   def perform
+    SitemapService.new.generate_categories
+
     # Update sitemap of products updated in the last month
     last_month_start = 1.month.ago.beginning_of_month
     last_month_end = last_month_start.end_of_month
