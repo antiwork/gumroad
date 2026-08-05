@@ -15,11 +15,20 @@ class Risk::StrandedBuyerRecoveryService
   class VerificationFailedError < StandardError; end
   class UnsafeClearError < StandardError; end
 
-  # The types unblock_buyer! treats as buyer-bound. email_domain is included because a stranded
-  # buyer's own domain block holds them the same way; the blast radius is recorded in the verdict.
+  # Only identifiers that are this buyer's alone — email and browser_guid are not realistically
+  # shared with an unrelated abuser. email_domain and ip_address are NOT here: one buyer's
+  # card-proven clean history says nothing about every other actor sharing that domain or IP
+  # (NAT, corporate mail relay, shared office network), so clearing those automatically would
+  # remove enforcement against people this buyer's history never vouched for. They fall through
+  # to withheld and wait on a human.
   CLEARABLE_TYPES = [
     PlatformBlock::TYPES[:browser_guid],
     PlatformBlock::TYPES[:email],
+  ].freeze
+
+  # Buyer-bound in the sense that clearing helps THIS buyer, but with a blast radius wide enough
+  # that automation shouldn't decide alone — surfaced to a human instead of auto-cleared.
+  SHARED_RADIUS_TYPES = [
     PlatformBlock::TYPES[:email_domain],
     PlatformBlock::TYPES[:ip_address],
   ].freeze
@@ -66,10 +75,15 @@ class Risk::StrandedBuyerRecoveryService
     return result(:noop, :nothing_clearable, attribution:, skipped: withheld) if clearable.empty?
 
     unless dry_run
-      clear!(clearable)
-      verify!(clearable)
-      record_admin_comment(attribution, clearable)
-      notify_buyer
+      # Wrapped so a mid-batch failure (concurrent re-block, reload mismatch, verification miss)
+      # rolls back every unblock! in this call instead of leaving enforcement partially removed
+      # with no admin comment recording what happened.
+      ActiveRecord::Base.transaction do
+        clear!(clearable)
+        verify!(clearable)
+        record_admin_comment(attribution, clearable)
+      end
+      notify_buyer(withheld)
     end
 
     result(:cleared, attribution[:rule], attribution:, cleared: clearable, skipped: withheld)
@@ -204,12 +218,15 @@ class Risk::StrandedBuyerRecoveryService
 
     # Person-bound rows clear; a card the issuer is still refusing stays blocked, because the block
     # is not what is declining it and clearing it reads as "fixed" to a buyer whose retry will fail.
+    # Shared-radius rows (domain/IP) never auto-clear — see SHARED_RADIUS_TYPES.
     def partition_blocks
       clearable = []
       withheld = []
       active_blocks.each do |block|
         if CLEARABLE_TYPES.include?(block.object_type)
           clearable << block
+        elsif SHARED_RADIUS_TYPES.include?(block.object_type)
+          withheld << [block, :shared_identifier_needs_human_review]
         elsif block.charge_processor_fingerprint? && card_still_declining?(block.object_value)
           withheld << [block, :card_still_declining_at_issuer]
         else
@@ -279,7 +296,12 @@ class Risk::StrandedBuyerRecoveryService
     # by a sweep is not an invitation anyone is waiting for.
     RECENT_FAILURE_WINDOW = 60.days
 
-    def notify_buyer
+    def notify_buyer(withheld)
+      # A retained card-fingerprint block means THIS card is still guaranteed to fail — telling the
+      # buyer to retry sends them straight into another decline. Domain/IP holds are informational
+      # (they gate other people's blocks, not this buyer's own retry), so they don't suppress the email.
+      return if withheld.any? { |block, reason| reason == :card_still_declining_at_issuer }
+
       failed = buyer_purchases.select { _1.failed? && _1.created_at >= RECENT_FAILURE_WINDOW.ago && _1.email.present? }.max_by(&:created_at)
       return if failed.nil?
 

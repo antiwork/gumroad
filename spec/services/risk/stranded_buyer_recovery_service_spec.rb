@@ -240,4 +240,61 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(PlatformBlock.active.count).to eq(0)
     end
   end
+
+  describe "shared-radius identifiers (email_domain, ip_address)" do
+    it "withholds a domain block instead of auto-clearing it — one buyer's history doesn't vouch for everyone on the domain" do
+      domain_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
+
+      result = call
+
+      expect(result.verdict).to eq(:cleared)
+      expect(result.cleared.map(&:object_value)).to match_array([browser_guid, buyer_email])
+      expect(result.skipped).to include([domain_block, :shared_identifier_needs_human_review])
+      expect(domain_block.reload.blocked_at).to be_present
+    end
+
+    it "withholds an IP block instead of auto-clearing it" do
+      create(:purchase, email: buyer_email, purchase_state: "successful", ip_address: "203.0.113.5", created_at: 6.months.ago)
+      ip_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "203.0.113.5", expires_in: 30.days)
+
+      result = call
+
+      expect(result.skipped).to include([ip_block, :shared_identifier_needs_human_review])
+      expect(ip_block.reload.blocked_at).to be_present
+    end
+  end
+
+  describe "atomicity of the clear batch" do
+    it "rolls back every unblock! in the batch when verification fails partway through" do
+      allow_any_instance_of(PlatformBlock).to receive(:unblock!) # silently does nothing -> verify! raises
+
+      expect { call }.to raise_error(described_class::VerificationFailedError)
+      expect(PlatformBlock.active.count).to eq(2) # nothing committed, not "some cleared"
+    end
+
+    it "rolls back every unblock! when a block goes human-authored mid-batch" do
+      other_admin = create(:admin_user)
+      allow_any_instance_of(PlatformBlock).to receive(:reload) do |block|
+        block.update_columns(blocked_by: other_admin.id)
+        block
+      end
+
+      expect { call }.to raise_error(described_class::UnsafeClearError)
+      expect(PlatformBlock.active.count).to eq(2)
+    end
+  end
+
+  describe "notification withheld alongside a still-declining card" do
+    it "does not email the buyer when a retained card-fingerprint block still guarantees their retry fails" do
+      declining_fingerprint = "still-declining-card"
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: declining_fingerprint)
+      create(:purchase, email: buyer_email, purchase_state: "failed",
+                        stripe_fingerprint: declining_fingerprint,
+                        stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD, created_at: 2.days.ago)
+
+      expect do
+        call
+      end.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+    end
+  end
 end
