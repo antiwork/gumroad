@@ -47,12 +47,17 @@ class PlatformBlock < ApplicationRecord
   end
 
   # Radar, not this row, enforces email/card blocks, so a MySQL-only unblock stays blocked until
-  # the daily sync (gumroad-private#1647). Enqueued unconditionally: re-running unblock! is the
-  # only repair for an item stranded in Radar, since a no-op update! never moves updated_at back
-  # into the sync's window.
+  # the daily sync (gumroad-private#1647). Enqueued unconditionally (not via an after_commit
+  # attribute-change callback like enqueue_radar_add): re-running unblock! on an already-nil row is
+  # the only repair for an item stranded in Radar, and a no-op update! fires no saved_change to hang
+  # a callback on. Deferred with AfterCommitEverywhere because a caller can hold this inside its own
+  # wrapping transaction (Risk::StrandedBuyerRecoveryService#clear!) — enqueued immediately, the job
+  # could reload the still-active pre-commit row and no-op, stranding the Radar entry.
   def unblock!
     update!(blocked_at: nil, expires_at: nil)
-    Radar::RemoveValueListItemJob.perform_async(id) if Radar::ValueListSyncService.syncs?(object_type)
+    return unless Radar::ValueListSyncService.syncs?(object_type)
+
+    AfterCommitEverywhere.after_commit { Radar::RemoveValueListItemJob.perform_async(id) }
   end
 
   private

@@ -313,6 +313,22 @@ class CustomerLowPriorityMailer < ApplicationMailer
     )
   end
 
+  # Sent after Risk::StrandedBuyerRecoveryService clears the blocks that were failing this buyer's
+  # checkouts, so they know retrying is worth their time. Deliberately vague about the mechanism:
+  # naming the systems involved helps nobody and reads as an accusation.
+  def blocked_purchase_resolved(purchase_id)
+    @purchase = Purchase.find(purchase_id)
+    return unless EmailFormatValidator.valid?(@purchase.email)
+
+    @product = @purchase.link
+
+    mail(
+      to: @purchase.email,
+      subject: "Your payment issue has been resolved",
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product&.user, to: @purchase.email)
+    )
+  end
+
   def chargeback_notice_to_customer(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable

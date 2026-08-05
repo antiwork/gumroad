@@ -3,6 +3,30 @@
 require "spec_helper"
 
 describe CustomerLowPriorityMailer do
+  describe "blocked_purchase_resolved" do
+    let(:purchase) { create(:purchase, purchase_state: "failed", email: "buyer@example.com") }
+
+    it "tells the buyer the issue is fixed and they can retry, without naming internals" do
+      mail = CustomerLowPriorityMailer.blocked_purchase_resolved(purchase.id)
+
+      expect(mail.to).to eq(["buyer@example.com"])
+      expect(mail.subject).to eq("Your payment issue has been resolved")
+      expect(mail.body.encoded).to include("payment issue on our side")
+      expect(mail.body.encoded).to include("You did nothing wrong")
+      expect(mail.body.encoded).to include("try your purchase again")
+      expect(mail.body.encoded).to include(purchase.link.name)
+      # The layout's CSS legitimately says "block"; the copy must not say these.
+      expect(mail.body.encoded).not_to match(/fraud|fingerprint|platform block|radar/i)
+    end
+
+    it "sends nothing to an invalid address" do
+      purchase.update_columns(email: "not-an-email")
+
+      mail = CustomerLowPriorityMailer.blocked_purchase_resolved(purchase.id)
+      expect(mail.to).to be_nil
+    end
+  end
+
   describe "subscription_autocancelled" do
     context "memberships" do
       before do
