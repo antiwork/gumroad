@@ -1,32 +1,13 @@
 # frozen_string_literal: true
 
+# The admin web UI was removed; this controller keeps the two team-member
+# entry points that other surfaces still link to: impersonation (linked from
+# the internal admin API payloads and the profile nav) and the Stripe
+# dashboard redirect.
 class Admin::BaseController < ApplicationController
-  include ActionView::Helpers::DateHelper, ActionView::Helpers::NumberHelper, AdminActionTracker, Impersonate
-
-  layout "admin"
-
-  inertia_share do
-    {
-      card_types: CreditCardUtility.card_types_for_react,
-      compliance: {
-        reasons: Compliance::TOS_VIOLATION_REASONS,
-        default_reason: Compliance::DEFAULT_TOS_VIOLATION_REASON
-      }
-    }
-  end
+  include Impersonate
 
   before_action :require_admin!
-  before_action :preload_admin_shell_user_associations
-  before_action :hide_layouts
-
-  before_action do
-    @body_id = "admin"
-    set_meta_tag(title: "Admin")
-  end
-
-  def index
-    render inertia: "Admin/Base/Index"
-  end
 
   def impersonate
     user = find_user(params[:user_identifier])
@@ -36,14 +17,14 @@ class Admin::BaseController < ApplicationController
       redirect_to products_path
     else
       flash[:alert] = "User not found"
-      redirect_to admin_path
+      redirect_to root_path
     end
   end
 
   def unimpersonate
     stop_impersonating_user
 
-    render json: { redirect_to: admin_url }
+    render json: { redirect_to: root_url }
   end
 
   def redirect_to_stripe_dashboard
@@ -58,11 +39,11 @@ class Admin::BaseController < ApplicationController
         redirect_to "#{base_url}/connect/accounts/#{merchant_account.charge_processor_merchant_id}", allow_other_host: true
       else
         flash[:alert] = "Stripe account not found"
-        redirect_to admin_path
+        redirect_to root_path
       end
     else
       flash[:alert] = "User not found"
-      redirect_to admin_path
+      redirect_to root_path
     end
   end
 
@@ -76,16 +57,6 @@ class Admin::BaseController < ApplicationController
       MerchantAccount.stripe.find_by(charge_processor_merchant_id: identifier)&.user
     end
 
-    def user_not_authorized(exception)
-      message = "You are not allowed to perform this action."
-      if request.format.json? || request.format.js?
-        render json: { success: false, error: message }, status: :unauthorized
-      else
-        flash[:alert] = message
-        redirect_to root_path
-      end
-    end
-
     def require_admin!
       if current_user.nil?
         return e404_json if xhr_or_json_request?
@@ -96,13 +67,6 @@ class Admin::BaseController < ApplicationController
         return e404_json if xhr_or_json_request?
         redirect_to root_path
       end
-    end
-
-    def preload_admin_shell_user_associations
-      avatar_users = [current_user, current_seller, impersonated_user].compact.uniq
-      ActiveRecord::Associations::Preloader.new(records: avatar_users, associations: { avatar_attachment: :blob }).call if avatar_users.any?
-
-      ActiveRecord::Associations::Preloader.new(records: [current_seller], associations: :seller_profile).call if current_seller.present?
     end
 
     def xhr_or_json_request?

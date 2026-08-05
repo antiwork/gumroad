@@ -689,10 +689,6 @@ class User < ApplicationRecord
     find_by(id: single_key)
   end
 
-  def admin_page_url
-    Rails.application.routes.url_helpers.admin_user_url(self, protocol: PROTOCOL, host: DOMAIN)
-  end
-
   def profile_url(custom_domain_url: nil, recommended_by: nil)
     uri = URI(custom_domain_url || subdomain_with_protocol)
     uri.query = { recommended_by: }.to_query if recommended_by.present?

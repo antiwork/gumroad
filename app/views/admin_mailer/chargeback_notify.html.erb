@@ -8,7 +8,7 @@
   <% @disputable.disputed_purchases.each do |purchase| %>
     <p>
       Purchase:
-      <%= link_to purchase.external_id, admin_purchase_url(purchase) %>
+      <%= purchase.external_id %>
       <% if purchase.card_type == CardType::PAYPAL %>
         (PayPal)
       <% end %>

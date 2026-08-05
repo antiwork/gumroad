@@ -2,7 +2,7 @@
 <div>
   <p>
     Last refunded purchase:
-    <%= link_to @purchase.email, admin_purchase_url(@purchase) %>
+    <%= @purchase.email %> (purchase id: <%= @purchase.external_id %>)
     <% if @purchase.card_type == CardType::PAYPAL %>
       <%= PaypalChargeProcessor::DISPLAY_NAME %>
     <% end %>
@@ -10,7 +10,7 @@
 
   <p>
     Last refunded product:
-    <%= link_to @product.name, admin_product_url(@product.unique_permalink) %>
+    <%= @product.name %> (<%= @product.unique_permalink %>)
   </p>
 
   <p>Creator:</p>
