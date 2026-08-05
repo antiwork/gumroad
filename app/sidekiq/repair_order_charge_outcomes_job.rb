@@ -34,9 +34,15 @@ class RepairOrderChargeOutcomesJob
   private
     # A failed line item is the cheap half of the predicate and the rarer one; `record_charge_outcome!`
     # is authoritative about the rest, so narrowing further here would only duplicate it.
+    #
+    # Also excludes orders where EVERY purchase is already checkout-failed: `record_charge_outcome!`
+    # requires a succeeded sibling too, so such an order can never leave this scope. Left in, a
+    # persistent set of these (Greptile reproduced 2,000) would resurface at the same low IDs on
+    # every recent-pass run and permanently crowd out real candidates plus the whole backlog budget.
     def candidates
       Order.not_partially_successful
            .joins(:purchases).merge(Purchase.checkout_failed)
+           .where(id: Order.joins(:purchases).where.not(purchases: { purchase_state: Purchase::CHECKOUT_FAILURE_STATES }).select(:id))
            .distinct
     end
 

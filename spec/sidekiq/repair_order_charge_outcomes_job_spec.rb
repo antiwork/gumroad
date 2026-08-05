@@ -95,6 +95,28 @@ describe RepairOrderChargeOutcomesJob do
     described_class.new.perform
   end
 
+  # Greptile (P1): an order all of whose purchases are already checkout-failed (both hard-declined,
+  # no successful sibling ever) can never satisfy `record_charge_outcome!`'s succeeded-and-failed
+  # check, so it can never leave the candidate set. A persistent pile of these would resurface every
+  # run and crowd out real repairable orders and the whole shared budget.
+  it "excludes an order whose purchases are all checkout-failed, since it can never become partial" do
+    order = create(:order)
+    one = create(:purchase_in_progress, link: product_1, seller: seller_1)
+    two = create(:purchase_in_progress, link: product_2, seller: seller_2)
+    order.purchases << one << two
+    one.update_columns(purchase_state: "failed")
+    two.update_columns(purchase_state: "failed")
+    RecordOrderChargeOutcomeJob.jobs.clear
+    stub_const("#{described_class}::MAX_BACKLOG_SCANNED", 1)
+
+    real = settle_with_lost_enqueue(create(:order))
+
+    described_class.new.perform
+
+    expect(order.reload).not_to be_partially_successful
+    expect(real.reload).to be_partially_successful
+  end
+
   # Greptile (P1): the fresh pass had no cap and reconciled every candidate created in the last
   # three days in one invocation — a burst of failures could make this hourly low-priority job
   # perform an unbounded number of primary reads and writes. Both passes now share one budget.
