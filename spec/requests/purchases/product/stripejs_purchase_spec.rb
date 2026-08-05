@@ -207,7 +207,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(page).to have_selector("iframe[src*='elements-inner-payment']")
   end
 
-  it "allows the buyer to pay for a recurring membership using the Payment Element reusable setup path" do
+  it "allows the buyer to pay for a recurring membership using the restored CardElement lane" do
     seller = create(:user)
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
@@ -231,6 +231,12 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       setup_intent
     end
 
+    payment_intent_params = []
+    allow(Stripe::PaymentIntent).to receive(:create).and_wrap_original do |original, params, *args|
+      payment_intent_params << params
+      original.call(params, *args)
+    end
+
     checkout_payment = checkout_payment_props
     # Recurring memberships confirm via confirmCardPayment on an off-session-reusable
     # PaymentMethod, which mounts the restored CardElement lane (gumroad-private#1853-1856)
@@ -245,8 +251,11 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(purchase.subscription).to be_alive
     expect(purchase.credit_card).to be_present
     expect(purchase.credit_card.stripe_customer_id).to be_present
-    expect(setup_intent_ids).to all(match(/\Aseti_/))
-    expect(setup_intent_ids).not_to be_empty
+    # The CardElement lane registers future usage on the charge's own PaymentIntent
+    # (setup_future_usage: off_session); the standalone SetupIntent was a Payment Element
+    # frontend artifact and must not appear here.
+    expect(setup_intent_ids).to be_empty
+    expect(payment_intent_params.last[:setup_future_usage]).to eq("off_session")
     expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
     expect(payment_element_payment_method_ids).not_to be_empty
   end
