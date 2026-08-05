@@ -445,10 +445,13 @@ class OrdersController < ApplicationController
     end
 
     def all_free_products_without_captcha?
-      # Same default as fetch_affiliates below: an absent :line_items must behave like "no
-      # line items" (Array#all? on []), not the Hash default ActionController::Parameters has
-      # no #all? on (GUMROAD-7B, 500s on /orders(/prepare) requests missing line_items).
+      # An absent/blank :line_items must NOT earn the free-cart exemption — a vacuous
+      # Array#all? would let a cartless request skip reCAPTCHA entirely. It also must not
+      # 500: the old {} default handed #all? a bare ActionController::Parameters
+      # (GUMROAD-7B), and an explicit-but-empty list deep-munges to nil.
       line_items = params.fetch(:line_items, [])
+      return false if line_items.blank?
+
       line_items.all? do |product|
         product_link = Link.find_by(unique_permalink: product["permalink"])
         !product_link.require_captcha? && product["perceived_price_cents"].to_s == "0"

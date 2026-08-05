@@ -1135,17 +1135,18 @@ describe OrdersController, :vcr do
           end.to change(Purchase.successful, :count).by(2)
         end
 
-        it "does not 500 when line_items is entirely absent from the request" do
-          # GUMROAD-7B: a request with no :line_items key (e.g. a legacy single-price form
-          # post, or a bot skipping it) fell through to `params.fetch(:line_items, {})`,
-          # handing `all?` a bare ActionController::Parameters hash instead of an array.
-          # An empty line_items list is vacuously "all free", so recaptcha verification is
-          # skipped entirely here -- the fix is just that #all? no longer raises on the way in.
-          expect_any_instance_of(OrdersController).to_not receive(:valid_recaptcha_response_and_hostname?)
+        it "still requires reCAPTCHA, without 500ing, when line_items is entirely absent from the request" do
+          # GUMROAD-7B: a request with no :line_items key used to crash (#all? on a bare
+          # ActionController::Parameters). A cartless request must not earn the free-cart
+          # exemption either -- vacuous [].all? would skip reCAPTCHA for exactly the
+          # bot/scanner traffic that omits line_items.
+          expect_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
 
           expect do
             post :create, params: { email: "test@test.com", price: "100", product_permalink: product_1.unique_permalink }
           end.not_to raise_error
+
+          expect(response.parsed_body["success"]).to be(false)
         end
 
         it "verifies reCAPTCHA if any of the purchases require it" do
