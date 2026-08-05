@@ -24,14 +24,12 @@ class Ai::StoreAgentService
 
   MODEL = Ai::AnthropicClient::DEFAULT_MODEL
   # Grok is only reachable through OpenRouter, so the cutover keys off routing: a direct-Anthropic
-  # config keeps serving Opus unchanged (gumroad-private#1879).
+  # config keeps serving Opus unchanged.
   OPENROUTER_MODEL = "x-ai/grok-4.5"
-  # When Grok errors (provider down, rate limited), OpenRouter retries the turn on Opus 5 (same
-  # per-token cost as 4.7) rather than the client's default GPT fallback.
+  # When Grok errors (provider down, rate limited), OpenRouter retries the turn on this model
+  # rather than the client's default GPT fallback.
   OPENROUTER_FALLBACK_MODEL = "anthropic/claude-opus-5"
-  # Per-seller ramp (gumroad-private#1879). Below 100% this decides Grok vs Opus per seller in
-  # addition to OPENROUTER_API_KEY being configured; at 100% and once the flag is deleted the
-  # OpenRouter-configured check alone will govern, per the issue's cleanup plan.
+  # Below 100%, gates Grok vs Opus per seller in addition to OPENROUTER_API_KEY being configured.
   GROK_RAMP_FEATURE = :store_agent_grok
   # Passed to Ai::AnthropicClient as its READ timeout. For the streamed reply this bounds silence
   # between chunks (not the total generation time — a long healthy stream is fine); for the buffered
@@ -885,9 +883,8 @@ class Ai::StoreAgentService
       }
     end
 
-    # One structured line per completed turn (gumroad-private#1879's canary needs this to compare
-    # Grok against the Opus baseline: model, tool iterations, stop_reason, contract retries, and
-    # latency are exactly the pass-bar signals the ramp checks each step against).
+    # One structured line per completed turn — model, tool iterations, stop_reason, contract
+    # retries, and latency are the signals the ramp's pass bar checks each step against.
     def log_turn_metrics(outcome:)
       latency_ms = @turn_started_at ? ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - @turn_started_at) * 1000).round : nil
       Rails.logger.info(
