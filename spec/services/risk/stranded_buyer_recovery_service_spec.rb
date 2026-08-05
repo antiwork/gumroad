@@ -239,6 +239,19 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.verdict).to eq(:cleared)
       expect(PlatformBlock.active.count).to eq(0)
     end
+
+    it "never mixes a supplied email into the resolved user's scope, so an unrelated victim's blocks stay untouched" do
+      account_owner = create(:user, email: buyer_email)
+      victim_email = "victim@example.com"
+      victim_guid = "guid-victim"
+      create(:purchase, email: victim_email, browser_guid: victim_guid, purchase_state: "failed", created_at: 1.day.ago)
+      victim_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: victim_guid)
+
+      result = described_class.call(user_external_id: account_owner.external_id, email: victim_email, dry_run: false)
+
+      expect(result.cleared).not_to include(victim_block)
+      expect(victim_block.reload.blocked_at).to be_present
+    end
   end
 
   describe "shared-radius identifiers (email_domain, ip_address)" do

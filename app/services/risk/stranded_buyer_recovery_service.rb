@@ -100,12 +100,13 @@ class Risk::StrandedBuyerRecoveryService
       end
     end
 
-    # The buyer's checkout footprint, bounded the same way unblock_buyer! bounds its widening.
+    # A resolved user is the canonical identity — an email param supplied alongside user_id is
+    # only a lookup hint, never mixed into the scope, or a caller could pair a clean account's
+    # user_id with an unrelated victim's email to clear that victim's blocks (Greptile P1,
+    # security: cross-identity recovery combines unrelated buyers).
     def buyer_purchases
       @_buyer_purchases ||= begin
-        scope = if user.present? && @email.present?
-          Purchase.where("purchaser_id = ? OR email = ?", user.id, @email)
-        elsif user.present?
+        scope = if user.present?
           Purchase.where("purchaser_id = ? OR email = ?", user.id, user.email)
         else
           Purchase.where(email: @email)
