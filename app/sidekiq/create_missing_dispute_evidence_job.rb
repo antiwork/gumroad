@@ -139,9 +139,10 @@ class CreateMissingDisputeEvidenceJob
       # left the window stamped with nobody told about it, and a stamped window no longer matches
       # the sweep that would have retried. Nothing here can raise now.
       #
-      # Ask through hours_left_in_window rather than the record: update_all left this object stale,
-      # so it reports no window at all, and the gate has to be the same arithmetic the notice quotes.
-      unless DisputeEvidence.hours_left_in_window(window_start).positive?
+      # Ask through window_open? rather than the record: update_all left this object stale, so it
+      # reports no window at all, and the gate has to be the same check the notice quotes. Exact
+      # comparison, not the rounded hours, so this cannot close the window up to 29 minutes early.
+      unless DisputeEvidence.window_open?(window_start)
         # The backdated window has already elapsed, so the seller has no time to say anything and
         # there is nothing to notify them about. Submit now rather than wait for FightDisputesJob's
         # next tick, which can cost an hour of a cutoff measured in hours — but the window IS

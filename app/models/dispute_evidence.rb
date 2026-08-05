@@ -108,6 +108,14 @@ class DisputeEvidence < ApplicationRecord
     seller_contacted_at + SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
   end
 
+  # Exact comparison against the deadline, for anything that gates a save or a submission.
+  # hours_left_in_window rounds for display and closes the window up to 29 minutes early —
+  # this is what the permission and submission checks must use instead.
+  def self.window_open?(seller_contacted_at)
+    due_at = seller_response_due_at(seller_contacted_at)
+    due_at.present? && Time.current < due_at
+  end
+
   def self.seller_response_reminder_at(seller_contacted_at)
     seller_response_due_at(seller_contacted_at)&.-(EVIDENCE_REMINDER_LEAD_TIME)
   end
@@ -142,7 +150,7 @@ class DisputeEvidence < ApplicationRecord
   def self.accepting_evidence?(seller_contacted_at:, resolved_at:)
     return false if evidence_submission_closed?(resolved_at:)
 
-    seller_contacted_at.present? && hours_left_in_window(seller_contacted_at).positive?
+    seller_contacted_at.present? && window_open?(seller_contacted_at)
   end
 
   # Is the notice itself still worth sending, whether or not we may ask for evidence? A dispute with
@@ -151,7 +159,7 @@ class DisputeEvidence < ApplicationRecord
   def self.notice_worth_sending?(seller_contacted_at:, resolved_at:)
     return false if evidence_submission_closed?(resolved_at:)
 
-    seller_contacted_at.nil? || hours_left_in_window(seller_contacted_at).positive?
+    seller_contacted_at.nil? || window_open?(seller_contacted_at)
   end
 
   def accepting_evidence?
