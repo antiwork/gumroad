@@ -90,7 +90,7 @@ class MerchantCenterFeedService
         builder.tag!("g:description", feed_description(product))
         builder.tag!("g:link", product.long_url)
         builder.tag!("g:image_link", product.social_share_image)
-        builder.tag!("g:price", formatted_price(product))
+        builder.tag!("g:price", feed_price(product))
         builder.tag!("g:availability", "in stock")
         builder.tag!("g:brand", product.user.name_or_username)
         builder.tag!("g:condition", "new")
@@ -122,12 +122,15 @@ class MerchantCenterFeedService
       product.name.truncate(MAX_TITLE_LENGTH)
     end
 
+    # Named feed_price, not formatted_price: CurrencyHelper#formatted_price(currency, price)
+    # is included here and format_just_price_in_cents calls it with two args.
+    #
     # Merchant Center rejected the original own-currency prices with "Unsupported
     # currency": the account's target countries each accept only their local currency,
     # and US free listings require USD. Feed prices are therefore converted to USD with
     # the same rate source checkout settles non-USD purchases with (get_usd_cents), so
     # the feed amount corresponds to what a buyer is actually charged.
-    def formatted_price(product)
+    def feed_price(product)
       format("%.2f USD", usd_price_cents(product) / 100.0)
     end
 
@@ -140,7 +143,8 @@ class MerchantCenterFeedService
       rate = @usd_rates.fetch(currency) do
         @usd_rates[currency] = begin
           get_rate(currency)
-        rescue StandardError
+        rescue StandardError => e
+          Rails.logger.error("MerchantCenterFeedService: no USD rate for #{currency}, excluding its products (#{e.class}: #{e.message})")
           nil
         end
       end
