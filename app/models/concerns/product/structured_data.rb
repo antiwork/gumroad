@@ -84,7 +84,7 @@ module Product::StructuredData
       return nil if cents.nil?
       return cents if price_currency_type.to_s == "usd"
 
-      rate = get_rate(price_currency_type)
+      rate = cached_rate(price_currency_type)
       return nil if rate.to_f <= 0
 
       get_usd_cents(price_currency_type, cents, rate:)
