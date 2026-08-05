@@ -5,6 +5,8 @@ require "spec_helper"
 # The admin web UI is gone; impersonation is entered via a direct GET (the
 # internal admin API and the profile nav link here) and exited from the nav.
 describe "Impersonate", type: :request do
+  include Devise::Test::IntegrationHelpers
+
   let(:admin) { create(:admin_user, name: "Gumlord") }
   let(:seller) do
     user = create(:named_seller)
@@ -15,7 +17,17 @@ describe "Impersonate", type: :request do
     user
   end
 
+  # `protect_from_forgery` null-sessions unverified non-GET requests, which
+  # would sign the admin out before unimpersonate runs.
+  around do |example|
+    ActionController::Base.allow_forgery_protection = false
+    example.run
+  ensure
+    ActionController::Base.allow_forgery_protection = true
+  end
+
   before do
+    host! DOMAIN
     sign_in admin
   end
 
@@ -26,7 +38,7 @@ describe "Impersonate", type: :request do
       expect(response).to redirect_to(products_path)
       expect($redis.get(RedisKey.impersonated_user(admin.id)).to_i).to eq(seller.id)
 
-      delete admin_unimpersonate_path
+      delete admin_unimpersonate_path, as: :json
 
       expect(response.parsed_body["redirect_to"]).to eq(root_url)
       expect($redis.get(RedisKey.impersonated_user(admin.id))).to be_nil
