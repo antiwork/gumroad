@@ -27,12 +27,17 @@ module Onetime
     end
 
     def process
+      registered_taxonomy_ids = []
+
       Discover::TaxonomyAttributeClassifier::CLASSIFIERS.each_key do |slug_path|
         taxonomy = TaxonomyAttributeDefinitions.taxonomy_for(slug_path)
         next if taxonomy.nil?
 
+        registered_taxonomy_ids << taxonomy.id
         backfill_taxonomy(taxonomy)
       end
+
+      cleanup_orphaned_inferred_values(registered_taxonomy_ids)
 
       @stats[:dry_run] = @dry_run
       Rails.logger.info("[BackfillTaxonomyAttributeClassification] #{@stats.to_h} distribution=#{@value_distribution.transform_values(&:to_h)}")
@@ -44,6 +49,29 @@ module Onetime
         Link.alive.where(taxonomy_id: taxonomy.id).find_each(batch_size: @batch_size) do |link|
           ReplicaLagWatcher.watch
           backfill(link)
+        rescue => e
+          @stats[:errors] += 1
+          Rails.logger.error("[BackfillTaxonomyAttributeClassification] link=#{link.id} error=#{e.class}: #{e.message}")
+        end
+      end
+
+      # A product whose taxonomy was never registered with a classifier (moved off one, or
+      # never had one) is invisible to backfill_taxonomy above, which only ever scopes to
+      # registered taxonomy ids. The json_data LIKE prefilter avoids a full-table scan; it
+      # can't false-negative since every write path serializes the key by this exact name.
+      def cleanup_orphaned_inferred_values(registered_taxonomy_ids)
+        scope = Link.alive.where("json_data LIKE ?", "%inferred_taxonomy_attribute_values%")
+        scope = scope.where("taxonomy_id NOT IN (?) OR taxonomy_id IS NULL", registered_taxonomy_ids) if registered_taxonomy_ids.present?
+
+        scope.find_each(batch_size: @batch_size) do |link|
+          ReplicaLagWatcher.watch
+          next if link.inferred_taxonomy_attribute_values.blank?
+
+          if @dry_run
+            tick(:would_clear_orphaned)
+          else
+            link.save_inferred_taxonomy_attribute_values({}) ? tick(:cleared_orphaned) : tick(:save_failed)
+          end
         rescue => e
           @stats[:errors] += 1
           Rails.logger.error("[BackfillTaxonomyAttributeClassification] link=#{link.id} error=#{e.class}: #{e.message}")

@@ -76,4 +76,42 @@ describe Onetime::BackfillTaxonomyAttributeClassification do
 
     expect(product.reload.inferred_taxonomy_attribute_values).to eq("format" => "OTF")
   end
+
+  it "clears a stale inferred value on a product in an unregistered taxonomy" do
+    product = create(:product, taxonomy: other_taxonomy)
+    product.update_column(:json_data, { "inferred_taxonomy_attribute_values" => { "format" => "OTF" } })
+
+    result = described_class.process(dry_run: false)
+
+    expect(product.reload.inferred_taxonomy_attribute_values).to eq({})
+    expect(result[:stats][:cleared_orphaned]).to eq(1)
+  end
+
+  it "clears a stale inferred value on a product with no taxonomy at all" do
+    product = create(:product, taxonomy: nil)
+    product.update_column(:json_data, { "inferred_taxonomy_attribute_values" => { "format" => "OTF" } })
+
+    result = described_class.process(dry_run: false)
+
+    expect(product.reload.inferred_taxonomy_attribute_values).to eq({})
+    expect(result[:stats][:cleared_orphaned]).to eq(1)
+  end
+
+  it "does not clear an orphaned stale value on a dry run, but reports it" do
+    product = create(:product, taxonomy: other_taxonomy)
+    product.update_column(:json_data, { "inferred_taxonomy_attribute_values" => { "format" => "OTF" } })
+
+    result = described_class.process(dry_run: true)
+
+    expect(product.reload.inferred_taxonomy_attribute_values).to eq("format" => "OTF")
+    expect(result[:stats][:would_clear_orphaned]).to eq(1)
+  end
+
+  it "does not touch a product in a registered taxonomy that still has no stale value" do
+    create(:product, taxonomy: fonts_taxonomy)
+
+    result = described_class.process(dry_run: false)
+
+    expect(result[:stats][:cleared_orphaned]).to eq(0)
+  end
 end
