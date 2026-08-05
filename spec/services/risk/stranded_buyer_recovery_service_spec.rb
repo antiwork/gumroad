@@ -77,7 +77,8 @@ describe Risk::StrandedBuyerRecoveryService do
     # PayPal and gifter addresses are typed-in third-party strings on a row, not the buyer's
     # identity — clearing this buyer must not deactivate a block somebody else earned.
     it "does not harvest paypal or gifter emails from the buyer's own rows" do
-      failed_purchase.update!(gifter_email: "someone-else@example.net")
+      failed_purchase.update!(is_gift_sender_purchase: true)
+      create(:gift, gifter_purchase: failed_purchase, gifter_email: "someone-else@example.net")
       third_party_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "someone-else@example.net")
 
       result = call
@@ -317,7 +318,8 @@ describe Risk::StrandedBuyerRecoveryService do
     # An ordinary decline is not something this run resolved — only a failure carrying one of our
     # block error codes proves the buyer actually hit the block being cleared.
     it "sends nothing when the newest recent failure was not declined by our block" do
-      create(:purchase, email: buyer_email, browser_guid:, purchase_state: "failed",
+      # A fresh guid, or check_for_fraud stamps the row with the block code at creation.
+      create(:purchase, email: buyer_email, purchase_state: "failed",
                         stripe_error_code: "card_declined_generic_decline", created_at: 12.hours.ago)
 
       expect do
@@ -422,6 +424,25 @@ describe Risk::StrandedBuyerRecoveryService do
       create(:purchase, email: buyer_email, purchaser: buyer_account, purchase_state: "failed",
                         stripe_fingerprint: declining_fingerprint,
                         stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD, created_at: 2.days.ago)
+
+      expect do
+        call
+      end.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+    end
+  end
+
+  describe "notification withheld alongside a withheld shared-radius block (Greptile P1)" do
+    it "does not email the buyer when an active IP block on their own checkout path is withheld for human review" do
+      create(:purchase, email: buyer_email, purchase_state: "successful", ip_address: "203.0.113.5", created_at: 6.months.ago)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "203.0.113.5", expires_in: 30.days)
+
+      expect do
+        call
+      end.to not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+    end
+
+    it "does not email the buyer when an active email_domain block is withheld for human review" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
 
       expect do
         call

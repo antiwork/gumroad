@@ -369,10 +369,12 @@ class Risk::StrandedBuyerRecoveryService
     RECENT_FAILURE_WINDOW = 60.days
 
     def notify_buyer(withheld)
-      # A retained card-fingerprint block means THIS card is still guaranteed to fail — telling the
-      # buyer to retry sends them straight into another decline. Domain/IP holds are informational
-      # (they gate other people's blocks, not this buyer's own retry), so they don't suppress the email.
-      return if withheld.any? { |block, reason| reason == :card_still_declining_at_issuer }
+      # A retained card-fingerprint block means THIS card is still guaranteed to fail. A withheld
+      # domain/IP block sits on the buyer's own checkout path too (Purchase::Blockable#buyer_blocked?
+      # includes blocked_by_ip_address?) — it is only "someone else's problem" in the sense that a
+      # human has to decide whether to lift it, not in whether it still rejects THIS buyer's retry.
+      # Either kind means telling them to retry is wrong until a human clears it.
+      return if withheld.any? { |_block, reason| [:card_still_declining_at_issuer, :shared_identifier_needs_human_review].include?(reason) }
 
       failed = buyer_purchases.select { _1.failed? && _1.created_at >= RECENT_FAILURE_WINDOW.ago && _1.email.present? }.max_by(&:created_at)
       return if failed.nil? || BLOCK_ERROR_CODES.exclude?(failed.error_code)

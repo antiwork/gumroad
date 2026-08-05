@@ -154,6 +154,20 @@ describe PlatformBlock do
           record.unblock!
         end.to change { Radar::RemoveValueListItemJob.jobs.size }.by(1)
       end
+
+      # Greptile P1: a worker picking this job up before a wrapping transaction commits reloads
+      # the still-active pre-commit row and no-ops, stranding the Radar entry.
+      it "does not enqueue until a wrapping transaction commits" do
+        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "wrapped@example.com")
+
+        ApplicationRecord.transaction do
+          record.unblock!
+          expect(Radar::RemoveValueListItemJob.jobs).to be_empty
+        end
+
+        expect(Radar::RemoveValueListItemJob.jobs.size).to eq(1)
+        expect(Radar::RemoveValueListItemJob.jobs.last["args"]).to eq([record.id])
+      end
     end
   end
 
