@@ -5,6 +5,9 @@
 class Api::Internal::Admin::StrandedBuyersController < Api::Internal::Admin::BaseController
   MAX_SCAN_RESULTS = 100
 
+  # Clearing fraud enforcement needs an attributable actor, not the shared legacy token.
+  before_action :require_per_actor_token!, only: :recover
+
   def scan
     result = Risk::StrandedBuyerScanService.call
 

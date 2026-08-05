@@ -76,6 +76,25 @@ describe Api::Internal::Admin::StrandedBuyersController do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
     end
 
+    # Recovery clears fraud enforcement; the shared example's before block authenticates
+    # with the legacy shared token, which this action must reject.
+    before do
+      per_actor_token = AdminApiToken.mint!(actor_user_id: admin_user.id)
+      request.headers["Authorization"] = "Bearer #{per_actor_token}"
+    end
+
+    it "rejects the legacy shared admin token" do
+      request.headers["Authorization"] = "Bearer test-admin-token"
+      strand_buyer!
+
+      expect do
+        post :recover, params: { email: buyer_email, dry_run: false }
+      end.not_to change { PlatformBlock.active.count }
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body["message"]).to eq("per-actor admin token is required")
+    end
+
     it "requires an identifier" do
       post :recover
       expect(response).to have_http_status(:bad_request)
