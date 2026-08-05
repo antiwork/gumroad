@@ -216,15 +216,6 @@ class User < ApplicationRecord
   scope :holding_non_zero_balance, lambda {
     joins(:balances).merge(Balance.unpaid).group("balances.user_id").having("SUM(balances.amount_cents) != 0")
   }
-  scope :admin_search, ->(query) {
-    query = query.to_s.strip
-    if EmailFormatValidator.valid?(query)
-      where(email: query)
-    else
-      where(external_id: query).or(where("email LIKE ?", "%#{query}%")).or(where("name LIKE ?", "%#{query}%"))
-    end
-  }
-
   attribute :recommendation_type, default: User::RecommendationType::OWN_PRODUCTS
 
   attr_accessor :login, :skip_enabling_two_factor_authentication
@@ -687,10 +678,6 @@ class User < ApplicationRecord
     # so as to use the cache
     single_key = key.is_a?(Array) ? key.first : key
     find_by(id: single_key)
-  end
-
-  def admin_page_url
-    Rails.application.routes.url_helpers.admin_user_url(self, protocol: PROTOCOL, host: DOMAIN)
   end
 
   def profile_url(custom_domain_url: nil, recommended_by: nil)

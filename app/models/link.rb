@@ -1247,10 +1247,6 @@ class Link < ApplicationRecord
     end
   end
 
-  def admin_url
-    "#{PROTOCOL}://#{DOMAIN}/admin/links/#{unique_permalink}"
-  end
-
   def has_third_party_analytics?(location)
     alive_third_party_analytics.where(location: [location, "all"]).present? || user.third_party_analytics.universal.alive.where(location: [location, "all"]).present?
   end
