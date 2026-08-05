@@ -870,14 +870,27 @@ jobs:
         id: specs
         run: |
           git fetch --no-tags --quiet origin main
+          set +e
           SPECS=$(ruby bin/branch-specs)
-          COUNT=$(echo "$SPECS" | grep -c . || true)
-          # An empty list would make Knapsack fall back to its full-suite
-          # pattern; fail loudly instead. The smoke set makes this
-          # unreachable unless those specs are deleted.
-          if [ "$COUNT" -eq 0 ]; then
-            echo "bin/branch-specs returned no specs — refusing to run"
+          STATUS=$?
+          set -e
+          # Exit 3 = the selector refused to certify a trimmed run (dependency/
+          # config/migration/factory change, mapping gap, or oversized
+          # selection). The full suite is required: add the run-all-specs label.
+          if [ "$STATUS" -eq 3 ]; then
+            echo "::error::bin/branch-specs escalated — this diff needs the full suite. Add the run-all-specs label to this PR and re-run."
             exit 1
+          elif [ "$STATUS" -ne 0 ]; then
+            echo "bin/branch-specs failed with status $STATUS"
+            exit "$STATUS"
+          fi
+          COUNT=$(echo "$SPECS" | grep -c . || true)
+          # An empty list here means the diff touched nothing rspec-affecting
+          # (selector escalates on app-code diffs that map to nothing).
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No rspec-affecting changes; running the schema smoke spec as a floor."
+            SPECS="spec/models/user_spec.rb"
+            COUNT=1
           fi
           echo "Running $COUNT spec file(s):"
           echo "$SPECS" | sed 's/^/  /'
