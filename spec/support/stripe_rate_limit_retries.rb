@@ -64,8 +64,9 @@ module StripeTestRateLimitRetries
   # Test Slow out to 50 shards and Test Fast to 18, all against the same
   # Stripe test account, and several PRs build concurrently — so contention
   # scales with how busy the queue is, not with anything a spec does. A build
-  # that goes red from budget exhaustion alone always goes green on a re-run
-  # with no code change, which is the tell that the budget was too small.
+  # that goes red from budget exhaustion alone usually goes green on a re-run
+  # with no code change — that's the tell — though it can redden again if the
+  # same contention is still there.
   #
   # It is kept OFF Stripe's global configuration on purpose. Raising
   # Stripe.max_network_retries would also widen the gem's own retries for
