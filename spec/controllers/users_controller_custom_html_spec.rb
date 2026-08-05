@@ -67,6 +67,15 @@ describe UsersController, :vcr, type: :controller do
         expect(response.body).to include(%(src="/landing/embed"))
         expect(response.body).not_to include(%(name="facebook-domain-verification"))
       end
+
+      it "renders the tag when the saved tag uses single quotes" do
+        seller.update!(facebook_meta_tag: "<meta name='facebook-domain-verification' content='abc123verifycode' />")
+
+        get :show
+
+        expect(response.body).to include(%(src="/landing/embed"))
+        expect(response.body).to include(%(<meta name="facebook-domain-verification" content="abc123verifycode">))
+      end
     end
 
     it "embeds the trusted products-wrapper listener with the landing products endpoint" do

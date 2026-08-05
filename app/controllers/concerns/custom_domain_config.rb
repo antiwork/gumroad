@@ -28,7 +28,8 @@ module CustomDomainConfig
   # set_meta_tag — both render sites read this to stay in sync.
   def facebook_domain_verification_content(user)
     return unless user&.enable_verify_domain_third_party_services? && user.facebook_meta_tag.present?
-    user.facebook_meta_tag[/content="([^"]+)"/, 1]
+    # facebook_meta_tag_is_valid (app/modules/user/validations.rb) accepts either quote style, so both must be extracted here.
+    user.facebook_meta_tag[/content=(["'])([^"']+)\1/, 2]
   end
 
   private
