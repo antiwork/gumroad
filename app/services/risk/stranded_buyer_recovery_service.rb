@@ -234,14 +234,18 @@ class Risk::StrandedBuyerRecoveryService
 
     # The exact complement of the not_chargedback_or_chargedback_reversed scope clean history
     # counts, mirroring Risk::StrandedBuyerScanService#reject_disputed.
+    #
+    # Once a user resolves, THEIR email is the canonical identity — a caller-supplied @email is a
+    # lookup hint only. Mixing an unrelated request @email in here let a dispute on a different
+    # person veto (or fail to veto) recovery for the resolved buyer (same identity-isolation class
+    # as candidate_purchases/identifier_emails above).
     def unreversed_chargeback?
       scope = Purchase.where.not(chargeback_date: nil)
                       .where("purchases.flags & :bit = 0", bit: Purchase.flag_mapping["flags"][:chargeback_reversed])
-      emails = [@email, user&.email].compact_blank
       scope = if user.present?
-        scope.where("purchaser_id = ? OR email IN (?)", user.id, emails)
+        scope.where("purchaser_id = ? OR email = ?", user.id, user.email)
       else
-        scope.where(email: emails)
+        scope.where(email: @email)
       end
       scope.exists?
     end
@@ -328,6 +332,11 @@ class Risk::StrandedBuyerRecoveryService
     # AlertOnStaleBlocksHoldingEstablishedBuyersJob and Onetime::ClearMistakenBuyerBlocks).
     def clear!(blocks)
       raise UnsafeClearError, "buyer no longer has clean payment history" unless clean_history_anchor.buyer_has_clean_payment_history?
+      # Re-checked here, not only in #call: a chargeback recorded between the initial veto and this
+      # write is a live dispute the batch decision never saw, and #call's result is a snapshot the
+      # transaction's own guards (this one included) must re-assert against, same as the clean-history
+      # recheck above.
+      raise UnsafeClearError, "buyer now carries an unreversed chargeback" if unreversed_chargeback?
 
       expected = blocks.to_h { [_1.id, [_1.object_type, _1.object_value, _1.blocked_at]] }
       blocks.each do |block|

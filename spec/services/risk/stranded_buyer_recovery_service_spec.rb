@@ -185,6 +185,42 @@ describe Risk::StrandedBuyerRecoveryService do
 
       expect(call.verdict).to eq(:cleared)
     end
+
+    # A dispute on an unrelated request email must not veto (or fail to veto) the resolved buyer's
+    # OWN recovery — once user_external_id resolves an identity, only that identity's chargeback
+    # history counts, mirroring the identifier_emails/candidate_purchases isolation above.
+    # Mutation-verified: fails against the pre-fix scope that ORs in the raw request @email.
+    it "does not veto on an unrelated request email's chargeback once user resolves" do
+      user = create(:user, email: buyer_email)
+      history.each { |purchase| purchase.update!(purchaser_id: user.id) }
+      failed_purchase.update!(purchaser_id: user.id)
+
+      create(:purchase, email: "unrelated-victim@example.com", purchase_state: "successful",
+                        stripe_fingerprint: "victim-card", chargeback_date: 1.month.ago,
+                        created_at: 7.months.ago)
+
+      result = Risk::StrandedBuyerRecoveryService.call(
+        user_external_id: user.external_id, email: "unrelated-victim@example.com", dry_run: false
+      )
+
+      expect(result.verdict).to eq(:cleared)
+    end
+
+    it "still vetoes on the resolved user's OWN chargeback even when a different request email is supplied" do
+      user = create(:user, email: buyer_email)
+      history.each { |purchase| purchase.update!(purchaser_id: user.id) }
+      failed_purchase.update!(purchaser_id: user.id)
+      create(:purchase, purchaser_id: user.id, purchase_state: "successful",
+                        stripe_fingerprint: "disputed-other-card", chargeback_date: 1.month.ago,
+                        created_at: 7.months.ago)
+
+      result = Risk::StrandedBuyerRecoveryService.call(
+        user_external_id: user.external_id, email: "unrelated-victim@example.com", dry_run: false
+      )
+
+      expect(result.verdict).to eq(:skip)
+      expect(result.reason).to eq(:unreversed_chargeback)
+    end
   end
 
   describe "velocity attribution" do
