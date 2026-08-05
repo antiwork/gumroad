@@ -55,7 +55,7 @@ class Risk::StrandedBuyerRecoveryService
     human_rows = active_blocks.select { |block| foreign_authored?(block) }
     return result(:escalate, :human_authored_block, skipped: human_rows.map { [_1, :human_authored] }) if human_rows.any?
 
-    return result(:skip, :no_clean_payment_history) if anchor_purchase.nil? || !anchor_purchase.buyer_has_clean_payment_history?
+    return result(:skip, :no_clean_payment_history) if clean_history_anchor.nil?
 
     attribution = attribute_rule
     # The collapsed 7-day count is what the live velocity rules read; over threshold means a rule
@@ -147,10 +147,19 @@ class Risk::StrandedBuyerRecoveryService
       block.blocked_by.present? && block.blocked_by != GUMROAD_ADMIN_ID
     end
 
-    # The newest purchase carrying a card fingerprint anchors the innocence check: history is
-    # card-proven or it is nothing (see Purchase::Blockable#buyer_has_clean_payment_history?).
-    def anchor_purchase
-      @_anchor_purchase ||= buyer_purchases.select { _1.stripe_fingerprint.present? }.max_by(&:id)
+    # Innocence is card-proven or it is nothing (see Purchase::Blockable#buyer_has_clean_payment_history?).
+    # Tried per distinct fingerprint, newest first, because the stranded buyer's newest card is often
+    # the reissued one with no history yet — the OLD card is what proves them.
+    ANCHOR_FINGERPRINT_LIMIT = 10
+
+    def clean_history_anchor
+      return @_clean_history_anchor if defined?(@_clean_history_anchor)
+
+      candidates = buyer_purchases.select { _1.stripe_fingerprint.present? }
+                                  .sort_by { -_1.id }
+                                  .uniq(&:stripe_fingerprint)
+                                  .first(ANCHOR_FINGERPRINT_LIMIT)
+      @_clean_history_anchor = candidates.find(&:buyer_has_clean_payment_history?)
     end
 
     # Which rule wrote the block, read from the same counts the live rules read. The raw-vs-collapsed
@@ -228,7 +237,7 @@ class Risk::StrandedBuyerRecoveryService
     # snapshot a concurrent admin block or re-block can invalidate (same pattern as
     # AlertOnStaleBlocksHoldingEstablishedBuyersJob and Onetime::ClearMistakenBuyerBlocks).
     def clear!(blocks)
-      raise UnsafeClearError, "buyer no longer has clean payment history" unless anchor_purchase.buyer_has_clean_payment_history?
+      raise UnsafeClearError, "buyer no longer has clean payment history" unless clean_history_anchor.buyer_has_clean_payment_history?
 
       expected = blocks.to_h { [_1.id, [_1.object_type, _1.object_value]] }
       blocks.each do |block|
@@ -262,7 +271,7 @@ class Risk::StrandedBuyerRecoveryService
           idempotency_key: "stranded_buyer_recovery:#{Time.current.to_date}:#{cleared.map(&:id).sort.join(",")}"
         ).perform
       else
-        anchor_purchase.comments.create!(content:, comment_type: Comment::COMMENT_TYPE_NOTE, author_id: GUMROAD_ADMIN_ID)
+        clean_history_anchor.comments.create!(content:, comment_type: Comment::COMMENT_TYPE_NOTE, author_id: GUMROAD_ADMIN_ID)
       end
     end
 
