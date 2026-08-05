@@ -137,17 +137,22 @@ class Rack::Attack
     # Each hit that matches purchases sends a grouped receipt email to the given address,
     # unauthenticated. Throttle by IP and, separately, by target email — the harm is to the
     # RECIPIENT, so an abuser rotating IPs must not be able to mailbomb one buyer
-    # (gumroad-private#1869). The frontend calls the .json forms; both variants get entries
-    # because matches_path? is an exact match (same reason /login and /login.json both appear).
-    %w[/charge_data /charge_data.json /license_key_lookup_data /license_key_lookup_data.json /paypal_charge_data /paypal_charge_data.json].each do |path|
-      throttle_by_ip path:, requests: 3, period: 20.seconds # Initial: 9rpm, Max: 45 requests/9 hours
+    # (gumroad-private#1869). These routes are Rails resources, so they accept any format
+    # suffix (`.json`, `.xml`, ...) — match by regex like the OAuth device-flow throttles
+    # below and key on the bare path alone, so every suffix shares one counter instead of
+    # each format getting its own separate budget.
+    %w[/charge_data /license_key_lookup_data /paypal_charge_data].each do |path|
+      throttle_with_exponential_backoff(name: "/ip:#{path}", requests: 3, period: 20.seconds) do |req|
+        req.remote_ip if req.path.match?(/\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/)
+      end
     end
-    %w[/charge_data /charge_data.json /license_key_lookup_data /license_key_lookup_data.json].each do |path|
+    %w[/charge_data /license_key_lookup_data].each do |path|
       # Initial: 3rpm, Max: 18 requests/3 days (per recipient email)
-      throttle_by_params path:,
-                         requests: 3,
-                         period: 60.seconds,
-                         throttle_params: Proc.new { |req| req.params["email"].to_s.downcase.presence }
+      throttle_with_exponential_backoff(name: "/params:#{path}:email", requests: 3, period: 60.seconds, max_level: 6) do |req|
+        if req.path.match?(/\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/)
+          req.params["email"].to_s.downcase.presence
+        end
+      end
     end
 
     # Creating a brand account sends a Devise confirmation email to whatever
