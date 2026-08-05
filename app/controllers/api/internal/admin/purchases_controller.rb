@@ -85,11 +85,17 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
 
     record_admin_write(action: "purchases.resend_all_receipts") do
       CustomerMailer.grouped_receipt(purchases.ids).deliver_later(queue: "critical")
-      render json: {
-        success: true,
-        message: "Successfully resent all receipts to #{email}",
-        count: purchases.count
-      }
+      count = purchases.count
+      # Truncation is decided on CHARGEABLES (a charge renders all its purchases), so
+      # resolve the same way the mailer does before comparing to the cap — a purchase
+      # count alone can overstate truncation when several purchases share one charge.
+      chargeable_count = purchases.map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }.uniq.size
+      message = if chargeable_count > CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES
+        "Queued a grouped receipt covering the #{CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES} most recent charges (of #{chargeable_count}) to #{email}"
+      else
+        "Successfully resent all receipts to #{email}"
+      end
+      render json: { success: true, message:, count: }
     end
   end
 

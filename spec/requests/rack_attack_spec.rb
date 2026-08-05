@@ -540,4 +540,53 @@ describe "Rack::Attack throttle", type: :request do
       end
     end
   end
+
+  describe "grouped receipt lookup throttles (gumroad-private#1869)" do
+    def lookup_request(path, ip:)
+      Rack::Attack::Request.new(
+        Rack::MockRequest.env_for(path, method: "GET", input: "", "HTTP_CF_CONNECTING_IP" => ip)
+      )
+    end
+
+    it "throttles the 4th request from one IP across format suffixes of the same endpoint" do
+      reset_rack_attack!
+
+      travel_to(Time.current) do
+        ["/charge_data?email=a@example.com", "/charge_data.json?email=a@example.com", "/charge_data.xml?email=a@example.com"].each_with_index do |path, i|
+          expect(Rack::Attack.configuration.throttled?(lookup_request(path, ip: "203.0.113.70"))).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(Rack::Attack.configuration.throttled?(lookup_request("/charge_data?email=a@example.com", ip: "203.0.113.70"))).to be(true)
+      end
+    ensure
+      reset_rack_attack!
+    end
+
+    it "throttles by recipient email across rotating IPs, both endpoints, and whitespace/case variants" do
+      reset_rack_attack!
+
+      travel_to(Time.current) do
+        6.times do |i|
+          path = i.even? ? "/charge_data?email=victim@example.com" : "/license_key_lookup_data.json?email=%20VICTIM@example.com"
+          expect(Rack::Attack.configuration.throttled?(lookup_request(path, ip: "203.0.113.#{71 + i}"))).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(Rack::Attack.configuration.throttled?(lookup_request("/license_key_lookup_data?email=victim@example.com", ip: "203.0.113.80"))).to be(true)
+      end
+    ensure
+      reset_rack_attack!
+    end
+
+    it "does not throttle near-miss paths" do
+      reset_rack_attack!
+
+      travel_to(Time.current) do
+        10.times do
+          expect(Rack::Attack.configuration.throttled?(lookup_request("/charge_data/extra?email=a@example.com", ip: "203.0.113.85"))).to be(false)
+        end
+      end
+    ensure
+      reset_rack_attack!
+    end
+  end
 end

@@ -211,6 +211,33 @@ class Rack::Attack
     req.remote_ip if req.path.match?(%r{\A/help/contact(?:\.[^/]+)?\z}) && req.post?
   end
 
+  # Each hit that matches purchases sends a grouped receipt email to the given address,
+  # unauthenticated. Throttle by IP and, separately, by target email — the harm is to the
+  # RECIPIENT, so an abuser rotating IPs must not be able to mailbomb one buyer
+  # (gumroad-private#1869). Every route accepts a format suffix (`.json`, `.xml`, ...) —
+  # match by regex like the throttles around this one so every suffix shares one counter
+  # instead of each format getting its own budget. Lives outside the production-only block
+  # above deliberately: like the help-center rule, an email-abuse limit belongs in staging too.
+  GROUPED_RECEIPT_LOOKUP_PATHS = %w[/charge_data /license_key_lookup_data /paypal_charge_data].index_with do |path|
+    /\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/
+  end.freeze
+  GROUPED_RECEIPT_LOOKUP_PATHS.each do |path, path_regexp|
+    throttle_with_exponential_backoff(name: "/ip:#{path}", requests: 3, period: 20.seconds) do |req|
+      req.remote_ip if req.path.match?(path_regexp)
+    end
+  end
+  # One shared per-recipient budget across both grouped-receipt endpoints — they send the
+  # same email, so separate budgets would double the ceiling. Initial: 6rpm, Max: 36
+  # requests/3 days — roomy enough for a buyer retrying a lookup, still a hard ceiling on
+  # emails one address can be sent (the mailer's 24h send-once claim bounds duplicates).
+  # Strip before keying: purchases.email compares under a PAD SPACE collation, so
+  # "a@b.com " matches the victim's rows while landing in a fresh throttle bucket.
+  throttle_with_exponential_backoff(name: "/params:grouped_receipt:email", requests: 6, period: 60.seconds, max_level: 6) do |req|
+    if req.path.match?(GROUPED_RECEIPT_LOOKUP_PATHS["/charge_data"]) || req.path.match?(GROUPED_RECEIPT_LOOKUP_PATHS["/license_key_lookup_data"])
+      req.params["email"].to_s.strip.downcase.presence
+    end
+  end
+
   throttle_with_exponential_backoff(name: "oauth_device_code/ip", requests: 20, period: 60.seconds) do |req|
     req.remote_ip if req.path.match?(%r{\A/oauth/device/code(?:\.[^/]+)?\z}) && req.post?
   end
