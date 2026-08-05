@@ -66,30 +66,14 @@ class User < ApplicationRecord
 
   MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT = 10_000
 
-  # How long a resolved avatar variant URL stays cached. Avatar URLs are stable
-  # for as long as the seller keeps the same picture, so this is only about
-  # bounding how long a cached URL can keep being served after the file behind
-  # it goes away. A day is short enough that a seller whose variant disappears
-  # right after a cache write is not left without a picture for a week, and long
-  # enough that virtually every read still hits the cache.
+  # Ceiling on how long a cached avatar URL can keep being served after the file
+  # behind it goes away (avatar URLs are otherwise stable for the seller's picture).
   AVATAR_VARIANT_URL_CACHE_TTL = 1.day
 
-  # How long we remember that an avatar variant's file was confirmed present in
-  # storage, so a normal page view does not pay for a storage lookup. Only
-  # confirmations are remembered, never absences, so a seller whose avatar is
-  # repaired sees it immediately.
-  #
-  # This is the ceiling on how long a broken avatar can keep being served. A
-  # page that lists many sellers (a profile, a review list, a community thread)
-  # asks for one avatar URL per person, so checking storage on every read is not
-  # affordable and this entry is what makes the check cheap. But while the entry
-  # says "present", a variant that has since disappeared keeps being handed out
-  # and every request for it fails with a 403.
-  #
-  # Minutes rather than an hour is the balance we want: a seller whose variant
-  # vanishes is missing their picture for a few minutes rather than most of an
-  # afternoon, and the cost is at most one storage lookup per variant per window
-  # across the whole fleet, since the entry is shared through memcached.
+  # Only "file exists in storage" is cached (never absence), so a repaired avatar
+  # shows up immediately, but a variant that disappears keeps 403ing until this
+  # expires. Shared via memcached across the fleet, so it also bounds the storage
+  # lookups per variant to about one per window.
   AVATAR_VARIANT_PRESENCE_CACHE_TTL = 5.minutes
 
   has_many :affiliate_credits, foreign_key: "affiliate_user_id"
@@ -403,22 +387,13 @@ class User < ApplicationRecord
     before_transition any => %i[flagged_for_fraud flagged_for_tos_violation suspended_for_fraud suspended_for_tos_violation],
                       :do => :not_verified?
 
-    # Clearing a suspension is a much bigger deal than clearing a flag: it puts the
-    # seller's products back on sale. Callers have to say they mean it by passing
-    # `clear_suspension: true`, so a routine "this account looks fine" review can't
-    # undo a suspension it never looked at. Registered on every transition into
-    # compliant (not just the ones out of a suspended state) because the object in
-    # memory can be older than the row — see User::Risk#refuse_unauthorized_suspension_clear.
-    #
-    # `on_probation` and `not_reviewed` need the same guard, because compliant is not
-    # the only way out of a suspension. Probation re-enables the seller's links exactly
-    # like compliant does (see the enable_links_and_tell_chat transition below), and
-    # not_reviewed drops the account back to its initial state, so either one silently
-    # undoes a suspension the caller never looked at. The realistic path is not a human
-    # in the admin UI: LowBalanceFraudCheck#disable_refunds_and_put_on_probation! decides
-    # whether to act by reading `suspended?` off an in-memory copy, which is precisely
-    # the stale read this guard exists to defeat — by the time it writes, the row may
-    # have been suspended by someone else.
+    # Clearing a suspension re-enables the seller's products, so callers must pass
+    # `clear_suspension: true` to prove a routine review isn't undoing a suspension
+    # it never looked at. Applies to all three exits from a suspended state
+    # (compliant, on_probation, not_reviewed), not just compliant — see
+    # User::Risk#refuse_unauthorized_suspension_clear. The real caller to worry about
+    # is LowBalanceFraudCheck#disable_refunds_and_put_on_probation!, which decides off
+    # a stale in-memory `suspended?`; this guard re-checks the row at write time.
     before_transition any => %i[compliant on_probation not_reviewed],
                       :do => :refuse_unauthorized_suspension_clear
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :invalidate_active_sessions!
@@ -786,14 +761,9 @@ class User < ApplicationRecord
       installments.alive.each(&:mark_deleted!)
       user_compliance_infos.alive.each(&:mark_deleted!)
       bank_accounts.alive.each(&:mark_deleted!)
-      # Files in the account's public media library are hosted on Gumroad's public CDN (see
-      # Api::V2::MediaController). A closed account must not keep hosting files there, so mark
-      # them deleted and purge the underlying blobs from public storage too — soft-deleting the
-      # records alone would leave the URLs serving. Scoped to account-level media
-      # (resource = the user); per-product public files are handled by the product deletions above.
-      # Rescue per file rather than letting one failure bubble up: an uncaught error here would
-      # stop the loop at the first bad file (leaving the rest publicly accessible) and roll back
-      # the whole account closure via the surrounding transaction.
+      # Account-level public media (see Api::V2::MediaController) is purged from storage, not
+      # just soft-deleted, so the CDN stops serving it. Rescue per file so one bad blob doesn't
+      # roll back the whole account closure.
       PublicFile.alive.where(seller: self, resource: self).find_each do |file|
         file.mark_deleted_and_purge_file!
       rescue => e
@@ -1018,11 +988,8 @@ class User < ApplicationRecord
     ActiveSupport::TimeZone::MAPPING.fetch(timezone)
   end
 
-  # Returns the user's UTC offset, formatted (e.g. "-08:00")
-  # Useful to resolve inconsistencies between Rails, Elasticsearch and MySQL which may all have
-  # different TZ databases: https://github.com/gumroad/web/pull/25208
-  # Note that it doesn't acknowledge DST by nature: it is just the difference between the timezone's
-  # Standard time and UTC, so the returned value does not change depending on when the method is called.
+  # Reconciles TZ database differences across Rails, Elasticsearch and MySQL: https://github.com/gumroad/web/pull/25208
+  # Ignores DST (it's the timezone's Standard offset from UTC, independent of current date).
   def timezone_formatted_offset
     ActiveSupport::TimeZone.new(timezone_id).formatted_offset
   end
@@ -1058,22 +1025,15 @@ class User < ApplicationRecord
     "#{PROTOCOL}://#{subdomain_url}"
   end
 
-  # The hostnames this seller controls: their Gumroad subdomain and their live
-  # custom domain. Custom-HTML pages run inside a sandboxed iframe that cannot
-  # navigate the top-level window on its own; it asks the trusted page around it
-  # to do so, and that page only agrees when the destination is one of these
-  # hosts. Shared Gumroad hosts (gumroad.com and friends) are deliberately
-  # absent, so seller-authored HTML can never walk a visitor around arbitrary
-  # gumroad.com paths. Living on the model means the public product wrapper and
-  # the editor's landing-page preview decide from the same list instead of each
-  # rebuilding it and drifting apart.
+  # Hostnames this seller controls: their Gumroad subdomain and live custom domain.
+  # A sandboxed seller-authored-HTML iframe can only navigate the top-level window to
+  # one of these — shared Gumroad hosts are deliberately excluded so seller HTML can't
+  # walk a visitor around arbitrary gumroad.com paths. Lives on the model so the public
+  # product wrapper and the editor's landing-page preview share one source of truth.
   #
-  # A custom domain only counts once it is active — DNS verified and holding a
-  # current SSL certificate, the same bar UrlService uses before it will build
-  # any custom-domain URL. Anyone can type a domain they don't own into the
-  # custom-domain field and the record sticks around whether verification
-  # succeeded or not, so trusting mere presence would let a seller's HTML send
-  # a visitor's tab to a host they never proved they control.
+  # Custom domain only counts once #active? (DNS verified + valid SSL, same bar
+  # UrlService uses) — an unverified domain typed into the field still persists on the
+  # record, and trusting mere presence would let seller HTML redirect to an unproven host.
   def custom_html_store_hostnames
     hostnames = []
     hostnames << URI("#{PROTOCOL}://#{subdomain}").host if subdomain.present?
@@ -1158,17 +1118,13 @@ class User < ApplicationRecord
       alive_user_compliance_info&.legal_entity_country_code == "US"
   end
 
-  # Anchored on the payout account, not the Gumroad signup date: a seller can hold an
-  # account for years before connecting one.
-  #
-  # Every account a payout could land on has to season: the destination is picked at payout time,
-  # so seasoning only the managed account leaves a fresh connected account as a hole.
-  #
-  # An account inherits seasoning from any earlier account of the same kind, alive or retired. A
-  # country change or payout-method switch retires one row and creates another, and reading only
-  # the live row restarts the clock on a seller who has been processing with us for years. A newly
-  # connected rail has no earlier account of its kind to inherit from, so it still seasons on its
-  # own.
+  # Anchored on the payout account's age, not signup date — a seller can hold an
+  # account for years before connecting one. Every account a payout could land on
+  # must season, since destination is picked at payout time; seasoning only the
+  # managed account would leave a fresh connected account as a hole. An account
+  # inherits seasoning from any earlier account of the same kind (alive or retired),
+  # since a country/payout-method change retires one row and creates another —
+  # reading only the live row would restart the clock on a longtime seller.
   def stripe_accounts_seasoned_for_instant_payouts?
     managed_account = stripe_account
     return false if managed_account.nil?
@@ -1274,15 +1230,11 @@ class User < ApplicationRecord
     refund_policy_enabled?
   end
 
-  # Whether the seller can edit the account-level refund policy section in Settings.
-  # The section always renders; when this is false the UI shows the controls disabled
-  # with a note explaining why. Two things make it read-only:
-  # - Account-level refund policies are switched off (account_level_refund_policy_enabled?
-  #   is false), in which case refunds are handled per product instead.
-  # - A refund policy has been enforced on the whole account because of a high dispute
-  #   rate (see Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!).
-  #   While enforced, the seller cannot change the policy themselves — they have to
-  #   contact us with the remediation steps they've taken, and we apply any update.
+  # Read-only when either account-level policies are off (account_level_refund_policy_enabled?
+  # false — refunds are then per-product) or the policy has been enforced account-wide for a
+  # high dispute rate (Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!),
+  # in which case the seller must contact us to change it. The section itself always renders,
+  # just disabled with an explanatory note.
   def refund_policy_settings_editable?
     !refund_policy_enforced? && account_level_refund_policy_enabled?
   end
