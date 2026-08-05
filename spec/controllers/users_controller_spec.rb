@@ -425,6 +425,17 @@ describe UsersController do
           expect(meta_content("twitter:image:alt")).to eq(preview_seller.name_or_username)
         end
 
+        # Without explicit dimensions Facebook's crawler processes the image
+        # asynchronously and the first share after a scrape goes out imageless.
+        it "advertises the card's pixel dimensions and type" do
+          @request.host = preview_seller.subdomain
+          get :show, params: { username: preview_seller.username }
+
+          expect(meta_content("og:image:type")).to eq("image/png")
+          expect(meta_content("og:image:width")).to eq(SubscribePreviewGeneratorService::OUTPUT_WIDTH.to_s)
+          expect(meta_content("og:image:height")).to eq(SubscribePreviewGeneratorService::OUTPUT_HEIGHT.to_s)
+        end
+
         # With only a preview attached either precedence order passes, so this is the
         # example that actually pins the card ahead of the avatar.
         it "prefers the card over an uploaded avatar when the seller has both" do
@@ -451,6 +462,10 @@ describe UsersController do
           expect(avatar_seller.avatar).to be_attached
           expect(meta_content("og:image")).to eq(avatar_seller.avatar_url)
           expect(meta_content("og:image:alt")).to eq("#{avatar_seller.name_or_username}'s profile picture")
+          # The card's dimensions describe the generated PNG, not an arbitrary
+          # avatar upload — advertising them here would lie to the crawler.
+          expect(meta_content("og:image:width")).to be_empty
+          expect(meta_content("og:image:height")).to be_empty
         end
 
         # avatar_url falls back to the default avatar, so a presence check here would

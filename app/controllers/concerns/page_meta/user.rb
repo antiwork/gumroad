@@ -23,6 +23,12 @@ module PageMeta::User
 
       if user.subscribe_preview_url.present?
         set_meta_tag(property: "og:image", content: user.subscribe_preview_url)
+        # Dimensions + type let Facebook's crawler render the card on the FIRST
+        # share after a scrape; without them it processes the image async and the
+        # first preview goes out imageless (which sellers report as "blank circle").
+        set_meta_tag(property: "og:image:type", content: "image/png")
+        set_meta_tag(property: "og:image:width", content: SubscribePreviewGeneratorService::OUTPUT_WIDTH.to_s)
+        set_meta_tag(property: "og:image:height", content: SubscribePreviewGeneratorService::OUTPUT_HEIGHT.to_s)
         set_meta_tag(property: "og:image:alt", content: user.name_or_username)
         set_meta_tag(property: "twitter:card", content: "summary_large_image")
         set_meta_tag(property: "twitter:image", content: user.subscribe_preview_url)
