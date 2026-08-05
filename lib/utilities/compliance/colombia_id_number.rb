@@ -1,16 +1,14 @@
 # frozen_string_literal: true
 
-# Stripe enforces 7-10 digits on individual.id_number for Colombia (support case
-# sco_UyXAayCkurHzCd). Colombia's own document spec allows 6 digits, so the floor excludes Cédula
-# de Extranjería numbers that legitimately exist — Stripe have raised that with their product team,
-# and this range should be widened if they change it. Test-mode Stripe does NOT enforce the rule, so
-# a local probe cannot re-derive these bounds. Browser copy: app/javascript/utils/colombiaIdNumbers.ts.
-# Widening DIGIT_RANGE also means editing the Colombia section of
-# app/views/help_center/articles/contents/_260-your-payout-settings-page.html.erb, which states the
-# bound to sellers — the help center cannot interpolate this constant.
+# Stripe enforces 6-10 digits on individual.id_number for Colombia. Test-mode Stripe does not
+# enforce this and repeated-digit values ("111111") trip a separate plausibility check, so
+# re-deriving the bound needs live mode with distinct digits. Browser copy:
+# app/javascript/utils/colombiaIdNumbers.ts. Changing DIGIT_RANGE also means editing the Colombia
+# section of app/views/help_center/articles/contents/_260-your-payout-settings-page.html.erb,
+# which states the bound to sellers — the help center cannot interpolate this constant.
 module Compliance
   module ColombiaIdNumber
-    DIGIT_RANGE = (7..10)
+    DIGIT_RANGE = (6..10)
 
     # Sellers paste the number with the thousands separators printed on the document. Stripe refuses
     # those, and the length check counts digits, so callers must send what was counted — otherwise a

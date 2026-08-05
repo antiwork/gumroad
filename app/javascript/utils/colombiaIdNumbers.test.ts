@@ -9,13 +9,14 @@ import {
 
 describe("isValidColombiaIdNumber", () => {
   it("accepts the digit lengths Stripe accepts for CO", () => {
+    expect(isValidColombiaIdNumber("482913")).toBe(true);
     expect(isValidColombiaIdNumber("1234567")).toBe(true);
     expect(isValidColombiaIdNumber("12345678")).toBe(true);
     expect(isValidColombiaIdNumber("1234567890")).toBe(true);
   });
 
-  it("rejects a six-digit Cédula de Extranjería, which Stripe refuses", () => {
-    expect(isValidColombiaIdNumber("482913")).toBe(false);
+  it("rejects a five-digit number, which Stripe refuses", () => {
+    expect(isValidColombiaIdNumber("48291")).toBe(false);
   });
 
   it("rejects numbers longer than Stripe's upper bound", () => {
@@ -25,8 +26,8 @@ describe("isValidColombiaIdNumber", () => {
   it("ignores thousands separators and spaces", () => {
     expect(isValidColombiaIdNumber("1.123.456")).toBe(true);
     expect(isValidColombiaIdNumber("1 123 456")).toBe(true);
-    // 13 characters but only 6 digits — the character count must not stand in for the digit count.
-    expect(isValidColombiaIdNumber("4.8.2.9.1.3")).toBe(false);
+    // 9 characters but only 5 digits — the character count must not stand in for the digit count.
+    expect(isValidColombiaIdNumber("4.8.2.9.1")).toBe(false);
   });
 
   it("rejects an empty value rather than treating it as valid", () => {
