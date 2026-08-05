@@ -488,8 +488,8 @@ describe("startOrderCreation", () => {
         jsonResponse({
           success: true,
           line_items: {
-            "purchase-first": confirmedPurchase(firstLine.permalink),
-            "purchase-second": confirmedPurchase(secondLine.permalink),
+            [firstLine.uid]: confirmedPurchase(firstLine.permalink),
+            [secondLine.uid]: confirmedPurchase(secondLine.permalink),
           },
           can_buyer_sign_up: false,
           offer_codes: [],
@@ -498,10 +498,9 @@ describe("startOrderCreation", () => {
 
     const result = await startOrderCreation(mixedRequestData, []);
 
-    // The confirm response is keyed by our sent purchase id, not by line uid or permalink,
-    // so the only way to reassociate results is a positional map: request order in,
-    // response values out, matched by index rather than a shared field.
-    expect(Object.keys(result.lineItems)).toEqual([firstLine.uid, secondLine.uid]);
+    // Both lines share a permalink; keying by uid (not permalink) is what keeps them distinct.
+    expect(result.lineItems[firstLine.uid]).toMatchObject({ success: true, permalink: firstLine.permalink });
+    expect(result.lineItems[secondLine.uid]).toMatchObject({ success: true, permalink: secondLine.permalink });
     expect(result.lineItems[firstLine.uid]).not.toBe(result.lineItems[secondLine.uid]);
   });
 });
