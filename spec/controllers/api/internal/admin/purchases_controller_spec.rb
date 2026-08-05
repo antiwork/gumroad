@@ -1131,7 +1131,7 @@ describe Api::Internal::Admin::PurchasesController do
     end
 
     it "reports truncation when the buyer has more purchases than the grouped receipt renders" do
-      stub_const("CustomerMailer::GROUPED_RECEIPT_PURCHASES_LIMIT", 1)
+      stub_const("CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES", 1)
       buyer_email = "buyer@example.com"
       create_list(:free_purchase, 2, email: buyer_email)
 

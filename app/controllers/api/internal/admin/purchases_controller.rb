@@ -86,7 +86,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     record_admin_write(action: "purchases.resend_all_receipts") do
       CustomerMailer.grouped_receipt(purchases.ids).deliver_later(queue: "critical")
       count = purchases.count
-      sent = [count, CustomerMailer::GROUPED_RECEIPT_PURCHASES_LIMIT].min
+      sent = [count, CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES].min
       message = if sent < count
         "Resent receipts for the #{sent} most recent of #{count} purchases to #{email}"
       else
