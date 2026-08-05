@@ -87,6 +87,21 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.cleared.map(&:object_value)).to match_array([browser_guid, buyer_email])
       expect(third_party_block.reload.blocked_at).to be_present
     end
+
+    # Blockable#same_email_guest_purchases has the same exclusion: an email match proves nothing
+    # about rows another account owns, even when that account's card history is clean.
+    it "does not let a different account's same-email rows anchor innocence or contribute identifiers" do
+      other_account = create(:user, email: "other-owner@example.net")
+      create(:purchase, purchaser: other_account, email: buyer_email, purchase_state: "successful",
+                        browser_guid: "guid-other-account", stripe_fingerprint: "other-account-card",
+                        created_at: 120.days.ago)
+      other_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-other-account")
+
+      result = call
+
+      expect(result.cleared.map(&:object_value)).not_to include("guid-other-account")
+      expect(other_block.reload.blocked_at).to be_present
+    end
   end
 
   describe "authored-block escalation" do
@@ -365,6 +380,17 @@ describe Risk::StrandedBuyerRecoveryService do
       victim_guid = "guid-victim"
       create(:purchase, email: victim_email, browser_guid: victim_guid, purchase_state: "failed", created_at: 1.day.ago)
       victim_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: victim_guid)
+
+      result = described_class.call(user_external_id: account_owner.external_id, email: victim_email, dry_run: false)
+
+      expect(result.cleared).not_to include(victim_block)
+      expect(victim_block.reload.blocked_at).to be_present
+    end
+
+    it "never clears a victim's email block directly, even though the caller supplied that email (Greptile P1)" do
+      account_owner = create(:user, email: buyer_email)
+      victim_email = "victim-email-block@example.com"
+      victim_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: victim_email)
 
       result = described_class.call(user_external_id: account_owner.external_id, email: victim_email, dry_run: false)
 

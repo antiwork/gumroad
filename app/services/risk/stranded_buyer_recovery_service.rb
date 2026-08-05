@@ -128,12 +128,15 @@ class Risk::StrandedBuyerRecoveryService
     # A resolved user is the canonical identity — an email param supplied alongside user_id is
     # only a lookup hint, never mixed into the scope, or a caller could pair a clean account's
     # user_id with an unrelated victim's email to clear that victim's blocks.
+    # Same-email rows owned by a DIFFERENT account are excluded outright (matching
+    # Blockable#same_email_guest_purchases): only the buyer's own rows and true guest
+    # checkouts may anchor innocence or corroborate identifiers.
     def candidate_purchases
       @_candidate_purchases ||= begin
         scope = if user.present?
-          Purchase.where("purchaser_id = ? OR email = ?", user.id, user.email)
+          Purchase.where("purchaser_id = ? OR (email = ? AND purchaser_id IS NULL)", user.id, user.email)
         else
-          Purchase.where(email: @email)
+          Purchase.where(email: @email, purchaser_id: nil)
         end
         scope.order(id: :desc).limit(Purchase::Blockable::MAX_SIBLING_PURCHASES_FOR_UNBLOCK).to_a
       end
@@ -158,10 +161,13 @@ class Risk::StrandedBuyerRecoveryService
 
     # Checkout paypal/gifter emails are typed-in third-party addresses, not the buyer's identity
     # (see Purchase::Blockable#blockable_values_for, widened_emails: false) — only the row's own
-    # email and the account-owned purchaser_email count.
+    # email and the account-owned purchaser_email count. Mirrors candidate_purchases: once a user
+    # resolves, a caller-supplied @email is a lookup hint only, never mixed into the identifier
+    # set — pushing it unconditionally let a clean account's user_id reach an unrelated victim's
+    # email block (Greptile P1, security: same class as the cross-identity fix in buyer_purchases).
     def identifier_emails
       @_identifier_emails ||= buyer_purchases.flat_map { [_1.email, _1.purchaser_email] }
-                                             .push(@email, user&.email)
+                                             .push(user.present? ? user.email : @email)
                                              .compact_blank.map(&:downcase).uniq
     end
 
