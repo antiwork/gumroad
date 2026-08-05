@@ -140,9 +140,14 @@ module CheckoutHelpers
       expect(page).to have_selector("[aria-label='Saved credit card']", text: logged_in_user.credit_card.visual)
     elsif !credit_card.nil? && !is_free
       # The mounted card surface depends on the cart: SCA/mandate-shaped carts get the restored
-      # CardElement lane while everything else mounts the Payment Element, so probe for the
-      # element's iframe and fill whichever surface is actually there.
-      if page.has_selector?("iframe[src*='elements-inner-payment'], iframe[title*='payment input']", visible: false, wait: 5)
+      # CardElement lane while everything else mounts the Payment Element. Wait for EITHER
+      # surface to render (up to the same 20s within_payment_element_frame allows), then check
+      # which one actually showed up — a fixed 5s probe races a slow-mounting Payment Element
+      # and wrongly falls into the CardElement branch, which then raises ElementNotFound.
+      payment_element_selector = "iframe[src*='elements-inner-payment'], iframe[title*='payment input']"
+      card_element_selector = "iframe[src*='elements-inner-card'], iframe[title*='Secure']"
+      page.has_selector?("#{payment_element_selector}, #{card_element_selector}", visible: false, wait: 20)
+      if page.has_selector?(payment_element_selector, visible: false, wait: 0)
         fill_in_payment_element(**(credit_card || {}).slice(:number, :expiry, :cvc).compact)
       else
         fill_in_credit_card(**credit_card.slice(:number, :expiry, :cvc, :zip_code).compact)
