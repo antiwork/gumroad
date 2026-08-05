@@ -275,8 +275,8 @@ describe("startOrderCreation", () => {
         jsonResponse({
           success: true,
           line_items: {
-            purchaseA: confirmedPurchase("product-a"),
-            purchaseB: {
+            [firstLine.uid]: confirmedPurchase("product-a"),
+            [secondLine.uid]: {
               success: false,
               permalink: "product-b",
               error_message: "Invalid variant.",
@@ -445,6 +445,64 @@ describe("startOrderCreation", () => {
     const result = await startOrderCreation(requestData, activeOfferCodes);
 
     expect(result.offerCodes).toEqual([]);
+  });
+
+  it("keeps both confirmed lines when the cart holds two variants of the same product", async () => {
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardPayment = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "variant-b " };
+    const mixedRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: {
+              success: true,
+              requires_card_action: true,
+              client_secret: "pi_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+            [secondLine.uid]: {
+              success: true,
+              requires_card_action: true,
+              client_secret: "pi_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            "purchase-first": confirmedPurchase(firstLine.permalink),
+            "purchase-second": confirmedPurchase(secondLine.permalink),
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    const result = await startOrderCreation(mixedRequestData, []);
+
+    // The confirm response is keyed by our sent purchase id, not by line uid or permalink,
+    // so the only way to reassociate results is a positional map: request order in,
+    // response values out, matched by index rather than a shared field.
+    expect(Object.keys(result.lineItems)).toEqual([firstLine.uid, secondLine.uid]);
+    expect(result.lineItems[firstLine.uid]).not.toBe(result.lineItems[secondLine.uid]);
   });
 });
 

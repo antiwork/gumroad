@@ -154,9 +154,9 @@ export const startOrderCreation = async (
         requiresCardAction,
         retryOfferCodeCandidates(requestData, retryOfferCodes),
       );
-      const lineItemResults = Object.values(orderConfirmResponse.line_items);
+      // Key by uid, not permalink, which collides when the cart holds two variants of one product.
       const lineItems = requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((lineItems, lineItem) => {
-        const resultItem = lineItemResults.find((item) => item.permalink === lineItem.permalink);
+        const resultItem = orderConfirmResponse.line_items[lineItem.uid];
         if (resultItem) lineItems[lineItem.uid] = resultItem;
         return lineItems;
       }, {});
