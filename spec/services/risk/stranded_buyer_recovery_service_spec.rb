@@ -185,6 +185,22 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.reason).to eq(:no_clean_payment_history)
     end
 
+    # account_purchases proves identity via purchaser_id, not email — but that's a proxy for WHO
+    # the row belongs to, not a waiver on HOW MANY settled rows the fingerprint needs. A single
+    # fresh account purchase must not anchor innocence on its own; it still has to clear the same
+    # min-3/60-day bar as a guest row, just counted by account instead of email.
+    it "does not let a single fresh account purchase skip the min-count/age bar" do
+      user = create(:user, email: buyer_email)
+      history.each { |purchase| purchase.update!(purchaser_id: nil, email: "someone-else@example.net") }
+      Purchase.where(email: buyer_email).update_all(stripe_fingerprint: nil)
+      create(:purchase, purchaser: user, email: buyer_email, purchase_state: "successful",
+                        stripe_fingerprint: "one-fresh-account-purchase", created_at: 1.day.ago)
+
+      result = call
+      expect(result.verdict).to eq(:skip)
+      expect(result.reason).to eq(:no_clean_payment_history)
+    end
+
     # The scan's reject_disputed veto, re-checked here: a clean anchor card does not vouch for a
     # buyer carrying a live dispute on a DIFFERENT card — a chargeback anywhere is what blocks are for.
     it "skips a buyer with an unreversed chargeback on another card" do

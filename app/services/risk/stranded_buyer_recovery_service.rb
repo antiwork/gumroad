@@ -225,19 +225,18 @@ class Risk::StrandedBuyerRecoveryService
     # knows is this buyer's; it's not fine here, where candidate_purchases includes any guest row
     # typed with this email. An established cardholder could type the victim's email at ONE guest
     # checkout with their own (elsewhere-clean) card and have that row corroborate itself — the
-    # "anchor" and the fingerprint's clean history would both trace back to a stranger. Require the
-    # clean-history purchases to ALSO share this row's email, so a card's history only vouches for
-    # the identity it was actually built under.
+    # "anchor" and the fingerprint's clean history would both trace back to a stranger. Account
+    # purchases already have their identity proven via purchaser_id, so they scope the same count
+    # by account instead of email — but they still have to CLEAR the count, same as everyone else;
+    # one fresh account purchase must not skip the min-3/60-day bar the whole file is built on.
     def own_clean_payment_history?(purchase)
-      return true if account_purchases.include?(purchase)
-
-      Purchase.successful.non_free.not_fully_refunded.not_chargedback_or_chargedback_reversed
-              .where(created_at: ..Purchase::Blockable::MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY.ago)
-              .where.not(id: purchase.id)
-              .where(stripe_fingerprint: purchase.stripe_fingerprint)
-              .where(email: purchase.email)
-              .limit(Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY)
-              .count >= Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
+      scope = Purchase.successful.non_free.not_fully_refunded.not_chargedback_or_chargedback_reversed
+                      .where(created_at: ..Purchase::Blockable::MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY.ago)
+                      .where.not(id: purchase.id)
+                      .where(stripe_fingerprint: purchase.stripe_fingerprint)
+      scope = account_purchases.include?(purchase) ? scope.where(purchaser_id: user.id) : scope.where(email: purchase.email)
+      scope.limit(Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY)
+           .count >= Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
     end
 
     def clean_history_anchors
