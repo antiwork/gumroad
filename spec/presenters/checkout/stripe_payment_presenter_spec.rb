@@ -98,6 +98,18 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
+  def card_element_props(fallback_reason = "sca_or_mandate_confirm_flow", disable_wallets: false, request_apple_pay_merchant_tokens: false)
+    {
+      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+      fallback_reason:,
+      disable_wallets:,
+      request_apple_pay_merchant_tokens:,
+      payment_element_wallets: false,
+      flat_payment_methods: false,
+      elements_options: nil,
+    }
+  end
+
   def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
@@ -172,8 +184,10 @@ describe Checkout::StripePaymentPresenter do
       )
     ]
 
+    # Recurring presentment candidates now hit the CardElement restoration branch first;
+    # wallets stay off because the displayed local total is not what CardElement charges.
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -198,8 +212,10 @@ describe Checkout::StripePaymentPresenter do
       checkout_product_for(other_product, buyer_currency_display:),
     ]
 
+    # Recurring presentment candidates now hit the CardElement restoration branch first;
+    # wallets stay off because the displayed local total is not what CardElement charges.
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -365,8 +381,10 @@ describe Checkout::StripePaymentPresenter do
       checkout_product_for(eur_product, buyer_currency_display:),
     ]
 
+    # Recurring presentment candidates now hit the CardElement restoration branch first;
+    # wallets stay off because the displayed local total is not what CardElement charges.
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -390,8 +408,10 @@ describe Checkout::StripePaymentPresenter do
       checkout_product_for(cad_product, buyer_currency_display: { display_mode: "default", buyer_currency_shown: Currency::CAD }),
     ]
 
+    # Recurring presentment candidates now hit the CardElement restoration branch first;
+    # wallets stay off because the displayed local total is not what CardElement charges.
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -419,8 +439,10 @@ describe Checkout::StripePaymentPresenter do
       )
     ]
 
+    # Recurring presentment candidates now hit the CardElement restoration branch first;
+    # wallets stay off because the displayed local total is not what CardElement charges.
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -448,8 +470,10 @@ describe Checkout::StripePaymentPresenter do
       )
     ]
 
+    # Recurring presentment candidates now hit the CardElement restoration branch first;
+    # wallets stay off because the displayed local total is not what CardElement charges.
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -473,8 +497,10 @@ describe Checkout::StripePaymentPresenter do
       )
     ]
 
+    # Recurring presentment candidates now hit the CardElement restoration branch first;
+    # wallets stay off because the displayed local total is not what CardElement charges.
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -525,8 +551,10 @@ describe Checkout::StripePaymentPresenter do
       )
     ]
 
+    # Recurring presentment candidates now hit the CardElement restoration branch first;
+    # wallets stay off because the displayed local total is not what CardElement charges.
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -554,8 +582,10 @@ describe Checkout::StripePaymentPresenter do
       )
     ]
 
+    # Recurring presentment candidates now hit the CardElement restoration branch first;
+    # wallets stay off because the displayed local total is not what CardElement charges.
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -587,9 +617,11 @@ describe Checkout::StripePaymentPresenter do
     expect(stripe_payment_props(add_products:)).to eq(payment_element_props)
   end
 
-  it "selects Stripe Payment Element for a recurring membership product" do
+  it "selects the CardElement fallback for a recurring membership product" do
+    # Scoped restoration (gumroad-private#1853): recurring carts confirm via the SCA/mandate
+    # machinery where the Payment Element's confirm currently throws, so they mount CardElement.
     expect(stripe_payment_props(add_products: [flagged_seller_product(recurrence: "monthly")]))
-      .to eq(payment_element_props)
+      .to eq(card_element_props)
   end
 
   it "selects Stripe Payment Element for a commission product" do
@@ -597,12 +629,11 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props)
   end
 
-  it "selects Stripe Payment Element with wallets suppressed for an installment-selection cart" do
-    # The purchase charges the first installment while the cart displays the full price, so a
-    # wallet sheet built from the cart total would promise the wrong charge. Cards are fine:
-    # the element mints a reusable PaymentMethod and the server prices every charge.
+  it "selects the CardElement fallback for an installment-selection cart" do
+    # Installment carts charge today and charge again later, so their confirm is
+    # SCA/mandate-shaped; they ride the restored CardElement lane too.
     expect(stripe_payment_props(add_products: [flagged_seller_product(pay_in_installments: true)]))
-      .to eq(payment_element_props(disable_wallets: true))
+      .to eq(card_element_props)
   end
 
   it "selects Stripe Payment Element SetupIntent mode for a preorder product" do
@@ -615,9 +646,9 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
   end
 
-  it "selects Stripe Payment Element with wallets suppressed when future-charge products are mixed with charged products" do
-    # Only part of the cart total is charged today (the preorder charges at release), so the
-    # wallet sheet cannot be trusted with the cart total; the card path is unaffected.
+  it "selects the CardElement fallback when future-charge products are mixed with charged products" do
+    # The cart charges today AND saves the card for the preorder's later charge, so the confirm
+    # is SCA/mandate-shaped and rides the restored CardElement lane.
     seller = create(:user)
     future_charge_product = create(:product, user: seller, price_cents: 1234)
     charged_product = create(:product, user: seller, price_cents: 5678)
@@ -626,7 +657,7 @@ describe Checkout::StripePaymentPresenter do
                                   checkout_product_for(future_charge_product, is_preorder: true),
                                   checkout_product_for(charged_product),
                                 ]))
-      .to eq(payment_element_props(disable_wallets: true))
+      .to eq(card_element_props)
   end
 
   it "selects Stripe Payment Element SetupIntent mode for a recurring free-trial product" do
@@ -1170,9 +1201,9 @@ describe Checkout::StripePaymentPresenter do
       expect(stripe_payment_props(cart:)).to eq(payment_element_props)
     end
 
-    it "keeps server-confirm Payment Element for a recurring membership because client-confirm mode is one-time only" do
+    it "keeps the CardElement fallback for a recurring membership because client-confirm mode is one-time only" do
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(recurrence: "monthly")]))
-        .to eq(payment_element_props)
+        .to eq(card_element_props)
     end
 
     it "keeps server-confirm Payment Element for a commission product even with both flags" do
@@ -1321,8 +1352,9 @@ describe Checkout::StripePaymentPresenter do
       # (Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote), which would
       # fail every payment attempt. Giving up the iDEAL/Bancontact tabs costs this buyer
       # nothing: both methods need a bank in the country that issues them.
+      # Recurring presentment candidates now hit the CardElement restoration branch first.
       expect(stripe_payment_props(add_products:)).to eq(
-        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+        card_element_props(disable_wallets: true)
       )
     ensure
       deactivate_buyer_currency_flags(seller) if seller
@@ -1612,8 +1644,9 @@ describe Checkout::StripePaymentPresenter do
       # canonical USD element couldn't present buyer currency. The presentment element shape
       # now carries it — a server-confirm Payment Element the browser mounts in the buyer's
       # FX-quote currency.
+      # Recurring presentment candidates now hit the CardElement restoration branch first.
       expect(stripe_payment_props(add_products:)).to eq(
-        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+        card_element_props(disable_wallets: true)
       )
     ensure
       deactivate_buyer_currency_flags(seller) if seller
@@ -1787,8 +1820,9 @@ describe Checkout::StripePaymentPresenter do
         )
       ]
 
+      # Recurring presentment candidates now hit the CardElement restoration branch first.
       expect(stripe_payment_props(add_products:)).to eq(
-        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+        card_element_props(disable_wallets: true)
       )
     ensure
       deactivate_buyer_currency_flags(seller) if seller
@@ -1814,8 +1848,9 @@ describe Checkout::StripePaymentPresenter do
       # canonical USD total converts into CAD exactly as a USD-priced cart's would
       # It used to dead-end on CardElement because quoting refused
       # any non-USD listing.
+      # Recurring presentment candidates now hit the CardElement restoration branch first.
       expect(stripe_payment_props(add_products:)).to eq(
-        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+        card_element_props(disable_wallets: true)
       )
     ensure
       deactivate_buyer_currency_flags(seller) if seller
