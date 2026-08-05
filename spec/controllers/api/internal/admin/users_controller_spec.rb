@@ -541,16 +541,14 @@ describe Api::Internal::Admin::UsersController do
       expect(stripe["verification"]).to eq("error" => "access revoked")
     end
 
-    it "includes admin helper links keyed on the user external id and email" do
+    it "includes only the impersonate link now that the admin web UI is gone" do
       user = create(:compliant_user, email: "links@example.com")
 
       get :info, params: { email: user.email }
 
       links = response.parsed_body["user"]["admin_links"]
       expect(links["impersonate"]).to include("/admin/impersonate?user_identifier=#{user.external_id}")
-      expect(links["admin_user"]).to include("/admin/users/#{user.id}")
-      expect(links["admin_purchases"]).to include("query=#{CGI.escape(user.email)}")
-      expect(links).not_to have_key("stripe_dashboard")
+      expect(links.keys).to eq(["impersonate"])
     end
 
     it "adds the View Stripe account link only when an alive Stripe merchant account exists" do
