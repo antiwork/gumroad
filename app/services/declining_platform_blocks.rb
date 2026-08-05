@@ -23,18 +23,18 @@ class DecliningPlatformBlocks
     domains_by_purchase = domain_purchases.index_with { |purchase| blocked_domain_candidates(purchase) }
 
     # Each lookup mirrors the check that declined this purchase, and the checks do NOT agree on
-    # type scope. Purchase::Risk#check_for_past_blocked_guids goes through #past_blocked_object,
-    # which matches object_value alone — a guid string stored under any type declines the purchase,
-    # so scoping to :browser_guid here would find nothing and drop the buyer from the report
-    # entirely. The domain and IP checks run through scoped lookups (AttributeBlockable,
-    # #check_for_past_fraudulent_ips), so those two stay scoped to their own object_type.
+    # type scope. Purchase::Risk#check_for_past_blocked_guids and #check_for_past_fraudulent_ips
+    # both go through a match on object_value alone — a value stored under any type declines the
+    # purchase, so scoping either lookup here would find nothing and drop the buyer from the report
+    # entirely. Only the domain check runs through a scoped lookup (AttributeBlockable), so that one
+    # stays scoped to :email_domain.
     #
     # The domain lookup also resolves by candidate order rather than by date, because
     # blocked_by_email_domain_if_fraudulent_transaction? short-circuits on the first of the four
     # domains that is blocked; that row holds this purchase even when another candidate carries an
     # older block.
     guid_blocks = guids.any? ? earliest_blocks_by_value(guids) : {}
-    ip_blocks = ips.any? ? earliest_blocks_by_value(ips, object_type: PlatformBlock::TYPES[:ip_address]) : {}
+    ip_blocks = ips.any? ? earliest_blocks_by_value(ips) : {}
     all_domains = domains_by_purchase.values.flatten.uniq
     domain_blocks = all_domains.any? ? earliest_blocks_by_value(all_domains, object_type: PlatformBlock::TYPES[:email_domain]) : {}
 

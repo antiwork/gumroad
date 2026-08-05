@@ -109,6 +109,23 @@ describe AlertOnBlockedEstablishedBuyersJob do
     end
   end
 
+  # Greptile P1 (gumroad#7087): the IP lookup here was scoped to object_type: ip_address, but
+  # Purchase::Risk#check_for_past_fraudulent_ips (what actually declined the purchase) matches
+  # object_value alone. A differently-typed active block sharing the same value still declines
+  # the purchase, so this report must resolve it the same way or it silently drops the buyer.
+  it "resolves a declining ip block even when it is stored under a different object_type" do
+    settled_purchases(established_count)
+    blocked_attempt(error_code: PurchaseErrorCode::BLOCKED_IP_ADDRESS, ip_address: "1.2.3.4")
+    block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "1.2.3.4", expires_in: 6.months)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include(email)
+      expect(message).to include("blocked by browser_guid since #{block.blocked_at.to_date}")
+    end
+  end
+
   it "counts how many times the buyer tried" do
     settled_purchases(established_count)
     3.times { |index| blocked_attempt(created_at: (index + 1).hours.ago) }
