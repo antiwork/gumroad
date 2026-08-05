@@ -57,14 +57,20 @@ describe Checkout::StripePaymentPresenter do
   def flagged_seller_product(**overrides)
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     checkout_product_for(product, **overrides)
   end
 
   def confirm_flagged_seller_product(**overrides)
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
     checkout_product_for(product, **overrides)
+  end
+
+  def card_element_fallback(reason, request_apple_pay_merchant_tokens: false)
+    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, payment_element_wallets: false, flat_payment_methods: false, elements_options: nil }
   end
 
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
@@ -129,6 +135,7 @@ describe Checkout::StripePaymentPresenter do
   it "selects Stripe Payment Element for a flagged single-seller charged checkout without a saved card" do
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props)
   end
@@ -137,6 +144,7 @@ describe Checkout::StripePaymentPresenter do
     seller = create(:user, check_merchant_account_is_linked: true)
     product = create(:product, user: seller, price_cents: 1234)
     create(:merchant_account_stripe_connect, user: seller)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props)
   end
@@ -144,22 +152,24 @@ describe Checkout::StripePaymentPresenter do
   it "selects Stripe Payment Element even when the buyer has a saved card" do
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     saved_credit_card = { type: "visa", number: "**** **** **** 4242", expiration_date: "12/30", requires_mandate: false }
 
     expect(stripe_payment_props(add_products: [checkout_product_for(product)], saved_credit_card:)).to eq(payment_element_props)
   end
 
-  it "selects Stripe Payment Element for a seller with no rollout flags at all" do
+  it "falls back to CardElement when the Stripe Payment Element seller flag is disabled" do
     product = create(:product, price_cents: 1234)
 
     expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
-      .to eq(payment_element_props)
+      .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
   end
 
   it "selects the buyer-currency presentment Payment Element for a single USD one-time item with presentment enabled" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     add_products = [
@@ -185,6 +195,7 @@ describe Checkout::StripePaymentPresenter do
     product = create(:product, user: seller, price_cents: 1234)
     other_product = create(:product, user: seller, price_cents: 500)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     buyer_currency_display = {
@@ -223,11 +234,13 @@ describe Checkout::StripePaymentPresenter do
 
     before do
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, presentment_seller)
       Feature.activate_user(:buyer_local_currency, presentment_seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, presentment_seller)
     end
 
     after do
+      Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, presentment_seller)
       Feature.deactivate_user(:buyer_local_currency, presentment_seller)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, presentment_seller)
       Feature.deactivate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, presentment_seller)
@@ -263,14 +276,14 @@ describe Checkout::StripePaymentPresenter do
       )
     end
 
-    it "keeps wallets suppressed on a mixed-candidacy presentment cart with both flags on" do
+    # A cart that falls back to CardElement never mounts a Payment Element, so its only wallet
+    # surface is the Payment Request Button — whose sheet shows canonical USD. It stays suppressed
+    # regardless of either flag.
+    it "keeps wallets suppressed on a CardElement-fallback presentment cart with both flags on" do
       Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, presentment_seller)
       Feature.activate_user(described_class::BUYER_CURRENCY_WALLETS_FEATURE_NAME, presentment_seller)
       # A cart mixing a candidate with a non-candidate line (here: a product already priced in
-      # the buyer's own currency, whose display stays "default") is not the full presentment
-      # shape, so wallets stay suppressed regardless of the ramp: the quote decides whether the
-      # cart presents locally, and a wallet sheet must never promise a total the charge might
-      # not match.
+      # the buyer's own currency, whose display stays "default") is not a supported element shape.
       cad_product = create(:product, user: presentment_seller, price_currency_type: "cad", price_cents: 500)
       add_products = presentment_add_products + [
         checkout_product_for(
@@ -281,8 +294,7 @@ describe Checkout::StripePaymentPresenter do
 
       props = stripe_payment_props(add_products:)
 
-      expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
-      expect(props[:elements_options][:buyer_currency_presentment]).to be(true)
+      expect(props[:integration]).to eq(described_class::STRIPE_CARD_ELEMENT_INTEGRATION)
       expect(props[:disable_wallets]).to be(true)
       expect(props[:payment_element_wallets]).to be(false)
     end
@@ -299,6 +311,7 @@ describe Checkout::StripePaymentPresenter do
     # quote per charge before the buyer is shown a total — so the cart can present in the
     # buyer's currency, with each charge priced from its own locked amount.
     add_products = sellers.map do |seller|
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
       checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
@@ -316,7 +329,7 @@ describe Checkout::StripePaymentPresenter do
     end
   end
 
-  it "mounts the element unquoted for a cart holding more sellers than the lane quotes" do
+  it "falls back to CardElement for a cart holding more sellers than the lane quotes" do
     # The surcharge endpoint withholds the quote past this many sellers, so mounting the element
     # in the buyer's currency would only make the browser drop back to dollars a moment later.
     sellers = Array.new(Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES + 1) { create(:user, disable_buyer_local_currency: false) }
@@ -326,6 +339,7 @@ describe Checkout::StripePaymentPresenter do
       buyer_currency_shown: Currency::CAD,
     }
     add_products = sellers.map do |seller|
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
       checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
@@ -333,12 +347,8 @@ describe Checkout::StripePaymentPresenter do
 
     props = stripe_payment_props(add_products:)
 
-    # The surcharge endpoint withholds the quote past the seller cap, so the element mounts in
-    # canonical USD (no quote, no token) — wallets stay off because the cart displays candidate
-    # local prices its charge will not match.
-    expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
-    expect(props[:elements_options][:buyer_currency_presentment]).to be(true)
-    expect(props[:disable_wallets]).to be(true)
+    expect(props[:integration]).to eq(described_class::STRIPE_CARD_ELEMENT_INTEGRATION)
+    expect(props[:fallback_reason]).to eq("buyer_currency_presentment_unsupported")
   ensure
     (sellers || []).each do |seller|
       Feature.deactivate_user(:buyer_local_currency, seller)
@@ -351,6 +361,7 @@ describe Checkout::StripePaymentPresenter do
     product = create(:product, user: seller, price_cents: 1234)
     eur_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 500)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     buyer_currency_display = {
@@ -373,25 +384,34 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
   end
 
-  it "suppresses wallets when an item is already priced in the buyer's own currency" do
+  it "falls back to CardElement when an item is already priced in the buyer's own currency" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     cad_product = create(:product, user: seller, price_currency_type: "cad", price_cents: 500)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     # A product already priced in the buyer's currency has nothing to convert, so its
-    # buyer-local display stays off and it is not a presentment candidate. The cart still
-    # rides the quote element (the quote service owns whether it quotes — here it refuses,
-    # so the element mounts canonical USD), but with wallets off: the candidate line
-    # displays a local price the canonical USD charge will not match.
+    # buyer-local display stays off (buyer_currency_display_props returns "default" when
+    # the two currencies match) and it is not a presentment candidate. The quote locks the
+    # whole cart total, so that one item takes the whole cart back to canonical USD —
+    # which is right here, because quoting that item would round-trip its listed CAD
+    # price through two FX rates and charge the buyer an amount that drifts from the
+    # price on the page.
     add_products = [
       checkout_product_for(product, buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::CAD }),
       checkout_product_for(cad_product, buyer_currency_display: { display_mode: "default", buyer_currency_shown: Currency::CAD }),
     ]
 
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+      fallback_reason: "buyer_currency_presentment_unsupported",
+      disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: false,
+      flat_payment_methods: false,
+      elements_options: nil,
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -406,6 +426,7 @@ describe Checkout::StripePaymentPresenter do
     product = create(:product, user: seller, price_cents: 1234)
     create(:product_installment_plan, link: product)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     add_products = [
@@ -427,10 +448,43 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
   end
 
+  it "mounts the buyer-currency element for a buyer who picked pay-in-installments on a presentment candidate" do
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:product, user: seller, price_cents: 1234)
+    create(:product_installment_plan, link: product)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    add_products = [
+      checkout_product_for(
+        product,
+        pay_in_installments: true,
+        buyer_currency_display: {
+          display_mode: "buyer_local",
+          buyer_currency_shown: Currency::CAD,
+        }
+      )
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(
+      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+    )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
+  it "mounts the canonical USD element for a buyer who picked pay-in-installments when the cart is not a presentment candidate" do
+    expect(stripe_payment_props(add_products: [flagged_seller_product(pay_in_installments: true)]))
+      .to eq(payment_element_props)
+  end
+
   it "mounts the buyer-currency element for a recurring presentment candidate" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:membership_product, user: seller, price_cents: 1234)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     add_products = [
@@ -460,6 +514,7 @@ describe Checkout::StripePaymentPresenter do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     add_products = [
@@ -488,6 +543,7 @@ describe Checkout::StripePaymentPresenter do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     add_products = [
@@ -513,6 +569,7 @@ describe Checkout::StripePaymentPresenter do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     add_products = [
@@ -537,6 +594,7 @@ describe Checkout::StripePaymentPresenter do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:membership_product, user: seller, price_cents: 1234)
     allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(:buyer_local_currency, seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     add_products = [
@@ -569,22 +627,33 @@ describe Checkout::StripePaymentPresenter do
       create(:product, user: create(:user), price_cents: 200),
     ]
     products.each do |product|
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
       create(:cart_product, cart:, product:)
     end
 
     expect(stripe_payment_props(cart:)).to eq(payment_element_props)
   end
 
-  it "selects Stripe Payment Element for an empty checkout, which mounts no element and charges nothing" do
-    expect(stripe_payment_props).to eq(payment_element_props)
+  it "falls back to CardElement for a multi-seller cart when any seller is not flagged" do
+    cart = create(:cart, :guest)
+    products = [
+      create(:product, user: create(:user), price_cents: 100),
+      create(:product, user: create(:user), price_cents: 200),
+    ]
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, products.first.user)
+    products.each { |product| create(:cart_product, cart:, product:) }
+
+    expect(stripe_payment_props(cart:)).to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
   end
 
-  it "selects Stripe Payment Element when a checkout product's seller cannot be resolved" do
-    # Seller-keyed predicates (wallet flags, client-confirm flag) all read false for a nil
-    # seller, so the cart lands on the canonical element rather than raising.
+  it "falls back to CardElement for an empty checkout" do
+    expect(stripe_payment_props).to eq(card_element_fallback("empty_cart"))
+  end
+
+  it "falls back to CardElement when a checkout product's seller cannot be resolved" do
     add_products = [{ product: { creator: { id: "nonexistent-seller" }, is_preorder: false, free_trial: nil, native_type: "digital" }, price: 1234, recurrence: nil, pay_in_installments: false }]
 
-    expect(stripe_payment_props(add_products:)).to eq(payment_element_props)
+    expect(stripe_payment_props(add_products:)).to eq(card_element_fallback("unknown_seller"))
   end
 
   it "selects Stripe Payment Element for a recurring membership product" do
@@ -597,14 +666,6 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props)
   end
 
-  it "selects Stripe Payment Element with wallets suppressed for an installment-selection cart" do
-    # The purchase charges the first installment while the cart displays the full price, so a
-    # wallet sheet built from the cart total would promise the wrong charge. Cards are fine:
-    # the element mints a reusable PaymentMethod and the server prices every charge.
-    expect(stripe_payment_props(add_products: [flagged_seller_product(pay_in_installments: true)]))
-      .to eq(payment_element_props(disable_wallets: true))
-  end
-
   it "selects Stripe Payment Element SetupIntent mode for a preorder product" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(is_preorder: true)]))
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
@@ -615,10 +676,9 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
   end
 
-  it "selects Stripe Payment Element with wallets suppressed when future-charge products are mixed with charged products" do
-    # Only part of the cart total is charged today (the preorder charges at release), so the
-    # wallet sheet cannot be trusted with the cart total; the card path is unaffected.
+  it "falls back to CardElement when future-charge products are mixed with charged products" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     future_charge_product = create(:product, user: seller, price_cents: 1234)
     charged_product = create(:product, user: seller, price_cents: 5678)
 
@@ -626,7 +686,7 @@ describe Checkout::StripePaymentPresenter do
                                   checkout_product_for(future_charge_product, is_preorder: true),
                                   checkout_product_for(charged_product),
                                 ]))
-      .to eq(payment_element_props(disable_wallets: true))
+      .to eq(card_element_fallback("setup_or_installment_flow"))
   end
 
   it "selects Stripe Payment Element SetupIntent mode for a recurring free-trial product" do
@@ -636,6 +696,7 @@ describe Checkout::StripePaymentPresenter do
 
   it "selects Stripe Payment Element SetupIntent mode for mixed future-charge products" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     preorder_product = create(:product, user: seller, price_cents: 1234)
     free_trial_product = create(:product, user: seller, price_cents: 5678)
 
@@ -646,11 +707,9 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
   end
 
-  it "selects Stripe Payment Element when the checkout total is not positive" do
-    # A free cart charges nothing and the browser mounts no element for it (requiresPayment is
-    # false client-side), so the element props are inert — there is no card surface to pick.
+  it "falls back to CardElement when the checkout total is not positive" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(price: 0)]))
-      .to eq(payment_element_props)
+      .to eq(card_element_fallback("not_charged"))
   end
 
   # gumroad-private#1430. A pay-what-you-want product listed from zero reads as a zero total
@@ -659,6 +718,7 @@ describe Checkout::StripePaymentPresenter do
   # on, costing them the Payment Element's local methods and wallets for no reason.
   it "keeps the Payment Element for a pay-what-you-want product listed from zero" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
 
     expect(stripe_payment_props(add_products: [checkout_product_for(pwyw_product, price: 0)]))
@@ -670,6 +730,7 @@ describe Checkout::StripePaymentPresenter do
   # buyer may well pay well above the minimum on.
   it "does not reject a zero-total pay-what-you-want cart as below the Payment Element minimum" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
 
     props = stripe_payment_props(add_products: [checkout_product_for(pwyw_product, price: 0)])
@@ -689,6 +750,7 @@ describe Checkout::StripePaymentPresenter do
   # ["card"] list and no deferred intent, so it has nothing to drift from.
   it "keeps a pay-what-you-want cart off the client-confirm lane, where the method list would drift once an amount is named" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
     Feature.activate_user(:checkout_local_method_klarna, seller)
     pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
@@ -706,20 +768,29 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(:checkout_local_method_klarna, seller) if seller
   end
 
-  # With no card lane left there is no "not charged" routing decision: a genuinely free cart
-  # gets the same inert element props as everything else, and the browser simply mounts no
-  # element for it (requiresPayment is false). One example pins that for the zero-total shapes
-  # that used to be classified.
-  it "selects Stripe Payment Element for a free cart regardless of how the zero total arose" do
+  # A product that genuinely cannot be paid for must keep falling back, but "free and not
+  # pay-what-you-want" is not that product: Product::Prices#set_customizable_price forces
+  # customizable_price to true on any $0 product, so CheckoutPresenter never emits that
+  # combination — measured across 39,875 recent production products, zero of which are $0
+  # with customizable_price false. Pinning it would assert on a hash production cannot
+  # produce. The reachable shape is line 64's escape hatch: a $0 base product whose alive
+  # variants carry a positive price_difference_cents keeps customizable_price false, and the
+  # buyer pays the variant's price rather than naming their own.
+  it "still falls back to CardElement for a free non-pay-what-you-want product priced by its variants" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     variant_priced_product = create(:product, user: seller, price_cents: 0)
     category = create(:variant_category, link: variant_priced_product)
     create(:variant, variant_category: category, price_difference_cents: 500)
+    # create(:product) already ran the callback while the product had no variants, forcing
+    # customizable_price true. Clear it and re-run now that the priced variant exists, which
+    # is the order a real seller produces: add the variant, then save.
     variant_priced_product.update_column(:customizable_price, false)
     variant_priced_product.send(:set_customizable_price)
 
+    expect(variant_priced_product.reload.customizable_price).to be(false)
     expect(stripe_payment_props(add_products: [checkout_product_for(variant_priced_product, price: 0)]))
-      .to eq(payment_element_props)
+      .to eq(card_element_fallback("not_charged"))
   end
 
   # A tiered membership never carries the pay-what-you-want flag on the product itself:
@@ -730,6 +801,7 @@ describe Checkout::StripePaymentPresenter do
   # product reached from a saved cart got the Payment Element. Pins the tier-aware read.
   it "keeps the Payment Element for a membership whose tier is pay-what-you-want" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     membership = create(:membership_product, user: seller, price_cents: 0)
     tier = membership.tiers.first
     tier.update!(customizable_price: true)
@@ -742,11 +814,75 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
   end
 
+  # The tier-aware read above must look at the tier the buyer SELECTED, not at every tier the
+  # membership offers. A membership can mix a free tier with a pay-what-you-want one, and asking
+  # "does any tier allow naming a price" answers yes for both — which would suppress the
+  # not_charged classification on the free tier and mount the Payment Element on a checkout that
+  # charges nothing. Pins the selected tier as the thing that decides.
+  it "still falls back to CardElement when the selected tier is free and only another tier is pay-what-you-want" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    free_tier = membership.tiers.first
+    # Variant::Prices#set_customizable_price forces the flag true on any tier whose alive prices
+    # are all zero, so clear the column directly to build the free non-pay-what-you-want tier a
+    # seller reaches by pricing the tier and then zeroing it.
+    free_tier.update_column(:customizable_price, false)
+    pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
+    pwyw_tier.update!(customizable_price: true)
+    membership.reload
+
+    expect(free_tier.reload.customizable_price).to be(false)
+    expect(membership.has_customizable_price_option?).to be(true)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: free_tier.external_id)]))
+      .to eq(card_element_fallback("not_charged"))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
+  # The membership guard on the `pwyw` short-circuit, which is what makes the selected-tier read
+  # above reachable at all. A membership can carry a stale product-level `customizable_price =
+  # true`: during create, Product::Prices#write_customizable_price runs (via `price_range=`) while
+  # is_tiered_membership is still false, so any membership started at $0 persists the flag, and the
+  # set_customizable_price after_save callback early-returns for memberships so nothing clears it.
+  # `customizable_price` is a directly writable param too. Measured on production: 6 of the 6,000
+  # most recent alive products with the flag set are tiered memberships.
+  #
+  # Without the guard the short-circuit fires before any tier logic and mounts the Payment Element
+  # on a genuinely free tier — and disagrees with cart_line_buyer_can_name_price?, which already
+  # checks is_tiered_membership? first, so the same product would behave differently depending on
+  # whether it came from a saved cart or /checkout?product=.
+  it "ignores a stale product-level customizable_price on a membership and still reads the selected tier" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    free_tier = membership.tiers.first
+    free_tier.update_column(:customizable_price, false)
+    pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
+    pwyw_tier.update!(customizable_price: true)
+    # The stale flag itself. update_column so the membership early-return in the after_save
+    # callback cannot interfere — which is exactly why production rows keep it.
+    membership.update_column(:customizable_price, true)
+    membership.reload
+
+    # The fixture must genuinely disagree with the tier, or this example cannot distinguish the
+    # guarded read from the unguarded one.
+    expect(membership.customizable_price).to be(true)
+    expect(free_tier.reload.customizable_price).to be(false)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: free_tier.external_id)]))
+      .to eq(card_element_fallback("not_charged"))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
   # The other half of the same rule: selecting the pay-what-you-want tier on that same mixed
   # membership must still reach the Payment Element, so scoping to the selected tier does not
   # undo the fix this PR exists for.
   it "keeps the Payment Element when the selected tier is the pay-what-you-want one" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     membership = create(:membership_product, user: seller, price_cents: 0)
     membership.tiers.first.update_column(:customizable_price, false)
     pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
@@ -756,30 +892,42 @@ describe Checkout::StripePaymentPresenter do
     expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: pwyw_tier.external_id)]))
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
   ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
   end
 
-  # The saved-cart path reaches the presenter through a different method; a free tier line
-  # there gets the same inert element props (the browser mounts no element for a free cart).
-  it "selects Stripe Payment Element when a saved cart line selects the free tier of a mixed membership" do
+  # The same rule on the saved-cart path, which reaches the presenter through a different method:
+  # cart lines used Link#has_customizable_price_option?, which scans every alive tier, so a line on
+  # the free tier of a mixed membership reported a customizable price and mounted the Payment
+  # Element on a checkout that charges nothing. Pins the cart line's own tier as the thing that
+  # decides.
+  it "still falls back to CardElement when a saved cart line selects the free tier of a mixed membership" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     membership = create(:membership_product, user: seller, price_cents: 0)
     free_tier = membership.tiers.first
+    # Variant::Prices#set_customizable_price forces the flag true on any tier whose alive prices
+    # are all zero, so clear the column directly to build the free non-pay-what-you-want tier a
+    # seller reaches by pricing the tier and then zeroing it.
     free_tier.update_column(:customizable_price, false)
     pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
     pwyw_tier.update!(customizable_price: true)
     membership.reload
 
+    expect(membership.has_customizable_price_option?).to be(true)
+
     cart = create(:cart)
     create(:cart_product, cart:, product: membership, option: free_tier, price: 0)
 
-    expect(stripe_payment_props(cart:)).to eq(payment_element_props)
+    expect(stripe_payment_props(cart:)).to eq(card_element_fallback("not_charged"))
   ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
   end
 
   # The other direction on the cart path: the pay-what-you-want tier still reaches the Payment
   # Element, so scoping cart lines to their own tier does not undo the fix this PR exists for.
   it "keeps the Payment Element when a saved cart line selects the pay-what-you-want tier" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     membership = create(:membership_product, user: seller, price_cents: 0)
     membership.tiers.first.update_column(:customizable_price, false)
     pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
@@ -792,6 +940,7 @@ describe Checkout::StripePaymentPresenter do
     expect(stripe_payment_props(cart:))
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
   ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
   end
 
   # A cart line with no tier recorded is a non-tiered product, where the product's own
@@ -799,6 +948,7 @@ describe Checkout::StripePaymentPresenter do
   # Element for a pay-what-you-want product listed from zero.
   it "keeps the Payment Element for a saved cart line on a pay-what-you-want product with no tier" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
 
     cart = create(:cart)
@@ -807,6 +957,7 @@ describe Checkout::StripePaymentPresenter do
     expect(stripe_payment_props(cart:))
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
   ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
   end
 
   # The guard that keeps the tier read scoped to memberships. An ordinary pay-what-you-want product
@@ -815,6 +966,7 @@ describe Checkout::StripePaymentPresenter do
   # line's variant here would call a genuinely pay-what-you-want cart free and undo this whole fix.
   it "keeps the Payment Element for a saved cart line on a pay-what-you-want product with a variant selected" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
     category = create(:variant_category, link: pwyw_product)
     variant = create(:variant, variant_category: category, price_difference_cents: 0)
@@ -828,25 +980,63 @@ describe Checkout::StripePaymentPresenter do
     expect(stripe_payment_props(cart:))
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
   ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
   end
 
-  it "selects Stripe Payment Element when a membership is added with no tier selected" do
+  # A membership cart line with no tier recorded must not fall back to the product-wide tier scan.
+  # Link#has_customizable_price_option? answers "does ANY alive tier allow naming a price", which is
+  # exactly the product-wide question the selected-tier read exists to stop asking: an unrelated
+  # pay-what-you-want tier would speak for a line that selected none, suppress the not_charged
+  # classification, and mount the Payment Element on a checkout that charges nothing. A membership's
+  # price can only be named through a tier, so no tier means no pending amount.
+  it "still falls back to CardElement when a saved cart line on a mixed membership has no tier" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     membership = create(:membership_product, user: seller, price_cents: 0)
     membership.tiers.first.update_column(:customizable_price, false)
     pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
     pwyw_tier.update!(customizable_price: true)
     membership.reload
 
-    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: nil)]))
-      .to eq(payment_element_props)
+    # The fixture must genuinely disagree with the (absent) line tier, or this example cannot
+    # distinguish the scoped read from the product-wide one.
+    expect(membership.has_customizable_price_option?).to be(true)
+
+    cart = create(:cart)
+    create(:cart_product, cart:, product: membership, option: nil, price: 0)
+
+    expect(stripe_payment_props(cart:)).to eq(card_element_fallback("not_charged"))
   ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
+  # The same rule on the add_products path, whose payload records the selected tier as option_id.
+  # A membership with no option_id must not consult the whole option list for the same reason, and
+  # must not trust the product-level pwyw field either — that column can be stale-true on a
+  # membership (see the buyer_can_name_price? comment).
+  it "still falls back to CardElement when a membership is added with no tier selected" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    membership.tiers.first.update_column(:customizable_price, false)
+    pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
+    pwyw_tier.update!(customizable_price: true)
+    membership.reload
+
+    expect(membership.has_customizable_price_option?).to be(true)
+    expect(membership.options.any? { _1[:is_pwyw] }).to be(true)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: nil)]))
+      .to eq(card_element_fallback("not_charged"))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
   end
 
   # A cart mixing a free product with a pay-what-you-want one can still be paid, so the
   # presence of one free line must not drag the whole cart back to the legacy surface.
   it "keeps the Payment Element when a free line shares the cart with a pay-what-you-want line" do
     seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     free_product = create(:product, user: seller, price_cents: 0)
     pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
 
@@ -857,19 +1047,18 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
   end
 
-  it "selects Stripe Payment Element with wallets suppressed for a future-charge product with no future charge amount" do
-    # A zero-priced preorder has nothing to charge now or later; the element props are inert
-    # (the browser mounts no element for a free cart) and the setup item keeps wallets off.
+  it "falls back to CardElement for a future-charge product with no future charge amount" do
     expect(stripe_payment_props(add_products: [flagged_seller_product(is_preorder: true, price: 0)]))
-      .to eq(payment_element_props(disable_wallets: true))
+      .to eq(card_element_fallback("setup_or_installment_flow"))
   end
 
-  it "selects Stripe Payment Element when the charged checkout total is below Stripe's charge floor" do
-    # The server no longer routes on the amount: the browser clamps the element's mount amount
-    # to Stripe's floor and suppresses wallets, and the charge is priced server-side from the
-    # real total.
-    expect(stripe_payment_props(add_products: [flagged_seller_product(price: 49)]))
-      .to eq(payment_element_props)
+  it "falls back to CardElement when the charged checkout total is below the Payment Element minimum" do
+    expect(
+      stripe_payment_props(
+        add_products: [flagged_seller_product(price: described_class::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS - 1)]
+      )
+    )
+      .to eq(card_element_fallback("stripe_payment_element_amount_below_minimum"))
   end
 
   it "selects Stripe Payment Element when the charged checkout total is below Gumroad's USD minimum but chargeable by Stripe" do
@@ -882,34 +1071,38 @@ describe Checkout::StripePaymentPresenter do
     ).to eq(payment_element_props)
   end
 
-  it "selects Stripe Payment Element for mixed free and paid products" do
+  it "selects Stripe Payment Element for mixed free and paid products when the charged total meets the minimum" do
     seller = create(:user)
+    minimum_charge_cents = described_class::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
     free_product = create(:product, user: seller, price_cents: 0)
     paid_product = create(:product, user: seller, price_cents: CURRENCY_CHOICES[Currency::USD][:min_price])
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     expect(
       stripe_payment_props(
         add_products: [
           checkout_product_for(free_product, price: 0),
-          checkout_product_for(paid_product, price: CURRENCY_CHOICES[Currency::USD][:min_price]),
+          checkout_product_for(paid_product, price: minimum_charge_cents),
         ]
       )
     ).to eq(payment_element_props)
   end
 
-  it "selects Stripe Payment Element for mixed free and paid products when the charged total is below Stripe's floor" do
+  it "falls back to CardElement for mixed free and paid products when the charged total is below the minimum" do
     seller = create(:user)
+    minimum_price_cents = described_class::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
     free_product = create(:product, user: seller, price_cents: 0)
     paid_product = create(:product, user: seller, price_cents: CURRENCY_CHOICES[Currency::USD][:min_price])
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     expect(
       stripe_payment_props(
         add_products: [
           checkout_product_for(free_product, price: 0),
-          checkout_product_for(paid_product, price: 49),
+          checkout_product_for(paid_product, price: minimum_price_cents - 1),
         ]
       )
-    ).to eq(payment_element_props)
+    ).to eq(card_element_fallback("stripe_payment_element_amount_below_minimum"))
   end
 
   it "ignores cart products when clear_cart is set" do
@@ -922,6 +1115,7 @@ describe Checkout::StripePaymentPresenter do
   it "always enables Link in the Payment Element (no per-seller flag)" do
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props(stripe_link_enabled: true))
   end
@@ -977,6 +1171,12 @@ describe Checkout::StripePaymentPresenter do
     it "selects the confirm integration for a single-seller one-time card cart with both flags" do
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product]))
         .to eq(payment_element_client_confirm_props)
+    end
+
+    it "keeps an installment cart on the server-confirm element even with both flags" do
+      # A deferred ConfirmationToken cannot fund later off-session installments.
+      expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(pay_in_installments: true)]))
+        .to eq(payment_element_props)
     end
 
     it "launches Cash App Pay alongside card for a US buyer — ACH Direct Debit stays withdrawn platform-wide" do
@@ -1049,6 +1249,7 @@ describe Checkout::StripePaymentPresenter do
         stub_geoip_country("104.28.0.1", "United States")
         seller = create(:user)
         product = create(:product, user: seller, price_cents: 50_00)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
         Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
         Feature.activate_user(:checkout_local_method_klarna, seller)
         cart = create(:cart, :guest)
@@ -1150,19 +1351,20 @@ describe Checkout::StripePaymentPresenter do
       expect(stripe_payment_props(add_products: [flagged_seller_product])).to eq(payment_element_props)
     end
 
-    it "selects the client-confirm Payment Element on the confirm flag alone" do
+    it "falls back to CardElement when only the confirm flag is enabled but the base flag is not" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
-        .to eq(payment_element_client_confirm_props)
+        .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
     end
 
     it "keeps server-confirm Payment Element for a multi-seller cart even when every seller has both flags" do
       cart = create(:cart, :guest)
       [100, 200].each do |price_cents|
         product = create(:product, user: create(:user), price_cents:)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
         Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, product.user)
         create(:cart_product, cart:, product:)
       end
@@ -1195,6 +1397,7 @@ describe Checkout::StripePaymentPresenter do
                                 "capabilities" => { "link_payments" => "active" },
                                 "refreshed_at" => Time.current.iso8601,
                               })
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
@@ -1204,6 +1407,7 @@ describe Checkout::StripePaymentPresenter do
     it "always enables Link in client-confirm mode (no per-seller flag)" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
@@ -1225,6 +1429,7 @@ describe Checkout::StripePaymentPresenter do
     def buyer_currency_seller_with_product(price_currency_type: "eur", price_cents: 1500)
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type:, price_cents:)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
       [seller, product]
     end
@@ -1359,6 +1564,40 @@ describe Checkout::StripePaymentPresenter do
           disable_wallets: true,
         )
       )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "kicks a mixed candidate/installment cart to CardElement instead of client-confirm, which cannot charge an installment purchase" do
+      # A mixed cart cannot be quoted, and installments keep method-forced client-confirm closed.
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      installment_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 3000)
+      create(:product_installment_plan, link: installment_product)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      platform_merchant_account
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::CAD,
+          }
+        ),
+        checkout_product_for(
+          installment_product,
+          pay_in_installments: true,
+          buyer_currency_display: {
+            display_mode: "default",
+            buyer_currency_shown: Currency::EUR,
+          }
+        )
+      ]
+
+      # disable_wallets: the fallback keeps the candidate cart's PRB suppression, matching the
+      # buyer-currency element it would otherwise mount.
+      expect(stripe_payment_props(add_products:))
+        .to eq(card_element_fallback("buyer_currency_presentment_unsupported").merge(disable_wallets: true))
     ensure
       deactivate_buyer_currency_flags(seller) if seller
     end
@@ -1573,6 +1812,7 @@ describe Checkout::StripePaymentPresenter do
       seller = create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 1500)
       connect_account = create(:merchant_account_stripe_connect, user: seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
       activate_buyer_currency_flags(seller)
       Feature.activate_user(:checkout_local_method_ideal, seller)
@@ -1769,6 +2009,7 @@ describe Checkout::StripePaymentPresenter do
       # list, or this cart raises instead of mounting the element.
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:membership_product, user: seller, price_currency_type: "eur", price_cents: 1500)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
@@ -1797,6 +2038,7 @@ describe Checkout::StripePaymentPresenter do
     it "mounts the buyer-currency element for an EUR-priced product when the client-confirm flag is off" do
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
       add_products = [
@@ -1826,26 +2068,29 @@ describe Checkout::StripePaymentPresenter do
     it "requests merchant tokens on the Payment Element integration when the seller is flagged" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
         .to eq(payment_element_props(request_apple_pay_merchant_tokens: true))
     end
 
-    it "requests merchant tokens on a wallet-suppressed element cart when the seller is flagged" do
-      # The flag must reach the frontend on every cart shape — the frontend owns which wallet
-      # surface (if any) consumes it.
+    it "requests merchant tokens on the CardElement fallback when the seller is flagged" do
+      # The wallet button renders on CardElement checkouts too (below-minimum carts and other
+      # Payment Element fallbacks), so the flag must reach the frontend on every integration.
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, seller)
 
-      expect(stripe_payment_props(add_products: [checkout_product_for(product, pay_in_installments: true)]))
-        .to eq(payment_element_props(disable_wallets: true, request_apple_pay_merchant_tokens: true))
+      expect(stripe_payment_props(add_products: [checkout_product_for(product, price: described_class::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS - 1)]))
+        .to eq(card_element_fallback("stripe_payment_element_amount_below_minimum", request_apple_pay_merchant_tokens: true))
     end
 
     it "requests merchant tokens on the client-confirm integration when the seller is flagged" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
       Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, seller)
 
@@ -1861,9 +2106,11 @@ describe Checkout::StripePaymentPresenter do
     it "does not request merchant tokens when any seller in the cart is not flagged" do
       flagged_seller = create(:user)
       flagged = create(:product, user: flagged_seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, flagged_seller)
       Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, flagged_seller)
       unflagged_seller = create(:user)
       unflagged = create(:product, user: unflagged_seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, unflagged_seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(flagged), checkout_product_for(unflagged)]))
         .to eq(payment_element_props(request_apple_pay_merchant_tokens: false))
@@ -1871,7 +2118,7 @@ describe Checkout::StripePaymentPresenter do
 
     it "does not request merchant tokens for an empty cart" do
       expect(stripe_payment_props)
-        .to eq(payment_element_props(request_apple_pay_merchant_tokens: false))
+        .to eq(card_element_fallback("empty_cart", request_apple_pay_merchant_tokens: false))
     end
   end
 
@@ -1879,6 +2126,7 @@ describe Checkout::StripePaymentPresenter do
     it "enables wallets on the Payment Element integration when the seller is flagged" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
@@ -1888,6 +2136,7 @@ describe Checkout::StripePaymentPresenter do
     it "enables wallets on the client-confirm integration when the seller is flagged" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
       Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
 
@@ -1895,15 +2144,17 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props(payment_element_wallets: true))
     end
 
-    it "never enables element wallets on a wallet-suppressed cart, even when the seller is flagged" do
-      # An installment cart's wallet sheet would promise the cart total while the charge is the
-      # first installment, so disable_wallets wins over the rollout flag.
+    it "never enables element wallets on the CardElement fallback, even when the seller is flagged" do
+      # CardElement carts (below-minimum carts and other fallbacks) never mount a Payment
+      # Element, so there is no element wallet surface to enable — they keep the Payment
+      # Request Button.
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
 
-      expect(stripe_payment_props(add_products: [checkout_product_for(product, pay_in_installments: true)]))
-        .to eq(payment_element_props(disable_wallets: true))
+      expect(stripe_payment_props(add_products: [checkout_product_for(product, price: described_class::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS - 1)]))
+        .to eq(card_element_fallback("stripe_payment_element_amount_below_minimum"))
     end
 
     it "keeps element wallets off when the cart disables wallets, even with the seller flagged" do
@@ -1919,6 +2170,7 @@ describe Checkout::StripePaymentPresenter do
       # the euro-zone buyer the forced lane actually serves.
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
       Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
@@ -1972,9 +2224,11 @@ describe Checkout::StripePaymentPresenter do
       # seller's checkout.
       flagged_seller = create(:user)
       flagged = create(:product, user: flagged_seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, flagged_seller)
       Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, flagged_seller)
       unflagged_seller = create(:user)
       unflagged = create(:product, user: unflagged_seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, unflagged_seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(flagged), checkout_product_for(unflagged)]))
         .to eq(payment_element_props(payment_element_wallets: false, flat_payment_methods: false))

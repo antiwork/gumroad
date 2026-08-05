@@ -138,10 +138,12 @@ module CheckoutHelpers
     elsif logged_in_user&.credit_card.present? && logged_in_user.credit_card.charge_processor_id != PaypalChargeProcessor.charge_processor_id
       expect(page).to have_command("Use a different card?")
       expect(page).to have_selector("[aria-label='Saved credit card']", text: logged_in_user.credit_card.visual)
-    elsif !credit_card.nil? && !is_free
-      # Every checkout mounts the Payment Element now; forward a caller-supplied card into it
-      # (e.g. a decline or 3DS card), defaulting to 4242.
+    elsif payment_element && !is_free
+      # Forward a caller-supplied card into the Payment Element (e.g. a decline or 3DS card); defaults to
+      # 4242 when no card is given, so existing payment_element callers are unaffected.
       fill_in_payment_element(**(credit_card || {}).slice(:number, :expiry, :cvc).compact)
+    elsif !credit_card.nil? && !is_free
+      fill_in_credit_card(**credit_card)
     end
   end
 
@@ -233,23 +235,12 @@ def within_payment_element_frame(&block)
   within_frame(stripe_frame, &block)
 end
 
-# Stripe varies the element's field labels across layouts (plain card form vs Link-optimized,
-# e.g. "Expiration date" vs "Expiration (MM/YY)"), so the finder probes label aliases.
-# `minimum: 0` is what makes a non-matching alias return nil instead of raising — without it
-# `first` raises on the first alias and the others are never tried. The synchronize block
-# retries the whole alias sweep for the default wait, since the element re-renders its form
-# (and swaps labels) when Link reacts to the buyer's email.
-def find_stripe_field(labels)
-  page.document.synchronize do
-    field = labels.lazy.filter_map { |label| first(:fillable_field, label, visible: false, wait: 0, minimum: 0) }.first
-    raise Capybara::ElementNotFound, "Unable to find Stripe field matching #{labels.join(', ')}" if field.nil?
-
-    field
-  end
-end
-
 def fill_in_stripe_field(labels, with:)
-  find_stripe_field(labels).fill_in(with:)
+  field = labels.lazy.filter_map { |label| first(:fillable_field, label, visible: false, wait: 0) }.first
+  field ||= first(:fillable_field, labels.first, visible: false)
+  raise Capybara::ElementNotFound, "Unable to find Stripe field matching #{labels.join(', ')}" if field.nil?
+
+  field.fill_in(with:)
 end
 
 SCA_CHALLENGE_IFRAME = "iframe[src^='https://js.stripe.com/v3/three-ds-2-challenge']"

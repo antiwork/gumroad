@@ -21,21 +21,14 @@ vi.mock("$app/components/useRecaptcha", () => ({
 }));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 
-const paymentElementConfig: CheckoutPaymentConfig = {
-  integration: "payment_element",
-  fallback_reason: null,
+const cardElementConfig: CheckoutPaymentConfig = {
+  integration: "card_element",
+  fallback_reason: "not_checkout",
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
   payment_element_wallets: false,
   flat_payment_methods: false,
-  elements_options: {
-    stripe_elements_mode: "payment",
-    currency: "usd",
-    buyer_currency_presentment: false,
-    payment_method_types: ["card"],
-    payment_method_creation: "manual",
-    stripe_link_enabled: true,
-  },
+  elements_options: null,
 };
 
 const state = (overrides: Partial<State> = {}): State => ({
@@ -95,7 +88,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   willSaveCard: false,
   usingSavedCard: false,
   savedCreditCard: null,
-  checkoutPayment: paymentElementConfig,
+  checkoutPayment: cardElementConfig,
   checkoutPaymentStale: false,
   resumeSubmitAfterCheckoutPayment: false,
   validationFailedCount: 0,
