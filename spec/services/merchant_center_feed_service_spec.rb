@@ -59,8 +59,10 @@ describe MerchantCenterFeedService do
     end
 
     it "omits the shipping element for physical products" do
-      product = create(:physical_product, :recommendable, price_cents: 999)
-      create(:asset_preview, link: product)
+      product = create_eligible_product
+      # update_column: the :recommendable trait's review purchase has no shipping
+      # address, so a validated flip to physical would fail on unrelated records.
+      product.update_column(:flags, product.flags | Link.flag_mapping["flags"][:is_physical])
       product.reload
 
       item = items(service.generate).first
