@@ -67,11 +67,11 @@ class HomeController < ApplicationController
   end
 
   def pricing
-    set_meta_tag(title: "Gumroad pricing: 10% + 50¢ per sale, $0 monthly")
-    set_meta_tag(name: "description", content: "One simple fee: 10% + 50¢ per sale. No monthly fees, no setup costs, no surprises — and Gumroad handles sales tax worldwide as Merchant of Record, at no extra cost.")
+    set_meta_tag(title: "Gumroad pricing: 10% + 50¢ direct, 30% via Discover")
+    set_meta_tag(name: "description", content: "Direct sales: 10% + 50¢ per sale, $0 monthly. Discover marketplace sales: 30%. Gumroad handles sales tax worldwide as Merchant of Record, at no extra cost.")
     set_meta_tag(tag_name: "link", rel: "canonical", href: pricing_url, head_key: "canonical")
-    set_meta_tag(property: "og:title", content: "Gumroad pricing: 10% + 50¢ per sale, $0 monthly")
-    set_meta_tag(property: "og:description", content: "One simple fee: 10% + 50¢ per sale. No monthly fees, no setup costs, no surprises — and Gumroad handles sales tax worldwide as Merchant of Record, at no extra cost.")
+    set_meta_tag(property: "og:title", content: "Gumroad pricing: 10% + 50¢ direct, 30% via Discover")
+    set_meta_tag(property: "og:description", content: "Direct sales: 10% + 50¢ per sale, $0 monthly. Discover marketplace sales: 30%. Gumroad handles sales tax worldwide as Merchant of Record, at no extra cost.")
     set_meta_tag(property: "og:type", content: "website")
     set_meta_tag(property: "og:url", content: pricing_url)
   end
