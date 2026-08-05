@@ -127,12 +127,16 @@ export type StartCartPurchaseRequestPayload = {
   // True when recaptchaResponse came from the challenge key because the score key refused this
   // order, which tells the server to verify it against that key instead (gumroad-private#1590).
   recaptchaChallengeFallback?: boolean;
+  usedStripePaymentElement: boolean;
   buyerCurrencyQuote: string | null;
 };
 
-export type PaymentDetailsSource = "payment_element" | "payment_request" | "saved_payment_method";
+export type PaymentDetailsSource = "card_element" | "payment_element" | "payment_request" | "saved_payment_method";
 
-export const getPaymentDetailsSource = (paymentMethod: PurchasePaymentMethod): PaymentDetailsSource | null => {
+export const getPaymentDetailsSource = (
+  paymentMethod: PurchasePaymentMethod,
+  usedStripePaymentElement: boolean,
+): PaymentDetailsSource | null => {
   if (paymentMethod.type === "saved") return "saved_payment_method";
   if (paymentMethod.type === "not-applicable") return null;
   // Client-confirm always collects card details through the Payment Element.
@@ -140,8 +144,8 @@ export const getPaymentDetailsSource = (paymentMethod: PurchasePaymentMethod): P
   switch (paymentMethod.cardParamsResult.type) {
     case "cc":
     case "error":
-      // The Payment Element is the only surface that mints card params now.
-      return "payment_element";
+      // card_element is the scoped SCA/mandate-confirm restoration lane (gumroad-private#1853).
+      return usedStripePaymentElement ? "payment_element" : "card_element";
     case "cc-payment-request":
       return "payment_request";
     case "paypal":
@@ -331,7 +335,7 @@ export const createPurchasesRequestData = (
     data.gift_note = payload.giftInfo.giftNote;
   }
 
-  const paymentDetailsSource = getPaymentDetailsSource(payload.paymentMethod);
+  const paymentDetailsSource = getPaymentDetailsSource(payload.paymentMethod, payload.usedStripePaymentElement);
   if (paymentDetailsSource) data.payment_details_source = paymentDetailsSource;
   if (payload.paymentMethod.type === "payment-element-client-confirm") {
     data.payment_element_mount_currency = payload.paymentMethod.mountCurrency;
