@@ -60,14 +60,12 @@ module StripeTestRateLimitRetries
   # request-rate bucket. A budget short enough to expire inside that window
   # would fail the build for the reason this file exists to prevent.
   #
-  # Eight retries (63.5s) was that budget, and it was not enough: on 2026-08-03
-  # nine open PRs went red at once, every failure a checkout or subscription spec
-  # whose log ended in "still rate limited after 8 retries". Test Slow alone
-  # fans out to 50 shards and Test Fast to 18, every one of them against the same
-  # Stripe test account, and several PRs build concurrently — so the contention
-  # scales with how busy the queue is, not with anything a spec does. Re-running
-  # the identical commit turned #6901 from 11 failures to 0, which is what a
-  # too-small budget looks like from the outside.
+  # Eight retries (63.5s) was that budget, and it was not enough: CI fans
+  # Test Slow out to 50 shards and Test Fast to 18, all against the same
+  # Stripe test account, and several PRs build concurrently — so contention
+  # scales with how busy the queue is, not with anything a spec does. A build
+  # that goes red from budget exhaustion alone always goes green on a re-run
+  # with no code change, which is the tell that the budget was too small.
   #
   # It is kept OFF Stripe's global configuration on purpose. Raising
   # Stripe.max_network_retries would also widen the gem's own retries for
