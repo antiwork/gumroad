@@ -126,8 +126,8 @@ end
 merge_base = git("merge-base", base, "HEAD").first
 
 changed = Set.new
-changed.merge(git("diff", "--name-only", "--diff-filter=d", "#{merge_base}..HEAD")) if merge_base
-changed.merge(git("diff", "--name-only", "--diff-filter=d", "HEAD"))
+changed.merge(git("diff", "--name-only", "#{merge_base}..HEAD")) if merge_base
+changed.merge(git("diff", "--name-only", "HEAD"))
 changed.merge(git("ls-files", "--others", "--exclude-standard"))
 
 changed.reject! { |path| IGNORED_PATTERNS.any? { |re| re.match?(path) } }
