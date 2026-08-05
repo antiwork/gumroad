@@ -3,9 +3,8 @@
 # Ai::StoreAgentService powers the conversational "Agent" dashboard tab. The seller chats with an
 # assistant that can answer questions about their store and *propose* changes to it.
 #
-# The agent runs on Anthropic's Claude Opus 4.7 (via Ai::AnthropicClient). Opus 4.7 currently leads
-# the vending-bench leaderboard for autonomous commercial operation, so it is the strongest model
-# for the agent's actual job: helping a creator run and grow their store.
+# The agent runs on Grok 4.5 via OpenRouter's Anthropic-compatible endpoint (see MODEL below), with
+# Claude Opus 4.7 — its previous production model — as the request-level fallback when Grok errors.
 #
 # Safety model:
 #   - READ tools (api_read) run automatically and only ever query data the seller already owns. They
@@ -24,6 +23,13 @@ class Ai::StoreAgentService
   class Error < StandardError; end
 
   MODEL = Ai::AnthropicClient::DEFAULT_MODEL
+  # Grok 4.5 costs ~3x less than Opus 4.7 at comparable tool-calling quality (gumroad-private#1879;
+  # store-agent spend was ~$577-779/day on Opus). It is only reachable through OpenRouter, so the
+  # cutover keys off routing: a direct-Anthropic config keeps serving Opus unchanged.
+  OPENROUTER_MODEL = "x-ai/grok-4.5"
+  # When Grok errors (provider down, rate limited), OpenRouter retries the turn on the agent's
+  # previous production model rather than the client's default GPT fallback.
+  OPENROUTER_FALLBACK_MODEL = "anthropic/claude-opus-4.7"
   # Passed to Ai::AnthropicClient as its READ timeout. For the streamed reply this bounds silence
   # between chunks (not the total generation time — a long healthy stream is fine); for the buffered
   # calls it bounds the wait for the full response. Production showed a steady stream of 60-second
@@ -1509,7 +1515,11 @@ class Ai::StoreAgentService
     end
 
     def client
-      @_client ||= Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: MODEL)
+      @_client ||= if Ai::AnthropicClient.openrouter_configured?
+        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: OPENROUTER_MODEL, fallback_model: OPENROUTER_FALLBACK_MODEL)
+      else
+        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: MODEL)
+      end
     end
 
     # Two generic API tools plus one terminal marker. The endpoint id (constrained to the catalog by

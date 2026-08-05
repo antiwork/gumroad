@@ -2189,4 +2189,37 @@ describe Ai::StoreAgentService do
       expect(HelpCenter::Article.find_by(title: "Create an application for the API")).to be_present
     end
   end
+
+  describe "model selection" do
+    # These build the real client (the top-level `Ai::AnthropicClient.new` stub would swallow the
+    # arguments this spec exists to pin), so re-stub .new to capture and return a double.
+    let(:captured) { {} }
+
+    before do
+      allow(Ai::AnthropicClient).to receive(:new) do |**kwargs|
+        captured.merge!(kwargs)
+        client
+      end
+    end
+
+    it "requests Grok with an Opus fallback when routing through OpenRouter" do
+      allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
+      allow(client).to receive(:messages).and_return(text_result("hi"))
+
+      service.respond(messages: [{ role: "user", content: "hello" }])
+
+      expect(captured[:model]).to eq("x-ai/grok-4.5")
+      expect(captured[:fallback_model]).to eq("anthropic/claude-opus-4.7")
+    end
+
+    it "keeps requesting Opus directly from Anthropic when OpenRouter is not configured" do
+      allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(false)
+      allow(client).to receive(:messages).and_return(text_result("hi"))
+
+      service.respond(messages: [{ role: "user", content: "hello" }])
+
+      expect(captured[:model]).to eq(Ai::AnthropicClient::DEFAULT_MODEL)
+      expect(captured[:fallback_model]).to be_nil
+    end
+  end
 end
