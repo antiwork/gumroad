@@ -82,6 +82,9 @@ describe "Profile custom HTML rendering", type: :request do
       expect(response.body).to include(%(<meta property="twitter:image" content="#{ERB::Util.h(seller.subscribe_preview_url)}">))
       expect(response.body).to include(%(<meta property="twitter:card" content="summary_large_image">))
       expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe">))
+      expect(response.body).to include(%(<meta property="og:image:type" content="image/png">))
+      expect(response.body).to include(%(<meta property="og:image:width" content="#{SubscribePreviewGeneratorService::OUTPUT_WIDTH}">))
+      expect(response.body).to include(%(<meta property="og:image:height" content="#{SubscribePreviewGeneratorService::OUTPUT_HEIGHT}">))
     end
 
     it "falls back to an uploaded avatar with no twitter card" do
@@ -98,6 +101,8 @@ describe "Profile custom HTML rendering", type: :request do
       expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe's profile picture">))
       expect(response.body).not_to include(%(property="twitter:image"))
       expect(response.body).not_to include(%(property="twitter:card"))
+      # Dimensions describe the generated card PNG only, never an avatar upload.
+      expect(response.body).not_to include(%(property="og:image:width"))
     end
 
     # The common case for an established seller, and the one that pins the chain's

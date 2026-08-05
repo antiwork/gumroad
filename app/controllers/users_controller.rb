@@ -307,6 +307,12 @@ class UsersController < ApplicationController
       share_image_tags = [%(<meta property="og:image" content="#{escaped_share_image}">),
                           %(<meta property="og:image:alt" content="#{alt}">)]
       if preview_url
+        # Dimensions + type mirror PageMeta::User: they let Facebook's crawler
+        # render the card on the FIRST share after a scrape instead of an
+        # imageless preview while it processes the image asynchronously.
+        share_image_tags << %(<meta property="og:image:type" content="image/png">)
+        share_image_tags << %(<meta property="og:image:width" content="#{SubscribePreviewGeneratorService::OUTPUT_WIDTH}">)
+        share_image_tags << %(<meta property="og:image:height" content="#{SubscribePreviewGeneratorService::OUTPUT_HEIGHT}">)
         share_image_tags << %(<meta property="twitter:card" content="summary_large_image">)
         share_image_tags << %(<meta property="twitter:image" content="#{escaped_share_image}">)
         share_image_tags << %(<meta property="twitter:image:alt" content="#{alt}">)

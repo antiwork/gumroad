@@ -6,6 +6,12 @@ class SubscribePreviewGeneratorService
   ASPECT_RATIO = 128/67r
   WIDTH = 512
   HEIGHT = WIDTH / ASPECT_RATIO
+  # The PNG's real pixel dimensions (the screenshot is taken at retina scale).
+  # Meta tags advertise these so Facebook's crawler can render the card on the
+  # very first share of a freshly-scraped URL instead of a blank preview while
+  # it processes the image asynchronously.
+  OUTPUT_WIDTH = WIDTH * RETINA_PIXEL_RATIO
+  OUTPUT_HEIGHT = (HEIGHT * RETINA_PIXEL_RATIO).to_i
   CHROME_ARGS = [
     "force-device-scale-factor=#{RETINA_PIXEL_RATIO}",
     "headless",
