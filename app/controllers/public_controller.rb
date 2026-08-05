@@ -28,6 +28,7 @@ class PublicController < ApplicationController
   def charge_data
     purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
     purchases = purchases.where("card_visual like ?", "%#{params[:last_4]}%") if params[:last_4].present? && params[:last_4].length == 4
+    purchases = scope_by_year_and_month(purchases, params[:year], params[:month])
     if purchases.none?
       render json: { success: false }
     else
@@ -38,6 +39,7 @@ class PublicController < ApplicationController
 
   def license_key_lookup_data
     all_purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
+    all_purchases = scope_by_year_and_month(all_purchases, params[:year], params[:month])
     purchases = all_purchases
     if params[:product_query].present?
       query = extract_permalink_from_query(params[:product_query].strip)
@@ -108,5 +110,24 @@ class PublicController < ApplicationController
 
       path = URI.parse(query).path rescue query
       path.split("/").reverse.find(&:present?) || query
+    end
+
+    # Optional narrowing so a buyer who remembers roughly when they were charged doesn't
+    # have to render every purchase on the account (gumroad-private#1869). Month is only
+    # applied when year is also present — the frontend disables the month picker until a
+    # year is chosen, but an unauthenticated GET can still send month alone.
+    def scope_by_year_and_month(purchases, year, month)
+      return purchases if year.blank?
+
+      year_i = year.to_i
+      return purchases if year_i < 2011 || year_i > Time.current.year
+
+      if month.present? && (1..12).cover?(month.to_i)
+        range_start = Time.utc(year_i, month.to_i)
+        purchases.where(created_at: range_start...range_start.next_month)
+      else
+        range_start = Time.utc(year_i)
+        purchases.where(created_at: range_start...range_start.next_year)
+      end
     end
 end

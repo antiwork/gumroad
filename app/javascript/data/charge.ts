@@ -2,21 +2,38 @@ import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
-export const lookupCharges = async (data: { email: string; last4: string | null }) => {
+export const lookupCharges = async (data: { email: string; last4: string | null; year: string | null; month: string | null }) => {
   const response = await request({
     method: "GET",
     accept: "json",
-    url: Routes.charge_data_path({ email: data.email, last_4: data.last4, format: "json" }),
+    url: Routes.charge_data_path({
+      email: data.email,
+      last_4: data.last4,
+      year: data.year,
+      month: data.month,
+      format: "json",
+    }),
   });
   if (response.ok) return typia.assert<{ success: boolean }>(await response.json());
   throw new ResponseError();
 };
 
-export const lookupLicenseKey = async (data: { email: string; productQuery: string | null }) => {
+export const lookupLicenseKey = async (data: {
+  email: string;
+  productQuery: string | null;
+  year: string | null;
+  month: string | null;
+}) => {
   const response = await request({
     method: "GET",
     accept: "json",
-    url: Routes.license_key_lookup_data_path({ email: data.email, product_query: data.productQuery, format: "json" }),
+    url: Routes.license_key_lookup_data_path({
+      email: data.email,
+      product_query: data.productQuery,
+      year: data.year,
+      month: data.month,
+      format: "json",
+    }),
   });
   if (response.ok) return typia.assert<{ success: boolean }>(await response.json());
   throw new ResponseError();

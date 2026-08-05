@@ -1,4 +1,4 @@
-import { Paypal } from "@boxicons/react";
+import { Paypal } from "@boxicons/react"
 import React, { useEffect, useRef } from "react"
 
 import { lookupCharges, lookupLicenseKey, lookupPaypalCharges } from "$app/data/charge"
@@ -12,6 +12,16 @@ import { FormSection } from "$app/components/ui/FormSection"
 import { Input } from "$app/components/ui/Input"
 import { Label } from "$app/components/ui/Label"
 import { PageHeader } from "$app/components/ui/PageHeader"
+import { Select } from "$app/components/ui/Select"
+
+// Gumroad's founding year — the earliest a purchase could exist.
+const EARLIEST_PURCHASE_YEAR = 2011
+const currentYear = new Date().getFullYear()
+const YEARS = Array.from({ length: currentYear - EARLIEST_PURCHASE_YEAR + 1 }, (_, i) => currentYear - i)
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+]
 
 const LookupLayout = ({ children, title, type }: {
   children?: React.ReactNode
@@ -21,11 +31,22 @@ const LookupLayout = ({ children, title, type }: {
   const [email, setEmail] = React.useState<{ value: string; error?: boolean }>({ value: "" })
   const [last4, setLast4] = React.useState<{ value: string; error?: boolean }>({ value: "" })
   const [productQuery, setProductQuery] = React.useState("")
+  const [year, setYear] = React.useState("")
+  const [month, setMonth] = React.useState("")
   const [invoiceId, setInvoiceId] = React.useState<{ value: string; error?: boolean }>({ value: "" })
   const [isCardLoading, setIsCardLoading] = React.useState(false)
   const [isPaypalLoading, setIsPaypalLoading] = React.useState(false)
   const [success, setSuccess] = React.useState<boolean | null>(null)
   const messageRef = useRef<HTMLDivElement>(null)
+
+  // Only one of the two lookup forms can be in flight — a submitted PayPal invoice
+  // ID and a submitted card lookup for the same buyer would race the same throttle.
+  const isAnyLookupLoading = isCardLoading || isPaypalLoading
+
+  const handleYearChange = (evt: React.ChangeEvent<HTMLSelectElement>) => {
+    setYear(evt.target.value)
+    setMonth("")
+  }
 
   const handleCardLookup = async () => {
     let hasError = false;
@@ -48,8 +69,18 @@ const LookupLayout = ({ children, title, type }: {
     try {
       const result =
         type === "licenseKey"
-          ? await lookupLicenseKey({ email: email.value, productQuery: productQuery.trim() || null })
-          : await lookupCharges({ email: email.value, last4: last4.value })
+          ? await lookupLicenseKey({
+              email: email.value,
+              productQuery: productQuery.trim() || null,
+              year: year || null,
+              month: year && month ? month : null,
+            })
+          : await lookupCharges({
+              email: email.value,
+              last4: last4.value,
+              year: year || null,
+              month: year && month ? month : null,
+            })
       setSuccess(result.success)
     } catch (error) {
       assertResponseError(error);
@@ -161,7 +192,29 @@ const LookupLayout = ({ children, title, type }: {
                 />
               </Fieldset>
             )}
-            <Button color="primary" type="submit" disabled={isCardLoading}>
+            <Fieldset>
+              <Label htmlFor="year">When did you make the purchase? (optional)</Label>
+              <Select id="year" value={year} onChange={handleYearChange}>
+                <option value="">Any year</option>
+                {YEARS.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </Select>
+            </Fieldset>
+            <Fieldset>
+              <Label htmlFor="month">Month (optional)</Label>
+              <Select id="month" value={month} disabled={!year} onChange={(evt) => setMonth(evt.target.value)}>
+                <option value="">Any month</option>
+                {MONTHS.map((name, i) => (
+                  <option key={name} value={i + 1}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </Fieldset>
+            <Button color="primary" type="submit" disabled={isAnyLookupLoading}>
               {isCardLoading ? "Searching..." : "Search"}
             </Button>
           </FormSection>
@@ -194,7 +247,7 @@ const LookupLayout = ({ children, title, type }: {
               <Button
                 color="paypal"
                 type="submit"
-                disabled={isPaypalLoading}
+                disabled={isAnyLookupLoading}
               >
                 <Paypal pack="brands" className="size-5" />
                 {isPaypalLoading ? "Searching..." : "Search"}
