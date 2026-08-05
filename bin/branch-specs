@@ -14,10 +14,14 @@
 # large the full suite is cheaper. CI turns that into "add run-all-specs".
 #
 # Usage:
-#   bin/branch-specs                 # print the list, one per line
+#   bin/branch-specs                 # print the relevant spec list, one per line
 #   bin/branch-specs --base main     # diff against a different base ref
 #   bin/branch-specs --smoke         # include the legacy smoke set
-#   bin/rspec $(bin/branch-specs)    # run it locally
+#   bin/rspec $(bin/branch-specs)    # high-coverage local pre-CI run
+#
+# This replaces the retired bin/test-confidence AI runner: local confidence
+# comes from deterministic relevant specs + explicit full-suite escalation,
+# not a model-generated confidence percentage.
 
 require "set"
 
