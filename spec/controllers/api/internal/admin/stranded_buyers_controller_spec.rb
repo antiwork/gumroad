@@ -6,16 +6,12 @@ require "shared_examples/authorized_admin_api_method"
 describe Api::Internal::Admin::StrandedBuyersController do
   let(:admin_user) { create(:admin_user) }
 
-  before do
-    create(:admin_api_token, actor_user: admin_user, token_hash: AdminApiToken.hash_token("test-admin-token"))
-    request.headers["Authorization"] = "Bearer test-admin-token"
-  end
-
   it "inherits from Api::Internal::Admin::BaseController" do
     expect(described_class.superclass).to eq(Api::Internal::Admin::BaseController)
   end
 
   describe "GET scan" do
+    # The shared examples' before block also provisions the admin token + header for this block.
     include_examples "admin api authorization required", :get, :scan
 
     it "returns the scan's candidates with external ids and block summaries" do
