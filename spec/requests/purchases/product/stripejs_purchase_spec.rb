@@ -232,10 +232,13 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     end
 
     checkout_payment = checkout_payment_props
-    expect(checkout_payment["integration"]).to eq("payment_element")
-    expect(checkout_payment["fallback_reason"]).to be_nil
+    # Recurring memberships confirm via confirmCardPayment on an off-session-reusable
+    # PaymentMethod, which mounts the restored CardElement lane (gumroad-private#1853-1856)
+    # rather than the Payment Element.
+    expect(checkout_payment["integration"]).to eq("card_element")
+    expect(checkout_payment["fallback_reason"]).to eq("sca_or_mandate_confirm_flow")
 
-    check_out(product, payment_element: true)
+    check_out(product)
 
     purchase = Purchase.last
     expect(purchase.successful?).to be(true)
@@ -248,7 +251,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(payment_element_payment_method_ids).not_to be_empty
   end
 
-  it "allows the buyer to pay in installments using the Payment Element" do
+  it "allows the buyer to pay in installments using the restored CardElement lane" do
     seller = create(:user)
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
@@ -266,15 +269,17 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     end
 
     checkout_payment = checkout_payment_props
-    expect(checkout_payment["integration"]).to eq("payment_element")
-    expect(checkout_payment["fallback_reason"]).to be_nil
+    # Installment carts also save the card for future off-session charges, so they mount the
+    # same restored CardElement lane as memberships (gumroad-private#1853-1856).
+    expect(checkout_payment["integration"]).to eq("card_element")
+    expect(checkout_payment["fallback_reason"]).to eq("sca_or_mandate_confirm_flow")
 
     expect(page).to have_text("Payment today US$3.34", normalize_ws: true)
     expect(page).to have_text("Future installments US$6.66", normalize_ws: true)
 
     # check_out's subscription-count expectation assumes only recurring-billing products create
     # subscriptions, which installment purchases also do — so drive the form directly.
-    fill_checkout_form(product, payment_element: true)
+    fill_checkout_form(product)
     click_on "Pay"
     expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.", visible: :all, wait: 60)
 
