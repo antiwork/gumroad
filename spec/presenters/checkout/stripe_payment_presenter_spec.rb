@@ -1530,7 +1530,6 @@ describe Checkout::StripePaymentPresenter do
     it "mounts card + UPI for the flagged single paid-upfront INR membership slice" do
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 73_000)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
       activate_buyer_currency_flags(seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
@@ -1570,7 +1569,6 @@ describe Checkout::StripePaymentPresenter do
     it "keeps unsupported recurring shapes off the UPI Autopay registration lane" do
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 73_000)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
       activate_buyer_currency_flags(seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
