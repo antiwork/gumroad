@@ -6,7 +6,7 @@ end
 
 Rails.application.config.flipper.preload = false
 
-Flipper::UI.configuration.application_breadcrumb_href = "/admin"
+Flipper::UI.configuration.application_breadcrumb_href = "/"
 Flipper::UI.configuration.cloud_recommendation = false
 Flipper::UI.configuration.fun = false
 

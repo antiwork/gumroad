@@ -3,7 +3,10 @@
 class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseController
   include Pagy::Backend
 
-  DEFAULT_PER_PAGE = Admin::Users::ListPaginatedProducts::PRODUCTS_PER_PAGE
+  # Inlined from the deleted admin web UI concern (Admin::Users::ListPaginatedProducts):
+  # live products first, newest first.
+  PRODUCTS_ORDER = Arel.sql("ISNULL(COALESCE(purchase_disabled_at, banned_at, links.deleted_at)) DESC, created_at DESC")
+  DEFAULT_PER_PAGE = 10
   MAX_PER_PAGE = 100
   SELLER_LOOKUP_BAD_REQUEST_MESSAGE = "email or external_id is required"
   RECENT_CHARGEBACK_WINDOW_DAYS = 90
@@ -15,7 +18,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
     WHERE h.descendant_id IN (?)
     ORDER BY h.descendant_id, h.generations DESC
   SQL
-  private_constant :DEFAULT_PER_PAGE, :MAX_PER_PAGE, :SELLER_LOOKUP_BAD_REQUEST_MESSAGE,
+  private_constant :PRODUCTS_ORDER, :DEFAULT_PER_PAGE, :MAX_PER_PAGE, :SELLER_LOOKUP_BAD_REQUEST_MESSAGE,
                    :RECENT_CHARGEBACK_WINDOW_DAYS, :NON_GLOBAL_AFFILIATE_TYPES, :TAXONOMY_ANCESTRY_SQL
 
   def index
@@ -28,7 +31,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
 
     products = user.products
       .includes(:product_files, :display_asset_previews, :taxonomy, product_affiliates: { affiliate: :affiliate_user })
-      .order(Admin::Users::ListPaginatedProducts::PRODUCTS_ORDER)
+      .order(PRODUCTS_ORDER)
 
     pagination, paginated = pagy(products, page: requested_page, limit: per_page, overflow: :empty_page)
     ancestry_paths = taxonomy_ancestry_paths_for(paginated)
