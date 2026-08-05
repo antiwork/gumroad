@@ -117,6 +117,22 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
+  # Scoped CardElement restoration (gumroad-private#1853-1856): the legacy lane's props are
+  # a fixed shape (no Payment Element wallets, no flat list, no elements_options) plus the
+  # per-cart fallback_reason/disable_wallets/request_apple_pay_merchant_tokens the presenter
+  # threads through from the same predicates the Payment Element lanes use.
+  def card_element_props(fallback_reason = "sca_or_mandate_confirm_flow", disable_wallets: false, request_apple_pay_merchant_tokens: false)
+    {
+      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+      fallback_reason:,
+      disable_wallets:,
+      request_apple_pay_merchant_tokens:,
+      payment_element_wallets: false,
+      flat_payment_methods: false,
+      elements_options: nil,
+    }
+  end
+
   def stripe_payment_props(cart: nil, add_products: [], clear_cart: false, saved_credit_card: nil, ip: nil)
     described_class.new(cart:, add_products:, clear_cart:, saved_credit_card:, ip:).props
   end
@@ -428,6 +444,11 @@ describe Checkout::StripePaymentPresenter do
   end
 
   it "mounts the buyer-currency element for a recurring presentment candidate" do
+    # Recurring carts route to the scoped CardElement restoration (gumroad-private#1853-1856)
+    # before the presentment branch is ever reached — this cart's own recurrence, not its
+    # buyer-currency candidacy, decides the lane. disable_wallets still follows the item's
+    # presentment candidacy: the CardElement's disable_wallets governs the Payment Request
+    # Button, which the browser also must not show a cart-total sheet against.
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:membership_product, user: seller, price_cents: 1234)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
@@ -449,7 +470,7 @@ describe Checkout::StripePaymentPresenter do
     ]
 
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -534,6 +555,8 @@ describe Checkout::StripePaymentPresenter do
   end
 
   it "mounts the buyer-currency element for a recurring presentment candidate in live mode" do
+    # Same scoped CardElement restoration as the test-mode example above; live mode does not
+    # change which lane a recurring cart takes.
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:membership_product, user: seller, price_cents: 1234)
     allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
@@ -555,7 +578,7 @@ describe Checkout::StripePaymentPresenter do
     ]
 
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      card_element_props(disable_wallets: true)
     )
   ensure
     Feature.deactivate_user(:buyer_local_currency, seller) if seller
@@ -587,9 +610,11 @@ describe Checkout::StripePaymentPresenter do
     expect(stripe_payment_props(add_products:)).to eq(payment_element_props)
   end
 
-  it "selects Stripe Payment Element for a recurring membership product" do
+  it "selects the scoped CardElement restoration for a recurring membership product" do
+    # Recurring carts confirm through the SCA/mandate machinery, so they mount the legacy
+    # CardElement lane (gumroad-private#1853-1856) rather than the Payment Element.
     expect(stripe_payment_props(add_products: [flagged_seller_product(recurrence: "monthly")]))
-      .to eq(payment_element_props)
+      .to eq(card_element_props)
   end
 
   it "selects Stripe Payment Element for a commission product" do
@@ -597,12 +622,14 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props)
   end
 
-  it "selects Stripe Payment Element with wallets suppressed for an installment-selection cart" do
-    # The purchase charges the first installment while the cart displays the full price, so a
-    # wallet sheet built from the cart total would promise the wrong charge. Cards are fine:
-    # the element mints a reusable PaymentMethod and the server prices every charge.
+  it "selects the scoped CardElement restoration for an installment-selection cart" do
+    # An installment purchase saves the card for later off-session charges, so it confirms
+    # through the SCA/mandate machinery and mounts the legacy CardElement lane
+    # (gumroad-private#1853-1856) instead of the Payment Element. disable_wallets here governs
+    # the CardElement's Payment Request Button, not an Element wallet sheet — this plain-USD
+    # cart carries no buyer-currency presentment candidate, so it stays false.
     expect(stripe_payment_props(add_products: [flagged_seller_product(pay_in_installments: true)]))
-      .to eq(payment_element_props(disable_wallets: true))
+      .to eq(card_element_props)
   end
 
   it "selects Stripe Payment Element SetupIntent mode for a preorder product" do
@@ -615,9 +642,12 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT))
   end
 
-  it "selects Stripe Payment Element with wallets suppressed when future-charge products are mixed with charged products" do
-    # Only part of the cart total is charged today (the preorder charges at release), so the
-    # wallet sheet cannot be trusted with the cart total; the card path is unaffected.
+  it "selects the scoped CardElement restoration when future-charge products are mixed with charged products" do
+    # A cart mixing a preorder with a charged item charges today AND needs a reusable
+    # PaymentMethod for the later preorder charge, so it confirms through the SCA/mandate
+    # machinery and mounts the legacy CardElement lane (gumroad-private#1853-1856).
+    # disable_wallets governs the CardElement's Payment Request Button; this plain-USD cart
+    # has no buyer-currency presentment candidate, so it stays false.
     seller = create(:user)
     future_charge_product = create(:product, user: seller, price_cents: 1234)
     charged_product = create(:product, user: seller, price_cents: 5678)
@@ -626,7 +656,7 @@ describe Checkout::StripePaymentPresenter do
                                   checkout_product_for(future_charge_product, is_preorder: true),
                                   checkout_product_for(charged_product),
                                 ]))
-      .to eq(payment_element_props(disable_wallets: true))
+      .to eq(card_element_props)
   end
 
   it "selects Stripe Payment Element SetupIntent mode for a recurring free-trial product" do
@@ -857,11 +887,14 @@ describe Checkout::StripePaymentPresenter do
       .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
   end
 
-  it "selects Stripe Payment Element with wallets suppressed for a future-charge product with no future charge amount" do
-    # A zero-priced preorder has nothing to charge now or later; the element props are inert
-    # (the browser mounts no element for a free cart) and the setup item keeps wallets off.
+  it "selects the scoped CardElement restoration for a future-charge product with no future charge amount" do
+    # The CardElement gate keys on future_charge_setup_item? alone, without also checking the
+    # cart's total: setup_for_future_charges_without_charging? is what requires a positive sum,
+    # and it doesn't claim carts with a zero-priced preorder — no charge to keep off Stripe's
+    # confirm-machinery lane, but nothing here scopes the gate the CardElement fallback shares
+    # with those items. disable_wallets stays false: no buyer-currency presentment candidate.
     expect(stripe_payment_props(add_products: [flagged_seller_product(is_preorder: true, price: 0)]))
-      .to eq(payment_element_props(disable_wallets: true))
+      .to eq(card_element_props)
   end
 
   it "selects Stripe Payment Element when the charged checkout total is below Stripe's charge floor" do
@@ -1170,9 +1203,11 @@ describe Checkout::StripePaymentPresenter do
       expect(stripe_payment_props(cart:)).to eq(payment_element_props)
     end
 
-    it "keeps server-confirm Payment Element for a recurring membership because client-confirm mode is one-time only" do
+    it "selects the scoped CardElement restoration for a recurring membership even with both flags" do
+      # The CardElement gate is checked before client-confirm eligibility ever matters — a
+      # recurring cart mounts CardElement regardless of the client-confirm rollout flag.
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(recurrence: "monthly")]))
-        .to eq(payment_element_props)
+        .to eq(card_element_props)
     end
 
     it "keeps server-confirm Payment Element for a commission product even with both flags" do
@@ -1761,12 +1796,13 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props)
     end
 
-    it "mounts the buyer-currency element for a recurring EUR-priced presentment candidate instead of crashing" do
-      # A recurring cart is rejected by the payment method resolver (client-confirm only
-      # covers one-time purchases), so its resolution carries a nil method list. The
-      # method-forced shape check — evaluated before the presentment shape in the supported
-      # check — must consult the resolver's eligibility verdict before scanning the method
-      # list, or this cart raises instead of mounting the element.
+    it "mounts the scoped CardElement restoration for a recurring EUR-priced presentment candidate instead of crashing" do
+      # A recurring cart now claims the scoped CardElement restoration (gumroad-private#1853-
+      # 1856) before either the method-forced or presentment checks run, so the crash this
+      # example originally pinned (the method-forced shape check scanning a resolver's nil
+      # method list without consulting its eligibility verdict first) is no longer reachable
+      # from this cart shape — but the regression coverage that this recurring, EUR-priced,
+      # presentment-candidate cart resolves without raising is still worth keeping.
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:membership_product, user: seller, price_currency_type: "eur", price_cents: 1500)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
@@ -1788,7 +1824,7 @@ describe Checkout::StripePaymentPresenter do
       ]
 
       expect(stripe_payment_props(add_products:)).to eq(
-        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+        card_element_props(disable_wallets: true)
       )
     ensure
       deactivate_buyer_currency_flags(seller) if seller
@@ -1832,15 +1868,15 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_props(request_apple_pay_merchant_tokens: true))
     end
 
-    it "requests merchant tokens on a wallet-suppressed element cart when the seller is flagged" do
-      # The flag must reach the frontend on every cart shape — the frontend owns which wallet
-      # surface (if any) consumes it.
+    it "requests merchant tokens on the scoped CardElement restoration when the seller is flagged" do
+      # The flag must reach the frontend on every cart shape, including the CardElement lane —
+      # the frontend owns which wallet surface (if any) consumes it.
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
       Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product, pay_in_installments: true)]))
-        .to eq(payment_element_props(disable_wallets: true, request_apple_pay_merchant_tokens: true))
+        .to eq(card_element_props(request_apple_pay_merchant_tokens: true))
     end
 
     it "requests merchant tokens on the client-confirm integration when the seller is flagged" do
@@ -1895,15 +1931,16 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props(payment_element_wallets: true))
     end
 
-    it "never enables element wallets on a wallet-suppressed cart, even when the seller is flagged" do
-      # An installment cart's wallet sheet would promise the cart total while the charge is the
-      # first installment, so disable_wallets wins over the rollout flag.
+    it "never enables Payment Element wallets on the scoped CardElement restoration, even when the seller is flagged" do
+      # An installment cart mounts the CardElement lane (gumroad-private#1853-1856), which
+      # never carries Payment Element wallets regardless of the rollout flag — the CardElement
+      # lane keeps the legacy Payment Request Button surface instead.
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
       Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product, pay_in_installments: true)]))
-        .to eq(payment_element_props(disable_wallets: true))
+        .to eq(card_element_props)
     end
 
     it "keeps element wallets off when the cart disables wallets, even with the seller flagged" do

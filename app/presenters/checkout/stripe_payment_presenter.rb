@@ -24,6 +24,11 @@ class Checkout::StripePaymentPresenter
   # wallet rows this presenter renders and the wallet charges that service accepts can never
   # end up reading different flags.
   BUYER_CURRENCY_WALLETS_FEATURE_NAME = Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME
+  # Scoped restoration of the legacy CardElement lane (gumroad-private#1853–1856): the Payment
+  # Element's confirm throws inside Stripe's bundle on SCA/mandate-shaped confirms (Indian card
+  # mandates, SCA subscription restarts), stranding buyers on "Processing...". Until the
+  # Element-native confirm is fixed, recurring carts mount CardElement (see props below).
+  STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION = "payment_element_client_confirm"
   # Passed through to Stripe Elements as `mode`; these are Stripe's UI configuration values,
@@ -57,9 +62,22 @@ class Checkout::StripePaymentPresenter
     # amount to present in the buyer's currency — they keep the SetupIntent-mode element even
     # when every item is a presentment candidate. Checked before the presentment branch so
     # the per-item shape conditions' absence cannot mount a payment-mode element on a cart
-    # with no charge.
+    # with no charge. Checked before the CardElement restoration below too: setup carts confirm
+    # via confirmCardSetup, which the Payment Element handles fine.
     if setup_for_future_charges_without_charging?(checkout_items)
       return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
+    end
+
+    # Scoped CardElement restoration (gumroad-private#1853–1856): carts that charge today AND
+    # save the card for later off-session charges (memberships, installment plans, mixed
+    # preorder/free-trial carts) confirm through the SCA/mandate machinery — confirmCardPayment
+    # on an off-session-reusable PaymentMethod, which for Indian cards also creates an RBI
+    # e-mandate — and the Payment Element's confirm currently throws inside Stripe's bundle
+    # there, stranding buyers on "Processing...". They keep the legacy CardElement lane until
+    # the Element-native confirm is fixed. One-time carts stay on the Payment Element.
+    if checkout_items.any? { _1[:recurrence].present? || _1[:pay_in_installments] || future_charge_setup_item?(_1) }
+      disable_wallets = checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
+      return card_element_props("sca_or_mandate_confirm_flow", disable_wallets:)
     end
 
     # FX-quoted buyer-currency candidates use server-confirm because the deferred-intent path does
@@ -158,6 +176,22 @@ class Checkout::StripePaymentPresenter
 
     def sellers
       @sellers ||= items.map { _1[:seller] }.uniq
+    end
+
+    def card_element_props(fallback_reason, disable_wallets:)
+      {
+        integration: STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason:,
+        disable_wallets:,
+        request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
+        # CardElement carts never mount a Payment Element, so there is no element wallet surface
+        # to enable — they keep the Payment Request Button regardless of the rollout flag.
+        payment_element_wallets: false,
+        # And with no Payment Element there is no accordion to act as the payment-method
+        # selector, so the CardElement lane always renders the legacy nested radio-row list.
+        flat_payment_methods: false,
+        elements_options: nil,
+      }
     end
 
     def payment_element_props(stripe_elements_mode, buyer_currency_presentment: false, disable_wallets: false)

@@ -370,22 +370,17 @@ class Purchase::CreateService < Purchase::BaseService
       end
     end
 
-    # The child purchases run `sold_out`/`variants_available` too, but as before_create hooks that
-    # only stamp an error_code — Purchase::CreateBundleProductPurchaseService never inspects it, and
-    # by the time it runs the parent has already been charged and marked successful. So the cap has
-    # to be enforced here: before `purchase.charge!`, and inside the product_inventory semaphore the
-    # caller holds, which is the only point where refusing costs the buyer nothing.
-    #
-    # Note the lock is the BUNDLE's, not each component's, so this does not close the
-    # direct-vs-bundle or bundle-vs-bundle races (gumroad-private#1786 items 2-4 — those need the
-    # multi-lock). It does close the far larger non-concurrent hole where the verdict was computed
-    # and discarded.
+    # Validated under the bundle's product_inventory lock, before purchase.charge! — refusing here
+    # costs the buyer nothing. Only closes the non-concurrent hole (verdict computed then discarded);
+    # the multi-lock direct-vs-bundle/bundle-vs-bundle race is gumroad-private#1786 items 2-4.
     def validate_bundle_component_inventory(bundle_product)
       requested_quantity = bundle_product.quantity * purchase.quantity
       component = bundle_product.product.reload
 
+      # A variant can have stock left while its product-wide cap is exhausted (or vice versa),
+      # so both must be checked — checking only one lets the other's cap be silently oversold.
       remaining = if bundle_product.variant.present?
-        bundle_product.variant.reload.quantity_left
+        [bundle_product.variant.reload.quantity_left, component.remaining_for_sale_count].compact.min
       else
         component.remaining_for_sale_count
       end
