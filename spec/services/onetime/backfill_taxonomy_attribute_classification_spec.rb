@@ -141,7 +141,7 @@ describe Onetime::BackfillTaxonomyAttributeClassification do
 
     locking_sql = []
     subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
-      locking_sql << payload[:sql] if payload[:sql] =~ /FOR UPDATE/i
+      locking_sql << payload[:sql] if payload[:sql].match?(/FOR UPDATE/i)
     end
 
     described_class.process(dry_run: false)
