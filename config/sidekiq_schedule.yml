@@ -16,10 +16,6 @@ repair_order_charge_outcomes:
   cron: "20 * * * *" # Every hour
   class: RepairOrderChargeOutcomesJob
   description: Re-derives Order#partially_successful for recent orders whose after-commit enqueue was lost
-cache_unreviewed_users_data:
-  cron: "0 * * * *" # Every hour
-  class: CacheUnreviewedUsersDataWorker
-  description: Caches unreviewed users data for admin dashboard
 renew_custom_domain_ssl_certificates:
   cron: "0 * * * *" # Every hour
   class: RenewCustomDomainSslCertificates
@@ -439,10 +435,6 @@ stripe_balance_summaries_report:
   cron: "0 11 2 * *" # UTC 11:00 on 2nd of every month — Stripe's balance reports lag ~24h, so the full previous month isn't queryable on the 1st
   class: SendStripeBalanceSummariesReportJob
   description: Email with Stripe balance summary reports (all Antiwork Stripe accounts) for the previous month
-reset_admin_action_call_counts:
-  cron: "0 11 1 * *" # UTC 11:00 on 1st of every month
-  class: ResetAdminActionCallCountsJob
-  description: Reset admin controller action call counts
 outstanding_balances:
   cron: "0 0 1 * *" # UTC 00:00 on 1st of every month
   class: EmailOutstandingBalancesCsvWorker

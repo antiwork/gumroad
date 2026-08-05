@@ -1,8 +1,7 @@
 <p>
   Name:
-  <a href="<%= admin_user_url(user.id) %>">
-    <%= user.name.presence || "<none set>" %>
-  </a>
+  <%= user.name.presence || "<none set>" %>
+  (user id: <%= user.external_id %>)
   <br>
   <br>
   Public email: <%= user.email %>
