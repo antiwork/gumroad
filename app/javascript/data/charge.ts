@@ -2,7 +2,12 @@ import typia from "typia";
 
 import { request, ResponseError } from "$app/utils/request";
 
-export const lookupCharges = async (data: { email: string; last4: string | null; year: string | null; month: string | null }) => {
+export const lookupCharges = async (data: {
+  email: string;
+  last4: string | null;
+  year: string | null;
+  month: string | null;
+}) => {
   const response = await request({
     method: "GET",
     accept: "json",
