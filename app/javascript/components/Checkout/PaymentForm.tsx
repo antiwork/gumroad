@@ -1110,6 +1110,12 @@ const CreditCardContent = ({
             amount={stripePaymentElementAmount}
             mountCurrency={stripePaymentElementMountCurrency}
             elementsOptions={stripePaymentElementConfig}
+            setupFutureUsage={
+              state.checkoutPayment.integration === "payment_element_client_confirm" &&
+              state.checkoutPayment.recurring_upi_registration
+                ? "off_session"
+                : undefined
+            }
             walletsEnabled={state.checkoutPayment.payment_element_wallets}
             flatLayout={state.checkoutPayment.flat_payment_methods}
             applePayOption={memoizedPaymentElementApplePayOption}
