@@ -50,11 +50,8 @@ class Purchase::FixLaterChargePresentmentService
 
   def perform
     owner = later_charge_owner
-    # Writes the FIRST fixing only. A re-fixing after a plan change is deliberately not this
-    # service's job — it reads its terms off the checkout quote/presentment, which no longer exists
-    # by then — so bailing here keeps it from clobbering an existing fixing with signup-time terms.
-    # The consequence is documented on LaterChargePresentment: until a re-fixing writer exists, a
-    # changed plan falls back to canonical dollars via the staleness gate.
+    # This service only has checkout terms, so it writes the first fixing. Direct-listed
+    # required-currency renewals are re-fixed from their renewal terms by the charge path.
     return if owner.blank? || owner.later_charge_presentments.exists?
     return if purchase.is_gift_sender_purchase?
 
@@ -102,8 +99,20 @@ class Purchase::FixLaterChargePresentmentService
       end
 
       presentment = purchase.purchase_presentment
-      fx_rate = presentment&.charge_presentment&.fx_rate&.to_d
-      return if presentment.blank? || fx_rate.blank?
+      return if presentment.blank?
+
+      fx_rate = presentment.charge_presentment&.fx_rate&.to_d
+      if fx_rate.blank?
+        # A product already listed in the presentment currency does not need a Stripe FX
+        # quote. Its stored product rate points in the opposite direction from a quote, so
+        # invert it here and let #perform keep its single units-per-dollar write convention.
+        return unless purchase.link.price_currency_type.to_s.downcase == presentment.presentment_currency
+
+        currency_units_per_usd = purchase.rate_converted_to_usd&.to_d
+        return unless currency_units_per_usd&.positive?
+
+        fx_rate = 1 / currency_units_per_usd
+      end
 
       presentment_price_cents = if purchase.is_installment_payment?
         presentment_cents_for(canonical_price_cents, fx_rate, presentment.presentment_currency)

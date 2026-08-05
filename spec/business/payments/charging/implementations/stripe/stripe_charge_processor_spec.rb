@@ -269,6 +269,7 @@ describe StripeChargeProcessor, :vcr do
         expect(charge.fee).to be_nil
       end
     end
+
     describe "when the charge has transfer_data but no transfer yet" do
       # A failed (or still-pending) destination charge carries `transfer_data` but Stripe has not
       # created the transfer, so the `transfer` attribute is absent from the payload entirely.
@@ -791,6 +792,108 @@ describe StripeChargeProcessor, :vcr do
     it "passes on the description" do
       expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(description: "test description")).and_call_original
       subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description")
+    end
+
+    context "with a saved UPI Autopay instrument" do
+      let(:chargeable) do
+        StripeChargeableUpi.new(
+          merchant_account:,
+          customer_id: "cus_upi_renewal",
+          payment_method_id: "pm_upi_renewal",
+          fingerprint: "pm_upi_renewal",
+          stripe_payment_intent_id: "pi_upi_signup",
+          stripe_account_id: nil,
+          recurring_authorization_verified_at: Time.current,
+          recurring_authorization_currency: Currency::INR,
+          recurring_authorization_max_amount_cents: 150_000
+        )
+      end
+      let(:payment_intent) do
+        Stripe::PaymentIntent.construct_from(
+          id: "pi_upi_renewal",
+          status: StripeIntentStatus::PROCESSING,
+          client_secret: "secret"
+        )
+      end
+
+      it "submits an off-session INR UPI intent without a card mandate lookup" do
+        expect(subject).not_to receive(:get_mandate_id_from_chargeable)
+        expect(Stripe::PaymentIntent).to receive(:create).with(
+          hash_including(
+            amount: 100_000,
+            currency: Currency::INR,
+            customer: "cus_upi_renewal",
+            payment_method: "pm_upi_renewal",
+            payment_method_types: ["upi"],
+            off_session: true,
+            confirm: true
+          )
+        ).and_return(payment_intent)
+
+        result = subject.create_payment_intent_or_charge!(
+          merchant_account, chargeable, 10_00, 3_00, "reference", "test description",
+          processor_amount_cents: 100_000,
+          processor_currency: Currency::INR,
+          processor_gumroad_amount_cents: 30_000,
+          mandate_expected: true
+        )
+
+        expect(result).to be_a(StripeChargeIntent)
+      end
+
+      it "uses the UPI preview version when the INR renewal also carries an FX quote" do
+        expect(Stripe::PaymentIntent).to receive(:create).with(
+          hash_including(
+            currency: Currency::INR,
+            payment_method_types: ["upi"],
+            fx_quote: "fxq_upi_renewal"
+          ),
+          hash_including(stripe_version: StripeFxQuote::API_VERSION)
+        ).and_return(payment_intent)
+
+        subject.create_payment_intent_or_charge!(
+          merchant_account, chargeable, 10_00, 3_00, "reference", "test description",
+          processor_amount_cents: 100_000,
+          processor_currency: Currency::INR,
+          processor_gumroad_amount_cents: 30_000,
+          stripe_fx_quote_id: "fxq_upi_renewal"
+        )
+      end
+
+      it "fails before Stripe instead of falling back to USD" do
+        expect(ErrorNotifier).to receive(:notify).with(
+          "UPI Autopay renewal rejected before Stripe submit",
+          reason: a_string_including("charge currency")
+        )
+        expect(Stripe::PaymentIntent).not_to receive(:create)
+
+        expect do
+          subject.create_payment_intent_or_charge!(
+            merchant_account, chargeable, 10_00, 3_00, "reference", "test description"
+          )
+        end.to raise_error(ChargeProcessorCardError) do |error|
+          expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+        end
+      end
+
+      it "fails before Stripe when the debit exceeds the registered maximum" do
+        expect(ErrorNotifier).to receive(:notify).with(
+          "UPI Autopay renewal rejected before Stripe submit",
+          reason: a_string_including("exceeded stored maximum")
+        )
+        expect(Stripe::PaymentIntent).not_to receive(:create)
+
+        expect do
+          subject.create_payment_intent_or_charge!(
+            merchant_account, chargeable, 10_00, 3_00, "reference", "test description",
+            processor_amount_cents: 150_001,
+            processor_currency: Currency::INR,
+            processor_gumroad_amount_cents: 30_000
+          )
+        end.to raise_error(ChargeProcessorCardError) do |error|
+          expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+        end
+      end
     end
 
     it "raises a quote-invalid error when Stripe rejects a drift-invalidated FX quote" do

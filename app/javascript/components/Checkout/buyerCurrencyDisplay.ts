@@ -60,6 +60,27 @@ export type CheckoutListedCurrencyOptions = Pick<CheckoutBuyerCurrencyOptions, "
   hasShipping?: boolean;
 };
 
+export const isRecurringUpiPaymentConfig = (checkoutPayment: CheckoutPaymentConfig) => {
+  if (checkoutPayment.integration !== "payment_element_client_confirm") return false;
+
+  const options = checkoutPayment.elements_options;
+  return (
+    checkoutPayment.recurring_upi_registration &&
+    checkoutPayment.disable_wallets &&
+    !checkoutPayment.payment_element_wallets &&
+    options.currency === "inr" &&
+    options.presentment_amount_cents !== null &&
+    options.presentment_amount_cents > 0 &&
+    options.listed_currency_display?.currency === "inr" &&
+    options.listed_currency_display.subunit_to_unit === 100 &&
+    options.payment_method_types.length === 2 &&
+    options.payment_method_types.includes("card") &&
+    options.payment_method_types.includes("upi") &&
+    !options.stripe_link_enabled &&
+    options.stripe_connect_account_id === null
+  );
+};
+
 export const getCheckoutBuyerCurrencyDisplay = (
   surcharges: SurchargesResponse | null,
   { cartPermalinks, willSaveCard = false, paymentMethod = "card" }: CheckoutBuyerCurrencyOptions,
@@ -149,13 +170,10 @@ export const getCheckoutListedCurrencyDisplay = (
   const item = cartItems[0];
   const product = item?.product;
   if (!product) return null;
-  // Installment plans and subscriptions are shapes the client-confirm Element never accepts, so
-  // the server withholds this lane for them at render. Both are toggleable in the cart's Edit
-  // popover afterwards, and `checkoutPayment` is an Inertia prop that does not refresh on cart
-  // edits — so without re-checking here, toggling "pay in installments" would leave listed-currency
-  // rows on screen for a charge that has silently dropped back to canonical USD.
+  // These fields are editable while the server-owned checkout config remains fixed. Only the
+  // narrowly configured recurring UPI lane may keep listed-currency display for a subscription.
   if (item.pay_in_installments) return null;
-  if (item.recurrence) return null;
+  if (!!item.recurrence !== isRecurringUpiPaymentConfig(checkoutPayment)) return null;
   if (product.currency_code !== listedCurrency.currency) return null;
   // A zero or missing rate would make every converted row 0; fall back to canonical USD instead.
   if (!(product.exchange_rate > 0)) return null;

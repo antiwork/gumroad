@@ -19,8 +19,14 @@ class Purchase::BaseService
 
       create_subscription(giftee_purchase) if purchase.link.is_recurring_billing || purchase.is_installment_payment
 
+      # UPI cannot use the ordinary canonical-USD fallback, so persist its INR terms first.
+      if purchase.credit_card&.recurring_upi?
+        fix_later_charge_presentment
+        ensure_upi_later_charge_presentment!
+      end
+
       purchase.update_balance_and_mark_successful!
-      fix_later_charge_presentment
+      fix_later_charge_presentment unless purchase.credit_card&.recurring_upi?
       purchase.gift_given.mark_successful! if purchase.is_gift_sender_purchase
       purchase.seller.save_gumroad_day_timezone
       after_commit do
@@ -30,6 +36,15 @@ class Purchase::BaseService
 
     def fix_later_charge_presentment
       Purchase::FixLaterChargePresentmentService.new(purchase:).perform
+    end
+
+    def ensure_upi_later_charge_presentment!
+      fixing = purchase.subscription&.current_later_charge_presentment
+      return if fixing&.presentment_currency == Currency::INR
+
+      error = RuntimeError.new("UPI Autopay signup completed without a durable INR renewal fixing")
+      ErrorNotifier.notify(error, purchase_id: purchase.id)
+      raise error
     end
 
     def create_subscription(giftee_purchase)

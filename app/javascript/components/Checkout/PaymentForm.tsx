@@ -704,8 +704,8 @@ const CreditCardContent = ({
   // via the same shared builder, so the two wallet surfaces can't drift. Applies to both element
   // modes the server-confirm lane uses: "payment" (subscriptions — regular recurring billing) and
   // "setup" (free trials / preorders — the builder emits the zero-amount trialBilling line there).
-  // The client-confirm lane never gets a declaration: Checkout::PaymentMethodResolver only routes
-  // one-time, non-recurring carts to it, so there is never a recurring agreement to declare.
+  // The only recurring client-confirm lane is UPI Autopay registration, whose server config
+  // disables wallets, so this lane never has an Apple Pay agreement to declare.
   //
   // The builder computes the end date from "now", so it returns a fresh object every call; the
   // useMemo below keys on the declaration's content (end-date excluded, same reasoning as the
@@ -1110,6 +1110,12 @@ const CreditCardContent = ({
             amount={stripePaymentElementAmount}
             mountCurrency={stripePaymentElementMountCurrency}
             elementsOptions={stripePaymentElementConfig}
+            setupFutureUsage={
+              state.checkoutPayment.integration === "payment_element_client_confirm" &&
+              state.checkoutPayment.recurring_upi_registration
+                ? "off_session"
+                : undefined
+            }
             walletsEnabled={state.checkoutPayment.payment_element_wallets}
             flatLayout={state.checkoutPayment.flat_payment_methods}
             applePayOption={memoizedPaymentElementApplePayOption}

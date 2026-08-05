@@ -16,6 +16,7 @@ const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | und
 const elementsRender = vi.hoisted<{
   options: {
     fonts?: unknown;
+    setupFutureUsage?: "off_session";
     appearance?: {
       variables?: Record<string, string>;
       rules?: Record<string, Record<string, string>>;
@@ -51,6 +52,7 @@ vi.mock("@stripe/react-stripe-js", async () => {
         currency: string;
         amount?: number;
         fonts?: unknown;
+        setupFutureUsage?: "off_session";
         appearance?: {
           variables?: Record<string, string>;
           rules?: Record<string, Record<string, string>>;
@@ -301,6 +303,18 @@ describe("PaymentElementInput", () => {
     // total, and reusing it for the USD mount would send a wrong (and wrongly-denominated)
     // amount in the creation request.
     expect(elementsMounts.amounts).toEqual([1_625, 1_300]);
+    expect(elementsMounts.unmounts).toBe(1);
+  });
+
+  it("declares off-session future use for recurring UPI registration", () => {
+    const { rerender } = render(<PaymentElementInput {...props} amount={100_000} mountCurrency="inr" />);
+
+    expect(elementsRender.options?.setupFutureUsage).toBeUndefined();
+
+    rerender(<PaymentElementInput {...props} amount={100_000} mountCurrency="inr" setupFutureUsage="off_session" />);
+
+    expect(elementsRender.options?.setupFutureUsage).toBe("off_session");
+    expect(elementsMounts.currencies).toEqual(["inr", "inr"]);
     expect(elementsMounts.unmounts).toBe(1);
   });
 

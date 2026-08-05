@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_183000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_235900) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -747,6 +747,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_183000) do
     t.string "paypal_billing_agreement_id", limit: 191
     t.string "processor_payment_method_id"
     t.json "json_data"
+    t.string "payment_method_type"
+    t.string "stripe_account_id"
+    t.datetime "recurring_authorization_verified_at"
+    t.string "recurring_authorization_currency"
+    t.integer "recurring_authorization_max_amount_cents"
     t.index ["preorder_id"], name: "index_credit_cards_on_preorder_id"
     t.index ["stripe_fingerprint"], name: "index_credit_cards_on_stripe_fingerprint"
   end

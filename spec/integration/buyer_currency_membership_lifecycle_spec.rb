@@ -33,12 +33,13 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
       # A membership signup mid-charge: the Subscription does not exist yet (that is the whole
       # point — the earlier broken version wrote the fixing before this moment), but the purchase
       # carries the recurring price the payment option is built from.
-      purchase = build(:membership_purchase, link: product, seller:, price_cents: 1000,
+      purchase = build(:membership_purchase, link: product, seller:, merchant_account:, price_cents: 1000,
                                              purchase_state: "in_progress", subscription: nil)
       purchase.price = product.prices.alive.first || product.prices.first
       purchase.variant_attributes = []
       purchase.save!(validate: false)
-      charge_presentment = create(:charge_presentment, presentment_currency: "eur", fx_rate: 0.9)
+      charge = create(:charge, seller:, merchant_account:)
+      charge_presentment = create(:charge_presentment, charge:, presentment_currency: "eur", fx_rate: 0.9)
       create(:purchase_presentment, purchase:, charge_presentment:,
                                     presentment_currency: "eur", presentment_price_cents: 899,
                                     presentment_gumroad_tax_cents: 0, presentment_total_cents: 899)
@@ -54,18 +55,66 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
       expect(fixing.signup_currency_units_per_usd).to be_within(BigDecimal("0.000001")).of(BigDecimal(1) / BigDecimal("0.9"))
     end
 
+    it "stores the product rate for a direct-listed INR signup that has no FX quote" do
+      inr_product = create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 83_000)
+      purchase = create(:membership_purchase, link: inr_product, seller:, merchant_account:, price_cents: 1000,
+                                              rate_converted_to_usd: BigDecimal("83"))
+      charge_presentment = create(
+        :charge_presentment,
+        charge: create(:charge, seller:, merchant_account:),
+        presentment_currency: Currency::INR,
+        stripe_fx_quote_id: nil,
+        stripe_fx_quote_expires_at: nil,
+        fx_rate: nil
+      )
+      create(:purchase_presentment, purchase:, charge_presentment:,
+                                    presentment_currency: Currency::INR, presentment_price_cents: 83_000,
+                                    presentment_gumroad_tax_cents: 0, presentment_total_cents: 83_000)
+
+      expect { subject_service(purchase).send(:fix_later_charge_presentment) }
+        .to change(LaterChargePresentment, :count).by(1)
+
+      fixing = purchase.reload.subscription.current_later_charge_presentment
+      expect(fixing.presentment_currency).to eq(Currency::INR)
+      expect(fixing.signup_currency_units_per_usd).to eq(BigDecimal("83"))
+    end
+
     it "writes nothing when the signup charged canonical dollars" do
       # A normal membership signup with no purchase_presentment: nothing to fix, so later charges
       # keep billing canonical dollars exactly as they did before this feature.
-      purchase = create(:membership_purchase, link: product, seller:, price_cents: 1000)
+      purchase = create(:membership_purchase, link: product, seller:, merchant_account:, price_cents: 1000)
 
       expect { subject_service(purchase).send(:fix_later_charge_presentment) }
         .not_to change(LaterChargePresentment, :count)
     end
 
+    it "refuses to fulfill a UPI signup without a durable INR fixing" do
+      upi_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        payment_method_type: "upi",
+        stripe_customer_id: "cus_upi_missing_fixing",
+        processor_payment_method_id: "pm_upi_missing_fixing",
+        stripe_fingerprint: "pm_upi_missing_fixing",
+        visual: "UPI",
+        card_type: CardType::UPI,
+        card_country: Compliance::Countries::IND.alpha2,
+        recurring_authorization_verified_at: Time.current,
+        recurring_authorization_currency: Currency::INR,
+        recurring_authorization_max_amount_cents: 100_000
+      )
+      purchase = create(:membership_purchase, link: product, seller:, price_cents: 1000,
+                                              purchase_state: "in_progress", credit_card: upi_card)
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(RuntimeError), purchase_id: purchase.id)
+
+      expect { subject_service(purchase).perform }
+        .to raise_error(RuntimeError, /without a durable INR renewal fixing/)
+      expect(purchase.reload).to be_in_progress
+    end
+
     it "writes nothing for a gift, whose subscription belongs to someone who never saw the price" do
-      purchase = create(:membership_purchase, link: product, seller:, price_cents: 1000)
-      charge_presentment = create(:charge_presentment, presentment_currency: "eur", fx_rate: 0.9)
+      purchase = create(:membership_purchase, link: product, seller:, merchant_account:, price_cents: 1000)
+      charge = create(:charge, seller:, merchant_account:)
+      charge_presentment = create(:charge_presentment, charge:, presentment_currency: "eur", fx_rate: 0.9)
       create(:purchase_presentment, purchase:, charge_presentment:,
                                     presentment_currency: "eur", presentment_price_cents: 899,
                                     presentment_gumroad_tax_cents: 0, presentment_total_cents: 899)
@@ -79,7 +128,7 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
   describe "the renewal bills the fixed amount" do
     let(:subscription) { create(:subscription, link: product, user: create(:user)) }
     let!(:original) do
-      create(:membership_purchase, link: product, seller:, subscription:,
+      create(:membership_purchase, link: product, seller:, subscription:, merchant_account:,
                                    is_original_subscription_purchase: true, price_cents: 1000)
     end
     let!(:fixing) do
@@ -242,6 +291,139 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
       end
 
       renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+    end
+
+    context "with a saved UPI Autopay instrument" do
+      let(:product) do
+        create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 83_000)
+      end
+
+      let!(:upi_fixing) do
+        create(
+          :later_charge_presentment,
+          owner: subscription,
+          presentment_currency: Currency::INR,
+          presentment_price_cents: 899,
+          canonical_price_cents: 1000,
+          signup_currency_units_per_usd: BigDecimal("1.111111111111111"),
+          effective_from: 1.day.ago
+        )
+      end
+
+      let!(:upi_card) do
+        CreditCard.create!(
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          payment_method_type: "upi",
+          stripe_customer_id: "cus_upi",
+          processor_payment_method_id: "pm_upi",
+          stripe_fingerprint: "pm_upi",
+          visual: "UPI",
+          card_type: CardType::UPI,
+          card_country: "IN",
+          recurring_authorization_verified_at: Time.current,
+          recurring_authorization_currency: Currency::INR,
+          recurring_authorization_max_amount_cents: 100_000,
+          json_data: { stripe_payment_intent_id: "pi_upi_signup" }
+        )
+      end
+
+      before do
+        Feature.activate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+        fixing.destroy!
+        subscription.update!(credit_card: upi_card)
+        renewal.update!(credit_card: upi_card)
+      end
+
+      it "defers the renewal without calling Stripe when servicing is disabled" do
+        Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+        allow(renewal).to receive(:process!) do
+          renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+        end
+        expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+        expect(ErrorNotifier).to receive(:notify).with(
+          "UPI Autopay renewal deferred before Stripe submit",
+          reason: "servicing flag inactive",
+          purchase_id: renewal.id
+        )
+        expect(subscription).to receive(:schedule_charge).with(be_within(2.seconds).of(1.hour.from_now))
+        expect(CustomerLowPriorityMailer).not_to receive(:subscription_card_declined)
+
+        subscription.process_purchase!(renewal)
+
+        expect(renewal.error_code).to eq(PurchaseErrorCode::STRIPE_UNAVAILABLE)
+        expect(renewal).to be_has_payment_network_error
+      end
+
+      it "hands INR to the processor without consulting the acquisition flags" do
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+
+        expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*_args, **kwargs|
+          expect(kwargs[:processor_currency]).to eq(Currency::INR)
+          expect(kwargs[:processor_amount_cents]).to eq(899)
+          double(id: "pi_upi_renewal", succeeded?: true, requires_action?: false, get_charge: nil)
+        end
+
+        renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+        expect(upi_card.reload.stripe_payment_intent_id).to eq("pi_upi_signup")
+      end
+
+      it "requests a payment-method update rather than calling Stripe in USD when the fixing is missing" do
+        upi_fixing.destroy!
+        expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Required-currency renewal rejected before processor submit",
+          reason: :no_stored_presentment,
+          required_currency: Currency::INR,
+          purchase_id: renewal.id,
+          charge_id: nil
+        )
+
+        result = renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+
+        expect(result).to be_nil
+        expect(renewal.stripe_error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+      end
+
+      it "schedules a retry when the INR quote is temporarily unavailable" do
+        allow(StripeFxQuote).to receive(:create).and_return(nil)
+        allow(renewal).to receive(:process!) do
+          renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+        end
+        expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+        expect(subscription).to receive(:schedule_charge).with(be_within(2.seconds).of(1.hour.from_now))
+        expect(CustomerLowPriorityMailer).not_to receive(:subscription_card_declined)
+
+        subscription.process_purchase!(renewal)
+
+        expect(renewal.error_code).to eq(PurchaseErrorCode::STRIPE_UNAVAILABLE)
+        expect(renewal).to be_has_payment_network_error
+      end
+
+      it "re-fixes a direct-INR renewal after its limited discount expires" do
+        renewal.update!(
+          price_cents: 1500,
+          total_transaction_cents: 1500,
+          displayed_price_currency_type: Currency::INR,
+          displayed_price_cents: 124_500,
+          rate_converted_to_usd: BigDecimal("83")
+        )
+
+        expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*_args, **kwargs|
+          expect(kwargs[:processor_currency]).to eq(Currency::INR)
+          expect(kwargs[:processor_amount_cents]).to eq(124_500)
+          double(id: "pi_upi_renewal", succeeded?: true, requires_action?: false, get_charge: nil)
+        end
+
+        expect { renewal.send(:create_charge_intent, double(get_chargeable_for: double)) }
+          .to change(LaterChargePresentment, :count).by(1)
+
+        expect(subscription.current_later_charge_presentment).to have_attributes(
+          presentment_price_cents: 124_500,
+          canonical_price_cents: 1500
+        )
+      end
     end
   end
 end

@@ -26,57 +26,43 @@ class Purchase::LaterChargePresentmentService
 
   include CurrencyHelper
 
-  attr_reader :charge, :merchant_account, :purchases, :amount_cents, :gumroad_amount_cents, :fallback_reason
+  attr_reader :charge, :merchant_account, :purchases, :amount_cents, :gumroad_amount_cents, :fallback_reason, :required_currency
 
-  def initialize(merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, charge: nil)
+  def initialize(merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, charge: nil, required_currency: nil)
     @charge = charge
     @merchant_account = merchant_account
     @purchases = purchases
     @amount_cents = amount_cents
     @gumroad_amount_cents = gumroad_amount_cents
+    @required_currency = required_currency&.to_s&.downcase
   end
 
   # Returns a Result in the stored currency, or nil to leave the caller charging canonical USD.
   #
-  # Every refusal here is a FALLBACK, not a failure. This differs deliberately from the card
-  # lane, which fails closed: there, a buyer is watching a confirmed local total and charging
-  # anything else would break the amount they agreed to. Here there is no browser and no
-  # confirmed total for this charge. Failing it outright over an FX-quote hiccup is worse than
-  # the canonical USD behavior these paths used before the fixing existed.
+  # Ordinary cards fall back to canonical USD; a required-currency rail either re-fixes a
+  # direct-listed renewal or requires the buyer to update their payment method.
   def perform
     presentment = stored_presentment
     return fallback(:no_stored_presentment) if presentment.blank?
 
     purchase = purchases.first
     currency = presentment.presentment_currency
+    return fallback(:required_currency_mismatch) if required_currency.present? && currency != required_currency
     return fallback(:unsupported_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
     return fallback(:unsupported_charge_model) unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
     return fallback(:settlement_currency_mismatch) unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: currency)
 
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
+    if presentment.canonical_price_cents != canonical_price_cents
+      presentment = refix_required_currency_presentment(presentment, purchase, canonical_price_cents)
+      return fallback(:stale_fixing) if presentment.blank? || presentment.canonical_price_cents != canonical_price_cents
+    end
+
     quote = mint_quote(currency)
-    return fallback(:quote_unavailable) if quote.blank?
+    return fallback(:quote_unavailable, transient: true) if quote.blank?
 
     # The stored price is charged as-is. Tax and shipping ride on today's rate.
     fixed_price_cents = presentment.presentment_price_cents
-
-    # STALENESS GATE. The fixed amount is only valid while the plan it was agreed against has not
-    # moved. A subscription's canonical price legitimately changes mid-life — a limited-duration
-    # discount runs out (see Purchase#mandate_maximum_amount_cents, which exists because renewals
-    # bill the undiscounted price), Subscription#update_current_plan! applies an upgrade,
-    # downgrade or quantity change, a SubscriptionPlanChange lands. The fixing cannot follow those
-    # on its own, so billing it anyway would silently under-charge (Gumroad pays the seller money
-    # it never collected) or over-charge (billing more than the member agreed, which is a consent
-    # and card-network problem, not just an accounting one).
-    #
-    # Falling back to canonical dollars is the safe answer: the member is billed exactly what the
-    # current plan says, which is what they would have been billed before this feature existed.
-    # Re-fixing the amount at the new price belongs to the plan-change paths and is not built yet.
-    #
-    # Compared on the plan's own price with tax, tip and shipping taken back out
-    # (LaterChargePresentment.canonical_price_cents_for), which is the same figure the signup
-    # stored. Comparing raw price_cents instead would trip on a member moving house or a VAT
-    # change, neither of which moves the plan price the fixing is about.
-    return fallback(:stale_fixing) unless presentment.canonical_price_cents == LaterChargePresentment.canonical_price_cents_for(purchase)
 
     variable_canonical_cents = variable_component_canonical_cents(purchase)
     variable_presentment_cents = presentment_cents_for(variable_canonical_cents, quote.fx_rate, currency)
@@ -122,10 +108,11 @@ class Purchase::LaterChargePresentmentService
       processor_gumroad_amount_cents: presentment_gumroad_amount_cents,
       stripe_fx_quote_id: quote.id
     )
+  rescue ChargeProcessorCardError, ChargeProcessorUnavailableError
+    raise
   rescue StandardError => e
-    # An unexpected failure must not cost the seller a delayed charge.
     ErrorNotifier.notify(e, context: { charge_id: charge&.id, purchase_id: purchases.first&.id })
-    fallback(:"#{e.class}")
+    fallback(:"#{e.class}", transient: true)
   end
 
   private
@@ -144,6 +131,37 @@ class Purchase::LaterChargePresentmentService
         purchase.preorder unless purchase.is_preorder_authorization?
       elsif purchase.is_commission_completion_purchase?
         purchase.commission
+      end
+    end
+
+    def refix_required_currency_presentment(presentment, purchase, canonical_price_cents)
+      return if required_currency.blank? || presentment.presentment_currency != required_currency
+      return unless purchase.link.price_currency_type.to_s.downcase == required_currency
+      return unless purchase.displayed_price_currency_type.to_s.downcase == required_currency
+
+      presentment_price_cents = purchase.displayed_price_cents.to_i
+      currency_units_per_usd = purchase.rate_converted_to_usd&.to_d
+      return unless canonical_price_cents.positive? && presentment_price_cents.positive? && currency_units_per_usd&.positive?
+
+      owner = later_charge_owner(purchase)
+      return if owner.blank?
+
+      owner.with_lock do
+        current = owner.current_later_charge_presentment
+        if current&.presentment_currency == required_currency && current.canonical_price_cents == canonical_price_cents
+          current
+        elsif current&.presentment_currency != required_currency
+          nil
+        else
+          owner.later_charge_presentments.create!(
+            processor: StripeChargeProcessor.charge_processor_id,
+            presentment_currency: required_currency,
+            presentment_price_cents:,
+            canonical_price_cents:,
+            signup_currency_units_per_usd: currency_units_per_usd,
+            effective_from: Time.current
+          )
+        end
       end
     end
 
@@ -192,9 +210,28 @@ class Purchase::LaterChargePresentmentService
       ((BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD)) / fx_rate * subunit_to_unit(currency)).round
     end
 
-    def fallback(reason)
+    def fallback(reason, transient: false)
       @fallback_reason = reason
       Rails.logger.info("Later-charge presentment fallback for #{charge.present? ? "charge #{charge.external_id}" : "purchase #{purchases.first&.id}"}: #{reason}")
+      if required_currency.present?
+        notification = transient ? "Required-currency renewal deferred before processor submit" : "Required-currency renewal rejected before processor submit"
+        ErrorNotifier.notify(
+          notification,
+          reason:,
+          required_currency:,
+          purchase_id: purchases.first&.id,
+          charge_id: charge&.id
+        )
+        if transient
+          raise ChargeProcessorUnavailableError, "The required-currency quote is temporarily unavailable"
+        end
+
+        raise ChargeProcessorCardError.new(
+          PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED,
+          StripeChargeProcessor::UPI_PAYMENT_METHOD_UPDATE_MESSAGE
+        )
+      end
+
       nil
     end
 end

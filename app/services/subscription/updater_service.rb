@@ -333,15 +333,20 @@ class Subscription::UpdaterService
       # force off_session: true so the charge references the prior authentication
       # and Stripe doesn't prompt for SCA again.
       setup_intent_authenticated = params[:stripe_setup_intent_id].present?
+      saved_payment_method = subscription.credit_card_to_charge
 
-      if !setup_intent_authenticated && subscription.credit_card_to_charge&.requires_mandate?
+      if !setup_intent_authenticated && saved_payment_method&.requires_mandate?
         purchase_params.merge!(setup_future_charges: true)
       end
+
+      # A saved UPI authorization is renewal-only. Buyer-present updates must not reuse its
+      # full-period INR fixing in place of the prorated amount currently shown.
+      off_session = setup_intent_authenticated || (!saved_payment_method&.requires_mandate? && !saved_payment_method&.recurring_upi?)
 
       self.upgrade_purchase = subscription.charge!(
         override_params: purchase_params,
         from_failed_charge_email: ActiveModel::Type::Boolean.new.cast(params[:declined]),
-        off_session: setup_intent_authenticated || !subscription.credit_card_to_charge&.requires_mandate?,
+        off_session:,
         authenticated_offer_code_buyer: logged_in_user,
       )
 

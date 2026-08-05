@@ -127,6 +127,31 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.encoded).to include subscription.link.name
       expect(mail.body.encoded).to include "/subscriptions/#{subscription.external_id}/manage?declined=true&amp;token=#{subscription.reload.token}"
     end
+
+    it "asks a UPI subscriber to update their payment method" do
+      upi_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        payment_method_type: "upi",
+        stripe_customer_id: "cus_upi",
+        processor_payment_method_id: "pm_upi",
+        stripe_fingerprint: "pm_upi",
+        visual: "UPI",
+        card_type: CardType::UPI,
+        card_country: Compliance::Countries::IND.alpha2,
+        recurring_authorization_verified_at: Time.current,
+        recurring_authorization_currency: Currency::INR,
+        recurring_authorization_max_amount_cents: 100_000
+      )
+      subscription = create(:subscription, link: create(:product), credit_card: upi_card)
+      create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+      mail = CustomerLowPriorityMailer.subscription_card_declined(subscription.id)
+
+      expect(mail.subject).to eq "Your payment method needs attention."
+      expect(mail.body.encoded).to include "saved UPI payment method"
+      expect(mail.body.encoded).to include "update your payment method"
+      expect(mail.body.encoded).not_to include "re-authorize or update your card"
+    end
   end
 
   describe "subscription_card_declined_warning" do
@@ -138,6 +163,31 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.encoded).to include subscription.link.name
       expect(mail.body.encoded).to include "This is a reminder"
       expect(mail.body.encoded).to include "/subscriptions/#{subscription.external_id}/manage?declined=true&amp;token=#{subscription.reload.token}"
+    end
+
+    it "reminds a UPI subscriber to update their payment method" do
+      upi_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        payment_method_type: "upi",
+        stripe_customer_id: "cus_upi_warning",
+        processor_payment_method_id: "pm_upi_warning",
+        stripe_fingerprint: "pm_upi_warning",
+        visual: "UPI",
+        card_type: CardType::UPI,
+        card_country: Compliance::Countries::IND.alpha2,
+        recurring_authorization_verified_at: Time.current,
+        recurring_authorization_currency: Currency::INR,
+        recurring_authorization_max_amount_cents: 100_000
+      )
+      subscription = create(:subscription, link: create(:product), credit_card: upi_card)
+      create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+      mail = CustomerLowPriorityMailer.subscription_card_declined_warning(subscription.id)
+
+      expect(mail.subject).to eq "Your payment method needs attention."
+      expect(mail.body.encoded).to include "saved UPI payment method"
+      expect(mail.body.encoded).to include "update your payment method"
+      expect(mail.body.encoded).not_to include "update your card"
     end
   end
 

@@ -15,7 +15,10 @@ import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { loadAcknowledgedEmails } from "$app/components/Checkout/acknowledgedEmails";
-import { getCheckoutBuyerCurrencyDisplay } from "$app/components/Checkout/buyerCurrencyDisplay";
+import {
+  getCheckoutBuyerCurrencyDisplay,
+  isRecurringUpiPaymentConfig,
+} from "$app/components/Checkout/buyerCurrencyDisplay";
 import { Creator } from "$app/components/Checkout/cartState";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -58,9 +61,12 @@ export type PaymentElementConfig = {
 // server-resolved (Checkout::PaymentMethodResolver) and must match the deferred intent's;
 // the browser never widens it — card and Link everywhere (stripe_link_enabled reflects the
 // resolved set; Link auto-enables with the Payment Element, dropped only by the PPP gate), plus
-// the US-locked methods (cashapp, us_bank_account) for US buyers.
-// Currency is "usd" everywhere except direct-listed surfaces. Those mount in the listed currency
-// with the listed subtotal so the Element, checkout summary, and deferred intent stay aligned.
+// the US-locked methods (cashapp, us_bank_account) for US buyers. Recurring UPI registration is
+// the narrow card + UPI exception.
+// Currency is "usd" everywhere except direct-listed and method-forced (iDEAL/Bancontact/UPI)
+// surfaces. Those mount in the listed currency with the listed subtotal so the Element, checkout
+// summary, and deferred intent stay aligned; when presentment_amount_cents is null the amount
+// derives from the USD total below.
 // listed_currency_display is non-null on that same surface and tells the checkout summary to
 // render the cart in the listed currency, matching what the element and the charge use.
 export type ListedCurrencyDisplayConfig = {
@@ -121,6 +127,7 @@ export type CheckoutPaymentConfig =
   | {
       integration: "payment_element_client_confirm";
       fallback_reason: null;
+      recurring_upi_registration: boolean;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
       payment_element_wallets: boolean;
@@ -134,6 +141,10 @@ export type Product = {
   creator: Creator;
   quantity: number;
   price: number;
+  // The selected pre-discount subtotal in the product's listed currency. Recurring UPI uses it
+  // to detect price or quantity edits that no longer match the server-rendered INR Element
+  // amount while allowing a limited discount to change only today's charge.
+  listedPriceCents?: number;
   // What one renewal of a membership will charge, when it differs from `price` (e.g. a discount
   // limited to the first billing cycle, or a payment-method update on the subscription manage
   // page where `price` is today's charge — often zero — rather than the plan price). For
@@ -417,8 +428,27 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
   return !state.products.some((product) => product.hasFreeTrial || product.isPreorder);
 }
 
-// The browser must not widen server eligibility for client-confirm: single-seller,
-// one-time card checkouts only.
+function isRecurringUpiRegistrationCheckout(
+  state: State,
+  config: StateWithPaymentElementClientConfirmCheckout["checkoutPayment"],
+) {
+  const [product] = state.products;
+  const options = config.elements_options;
+
+  return (
+    isRecurringUpiPaymentConfig(config) &&
+    state.products.length === 1 &&
+    product?.quantity === 1 &&
+    !!product.recurrence &&
+    product.listedPriceCents === options.presentment_amount_cents &&
+    product.installmentPlan == null &&
+    !product.requireShipping &&
+    state.gift === null
+  );
+}
+
+// The browser must not widen server eligibility. Recurring client-confirm is limited to the
+// server-selected UPI registration lane while the live cart retains that lane's shape.
 export function canUseStripePaymentElementClientConfirm(
   state: State,
 ): state is StateWithPaymentElementClientConfirmCheckout {
@@ -431,12 +461,15 @@ export function canUseStripePaymentElementClientConfirm(
     if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
   }
 
+  const recurringUpiRegistration = isRecurringUpiRegistrationCheckout(state, state.checkoutPayment);
+  if (state.checkoutPayment.recurring_upi_registration && !recurringUpiRegistration) return false;
+
   return !state.products.some(
     (product) =>
       product.payInInstallments ||
       product.hasFreeTrial ||
       product.isPreorder ||
-      !!product.recurrence ||
+      (!!product.recurrence && !recurringUpiRegistration) ||
       !!product.subscription_id ||
       product.nativeType === "commission",
   );

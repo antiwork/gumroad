@@ -597,6 +597,77 @@ describe Checkout::PaymentMethodResolver do
         expect(resolution.fallback_reason).to eq("recurring_charge")
         expect(resolution.payment_method_types).to be_nil
       end
+
+      context "with the narrow UPI Autopay registration shape" do
+        before do
+          allow(Stripe).to receive(:api_key).and_return("sk_test_upi_autopay")
+          Feature.activate_user(:buyer_currency_charging, seller)
+          Feature.activate_user(:buyer_local_currency, seller)
+          Feature.activate(described_class::UPI_RECURRING_SERVICING_FEATURE)
+          Feature.activate_user(described_class::UPI_RECURRING_LAUNCH_FEATURE, seller)
+        end
+
+        after do
+          Feature.deactivate_user(:buyer_currency_charging, seller)
+          Feature.deactivate_user(:buyer_local_currency, seller)
+          Feature.deactivate(described_class::UPI_RECURRING_SERVICING_FEATURE)
+          Feature.deactivate_user(described_class::UPI_RECURRING_LAUNCH_FEATURE, seller)
+        end
+
+        it "enables exactly card and UPI for an Indian buyer on an INR cart" do
+          resolution = resolve(
+            recurring: true,
+            recurring_upi_registration: true,
+            buyer_country: "IN",
+            cart_product_currency: Currency::INR
+          )
+
+          expect(resolution.client_confirm_eligible?).to be(true)
+          expect(resolution.eligible_payment_method_types).to eq(%w[card upi])
+          expect(resolution.payment_method_types).to eq(%w[card upi])
+        end
+
+        it "falls back to the existing card lane when UPI does not survive the buyer-country gate" do
+          resolution = resolve(
+            recurring: true,
+            recurring_upi_registration: true,
+            buyer_country: "US",
+            cart_product_currency: Currency::INR
+          )
+
+          expect(resolution.client_confirm_eligible?).to be(false)
+          expect(resolution.fallback_reason).to eq("recurring_upi_unavailable")
+          expect(resolution.payment_method_types).to be_nil
+        end
+
+        it "requires the dedicated recurring acquisition flag even in Stripe test mode" do
+          Feature.deactivate_user(described_class::UPI_RECURRING_LAUNCH_FEATURE, seller)
+
+          resolution = resolve(
+            recurring: true,
+            recurring_upi_registration: true,
+            buyer_country: "IN",
+            cart_product_currency: Currency::INR
+          )
+
+          expect(resolution.client_confirm_eligible?).to be(false)
+          expect(resolution.fallback_reason).to eq("recurring_upi_unavailable")
+        end
+
+        it "requires renewal servicing to be active before acquisition" do
+          Feature.deactivate(described_class::UPI_RECURRING_SERVICING_FEATURE)
+
+          resolution = resolve(
+            recurring: true,
+            recurring_upi_registration: true,
+            buyer_country: "IN",
+            cart_product_currency: Currency::INR
+          )
+
+          expect(resolution.client_confirm_eligible?).to be(false)
+          expect(resolution.fallback_reason).to eq("recurring_upi_unavailable")
+        end
+      end
     end
 
     context "with a multi-seller cart" do

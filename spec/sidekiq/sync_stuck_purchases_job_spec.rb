@@ -34,13 +34,39 @@ describe SyncStuckPurchasesJob, :vcr do
         purchase
       end
 
-      allow_any_instance_of(Purchase).to receive(:is_an_off_session_charge_on_indian_card?).and_return(true)
+      allow_any_instance_of(Purchase).to receive(:is_an_async_off_session_charge_in_india?).and_return(true)
       expect_any_instance_of(Purchase).to_not receive(:sync_status_with_charge_processor)
       expect(stuck_in_progress_purchase_that_would_succeed_if_synced.in_progress?).to eq(true)
 
       described_class.new.perform
 
       expect(stuck_in_progress_purchase_that_would_succeed_if_synced.reload.in_progress?).to eq(true)
+    end
+
+    it "does not sync a processing UPI Autopay renewal created less than 26 hours ago" do
+      credit_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        payment_method_type: "upi",
+        stripe_customer_id: "cus_upi_renewal",
+        processor_payment_method_id: "pm_upi_renewal",
+        stripe_fingerprint: "pm_upi_renewal",
+        visual: "UPI",
+        card_type: CardType::UPI,
+        card_country: Compliance::Countries::IND.alpha2,
+        recurring_authorization_verified_at: Time.current,
+        recurring_authorization_currency: Currency::INR,
+        recurring_authorization_max_amount_cents: 100_000
+      )
+      purchase = travel_to(Time.current - 12.hours) do
+        create(:recurring_membership_purchase, link: product, purchase_state: "in_progress", credit_card:)
+      end
+
+      expect(purchase).to be_is_an_async_off_session_charge_in_india
+      expect_any_instance_of(Purchase).not_to receive(:sync_status_with_charge_processor)
+
+      described_class.new.perform
+
+      expect(purchase.reload).to be_in_progress
     end
 
     it "syncs the in progress free purchase and does nothing if the new purchase state is successful and there are no subsequent successful purchases" do
@@ -81,7 +107,7 @@ describe SyncStuckPurchasesJob, :vcr do
         purchase
       end
 
-      allow_any_instance_of(Purchase).to receive(:is_an_off_session_charge_on_indian_card?).and_return(true)
+      allow_any_instance_of(Purchase).to receive(:is_an_async_off_session_charge_in_india?).and_return(true)
       expect(stuck_in_progress_purchase_that_will_succeed_when_synced.in_progress?).to eq(true)
 
       described_class.new.perform

@@ -142,6 +142,33 @@ describe "Purchase Process", :vcr do
           expect(purchase.stripe_error_code).to be(nil)
           expect(purchase.error_code).to eq PurchaseErrorCode::CREDIT_CARD_NOT_PROVIDED
         end
+
+        it "keeps a saved UPI method on the platform account after the seller connects Stripe" do
+          seller = create(:user)
+          connected_account = create(:merchant_account_stripe_connect, user: seller)
+          upi_card = CreditCard.create!(
+            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            payment_method_type: "upi",
+            stripe_customer_id: "cus_upi",
+            processor_payment_method_id: "pm_upi",
+            stripe_fingerprint: "pm_upi",
+            visual: "UPI",
+            card_type: CardType::UPI,
+            card_country: Compliance::Countries::IND.alpha2,
+            recurring_authorization_verified_at: Time.current,
+            recurring_authorization_currency: Currency::INR,
+            recurring_authorization_max_amount_cents: 100_000
+          )
+          purchase = build(:purchase, link: create(:membership_product, user: seller), credit_card: upi_card)
+
+          purchase.send(
+            :prepare_merchant_account,
+            StripeChargeProcessor.charge_processor_id,
+            resolved_merchant_account: connected_account
+          )
+
+          expect(purchase.merchant_account).to eq(MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id))
+        end
       end
 
       describe "#validate_chargeable_for_charging" do

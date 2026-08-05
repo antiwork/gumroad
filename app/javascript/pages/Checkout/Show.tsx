@@ -444,6 +444,9 @@ const CheckoutIndexPage = () => {
         hasTippingEnabled: item.product.has_tipping_enabled,
         isPreorder: item.product.is_preorder,
         price: convertToUSD(item, price),
+        // The server renders the recurring UPI Element from the selected listed amount before
+        // discounts. Keep that basis stable when a limited discount changes only today's charge.
+        listedPriceCents: item.price * item.quantity,
         renewalPriceCents: item.recurrence ? Math.round(convertToUSD(item, renewalPrice)) : null,
         payInInstallments: item.pay_in_installments,
         installmentPlan: item.product.installment_plan

@@ -241,6 +241,8 @@ describe("formatCheckoutPrice", () => {
 });
 
 describe("getCheckoutListedCurrencyDisplay", () => {
+  type ClientConfirmPayment = Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
+
   // A BRL product paid with Pix: the element mounts in BRL, the charge bills the listed
   // R$49.90 directly, and there is no FX quote anywhere in the flow.
   const listedCurrencyPayment = (
@@ -248,9 +250,10 @@ describe("getCheckoutListedCurrencyDisplay", () => {
       currency: "brl",
       subunit_to_unit: 100,
     },
-  ): CheckoutPaymentConfig => ({
+  ): ClientConfirmPayment => ({
     integration: "payment_element_client_confirm",
     fallback_reason: null,
+    recurring_upi_registration: false,
     disable_wallets: true,
     request_apple_pay_merchant_tokens: false,
     payment_element_wallets: false,
@@ -275,6 +278,18 @@ describe("getCheckoutListedCurrencyDisplay", () => {
       },
     },
   ];
+
+  const recurringUpiPayment = (): ClientConfirmPayment => ({
+    ...listedCurrencyPayment({ currency: "inr", subunit_to_unit: 100 }),
+    recurring_upi_registration: true,
+    elements_options: {
+      ...listedCurrencyPayment().elements_options,
+      currency: "inr",
+      presentment_amount_cents: 73_000,
+      listed_currency_display: { currency: "inr", subunit_to_unit: 100 },
+      payment_method_types: ["card", "upi"],
+    },
+  });
 
   const directListedCardPayment = (): CheckoutPaymentConfig => {
     const payment = listedCurrencyPayment();
@@ -338,9 +353,7 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     ).toBeNull();
   });
 
-  it("stays in canonical USD for installment and subscription carts", () => {
-    // Both are shapes the client-confirm Element rejects, and both are toggleable after render
-    // while `checkoutPayment` stays frozen — so the client has to re-check them itself.
+  it("stays in canonical USD for installment and ordinary subscription carts", () => {
     const brlItem = { product: { currency_code: "brl" as const, exchange_rate: 5.45 } };
     expect(
       getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [{ ...brlItem, pay_in_installments: true }]),
@@ -348,6 +361,14 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     expect(
       getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [{ ...brlItem, recurrence: "monthly" }]),
     ).toBeNull();
+  });
+
+  it("renders INR for the server-selected recurring UPI registration lane", () => {
+    expect(
+      getCheckoutListedCurrencyDisplay(recurringUpiPayment(), [
+        { product: { currency_code: "inr", exchange_rate: 85.4 }, recurrence: "monthly" },
+      ]),
+    ).toEqual({ currencyCode: "inr", rate: 85.4, subunitToUnit: 100 });
   });
 });
 

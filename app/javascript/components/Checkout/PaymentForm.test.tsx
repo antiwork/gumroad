@@ -8,11 +8,27 @@ import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { LoggedInUserProvider } from "$app/components/LoggedInUser";
 
 vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
+vi.stubGlobal("SSR", false);
 
-// Keeps the render free of network and third-party scripts: the scenarios below are free
-// purchases, so the Stripe/PayPal payment subtrees never mount, but the hooks still run.
+const paymentElementInputRender = vi.hoisted<{ setupFutureUsage: "off_session" | undefined }>(() => ({
+  setupFutureUsage: undefined,
+}));
+
+// Keeps the render free of network and third-party scripts. The recurring UPI case captures the
+// Payment Element props, while the other scenarios are free purchases whose payment subtrees do not mount.
+vi.mock("@stripe/react-stripe-js", () => ({ useStripe: () => null }));
 vi.mock("$app/data/braintree_client_token_data", () => ({ useBraintreeToken: () => ({ type: "not-available" }) }));
 vi.mock("$app/utils/stripe_loader", () => ({ getCheckoutStripeInstance: vi.fn(), getStripeInstance: vi.fn() }));
+vi.mock("$app/components/Checkout/CreditCardInput", () => ({
+  CreditCardInput: () => null,
+  StripeElementsProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+vi.mock("$app/components/Checkout/PaymentElementInput", () => ({
+  PaymentElementInput: ({ setupFutureUsage }: { setupFutureUsage?: "off_session" | undefined }) => {
+    paymentElementInputRender.setupFutureUsage = setupFutureUsage;
+    return null;
+  },
+}));
 vi.mock("$app/components/useRecaptcha", () => ({
   useRecaptcha: () => ({ execute: vi.fn(), container: null }),
   RECAPTCHA_UNAVAILABLE_MESSAGE: "unavailable",
@@ -121,6 +137,7 @@ describe("PaymentForm validation-failure feedback", () => {
 
   beforeEach(() => {
     scrollIntoView.mockClear();
+    paymentElementInputRender.setupFutureUsage = undefined;
     Element.prototype.scrollIntoView = scrollIntoView;
   });
   afterEach(cleanup);
@@ -157,6 +174,53 @@ describe("PaymentForm validation-failure feedback", () => {
   it("does not scroll while nothing is flagged", () => {
     renderPaymentForm(state());
     expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("declares off-session future use for the recurring UPI client-confirm lane", () => {
+    type ClientConfirmPayment = Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
+    const checkoutPayment: ClientConfirmPayment = {
+      integration: "payment_element_client_confirm",
+      fallback_reason: null,
+      recurring_upi_registration: true,
+      disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: false,
+      flat_payment_methods: true,
+      elements_options: {
+        stripe_elements_mode: "payment",
+        currency: "inr",
+        presentment_amount_cents: 73_000,
+        listed_currency_display: { currency: "inr", subunit_to_unit: 100 },
+        payment_method_types: ["card", "upi"],
+        payment_method_list_token: null,
+        stripe_link_enabled: false,
+        stripe_connect_account_id: null,
+      },
+    };
+    const checkoutState = state();
+    const [product] = checkoutState.products;
+    if (product === undefined) throw new Error("Expected a checkout product");
+    if (checkoutState.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+
+    renderPaymentForm({
+      ...checkoutState,
+      products: [
+        {
+          ...product,
+          price: 73_000,
+          requirePayment: true,
+          recurrence: "monthly",
+          listedPriceCents: 73_000,
+        },
+      ],
+      surcharges: {
+        type: "loaded",
+        result: { ...checkoutState.surcharges.result, subtotal: 73_000 },
+      },
+      checkoutPayment,
+    });
+
+    expect(paymentElementInputRender.setupFutureUsage).toBe("off_session");
   });
 
   // Mirrors Checkout/index.tsx: tip and gift inputs render as siblings of PaymentForm, all of them

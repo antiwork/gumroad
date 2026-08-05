@@ -99,13 +99,15 @@ class CustomerLowPriorityMailer < ApplicationMailer
   def subscription_card_declined(subscription_id)
     @subscription = Subscription.find(subscription_id)
     @declined = true
-    @subject = "Your card was declined."
+    @payment_method_is_upi = @subscription.credit_card_to_charge&.recurring_upi?
+    @subject = @payment_method_is_upi ? "Your payment method needs attention." : "Your card was declined."
   end
 
   def subscription_card_declined_warning(subscription_id)
     @subscription = Subscription.find(subscription_id)
     @declined = true
-    @subject = "Your card was declined."
+    @payment_method_is_upi = @subscription.credit_card_to_charge&.recurring_upi?
+    @subject = @payment_method_is_upi ? "Your payment method needs attention." : "Your card was declined."
   end
 
   def subscription_charge_failed(subscription_id)

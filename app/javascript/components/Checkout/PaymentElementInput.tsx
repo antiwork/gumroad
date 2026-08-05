@@ -53,6 +53,7 @@ export const PaymentElementInput = ({
   amount,
   mountCurrency,
   elementsOptions,
+  setupFutureUsage,
   walletsEnabled,
   flatLayout,
   applePayOption,
@@ -78,6 +79,8 @@ export const PaymentElementInput = ({
   // while a surcharge refresh is merely in flight.
   mountCurrency?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
+  // Stripe requires the confirmation token to carry the same future-use contract as the deferred PaymentIntent.
+  setupFutureUsage?: "off_session" | undefined;
   // Per-seller rollout flag (payment_element_wallets): show Apple Pay/Google Pay inside the
   // Payment Element instead of via the separate Payment Request Button.
   walletsEnabled: boolean;
@@ -173,6 +176,7 @@ export const PaymentElementInput = ({
           amount={mountedAmount}
           currencyOverride={mountedCurrency}
           elementsOptions={elementsOptions}
+          setupFutureUsage={setupFutureUsage}
           flatLayout={flatLayout}
         >
           <PaymentElementControllerInput
@@ -363,12 +367,14 @@ const StripePaymentElementProvider = ({
   amount,
   currencyOverride,
   elementsOptions,
+  setupFutureUsage,
   flatLayout,
   children,
 }: {
   amount: number | null;
   currencyOverride?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
+  setupFutureUsage?: "off_session" | undefined;
   flatLayout: boolean;
   children: React.ReactNode;
 }) => {
@@ -405,6 +411,7 @@ const StripePaymentElementProvider = ({
       mode: elementsOptions.stripe_elements_mode,
       currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
+      ...(setupFutureUsage ? { setupFutureUsage } : {}),
       paymentMethodTypes: elementsOptions.payment_method_types,
       // Stripe rejects createConfirmationToken({ elements }) when payment_method_creation is manual.
       ...("payment_method_creation" in elementsOptions
@@ -481,15 +488,19 @@ const StripePaymentElementProvider = ({
         },
       },
     }),
-    [colors, currency, elementsOptions, fontFamily, initialAmount, flatLayout, stripeFonts],
+    [colors, currency, elementsOptions, fontFamily, initialAmount, setupFutureUsage, flatLayout, stripeFonts],
   );
 
   return (
     // The key includes the effective mount currency so a currency change (e.g. the buyer-currency
     // FX quote arriving after the initial USD mount, or disappearing when the buyer opts to save
     // their card) remounts Elements — Stripe supports amount updates on a live element but not
-    // currency changes.
-    <Elements stripe={stripePromise} options={options} key={`${elementsOptions.stripe_elements_mode}-${currency}`}>
+    // currency changes. Future-use setup is also creation-time configuration.
+    <Elements
+      stripe={stripePromise}
+      options={options}
+      key={`${elementsOptions.stripe_elements_mode}-${currency}-${setupFutureUsage ?? "none"}`}
+    >
       {children}
     </Elements>
   );

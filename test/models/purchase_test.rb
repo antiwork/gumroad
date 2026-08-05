@@ -6102,28 +6102,28 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal 525, mandate_options[:payment_method_options][:card][:mandate_options][:amount]
   end
 
-  # ---- #is_an_off_session_charge_on_indian_card? ----------------------------
+  # ---- #is_an_async_off_session_charge_in_india? ----------------------------
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is not India returns false if it is a regular purchase" do
-    assert_equal false, create_purchase_in_progress(link: create_product).is_an_off_session_charge_on_indian_card?
+  test "#is_an_async_off_session_charge_in_india? when card country is not India returns false if it is a regular purchase" do
+    assert_equal false, create_purchase_in_progress(link: create_product).is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is not India returns false if it is a membership purchase" do
+  test "#is_an_async_off_session_charge_in_india? when card country is not India returns false if it is a membership purchase" do
     membership_purchase = create_purchase_in_progress(link: create_membership_product)
-    assert_equal false, membership_purchase.is_an_off_session_charge_on_indian_card?
+    assert_equal false, membership_purchase.is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is not India returns false if it is a recurring charge and charge processor is not Stripe" do
+  test "#is_an_async_off_session_charge_in_india? when card country is not India returns false if it is a recurring charge and charge processor is not Stripe" do
     product = create_subscription_product
     subscription = create_subscription(link: product)
     create_purchase(subscription:, is_original_subscription_purchase: true)
     recurring_charge = create_purchase_in_progress(is_original_subscription_purchase: false,
                                                    link: product, subscription:, charge_processor_id: PaypalChargeProcessor.charge_processor_id,
                                                    card_type: CardType::PAYPAL, card_visual: "jane@paypal.com")
-    assert_equal false, recurring_charge.is_an_off_session_charge_on_indian_card?
+    assert_equal false, recurring_charge.is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is not India returns false if it is a preorder charge and charge processor is not Stripe" do
+  test "#is_an_async_off_session_charge_in_india? when card country is not India returns false if it is a preorder charge and charge processor is not Stripe" do
     product = create_product(is_in_preorder_state: true)
     preorder_link = create_preorder_link(link: product)
     authorization_purchase = create_preorder_authorization_purchase(link: product)
@@ -6132,47 +6132,47 @@ class PurchaseTest < ActiveSupport::TestCase
     preorder_charge = create_purchase_in_progress(link: product, preorder:,
                                                   charge_processor_id: PaypalChargeProcessor.charge_processor_id,
                                                   card_type: CardType::PAYPAL, card_visual: "jane@paypal.com")
-    assert_equal false, preorder_charge.is_an_off_session_charge_on_indian_card?
+    assert_equal false, preorder_charge.is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is not India returns false if it is a recurring charge and charge processor is Stripe" do
+  test "#is_an_async_off_session_charge_in_india? when card country is not India returns false if it is a recurring charge and charge processor is Stripe" do
     product = create_subscription_product
     subscription = create_subscription(link: product)
     create_purchase(subscription:, is_original_subscription_purchase: true)
     recurring_charge = create_purchase_in_progress(is_original_subscription_purchase: false, link: product, subscription:)
-    assert_equal false, recurring_charge.is_an_off_session_charge_on_indian_card?
+    assert_equal false, recurring_charge.is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is not India returns false if it is a preorder charge and charge processor is Stripe" do
+  test "#is_an_async_off_session_charge_in_india? when card country is not India returns false if it is a preorder charge and charge processor is Stripe" do
     product = create_product(is_in_preorder_state: true)
     preorder_link = create_preorder_link(link: product)
     authorization_purchase = create_preorder_authorization_purchase(link: product)
     preorder = preorder_link.build_preorder(authorization_purchase)
 
     preorder_charge = create_purchase_in_progress(link: product, preorder:)
-    assert_equal false, preorder_charge.is_an_off_session_charge_on_indian_card?
+    assert_equal false, preorder_charge.is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is India returns false if it is a regular purchase" do
-    assert_equal false, create_purchase_in_progress(link: create_product, card_country: "IN").is_an_off_session_charge_on_indian_card?
+  test "#is_an_async_off_session_charge_in_india? when card country is India returns false if it is a regular purchase" do
+    assert_equal false, create_purchase_in_progress(link: create_product, card_country: "IN").is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is India returns false if it is a membership purchase" do
+  test "#is_an_async_off_session_charge_in_india? when card country is India returns false if it is a membership purchase" do
     membership_purchase = create_purchase_in_progress(card_country: "IN", link: create_membership_product)
-    assert_equal false, membership_purchase.is_an_off_session_charge_on_indian_card?
+    assert_equal false, membership_purchase.is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is India returns false if it is a recurring charge and charge processor is not Stripe" do
+  test "#is_an_async_off_session_charge_in_india? when card country is India returns false if it is a recurring charge and charge processor is not Stripe" do
     product = create_subscription_product
     subscription = create_subscription(link: product)
     create_purchase(subscription:, is_original_subscription_purchase: true)
     recurring_charge = create_purchase_in_progress(is_original_subscription_purchase: false, link: product, card_country: "IN",
                                                    subscription:, charge_processor_id: PaypalChargeProcessor.charge_processor_id,
                                                    card_type: CardType::PAYPAL, card_visual: "jane@paypal.com")
-    assert_equal false, recurring_charge.is_an_off_session_charge_on_indian_card?
+    assert_equal false, recurring_charge.is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is India returns false if it is a preorder charge but charge processor is not Stripe" do
+  test "#is_an_async_off_session_charge_in_india? when card country is India returns false if it is a preorder charge but charge processor is not Stripe" do
     product = create_product(is_in_preorder_state: true)
     preorder_link = create_preorder_link(link: product)
     authorization_purchase = create_preorder_authorization_purchase(link: product)
@@ -6181,25 +6181,44 @@ class PurchaseTest < ActiveSupport::TestCase
     preorder_charge = create_purchase_in_progress(link: product, preorder:, card_country: "IN",
                                                   charge_processor_id: PaypalChargeProcessor.charge_processor_id,
                                                   card_type: CardType::PAYPAL, card_visual: "jane@paypal.com")
-    assert_equal false, preorder_charge.is_an_off_session_charge_on_indian_card?
+    assert_equal false, preorder_charge.is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is India returns true if it is a recurring charge" do
+  test "#is_an_async_off_session_charge_in_india? when card country is India returns true if it is a recurring charge" do
     product = create_subscription_product
     subscription = create_subscription(link: product)
     create_purchase(subscription:, is_original_subscription_purchase: true)
     recurring_charge = create_purchase_in_progress(is_original_subscription_purchase: false, card_country: "IN", link: product, subscription:)
-    assert_equal true, recurring_charge.is_an_off_session_charge_on_indian_card?
+    assert_equal true, recurring_charge.is_an_async_off_session_charge_in_india?
   end
 
-  test "#is_an_off_session_charge_on_indian_card? when card country is India returns true if it is a preorder charge" do
+  test "#is_an_async_off_session_charge_in_india? when card country is India returns true if it is a preorder charge" do
     product = create_product(is_in_preorder_state: true)
     preorder_link = create_preorder_link(link: product)
     authorization_purchase = create_preorder_authorization_purchase(link: product)
     preorder = preorder_link.build_preorder(authorization_purchase)
 
     preorder_charge = create_purchase_in_progress(link: product, preorder:, card_country: "IN")
-    assert_equal true, preorder_charge.is_an_off_session_charge_on_indian_card?
+    assert_equal true, preorder_charge.is_an_async_off_session_charge_in_india?
+  end
+
+  test "#is_an_async_off_session_charge_in_india? returns true for a recurring charge on a UPI Autopay payment method regardless of card country" do
+    card = build_upi_credit_card(recurring: true, card_country: nil)
+    product = create_subscription_product
+    subscription = create_subscription(link: product, credit_card: card)
+    create_purchase(subscription:, is_original_subscription_purchase: true)
+    recurring_charge = create_purchase_in_progress(is_original_subscription_purchase: false, link: product, subscription:, credit_card: card)
+    assert_equal true, recurring_charge.is_an_async_off_session_charge_in_india?
+  end
+
+  test "#is_an_async_off_session_charge_in_india? returns false for a recurring charge on a one-time UPI payment method even when card country is India" do
+    card = build_upi_credit_card(recurring: false, card_country: "IN")
+    product = create_subscription_product
+    subscription = create_subscription(link: product, credit_card: card)
+    create_purchase(subscription:, is_original_subscription_purchase: true)
+    recurring_charge = create_purchase_in_progress(is_original_subscription_purchase: false, card_country: "IN",
+                                                   link: product, subscription:, credit_card: card)
+    assert_equal false, recurring_charge.is_an_async_off_session_charge_in_india?
   end
 
   # ---- #can_force_update? ---------------------------------------------------
@@ -6214,17 +6233,17 @@ class PurchaseTest < ActiveSupport::TestCase
   end
 
   test "#can_force_update? returns true if an off session charge on Indian card is in progress and was not created in the last 26 hours" do
-    Purchase.any_instance.stubs(:is_an_off_session_charge_on_indian_card?).returns(true)
+    Purchase.any_instance.stubs(:is_an_async_off_session_charge_in_india?).returns(true)
     assert_equal true, create_purchase_in_progress(link: create_product, created_at: 27.hours.ago).can_force_update?
   end
 
   test "#can_force_update? returns false if an off session charge on Indian card is in progress and was created in the last 26 hours" do
-    Purchase.any_instance.stubs(:is_an_off_session_charge_on_indian_card?).returns(true)
+    Purchase.any_instance.stubs(:is_an_async_off_session_charge_in_india?).returns(true)
     assert_equal false, create_purchase_in_progress(link: create_product, created_at: 10.hours.ago).can_force_update?
   end
 
   test "#can_force_update? returns false if an off session charge on Indian card is not in progress" do
-    Purchase.any_instance.stubs(:is_an_off_session_charge_on_indian_card?).returns(true)
+    Purchase.any_instance.stubs(:is_an_async_off_session_charge_in_india?).returns(true)
     assert_equal false, create_purchase(purchase_state: "failed", created_at: 27.hours.ago).can_force_update?
   end
 
@@ -8236,6 +8255,31 @@ class PurchaseTest < ActiveSupport::TestCase
         expiry_year: 5.years.from_now.year,
         charge_processor_id: StripeChargeProcessor.charge_processor_id,
         card_country:
+      )
+    end
+
+    # A UPI payment method saved via Stripe. `recurring: true` marks it as a UPI Autopay
+    # (recurring) mandate; `recurring: false` is a one-time UPI payment method.
+    def build_upi_credit_card(recurring:, card_country: "IN")
+      recurring_attrs = if recurring
+        {
+          payment_method_type: Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE,
+          processor_payment_method_id: "pm_upi_check",
+          recurring_authorization_verified_at: Time.current,
+          recurring_authorization_currency: Currency::INR,
+          recurring_authorization_max_amount_cents: 10_000_00,
+        }
+      else
+        {}
+      end
+      CreditCard.create!(
+        card_type: CardType::UPI,
+        visual: "buyer@upi",
+        stripe_fingerprint: "upi_check_fp",
+        stripe_customer_id: "cus_upi_check",
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        card_country:,
+        **recurring_attrs
       )
     end
 

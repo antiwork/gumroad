@@ -131,6 +131,23 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(@seller.reload.unpaid_balance_cents).to eq(@initial_balance + purchase.payment_cents)
   end
 
+  it "delegates client-confirmed recovery to the PaymentIntent finalizer" do
+    order = create(:order)
+    charge = create(:charge, order:, seller: @seller, client_confirmed: true,
+                             stripe_payment_intent_id: "pi_client_confirmed_recovery")
+    purchase = create(:purchase_in_progress, link: @product)
+    charge.purchases << purchase
+    finalizer = instance_double(Order::FinalizeConfirmedChargeService, charge_intent: nil)
+
+    expect(Order::FinalizeConfirmedChargeService).to receive(:new).with(order:).and_return(finalizer)
+    expect(finalizer).to receive(:perform) { purchase.update!(purchase_state: "successful") }
+    expect(ChargeProcessor).not_to receive(:get_or_search_charge)
+    expect(purchase).to receive(:with_lock).and_call_original
+
+    expect(described_class.new(purchase, mark_as_failed: true).perform).to be(true)
+    expect(purchase.reload).to be_successful
+  end
+
   it "finalizes a combined-charge purchase whose destination payment Stripe never credited, booking zero in the account's currency" do
     # gumroad-private#1608 end to end: the seller's cut is our one-subunit floor in the charge's
     # currency, which rounds below one subunit of the destination account's currency, so Stripe
@@ -178,6 +195,77 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(seller_balance_transaction.holding_amount_net_cents).to eq(0)
     # And the balance it lands on stays payable, which a usd label on a eur account would break.
     expect(StripePayoutProcessor.is_balance_payable(seller_balance_transaction.balance)).to be(true)
+  end
+
+  it "does not mark a client-confirmed purchase failed when its finalizer is unavailable" do
+    order = create(:order)
+    charge = create(:charge, order:, seller: @seller, client_confirmed: true,
+                             stripe_payment_intent_id: "pi_client_confirmed_recovery")
+    purchase = create(:purchase_in_progress, link: @product)
+    charge.purchases << purchase
+    finalizer = instance_double(Order::FinalizeConfirmedChargeService, charge_intent: nil)
+    allow(Order::FinalizeConfirmedChargeService).to receive(:new).with(order:).and_return(finalizer)
+    allow(finalizer).to receive(:perform).and_raise(ChargeProcessorUnavailableError, "Stripe unavailable")
+    allow(ErrorNotifier).to receive(:notify)
+
+    expect(described_class.new(purchase, mark_as_failed: true).perform).to be(false)
+    expect(purchase.reload).to be_in_progress
+  end
+
+  it "reports a succeeded outcome when client-confirmed finalization cannot recover the purchase" do
+    order = create(:order)
+    charge = create(:charge, order:, seller: @seller, client_confirmed: true,
+                             stripe_payment_intent_id: "pi_client_confirmed_recovery")
+    purchase = create(:purchase_in_progress, link: @product, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+    charge.purchases << purchase
+    processor_charge = instance_double(StripeCharge, status: "succeeded", refunded: false, disputed: false)
+    charge_intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      charge: processor_charge,
+      processing?: false,
+      awaiting_customer_initiated_payment?: false
+    )
+    finalizer = instance_double(Order::FinalizeConfirmedChargeService, charge_intent:)
+    allow(ChargeProcessor).to receive(:get_charge_intent)
+      .with(charge.merchant_account, charge.stripe_payment_intent_id)
+      .and_return(charge_intent)
+    allow(Order::FinalizeConfirmedChargeService).to receive(:new)
+      .with(order:, charge_intent:)
+      .and_return(finalizer)
+    allow(finalizer).to receive(:perform)
+
+    service = described_class.new(purchase, require_final_charge_status: true)
+
+    expect(service.perform).to be(false)
+    expect(service.charge_outcome).to eq(:succeeded)
+    expect(purchase.reload).to be_in_progress
+  end
+
+  it "does not finalize a client-confirmed purchase while its charge is pending" do
+    order = create(:order)
+    charge = create(:charge, order:, seller: @seller, client_confirmed: true,
+                             stripe_payment_intent_id: "pi_client_confirmed_pending")
+    purchase = create(:purchase_in_progress, link: @product, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+    charge.purchases << purchase
+    processor_charge = instance_double(StripeCharge, status: "pending", refunded: false, disputed: false)
+    charge_intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      charge: processor_charge,
+      processing?: false,
+      awaiting_customer_initiated_payment?: false
+    )
+    allow(ChargeProcessor).to receive(:get_charge_intent)
+      .with(charge.merchant_account, charge.stripe_payment_intent_id)
+      .and_return(charge_intent)
+    expect(Order::FinalizeConfirmedChargeService).not_to receive(:new)
+
+    service = described_class.new(purchase, require_final_charge_status: true)
+
+    expect(service.perform).to be(false)
+    expect(service.charge_outcome).to eq(:pending)
+    expect(purchase.reload).to be_in_progress
   end
 
   it "returns false and leaves the purchase in_progress when a combined charge has nil flow_of_funds (transient unsettled state)" do
