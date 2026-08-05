@@ -108,7 +108,10 @@ describe Api::Internal::Admin::StrandedBuyersController do
       body = response.parsed_body
       expect(body["verdict"]).to eq("cleared")
       expect(body["dry_run"]).to be(false)
-      expect(AdminApiAuditLog.last.action).to eq("stranded_buyers.recover")
+      audit_log = AdminApiAuditLog.last
+      expect(audit_log.action).to eq("stranded_buyers.recover")
+      # The email is the subject of the write — the audit row must say who was recovered.
+      expect(audit_log.params_snapshot["email"]).to eq(buyer_email)
     end
 
     it "resolves the buyer by user external id" do
@@ -132,7 +135,7 @@ describe Api::Internal::Admin::StrandedBuyersController do
 
       body = response.parsed_body
       expect(body["verdict"]).to eq("escalate")
-      expect(body["reason"]).to eq("human_authored_block")
+      expect(body["reason"]).to eq("authored_block")
     end
 
     it "surfaces a verification failure as unprocessable" do

@@ -55,11 +55,64 @@ describe Risk::StrandedBuyerRecoveryService do
       anchor = Purchase.where(email: buyer_email).where.not(stripe_fingerprint: nil).order(id: :desc).first
       expect(anchor.comments.last.content).to include("Stranded-buyer recovery cleared")
     end
+  end
 
-    it "clears rows the automation actor itself wrote" do
+  describe "identifier harvesting" do
+    # A checkout email is unauthenticated: a card tester who typed the buyer's address contributes
+    # rows to the footprint, but without the buyer's proven card or account nothing they carried is
+    # harvested — their guid block stays put while the buyer's own rows clear.
+    it "does not harvest identifiers from same-email rows the buyer's fingerprints do not corroborate" do
+      create(:purchase, email: buyer_email, purchase_state: "failed",
+                        browser_guid: "guid-card-tester", stripe_fingerprint: "tester-card",
+                        created_at: 2.days.ago)
+      tester_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-card-tester")
+
+      result = call
+
+      expect(result.verdict).to eq(:cleared)
+      expect(result.cleared.map(&:object_value)).to match_array([browser_guid, buyer_email])
+      expect(tester_block.reload.blocked_at).to be_present
+    end
+
+    # PayPal and gifter addresses are typed-in third-party strings on a row, not the buyer's
+    # identity — clearing this buyer must not deactivate a block somebody else earned.
+    it "does not harvest paypal or gifter emails from the buyer's own rows" do
+      failed_purchase.update!(gifter_email: "someone-else@example.net")
+      third_party_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "someone-else@example.net")
+
+      result = call
+
+      expect(result.verdict).to eq(:cleared)
+      expect(result.cleared.map(&:object_value)).to match_array([browser_guid, buyer_email])
+      expect(third_party_block.reload.blocked_at).to be_present
+    end
+  end
+
+  describe "authored-block escalation" do
+    it "touches nothing when any block names a different human" do
+      other_admin = create(:admin_user)
+      email_block.update!(blocked_by: other_admin.id)
+
+      result = nil
+      expect { result = call }.not_to change { PlatformBlock.active.count }
+
+      expect(result.verdict).to eq(:escalate)
+      expect(result.reason).to eq(:authored_block)
+      # The unattended guid row is also left: an authored decision about this buyer freezes the whole set.
+      expect(result.skipped.map(&:first)).to contain_exactly(email_block)
+    end
+
+    # GUMROAD_ADMIN_ID authors CONFIRMED-FRAUD blocks (chargeback count, EFW) — the shared actor id
+    # marks a verdict, not stale automation, so it escalates exactly like a human's row.
+    it "escalates rows the shared automation actor wrote instead of clearing them" do
       guid_block.update!(blocked_by: GUMROAD_ADMIN_ID)
 
-      expect { call }.to change { PlatformBlock.active.count }.from(2).to(0)
+      result = nil
+      expect { result = call }.not_to change { PlatformBlock.active.count }
+
+      expect(result.verdict).to eq(:escalate)
+      expect(result.reason).to eq(:authored_block)
+      expect(result.skipped.map(&:first)).to contain_exactly(guid_block)
     end
   end
 
@@ -73,21 +126,6 @@ describe Risk::StrandedBuyerRecoveryService do
 
       expect(result.verdict).to eq(:cleared)
       expect(result.dry_run).to be(true)
-    end
-  end
-
-  describe "human-authored escalation" do
-    it "touches nothing when any block names a different human" do
-      other_admin = create(:admin_user)
-      email_block.update!(blocked_by: other_admin.id)
-
-      result = nil
-      expect { result = call }.not_to change { PlatformBlock.active.count }
-
-      expect(result.verdict).to eq(:escalate)
-      expect(result.reason).to eq(:human_authored_block)
-      # The unattended guid row is also left: a human decision about this buyer freezes the whole set.
-      expect(result.skipped.map(&:first)).to contain_exactly(email_block)
     end
   end
 
@@ -109,6 +147,28 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.verdict).to eq(:skip)
       expect(result.reason).to eq(:no_clean_payment_history)
     end
+
+    # The scan's reject_disputed veto, re-checked here: a clean anchor card does not vouch for a
+    # buyer carrying a live dispute on a DIFFERENT card — a chargeback anywhere is what blocks are for.
+    it "skips a buyer with an unreversed chargeback on another card" do
+      create(:purchase, email: buyer_email, purchase_state: "successful",
+                        stripe_fingerprint: "disputed-other-card", chargeback_date: 1.month.ago,
+                        created_at: 7.months.ago)
+
+      result = nil
+      expect { result = call }.not_to change { PlatformBlock.active.count }
+
+      expect(result.verdict).to eq(:skip)
+      expect(result.reason).to eq(:unreversed_chargeback)
+    end
+
+    it "does not veto on a chargeback that was reversed" do
+      create(:purchase, email: buyer_email, purchase_state: "successful",
+                        stripe_fingerprint: "reversed-other-card", chargeback_date: 1.month.ago,
+                        chargeback_reversed: true, created_at: 7.months.ago)
+
+      expect(call.verdict).to eq(:cleared)
+    end
   end
 
   describe "velocity attribution" do
@@ -124,6 +184,23 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.verdict).to eq(:skip)
       expect(result.reason).to eq(:velocity_rule_still_firing)
       expect(result.attribution[:recent_distinct_cards]).to be >= Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
+    end
+
+    # The guid rule has no window, so failures older than the 7-day watch period still arm it:
+    # unexplained all-time distinct cards over threshold mean the rule re-fires on the next attempt.
+    it "skips when all-time distinct failed cards the anchor does not explain still arm the guid rule" do
+      Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS.times do |index|
+        create(:purchase, email: buyer_email, browser_guid:, purchase_state: "failed",
+                          stripe_fingerprint: "stale-card-#{index}", created_at: 30.days.ago)
+      end
+
+      result = nil
+      expect { result = call }.not_to change { PlatformBlock.active.count }
+
+      expect(result.verdict).to eq(:skip)
+      expect(result.reason).to eq(:velocity_rule_still_firing)
+      expect(result.attribution[:recent_distinct_cards]).to be < Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
+      expect(result.attribution[:all_time_unexplained_cards]).to be >= Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
     end
 
     # One PayPal wallet mints a fresh billing-agreement token per attempt, so raw fingerprints trip
@@ -148,13 +225,14 @@ describe Risk::StrandedBuyerRecoveryService do
 
   describe "card-fingerprint blocks" do
     let(:declining_fingerprint) { "still-declining-card" }
+    let!(:buyer_account) { create(:user, email: buyer_email) }
 
     let!(:card_block) do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: declining_fingerprint)
     end
 
     it "leaves the card blocked while the issuer is still declining it" do
-      create(:purchase, email: buyer_email, purchase_state: "failed",
+      create(:purchase, email: buyer_email, purchaser: buyer_account, purchase_state: "failed",
                         stripe_fingerprint: declining_fingerprint,
                         stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD, created_at: 2.days.ago)
 
@@ -167,10 +245,10 @@ describe Risk::StrandedBuyerRecoveryService do
     end
 
     it "clears the card once a later charge on it succeeded" do
-      create(:purchase, email: buyer_email, purchase_state: "failed",
+      create(:purchase, email: buyer_email, purchaser: buyer_account, purchase_state: "failed",
                         stripe_fingerprint: declining_fingerprint,
                         stripe_error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD, created_at: 2.days.ago)
-      create(:purchase, email: buyer_email, purchase_state: "successful",
+      create(:purchase, email: buyer_email, purchaser: buyer_account, purchase_state: "successful",
                         stripe_fingerprint: declining_fingerprint, created_at: 1.day.ago)
 
       result = call
@@ -178,6 +256,36 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.verdict).to eq(:cleared)
       expect(result.cleared).to include(card_block)
       expect(PlatformBlock.active.count).to eq(0)
+    end
+
+    # A PayPal wallet's block value is card_visual (the attested payer email), not a Stripe
+    # fingerprint — the withhold must recognize it or a blocked wallet clears while still declining.
+    it "withholds a PayPal wallet block while the wallet is still declining" do
+      create(:purchase, email: buyer_email, purchaser: buyer_account, purchase_state: "failed",
+                        charge_processor_id: PaypalChargeProcessor.charge_processor_id,
+                        stripe_fingerprint: "B-WALLETTOKEN", card_visual: "buyer@paypal.com",
+                        stripe_error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT, created_at: 2.days.ago)
+      wallet_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "buyer@paypal.com")
+
+      result = call
+
+      expect(result.verdict).to eq(:cleared)
+      expect(result.skipped).to include([wallet_block, :card_still_declining_at_issuer])
+      expect(wallet_block.reload.blocked_at).to be_present
+    end
+  end
+
+  describe "email-domain blocks" do
+    # A domain block holds everyone at that domain; one buyer's innocence cannot vouch for it.
+    it "withholds the buyer's domain block instead of clearing it" do
+      domain_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
+
+      result = call
+
+      expect(result.verdict).to eq(:cleared)
+      expect(result.cleared.map(&:object_value)).to match_array([browser_guid, buyer_email])
+      expect(result.skipped).to contain_exactly([domain_block, :domain_wide_block])
+      expect(domain_block.reload.blocked_at).to be_present
     end
   end
 
@@ -188,20 +296,43 @@ describe Risk::StrandedBuyerRecoveryService do
       expect { call }.to raise_error(described_class::VerificationFailedError, /still active/)
     end
 
-    it "raises instead of clearing when a block becomes human-authored underneath the run" do
+    it "raises instead of clearing when a block becomes authored underneath the run" do
       other_admin = create(:admin_user)
       allow_any_instance_of(PlatformBlock).to receive(:reload) do |block|
         block.update_columns(blocked_by: other_admin.id)
         block
       end
 
-      expect { call }.to raise_error(described_class::UnsafeClearError, /human-authored/)
+      expect { call }.to raise_error(described_class::UnsafeClearError, /names an author/)
+    end
+
+    # A fresh blocked_at between the decision snapshot and the write is a re-block by a live rule —
+    # wiping it would switch enforcement off mid-attack.
+    it "raises instead of clearing when a block was re-blocked underneath the run" do
+      allow_any_instance_of(PlatformBlock).to receive(:reload) do |block|
+        block.update_columns(blocked_at: Time.current + 1.hour)
+        block
+      end
+
+      expect { call }.to raise_error(described_class::UnsafeClearError, /re-blocked/)
     end
   end
 
   describe "buyer notification gating" do
     it "sends nothing when the buyer has not failed a purchase in the last 60 days" do
       failed_purchase.update!(created_at: 61.days.ago)
+
+      expect do
+        call
+      end.to change { PlatformBlock.active.count }.to(0)
+         .and not_have_enqueued_mail(CustomerLowPriorityMailer, :blocked_purchase_resolved)
+    end
+
+    # An ordinary decline is not something this run resolved — only a failure carrying one of our
+    # block error codes proves the buyer actually hit the block being cleared.
+    it "sends nothing when the newest recent failure was not declined by our block" do
+      create(:purchase, email: buyer_email, browser_guid:, purchase_state: "failed",
+                        stripe_error_code: "card_declined_generic_decline", created_at: 12.hours.ago)
 
       expect do
         call
