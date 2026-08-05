@@ -312,25 +312,17 @@ export default function SubscriptionsManage() {
     // Always on since the require_email_typo_acknowledgment rollout flag was removed
     // (100% enabled in production since 2025-08; see gumroad-private#1208).
     requireEmailTypoAcknowledgment: true,
-    // A SetupIntent-mode element: this page collects a reusable card and the server prices any
-    // charge (a payment-method update may charge nothing at all today). Wallets keep riding the
-    // Payment Request Button, so payment_element_wallets stays false and only the Apple Pay
-    // merchant-token flag is threaded through for the sheet's recurring declaration.
+    // This page uses the CardElement integration (the createReducer default); only the Apple Pay
+    // merchant-token rollout flag is threaded through, so a payment-method update via Apple Pay
+    // declares the subscription's recurring agreement (see paymentProduct above).
     checkoutPayment: {
-      integration: "payment_element",
-      fallback_reason: null,
+      integration: "card_element",
+      fallback_reason: "not_checkout",
       disable_wallets: false,
       request_apple_pay_merchant_tokens,
       payment_element_wallets: false,
       flat_payment_methods: false,
-      elements_options: {
-        stripe_elements_mode: "setup",
-        currency: "usd",
-        buyer_currency_presentment: false,
-        payment_method_types: ["card"],
-        payment_method_creation: "manual",
-        stripe_link_enabled: true,
-      },
+      elements_options: null,
     },
   });
   const [state, dispatchAction] = reducer;

@@ -3921,7 +3921,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_select("Country", selected: "Austria")
 
       fill_in("Email address", with: "test@test.com")
-      fill_in_payment_element
+      fill_in_credit_card
 
       fill_in("Business VAT ID (optional)", with: "NL860999063B01\t")
 

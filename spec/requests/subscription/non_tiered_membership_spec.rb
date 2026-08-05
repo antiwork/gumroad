@@ -66,7 +66,7 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
 
       click_on "Use a different card?"
 
-      fill_in_payment_element(number: CardParamsSpecHelper.card_number(:success))
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
       click_on "Update membership"
       wait_for_ajax
 
@@ -88,7 +88,7 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
 
       click_on "Use a different card?"
 
-      fill_in_payment_element(number: CardParamsSpecHelper.card_number(:success_with_sca))
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success_with_sca))
       click_on "Update membership"
       wait_for_ajax
       sleep 1
@@ -113,7 +113,7 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
 
       click_on "Use a different card?"
 
-      fill_in_payment_element(number: CardParamsSpecHelper.card_number(:success_with_sca))
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success_with_sca))
       click_on "Update membership"
       wait_for_ajax
       sleep 1
@@ -130,7 +130,7 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
 
       click_on "Use a different card?"
 
-      fill_in_payment_element(number: CardParamsSpecHelper.card_number(:success_indian_card_mandate))
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success_indian_card_mandate))
       click_on "Update membership"
       wait_for_ajax
       sleep 1
@@ -290,7 +290,7 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
       visit "/subscriptions/#{@subscription_with_purchaser.external_id}/manage?token=#{@subscription_with_purchaser.token}"
 
       click_on "Use a different card?"
-      fill_in_payment_element(number: CardParamsSpecHelper.card_number(:success))
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
       click_on "Restart membership"
       wait_for_ajax
 
@@ -334,7 +334,7 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
         visit "/subscriptions/#{@subscription_without_purchaser.external_id}/manage?token=#{@subscription_without_purchaser.token}"
 
         click_on "Use a different card?"
-        fill_in_payment_element(number: CardParamsSpecHelper.card_number(:success))
+        fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
         click_on "Restart membership"
 
         expect(page).to(have_alert(text: "Membership restarted"))
@@ -362,7 +362,7 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
       visit "/subscriptions/#{@subscription_without_purchaser.external_id}/manage?token=#{@subscription_without_purchaser.token}"
 
       click_on "Use a different card?"
-      fill_in_payment_element(number: CardParamsSpecHelper.card_number(:success_charge_decline))
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success_charge_decline))
       click_on "Restart membership"
       wait_for_ajax
 
@@ -387,7 +387,7 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
       visit "/subscriptions/#{subscription.external_id}/manage?token=#{subscription.token}"
 
       click_on "Use a different card?"
-      fill_in_payment_element(number: CardParamsSpecHelper.card_number(:success))
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
       click_on "Update membership"
       wait_for_ajax
 
@@ -420,7 +420,7 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
 
       click_on "Use a different card?"
 
-      fill_in_payment_element(number: CardParamsSpecHelper.card_number(:success))
+      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success))
       click_on "Update membership"
       wait_for_ajax
 

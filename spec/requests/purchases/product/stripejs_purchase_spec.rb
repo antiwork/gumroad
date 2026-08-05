@@ -51,6 +51,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     product = create(:product_with_pdf_file, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
 
     visit("/checkout?product=#{product.unique_permalink}")
 
@@ -93,6 +94,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     paid_product_price_cents = CURRENCY_CHOICES[Currency::USD][:min_price]
     free_product = create(:product_with_pdf_file, user: seller, name: "Free bonus", price_cents: 0)
     paid_product = create(:product_with_pdf_file, user: seller, name: "Paid guide", price_cents: paid_product_price_cents)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     cart = create(:cart, :guest)
     create(:cart_product, cart:, product: free_product, price: 0)
     create(:cart_product, cart:, product: paid_product, price: paid_product_price_cents)
@@ -134,12 +136,12 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     seller = create(:user)
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
-    # 10¢ above the 50¢ Stripe charge floor (STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS in payment.ts).
-    near_zero_price_cents = 60
+    near_zero_price_cents = Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS + 10
     product = create(:product_with_pdf_file, user: seller, name: "Near-zero guide")
     # Product creation enforces Gumroad's minimum; this synthetic checkout verifies Stripe's lower charge floor.
     product.default_price.update_column(:price_cents, near_zero_price_cents)
     product.reload
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     visit("/checkout?product=#{product.unique_permalink}")
 
@@ -174,6 +176,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     seller = create(:user)
     gumroad_minimum_amount_cents = CURRENCY_CHOICES[Currency::USD][:min_price]
     product = create(:product_with_pdf_file, user: seller, name: "Near-zero guide", customizable_price: true, price_cents: 0)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     cart = create(:cart, :guest)
     create(:cart_product, cart:, product:, price: gumroad_minimum_amount_cents - 1)
 
@@ -188,13 +191,13 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(page).to have_selector("iframe[src*='elements-inner-payment']")
   end
 
-  it "keeps the Payment Element mounted for a positive checkout total below Stripe's minimum charge amount" do
+  it "renders CardElement fallback for a positive checkout total below the Payment Element minimum" do
     seller = create(:user)
-    # 49¢ sits below the 50¢ floor the client clamps the mount amount to
-    # (STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS in payment.ts).
+    payment_element_minimum_amount_cents = Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
     product = create(:product_with_pdf_file, user: seller, name: "Near-zero guide", customizable_price: true, price_cents: 0)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
     cart = create(:cart, :guest)
-    create(:cart_product, cart:, product:, price: 49)
+    create(:cart_product, cart:, product:, price: payment_element_minimum_amount_cents - 1)
 
     visit checkout_path(cart_id: cart.secure_external_id(scope: "cart_login"))
 
@@ -202,16 +205,18 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(page).to have_text("Near-zero guide")
     expect(page).to have_text("Total US$0.49", normalize_ws: true)
     checkout_payment = checkout_payment_props
-    expect(checkout_payment["integration"]).to eq("payment_element")
-    expect(checkout_payment["fallback_reason"]).to be_nil
-    expect(page).to have_selector("iframe[src*='elements-inner-payment']")
+    expect(checkout_payment["integration"]).to eq("card_element")
+    expect(checkout_payment["fallback_reason"]).to eq("stripe_payment_element_amount_below_minimum")
+    expect(page).to have_selector(:fieldset, "Card information")
+    expect(page).not_to have_selector("iframe[src*='elements-inner-payment']", wait: 0)
   end
 
-  it "allows the buyer to pay for a recurring membership using the restored CardElement lane" do
+  it "allows the buyer to pay for a recurring membership using the Payment Element reusable setup path" do
     seller = create(:user)
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     product = create(:membership_product_with_preset_tiered_pricing, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
 
     tier = product.variant_categories.alive.first.variants.alive.find_by!(name: "First Tier")
 
@@ -231,41 +236,30 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       setup_intent
     end
 
-    payment_intent_params = []
-    allow(Stripe::PaymentIntent).to receive(:create).and_wrap_original do |original, params, *args|
-      payment_intent_params << params
-      original.call(params, *args)
-    end
-
     checkout_payment = checkout_payment_props
-    # Recurring memberships confirm via confirmCardPayment on an off-session-reusable
-    # PaymentMethod, which mounts the restored CardElement lane (gumroad-private#1853-1856)
-    # rather than the Payment Element.
-    expect(checkout_payment["integration"]).to eq("card_element")
-    expect(checkout_payment["fallback_reason"]).to eq("sca_or_mandate_confirm_flow")
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
 
-    check_out(product)
+    check_out(product, payment_element: true)
 
     purchase = Purchase.last
     expect(purchase.successful?).to be(true)
     expect(purchase.subscription).to be_alive
     expect(purchase.credit_card).to be_present
     expect(purchase.credit_card.stripe_customer_id).to be_present
-    # The CardElement lane registers future usage on the charge's own PaymentIntent
-    # (setup_future_usage: off_session); the standalone SetupIntent was a Payment Element
-    # frontend artifact and must not appear here.
-    expect(setup_intent_ids).to be_empty
-    expect(payment_intent_params.last[:setup_future_usage]).to eq("off_session")
+    expect(setup_intent_ids).to all(match(/\Aseti_/))
+    expect(setup_intent_ids).not_to be_empty
     expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
     expect(payment_element_payment_method_ids).not_to be_empty
   end
 
-  it "allows the buyer to pay in installments using the restored CardElement lane" do
+  it "allows the buyer to pay in installments using the Payment Element" do
     seller = create(:user)
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     product = create(:product, user: seller, price_cents: 1000)
     create(:product_installment_plan, link: product, number_of_installments: 3)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     visit product.long_url
     click_on "Pay in 3 installments"
@@ -278,17 +272,15 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     end
 
     checkout_payment = checkout_payment_props
-    # Installment carts also save the card for future off-session charges, so they mount the
-    # same restored CardElement lane as memberships (gumroad-private#1853-1856).
-    expect(checkout_payment["integration"]).to eq("card_element")
-    expect(checkout_payment["fallback_reason"]).to eq("sca_or_mandate_confirm_flow")
+    expect(checkout_payment["integration"]).to eq("payment_element")
+    expect(checkout_payment["fallback_reason"]).to be_nil
 
     expect(page).to have_text("Payment today US$3.34", normalize_ws: true)
     expect(page).to have_text("Future installments US$6.66", normalize_ws: true)
 
     # check_out's subscription-count expectation assumes only recurring-billing products create
     # subscriptions, which installment purchases also do — so drive the form directly.
-    fill_checkout_form(product)
+    fill_checkout_form(product, payment_element: true)
     click_on "Pay"
     expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.", visible: :all, wait: 60)
 
@@ -308,6 +300,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     product = create(:product_with_pdf_file, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     buyer = create(:user)
     saved_card = create(:credit_card)
@@ -336,6 +329,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     product = create(:product_with_pdf_file, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
 
     buyer = create(:user)
     saved_card = create(:credit_card)
@@ -371,6 +365,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     product = create(:product_with_pdf_file, user: seller)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
 
     visit("/checkout?product=#{product.unique_permalink}")
 
@@ -409,6 +404,9 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     product_1 = create(:product, user: seller_1, price_cents: 1000)
     product_2 = create(:product, user: seller_2, price_cents: 1500)
+    [seller_1, seller_2].each do |seller|
+      Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    end
 
     login_as buyer
     visit(product_1.long_url)
@@ -466,6 +464,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
     product = create(:product_with_pdf_file, user: seller, is_in_preorder_state: true)
     create(:preorder_link, link: product, release_at: 25.hours.from_now)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
 
     visit("/checkout?product=#{product.unique_permalink}")
 
@@ -512,6 +511,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       free_trial_duration_unit: :week
     )
     tier = product.tiers.find_by!(name: "First Tier")
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
 
     visit("/checkout?product=#{product.unique_permalink}&option=#{Rack::Utils.escape(tier.external_id)}")
     within_cart_item(product.name) do

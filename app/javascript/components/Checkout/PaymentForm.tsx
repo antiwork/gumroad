@@ -62,7 +62,6 @@ import {
   requiresReusablePaymentMethodForCardCollection,
   requiresPayment,
   requiresReusablePaymentMethod,
-  stripePaymentElementAmountClamped,
   usePayLabel,
   useState,
 } from "$app/components/Checkout/payment";
@@ -78,7 +77,6 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
-import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 import { Radio } from "$app/components/ui/Radio";
 import { Select } from "$app/components/ui/Select";
@@ -678,15 +676,6 @@ const CreditCardContent = ({
 
   const [cardError, setCardError] = React.useState(false);
 
-  // A refused submit must put the buyer's focus on the invalid card, like every other invalid
-  // field. The error-focus effect walks the top document's `[aria-invalid=true]` controls,
-  // which reached the legacy CardElement through the helper input it rendered alongside its
-  // iframe — the Payment Element keeps every field inside the iframe, out of that walk's
-  // reach, so checkout has to ask the element to take focus itself.
-  const focusPaymentElement = React.useCallback(() => {
-    paymentElementRef.current?.elements.getElement("payment")?.focus();
-  }, []);
-
   // The in-flight elements.submit() started synchronously by the pay-button click for a wallet
   // payment (see walletClickSubmitRef above). Consumed (and cleared) by the tokenization
   // effects below so Stripe keeps Safari's user-activation window for the Apple Pay sheet.
@@ -883,7 +872,6 @@ const CreditCardContent = ({
         });
         if (tokenResult.status === "error") {
           setCardError(true);
-          focusPaymentElement();
           return dispatch({ type: "cancel" });
         }
         // A wallet paid through the Payment Element: adopt the wallet sheet's billing address as
@@ -958,8 +946,6 @@ const CreditCardContent = ({
       }
 
       if (!useSavedCard && !useStripePaymentElement && !cardElementRef.current) {
-        // No element is mountable for this cart (an empty cart, or a config the client cannot
-        // honor) and there is no card on file — there is nothing to tokenize.
         setCardError(true);
         return dispatch({ type: "cancel" });
       }
@@ -1010,7 +996,6 @@ const CreditCardContent = ({
         paymentMethod.cardParamsResult.cardParams.stripe_error.type === "validation_error"
       ) {
         setCardError(true);
-        focusPaymentElement();
         return dispatch({ type: "cancel" });
       }
       // A wallet paid through the Payment Element (server-confirm lane): adopt the wallet
@@ -1125,9 +1110,7 @@ const CreditCardContent = ({
             amount={stripePaymentElementAmount}
             mountCurrency={stripePaymentElementMountCurrency}
             elementsOptions={stripePaymentElementConfig}
-            walletsEnabled={
-              state.checkoutPayment.payment_element_wallets ? !stripePaymentElementAmountClamped(state) : false
-            }
+            walletsEnabled={state.checkoutPayment.payment_element_wallets}
             flatLayout={state.checkoutPayment.flat_payment_methods}
             applePayOption={memoizedPaymentElementApplePayOption}
             disabled={isProcessing(state)}
@@ -1160,7 +1143,7 @@ const CreditCardContent = ({
             }}
           />
         </div>
-      ) : state.checkoutPayment.integration === "card_element" ? (
+      ) : (
         <CreditCardInput
           savedCreditCard={state.savedCreditCard}
           disabled={isProcessing(state)}
@@ -1171,30 +1154,7 @@ const CreditCardContent = ({
           onChange={(evt) => setCardError(!!evt.error)}
           enableLink
         />
-      ) : state.savedCreditCard ? (
-        // Paying with the card on file mounts no element at all; the box and its toggle used to
-        // live in CreditCardInput, which the payout debit-card page still owns.
-        <Fieldset>
-          <FieldsetTitle>
-            <Label>Card information</Label>
-            <button
-              type="button"
-              className="cursor-pointer font-normal underline all-unset"
-              disabled={isProcessing(state)}
-              onClick={() => setUseSavedCard(!useSavedCard)}
-            >
-              {useSavedCard ? "Use a different card?" : "Use saved card"}
-            </button>
-          </FieldsetTitle>
-          {useSavedCard ? (
-            <InputGroup readOnly aria-label="Saved credit card">
-              <CreditCard className="size-5" />
-              <span>{state.savedCreditCard.number}</span>
-              <span style={{ marginLeft: "auto" }}>{state.savedCreditCard.expiration_date}</span>
-            </InputGroup>
-          ) : null}
-        </Fieldset>
-      ) : null}
+      )}
       {paymentMethodsAppendix}
       {!useSavedCard && isLoggedIn && (!flatPaymentMethodsList || state.paymentMethod === "card") ? (
         <Label className="flex items-center gap-2">
