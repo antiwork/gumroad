@@ -144,20 +144,24 @@ describe SitemapService do
       expect(File.exist?(sitemap_file_path)).to be false
     end
 
-    it "deletes the S3 object with the dedicated sitemap-uploader credentials in production/staging" do
-      allow(Rails.env).to receive_messages(production?: true, staging?: false)
-      client = instance_double(Aws::S3::Client, delete_object: nil)
+    [{ production?: true, staging?: false }, { production?: false, staging?: true }].each do |env_stubs|
+      env_name = env_stubs[:production?] ? "production" : "staging"
 
-      expect(Aws::S3::Client).to receive(:new).with(
-        access_key_id: GlobalConfig.get("S3_SITEMAP_UPLOADER_ACCESS_KEY"),
-        secret_access_key: GlobalConfig.get("S3_SITEMAP_UPLOADER_SECRET_ACCESS_KEY"),
-        region: AWS_DEFAULT_REGION
-      ).and_return(client)
-      expect(client).to receive(:delete_object).with(
-        bucket: PUBLIC_STORAGE_S3_BUCKET, key: "#{SitemapService::SITEMAP_PATH_WISHLISTS}/sitemap.xml.gz"
-      )
+      it "deletes the S3 object with the dedicated sitemap-uploader credentials in #{env_name}" do
+        allow(Rails.env).to receive_messages(**env_stubs)
+        client = instance_double(Aws::S3::Client, delete_object: nil)
 
-      service.send(:remove_wishlist_sitemap_artifact)
+        expect(Aws::S3::Client).to receive(:new).with(
+          access_key_id: GlobalConfig.get("S3_SITEMAP_UPLOADER_ACCESS_KEY"),
+          secret_access_key: GlobalConfig.get("S3_SITEMAP_UPLOADER_SECRET_ACCESS_KEY"),
+          region: AWS_DEFAULT_REGION
+        ).and_return(client)
+        expect(client).to receive(:delete_object).with(
+          bucket: PUBLIC_STORAGE_S3_BUCKET, key: "#{SitemapService::SITEMAP_PATH_WISHLISTS}/sitemap.xml.gz"
+        )
+
+        service.send(:remove_wishlist_sitemap_artifact)
+      end
     end
 
     it "deletes /robots.txt sitemap configs cache" do
