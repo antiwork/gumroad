@@ -138,6 +138,43 @@ describe Product::StructuredData do
           expect(offer["url"]).to eq(product.long_url)
         end
 
+        context "when the product is priced in a non-USD currency" do
+          before do
+            product.update!(price_currency_type: "eur", price_cents: 2600)
+            # cached_rate only reads the warm cache (no live fetch on render), so seed it
+            # the way UpdateCurrenciesWorker does.
+            Redis::Namespace.new(:currencies, redis: $redis).set("EUR", "0.81127")
+          end
+
+          it "converts the offer price to USD, matching the Merchant Center feed's price" do
+            offer = product.structured_data["offers"]
+
+            # 26.00 EUR at the test-fixture rate (0.81127 EUR/USD) — same conversion
+            # MerchantCenterFeedService performs so a crawler sees the same figure.
+            expect(offer["priceCurrency"]).to eq("USD")
+            expect(offer["price"]).to eq(32.05)
+          end
+
+          it "falls back to the native price and currency when no conversion rate is available" do
+            allow_any_instance_of(described_class).to receive(:cached_rate).and_return(nil)
+
+            offer = product.structured_data["offers"]
+
+            expect(offer["priceCurrency"]).to eq("EUR")
+            expect(offer["price"]).to eq(26.0)
+          end
+
+          it "never performs a live exchange-rate fetch on a cache miss" do
+            Redis::Namespace.new(:currencies, redis: $redis).del("EUR")
+            expect(product).not_to receive(:query_rate)
+
+            offer = product.structured_data["offers"]
+
+            expect(offer["priceCurrency"]).to eq("EUR")
+            expect(offer["price"]).to eq(26.0)
+          end
+        end
+
         context "when the product is pay-what-you-want with no minimum" do
           before do
             product.price_cents = 0

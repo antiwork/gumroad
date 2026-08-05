@@ -207,7 +207,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(page).to have_selector("iframe[src*='elements-inner-payment']")
   end
 
-  it "allows the buyer to pay for a recurring membership using the Payment Element reusable setup path" do
+  it "allows the buyer to pay for a recurring membership using the restored CardElement lane" do
     seller = create(:user)
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
@@ -231,24 +231,36 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       setup_intent
     end
 
-    checkout_payment = checkout_payment_props
-    expect(checkout_payment["integration"]).to eq("payment_element")
-    expect(checkout_payment["fallback_reason"]).to be_nil
+    payment_intent_params = []
+    allow(Stripe::PaymentIntent).to receive(:create).and_wrap_original do |original, params, *args|
+      payment_intent_params << params
+      original.call(params, *args)
+    end
 
-    check_out(product, payment_element: true)
+    checkout_payment = checkout_payment_props
+    # Recurring memberships confirm via confirmCardPayment on an off-session-reusable
+    # PaymentMethod, which mounts the restored CardElement lane (gumroad-private#1853-1856)
+    # rather than the Payment Element.
+    expect(checkout_payment["integration"]).to eq("card_element")
+    expect(checkout_payment["fallback_reason"]).to eq("sca_or_mandate_confirm_flow")
+
+    check_out(product)
 
     purchase = Purchase.last
     expect(purchase.successful?).to be(true)
     expect(purchase.subscription).to be_alive
     expect(purchase.credit_card).to be_present
     expect(purchase.credit_card.stripe_customer_id).to be_present
-    expect(setup_intent_ids).to all(match(/\Aseti_/))
-    expect(setup_intent_ids).not_to be_empty
+    # The CardElement lane registers future usage on the charge's own PaymentIntent
+    # (setup_future_usage: off_session); the standalone SetupIntent was a Payment Element
+    # frontend artifact and must not appear here.
+    expect(setup_intent_ids).to be_empty
+    expect(payment_intent_params.last[:setup_future_usage]).to eq("off_session")
     expect(payment_element_payment_method_ids).to all(match(/\Apm_/))
     expect(payment_element_payment_method_ids).not_to be_empty
   end
 
-  it "allows the buyer to pay in installments using the Payment Element" do
+  it "allows the buyer to pay in installments using the restored CardElement lane" do
     seller = create(:user)
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
@@ -266,15 +278,17 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     end
 
     checkout_payment = checkout_payment_props
-    expect(checkout_payment["integration"]).to eq("payment_element")
-    expect(checkout_payment["fallback_reason"]).to be_nil
+    # Installment carts also save the card for future off-session charges, so they mount the
+    # same restored CardElement lane as memberships (gumroad-private#1853-1856).
+    expect(checkout_payment["integration"]).to eq("card_element")
+    expect(checkout_payment["fallback_reason"]).to eq("sca_or_mandate_confirm_flow")
 
     expect(page).to have_text("Payment today US$3.34", normalize_ws: true)
     expect(page).to have_text("Future installments US$6.66", normalize_ws: true)
 
     # check_out's subscription-count expectation assumes only recurring-billing products create
     # subscriptions, which installment purchases also do — so drive the form directly.
-    fill_checkout_form(product, payment_element: true)
+    fill_checkout_form(product)
     click_on "Pay"
     expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.", visible: :all, wait: 60)
 

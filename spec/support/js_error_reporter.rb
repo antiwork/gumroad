@@ -55,7 +55,7 @@ class JSErrorReporter
     errors.map do |log|
       if log.message.start_with?("DevTools WebSocket Event: Runtime.exceptionThrown")
         error = JSON.parse(log.message[log.message.index("{")..])["exceptionDetails"]
-        message = error["exception"]["preview"] ? error["exception"]["preview"]["properties"].find { |prop| prop["name"] == "message" }["value"] : error["exception"]["value"]
+        message = error["exception"]["preview"] ? error["exception"]["preview"]["properties"].find { |prop| prop["name"] == "message" }&.dig("value") || error["exception"]["preview"]["description"] : error["exception"]["value"]
         next "Error: #{message}\n\tat #{error["url"]}:#{error["lineNumber"]}:#{error["columnNumber"]}" unless error["stackTrace"]
         trace = format_stack_trace(error["stackTrace"])
         "Error: #{message}\n#{trace}"

@@ -3,6 +3,7 @@
 module Product::StructuredData
   extend ActiveSupport::Concern
   include ActionView::Helpers::SanitizeHelper
+  include CurrencyHelper
 
   SCHEMA_ORG_CONTEXT = "https://schema.org"
   AVAILABILITY_IN_STOCK = "#{SCHEMA_ORG_CONTEXT}/InStock"
@@ -75,14 +76,33 @@ module Product::StructuredData
 
     def build_offer_data(url)
       price_cents = minimum_offer_price_cents
+      usd_cents = usd_offer_price_cents(price_cents)
+      # Merchant Center's feed always reports USD (MerchantCenterFeedService); when
+      # conversion succeeds here too, the price a crawler sees on this Offer matches
+      # what the feed submitted for the same product. On conversion failure, fall back
+      # to the native price/currency rather than showing a currency with no price.
+      display_cents = usd_cents || price_cents
+      currency = usd_cents.nil? ? price_currency_type.upcase : "USD"
       offer = {
         "@type" => "Offer",
-        "priceCurrency" => price_currency_type.upcase,
+        "priceCurrency" => currency,
         "availability" => availability_for_schema_org,
         "url" => url
       }
-      offer["price"] = price_cents / 100.0 unless price_cents.nil?
+      offer["price"] = display_cents / 100.0 unless display_cents.nil?
       offer
+    end
+
+    def usd_offer_price_cents(cents)
+      return nil if cents.nil?
+      return cents if price_currency_type.to_s == "usd"
+
+      rate = cached_rate(price_currency_type)
+      return nil if rate.to_f <= 0
+
+      get_usd_cents(price_currency_type, cents, rate:)
+    rescue StandardError
+      nil
     end
 
     def minimum_offer_price_cents

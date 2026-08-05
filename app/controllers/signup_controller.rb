@@ -130,8 +130,10 @@ class SignupController < Devise::RegistrationsController
 
       return unless params[:user] && params[:user][:password].present? && params[:user][:email].present?
 
-      user = User.find_by(email: params[:user][:email])
-      return unless user
+      holders = User.by_email(params[:user][:email])
+      return if holders.empty?
+
+      user = holders.find { |holder| !holder.deleted? } || holders.first
 
       if !user.deleted? && user.try(:valid_password?, params[:user][:password])
         sign_in_or_prepare_for_two_factor_auth(user)
@@ -140,7 +142,9 @@ class SignupController < Devise::RegistrationsController
           format.json { render json: { success: true, redirect_location: login_path_for(user) } }
         end
       else
-        message = user.deleted? ? User::DELETED_ACCOUNT_HOLDS_EMAIL_ERROR : "An account already exists with this email."
+        # Mirror User::Validations#email_almost_unique: only claim the address is
+        # deleted-held when EVERY holder is deleted, not just the one row we picked.
+        message = holders.all?(&:deleted?) ? User::DELETED_ACCOUNT_HOLDS_EMAIL_ERROR : "An account already exists with this email."
         respond_to do |format|
           format.html { redirect_with_signup_error(message) }
           format.json { render json: { success: false, error_message: message } }

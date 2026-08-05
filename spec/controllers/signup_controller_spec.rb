@@ -166,10 +166,17 @@ describe SignupController, type: :controller, inertia: true do
         expect(response.parsed_body["error_message"]).to eq(User::DELETED_ACCOUNT_HOLDS_EMAIL_ERROR)
       end
 
-      it "still says the account already exists when a live account holds the email" do
+      # The deleted holder is created FIRST (in the outer `before`) so an unordered/
+      # single-row lookup that just inspects whichever holder it finds first would
+      # report "deleted" and hand this visitor the wrong message even though they
+      # collide with a real, live account.
+      it "still says the account already exists when the same email is also held by a live account" do
         live = create(:user, password: "password")
+        live_email = live.email
+        @deleted.update_columns(email: live_email)
+        expect(User.by_email(live_email).order(:id).pluck(:deleted_at).map(&:present?)).to eq([true, false])
 
-        post "create", params: { user: { email: live.email, password: "wrongpassword" } }
+        post "create", params: { user: { email: live_email, password: "wrongpassword" } }
 
         expect(flash[:warning]).to eq("An account already exists with this email.")
       end

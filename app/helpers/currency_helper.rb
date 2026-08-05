@@ -52,6 +52,16 @@ module CurrencyHelper
     end
   end
 
+  # Cache-only counterpart to get_rate: never falls through to a live
+  # exchange-rate fetch, so callers on a request/render path (e.g. product
+  # page structured data) don't block on an external HTTP call on a cache
+  # miss. Rates are kept warm by UpdateCurrenciesWorker.
+  def cached_rate(currency_type)
+    return "1.0" if currency_type.to_s == "usd"
+    rate = currency_namespace.get(currency_type.to_s.upcase)
+    rate.to_f > 0 ? rate.to_f.to_s : nil
+  end
+
   def buyer_currency_for_ip(ip)
     buyer_currency_for_country(GeoIp.lookup(ip)&.country_code)
   rescue StandardError

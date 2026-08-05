@@ -34,12 +34,21 @@ describe UndeliveredReceiptNotifier do
       expect(described_class.undelivered?(purchase)).to eq(false)
     end
 
-    # A delivery timestamp is evidence the buyer got the email whatever the state column says, and a
-    # resend leaves exactly that shape while the row sits back at `sent`.
-    it "is false for a row back at sent that still carries a delivery timestamp" do
-      settled_receipt("sent", delivered_at: 4.days.ago)
+    # A delivery timestamp on or after the send is evidence the buyer got the email whatever the state
+    # column says, and a resend leaves exactly that shape while the row sits back at `sent`.
+    it "is false for a row back at sent that still carries a delivery timestamp on or after the send" do
+      settled_receipt("sent", delivered_at: 2.days.ago)
 
       expect(described_class.undelivered?(purchase)).to eq(false)
+    end
+
+    # `CustomerEmailInfo.newest_sent_before` falls back to the newest row when an event predates every
+    # recorded send, so a pre-send event can populate `delivered_at`/`opened_at` on a row that never
+    # earned it. That timestamp must not count as confirmation (gumroad-private#1635).
+    it "is true when the only delivery/open timestamp predates the send" do
+      settled_receipt("sent", delivered_at: 4.days.ago, opened_at: 4.days.ago)
+
+      expect(described_class.undelivered?(purchase)).to eq(true)
     end
 
     # Delivery events land in minutes but content access does not, so judging early would report a
@@ -73,14 +82,14 @@ describe UndeliveredReceiptNotifier do
     # the seller was told a delivered receipt was undelivered.
     context "with more than one send on the same receipt" do
       it "is false when an earlier send was delivered and the resend bounced" do
-        settled_receipt("delivered", delivered_at: 4.days.ago)
+        settled_receipt("delivered", delivered_at: 2.days.ago)
         settled_receipt("bounced")
 
         expect(described_class.undelivered?(purchase)).to eq(false)
       end
 
       it "is false when an earlier send was opened and the resend is still only sent" do
-        settled_receipt("opened", opened_at: 4.days.ago)
+        settled_receipt("opened", opened_at: 2.days.ago)
         settled_receipt("sent")
 
         expect(described_class.undelivered?(purchase)).to eq(false)

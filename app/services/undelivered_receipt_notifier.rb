@@ -131,7 +131,7 @@ class UndeliveredReceiptNotifier
     email_infos = purchase.receipt_email_infos.to_a
     email_infos = [purchase.receipt_email_info].compact if email_infos.empty?
     return false if email_infos.empty?
-    return false if email_infos.any? { _1.delivered_at.present? || _1.opened_at.present? }
+    return false if email_infos.any? { confirmed_delivery?(_1) }
 
     # The newest send decides timing and state: an older settled send must not make a resend that is
     # still inside its grace window reportable, and the seller acts on the latest attempt.
@@ -141,6 +141,16 @@ class UndeliveredReceiptNotifier
 
     !accessed_content?(purchase)
   end
+
+  # A delivery/open event that predates a row's own `sent_at` did not confirm that row: it landed here
+  # only because `CustomerEmailInfo.newest_sent_before` falls back to the newest row when the event
+  # predates every recorded send, not because this send earned it (gumroad-private#1635).
+  def self.confirmed_delivery?(email_info)
+    return false if email_info.sent_at.blank?
+
+    [email_info.delivered_at, email_info.opened_at].compact.any? { _1 >= email_info.sent_at }
+  end
+  private_class_method :confirmed_delivery?
 
   # Free downloads are excluded because every action this notice prescribes assumes money changed
   # hands: there is nothing to refund, and a free-checkout address the buyer typed wrong is not a

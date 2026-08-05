@@ -20,9 +20,17 @@ describe("post-purchase cart save cancellation", () => {
     // The success path (items: failedItems) and the PaymentConfirmedError path (items: []).
     expect(resets.length).toBeGreaterThanOrEqual(2);
 
+    // Requiring the reset to be the very next statement (only whitespace/comments between) is what
+    // catches a conditional cancel — an `if (x) { …cancel(); }` puts a `}` right before the reset,
+    // not the cancel call — and an inserted statement between the two, both of which the old
+    // "somewhere in the preceding 400 chars" check let through.
     for (const match of resets) {
-      const preceding = source.slice(Math.max(0, match.index - 400), match.index);
-      expect(preceding).toContain("debouncedSaveCartState.cancel()");
+      const before = source
+        .slice(0, match.index)
+        .replace(/\/\*[\s\S]*?\*\//gu, "")
+        .replace(/\/\/[^\n]*\n\s*/gu, "")
+        .trimEnd();
+      expect(before.endsWith("debouncedSaveCartState.cancel();")).toBe(true);
     }
   });
 });

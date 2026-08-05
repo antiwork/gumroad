@@ -42,6 +42,42 @@ describe UsersController, :vcr, type: :controller do
       expect(response.body).to include("STORE_HOSTNAMES")
     end
 
+    describe "facebook-domain-verification meta tag" do
+      before do
+        seller.update!(
+          enable_verify_domain_third_party_services: true,
+          facebook_meta_tag: '<meta name="facebook-domain-verification" content="abc123verifycode" />'
+        )
+        CustomDomain.create(domain: "fb-verify-wrapper.example.com", user: seller)
+        @request.host = "fb-verify-wrapper.example.com"
+      end
+
+      it "renders the tag in the hand-built wrapper head on a custom domain" do
+        get :show
+
+        expect(response.body).to include(%(src="/landing/embed"))
+        expect(response.body).to include(%(<meta name="facebook-domain-verification" content="abc123verifycode">))
+      end
+
+      it "does not render the tag when domain verification is disabled" do
+        seller.update!(enable_verify_domain_third_party_services: false)
+
+        get :show
+
+        expect(response.body).to include(%(src="/landing/embed"))
+        expect(response.body).not_to include(%(name="facebook-domain-verification"))
+      end
+
+      it "renders the tag when the saved tag uses single quotes" do
+        seller.update!(facebook_meta_tag: "<meta name='facebook-domain-verification' content='abc123verifycode' />")
+
+        get :show
+
+        expect(response.body).to include(%(src="/landing/embed"))
+        expect(response.body).to include(%(<meta name="facebook-domain-verification" content="abc123verifycode">))
+      end
+    end
+
     it "embeds the trusted products-wrapper listener with the landing products endpoint" do
       get :show
       expect(response.body).to include("data-gumroad-products-wrapper")

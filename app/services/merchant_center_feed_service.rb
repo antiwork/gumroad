@@ -5,6 +5,8 @@
 # sitemaps in public storage. Eligibility intentionally mirrors Discover: a product that
 # is not recommendable there should not be advertised in Shopping either.
 class MerchantCenterFeedService
+  include CurrencyHelper
+
   FEED_KEY = "sitemap/merchant-center/feed.xml"
   FEED_TITLE = "Gumroad products"
   # Google rejects descriptions over 5,000 characters.
@@ -26,6 +28,7 @@ class MerchantCenterFeedService
   private_constant :FEED_PRELOADS
 
   def generate(max_products: DEFAULT_MAX_PRODUCTS)
+    @usd_rates = {}
     xml = build_xml(max_products)
     upload(xml)
     xml
@@ -62,6 +65,7 @@ class MerchantCenterFeedService
         !product.rated_as_adult? &&
         !product.user.suspended? &&
         product.price_cents.to_i.positive? &&
+        usd_price_cents(product).to_i.positive? &&
         product.social_share_image.present?
     end
 
@@ -86,10 +90,24 @@ class MerchantCenterFeedService
         builder.tag!("g:description", feed_description(product))
         builder.tag!("g:link", product.long_url)
         builder.tag!("g:image_link", product.social_share_image)
-        builder.tag!("g:price", formatted_price(product))
+        builder.tag!("g:price", feed_price(product))
         builder.tag!("g:availability", "in stock")
         builder.tag!("g:brand", product.user.name_or_username)
         builder.tag!("g:condition", "new")
+        build_shipping(builder, product)
+      end
+    end
+
+    # Digital products ship nowhere; a free-US <g:shipping> entry clears Merchant
+    # Center's "Missing shipping information" requirement (US is the primary target
+    # country) without account-level shipping settings. Physical products get no
+    # entry — their real shipping cost is seller-configured and unknown here.
+    def build_shipping(builder, product)
+      return if product.is_physical?
+
+      builder.tag!("g:shipping") do
+        builder.tag!("g:country", "US")
+        builder.tag!("g:price", "0.00 USD")
       end
     end
 
@@ -104,13 +122,39 @@ class MerchantCenterFeedService
       product.name.truncate(MAX_TITLE_LENGTH)
     end
 
-    def formatted_price(product)
-      currency_code = product.price_currency_type.to_s.upcase
-      if product.single_unit_currency?
-        "#{product.price_cents} #{currency_code}"
-      else
-        format("%.2f %s", product.price_cents / 100.0, currency_code)
+    # Named feed_price, not formatted_price: CurrencyHelper#formatted_price(currency, price)
+    # is included here and format_just_price_in_cents calls it with two args.
+    #
+    # Merchant Center rejected the original own-currency prices with "Unsupported
+    # currency": the account's target countries each accept only their local currency,
+    # and US free listings require USD. Feed prices are therefore converted to USD with
+    # the same rate source checkout settles non-USD purchases with (get_usd_cents), so
+    # the feed amount corresponds to what a buyer is actually charged.
+    def feed_price(product)
+      format("%.2f USD", usd_price_cents(product) / 100.0)
+    end
+
+    # Rates are memoized per feed run: one Redis lookup per currency instead of one per
+    # product, and every item in a run converts at the same rate.
+    #
+    # cached_rate, not get_rate: the landing page's structured data reads cache-only too
+    # (Product::StructuredData#usd_offer_price_cents), so a rate cache miss excludes the
+    # product from the feed instead of showing a different price there than on its own page.
+    def usd_price_cents(product)
+      currency = product.price_currency_type.to_s.downcase
+      return product.price_cents if currency == "usd"
+
+      rate = @usd_rates.fetch(currency) do
+        @usd_rates[currency] = begin
+          cached_rate(currency)
+        rescue StandardError => e
+          Rails.logger.error("MerchantCenterFeedService: no USD rate for #{currency}, excluding its products (#{e.class}: #{e.message})")
+          nil
+        end
       end
+      return nil if rate.to_f <= 0
+
+      get_usd_cents(currency, product.price_cents, rate:)
     end
 
     def upload(xml)

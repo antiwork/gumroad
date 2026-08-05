@@ -91,11 +91,11 @@ end
 # HTTPS one — the content page turns `attrs.url` into an anchor href and RichContent rejects the
 # script-bearing schemes, so a placeholder like "embed://x" would not save.
 def create_mobile_embed_page(product:, title:)
-  existing = product.alive_rich_contents.find_by(title:)
-  return existing if existing.present?
-
-  product.alive_rich_contents.create!(
-    title:,
+  # Upsert, not create-if-missing: this page's whole purpose is to hold the mediaEmbed node, so a
+  # pre-existing page from an earlier seed run (with different content) must be overwritten rather
+  # than left stale, or the fixture silently stops exercising WebView playback.
+  page = product.alive_rich_contents.find_or_initialize_by(title:)
+  page.update!(
     description: [
       {
         "type" => "mediaEmbed",
@@ -107,6 +107,7 @@ def create_mobile_embed_page(product:, title:)
       }
     ]
   )
+  page
 end
 
 seller1 = create_mobile_user(
