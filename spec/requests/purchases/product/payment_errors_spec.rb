@@ -8,6 +8,23 @@ describe("Purchase from a product page", type: :system, js: true) do
     @product = create(:product, user: @creator)
   end
 
+  # A refused submit with an invalid card must land focus inside the Payment Element — that
+  # is the contract checkout owns. WHICH in-frame field Stripe then focuses is its own
+  # business, routed through anonymous mirror inputs in an accessory frame that outside
+  # queries can't reliably address, so this deliberately doesn't assert on a specific field.
+  def expect_focus_in_payment_element
+    page.document.synchronize do
+      focused = page.evaluate_script(<<~JS)
+        (() => {
+          const el = document.activeElement;
+          return !!el && el.tagName === "IFRAME" &&
+            ((el.src || "").includes("js.stripe.com") || (el.title || "").includes("payment input"));
+        })()
+      JS
+      raise Capybara::ElementNotFound, "expected focus to be inside the Stripe payment element" unless focused
+    end
+  end
+
   it "displays card expired error if input card is expired as per stripe" do
     visit "/l/#{@product.unique_permalink}"
 
@@ -65,17 +82,16 @@ describe("Purchase from a product page", type: :system, js: true) do
 
     fill_in "ZIP code", with: "94107"
 
-    fill_in_credit_card(number: "", expiry: "", cvc: "")
     click_on "Pay"
-    expect(page).to have_selector("[aria-label='Card information'][aria-invalid='true']")
+    expect(page).to have_selector("fieldset[aria-label='Card information'].danger")
 
-    fill_in_credit_card(expiry: "", cvc: "")
+    fill_in_payment_element(expiry: "", cvc: "")
     click_on "Pay"
-    expect(page).to have_selector("[aria-label='Card information'][aria-invalid='true']")
+    expect(page).to have_selector("fieldset[aria-label='Card information'].danger")
 
-    fill_in_credit_card(cvc: "")
+    fill_in_payment_element(cvc: "")
     click_on "Pay"
-    expect(page).to have_selector("[aria-label='Card information'][aria-invalid='true']")
+    expect(page).to have_selector("fieldset[aria-label='Card information'].danger")
 
     check_out(@product)
   end
@@ -102,26 +118,20 @@ describe("Purchase from a product page", type: :system, js: true) do
     add_to_cart(product)
 
     click_on "Pay"
-    within_fieldset "Card information" do
-      within_credit_card_frame { expect_focused find_field("Card number") }
-    end
+    expect_focus_in_payment_element
 
-    fill_in_credit_card(expiry: nil, cvc: nil)
+    fill_in_payment_element(expiry: "", cvc: "")
     click_on "Pay"
-    within_fieldset "Card information" do
-      within_credit_card_frame { expect_focused find_field("MM / YY") }
-    end
+    expect_focus_in_payment_element
 
-    fill_in_credit_card(cvc: nil)
+    fill_in_payment_element(cvc: "")
     click_on "Pay"
-    within_fieldset "Card information" do
-      within_credit_card_frame { expect_focused find_field("CVC") }
-    end
+    expect_focus_in_payment_element
 
     # Error focus lands on the first invalid field in DOM order. With the one-box checkout
     # layout, the email address lives inside the "Pay with" box, which renders AFTER the
     # shipping card — so for shippable carts the shipping fields now come first and email last.
-    fill_in_credit_card
+    fill_in_payment_element
     click_on "Pay"
     expect_focused find_field("Full name")
 

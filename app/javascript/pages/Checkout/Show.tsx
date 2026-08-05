@@ -55,7 +55,6 @@ import {
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
-  canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
   computeTip,
   computeTipForListedLines,
@@ -265,9 +264,8 @@ const CheckoutIndexPage = () => {
   // all reading from the one lane that is actually in effect.
   //
   // Also gated on the same dynamic eligibility PaymentForm uses to mount the element (matching
-  // the summary in index.tsx): if a discount or surcharge reload drops the loaded canonical total
-  // below Stripe's Payment Element minimum, PaymentForm falls back to the CardElement and the
-  // charge is canonical USD, so the tip basis and the modal must fall back too.
+  // the summary in index.tsx), so the tip basis and the modal can never quote a listed currency
+  // for a cart whose element the client declines to mount.
   const listedCurrency =
     buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state)
       ? null
@@ -519,7 +517,6 @@ const CheckoutIndexPage = () => {
         zipCode: state.zipCode,
         state: state.state,
         paymentMethod: state.status.paymentMethod,
-        usedStripePaymentElement: canUseStripePaymentElement(state),
         shippingInfo: cartForm.data.cart.items.some((item) => item.product.require_shipping)
           ? {
               save: state.saveAddress,
