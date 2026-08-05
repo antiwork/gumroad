@@ -83,10 +83,9 @@ class DisputeEvidence < ApplicationRecord
     errors.add(:base, "Invalid file type.")
   end
 
-  # Hours the seller has left, from a stamp. Every consumer must ask through here: the number the
-  # notice quotes and the number the gates test have to be the same one, or a window reads open to
-  # one caller while the email it triggers says "0 hours". Rounded, so callers that hold a raw
-  # timestamp cannot reintroduce a second arithmetic.
+  # Hours the seller has left, from a stamp — display copy only (UI and email hour counts).
+  # Rounded, so it reads 0 up to ~29 minutes before seller_response_due_at actually arrives;
+  # anything gating a save or a submission must use window_open? below instead.
   def self.hours_left_in_window(seller_contacted_at)
     return 0 if seller_contacted_at.nil?
 
