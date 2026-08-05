@@ -4,7 +4,7 @@
 # assistant that can answer questions about their store and *propose* changes to it.
 #
 # The agent runs on Grok 4.5 via OpenRouter's Anthropic-compatible endpoint (see MODEL below), with
-# Claude Opus 4.7 — its previous production model — as the request-level fallback when Grok errors.
+# Claude Opus 5 as the request-level fallback when Grok errors.
 #
 # Safety model:
 #   - READ tools (api_read) run automatically and only ever query data the seller already owns. They
@@ -26,9 +26,9 @@ class Ai::StoreAgentService
   # Grok is only reachable through OpenRouter, so the cutover keys off routing: a direct-Anthropic
   # config keeps serving Opus unchanged (gumroad-private#1879).
   OPENROUTER_MODEL = "x-ai/grok-4.5"
-  # When Grok errors (provider down, rate limited), OpenRouter retries the turn on the agent's
-  # previous production model rather than the client's default GPT fallback.
-  OPENROUTER_FALLBACK_MODEL = "anthropic/claude-opus-4.7"
+  # When Grok errors (provider down, rate limited), OpenRouter retries the turn on Opus 5 (same
+  # per-token cost as 4.7) rather than the client's default GPT fallback.
+  OPENROUTER_FALLBACK_MODEL = "anthropic/claude-opus-5"
   # Per-seller ramp (gumroad-private#1879). Below 100% this decides Grok vs Opus per seller in
   # addition to OPENROUTER_API_KEY being configured; at 100% and once the flag is deleted the
   # OpenRouter-configured check alone will govern, per the issue's cleanup plan.

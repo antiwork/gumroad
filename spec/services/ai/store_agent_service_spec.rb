@@ -2210,7 +2210,7 @@ describe Ai::StoreAgentService do
       service.respond(messages: [{ role: "user", content: "hello" }])
 
       expect(captured[:model]).to eq("x-ai/grok-4.5")
-      expect(captured[:fallback_model]).to eq("anthropic/claude-opus-4.7")
+      expect(captured[:fallback_model]).to eq("anthropic/claude-opus-5")
     end
 
     it "keeps requesting Opus when OpenRouter is configured but the seller is not in the ramp" do

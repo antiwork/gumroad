@@ -489,8 +489,8 @@ class Ai::AnthropicClient
       openrouter? ? OPENROUTER_API_URL : API_URL
     end
 
-    # Caller override first (the store agent falls back to Opus, its previous production model)
-    # so the config knob stays a global emergency override for the default GPT fallback only.
+    # Caller override first (the store agent falls back to Opus 5) so the config knob stays a
+    # global emergency override for the default GPT fallback only.
     def fallback_model
       @fallback_model_override.presence ||
         GlobalConfig.get("OPENROUTER_FALLBACK_MODEL").presence ||
