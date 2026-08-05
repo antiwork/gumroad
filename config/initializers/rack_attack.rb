@@ -135,14 +135,20 @@ class Rack::Attack
     throttle_by_ip path: "/settings", requests: 3, period: 20.seconds, method: :put # Initial: 9rpm, Max: 45 requests/9 hours
 
     # Each hit that matches purchases sends a grouped receipt email to the given address,
-    # unauthenticated — unthrottled, a stuck client or an abuser can flood a buyer with
-    # multi-MB receipt emails (gumroad-private#1869). The frontend only ever calls the
-    # `.json` path (app/javascript/data/charge.ts), so both the plain and `.json` paths
-    # need an entry, same as /login and /login.json above.
-    throttle_by_ip path: "/charge_data",                  requests: 3, period: 20.seconds # Initial: 9rpm, Max: 45 requests/9 hours
-    throttle_by_ip path: "/charge_data.json",             requests: 3, period: 20.seconds # Initial: 9rpm, Max: 45 requests/9 hours
-    throttle_by_ip path: "/license_key_lookup_data",      requests: 3, period: 20.seconds # Initial: 9rpm, Max: 45 requests/9 hours
-    throttle_by_ip path: "/license_key_lookup_data.json", requests: 3, period: 20.seconds # Initial: 9rpm, Max: 45 requests/9 hours
+    # unauthenticated. Throttle by IP and, separately, by target email — the harm is to the
+    # RECIPIENT, so an abuser rotating IPs must not be able to mailbomb one buyer
+    # (gumroad-private#1869). The frontend calls the .json forms; both variants get entries
+    # because matches_path? is an exact match (same reason /login and /login.json both appear).
+    %w[/charge_data /charge_data.json /license_key_lookup_data /license_key_lookup_data.json /paypal_charge_data /paypal_charge_data.json].each do |path|
+      throttle_by_ip path:, requests: 3, period: 20.seconds # Initial: 9rpm, Max: 45 requests/9 hours
+    end
+    %w[/charge_data /charge_data.json /license_key_lookup_data /license_key_lookup_data.json].each do |path|
+      # Initial: 3rpm, Max: 18 requests/3 days (per recipient email)
+      throttle_by_params path:,
+                         requests: 3,
+                         period: 60.seconds,
+                         throttle_params: Proc.new { |req| req.params["email"].to_s.downcase.presence }
+    end
 
     # Creating a brand account sends a Devise confirmation email to whatever
     # address is submitted, so without a limit a flag-enabled creator could use

@@ -1129,6 +1129,21 @@ describe Api::Internal::Admin::PurchasesController do
         "count" => 2
       )
     end
+
+    it "reports truncation when the buyer has more purchases than the grouped receipt renders" do
+      stub_const("CustomerMailer::GROUPED_RECEIPT_PURCHASES_LIMIT", 1)
+      buyer_email = "buyer@example.com"
+      create_list(:free_purchase, 2, email: buyer_email)
+
+      post :resend_all_receipts, params: { email: buyer_email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "message" => "Resent receipts for the 1 most recent of 2 purchases to #{buyer_email}",
+        "count" => 1
+      )
+    end
   end
 
   describe "POST refund_taxes" do

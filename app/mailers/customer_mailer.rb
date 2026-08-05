@@ -10,7 +10,8 @@ class CustomerMailer < ApplicationMailer
   layout "layouts/email", except: :send_to_kindle
 
   # A buyer with hundreds of purchases would otherwise get every one of them rendered
-  # into a single email — a 455-page, ~455MB message in the wild (gumroad-private#1869).
+  # into a single email — 752 receipts in one message in the wild (gumroad-private#1869).
+  # This bounds chargeables, so a multi-purchase charge still renders all its purchases.
   GROUPED_RECEIPT_PURCHASES_LIMIT = 20
 
   def grouped_receipt(purchase_ids)
