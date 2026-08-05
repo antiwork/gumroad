@@ -115,20 +115,38 @@ describe Onetime::BackfillTaxonomyAttributeClassification do
     expect(result[:stats][:cleared_orphaned]).to eq(0)
   end
 
-  it "does not erase a fresh inferred value written by a concurrent taxonomy move after selection" do
+  it "does not erase a fresh inferred value written by a concurrent taxonomy move landing right after row-lock acquisition" do
     product = create(:product, taxonomy: other_taxonomy)
     product.update_column(:json_data, { "inferred_taxonomy_attribute_values" => { "format" => "OTF" } })
 
-    allow_any_instance_of(Link).to receive(:reload).and_wrap_original do |original, *args|
-      # Simulate the taxonomy-change callback landing between select and write: the link
-      # moved into a registered taxonomy and got fresh inferred values in the meantime.
+    original_lock = Link.method(:lock)
+    allow(Link).to receive(:lock) do |*args|
+      # Simulate the taxonomy-change callback's transaction committing just before this
+      # instance's SELECT ... FOR UPDATE executes: the link moved into a registered
+      # taxonomy and got fresh inferred values in the meantime. Once our lock is granted,
+      # no further concurrent commit on this row can land until our transaction ends.
       product.update_columns(taxonomy_id: fonts_taxonomy.id, json_data: { "inferred_taxonomy_attribute_values" => { "format" => "TTF" } })
-      original.call(*args)
+      original_lock.call(*args)
     end
 
     result = described_class.process(dry_run: false)
 
     expect(product.reload.inferred_taxonomy_attribute_values).to eq("format" => "TTF")
     expect(result[:stats][:cleared_orphaned]).to eq(0)
+  end
+
+  it "holds a row lock across the orphan recheck and the cleanup write" do
+    product = create(:product, taxonomy: other_taxonomy)
+    product.update_column(:json_data, { "inferred_taxonomy_attribute_values" => { "format" => "OTF" } })
+
+    locking_sql = []
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      locking_sql << payload[:sql] if payload[:sql] =~ /FOR UPDATE/i
+    end
+
+    described_class.process(dry_run: false)
+
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+    expect(locking_sql).not_to be_empty
   end
 end

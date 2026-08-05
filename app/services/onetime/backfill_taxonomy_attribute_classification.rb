@@ -70,15 +70,22 @@ module Onetime
           if @dry_run
             tick(:would_clear_orphaned)
           else
-            # A taxonomy move between select and write re-fires classify_taxonomy_attributes
-            # (Product::Taxonomies after_commit), which can give the link fresh inferred values
-            # or put it back in a registered taxonomy — reload and recheck right before writing
-            # so this pass doesn't stomp that with its stale in-memory copy.
-            link.reload
-            still_orphaned = registered_taxonomy_ids.blank? || registered_taxonomy_ids.exclude?(link.taxonomy_id)
-            if still_orphaned && link.inferred_taxonomy_attribute_values.present?
-              link.save_inferred_taxonomy_attribute_values({}) ? tick(:cleared_orphaned) : tick(:save_failed)
+            # A taxonomy move can land between select and write and re-fire
+            # classify_taxonomy_attributes (Product::Taxonomies after_commit) with fresh
+            # inferred values. Reload-then-check-then-save still races: the after_commit
+            # can land between the check and this instance's save. Lock the row for the
+            # whole check+write so no classifier save can interleave.
+            outcome = Link.transaction do
+              locked = Link.lock.find_by(id: link.id)
+              next :missing unless locked
+
+              still_orphaned = registered_taxonomy_ids.blank? || registered_taxonomy_ids.exclude?(locked.taxonomy_id)
+              next :no_longer_orphaned unless still_orphaned && locked.inferred_taxonomy_attribute_values.present?
+
+              locked.save_inferred_taxonomy_attribute_values({}) ? :cleared : :save_failed
             end
+            tick(:cleared_orphaned) if outcome == :cleared
+            tick(:save_failed) if outcome == :save_failed
           end
         rescue => e
           @stats[:errors] += 1
