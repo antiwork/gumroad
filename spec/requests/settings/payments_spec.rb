@@ -2441,7 +2441,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Account #", with: "000123456789")
         fill_in("Confirm account #", with: "000123456789")
         # Six digits: the shortest Cédula de Ciudadanía or Cédula de Extranjería number Stripe
-        # accepts for Colombia (floor widened from seven on 2026-08-05).
+        # accepts for Colombia.
         fill_in("Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)", with: "482913")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
@@ -2452,7 +2452,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).to have_alert(text: "Thanks! You're all set.")
         expect(page).to have_content("Bank code")
         compliance_info = @user.alive_user_compliance_info
-        expect(compliance_info.individual_tax_id.decrypt("1234")).to eq("1234567")
+        expect(compliance_info.individual_tax_id.decrypt("1234")).to eq("482913")
         expect(compliance_info.first_name).to eq("barnabas")
         expect(compliance_info.last_name).to eq("barnabastein")
         expect(compliance_info.street_address).to eq("address_full_match")
