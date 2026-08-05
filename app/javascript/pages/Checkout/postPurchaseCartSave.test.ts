@@ -27,6 +27,7 @@ describe("post-purchase cart save cancellation", () => {
     for (const match of resets) {
       const before = source
         .slice(0, match.index)
+        .replace(/\/\*[\s\S]*?\*\//gu, "")
         .replace(/\/\/[^\n]*\n\s*/gu, "")
         .trimEnd();
       expect(before.endsWith("debouncedSaveCartState.cancel();")).toBe(true);
