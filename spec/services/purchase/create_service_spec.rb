@@ -554,6 +554,32 @@ describe Purchase::CreateService, :vcr do
         expect(purchase.purchase_state).to eq("successful")
       end
     end
+
+    context "when a component's variant has stock but the component's product-wide cap is exhausted" do
+      let(:versioned_component) { product.bundle_products.second.product }
+      let(:variant_category) { create(:variant_category, link: versioned_component) }
+      let(:component_variant) { create(:variant, variant_category:, max_purchase_count: 5) }
+
+      before do
+        product.bundle_products.second.update!(variant: component_variant)
+        # Product-wide cap exhausted while the selected variant itself still has room —
+        # checking only variant.quantity_left would miss this and let the sale through.
+        versioned_component.update!(max_purchase_count: 1, sales_count_for_inventory_cache: 1)
+
+        params[:purchase][:perceived_price_cents] = 100
+        params[:bundle_products] = product.bundle_products.alive.map do |bundle_product|
+          { product_id: bundle_product.product.external_id, variant_id: bundle_product.variant&.external_id, quantity: bundle_product.quantity }
+        end
+      end
+
+      it "fails the whole bundle purchase before charging" do
+        purchase, error = Purchase::CreateService.new(product:, params:, buyer:).perform
+
+        expect(error).to eq("#{versioned_component.name} is no longer available in the quantity this bundle includes. Please refresh the page!")
+        expect(purchase).not_to be_persisted
+        expect(purchase.product_purchases).to be_empty
+      end
+    end
   end
 
   context "when the discount code has a minimum amount" do
