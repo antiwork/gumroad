@@ -56,4 +56,24 @@ describe Onetime::BackfillTaxonomyAttributeClassification do
 
     expect(result[:stats]).to eq(dry_run: false)
   end
+
+  it "clears a stale inferred value on a real run when the classifier no longer returns one" do
+    product = create(:product, taxonomy: fonts_taxonomy)
+    product.update_column(:json_data, { "inferred_taxonomy_attribute_values" => { "format" => "OTF" } })
+
+    result = described_class.process(dry_run: false)
+
+    expect(product.reload.inferred_taxonomy_attribute_values).to eq({})
+    expect(product.taxonomy_attribute_filter_tokens).to eq([])
+    expect(result[:stats][:cleared]).to eq(1)
+  end
+
+  it "does not clear a stale inferred value on a dry run" do
+    product = create(:product, taxonomy: fonts_taxonomy)
+    product.update_column(:json_data, { "inferred_taxonomy_attribute_values" => { "format" => "OTF" } })
+
+    described_class.process(dry_run: true)
+
+    expect(product.reload.inferred_taxonomy_attribute_values).to eq("format" => "OTF")
+  end
 end
