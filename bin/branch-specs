@@ -189,10 +189,12 @@ specs = specs.flat_map { |s| Dir.exist?(s) ? Dir.glob("#{s}/**/*_spec.rb") : [s]
 
 specs |= SMOKE_SPECS.select { |spec| File.exist?(spec) } if smoke
 
-# Rails-affecting changes that selected nothing are a mapping gap, not a
-# clean bill: refuse to certify silence.
-if specs.empty? && changed.any? { |p| p.start_with?("app/", "lib/", "spec/") }
-  escalate!("diff touches app code but no specs were selected (mapping gap)")
+# Any non-ignored change that selected nothing is a mapping gap, not a clean
+# bill — this also catches boot/test-infrastructure paths (Rakefile, bin/rspec,
+# .rspec, config.ru) that aren't under app/, lib/, or spec/ but can still
+# change what the suite runs or how it boots.
+if specs.empty? && changed.any?
+  escalate!("diff touches #{changed.first(5).join(', ')} but no specs were selected (mapping gap)")
 end
 
 escalate!("selection of #{specs.size} spec files exceeds #{MAX_SELECTED_FILES}") if specs.size > MAX_SELECTED_FILES
