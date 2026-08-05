@@ -99,19 +99,6 @@ export type PaymentElementClientConfirmConfig = {
 // flat list without wallet rows.
 export type CheckoutPaymentConfig =
   | {
-      // Scoped restoration (gumroad-private#1853–1856): the server picks this lane for carts
-      // whose confirm the Payment Element currently crashes on (SCA/mandate confirms of
-      // off-session-reusable cards). It never mounts a Payment Element, so the element wallet
-      // and flat-layout fields are always false and elements_options is null.
-      integration: "card_element";
-      fallback_reason: string;
-      disable_wallets: boolean;
-      request_apple_pay_merchant_tokens: boolean;
-      payment_element_wallets: boolean;
-      flat_payment_methods: boolean;
-      elements_options: null;
-    }
-  | {
       integration: "payment_element";
       fallback_reason: null;
       disable_wallets: boolean;

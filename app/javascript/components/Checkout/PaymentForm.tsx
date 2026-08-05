@@ -6,7 +6,6 @@ import {
   PaymentRequestPaymentMethodEvent,
   PaymentRequestShippingAddress,
   PaymentRequestShippingAddressEvent,
-  StripeCardElement,
   StripeElements,
 } from "@stripe/stripe-js";
 import { DataCollector, PayPal } from "braintree-web";
@@ -41,7 +40,7 @@ import { Button } from "$app/components/Button";
 import { persistAcknowledgedEmail } from "$app/components/Checkout/acknowledgedEmails";
 import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
 import { useShouldInvertNativePayPalButton } from "$app/components/Checkout/checkoutTheme";
-import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
+import { StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
 import { resolveHeldWalletPayment, type HeldWalletPayment } from "$app/components/Checkout/heldWalletPayment";
 import {
@@ -657,7 +656,6 @@ const CreditCardContent = ({
   const fail = useFail();
   const isLoggedIn = !!useLoggedInUser();
 
-  const cardElementRef = React.useRef<StripeCardElement | null>(null);
   const paymentElementRef = React.useRef<PaymentElementController | null>(null);
   const [paymentElementReady, setPaymentElementReady] = React.useState(false);
   const [useSavedCard, setUseSavedCard] = React.useState(!!state.savedCreditCard);
@@ -957,7 +955,7 @@ const CreditCardContent = ({
         return dispatch({ type: "set-payment-method", paymentMethod: clientConfirmPaymentMethod });
       }
 
-      if (!useSavedCard && !useStripePaymentElement && !cardElementRef.current) {
+      if (!useSavedCard && !useStripePaymentElement) {
         // No element is mountable for this cart (an empty cart, or a config the client cannot
         // honor) and there is no card on file — there is nothing to tokenize.
         setCardError(true);
@@ -967,37 +965,26 @@ const CreditCardContent = ({
       pendingWalletSubmitRef.current = null;
       const selectedPaymentMethod: SelectedPaymentMethod = useSavedCard
         ? { type: "saved" }
-        : useStripePaymentElement
-          ? {
-              type: "payment-element",
-              ...assertDefined(
-                paymentElementRef.current,
-                "`paymentElementRef.current` should be defined when the payment method is a Payment Element card",
-              ),
-              zipCode: state.zipCode,
-              keepOnFile,
-              email: state.email,
-              fullName: state.fullName,
-              country: state.country,
-              state: state.state,
-              city: state.city,
-              address: state.address,
-              billingDetailsCollection: paymentElementBillingDetailsCollection(
-                paymentElementTypeRef.current,
-                hasShipping(state),
-              ),
-              pendingSubmit: serverConfirmPendingSubmit,
-            }
-          : {
-              type: "card",
-              element: assertDefined(
-                cardElementRef.current,
-                "`cardElementRef.current` should be defined when the payment method is an unsaved card",
-              ),
-              zipCode: state.zipCode,
-              keepOnFile,
-              email: state.email,
-            };
+        : {
+            type: "payment-element",
+            ...assertDefined(
+              paymentElementRef.current,
+              "`paymentElementRef.current` should be defined when the payment method is a Payment Element card",
+            ),
+            zipCode: state.zipCode,
+            keepOnFile,
+            email: state.email,
+            fullName: state.fullName,
+            country: state.country,
+            state: state.state,
+            city: state.city,
+            address: state.address,
+            billingDetailsCollection: paymentElementBillingDetailsCollection(
+              paymentElementTypeRef.current,
+              hasShipping(state),
+            ),
+            pendingSubmit: serverConfirmPendingSubmit,
+          };
 
       const useReusablePaymentMethod = requiresReusablePaymentMethodForCardCollection(state, useStripePaymentElement);
       const paymentMethod = await (useReusablePaymentMethod
@@ -1160,17 +1147,6 @@ const CreditCardContent = ({
             }}
           />
         </div>
-      ) : state.checkoutPayment.integration === "card_element" ? (
-        <CreditCardInput
-          savedCreditCard={state.savedCreditCard}
-          disabled={isProcessing(state)}
-          onReady={(element) => (cardElementRef.current = element)}
-          invalid={cardError}
-          useSavedCard={useSavedCard}
-          setUseSavedCard={setUseSavedCard}
-          onChange={(evt) => setCardError(!!evt.error)}
-          enableLink
-        />
       ) : state.savedCreditCard ? (
         // Paying with the card on file mounts no element at all; the box and its toggle used to
         // live in CreditCardInput, which the payout debit-card page still owns.
