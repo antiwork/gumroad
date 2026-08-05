@@ -29,9 +29,9 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
 
   const headerButtons =
     creatorProfile.can_edit || creatorProfile.twitter_handle || cartItemsCount ? (
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex shrink-0 items-center gap-3">
         {creatorProfile.can_edit ? (
-          <NavigationButton color="filled" href={Routes.profile_url({ host: appDomain })}>
+          <NavigationButton color="filled" className="whitespace-nowrap" href={Routes.profile_url({ host: appDomain })}>
             <Pencil className="size-5" />
             Edit profile
           </NavigationButton>
