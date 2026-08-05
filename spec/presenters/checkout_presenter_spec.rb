@@ -18,6 +18,17 @@ describe CheckoutPresenter do
     end
 
     let(:browser_guid) { SecureRandom.uuid }
+    let(:card_element_checkout_payment) do
+      {
+        integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason: "empty_cart",
+        disable_wallets: false,
+        request_apple_pay_merchant_tokens: false,
+        payment_element_wallets: false,
+        flat_payment_methods: false,
+        elements_options: nil,
+      }
+    end
 
     it "returns basic props for the checkout page" do
       expect(@instance.checkout_props(params: {}, browser_guid:)).to eq(
@@ -659,8 +670,8 @@ describe CheckoutPresenter do
 
     it "returns the payment configuration for an empty cart" do
       expect(instance.checkout_payment_props(params: {})).to include(
-        integration: Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
-        fallback_reason: nil
+        integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason: "empty_cart"
       )
     end
 
@@ -668,11 +679,10 @@ describe CheckoutPresenter do
       # The whole reason this is a separate prop: the answer depends on the cart's contents, and the
       # checkout page re-requests it after every cart edit.
       #
-      # A cart holding more sellers than the quote lane serves mounts the element with wallets
-      # suppressed (no quote will arrive for it) — and removing one seller's item brings the very
-      # same cart under the limit, which is quotable and re-enables the lane's wallet posture. The
-      # answer changes under an edit, which is only possible if this prop is recomputed rather
-      # than frozen at page load.
+      # A cart holding more sellers than the quote lane serves falls back to CardElement — and
+      # removing one seller's item brings the very same cart under the limit, which is quotable and
+      # mounts the buyer-currency element. The lane changes under an edit, which is only possible if
+      # this prop is recomputed rather than frozen at page load.
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
       # A Canadian buyer: the display currency has to differ from the product's USD pricing for the
       # cart to be a presentment candidate at all.
@@ -683,6 +693,7 @@ describe CheckoutPresenter do
       allow_any_instance_of(Checkout::StripePaymentPresenter).to receive(:buyer_local_currency_rate).and_return(BigDecimal("1.35"))
       sellers = Array.new(Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES + 1) { create(:user, disable_buyer_local_currency: false) }
       sellers.each do |seller|
+        Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
         Feature.activate_user(Checkout::StripePaymentPresenter::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
         Feature.activate_user(:buyer_local_currency, seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
@@ -692,9 +703,8 @@ describe CheckoutPresenter do
       products.each { create(:cart_product, cart:, product: _1, price: _1.price_cents) }
 
       over_limit = instance.checkout_payment_props(params: {}, cart:)
-      expect(over_limit[:integration]).to eq(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
-      expect(over_limit[:elements_options][:buyer_currency_presentment]).to be(true)
-      expect(over_limit[:disable_wallets]).to be(true)
+      expect(over_limit[:integration]).to eq(Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION)
+      expect(over_limit[:fallback_reason]).to eq("buyer_currency_presentment_unsupported")
 
       cart.cart_products.find_by(product: products.last).mark_deleted!
       cart.reload
@@ -704,6 +714,7 @@ describe CheckoutPresenter do
       expect(under_limit[:elements_options][:buyer_currency_presentment]).to be(true)
     ensure
       (sellers || []).each do |seller|
+        Feature.deactivate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
         Feature.deactivate_user(Checkout::StripePaymentPresenter::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
         Feature.deactivate_user(:buyer_local_currency, seller)
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
@@ -721,6 +732,7 @@ describe CheckoutPresenter do
       allow_any_instance_of(Checkout::StripePaymentPresenter).to receive(:buyer_local_currency_rate).and_return(BigDecimal("1.35"))
       sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
       sellers.each do |seller|
+        Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
         Feature.activate_user(Checkout::StripePaymentPresenter::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
         Feature.activate_user(:buyer_local_currency, seller)
         Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
@@ -741,6 +753,7 @@ describe CheckoutPresenter do
       expect(single_seller[:elements_options][:buyer_currency_presentment]).to be(true)
     ensure
       (sellers || []).each do |seller|
+        Feature.deactivate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
         Feature.deactivate_user(Checkout::StripePaymentPresenter::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
         Feature.deactivate_user(:buyer_local_currency, seller)
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)

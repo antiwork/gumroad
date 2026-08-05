@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
 
-import { createReducer, type CheckoutPaymentConfig } from "$app/components/Checkout/payment";
+import { createReducer } from "$app/components/Checkout/payment";
 
 const getSurcharges = vi.hoisted(() => vi.fn());
 vi.mock("$app/data/customer_surcharge", () => ({ getSurcharges }));
@@ -77,22 +77,6 @@ const initialArgs = {
   paypalClientId: "",
   gift: null,
   requireEmailTypoAcknowledgment: false,
-  checkoutPayment: {
-    integration: "payment_element",
-    fallback_reason: null,
-    disable_wallets: false,
-    request_apple_pay_merchant_tokens: false,
-    payment_element_wallets: false,
-    flat_payment_methods: false,
-    elements_options: {
-      stripe_elements_mode: "payment",
-      currency: "usd",
-      buyer_currency_presentment: false,
-      payment_method_types: ["card"],
-      payment_method_creation: "manual",
-      stripe_link_enabled: true,
-    },
-  } satisfies CheckoutPaymentConfig,
 };
 
 // A getSurcharges stub the test resolves by hand, so two overlapping requests can complete

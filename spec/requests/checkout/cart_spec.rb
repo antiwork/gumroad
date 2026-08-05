@@ -160,9 +160,9 @@ describe "Checkout cart", :js, type: :system do
 
           add_to_cart(@product, offer_code:)
 
-          # Wait for the discount to be successfully verified - the payment element is removed when the product is free
+          # Wait for the discount to be successfully verified - the card form will be removed when the product is free
           expect(page).to have_text("Discounts get-it-for-free US$-10", normalize_ws: true)
-          expect(page).not_to have_selector("iframe[src*='elements-inner-payment']")
+          expect(page).not_to have_selector(:fieldset, "Card information")
 
           expect(cart.reload.discount_codes).to eq([{ "code" => "get-it-for-free", "fromUrl" => true }])
         end

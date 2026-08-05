@@ -24,20 +24,13 @@ describe CheckoutController, type: :controller, inertia: true do
       # Its own top-level prop, not a key of `checkout`: it is derived from the cart, so the page
       # re-requests it alone after every cart edit (see the debounced save in Checkout/Show.tsx).
       expect(inertia.props[:checkout_payment]).to eq(
-        integration: Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
-        fallback_reason: nil,
+        integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason: "stripe_payment_element_flag_disabled",
         disable_wallets: false,
         request_apple_pay_merchant_tokens: false,
         payment_element_wallets: false,
         flat_payment_methods: false,
-        elements_options: {
-          stripe_elements_mode: Checkout::StripePaymentPresenter::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
-          currency: "usd",
-          buyer_currency_presentment: false,
-          payment_method_types: ["card"],
-          payment_method_creation: "manual",
-          stripe_link_enabled: true,
-        },
+        elements_options: nil,
       )
       expect(inertia.props[:checkout]).to eq({
                                                add_products: [],
