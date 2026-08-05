@@ -44,8 +44,9 @@ describe MerchantCenterFeedService do
 
     it "converts non-USD prices to USD with checkout's rate source" do
       create_eligible_product(price_currency_type: "eur", price_cents: 2600)
+      Redis::Namespace.new(:currencies, redis: $redis).set("EUR", "0.81127")
 
-      # 26.00 EUR at the test-fixture rate (0.81127 EUR/USD) — same conversion
+      # 26.00 EUR at the cached rate (0.81127 EUR/USD) — same conversion
       # get_usd_cents performs at checkout.
       expect(g_field(items(service.generate).first, "price")).to eq "32.05 USD"
     end
@@ -72,9 +73,17 @@ describe MerchantCenterFeedService do
 
     it "excludes non-USD products when no conversion rate is available" do
       create_eligible_product(price_currency_type: "eur", price_cents: 2600)
-      allow(service).to receive(:get_rate).and_raise(StandardError)
+      Redis::Namespace.new(:currencies, redis: $redis).del("EUR")
 
       expect(items(service.generate)).to be_empty
+    end
+
+    it "excludes non-USD products rather than falling through to a live rate fetch on a cache miss" do
+      create_eligible_product(price_currency_type: "eur", price_cents: 2600)
+      Redis::Namespace.new(:currencies, redis: $redis).del("EUR")
+      expect(service).not_to receive(:query_rate)
+
+      service.generate
     end
 
     it "escapes XML-unsafe characters in product fields" do
@@ -163,8 +172,9 @@ describe MerchantCenterFeedService do
 
     it "converts single-unit currency prices to USD" do
       create_eligible_product(price_currency_type: "jpy", price_cents: 500)
+      Redis::Namespace.new(:currencies, redis: $redis).set("JPY", "78.3932")
 
-      # 500 JPY at the test-fixture rate (78.3932 JPY/USD).
+      # 500 JPY at the cached rate (78.3932 JPY/USD).
       expect(g_field(items(service.generate).first, "price")).to eq "6.38 USD"
     end
 
