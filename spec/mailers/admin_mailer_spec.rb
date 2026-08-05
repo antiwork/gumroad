@@ -14,7 +14,7 @@ describe AdminMailer do
       end
 
       it "has the id of the seller" do
-        expect(mail.body).to include(dispute.disputable.seller.id)
+        expect(mail.body.encoded).to include(dispute.disputable.seller.external_id)
       end
 
       it "has the details of the purchase" do
@@ -40,7 +40,7 @@ describe AdminMailer do
       end
 
       it "has the id of the seller" do
-        expect(mail.body).to include(dispute.disputable.seller.id)
+        expect(mail.body.encoded).to include(dispute.disputable.seller.external_id)
       end
 
       it "has the details of all included purchases" do
