@@ -295,10 +295,14 @@ module Purchase::Blockable
                       .to_a
     eligible = scanned.reject { |purchase| purchase.merchant_account&.is_a_stripe_connect_account? }
     candidates = eligible.first(PROCESSOR_REFUSAL_MAX_READS)
+
+    # A full scan may be hiding eligible rows behind the bound, so it counts as capped too — even
+    # when every fetched row was excluded and left `candidates` empty (Greptile, #6916): a clean
+    # `eligible` here just means we haven't looked past the page, not that nothing is there.
+    capped = scanned.size == PROCESSOR_REFUSAL_MAX_SCAN || eligible.size > candidates.size
+    return { incomplete: true, truncated_by: :read_cap } if candidates.empty? && capped
     return if candidates.empty?
 
-    # A full scan may be hiding eligible rows behind the bound, so it counts as capped too.
-    capped = eligible.size > candidates.size || scanned.size == PROCESSOR_REFUSAL_MAX_SCAN
     ran_out_of_time = false
     deadline = Time.current + PROCESSOR_REFUSAL_TIME_BUDGET
 

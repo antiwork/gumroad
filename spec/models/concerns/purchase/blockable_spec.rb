@@ -791,6 +791,19 @@ describe Purchase::Blockable do
         expect(Stripe::Charge).to have_received(:retrieve).twice
       end
 
+      # #6916: a page that is entirely Connect rows empties `candidates` before `capped` is ever
+      # checked, so this must not take the "nothing eligible" nil exit — there may be a platform
+      # refusal sitting right behind the excluded page.
+      it "reports incomplete rather than clean when the whole capped page is excluded" do
+        connect_account = create(:merchant_account, user: create(:user), charge_processor_id: StripeChargeProcessor.charge_processor_id)
+        connect_account.update!(json_data: { "meta" => { "stripe_connect" => "true" } })
+        refused_purchase.update_column(:merchant_account_id, connect_account.id)
+        stub_const("Purchase::Blockable::PROCESSOR_REFUSAL_MAX_SCAN", 1)
+        expect(Stripe::Charge).not_to receive(:retrieve)
+
+        expect(refused_purchase.processor_rule_refusal).to eq({ incomplete: true, truncated_by: :read_cap })
+      end
+
       it "does not load more rows than the scan bound" do
         create_list(:purchase, 8, link: product, email: buyer_email, purchaser: buyer, created_at: 2.hours.ago)
           .each { |record| record.update_column(:stripe_transaction_id, "ch_extra") }
