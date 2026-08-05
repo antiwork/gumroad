@@ -23,16 +23,15 @@ class Ai::StoreAgentService
   class Error < StandardError; end
 
   MODEL = Ai::AnthropicClient::DEFAULT_MODEL
-  # Grok 4.5 costs ~3x less than Opus 4.7 at comparable tool-calling quality (gumroad-private#1879;
-  # store-agent spend was ~$577-779/day on Opus). It is only reachable through OpenRouter, so the
-  # cutover keys off routing: a direct-Anthropic config keeps serving Opus unchanged.
+  # Grok is only reachable through OpenRouter, so the cutover keys off routing: a direct-Anthropic
+  # config keeps serving Opus unchanged (gumroad-private#1879).
   OPENROUTER_MODEL = "x-ai/grok-4.5"
   # When Grok errors (provider down, rate limited), OpenRouter retries the turn on the agent's
   # previous production model rather than the client's default GPT fallback.
   OPENROUTER_FALLBACK_MODEL = "anthropic/claude-opus-4.7"
-  # Per-seller ramp (gumroad-private#1879): 5% -> 25% -> 50% -> 100%. Below 100% this decides Grok
-  # vs Opus per seller in addition to OPENROUTER_API_KEY being configured; at 100% and once the
-  # flag is deleted the OpenRouter-configured check alone will govern, per the issue's cleanup plan.
+  # Per-seller ramp (gumroad-private#1879). Below 100% this decides Grok vs Opus per seller in
+  # addition to OPENROUTER_API_KEY being configured; at 100% and once the flag is deleted the
+  # OpenRouter-configured check alone will govern, per the issue's cleanup plan.
   GROK_RAMP_FEATURE = :store_agent_grok
   # Passed to Ai::AnthropicClient as its READ timeout. For the streamed reply this bounds silence
   # between chunks (not the total generation time — a long healthy stream is fine); for the buffered
