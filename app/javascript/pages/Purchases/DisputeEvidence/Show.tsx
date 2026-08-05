@@ -212,7 +212,11 @@ export default function Show() {
   };
 
   const maxFileCount = dispute_evidence.customer_communication_files_max_count;
-  const remainingFileSlots = maxFileCount - uploadedFiles.length;
+  // A prior save's attachment counts against the server's max: the update action folds it into
+  // the merge inputs before enforcing the limit, so ignoring it here would let the seller pick a
+  // selection the server is guaranteed to reject.
+  const savedFileCount = blobs.customer_communication_file !== null ? 1 : 0;
+  const remainingFileSlots = maxFileCount - savedFileCount - uploadedFiles.length;
 
   // Uploads run sequentially so the order the seller picked becomes the page order of the
   // merged PDF: for a chat log, order is part of the evidence.
@@ -480,8 +484,11 @@ export default function Show() {
         </p>
         {uploadedFiles.length > 0 ? (
           <p>
-            You are attaching {uploadedFiles.length} {uploadedFiles.length === 1 ? "file" : "files"}.
+            You are attaching {uploadedFiles.length} {uploadedFiles.length === 1 ? "file" : "files"}
+            {savedFileCount > 0 ? ", in addition to the file you already saved" : ""}.
           </p>
+        ) : savedFileCount > 0 ? (
+          <p>Your previously saved file stays attached. You can add more here any time before the deadline.</p>
         ) : (
           <p>You have not attached any files. You can add them here any time before the deadline.</p>
         )}

@@ -38,25 +38,30 @@ class Purchases::DisputeEvidenceController < ApplicationController
 
   def update
     input_blobs = customer_communication_file_blobs
-    # Only what the seller actually filled in this time. A revision is additive per field: the
-    # form always posts all three, so assigning them wholesale would let a seller who returns to
-    # attach a file blank the statement they wrote yesterday. Same reason the attachment below is
-    # left alone when no new file arrives.
+    # A revision is additive per field: the form always posts all three text fields, so assigning
+    # them wholesale would let a seller who returns to attach a file blank the statement they wrote
+    # yesterday. But a field the seller explicitly cleared must still clear — only an ABSENT param
+    # means "leave unchanged", so params.require raises before this, and slice+compact_blank on the
+    # empty string would silently keep the old value the seller just deleted.
     @dispute_evidence.assign_attributes(
       dispute_evidence_params.slice(:cancellation_rebuttal, :reason_for_winning, :refund_refusal_explanation)
-                             .compact_blank
     )
 
-    if input_blobs.one?
+    if input_blobs.one? && !@dispute_evidence.customer_communication_file.attached?
       attached_blob = covert_and_optimize_blob_if_needed(input_blobs.first)
       @dispute_evidence.customer_communication_file.attach(attached_blob)
-    elsif input_blobs.many?
-      # Stripe accepts a single file for this evidence field, so multiple uploads are merged
-      # into one PDF before attaching. The merge stays inline: FightDisputeJob can fire the
-      # moment the window closes, and an async merge would let it forward the evidence before
-      # the merged file exists.
+    elsif input_blobs.any?
+      # customer_communication_file is has_one_attached, so a bare #attach on a later save would
+      # replace rather than add to what a prior save already sent — silently dropping the earlier
+      # evidence for a seller who returns to add one more file. Fold the existing attachment into
+      # the merge inputs first (read before .attach replaces it below) so nothing already saved is
+      # lost. Stripe accepts a single file for this field, so multiple uploads are merged into one
+      # PDF before attaching. The merge stays inline: FightDisputeJob can fire the moment the window
+      # closes, and an async merge would let it forward the evidence before the merged file exists.
+      existing_blob = @dispute_evidence.customer_communication_file.blob if @dispute_evidence.customer_communication_file.attached?
+      merge_blobs = [existing_blob, *input_blobs].compact
       merged_blob = DisputeEvidence::MergeCustomerCommunicationFilesService.perform(
-        blobs: input_blobs,
+        blobs: merge_blobs,
         max_size: @dispute_evidence.customer_communication_file_max_size
       )
       @dispute_evidence.customer_communication_file.attach(merged_blob)

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // See DownloadPage.test.tsx.
 import Show from "$app/pages/Purchases/DisputeEvidence/Show";
 
+import { showAlert } from "$app/components/server-components/Alert";
 import { UserAgentProvider } from "$app/components/UserAgent";
 
 type PendingUpload = (signedId: string) => void;
@@ -104,7 +105,7 @@ const renderPage = () =>
     </UserAgentProvider>,
   );
 
-const selectFiles = async (count: number) => {
+const selectFiles = async (count: number, expectedPendingUploads = 1) => {
   const input = document.querySelector<HTMLInputElement>('input[type="file"]');
   if (!input) throw new Error("file input not rendered");
   const files = Array.from(
@@ -113,7 +114,7 @@ const selectFiles = async (count: number) => {
   );
   Object.defineProperty(input, "files", { value: files, configurable: true });
   input.dispatchEvent(new Event("change", { bubbles: true }));
-  await waitFor(() => expect(mocks.pendingUploads.length).toBe(1));
+  await waitFor(() => expect(mocks.pendingUploads.length).toBe(expectedPendingUploads));
 };
 
 const finishNextUpload = (signedId: string) => {
@@ -134,6 +135,7 @@ describe("DisputeEvidence Show", () => {
     mocks.usePage.mockReturnValue({ props: pageProps });
     mocks.pendingUploads.length = 0;
     mocks.put.mockClear();
+    vi.mocked(showAlert).mockClear();
   });
 
   afterEach(cleanup);
@@ -220,5 +222,78 @@ describe("DisputeEvidence Show", () => {
 
     expect(screen.queryAllByRole("radio").some((radio) => asInput(radio).checked)).toBe(false);
     expect(screen.queryByText("Your saved response is filled in below.")).toBe(null);
+  });
+
+  // The server folds the previously saved attachment into the merge before enforcing the max,
+  // so on a return visit the UI must count it too — otherwise it permits a selection the server
+  // is guaranteed to reject with "You can attach up to N files."
+  describe("with a previously saved attachment", () => {
+    const savedBlobProps = {
+      ...pageProps,
+      dispute_evidence: {
+        ...pageProps.dispute_evidence,
+        customer_communication_files_max_count: 3,
+        blobs: {
+          receipt_image: null,
+          policy_image: null,
+          customer_communication_file: {
+            byte_size: 1024,
+            filename: "customer_communication.pdf",
+            key: "saved-key",
+            signed_id: null,
+            title: "Customer communication",
+          },
+        },
+      },
+    };
+
+    beforeEach(() => {
+      mocks.usePage.mockReturnValue({ props: savedBlobProps });
+    });
+
+    it("rejects a selection that only fits when the saved file is ignored", async () => {
+      renderPage();
+      await selectFiles(3, 0);
+
+      await waitFor(() => expect(showAlert).toHaveBeenCalledWith("You can attach 2 more files.", "error"));
+      expect(mocks.pendingUploads.length).toBe(0);
+      expect(queuedFileNames()).toEqual(["Customer communication"]);
+    });
+
+    it("accepts a selection filling exactly the remaining slots and submits it", async () => {
+      renderPage();
+      await selectFiles(2);
+
+      finishNextUpload("signed-first");
+      await waitFor(() => expect(mocks.pendingUploads.length).toBe(1));
+      finishNextUpload("signed-second");
+      await waitFor(() => expect(submitButton().hasAttribute("disabled")).toBe(false));
+
+      // 1 saved + 2 new = exactly the max of 3; the upload button disappears at zero remaining.
+      expect(screen.queryByRole("button", { name: /Upload customer communication/u })).toBe(null);
+      expect(showAlert).not.toHaveBeenCalled();
+
+      act(() => submitButton().click());
+      const confirm = await screen.findByRole("button", { name: "Confirm and save" });
+      act(() => confirm.click());
+
+      await waitFor(() => expect(mocks.put).toHaveBeenCalledTimes(1));
+      expect(mocks.put.mock.calls[0]?.[1]).toMatchObject({
+        dispute_evidence: { customer_communication_file_signed_blob_ids: ["signed-first", "signed-second"] },
+      });
+    });
+
+    it("hides the upload input when the saved file alone exhausts the max", () => {
+      mocks.usePage.mockReturnValue({
+        props: {
+          ...savedBlobProps,
+          dispute_evidence: { ...savedBlobProps.dispute_evidence, customer_communication_files_max_count: 1 },
+        },
+      });
+      renderPage();
+
+      expect(document.querySelector('input[type="file"]')).toBe(null);
+      expect(queuedFileNames()).toEqual(["Customer communication"]);
+    });
   });
 });
