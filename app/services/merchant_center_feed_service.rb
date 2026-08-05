@@ -136,13 +136,17 @@ class MerchantCenterFeedService
 
     # Rates are memoized per feed run: one Redis lookup per currency instead of one per
     # product, and every item in a run converts at the same rate.
+    #
+    # cached_rate, not get_rate: the landing page's structured data reads cache-only too
+    # (Product::StructuredData#usd_offer_price_cents), so a rate cache miss excludes the
+    # product from the feed instead of showing a different price there than on its own page.
     def usd_price_cents(product)
       currency = product.price_currency_type.to_s.downcase
       return product.price_cents if currency == "usd"
 
       rate = @usd_rates.fetch(currency) do
         @usd_rates[currency] = begin
-          get_rate(currency)
+          cached_rate(currency)
         rescue StandardError => e
           Rails.logger.error("MerchantCenterFeedService: no USD rate for #{currency}, excluding its products (#{e.class}: #{e.message})")
           nil
