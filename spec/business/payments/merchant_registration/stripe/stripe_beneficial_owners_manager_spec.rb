@@ -193,15 +193,15 @@ describe StripeBeneficialOwnersManager do
       end
 
       it "rejects an ID whose digit count is outside Stripe's range even though it fits the input's character limit" do
-        # 11 characters, so the form's maxLength of 13 accepts it, but only 6 digits.
-        separated_six_digits = colombia_params.deep_dup.tap { |p| p[:id_number] = "4.8.2.9.1.3" }
+        # 9 characters, so the form's maxLength of 13 accepts it, but only 5 digits.
+        separated_five_digits = colombia_params.deep_dup.tap { |p| p[:id_number] = "4.8.2.9.1" }
         expect(Stripe::Account).not_to receive(:create_person)
-        expect { described_class.create(user, separated_six_digits) }
-          .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /Cédula de Ciudadanía or Cédula de Extranjería must be 7-10 digits/)
+        expect { described_class.create(user, separated_five_digits) }
+          .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /Cédula de Ciudadanía or Cédula de Extranjería must be 6-10 digits/)
       end
 
-      it "rejects a bare 6-digit Cédula de Extranjería and an 11-digit number" do
-        %w[482913 12345678901].each do |value|
+      it "rejects a bare 5-digit number and an 11-digit number" do
+        %w[48291 12345678901].each do |value|
           out_of_range = colombia_params.deep_dup.tap { |p| p[:id_number] = value }
           expect { described_class.create(user, out_of_range) }
             .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError)
@@ -219,6 +219,12 @@ describe StripeBeneficialOwnersManager do
 
       it "accepts an in-range ID" do
         valid = colombia_params.deep_dup.tap { |p| p[:id_number] = "1020304050" }
+        expect(Stripe::Account).to receive(:create_person).and_return(other_owner_person)
+        expect { described_class.create(user, valid) }.not_to raise_error
+      end
+
+      it "accepts a six-digit Cédula de Extranjería at the widened floor" do
+        valid = colombia_params.deep_dup.tap { |p| p[:id_number] = "482913" }
         expect(Stripe::Account).to receive(:create_person).and_return(other_owner_person)
         expect { described_class.create(user, valid) }.not_to raise_error
       end

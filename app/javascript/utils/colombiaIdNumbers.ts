@@ -1,15 +1,10 @@
 // Colombia issues two personal IDs: the Cédula de Ciudadanía to citizens and the Cédula de
 // Extranjería to foreign residents. Both are sent to Stripe as individual.id_number, and Stripe
-// enforces 7-10 digits on that field for CO — confirmed by Stripe support on case
-// sco_UyXAayCkurHzCd after their validator refused a real 6-digit Cédula de Extranjería.
-// Test-mode Stripe does NOT enforce this, so a local probe accepts any length and cannot be used
-// to re-derive these bounds.
-//
-// Colombia's own document spec (Anexo Técnico 1, Resolución 2011) allows 6-digit numbers, so
-// Stripe's floor excludes IDs that legitimately exist. Until they widen it, matching their bounds
-// here is the honest thing to do: the alternative is accepting input we know the processor will
-// refuse, which is how one seller reached eight silent rolled-back attempts.
-export const COLOMBIA_ID_MIN_DIGITS = 7;
+// enforces 6-10 digits on that field for CO. They widened the floor from 7 on 2026-08-05 (support
+// case sco_UyXAayCkurHzCd) after it refused a real 6-digit Cédula de Extranjería; both endpoints
+// were re-derived live that day. Test-mode Stripe does NOT enforce this, so a local probe accepts
+// any length and cannot be used to re-derive these bounds.
+export const COLOMBIA_ID_MIN_DIGITS = 6;
 export const COLOMBIA_ID_MAX_DIGITS = 10;
 
 // The input's maxLength counts characters, so it has to leave room for a number pasted with

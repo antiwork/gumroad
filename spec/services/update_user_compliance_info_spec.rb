@@ -703,14 +703,27 @@ describe UpdateUserComplianceInfo do
       end
 
       let(:expected_error) do
-        "Your Cédula de Ciudadanía or Cédula de Extranjería must be 7-10 digits. Enter it exactly as it appears on your document — do not add leading zeros, as the number has to match the document you may later be asked to upload."
+        "Your Cédula de Ciudadanía or Cédula de Extranjería must be 6-10 digits. Enter it exactly as it appears on your document — do not add leading zeros, as the number has to match the document you may later be asked to upload."
       end
 
-      it "rejects a six-digit Cédula de Extranjería, which Stripe refuses" do
+      it "accepts a six-digit Cédula de Extranjería, which Stripe accepts since 2026-08-05" do
+        user = create_colombian_individual_user(individual_tax_id: "1234567")
+
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "482913")
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("482913")
+      end
+
+      it "rejects a five-digit number, which Stripe refuses" do
         user = create_colombian_individual_user(individual_tax_id: "1234567")
         original = user.alive_user_compliance_info
 
-        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "482913")
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "48291")
 
         expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
 
@@ -727,11 +740,11 @@ describe UpdateUserComplianceInfo do
       it "cannot detect a zero-padded number, so the message is what warns against it" do
         user = create_colombian_individual_user(individual_tax_id: "1234567")
 
-        # Padding a 6-digit number to seven satisfies Stripe's length rule, so no guard can catch
+        # Padding a 5-digit number to six satisfies Stripe's length rule, so no guard can catch
         # it: the number simply stops matching the document and fails id_number_match verification
         # later, once the seller has a balance. Pinned as passing so the limitation is visible
         # rather than assumed, and so the warning in the message stays load-bearing.
-        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "0482913")
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "048291")
 
         expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
 
