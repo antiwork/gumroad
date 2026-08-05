@@ -40,6 +40,7 @@ type Props = {
     seller_response_due_at: string | null;
     customer_communication_file_max_size: number;
     customer_communication_files_max_count: number;
+    customer_communication_saved_file_count: number;
     blobs: Blobs;
     saved: {
       reason_for_winning: string | null;
@@ -212,10 +213,12 @@ export default function Show() {
   };
 
   const maxFileCount = dispute_evidence.customer_communication_files_max_count;
-  // A prior save's attachment counts against the server's max: the update action folds it into
-  // the merge inputs before enforcing the limit, so ignoring it here would let the seller pick a
-  // selection the server is guaranteed to reject.
-  const savedFileCount = blobs.customer_communication_file !== null ? 1 : 0;
+  // A prior save's attachment counts against the server's max: the merged blob may hold several
+  // source files from earlier revisions, not just the one blob the UI can see, so the server-
+  // computed true count (not blobs.customer_communication_file's mere presence) must be used —
+  // otherwise a seller with a multi-file merge already saved could pick more than the server's
+  // fold-in-then-enforce check will accept.
+  const savedFileCount = dispute_evidence.customer_communication_saved_file_count;
   const remainingFileSlots = maxFileCount - savedFileCount - uploadedFiles.length;
 
   // Uploads run sequentially so the order the seller picked becomes the page order of the

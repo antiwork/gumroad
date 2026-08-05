@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_183000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_183001) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -888,6 +888,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_183000) do
     t.string "error_message"
     t.text "access_activity_log"
     t.text "reason_for_winning"
+    t.integer "customer_communication_source_file_count", default: 0, null: false
     t.index ["dispute_id"], name: "index_dispute_evidences_on_dispute_id", unique: true
     t.index ["resolved_at"], name: "index_dispute_evidences_on_resolved_at"
   end

@@ -183,6 +183,12 @@ class DisputeEvidence < ApplicationRecord
         .positive?
   end
 
+  # The merge folds multiple uploads into one blob, so the attachment count alone can't say how
+  # many source files it holds — a return visit must read this instead of assuming 1.
+  def customer_communication_saved_file_count
+    customer_communication_file.attached? ? customer_communication_source_file_count : 0
+  end
+
   def all_files_size_within_limit
     all_files_size = receipt_image.byte_size.to_i +
       policy_image.byte_size.to_i +

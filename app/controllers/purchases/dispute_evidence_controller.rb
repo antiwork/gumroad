@@ -47,9 +47,19 @@ class Purchases::DisputeEvidenceController < ApplicationController
       dispute_evidence_params.slice(:cancellation_rebuttal, :reason_for_winning, :refund_refusal_explanation)
     )
 
+    # The merge folds every source file into one blob, so blob count can't enforce the limit past
+    # the first save — a merged blob is one blob regardless of how many originals it holds. Track
+    # the true source-file total across revisions and gate on that instead.
+    new_source_file_count = @dispute_evidence.customer_communication_saved_file_count + input_blobs.size
+    if new_source_file_count > DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES
+      raise DisputeEvidence::MergeCustomerCommunicationFilesService::MergeError,
+            "You can attach up to #{DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES} files."
+    end
+
     if input_blobs.one? && !@dispute_evidence.customer_communication_file.attached?
       attached_blob = covert_and_optimize_blob_if_needed(input_blobs.first)
       @dispute_evidence.customer_communication_file.attach(attached_blob)
+      @dispute_evidence.customer_communication_source_file_count = new_source_file_count
     elsif input_blobs.any?
       # customer_communication_file is has_one_attached, so a bare #attach on a later save would
       # replace rather than add to what a prior save already sent — silently dropping the earlier
@@ -65,6 +75,7 @@ class Purchases::DisputeEvidenceController < ApplicationController
         max_size: @dispute_evidence.customer_communication_file_max_size
       )
       @dispute_evidence.customer_communication_file.attach(merged_blob)
+      @dispute_evidence.customer_communication_source_file_count = new_source_file_count
     end
     @dispute_evidence.update_as_seller_submitted!
     # Only once the submission is persisted: a validation failure below has to leave the

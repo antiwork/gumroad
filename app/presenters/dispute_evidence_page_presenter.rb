@@ -36,6 +36,10 @@ class DisputeEvidencePagePresenter
         seller_response_due_at: dispute_evidence.seller_response_due_at&.iso8601,
         customer_communication_file_max_size: dispute_evidence.customer_communication_file_max_size,
         customer_communication_files_max_count: DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES,
+        # The saved attachment is a single merged blob that may hold several source files (a
+        # return visit's revision folds the prior save into the new merge) — the UI needs the
+        # true count to compute remaining upload capacity, not just whether one blob exists.
+        customer_communication_saved_file_count: dispute_evidence.customer_communication_saved_file_count,
         blobs: blobs_props,
         # What the seller already saved, so a return visit shows their statement instead of an
         # empty form that reads as though the earlier save was lost.

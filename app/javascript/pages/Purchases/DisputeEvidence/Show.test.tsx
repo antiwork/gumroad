@@ -81,6 +81,7 @@ const pageProps = {
     seller_response_due_at: "2026-07-16T00:00:00Z",
     customer_communication_file_max_size: 5 * 1024 * 1024,
     customer_communication_files_max_count: 10,
+    customer_communication_saved_file_count: 0,
     blobs: { receipt_image: null, policy_image: null, customer_communication_file: null },
     saved: { reason_for_winning: null, cancellation_rebuttal: null, refund_refusal_explanation: null },
   },
@@ -233,6 +234,7 @@ describe("DisputeEvidence Show", () => {
       dispute_evidence: {
         ...pageProps.dispute_evidence,
         customer_communication_files_max_count: 3,
+        customer_communication_saved_file_count: 1,
         blobs: {
           receipt_image: null,
           policy_image: null,
@@ -294,6 +296,25 @@ describe("DisputeEvidence Show", () => {
 
       expect(document.querySelector('input[type="file"]')).toBe(null);
       expect(queuedFileNames()).toEqual(["Customer communication"]);
+    });
+
+    // A prior revision's merged blob is one attachment but can carry several original files
+    // (e.g. two uploads folded into one PDF on an earlier save). Counting the blob instead of
+    // the true source-file total would under-count and let the seller pick more than the
+    // server's fold-in-then-enforce check will accept.
+    it("counts every source file behind a saved multi-file merge, not just the one blob", async () => {
+      mocks.usePage.mockReturnValue({
+        props: {
+          ...savedBlobProps,
+          dispute_evidence: { ...savedBlobProps.dispute_evidence, customer_communication_saved_file_count: 2 },
+        },
+      });
+      renderPage();
+
+      await selectFiles(2, 0);
+
+      await waitFor(() => expect(showAlert).toHaveBeenCalledWith("You can attach 1 more file.", "error"));
+      expect(mocks.pendingUploads.length).toBe(0);
     });
   });
 });
