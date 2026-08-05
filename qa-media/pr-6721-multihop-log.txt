@@ -1,6 +1,0 @@
-desktop two-hops-back: requested /l/hop-a-3 -> HTTP 200 final=hop-c-3 (/private/tmp/qa6721/out/pr6721-desktop-two-hops-back.png)
-desktop one-hop-back: requested /l/hop-b-3 -> HTTP 200 final=hop-c-3 (/private/tmp/qa6721/out/pr6721-desktop-one-hop-back.png)
-desktop current-slug: requested /l/hop-c-3 -> HTTP 200 final=hop-c-3 (/private/tmp/qa6721/out/pr6721-desktop-current-slug.png)
-mobile375 two-hops-back: requested /l/hop-a-3 -> HTTP 200 final=hop-c-3 (/private/tmp/qa6721/out/pr6721-mobile375-two-hops-back.png)
-mobile375 one-hop-back: requested /l/hop-b-3 -> HTTP 200 final=hop-c-3 (/private/tmp/qa6721/out/pr6721-mobile375-one-hop-back.png)
-mobile375 current-slug: requested /l/hop-c-3 -> HTTP 200 final=hop-c-3 (/private/tmp/qa6721/out/pr6721-mobile375-current-slug.png)
