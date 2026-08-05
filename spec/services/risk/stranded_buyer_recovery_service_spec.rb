@@ -431,10 +431,35 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.verdict).to eq(:noop)
       expect(result.reason).to eq(:buyer_not_found)
     end
+  end
 
-    it "requires an identifier" do
-      expect { described_class.call }.to raise_error(ArgumentError)
+  describe "cross-type value matching for GUID/IP enforcement" do
+    # Checkout enforcement (Purchase::Risk#check_for_past_blocked_guids/#check_for_past_fraudulent_ips)
+    # and DecliningPlatformBlocks both match GUID/IP values by object_value alone, so a row stored
+    # under an unexpected object_type still declines checkout. Recovery has to see it too.
+    it "resolves and clears a browser_guid value stored under a different object_type" do
+      guid_block.unblock!
+      mistyped_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: browser_guid)
+
+      result = call
+      expect(result.verdict).to eq(:cleared)
+      expect(result.cleared).to include(mistyped_block)
+      expect(mistyped_block.reload.blocked_at).to be_nil
     end
+
+    it "resolves an IP value stored under a different object_type, still withheld for human review" do
+      ip = "203.0.113.9"
+      failed_purchase.update!(ip_address: ip, error_code: PurchaseErrorCode::BLOCKED_IP_ADDRESS)
+      mistyped_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: ip)
+
+      result = call
+      expect(mistyped_block.reload.blocked_at).to be_present
+      expect(result.skipped.map(&:first)).to include(mistyped_block)
+    end
+  end
+
+  it "requires an identifier" do
+    expect { described_class.call }.to raise_error(ArgumentError)
   end
 
   describe "lookup by user external id" do

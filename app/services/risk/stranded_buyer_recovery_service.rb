@@ -194,16 +194,22 @@ class Risk::StrandedBuyerRecoveryService
 
     def active_blocks
       @_active_blocks ||= begin
-        pairs = {
+        # Checkout enforcement (Purchase::Risk#check_for_past_blocked_guids,
+        # #check_for_past_fraudulent_ips) and DecliningPlatformBlocks match GUID/IP values by
+        # object_value alone, regardless of the row's stored object_type. Scoping those two by
+        # type here would let a value stored under an unexpected type survive recovery while
+        # checkout keeps rejecting it. partition_blocks still dispatches on each row's real
+        # object_type, so a value-only hit is unaffected either way.
+        type_scoped = {
           PlatformBlock::TYPES[:email] => identifier_emails,
           PlatformBlock::TYPES[:email_domain] => identifier_domains,
-          PlatformBlock::TYPES[:browser_guid] => identifier_guids,
-          PlatformBlock::TYPES[:ip_address] => identifier_ips,
           PlatformBlock::TYPES[:charge_processor_fingerprint] => identifier_fingerprints,
         }
-        scopes = pairs.filter_map do |object_type, values|
+        scopes = type_scoped.filter_map do |object_type, values|
           PlatformBlock.active.where(object_type:, object_value: values) if values.any?
         end
+        value_only_values = (identifier_guids + identifier_ips).uniq
+        scopes << PlatformBlock.active.where(object_value: value_only_values) if value_only_values.any?
         scopes.any? ? scopes.reduce { |combined, scope| combined.or(scope) }.to_a : []
       end
     end
@@ -313,14 +319,19 @@ class Risk::StrandedBuyerRecoveryService
 
     # Person-bound rows clear. A card the issuer is still refusing stays blocked — the block is not
     # what is declining it. Shared-radius rows (domain/IP) never auto-clear — see SHARED_RADIUS_TYPES.
+    #
+    # Dispatches on the VALUE space the row matched, not block.object_type: GUID/IP enforcement
+    # matches object_value alone (see active_blocks), so a row can carry a stored type that
+    # disagrees with what actually declined checkout. An IP value withheld for its shared blast
+    # radius has to stay withheld even when mis-filed under browser_guid.
     def partition_blocks
       clearable = []
       withheld = []
       active_blocks.each do |block|
-        if CLEARABLE_TYPES.include?(block.object_type)
-          clearable << block
-        elsif SHARED_RADIUS_TYPES.include?(block.object_type)
+        if identifier_ips.include?(block.object_value) || SHARED_RADIUS_TYPES.include?(block.object_type)
           withheld << [block, :shared_identifier_needs_human_review]
+        elsif CLEARABLE_TYPES.include?(block.object_type) || identifier_guids.include?(block.object_value)
+          clearable << block
         elsif block.charge_processor_fingerprint? && card_still_declining?(block.object_value)
           withheld << [block, :card_still_declining_at_issuer]
         else
