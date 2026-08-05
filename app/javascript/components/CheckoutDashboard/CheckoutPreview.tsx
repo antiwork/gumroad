@@ -31,7 +31,21 @@ export const CheckoutPreview = ({
         saveAddress: false,
         gift: { type: "normal", email: "", note: "" },
         customFieldValues: {},
-        surcharges: { type: "pending" },
+        // Loaded (with no surcharges) rather than pending: the payment element defers mounting
+        // until it has a loaded total, and the preview should show the real payment fields, not
+        // the loading placeholder.
+        surcharges: {
+          type: "loaded",
+          result: {
+            vat_id_valid: false,
+            has_vat_id_input: false,
+            shipping_rate_cents: 0,
+            tax_cents: 0,
+            tax_included_cents: 0,
+            subtotal: cartItem.price,
+            buyer_currency_quote: null,
+          },
+        },
         status: { type: "input", errors: new Set() },
         paymentMethod: "card",
         usStates: ["AA"],
@@ -42,14 +56,24 @@ export const CheckoutPreview = ({
         paymentElementType: "card",
         willSaveCard: false,
         usingSavedCard: false,
+        // The real checkout's canonical element config, so the preview renders the same payment
+        // surface buyers see. The preview's surcharges never load, so the element itself stays
+        // in its pre-mount state and no Stripe call is made.
         checkoutPayment: {
-          integration: "card_element",
-          fallback_reason: "checkout_preview",
+          integration: "payment_element",
+          fallback_reason: null,
           disable_wallets: false,
           request_apple_pay_merchant_tokens: false,
           payment_element_wallets: false,
           flat_payment_methods: false,
-          elements_options: null,
+          elements_options: {
+            stripe_elements_mode: "payment",
+            currency: "usd",
+            buyer_currency_presentment: false,
+            payment_method_types: ["card"],
+            payment_method_creation: "manual",
+            stripe_link_enabled: true,
+          },
         },
         availablePaymentMethods: [],
         tip: { type: "percentage", percentage: 0 },
@@ -83,6 +107,7 @@ export const CheckoutPreview = ({
         paypalClientId: "",
         recaptchaKey: "",
         recaptchaScoreBased: false,
+        recaptchaChallengeKey: null,
         checkoutPaymentStale: false,
         resumeSubmitAfterCheckoutPayment: false,
         validationFailedCount: 0,

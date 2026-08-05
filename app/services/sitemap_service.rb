@@ -4,6 +4,25 @@ class SitemapService
   HOST = UrlService.root_domain_with_protocol
   MAX_SITEMAP_LINKS = 50_000
   SITEMAP_PATH_MONTHLY = "sitemap/products/monthly"
+  SITEMAP_PATH_CATEGORIES = "sitemap/categories/"
+  SITEMAP_PATH_WISHLISTS = "sitemap/wishlists"
+
+  def generate_categories
+    sitemap_config("sitemap", SITEMAP_PATH_CATEGORIES, false)
+
+    SitemapGenerator::Sitemap.create do
+      presenter = Discover::TaxonomyPresenter.new
+      Taxonomy.find_each do |taxonomy|
+        path = presenter.category_for_taxonomy_id(taxonomy.id)&.fetch(:path) || next
+        add "/#{path}", changefreq: "weekly", priority: 0.8,
+                        host: UrlService.discover_domain_with_protocol
+      end
+    end
+
+    RobotsService.new.expire_sitemap_configs_cache
+
+    SitemapGenerator::Sitemap.ping_search_engines if ping_search_engines?
+  end
 
   # Flattens the per-row seller and cover lookups the `add` loop below makes. The
   # variant_records leg matters: with it loaded, `.processed` finds the retina variant in
@@ -22,6 +41,33 @@ class SitemapService
     year = date.year
 
     create_sitemap(period, "sitemap", "#{SITEMAP_PATH_MONTHLY}/#{year}/#{date.month}/")
+  end
+
+  # Unlike products, indexable wishlists are few enough for a single non-partitioned
+  # sitemap, and the quality gate (Wishlist.seo_indexable) can flip either way as
+  # products are added/removed — so the whole file is regenerated each run.
+  def generate_wishlists
+    sitemap_config("sitemap", "#{SITEMAP_PATH_WISHLISTS}/", false)
+
+    SitemapGenerator::Sitemap.create do
+      # seo_indexable is grouped, which find_each can't batch — page via an id subquery.
+      Wishlist.where(id: Wishlist.seo_indexable.select(:id)).preload(:user).find_each do |wishlist|
+        relative_url = Rails.application.routes.url_helpers.wishlist_path(wishlist.url_slug)
+        add relative_url, changefreq: "daily", priority: 0.7, lastmod: wishlist.updated_at,
+                          host: wishlist.user.subdomain_with_protocol
+      end
+    end
+
+    # sitemap_generator only writes a file when it has at least one link, so a run that
+    # finds zero qualifying wishlists leaves the PRIOR run's file (or S3 object) in place —
+    # previously-indexed URLs stay published after their wishlists drop below the gate.
+    remove_wishlist_sitemap_artifact if SitemapGenerator::Sitemap.link_count.zero?
+
+    RobotsService.new.expire_sitemap_configs_cache
+
+    if ping_search_engines?
+      SitemapGenerator::Sitemap.ping_search_engines
+    end
   end
 
   private
@@ -69,5 +115,20 @@ class SitemapService
 
     def upload_sitemap_to_s3?
       Rails.env.production? || Rails.env.staging?
+    end
+
+    def remove_wishlist_sitemap_artifact
+      key = "#{SITEMAP_PATH_WISHLISTS}/sitemap.xml.gz"
+      if upload_sitemap_to_s3?
+        # Must use the same dedicated sitemap-uploader identity as the upload path (sitemap_config
+        # above) — the default AWS credentials may not be authorized to delete from this bucket.
+        Aws::S3::Client.new(
+          access_key_id: GlobalConfig.get("S3_SITEMAP_UPLOADER_ACCESS_KEY"),
+          secret_access_key: GlobalConfig.get("S3_SITEMAP_UPLOADER_SECRET_ACCESS_KEY"),
+          region: AWS_DEFAULT_REGION
+        ).delete_object(bucket: PUBLIC_STORAGE_S3_BUCKET, key:)
+      else
+        FileUtils.rm_f(Rails.public_path.join(key))
+      end
     end
 end

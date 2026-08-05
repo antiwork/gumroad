@@ -110,6 +110,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   status: { type: "starting" },
   recaptchaKey: null,
   recaptchaScoreBased: false,
+  recaptchaChallengeKey: null,
   paypalClientId: "",
   tip: { type: "percentage", percentage: 0 },
   emailTypoSuggestion: null,

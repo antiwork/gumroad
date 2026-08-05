@@ -2,7 +2,7 @@
 
 module Subscription::Restartable
   def restartable_for_product_and_buyer(product:, buyer:)
-    return nil unless product.is_recurring_billing
+    return nil unless product.is_recurring_billing && product.alive?
 
     where(link_id: product.id)
       .where(ended_at: nil)
@@ -15,7 +15,7 @@ module Subscription::Restartable
   end
 
   def restartable_for_product_and_email(product:, email:)
-    return nil unless product.is_recurring_billing
+    return nil unless product.is_recurring_billing && product.alive?
 
     where(link_id: product.id)
       .where(ended_at: nil)

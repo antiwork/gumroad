@@ -22,7 +22,7 @@ const SCOPES = [
   },
   {
     name: "edit_emails",
-    description: "read/write access to the user's audience emails.",
+    description: "read/write access to the user's audience emails and read access to the user's workflows.",
   },
   {
     name: "view_sales",

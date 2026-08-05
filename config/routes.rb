@@ -25,6 +25,13 @@ Rails.application.routes.draw do
   get "/healthcheck/purchases" => "healthcheck#purchases"
   get "/healthcheck/apple_pay_domain" => "healthcheck#apple_pay_domain"
 
+  # IndexNow key verification file (https://www.indexnow.org/documentation).
+  # Deliberately unconstrained by host: the spec requires the key file to be
+  # served on every host we submit URLs for, including seller subdomains.
+  # Charset matches the IndexNow key spec (a-z, A-Z, 0-9, hyphens, 8-128 chars) —
+  # not just hex — so a differently-formatted configured key still routes.
+  get "/:key.txt" => "indexnow_keys#show", constraints: { key: /[a-zA-Z0-9-]{8,128}/ }, as: :indexnow_key
+
   use_doorkeeper do
     controllers applications: "oauth/applications"
     controllers authorized_applications: "oauth/authorized_applications"
@@ -132,6 +139,7 @@ Rails.application.routes.draw do
           post :send, action: :send_email
         end
       end
+      resources :workflows, only: [:index, :show]
       post "sales/exports", to: "sales#export"
       get "sales/summary", to: "sales#summary"
       resources :sales, only: [:index, :show] do
@@ -519,6 +527,9 @@ Rails.application.routes.draw do
 
     # /robots.txt
     get "/robots.:format" => "robots#index"
+
+    # /llms.txt — AI-assistant discoverability (https://llmstxt.org)
+    get "/llms.:format" => "llms#index"
 
     # Redirect Devise's default auth paths to our custom routes.
     # Must be defined before devise_for so they match first, preventing Devise's
@@ -1220,6 +1231,7 @@ Rails.application.routes.draw do
     get "/charge", to: "public#charge", as: "charge"
     get "/license-key-lookup", to: "public#license_key_lookup"
     get "/charge_data", to: "public#charge_data", as: :charge_data
+    get "/license_key_lookup_data", to: "public#license_key_lookup_data", as: :license_key_lookup_data
     get "/paypal_charge_data", to: "public#paypal_charge_data", as: :paypal_charge_data
     get "/CHARGE" => redirect("/charge")
 

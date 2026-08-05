@@ -31,6 +31,7 @@ export type CheckoutBuyerCurrencyDisplay = {
   // total by a cent, and with the amounts the charge later persists for the receipt.
   presentmentTotalCents: number;
   chargePresentmentTotalCents: number;
+  futureInstallmentsPresentmentTotalCents: number | null;
   lineAllocations: BuyerCurrencyLineAllocation[];
 };
 
@@ -115,6 +116,7 @@ export const getCheckoutBuyerCurrencyDisplay = (
     subunitToUnit: quote.subunit_to_unit,
     presentmentTotalCents: quote.presentment_total_cents,
     chargePresentmentTotalCents: quote.charge_presentment_total_cents ?? quote.presentment_total_cents,
+    futureInstallmentsPresentmentTotalCents: quote.future_installments_presentment_total_cents ?? null,
     lineAllocations,
   };
 };

@@ -93,6 +93,9 @@ describe SearchProducts do
     context "with taxonomy attribute filter parameters" do
       before do
         routes.draw { get "index" => "anonymous#index" }
+        taxonomy = create(:taxonomy)
+        TaxonomyAttribute.create!(taxonomy:, name: "format", label: "Format", value_type: "enum", values: ["OTF"])
+        TaxonomyAttribute.create!(taxonomy:, name: "license", label: "License", value_type: "enum", values: ["Commercial"])
       end
 
       it "coerces nested taxonomy attribute filter params into scalar tokens" do
@@ -102,18 +105,42 @@ describe SearchProducts do
       end
 
       it "caps the number of tokens so a crafted URL cannot emit an unbounded number of ES clauses" do
-        tokens = (1..50).map { |i| "attr#{i}:value" }
+        valid_tokens = ["format:otf", "license:commercial"]
+        tokens = valid_tokens + (1..50).map { |i| "attr#{i}:value" }
+        get :index, params: { taxonomy_attribute_filters: tokens.join(",") }
+
+        parsed = JSON.parse(response.body)["taxonomy_attribute_filters"]
+        expect(parsed).to match_array(valid_tokens)
+      end
+
+      it "still caps once invalid tokens are removed, when the surviving set exceeds the limit" do
+        taxonomy = TaxonomyAttribute.first.taxonomy
+        many_values = (1..25).map { |i| "v#{i}" }
+        TaxonomyAttribute.create!(taxonomy:, name: "size", label: "Size", value_type: "enum", values: many_values)
+        tokens = many_values.map { |v| "size:#{v}" }
         get :index, params: { taxonomy_attribute_filters: tokens.join(",") }
 
         parsed = JSON.parse(response.body)["taxonomy_attribute_filters"]
         expect(parsed.size).to eq(Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS)
-        expect(parsed).to eq(tokens.first(Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS))
       end
 
       it "drops duplicate tokens before applying the cap" do
         get :index, params: { taxonomy_attribute_filters: "format:otf,format:otf,license:commercial" }
 
         expect(JSON.parse(response.body)["taxonomy_attribute_filters"]).to eq(["format:otf", "license:commercial"])
+      end
+
+      it "applies the allowlist before the cap so junk tokens cannot crowd out a valid one" do
+        tokens = (1..Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS).map { |i| "attr#{i}:value" } + ["format:otf"]
+        get :index, params: { taxonomy_attribute_filters: tokens.join(",") }
+
+        expect(JSON.parse(response.body)["taxonomy_attribute_filters"]).to eq(["format:otf"])
+      end
+
+      it "drops tokens for attributes/values that are no longer active" do
+        get :index, params: { taxonomy_attribute_filters: "format:otf,format:tiff" }
+
+        expect(JSON.parse(response.body)["taxonomy_attribute_filters"]).to eq(["format:otf"])
       end
     end
 

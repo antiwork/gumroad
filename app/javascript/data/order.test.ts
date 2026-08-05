@@ -78,7 +78,6 @@ const requestData: StartCartPurchaseRequestPayload = {
     locale: "en-US",
   },
   recaptchaResponse: null,
-  usedStripePaymentElement: true,
   buyerCurrencyQuote: null,
   lineItems: [
     {
@@ -930,5 +929,69 @@ describe("startClientConfirmOrderCreation", () => {
         selected_payment_method_type: "ideal",
       },
     });
+  });
+});
+
+// A CAPTCHA refusal happens in a before_action, so it arrives as a whole-order failure with no line
+// items of its own. The offer of a challenge retry has to survive being fanned out across the cart
+// (gumroad-private#1590).
+describe("startOrderCreation", () => {
+  beforeEach(() => {
+    vi.stubGlobal("Routes", { orders_path: () => "/orders" });
+    requestMock.mockReset();
+  });
+
+  it("surfaces the challenge-retry offer from a score-only CAPTCHA refusal", async () => {
+    requestMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: false,
+        error_message: "Sorry, we could not complete this purchase",
+        recaptcha_challenge_available: true,
+      }),
+    );
+
+    const result = await startOrderCreation(requestData);
+
+    expect(result.recaptchaChallengeAvailable).toBe(true);
+    // The refusal is still reported per line item, so a client that ignores the offer behaves as before.
+    expect(result.lineItems["product-a "]).toMatchObject({ success: false });
+  });
+
+  it("does not offer a retry for an ordinary order failure", async () => {
+    requestMock.mockResolvedValueOnce(jsonResponse({ success: false, error_message: "Try again." }));
+
+    const result = await startOrderCreation(requestData);
+
+    expect(result.recaptchaChallengeAvailable).toBe(false);
+  });
+
+  it("sends the challenge-fallback marker when resubmitting with a challenge token", async () => {
+    requestMock.mockResolvedValueOnce(jsonResponse({ success: false, error_message: "Try again." }));
+
+    await startOrderCreation({
+      ...requestData,
+      recaptchaResponse: "challenge-token",
+      recaptchaChallengeFallback: true,
+    });
+
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/orders",
+        data: expect.objectContaining({
+          "g-recaptcha-response": "challenge-token",
+          recaptcha_challenge_fallback: true,
+        }),
+      }),
+    );
+  });
+
+  it("marks an ordinary submission as not a challenge fallback", async () => {
+    requestMock.mockResolvedValueOnce(jsonResponse({ success: false, error_message: "Try again." }));
+
+    await startOrderCreation(requestData);
+
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ recaptcha_challenge_fallback: false }) }),
+    );
   });
 });

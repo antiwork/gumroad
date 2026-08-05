@@ -81,4 +81,103 @@ describe SitemapService do
       expect(xml).to include(product.reload.preview_url)
     end
   end
+
+  describe "#generate_categories" do
+    it "generates a sitemap entry for every taxonomy path on the discover host" do
+      path = "#{Rails.public_path}/#{SitemapService::SITEMAP_PATH_CATEGORIES}sitemap.xml.gz"
+      service.generate_categories
+
+      expect(File.exist?(path)).to be true
+      xml = Zlib::GzipReader.open(path, &:read)
+      expect(xml).to include("#{UrlService.discover_domain_with_protocol}/3d")
+      expect(xml).to include("#{UrlService.discover_domain_with_protocol}/software-development/programming")
+    end
+  end
+
+  describe "#generate_wishlists" do
+    let(:sitemap_file_path) { "#{Rails.public_path}/sitemap/wishlists/sitemap.xml.gz" }
+
+    it "includes only quality-gated wishlists" do
+      seller = create(:user, username: "wishlistseller")
+      indexable_wishlist = create(:wishlist, name: "Great Finds", user: seller)
+      create_list(:wishlist_product, Wishlist::MINIMUM_SEO_INDEXABLE_PRODUCTS, wishlist: indexable_wishlist)
+
+      thin_wishlist = create(:wishlist, name: "Thin List")
+      create(:wishlist_product, wishlist: thin_wishlist)
+
+      opted_out_wishlist = create(:wishlist, name: "Opted Out", discover_opted_out: true)
+      create_list(:wishlist_product, Wishlist::MINIMUM_SEO_INDEXABLE_PRODUCTS, wishlist: opted_out_wishlist)
+
+      service.generate_wishlists
+
+      expect(File.exist?(sitemap_file_path)).to be true
+      xml = Zlib::GzipReader.open(sitemap_file_path, &:read)
+      expect(xml).to include("#{seller.subdomain_with_protocol}/wishlists/#{indexable_wishlist.url_slug}")
+      expect(xml).not_to include(thin_wishlist.url_slug)
+      expect(xml).not_to include(opted_out_wishlist.url_slug)
+    end
+
+    it "does not raise when no wishlist is indexable" do
+      FileUtils.rm_f(sitemap_file_path) # earlier examples' output persists on disk
+      create(:wishlist_product, wishlist: create(:wishlist, name: "Thin List"))
+
+      expect { service.generate_wishlists }.not_to raise_error
+
+      # sitemap_generator skips writing a file with zero links.
+      expect(File.exist?(sitemap_file_path)).to be false
+    end
+
+    it "removes a previously published sitemap once no wishlist remains indexable" do
+      seller = create(:user, username: "shrinkingseller")
+      wishlist = create(:wishlist, name: "Shrinking List", user: seller)
+      products = create_list(:wishlist_product, Wishlist::MINIMUM_SEO_INDEXABLE_PRODUCTS, wishlist: wishlist)
+
+      service.generate_wishlists
+      expect(File.exist?(sitemap_file_path)).to be true
+      xml = Zlib::GzipReader.open(sitemap_file_path, &:read)
+      expect(xml).to include(wishlist.url_slug)
+
+      products.each(&:mark_deleted!)
+
+      service.generate_wishlists
+
+      expect(File.exist?(sitemap_file_path)).to be false
+    end
+
+    it "deletes the S3 sitemap object with the dedicated sitemap-uploader credentials when no wishlist remains indexable" do
+      allow(Rails.env).to receive(:production?).and_return(true)
+      allow(GlobalConfig).to receive(:get).and_call_original
+      allow(GlobalConfig).to receive(:get).with("S3_SITEMAP_UPLOADER_ACCESS_KEY").and_return("uploader-access-key")
+      allow(GlobalConfig).to receive(:get).with("S3_SITEMAP_UPLOADER_SECRET_ACCESS_KEY").and_return("uploader-secret-key")
+
+      s3_client = instance_double(Aws::S3::Client)
+      expect(Aws::S3::Client).to receive(:new).with(
+        access_key_id: "uploader-access-key",
+        secret_access_key: "uploader-secret-key",
+        region: AWS_DEFAULT_REGION
+      ).and_return(s3_client)
+      expect(s3_client).to receive(:delete_object).with(
+        bucket: PUBLIC_STORAGE_S3_BUCKET,
+        key: "#{SitemapService::SITEMAP_PATH_WISHLISTS}/sitemap.xml.gz"
+      )
+      # The upload path in sitemap_config also builds an AwsSdkAdapter that reads S3
+      # credentials via GlobalConfig, but that adapter never touches Aws::S3::Client
+      # directly, so this expectation binds only to the deletion call being pinned here.
+      allow(SitemapGenerator::Sitemap).to receive(:ping_search_engines)
+
+      create(:wishlist_product, wishlist: create(:wishlist, name: "Thin List"))
+
+      service.generate_wishlists
+    end
+
+    it "deletes /robots.txt sitemap configs cache" do
+      cache_key = "sitemap_configs"
+      redis_namespace = Redis::Namespace.new(:robots_redis_namespace, redis: $redis)
+      redis_namespace.set(cache_key, "[\"https://example.com/robots.txt\"]")
+
+      service.generate_wishlists
+
+      expect(redis_namespace.get(cache_key)).to eq nil
+    end
+  end
 end

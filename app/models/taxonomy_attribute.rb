@@ -6,7 +6,8 @@ class TaxonomyAttribute < ApplicationRecord
 
   belongs_to :taxonomy
 
-  scope :active_ordered, -> { where(active: true).order(:position, :id) }
+  scope :active, -> { where(active: true) }
+  scope :active_ordered, -> { active.order(:position, :id) }
 
   validates :name, presence: true, uniqueness: { scope: :taxonomy_id }, format: { with: /\A[a-z0-9_]+\z/ }
   validates :label, :value_type, presence: true
@@ -48,5 +49,18 @@ class TaxonomyAttribute < ApplicationRecord
     return value == "true" ? "Yes" : "No" if value_type == "boolean"
 
     value
+  end
+
+  # The token space a request is allowed to filter on right now. Retiring an attribute (or
+  # dropping/renaming one of its values) doesn't touch already-indexed products — see
+  # `Onetime::SeedTaxonomyAttributes` — so a stale bookmarked or hand-built URL can otherwise
+  # keep matching documents that still carry the old token.
+  def self.valid_filter_tokens
+    active.each_with_object(Set.new) do |attribute, tokens|
+      attribute.filter_options.each do |option|
+        token = attribute.filter_token_for(option)
+        tokens << token if token
+      end
+    end
   end
 end

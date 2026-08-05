@@ -55,7 +55,6 @@ import {
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
-  canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
   computeTip,
   computeTipForListedLines,
@@ -105,6 +104,7 @@ type CheckoutIndexPageProps = {
     paypal_client_id: string;
     recaptcha_key: string | null;
     recaptcha_score_based: boolean;
+    recaptcha_challenge_key: string | null;
     saved_credit_card: SavedCreditCard | null;
     state: string | null;
     tip_options: number[];
@@ -176,6 +176,7 @@ const CheckoutIndexPage = () => {
       saved_credit_card,
       recaptcha_key,
       recaptcha_score_based,
+      recaptcha_challenge_key,
       paypal_client_id,
       max_allowed_cart_products,
       cart_save_debounce_ms,
@@ -237,6 +238,7 @@ const CheckoutIndexPage = () => {
     products: getProducts(cartForm.data.cart),
     recaptchaKey: recaptcha_key,
     recaptchaScoreBased: recaptcha_score_based,
+    recaptchaChallengeKey: recaptcha_challenge_key,
     paypalClientId: paypal_client_id,
     gift,
     // Always on since the require_email_typo_acknowledgment rollout flag was removed
@@ -262,9 +264,8 @@ const CheckoutIndexPage = () => {
   // all reading from the one lane that is actually in effect.
   //
   // Also gated on the same dynamic eligibility PaymentForm uses to mount the element (matching
-  // the summary in index.tsx): if a discount or surcharge reload drops the loaded canonical total
-  // below Stripe's Payment Element minimum, PaymentForm falls back to the CardElement and the
-  // charge is canonical USD, so the tip basis and the modal must fall back too.
+  // the summary in index.tsx), so the tip basis and the modal can never quote a listed currency
+  // for a cart whose element the client declines to mount.
   const listedCurrency =
     buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state)
       ? null
@@ -519,7 +520,6 @@ const CheckoutIndexPage = () => {
         zipCode: state.zipCode,
         state: state.state,
         paymentMethod: state.status.paymentMethod,
-        usedStripePaymentElement: canUseStripePaymentElement(state),
         shippingInfo: cartForm.data.cart.items.some((item) => item.product.require_shipping)
           ? {
               save: state.saveAddress,
@@ -545,6 +545,7 @@ const CheckoutIndexPage = () => {
           locale: navigator.language,
         },
         recaptchaResponse: state.status.recaptchaResponse ?? null,
+        recaptchaChallengeFallback: state.status.challengeFallback ?? false,
         buyerCurrencyQuote: getCheckoutBuyerCurrencyQuoteToken(
           state.surcharges.type === "loaded" ? state.surcharges.result : null,
           {
@@ -651,6 +652,16 @@ const CheckoutIndexPage = () => {
               cartForm.data.cart.discountCodes,
             )
           : await startOrderCreation(requestData, cartForm.data.cart.discountCodes);
+
+      // The CAPTCHA check refused the order on risk score alone, which is not something the buyer
+      // can act on — so run the challenge key instead and resubmit with its token
+      // (gumroad-private#1590). No alert: the challenge is the next step, and the offer is
+      // single-use server-side, so it cannot loop.
+      if (result.recaptchaChallengeAvailable) {
+        dispatch({ type: "retry-recaptcha-challenge" });
+        return;
+      }
+
       const results = Object.entries(result.lineItems).flatMap(([key, result]) => {
         const [permalink, optionId] = key.split(" ");
         const item = cartForm.data.cart.items.find(

@@ -58,6 +58,46 @@ describe Pages::ProfileData do
 
         expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(key_before)
       end
+
+      it "changes the cache key when two review-stat mutations land in the same second" do
+        # maximum(:updated_at) has second precision, so a naive timestamp-based key would
+        # reuse the same value for both writes below and silently serve the stale rollup.
+        Feature.activate_user(:seller_reputation_summary, seller)
+        product = create(:product, user: seller)
+        seller_profile = SellerProfile.find_by(seller_id: seller.id)
+        stat = ProductReviewStat.create!(link: product, reviews_count: 1, average_rating: 5, ratings_of_five_count: 1)
+        key_before = Pages::ProfileData.cache_key(seller.reload, seller_profile)
+
+        travel_to(stat.updated_at) do
+          stat.update!(reviews_count: 2, ratings_of_five_count: 1, ratings_of_one_count: 1)
+        end
+
+        expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(key_before)
+      end
+
+      it "does not change the cache key when a review-hidden product's stat mutates" do
+        Feature.activate_user(:seller_reputation_summary, seller)
+        product = create(:product, user: seller, display_product_reviews: false)
+        stat = ProductReviewStat.create!(link: product, reviews_count: 1, average_rating: 5, ratings_of_five_count: 1)
+        seller_profile = SellerProfile.find_by(seller_id: seller.id)
+        key_before = Pages::ProfileData.cache_key(seller.reload, seller_profile)
+
+        stat.update!(reviews_count: 2, ratings_of_five_count: 2)
+
+        expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).to eq(key_before)
+      end
+
+      it "does not change the cache key when a zero-review stat's non-count fields mutate" do
+        Feature.activate_user(:seller_reputation_summary, seller)
+        product = create(:product, user: seller)
+        stat = ProductReviewStat.create!(link: product, reviews_count: 0)
+        seller_profile = SellerProfile.find_by(seller_id: seller.id)
+        key_before = Pages::ProfileData.cache_key(seller.reload, seller_profile)
+
+        stat.update!(average_rating: 3.2)
+
+        expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).to eq(key_before)
+      end
     end
 
     it "does not expose draft products in the public profile data payload" do

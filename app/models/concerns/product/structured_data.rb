@@ -14,10 +14,8 @@ module Product::StructuredData
   def structured_data(host: nil)
     if native_type == Link::NATIVE_TYPE_EBOOK
       build_ebook_structured_data(host:)
-    elsif has_displayable_reviews?
-      build_product_structured_data(host:)
     else
-      {}
+      build_product_structured_data(host:)
     end
   end
 
@@ -37,7 +35,9 @@ module Product::StructuredData
           "name" => user.name
         },
         "description" => product_description,
-        "url" => url
+        "url" => url,
+        "image" => social_share_image.presence,
+        "sku" => unique_permalink
       }
 
       work_examples = build_book_work_examples
@@ -49,15 +49,28 @@ module Product::StructuredData
 
     def build_product_structured_data(host: nil)
       url = long_url(host:)
-      {
+      data = {
         "@context" => SCHEMA_ORG_CONTEXT,
         "@type" => "Product",
         "name" => name,
         "description" => product_description,
         "url" => url,
-        "offers" => build_offer_data(url),
-        "aggregateRating" => aggregate_rating_data
-      }.compact
+        "image" => social_share_image.presence,
+        "sku" => unique_permalink,
+        "brand" => brand_data,
+        "offers" => build_offer_data(url)
+      }
+      data["aggregateRating"] = aggregate_rating_data if has_displayable_reviews?
+      data.compact
+    end
+
+    # Seller display name only — never fall back to User#display_name, whose
+    # email fallback would leak the seller's address into public markup.
+    def brand_data
+      brand_name = user.name.presence
+      return if brand_name.nil?
+
+      { "@type" => "Brand", "name" => brand_name }
     end
 
     def build_offer_data(url)

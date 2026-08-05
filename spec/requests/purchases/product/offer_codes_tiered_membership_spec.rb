@@ -55,7 +55,7 @@ describe("Offer-code usage from product page for tiered membership", type: :syst
       add_to_cart(product, option: "First Tier", offer_code:)
       expect(page).to have_text("Subtotal US$0", normalize_ws: true)
       expect(page).to have_text("Total US$0", normalize_ws: true)
-      expect(page).to_not have_selector(:fieldset, "Card information")
+      expect(page).to_not have_selector("iframe[src*='elements-inner-payment']")
       check_out(product, is_free: true)
     end
   end

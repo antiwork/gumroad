@@ -89,6 +89,7 @@ import {
   UpdateVariant,
   UpdateVariantCategory,
 } from "$app/components/ApiDocumentation/Endpoints/Variants";
+import { GetWorkflow, GetWorkflows } from "$app/components/ApiDocumentation/Endpoints/Workflows";
 import { Errors } from "$app/components/ApiDocumentation/Errors";
 import { Introduction } from "$app/components/ApiDocumentation/Introduction";
 import { Navigation } from "$app/components/ApiDocumentation/Navigation";
@@ -212,6 +213,11 @@ export default function Api() {
                 <PreviewEmail />
                 <SendEmail />
                 <DeleteEmail />
+              </ApiResource>
+
+              <ApiResource name="Workflows" id="workflows">
+                <GetWorkflows />
+                <GetWorkflow />
               </ApiResource>
 
               <ApiResource name="Custom fields" id="custom-fields">

@@ -401,5 +401,6 @@ Taxonomy.find_or_create_by!(slug: "tattoos", parent: textures)
 
 Taxonomy.find_or_create_by!(slug: "other")
 
-# Same registry the production backfill applies, so the two cannot drift.
-Onetime::SeedTaxonomyAttributes.process(dry_run: false)
+# Same registry the production backfill applies, so the two cannot drift. Deactivation is safe
+# here (unlike production) because this seed owns the whole dev/staging/test taxonomy tree.
+Onetime::SeedTaxonomyAttributes.process(dry_run: false, deactivate: true)

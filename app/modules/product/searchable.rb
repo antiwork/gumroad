@@ -17,6 +17,8 @@ module Product::Searchable
   MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS = 20
   MAX_OFFER_CODES_IN_INDEX = 300
   MAX_PRICE_FILTER_CENTS = 10_000_000_000 # $100,000,000 — upper bound for ES long-typed price range filters
+  PRICE_FILTER_MAX_LENGTH = 64
+  PRICE_FILTER_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
 
   ATTRIBUTE_TO_SEARCH_FIELDS_MAP = {
     "name" => ["name", "rated_as_adult"],
@@ -180,6 +182,8 @@ module Product::Searchable
       # and /products/search; `user_id` is what bounds the vocabulary, via `terms user_id:` below.
       is_alive_on_profile = ActiveModel::Type::Boolean.new.cast(params[:is_alive_on_profile])
       tags_aggregation_size = params[:user_id].present? && is_alive_on_profile ? MAX_NUMBER_OF_PROFILE_TAGS : MAX_NUMBER_OF_TAGS
+      min_price_cents = price_filter_cents(params[:min_price], rounding: :ceil) if params[:min_price].present?
+      max_price_cents = price_filter_cents(params[:max_price], rounding: :floor) if params[:max_price].present?
       search_options = Elasticsearch::DSL::Search.search do
         size params.fetch(:size, RECOMMENDED_PRODUCTS_PER_PAGE).to_i
         from (params[:from].to_i - 1).clamp(0, MAX_RESULT_WINDOW - size)
@@ -271,13 +275,11 @@ module Product::Searchable
                 end
             end
 
-            if params[:min_price].present? || params[:max_price].present?
-              min_cents = (params[:min_price].to_f * 100).to_i.clamp(0, MAX_PRICE_FILTER_CENTS) if params[:min_price].present?
-              max_cents = (params[:max_price].to_f * 100).to_i.clamp(0, MAX_PRICE_FILTER_CENTS) if params[:max_price].present?
+            if min_price_cents || max_price_cents
               filter do
                 range :available_price_cents do
-                  gte min_cents if min_cents
-                  lte max_cents if max_cents
+                  gte min_price_cents if min_price_cents
+                  lte max_price_cents if max_price_cents
                 end
               end
             end
@@ -424,6 +426,14 @@ module Product::Searchable
 
       search_options
     end
+
+    def price_filter_cents(value, rounding:)
+      value = value.to_s
+      return if value.length > PRICE_FILTER_MAX_LENGTH || !value.match?(PRICE_FILTER_PATTERN)
+
+      (BigDecimal(value) * 100).public_send(rounding).clamp(0, MAX_PRICE_FILTER_CENTS)
+    end
+    private :price_filter_cents
 
     def filetype_options(params)
       filetype_search_options = search_options(params.except(:filetypes))

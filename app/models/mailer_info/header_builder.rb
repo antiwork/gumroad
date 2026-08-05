@@ -88,11 +88,12 @@ class MailerInfo::HeaderBuilder
     return [nil, nil] unless receipt_email?
     purchase_id, charge_id = mailer_args.slice(0, 2)
     if mailer_method == SendgridEventInfo::RECEIPT_MAILER_METHOD
-      # Ensures the correct EmailInfo record will be used, and no duplicates are created
-      # Use case:
+      # Normalizes to the charge so every send and every event for one receipt
+      # resolves to the same lineage. Use case:
       # 1. Sending the first receipt uses charge_id, and EmailInfo + EmailInfoCharge records are created
       # 2. Resending the receipt uses purchase_id.
-      # We want the 2nd receipt to update the existing EmailInfo record (with a charge), not create a new one
+      # The resend gets its own EmailInfo (gumroad-private#1635), but it must
+      # hang off the same charge, or the two sends become unrelated histories.
       chargeable = Charge::Chargeable.find_by_purchase_or_charge!(
         purchase: Purchase.find_by(id: purchase_id),
         charge: Charge.find_by(id: charge_id)

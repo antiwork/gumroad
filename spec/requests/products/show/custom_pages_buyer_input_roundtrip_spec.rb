@@ -82,16 +82,16 @@ describe("Custom pages buyer-input round trip", type: :system, js: true) do
   it "round-trips a PWYW price prefill (major units -> cents) to the recorded purchase" do
     product = create(:product, customizable_price: true, price_cents: 100)
 
-    visit "#{product.long_url}?wanted=true&price=9.99"
+    visit "#{product.long_url}?wanted=true&price=19.99"
 
     expect(page).to have_current_path(/^\/checkout/, wait: 10)
     within_cart_item product.name do
-      expect(page).to have_text("$9.99")
+      expect(page).to have_text("$19.99")
     end
 
     check_out(product)
 
-    expect(product.sales.successful.last.price_cents).to eq(999)
+    expect(product.sales.successful.last.price_cents).to eq(1999)
   end
 
   it "round-trips a recurrence prefill on a membership product and records the subscription recurrence" do

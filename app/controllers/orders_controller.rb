@@ -3,6 +3,10 @@
 class OrdersController < ApplicationController
   include ValidateRecaptcha, Events, Order::ResponseHelpers, ClientConfirmedOrderFinalization
 
+  # Long enough for a buyer to work through an image challenge, short enough that an offer cannot
+  # be banked for later.
+  RECAPTCHA_CHALLENGE_OFFER_TTL = 15.minutes
+
   before_action :normalize_line_items, only: [:create, :prepare]
   before_action :validate_order_request, only: [:create, :prepare]
   before_action :fetch_affiliates, only: [:create, :prepare]
@@ -376,9 +380,59 @@ class OrdersController < ApplicationController
       return render_error("Cookies are not enabled on your browser. Please enable cookies and refresh this page before continuing.") if contains_paid_purchase && browser_guid.blank?
 
       # Verify reCAPTCHA response
-      if !skip_recaptcha? && !valid_recaptcha_response_and_hostname?(site_key: CheckoutRecaptcha.site_key(logged_in_user), surface: CheckoutRecaptcha.surface(logged_in_user))
-        render_error(recaptcha_failure_message)
+      if !skip_recaptcha? && !valid_checkout_recaptcha?
+        render_error(recaptcha_failure_message, recaptcha_challenge_available: offer_recaptcha_challenge_fallback?)
       end
+    end
+
+    def valid_checkout_recaptcha?
+      fallback = recaptcha_challenge_fallback?
+      valid_recaptcha_response_and_hostname?(
+        site_key: CheckoutRecaptcha.site_key(logged_in_user, challenge_fallback: fallback),
+        surface: CheckoutRecaptcha.surface(logged_in_user, challenge_fallback: fallback)
+      )
+    end
+
+    # The buyer is resubmitting with a token from the challenge key after being refused on score
+    # alone, so verify against that key instead (gumroad-private#1590). The marker is only honoured
+    # against an offer this server issued and has not yet spent: :checkout carries no score
+    # threshold, so a marker taken on trust would let any cohort buyer opt out of the score gate on
+    # their FIRST attempt. Also ignored when the challenge key is unconfigured — verifying against a
+    # blank key lands on the infrastructure-error path, which fails OPEN for :checkout.
+    def recaptcha_challenge_fallback?
+      return @recaptcha_challenge_fallback if defined?(@recaptcha_challenge_fallback)
+
+      @recaptcha_challenge_fallback =
+        ActiveModel::Type::Boolean.new.cast(params[:recaptcha_challenge_fallback]).present? &&
+        CheckoutRecaptcha.challenge_site_key.present? &&
+        redeem_recaptcha_challenge_offer?
+    end
+
+    # One redemption per issued offer. DEL returning 1 means this request is the one that spent it,
+    # so concurrent submissions cannot both ride the same offer.
+    def redeem_recaptcha_challenge_offer?
+      browser_guid = cookies[:_gumroad_guid]
+      return false if browser_guid.blank?
+
+      $redis.del(RedisKey.recaptcha_challenge_offer(browser_guid)) == 1
+    end
+
+    # Offered once per order attempt, and only to the cohort whose key cannot render a challenge —
+    # everyone else already checks out against the challenge key, so there is nothing to fall back
+    # to. Recorded server-side because the marker on the next request is only trustworthy if we
+    # issued it. A request that already spent an offer and still failed is terminal.
+    def offer_recaptcha_challenge_fallback?
+      # Without a challenge key the client would be told a challenge is available but handed no
+      # key to render it with — advertising the offer would be a dead end all over again.
+      return false if CheckoutRecaptcha.challenge_site_key.blank?
+      return false unless CheckoutRecaptcha.score_based?(logged_in_user)
+      return false unless recaptcha_failed_on_score_only? && !recaptcha_challenge_fallback?
+
+      browser_guid = cookies[:_gumroad_guid]
+      return false if browser_guid.blank?
+
+      $redis.set(RedisKey.recaptcha_challenge_offer(browser_guid), "1", ex: RECAPTCHA_CHALLENGE_OFFER_TTL.to_i)
+      true
     end
 
     def skip_recaptcha?
@@ -438,8 +492,12 @@ class OrdersController < ApplicationController
       end
     end
 
-    def render_error(error_message, purchase: nil)
-      render json: error_response(error_message, purchase:)
+    def render_error(error_message, purchase: nil, recaptcha_challenge_available: false)
+      response = error_response(error_message, purchase:)
+      # Only sent when the client actually has a next step, so an ordinary failure keeps today's
+      # response shape byte for byte.
+      response[:recaptcha_challenge_available] = true if recaptcha_challenge_available
+      render json: response
     end
 
     def can_buyer_sign_up

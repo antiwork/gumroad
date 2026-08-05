@@ -21,6 +21,14 @@ describe SendPostBlastEmailsJob, :freeze_time do
     post
   end
 
+  # Asserted on the options rather than on behaviour because SidekiqUniqueJobs is disabled outright
+  # in test (`config.enabled = !Rails.env.test?`), so a re-enqueue succeeds here either way. A
+  # stranded digest silently drops every later `perform_async` for the blast, which is what made
+  # resuming a hard-killed blast a no-op (gumroad-private#1816).
+  it "declares no unique lock, so a stranded digest cannot suppress a resume" do
+    expect(described_class.get_sidekiq_options).not_to have_key("lock")
+  end
+
   describe "#perform" do
     it "ignores deleted posts" do
       basic_post_with_audience.mark_deleted!

@@ -10,11 +10,23 @@ class LastReadCommunityChatMessage < ApplicationRecord
   validates :user_id, uniqueness: { scope: :community_id }
 
   def self.set!(user_id:, community_id:, community_chat_message_id:)
-    record = find_or_initialize_by(user_id:, community_id:)
+    message = CommunityChatMessage.find_by!(id: community_chat_message_id, community_id:)
+    record = find_by(user_id:, community_id:)
+    unless record
+      begin
+        record = create!(user_id:, community_id:, community_chat_message: message)
+      rescue ActiveRecord::RecordInvalid => error
+        record = find_by(user_id:, community_id:)
+        raise error unless record && error.record.errors.added?(:user_id, :taken)
+      rescue ActiveRecord::RecordNotUnique
+        record = find_by!(user_id:, community_id:)
+      end
+    end
 
-    if record.new_record? ||
-      (record.community_chat_message.created_at < CommunityChatMessage.find(community_chat_message_id).created_at)
-      record.update!(community_chat_message_id:)
+    record.with_lock do
+      if record.community_chat_message.created_at < message.created_at
+        record.update!(community_chat_message: message)
+      end
     end
 
     record

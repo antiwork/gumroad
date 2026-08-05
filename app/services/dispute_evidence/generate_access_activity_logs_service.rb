@@ -130,13 +130,59 @@ class DisputeEvidence::GenerateAccessActivityLogsService
       content << "\n"
     end
 
+    # The ORIGINAL send dates the receipt: a resend is often triggered BY the
+    # dispute, so citing the newest one would date the receipt after the
+    # complaint. Later attempts are named separately rather than replacing it.
     def email_activity
-      receipt_email_info = purchase.receipt_email_info
-      return unless receipt_email_info.present? && receipt_email_info.sent_at.present?
+      sends = purchase.receipt_email_infos.select { _1.sent_at.present? }
+      return if sends.empty?
 
-      content = "The receipt email was sent at #{receipt_email_info.sent_at}"
-      content << ", delivered at #{receipt_email_info.delivered_at}" if receipt_email_info.delivered_at.present?
-      content << ", opened at #{receipt_email_info.opened_at}" if receipt_email_info.opened_at.present?
+      return single_send_activity(sends.first) if sends.one?
+
+      content = "The receipt email was sent at #{sends.first.sent_at}."
+      content << " The receipt was sent again at #{sends.drop(1).map { _1.sent_at }.join('; ')}."
+      content << unattributed_event_activity(sends)
+    end
+
+    def single_send_activity(email_info)
+      delivered_at, opened_at = events_after(email_info.sent_at, [email_info.delivered_at, email_info.opened_at])
+
+      content = "The receipt email was sent at #{email_info.sent_at}"
+      content << ", delivered at #{delivered_at}" if delivered_at.present?
+      content << ", opened at #{opened_at}" if opened_at.present?
       content << "."
+    end
+
+    # Providers give us no message identifier on a delivery or open event, so
+    # with several sends outstanding we know a receipt was delivered and opened
+    # but not WHICH send earned it — an event routes to the newest send that
+    # predates it, which is a guess once two sends do. So report the earliest
+    # of each across all sends and claim nothing per send: the card network
+    # needs "it was delivered and read", and a per-send claim here would be
+    # evidence we cannot stand behind. Tracked in gumroad-private#1635.
+    def unattributed_event_activity(sends)
+      delivered_at, = events_after(sends.first.sent_at, [sends.filter_map(&:delivered_at).min])
+      # The earliest open across all sends can predate the delivery selected from a
+      # different send, which would claim the receipt was read before it arrived. Pick
+      # the earliest open that is not earlier than that delivery instead of the raw min,
+      # so a later valid open still gets reported rather than discarding open activity outright.
+      opened_at, = events_after(
+        sends.first.sent_at,
+        [sends.filter_map(&:opened_at).select { delivered_at.blank? || _1 >= delivered_at }.min]
+      )
+
+      content = +""
+      content << " A receipt was delivered at #{delivered_at}." if delivered_at.present?
+      content << " A receipt was opened at #{opened_at}." if opened_at.present?
+      content
+    end
+
+    # An event stamped before the earliest send cannot describe any of these
+    # sends — routing falls back to the newest row when nothing predates the
+    # event, which would otherwise print a receipt delivered before it was sent.
+    # Dropping it loses nothing we could defend; asserting it to a card network
+    # discredits the whole package.
+    def events_after(sent_at, timestamps)
+      timestamps.map { _1.present? && _1 >= sent_at ? _1 : nil }
     end
 end

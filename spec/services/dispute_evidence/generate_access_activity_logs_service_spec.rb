@@ -262,6 +262,248 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
             )
           end
         end
+
+        # Event routing falls back to the newest row when no send predates the
+        # event, so a stray pre-send event lands on a row it cannot describe.
+        # The package must not claim a delivery before the send.
+        context "when the recorded event predates the send" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at - 2.hours,
+              opened_at: sent_at - 1.hour
+            )
+          end
+
+          it "omits the delivery and open rather than dating them before the send" do
+            expect(email_activity).to eq("The receipt email was sent at 2024-05-07 00:00:00 UTC.")
+          end
+        end
+
+        context "when a pre-send event lands on one of several sends" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at - 2.hours,
+              opened_at: sent_at - 1.hour
+            )
+            create(
+              :customer_email_info_sent,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+            )
+          end
+
+          it "names every send and claims no delivery or open" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at " \
+              "2024-05-12 00:00:00 UTC."
+            )
+          end
+        end
+
+        # A resend is often triggered BY the dispute, so the evidence must date
+        # the receipt from the ORIGINAL send. Delivery events carry no message
+        # id, so with two sends outstanding they are reported without claiming
+        # which send earned them (gumroad-private#1635).
+        context "when the receipt was resent after the original send" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at + 1.hour,
+              opened_at: sent_at + 2.hours
+            )
+            create(
+              :customer_email_info_sent,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+            )
+          end
+
+          it "dates the receipt from the original send and reports the events unattributed" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at " \
+              "2024-05-12 00:00:00 UTC. A receipt was delivered at 2024-05-07 01:00:00 UTC. " \
+              "A receipt was opened at 2024-05-07 02:00:00 UTC."
+            )
+          end
+
+          it "attributes the delivery and open to no individual send" do
+            expect(email_activity).to_not match(/sent at 2024-05-07 00:00:00 UTC, delivered/)
+            expect(email_activity).to_not match(/sent again at 2024-05-12 00:00:00 UTC, delivered/)
+          end
+        end
+
+        # The dispute flow this evidence answers is "I never got it" -> seller
+        # resends -> buyer opens the RESEND, so the events land on the resend's
+        # row. Citing only the original would drop the strongest signal we have,
+        # and citing it as the resend's would overstate what we know.
+        context "when the events landed on the resend rather than the original" do
+          before do
+            create(
+              :customer_email_info_sent,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+            )
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+              delivered_at: sent_at + 5.days + 1.hour,
+              opened_at: sent_at + 5.days + 2.hours
+            )
+          end
+
+          it "still reports the delivery and open" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at " \
+              "2024-05-12 00:00:00 UTC. A receipt was delivered at 2024-05-12 01:00:00 UTC. " \
+              "A receipt was opened at 2024-05-12 02:00:00 UTC."
+            )
+          end
+        end
+
+        # Both sends carry events, so "which is reported" is a real choice: the
+        # EARLIEST proves the buyer had the receipt as soon as possible, which
+        # is what the card network is being asked.
+        context "when both sends carry their own delivery and open" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at + 1.hour,
+              opened_at: sent_at + 2.hours
+            )
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+              delivered_at: sent_at + 5.days + 1.hour,
+              opened_at: sent_at + 5.days + 2.hours
+            )
+          end
+
+          it "reports the earliest delivery and open, once" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at " \
+              "2024-05-12 00:00:00 UTC. A receipt was delivered at 2024-05-07 01:00:00 UTC. " \
+              "A receipt was opened at 2024-05-07 02:00:00 UTC."
+            )
+          end
+        end
+
+        # Each aggregate timestamp is the earliest across ALL sends independently, so an
+        # open from one send can beat the delivery selected from a different send. The
+        # earliest open that still lands at or after that delivery is reported instead.
+        context "when the earliest open and earliest delivery come from different sends" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at + 3.hours,
+              opened_at: sent_at + 4.hours
+            )
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+              delivered_at: sent_at + 5.days + 2.hours,
+              opened_at: sent_at + 1.hour
+            )
+          end
+
+          it "reports the earliest delivery and the earliest open at or after it, from either send" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at " \
+              "2024-05-12 00:00:00 UTC. A receipt was delivered at 2024-05-07 03:00:00 UTC. " \
+              "A receipt was opened at 2024-05-07 04:00:00 UTC."
+            )
+          end
+
+          it "never claims the receipt was opened before it was delivered" do
+            expect(email_activity).to_not match(/opened at 2024-05-07 01:00:00 UTC/)
+          end
+        end
+
+        # When no open from any send lands at or after the selected delivery, there is
+        # nothing attributable left to report — unlike the case above, dropping the open
+        # entirely is correct here rather than a lost later one.
+        context "when every open precedes the earliest delivery" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at + 3.hours,
+              opened_at: sent_at + 1.hour
+            )
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+              delivered_at: sent_at + 5.days + 2.hours,
+              opened_at: sent_at + 2.hours
+            )
+          end
+
+          it "reports the delivery and drops all opens" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at " \
+              "2024-05-12 00:00:00 UTC. A receipt was delivered at 2024-05-07 03:00:00 UTC."
+            )
+          end
+        end
+
+        # Whichever send a provider's event routed to, the evidence reads the
+        # same — so a misrouted event cannot change what we tell the card
+        # network. This is the property that makes timestamp routing's
+        # remaining ambiguity harmless here.
+        context "when the same events are routed to different sends" do
+          # `email_activity` is a memoized `let`, so read the service directly —
+          # the whole point here is evaluating it twice.
+          def activity_with_events_on(row)
+            purchase.email_infos.destroy_all
+            purchase.instance_variable_set(:@_receipt_email_info, nil)
+            rows = [sent_at, sent_at + 5.days].each_with_index.map do |at, index|
+              create(
+                (index == row ? :customer_email_info_opened : :customer_email_info_sent),
+                email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+                purchase: purchase,
+                sent_at: at,
+                **(index == row ? { delivered_at: sent_at + 1.hour, opened_at: sent_at + 2.hours } : {})
+              )
+            end
+            expect(rows.size).to eq(2)
+            described_class.new(purchase.reload).send(:email_activity)
+          end
+
+          it "produces identical evidence either way" do
+            events_on_original = activity_with_events_on(0)
+            expect(events_on_original).to include("A receipt was opened at")
+            expect(activity_with_events_on(1)).to eq(events_on_original)
+          end
+        end
       end
 
       context "when the email info is associated with a charge" do

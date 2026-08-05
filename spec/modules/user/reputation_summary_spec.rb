@@ -74,6 +74,15 @@ describe User::ReputationSummary do
         expect(seller.seller_reputation_summary).to eq(average: 4.7, count: 12, products_count: 2)
       end
 
+      it "skips draft products" do
+        create_stat(product_one, five: 8)
+        create_stat(product_two, four: 4)
+        draft = create(:product, user: seller, purchase_disabled_at: nil, draft: true)
+        create_stat(draft, one: 50)
+
+        expect(seller.seller_reputation_summary).to eq(average: 4.7, count: 12, products_count: 2)
+      end
+
       it "does not count another seller's products" do
         create_stat(product_one, five: 8)
         create_stat(product_two, four: 4)

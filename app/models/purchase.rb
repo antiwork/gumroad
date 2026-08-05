@@ -110,18 +110,12 @@ class Purchase < ApplicationRecord
   # debit actually booked. Snapshotted at debit time so the dispute-won re-credit books
   # exactly the same amount, even when refunds land between the debit and the win.
   attr_json_data_accessor :presentment_dispute_debited_gross_cents
-  # Why `can_contact` is false. Until now the only way to tell a buyer's own unsubscribe from a
-  # machine-written suppression was `versions.request_path` being non-NULL, which is an audit
-  # side effect with a retention window — see antiwork/gumroad-private#1745, where a restore had
-  # to be reconstructed forensically and anything past retention was unrecoverable.
+  # Why `can_contact` is false. Only `BUYER_UNSUBSCRIBE`/`SPAM_REPORT` are first-party consent;
+  # a restore must never reverse those, only `INHERITED`.
   attr_json_data_accessor :can_contact_reason
 
-  # Buyer acted: clicked the receipt-footer unsubscribe, or reported the email as spam. Both are
-  # first-party consent signals and must never be reversed by an automated restore.
   CAN_CONTACT_REASON_BUYER_UNSUBSCRIBE = "buyer_unsubscribe"
   CAN_CONTACT_REASON_SPAM_REPORT = "spam_report"
-  # Nobody acted on THIS row: it was born uncontactable because a sibling already was.
-  # Reversing it is safe iff the row it inherited from is reversed.
   CAN_CONTACT_REASON_INHERITED = "inherited"
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents

@@ -912,7 +912,7 @@ class PaypalChargeProcessor
       if paypal_rest_api.successful_response?(api_response)
         api_response.result
       else
-        error_message = PaypalChargeProcessor.build_error_message("Failed refund capture id - #{capture_id}", api_response.result.details[0].description)
+        error_message = PaypalChargeProcessor.build_error_message("Failed refund capture id - #{capture_id}", PaypalChargeProcessor.paypal_rejection_description(api_response))
         raise determine_refund_order_error(api_response), error_message
       end
     end
@@ -1045,19 +1045,16 @@ class PaypalChargeProcessor
     end
 
     def self.determine_capture_order_error(api_response)
+      issue = api_response.result.details&.first&.issue
       if api_response.result.name == "INTERNAL_ERROR"
         ChargeProcessorUnavailableError
-      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" &&
-        api_response.result.details[0].issue == "AGREEMENT_ALREADY_CANCELLED"
+      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" && issue == "AGREEMENT_ALREADY_CANCELLED"
         ChargeProcessorPayerCancelledBillingAgreementError
-      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" &&
-        api_response.result.details[0].issue == "TRANSACTION_REFUSED"
+      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" && issue == "TRANSACTION_REFUSED"
         ChargeProcessorPaymentDeclinedByPayerAccountError
-      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" &&
-        api_response.result.details[0].issue == "PAYEE_ACCOUNT_RESTRICTED"
+      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" && issue == "PAYEE_ACCOUNT_RESTRICTED"
         ChargeProcessorPayeeAccountRestrictedError
-      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" &&
-        api_response.result.details[0].issue == "PAYER_CANNOT_PAY"
+      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" && issue == "PAYER_CANNOT_PAY"
         ChargeProcessorPaymentDeclinedByPayerAccountError
       else
         ChargeProcessorInvalidRequestError
@@ -1065,13 +1062,12 @@ class PaypalChargeProcessor
     end
 
     def determine_refund_order_error(api_response)
+      issue = api_response.result.details&.first&.issue
       if api_response.result.name == "INTERNAL_ERROR"
         ChargeProcessorUnavailableError
-      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" &&
-          api_response.result.details[0].issue == "CAPTURE_FULLY_REFUNDED"
+      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" && issue == "CAPTURE_FULLY_REFUNDED"
         ChargeProcessorAlreadyRefundedError
-      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" &&
-          api_response.result.details[0].issue == "REFUND_FAILED_INSUFFICIENT_FUNDS"
+      elsif api_response.result.name == "UNPROCESSABLE_ENTITY" && issue == "REFUND_FAILED_INSUFFICIENT_FUNDS"
         ChargeProcessorInsufficientFundsError
       else
         ChargeProcessorInvalidRequestError

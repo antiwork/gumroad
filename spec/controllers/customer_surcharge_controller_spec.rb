@@ -6,7 +6,7 @@ describe CustomerSurchargeController, :vcr do
   include ManageSubscriptionHelpers
 
   def expected_surcharge_response(**overrides)
-    {
+    expected = {
       buyer_currency_quote: nil,
       vat_id_valid: false,
       has_vat_id_input: false,
@@ -14,7 +14,9 @@ describe CustomerSurchargeController, :vcr do
       tax_cents: 0,
       tax_included_cents: 0,
       subtotal: 0,
-    }.merge(overrides).as_json
+    }.merge(overrides)
+    expected[:charge_canonical_total_cents] = expected[:subtotal] + expected[:tax_cents] + expected[:shipping_rate_cents]
+    expected.as_json
   end
 
   before do
@@ -68,6 +70,24 @@ describe CustomerSurchargeController, :vcr do
     post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }], postal_code: 10115, country: "DE", vat_id: "IE6388047V" }, as: :json
 
     expect(response.parsed_body).to eq(expected_surcharge_response(vat_id_valid: true, subtotal: 100))
+  end
+
+  it "returns the canonical amount charged now for a taxed installment purchase" do
+    @product.update!(price_cents: 10_00)
+    create(:product_installment_plan, link: @product, number_of_installments: 3)
+    create(:zip_tax_rate, combined_rate: 0.19, country: "DE", state: nil, zip_code: nil, is_seller_responsible: false)
+
+    post "calculate_all", params: {
+      products: [{ permalink: @product.unique_permalink, price: 10_00, quantity: 1, pay_in_installments: true }],
+      postal_code: 10115,
+      country: "DE",
+    }, as: :json
+
+    expect(response.parsed_body).to include(
+      "subtotal" => 10_00,
+      "tax_cents" => 1_90,
+      "charge_canonical_total_cents" => 3_97
+    )
   end
 
   context "when the checkout is eligible for a buyer-currency quote" do
@@ -156,7 +176,8 @@ describe CustomerSurchargeController, :vcr do
 
       expect(response.parsed_body.fetch("buyer_currency_quote")).to include(
         "presentment_total_cents" => 12_50,
-        "charge_presentment_total_cents" => 4_18
+        "charge_presentment_total_cents" => 4_18,
+        "future_installments_presentment_total_cents" => 8_32
       )
     end
 

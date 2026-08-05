@@ -46,13 +46,23 @@ module Product::ReviewStat
   end
 
   def update_review_stat_via_rating_change(old_rating, new_rating)
-    create_product_review_stat if product_review_stat.nil?
-    if old_rating.nil?
-      product_review_stat.update_with_added_rating(new_rating)
-    elsif new_rating.nil?
-      product_review_stat.update_with_removed_rating(old_rating)
+    if product_review_stat.nil?
+      # First-row creation must not go through a plain INSERT: on a duplicate key it takes a
+      # SHARED lock on the winner's row, held until the transaction ends, so two losers that
+      # then request exclusive locks deadlock each other and roll back a review. The no-op
+      # ON DUPLICATE KEY UPDATE takes an exclusive lock instead, so losers queue up. Locking
+      # the parent product row is not an option either — callers often hold unpersisted
+      # product changes (e.g. content_updated_at), which with_lock refuses.
+      ProductReviewStat.upsert({ link_id: id }, on_duplicate: Arel.sql("link_id = link_id"))
+      association(:product_review_stat).reset
+      # A plain re-read could miss the winner's row: under REPEATABLE READ it reads a snapshot
+      # that may predate the winner's commit. The locking read is a current read, and the
+      # upsert already holds this row's exclusive lock, so it cannot block or deadlock.
+      review_stat = ProductReviewStat.lock.find_by!(link_id: id)
+      association(:product_review_stat).target = review_stat
+      apply_rating_change_to_review_stat(review_stat, old_rating, new_rating)
     else
-      product_review_stat.update_with_changed_rating(old_rating, new_rating)
+      apply_rating_change_to_review_stat(product_review_stat, old_rating, new_rating)
     end
     enqueue_index_update_for_reviews
   end
@@ -110,6 +120,16 @@ module Product::ReviewStat
   # /Admin methods.
 
   private
+    def apply_rating_change_to_review_stat(review_stat, old_rating, new_rating)
+      if old_rating.nil?
+        review_stat.update_with_added_rating(new_rating)
+      elsif new_rating.nil?
+        review_stat.update_with_removed_rating(old_rating)
+      else
+        review_stat.update_with_changed_rating(old_rating, new_rating)
+      end
+    end
+
     def review_stat_proxy
       product_review_stat || ProductReviewStat::TEMPLATE
     end

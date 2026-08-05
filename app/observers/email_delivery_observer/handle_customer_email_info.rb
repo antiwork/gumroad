@@ -20,7 +20,7 @@ module EmailDeliveryObserver::HandleCustomerEmailInfo
     message_info = build_message_info(message)
     return if message_info.ignore?
 
-    email_info = find_or_initialize_customer_email_info(**message_info.attributes)
+    email_info = build_customer_email_info(**message_info.attributes)
     email_info.mark_sent!
   rescue InvalidHeaderError => e
     ErrorNotifier.notify(e)
@@ -40,11 +40,11 @@ module EmailDeliveryObserver::HandleCustomerEmailInfo
       )
     end
 
-    def find_or_initialize_customer_email_info(email_name:, purchase_id:, charge_id:)
+    def build_customer_email_info(email_name:, purchase_id:, charge_id:)
       if charge_id.present?
-        CustomerEmailInfo.find_or_initialize_for_charge(charge_id:, email_name:)
+        CustomerEmailInfo.build_for_charge(charge_id:, email_name:)
       else
-        CustomerEmailInfo.find_or_initialize_for_purchase(purchase_id:, email_name:)
+        CustomerEmailInfo.build_for_purchase(purchase_id:, email_name:)
       end
     end
 

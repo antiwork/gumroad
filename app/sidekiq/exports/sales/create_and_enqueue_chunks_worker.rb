@@ -48,6 +48,15 @@ class Exports::Sales::CreateAndEnqueueChunksWorker
     end
 
     def enqueue_chunks
-      Exports::Sales::ProcessChunkWorker.perform_bulk(@export.chunks.ids.map { |id| [id] })
+      chunk_ids = @export.chunks.ids
+      if chunk_ids.empty?
+        # A zero-match query creates no chunks, so no ProcessChunkWorker ever schedules the
+        # compile step — compile directly so the recipient still gets a CSV and the export
+        # row is cleaned up instead of sitting orphaned forever.
+        Exports::Sales::CompileChunksWorker.perform_async(@export.id)
+        return
+      end
+
+      Exports::Sales::ProcessChunkWorker.perform_bulk(chunk_ids.map { |id| [id] })
     end
 end

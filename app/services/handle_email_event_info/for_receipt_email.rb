@@ -35,15 +35,19 @@ class HandleEmailEventInfo::ForReceiptEmail
     # the code to create these records was in place. From our investigation, we saw that we still receive events
     # for ancient purchases.
     def find_or_initialize_customer_email_info(email_event_info)
+      # `created_at` is the provider's event timestamp, which routes a late or
+      # retried event to the send it actually describes.
       if email_event_info.charge_id.present?
         CustomerEmailInfo.find_or_initialize_for_charge(
           charge_id: email_event_info.charge_id,
-          email_name: email_event_info.mailer_method
+          email_name: email_event_info.mailer_method,
+          sent_before: email_event_info.created_at
         )
       else
         CustomerEmailInfo.find_or_initialize_for_purchase(
           purchase_id: email_event_info.purchase_id,
-          email_name: email_event_info.mailer_method
+          email_name: email_event_info.mailer_method,
+          sent_before: email_event_info.created_at
         )
       end
     end

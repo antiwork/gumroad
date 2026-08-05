@@ -3033,7 +3033,10 @@ class PurchaseTest < ActiveSupport::TestCase
 
   test "#purchase_info returns the tracking url for physical product purchase where order has been shipped with tracking" do
     link, purchase = setup_purchase_info_context
-    link.update_attribute(:is_physical, true)
+    # Shipment's create validation reads the product's paper_trail state at checkout time
+    # (required_delivery_at_checkout?), so the physical flip must land inside that window —
+    # applying it "now" makes the test time-dependent on setup speed.
+    travel_to(purchase.created_at) { link.update_attribute(:is_physical, true) }
     shipment = create_shipment(purchase:, tracking_url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890")
     shipment.mark_shipped
 

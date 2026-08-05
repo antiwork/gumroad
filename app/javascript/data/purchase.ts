@@ -124,16 +124,15 @@ export type StartCartPurchaseRequestPayload = {
   };
   lineItems: PurchaseLineItemPayload[];
   recaptchaResponse: string | null;
-  usedStripePaymentElement: boolean;
+  // True when recaptchaResponse came from the challenge key because the score key refused this
+  // order, which tells the server to verify it against that key instead (gumroad-private#1590).
+  recaptchaChallengeFallback?: boolean;
   buyerCurrencyQuote: string | null;
 };
 
-export type PaymentDetailsSource = "card_element" | "payment_element" | "payment_request" | "saved_payment_method";
+export type PaymentDetailsSource = "payment_element" | "payment_request" | "saved_payment_method";
 
-export const getPaymentDetailsSource = (
-  paymentMethod: PurchasePaymentMethod,
-  usedStripePaymentElement: boolean,
-): PaymentDetailsSource | null => {
+export const getPaymentDetailsSource = (paymentMethod: PurchasePaymentMethod): PaymentDetailsSource | null => {
   if (paymentMethod.type === "saved") return "saved_payment_method";
   if (paymentMethod.type === "not-applicable") return null;
   // Client-confirm always collects card details through the Payment Element.
@@ -141,7 +140,8 @@ export const getPaymentDetailsSource = (
   switch (paymentMethod.cardParamsResult.type) {
     case "cc":
     case "error":
-      return usedStripePaymentElement ? "payment_element" : "card_element";
+      // The Payment Element is the only surface that mints card params now.
+      return "payment_element";
     case "cc-payment-request":
       return "payment_request";
     case "paypal":
@@ -155,6 +155,10 @@ export type CartPurchaseResult = {
   lineItems: Record<LineItemUid, LineItemResult>;
   canBuyerSignUp: boolean;
   offerCodes: OfferCodes;
+  // The order was refused by the CAPTCHA check on risk score alone, and the buyer can re-prove
+  // themselves against the challenge key. Set on the whole result rather than per line item
+  // because the refusal happens before any line item is looked at.
+  recaptchaChallengeAvailable?: boolean;
 };
 
 export type PurchaseErrorResponse = {
@@ -262,6 +266,7 @@ export const createPurchasesRequestData = (
     is_gift: payload.giftInfo != null,
     vat_id: payload.vatId || "",
     "g-recaptcha-response": payload.recaptchaResponse || "",
+    recaptcha_challenge_fallback: payload.recaptchaChallengeFallback ?? false,
     buyer_currency_quote: payload.buyerCurrencyQuote || "",
     purchase,
     line_items: payload.lineItems.map((lineItem) => ({
@@ -326,7 +331,7 @@ export const createPurchasesRequestData = (
     data.gift_note = payload.giftInfo.giftNote;
   }
 
-  const paymentDetailsSource = getPaymentDetailsSource(payload.paymentMethod, payload.usedStripePaymentElement);
+  const paymentDetailsSource = getPaymentDetailsSource(payload.paymentMethod);
   if (paymentDetailsSource) data.payment_details_source = paymentDetailsSource;
   if (payload.paymentMethod.type === "payment-element-client-confirm") {
     data.payment_element_mount_currency = payload.paymentMethod.mountCurrency;

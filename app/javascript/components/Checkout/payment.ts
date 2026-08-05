@@ -94,27 +94,16 @@ export type PaymentElementClientConfirmConfig = {
 // Every integration variant also carries `request_apple_pay_merchant_tokens` — a per-seller
 // rollout flag: when true, subscription carts declare recurring intent on the Apple Pay sheet so
 // Apple issues a device-independent merchant token (MPAN) instead of a device token. It applies
-// to the wallet button regardless of which card integration is active.
+// to the wallet button regardless of which integration is active.
 // `payment_element_wallets` is another per-seller rollout flag: when true, the Payment Element
 // renders Apple Pay/Google Pay natively and the separate Payment Request Button is not mounted
-// for that cart (antiwork/gumroad#5768). It is always false on the card_element fallback lane,
-// which has no Payment Element to render wallets in.
+// for that cart (antiwork/gumroad#5768).
 // `flat_payment_methods` selects the flat payment-methods list (the element's accordion is the
 // payment-method selector; PayPal appends as one more row — see PaymentMethodsSection in
 // PaymentForm.tsx). Server-owned and independent of `payment_element_wallets` since the layout
 // was decoupled from the wallet rollout: wallet-suppressed carts (disable_wallets) get the same
-// flat list without wallet rows. Always false on the card_element lane, which has no element to
-// act as the selector.
+// flat list without wallet rows.
 export type CheckoutPaymentConfig =
-  | {
-      integration: "card_element";
-      fallback_reason: string;
-      disable_wallets: boolean;
-      request_apple_pay_merchant_tokens: boolean;
-      payment_element_wallets: boolean;
-      flat_payment_methods: boolean;
-      elements_options: null;
-    }
   | {
       integration: "payment_element";
       fallback_reason: null;
@@ -274,11 +263,20 @@ export type State = {
     | { type: "offering" }
     | { type: "validating" }
     | { type: "starting" }
-    | { type: "captcha"; paymentMethod: PurchasePaymentMethod }
-    | { type: "finished"; recaptchaResponse?: string; paymentMethod: PurchasePaymentMethod };
+    // `challengeFallback` marks the second pass through the CAPTCHA step after the server refused
+    // the order on risk score alone: the token comes from the challenge key rather than the score
+    // key, and the order request says so (see "retry-recaptcha-challenge").
+    | { type: "captcha"; paymentMethod: PurchasePaymentMethod; challengeFallback?: boolean }
+    | {
+        type: "finished";
+        recaptchaResponse?: string;
+        paymentMethod: PurchasePaymentMethod;
+        challengeFallback?: boolean;
+      };
   payLabel?: string;
   recaptchaKey: string | null;
   recaptchaScoreBased: boolean;
+  recaptchaChallengeKey: string | null;
   paypalClientId?: string;
   tip: Tip;
   warning?: string | null;
@@ -328,6 +326,10 @@ type PublicAction =
   | { type: "validate" }
   | { type: "start-payment" }
   | { type: "set-recaptcha-response"; recaptchaResponse?: string }
+  // The order was refused because the score key scored the session as risky. Send the buyer back
+  // through the CAPTCHA step against the challenge key, which can ask them to prove humanity
+  // instead of only scoring them (gumroad-private#1590).
+  | { type: "retry-recaptcha-challenge" }
   | { type: "set-payment-method"; paymentMethod: PurchasePaymentMethod }
   | { type: "acknowledge-email-typo"; email: string }
   | {
@@ -377,7 +379,15 @@ export function requiresPaymentElementReusablePaymentMethod(state: State) {
   return (
     requiresReusablePaymentMethod(state) ||
     state.products.some(
-      (product) => !!product.recurrence || !!product.subscription_id || product.nativeType === "commission",
+      (product) =>
+        !!product.recurrence ||
+        !!product.subscription_id ||
+        product.nativeType === "commission" ||
+        // Installments charge again monthly, and a preorder/free-trial line in a mixed cart
+        // charges at release/trial end — all off the card collected today.
+        product.payInInstallments ||
+        product.isPreorder ||
+        product.hasFreeTrial,
     )
   );
 }
@@ -388,7 +398,10 @@ export function requiresReusablePaymentMethodForCardCollection(state: State, use
     state.checkoutPayment.integration === "payment_element" &&
     state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
   )
-    return false;
+    // A checkout preorder/free-trial cart reads false here (the charge path saves the card
+    // server-side), but the subscription manage page's card update still preps a reusable
+    // method client-side — requiresReusablePaymentMethod covers its subscription_id product.
+    return requiresReusablePaymentMethod(state);
   return requiresPaymentElementReusablePaymentMethod(state);
 }
 
@@ -400,13 +413,10 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
     return canUseStripePaymentElementForFutureChargeSetup(state);
   }
 
-  // Rails chooses the initial lane, but discount/surcharge reloads can lower the final total before Elements updates.
-  if (state.surcharges.type === "loaded") {
-    const total = getTotalPrice(state);
-    if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
-  }
-
-  return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
+  // A cart that charges nothing renders no payment surface at all (the free-purchase path).
+  // Totals below Stripe's floor stay on the element: the mount amount is clamped (see
+  // getStripePaymentElementAmount) and the server prices the real charge.
+  return state.surcharges.type !== "loaded" || requiresPayment(state);
 }
 
 function isRecurringUpiRegistrationCheckout(
@@ -436,11 +446,7 @@ export function canUseStripePaymentElementClientConfirm(
   if (state.products.length === 0) return false;
   if (state.checkoutPayment.integration !== "payment_element_client_confirm") return false;
   if (hasMultipleSellers(state)) return false;
-
-  if (state.surcharges.type === "loaded") {
-    const total = getTotalPrice(state);
-    if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
-  }
+  if (state.surcharges.type === "loaded" && !requiresPayment(state)) return false;
 
   const recurringUpiRegistration = isRecurringUpiRegistrationCheckout(state, state.checkoutPayment);
   if (state.checkoutPayment.recurring_upi_registration && !recurringUpiRegistration) return false;
@@ -456,13 +462,12 @@ export function canUseStripePaymentElementClientConfirm(
   );
 }
 
+// Setup mode collects a reusable PaymentMethod without charging today, and the server owns
+// every charge — so the only cart-shape requirement is that each line is a future-charge one:
+// a checkout preorder/free trial, or the subscription manage page's product (subscription_id),
+// whose payment-method update may charge nothing at all.
 function canUseStripePaymentElementForFutureChargeSetup(state: State) {
-  return (
-    !hasMultipleSellers(state) &&
-    !state.products.some((product) => product.payInInstallments) &&
-    state.products.every((product) => product.isPreorder || product.hasFreeTrial) &&
-    getTotalPriceFromProducts(state) > 0
-  );
+  return state.products.every((product) => product.isPreorder || product.hasFreeTrial || !!product.subscription_id);
 }
 
 export function getStripePaymentElementAmount(state: State) {
@@ -482,10 +487,37 @@ export function getStripePaymentElementAmount(state: State) {
   )
     return state.checkoutPayment.elements_options.presentment_amount_cents;
   // Buyer-currency presentment lane: the element mounts in the quote currency, so the amount
-  // must be the quote's locked local-currency total, not the USD total below.
+  // must be the quote's locked local-currency total, not the USD amount below.
   const presentment = getStripePaymentElementPresentment(state);
   if (presentment) return presentment.amountCents;
-  return getTotalPrice(state);
+  // Partial-payment carts mount with the amount the server will charge now, not the agreement
+  // total. Real charges can still land under Stripe's mount floor (a discounted installment's
+  // first payment, offer-code drift), and a payment-mode element refuses to mount below it. The
+  // mount amount only feeds display plumbing on these lanes — the server prices the charge — so
+  // clamp it; stripePaymentElementAmountClamped keeps wallets off such carts so no sheet shows it.
+  const chargeToday = getChargeTodayPrice(state);
+  if (chargeToday === null) return null;
+  return Math.max(chargeToday, STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS);
+}
+
+// Whether the element is mounted at the clamped floor rather than the real charge-today amount.
+// Wallet surfaces must stay off then: a wallet sheet would promise the clamped amount, not the charge.
+export function stripePaymentElementAmountClamped(state: State) {
+  if (state.surcharges.type !== "loaded") return false;
+  if (!canUseStripePaymentElement(state) && !canUseStripePaymentElementClientConfirm(state)) return false;
+  if (
+    state.checkoutPayment.integration === "payment_element" &&
+    state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
+  )
+    return false;
+  if (
+    state.checkoutPayment.integration === "payment_element_client_confirm" &&
+    state.checkoutPayment.elements_options.presentment_amount_cents !== null
+  )
+    return false;
+  if (getStripePaymentElementPresentment(state)) return false;
+  const chargeToday = getChargeTodayPrice(state);
+  return chargeToday !== null && chargeToday < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS;
 }
 
 // The mount currency + amount for the buyer-currency presentment lane, or null everywhere else.
@@ -694,10 +726,9 @@ export function getTotalPrice(state: State) {
     : null;
 }
 
-// The pre-tax sum of all future (not-charged-today) installment payments in the cart — the
-// checkout table's "Future installments" row. Tips are excluded because the full tip amount is
-// charged upfront with the first payment; taxes are excluded because the checkout table
-// presents the full tax amount as part of "Payment today".
+// The pre-tax sum of all future installment payments. Besides the summary row, this is the
+// rolling-deploy fallback for the charge-now mount amount and its Stripe floor check. Tips are
+// charged upfront; taxes remain in the checkout table's "Payment today" display.
 //
 // Items with remainingInstallments set (subscription manage page) are skipped: there `price` is
 // today's charge alone — future installments were never part of it, so nothing needs deducting.
@@ -712,13 +743,14 @@ export function getFutureInstallmentsTotal(state: State) {
   }, 0);
 }
 
-// What the buyer pays TODAY as the checkout table presents it ("Payment today"): the cart's full
-// value minus the future installment payments. Wallet payment sheets (Apple Pay / Google Pay)
-// display this as their total, so it must match the table the buyer just read — a single source
-// of numbers for both, derived from the same server surcharges quote the table renders.
+// What the server will charge now, including only the tax on today's installment. The fallback
+// keeps a response from an older server usable during a rolling deploy.
 export function getChargeTodayPrice(state: State) {
   const total = getTotalPrice(state);
   if (total === null) return null;
+  const serverChargeTotal =
+    state.surcharges.type === "loaded" ? state.surcharges.result.charge_canonical_total_cents : null;
+  if (serverChargeTotal != null) return serverChargeTotal;
   return total - getFutureInstallmentsTotal(state);
 }
 
@@ -1070,6 +1102,13 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       state.status = { ...state.status, type: "finished", ...recaptchaData };
       break;
     }
+    case "retry-recaptcha-challenge":
+      // Only from "finished" — the refused pay attempt — and only once. A fallback attempt that is
+      // refused again is terminal, so a buyer can't be bounced through challenges indefinitely;
+      // the server withholds the offer there too.
+      if (state.status.type !== "finished" || state.status.challengeFallback) return;
+      state.status = { type: "captcha", paymentMethod: state.status.paymentMethod, challengeFallback: true };
+      break;
     case "set-payment-method": {
       if (state.status.type !== "starting") return;
       const errors = validatePaymentMethodIndependentFields(state);
@@ -1181,10 +1220,11 @@ export function createReducer(initial: {
   payLabel?: string;
   recaptchaKey: string | null;
   recaptchaScoreBased?: boolean;
+  recaptchaChallengeKey?: string | null;
   paypalClientId: string;
   gift: Gift | null;
   requireEmailTypoAcknowledgment: boolean;
-  checkoutPayment?: CheckoutPaymentConfig;
+  checkoutPayment: CheckoutPaymentConfig;
 }): readonly [State, React.Dispatch<PublicAction>] {
   const url = new URL(useOriginalLocation());
   const reducer = React.useReducer(reduceCheckoutState, null, (): State => {
@@ -1201,6 +1241,7 @@ export function createReducer(initial: {
       fullName: "",
       ...initial,
       recaptchaScoreBased: initial.recaptchaScoreBased ?? false,
+      recaptchaChallengeKey: initial.recaptchaChallengeKey ?? null,
       country: initial.country ?? "US",
       vatId: "",
       address: initial.address?.street ?? "",
@@ -1212,15 +1253,7 @@ export function createReducer(initial: {
       surcharges: { type: "pending" },
       saveAddress: !!initial.address,
       gift: initial.gift,
-      checkoutPayment: initial.checkoutPayment ?? {
-        integration: "card_element",
-        fallback_reason: "not_checkout",
-        disable_wallets: false,
-        request_apple_pay_merchant_tokens: false,
-        payment_element_wallets: false,
-        flat_payment_methods: false,
-        elements_options: null,
-      },
+      checkoutPayment: initial.checkoutPayment,
       paymentMethod: "card",
       paymentElementType: "card",
       checkoutPaymentStale: false,

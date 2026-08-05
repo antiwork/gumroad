@@ -13,8 +13,68 @@ describe Product::StructuredData do
       end
 
       context "without reviews" do
-        it "returns an empty hash" do
-          expect(product.structured_data).to eq({})
+        it "returns a Product schema with an Offer but no aggregateRating" do
+          data = product.structured_data
+
+          expect(data["@context"]).to eq("https://schema.org")
+          expect(data["@type"]).to eq("Product")
+          expect(data["name"]).to eq("My Great Book")
+          expect(data["url"]).to eq(product.long_url)
+          expect(data).not_to have_key("aggregateRating")
+
+          offer = data["offers"]
+          expect(offer["@type"]).to eq("Offer")
+          expect(offer["priceCurrency"]).to eq("USD")
+          expect(offer["price"]).to eq(product.price_cents / 100.0)
+          expect(offer["availability"]).to eq(Product::StructuredData::AVAILABILITY_IN_STOCK)
+          expect(offer["url"]).to eq(product.long_url)
+        end
+
+        it "includes the sku as the unique permalink" do
+          expect(product.structured_data["sku"]).to eq(product.unique_permalink)
+        end
+
+        it "includes the seller name as the brand" do
+          expect(product.structured_data["brand"]).to eq({ "@type" => "Brand", "name" => "John Doe" })
+        end
+
+        context "when the seller has no name" do
+          let(:user) { create(:user, name: nil) }
+
+          it "omits brand" do
+            expect(product.structured_data).not_to have_key("brand")
+          end
+        end
+
+        context "when the product has a cover image" do
+          before do
+            allow(product).to receive(:social_share_image).and_return("https://static-2.gumroad.com/res/gumroad/assets/cover.jpg")
+          end
+
+          it "includes the image" do
+            expect(product.structured_data["image"]).to eq("https://static-2.gumroad.com/res/gumroad/assets/cover.jpg")
+          end
+        end
+
+        context "when the product has no cover image" do
+          it "omits image" do
+            expect(product.structured_data).not_to have_key("image")
+          end
+        end
+
+        context "when the product has no live price" do
+          before do
+            product.prices.alive.each(&:mark_deleted!)
+            product.reload
+          end
+
+          it "omits price but keeps the rest of the offer" do
+            offer = product.structured_data["offers"]
+
+            expect(offer).not_to have_key("price")
+            expect(offer["priceCurrency"]).to eq("USD")
+            expect(offer["availability"]).to eq(Product::StructuredData::AVAILABILITY_IN_STOCK)
+          end
         end
       end
 
@@ -26,8 +86,12 @@ describe Product::StructuredData do
                                        ratings_of_five_count: 4, ratings_of_four_count: 1)
         end
 
-        it "returns an empty hash" do
-          expect(product.structured_data).to eq({})
+        it "returns a Product schema without aggregateRating" do
+          data = product.structured_data
+
+          expect(data["@type"]).to eq("Product")
+          expect(data["offers"]["@type"]).to eq("Offer")
+          expect(data).not_to have_key("aggregateRating")
         end
       end
 
