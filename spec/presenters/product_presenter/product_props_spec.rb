@@ -540,19 +540,30 @@ describe ProductPresenter::ProductProps do
         )
       end
 
-      it "aggregates the bundled products' ratings for the bundle's own ratings prop" do
+      it "shows only the bundle's own reviews in its ratings prop" do
         first_bundled_product = bundle.bundle_products.in_order.first.product
         second_bundled_product = bundle.bundle_products.in_order.second.product
         create(:product_review, purchase: create(:purchase, link: first_bundled_product), rating: 5)
         create(:product_review, purchase: create(:purchase, link: second_bundled_product), rating: 3)
+        create(:product_review, purchase: create(:purchase, link: bundle, is_bundle_purchase: true), rating: 4)
         bundle.reload
 
         props = described_class.new(product: bundle).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
         expect(props[:product][:ratings]).to eq(
-          count: 2,
+          count: 1,
           average: 4.0,
-          percentages: [0, 0, 50, 0, 50],
+          percentages: [0, 0, 0, 100, 0],
         )
+      end
+
+      it "keeps per-product ratings on the bundle contents cards" do
+        first_bundled_product = bundle.bundle_products.in_order.first.product
+        create(:product_review, purchase: create(:purchase, link: first_bundled_product), rating: 5)
+        bundle.reload
+
+        props = described_class.new(product: bundle).props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+        card = props[:product][:bundle_products].find { _1[:id] == first_bundled_product.external_id }
+        expect(card[:ratings]).to eq(count: 1, average: 5.0)
       end
 
       it "does not issue per-row queries for bundle product card associations" do
