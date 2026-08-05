@@ -927,6 +927,23 @@ describe SettingsPresenter do
                                                                      }))
       end
 
+      it "asks only for SSN last-4 once a past full-SSN request was provided" do
+        create(:merchant_account, user: seller)
+        request = create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+        request.mark_provided!
+
+        expect(presenter.payments_props[:user][:need_full_ssn]).to eq(false)
+        expect(presenter.payments_props[:user][:has_outstanding_full_ssn_requirement]).to eq(false)
+      end
+
+      it "asks only for SSN last-4 when Stripe's open request is itself partial" do
+        create(:merchant_account, user: seller)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID,
+                                              only_needs_field_to_be_partially_provided: true)
+
+        expect(presenter.payments_props[:user][:need_full_ssn]).to eq(false)
+      end
+
       it "surfaces a Stripe postal-code rejection as a compliance action while payout setup is blocked" do
         # Regression coverage for gumroad-private#1247: Stripe rejects the postal code
         # asynchronously after the settings save, so without this banner the seller sees a
