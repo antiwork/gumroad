@@ -634,7 +634,10 @@ class SettingsPresenter
         country_supports_native_payouts: seller.native_payouts_supported?,
         no_payout_rail_in_country: seller.no_payout_rail_in_compliance_country?,
         country_supports_iban: seller.country_supports_iban?,
-        need_full_ssn: seller.has_ever_been_requested_for_user_compliance_info_field?(UserComplianceInfoFields::Individual::TAX_ID),
+        # Outstanding-based, not ever-based: a business whose contact long ago cleared id_number
+        # (or never owed more than last-4) must see the 4-digit field, not a permanent full-SSN
+        # demand. Full SSN is asked only while Stripe has the requirement open.
+        need_full_ssn: has_outstanding_full_ssn_requirement?,
         country_code: user_compliance_info.legal_entity_country_code,
         payout_currency: Country.new(user_compliance_info.legal_entity_country_code).payout_currency,
         is_from_europe: seller.signed_up_from_europe?,
