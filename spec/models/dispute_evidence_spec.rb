@@ -349,8 +349,14 @@ describe DisputeEvidence do
       expect(dispute_evidence.accepting_evidence?).to be(true)
     end
 
+    # This is the exact band Greptile's rounding P1 flagged: 71.6 hours elapsed is 24 minutes before
+    # the real deadline, and the OLD rounded gate returned 0 here and closed the window early.
+    it "keeps accepting inside the last rounded hour, where a rounded gate closed early" do
+      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)).to be(true)
+    end
+
     it "declines an elapsed window" do
-      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)).to be(false)
+      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 0.1).hours.ago)).to be(false)
     end
 
     it "still quotes the last whole hour rather than declining early" do
@@ -394,7 +400,13 @@ describe DisputeEvidence do
     end
 
     it "declines an elapsed window" do
-      expect(worth_sending?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)).to be(false)
+      expect(worth_sending?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 0.1).hours.ago)).to be(false)
+    end
+
+    # Same rounding band as accepting_evidence? above: the window is still exactly open here even
+    # though the rounded hour count would read 0.
+    it "keeps sending inside the last rounded hour" do
+      expect(worth_sending?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)).to be(true)
     end
   end
 

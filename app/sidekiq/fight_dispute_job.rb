@@ -8,10 +8,11 @@ class FightDisputeJob
     dispute = Dispute.find(dispute_id)
     dispute_evidence = dispute.dispute_evidence
     return if dispute_evidence.resolved?
-    # Raw arithmetic, not hours_left_to_submit_evidence, so this reads the window and nothing else.
-    # Nothing is forwarded before the window closes even when the seller has already saved a
-    # statement: they keep the whole 72 hours to revise it, and Stripe accepts one submission.
-    return if DisputeEvidence.hours_left_in_window(dispute_evidence.seller_contacted_at).positive?
+    # Exact comparison, not hours_left_to_submit_evidence or the rounded window: rounding closed
+    # this gate up to 29 minutes before the real deadline. Nothing is forwarded before the window
+    # closes even when the seller has already saved a statement: they keep the whole 72 hours to
+    # revise it, and Stripe accepts one submission.
+    return if DisputeEvidence.window_open?(dispute_evidence.seller_contacted_at)
 
     disputable = dispute.disputable
     if disputable.charge_processor_transaction_id.blank?
