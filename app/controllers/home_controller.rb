@@ -47,11 +47,11 @@ class HomeController < ApplicationController
   end
 
   def features
-    set_meta_tag(title: "Gumroad features: Simple and powerful e-commerce tools")
-    set_meta_tag(name: "description", content: "Sell books, memberships, courses, and more with Gumroad's simple e-commerce tools. Everything you need to grow your audience.")
+    set_meta_tag(title: "Gumroad features: Sell digital products, memberships & courses")
+    set_meta_tag(name: "description", content: "Everything you need to sell online: instant digital delivery, memberships, courses, pay-what-you-want pricing, affiliates, email marketing, and worldwide tax handling. Start selling in minutes — no monthly fees.")
     set_meta_tag(tag_name: "link", rel: "canonical", href: features_url, head_key: "canonical")
-    set_meta_tag(property: "og:title", content: "Gumroad features: Simple and powerful e-commerce tools")
-    set_meta_tag(property: "og:description", content: "Sell books, memberships, courses, and more with Gumroad's simple e-commerce tools. Everything you need to grow your audience.")
+    set_meta_tag(property: "og:title", content: "Gumroad features: Sell digital products, memberships & courses")
+    set_meta_tag(property: "og:description", content: "Everything you need to sell online: instant digital delivery, memberships, courses, pay-what-you-want pricing, affiliates, email marketing, and worldwide tax handling. Start selling in minutes — no monthly fees.")
     set_meta_tag(property: "og:type", content: "website")
     set_meta_tag(property: "og:url", content: features_url)
   end
@@ -67,11 +67,11 @@ class HomeController < ApplicationController
   end
 
   def pricing
-    set_meta_tag(title: "Gumroad pricing: 10% flat fee")
-    set_meta_tag(name: "description", content: "No monthly fees, just a simple 10% cut per sale. Gumroad's pricing is transparent and creator-friendly.")
+    set_meta_tag(title: "Gumroad pricing: 10% + 50¢ per sale, $0 monthly")
+    set_meta_tag(name: "description", content: "One simple fee: 10% + 50¢ per sale. No monthly fees, no setup costs, no surprises — and Gumroad handles sales tax worldwide as Merchant of Record, at no extra cost.")
     set_meta_tag(tag_name: "link", rel: "canonical", href: pricing_url, head_key: "canonical")
-    set_meta_tag(property: "og:title", content: "Gumroad pricing: 10% flat fee")
-    set_meta_tag(property: "og:description", content: "No monthly fees, just a simple 10% cut per sale. Gumroad's pricing is transparent and creator-friendly.")
+    set_meta_tag(property: "og:title", content: "Gumroad pricing: 10% + 50¢ per sale, $0 monthly")
+    set_meta_tag(property: "og:description", content: "One simple fee: 10% + 50¢ per sale. No monthly fees, no setup costs, no surprises — and Gumroad handles sales tax worldwide as Merchant of Record, at no extra cost.")
     set_meta_tag(property: "og:type", content: "website")
     set_meta_tag(property: "og:url", content: pricing_url)
   end
