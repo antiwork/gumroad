@@ -62,14 +62,14 @@ module WithFiltering
       if params[:paid_more_than_cents].present?
         params[:paid_more_than_cents]
       elsif params[:paid_more_than].present?
-        get_usd_cents(currency, (params[:paid_more_than].to_f * unit_scaling_factor(currency)).to_i)
+        price_filter_cents(params[:paid_more_than], currency)
       end
     end
     self.paid_less_than_cents = if seller_or_product_or_variant_type?
       if params[:paid_less_than_cents].present?
         params[:paid_less_than_cents]
       elsif params[:paid_less_than].present?
-        get_usd_cents(currency, (params[:paid_less_than].to_f * unit_scaling_factor(currency)).to_i)
+        price_filter_cents(params[:paid_less_than], currency)
       end
     end
     self.bought_products = (!audience_type? && params[:bought_products].present?) ? Array.wrap(params[:bought_products]) : []
@@ -111,6 +111,16 @@ module WithFiltering
     return false if created_before.present? && affiliate.created_at > created_before
     return false if affiliate_products.present? && (affiliate_products & affiliate.products.pluck(:unique_permalink)).empty?
     true
+  end
+
+  def price_filter_cents(value, currency)
+    amount = BigDecimal(value.to_s)
+    return nil unless amount.finite?
+
+    currency_cents = (amount * unit_scaling_factor(currency)).to_i
+    get_usd_cents(currency, currency_cents)
+  rescue ArgumentError, FloatDomainError
+    nil
   end
 
   def follower_passes_filters(follower)
