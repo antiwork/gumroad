@@ -9,6 +9,17 @@ class CustomerMailer < ApplicationMailer
 
   layout "layouts/email", except: :send_to_kindle
 
+  # A buyer's full history can run to hundreds of purchases (gumroad-private#1869: 752),
+  # and rendering a receipt for each produced a multi-hundred-page email whose SMTP upload
+  # timed out AFTER the relay accepted it — so every MailDeliveryJob retry delivered
+  # another copy. Newest receipts are the ones a "resend my receipts" caller is after.
+  GROUPED_RECEIPT_MAX_CHARGEABLES = 20
+
+  # One send per recipient + receipt set within this window. The claim is taken at render,
+  # so a retry of a send that failed before SMTP handoff is also suppressed — acceptable,
+  # because every caller of this mailer is a self-serve flow the buyer can re-trigger.
+  GROUPED_RECEIPT_SEND_CLAIM_TTL = 24.hours
+
   def grouped_receipt(purchase_ids)
     # Callers can pass ids of purchases in any state (e.g. the email-reassignment flow
     # moves failed purchases too). A failed purchase that belongs to a Charge resolves
@@ -17,12 +28,16 @@ class CustomerMailer < ApplicationMailer
     # Only successful purchases get receipts, so filter here.
     @chargeables = Purchase.where(id: purchase_ids)
       .all_success_states_including_test
+      .order(id: :desc)
       .includes(charge: [:order, :seller])
       .map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }
       .uniq
+      .first(GROUPED_RECEIPT_MAX_CHARGEABLES)
+      .reverse
     return if @chargeables.empty?
 
     last_chargeable = @chargeables.last
+    return unless claim_grouped_receipt_send(last_chargeable.orderable.email)
 
     mail(
       to: last_chargeable.orderable.email,
@@ -380,6 +395,19 @@ class CustomerMailer < ApplicationMailer
   end
 
   private
+    # True when this render owns the send for this recipient + receipt set. NX so a
+    # MailDeliveryJob retry that re-renders after a successful SMTP handoff (the
+    # gumroad-private#1869 loop: the relay accepted the message but the final response
+    # timed out) cannot deliver another copy. Fails open — losing a receipt to a Redis
+    # blip is worse than a rare duplicate.
+    def claim_grouped_receipt_send(email)
+      digest = Digest::SHA256.hexdigest(@chargeables.map { _1.external_id }.sort.join(","))
+      $redis.set(RedisKey.grouped_receipt_send_claim(email, digest), Time.current.to_i, nx: true, ex: GROUPED_RECEIPT_SEND_CLAIM_TTL.to_i)
+    rescue => e
+      ErrorNotifier.notify(e)
+      true
+    end
+
     def receipt_for_gift_receiver?(chargeable)
       chargeable.orderable.receipt_for_gift_receiver?
     rescue NotImplementedError
