@@ -9,6 +9,10 @@ class CustomerMailer < ApplicationMailer
 
   layout "layouts/email", except: :send_to_kindle
 
+  # A buyer with hundreds of purchases would otherwise get every one of them rendered
+  # into a single email — a 455-page, ~455MB message in the wild (gumroad-private#1869).
+  GROUPED_RECEIPT_PURCHASES_LIMIT = 20
+
   def grouped_receipt(purchase_ids)
     # Callers can pass ids of purchases in any state (e.g. the email-reassignment flow
     # moves failed purchases too). A failed purchase that belongs to a Charge resolves
@@ -17,9 +21,12 @@ class CustomerMailer < ApplicationMailer
     # Only successful purchases get receipts, so filter here.
     @chargeables = Purchase.where(id: purchase_ids)
       .all_success_states_including_test
+      .order(id: :desc)
+      .limit(GROUPED_RECEIPT_PURCHASES_LIMIT)
       .includes(charge: [:order, :seller])
       .map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }
       .uniq
+      .reverse
     return if @chargeables.empty?
 
     last_chargeable = @chargeables.last

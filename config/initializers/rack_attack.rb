@@ -134,6 +134,12 @@ class Rack::Attack
     # Don't allow spammer to send confirmation emails to many random emails
     throttle_by_ip path: "/settings", requests: 3, period: 20.seconds, method: :put # Initial: 9rpm, Max: 45 requests/9 hours
 
+    # Each hit that matches purchases sends a grouped receipt email to the given address,
+    # unauthenticated — unthrottled, a stuck client or an abuser can flood a buyer with
+    # multi-MB receipt emails (gumroad-private#1869).
+    throttle_by_ip path: "/charge_data",             requests: 3, period: 20.seconds # Initial: 9rpm, Max: 45 requests/9 hours
+    throttle_by_ip path: "/license_key_lookup_data", requests: 3, period: 20.seconds # Initial: 9rpm, Max: 45 requests/9 hours
+
     # Creating a brand account sends a Devise confirmation email to whatever
     # address is submitted, so without a limit a flag-enabled creator could use
     # it to send unsolicited email to arbitrary addresses. Same rate as the

@@ -1355,6 +1355,20 @@ describe CustomerMailer do
       expect(mail.subject).to eq("Receipts for Purchases")
     end
 
+    it "renders only the newest GROUPED_RECEIPT_PURCHASES_LIMIT purchases" do
+      stub_const("CustomerMailer::GROUPED_RECEIPT_PURCHASES_LIMIT", 2)
+      oldest = create(:purchase, link: create(:product, user: seller, name: "Oldest product"), seller:)
+      newer = [
+        create(:purchase, link: create(:product, user: seller, name: "Newer product one"), seller:),
+        create(:purchase, link: create(:product, user: seller, name: "Newer product two"), seller:),
+      ]
+
+      body = CustomerMailer.grouped_receipt([oldest.id] + newer.map(&:id)).message.to_s
+
+      expect(body).to include("Newer product one", "Newer product two")
+      expect(body).not_to include("Oldest product")
+    end
+
     it "skips failed purchases whose charge has no successful purchases" do
       failed_purchase = create(:failed_purchase, link: product, seller:)
       charge = create(:charge, seller:)
