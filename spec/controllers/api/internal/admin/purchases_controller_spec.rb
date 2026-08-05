@@ -1140,8 +1140,8 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
         "success" => true,
-        "message" => "Resent receipts for the 1 most recent of 2 purchases to #{buyer_email}",
-        "count" => 1
+        "message" => "Queued a grouped receipt covering the 1 most recent charges (of 2 purchases) to #{buyer_email}",
+        "count" => 2
       )
     end
   end

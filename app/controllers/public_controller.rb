@@ -116,14 +116,16 @@ class PublicController < ApplicationController
     # have to render every purchase on the account (gumroad-private#1869). Month is only
     # applied when year is also present — the frontend disables the month picker until a
     # year is chosen, but an unauthenticated GET can still send month alone.
+    EARLIEST_PURCHASE_YEAR = 2011
+
     def scope_by_year_and_month(purchases, year, month)
-      return purchases if year.blank?
+      # to_s first: `?year[]=2024` yields an Array, and Array#to_i would 500.
+      year_i = year.to_s.to_i
+      return purchases if year_i < EARLIEST_PURCHASE_YEAR || year_i > Time.current.year
 
-      year_i = year.to_i
-      return purchases if year_i < 2011 || year_i > Time.current.year
-
-      if month.present? && (1..12).cover?(month.to_i)
-        range_start = Time.utc(year_i, month.to_i)
+      month_i = month.to_s.to_i
+      if (1..12).cover?(month_i)
+        range_start = Time.utc(year_i, month_i)
         purchases.where(created_at: range_start...range_start.next_month)
       else
         range_start = Time.utc(year_i)

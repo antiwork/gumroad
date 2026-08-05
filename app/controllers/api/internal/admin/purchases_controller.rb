@@ -86,13 +86,14 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     record_admin_write(action: "purchases.resend_all_receipts") do
       CustomerMailer.grouped_receipt(purchases.ids).deliver_later(queue: "critical")
       count = purchases.count
-      sent = [count, CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES].min
-      message = if sent < count
-        "Resent receipts for the #{sent} most recent of #{count} purchases to #{email}"
+      # The mailer caps CHARGEABLES (a charge renders all its purchases), so a purchase
+      # count can't say exactly what was truncated — only whether truncation is possible.
+      message = if count > CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES
+        "Queued a grouped receipt covering the #{CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES} most recent charges (of #{count} purchases) to #{email}"
       else
         "Successfully resent all receipts to #{email}"
       end
-      render json: { success: true, message:, count: sent }
+      render json: { success: true, message:, count: }
     end
   end
 

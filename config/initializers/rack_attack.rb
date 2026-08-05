@@ -141,16 +141,22 @@ class Rack::Attack
     # suffix (`.json`, `.xml`, ...) — match by regex like the OAuth device-flow throttles
     # below and key on the bare path alone, so every suffix shares one counter instead of
     # each format getting its own separate budget.
-    %w[/charge_data /license_key_lookup_data /paypal_charge_data].each do |path|
+    GROUPED_RECEIPT_LOOKUP_PATHS = %w[/charge_data /license_key_lookup_data /paypal_charge_data].to_h do |path|
+      [path, /\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/]
+    end.freeze
+    GROUPED_RECEIPT_LOOKUP_PATHS.each do |path, path_regexp|
       throttle_with_exponential_backoff(name: "/ip:#{path}", requests: 3, period: 20.seconds) do |req|
-        req.remote_ip if req.path.match?(/\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/)
+        req.remote_ip if req.path.match?(path_regexp)
       end
     end
-    %w[/charge_data /license_key_lookup_data].each do |path|
-      # Initial: 3rpm, Max: 18 requests/3 days (per recipient email)
-      throttle_with_exponential_backoff(name: "/params:#{path}:email", requests: 3, period: 60.seconds, max_level: 6) do |req|
-        if req.path.match?(/\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/)
-          req.params["email"].to_s.downcase.presence
+    GROUPED_RECEIPT_LOOKUP_PATHS.slice("/charge_data", "/license_key_lookup_data").each do |path, path_regexp|
+      # Initial: 6rpm, Max: 36 requests/3 days (per recipient email) — roomy enough for a
+      # buyer walking the year/month pickers hunting an old charge, still a hard ceiling on
+      # emails one address can be sent. Strip before keying: purchases.email has a PAD SPACE
+      # collation, so "a@b.com " matches the victim's rows while landing in a fresh bucket.
+      throttle_with_exponential_backoff(name: "/params:#{path}:email", requests: 6, period: 60.seconds, max_level: 6) do |req|
+        if req.path.match?(path_regexp)
+          req.params["email"].to_s.strip.downcase.presence
         end
       end
     end

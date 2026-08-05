@@ -39,8 +39,8 @@ const LookupLayout = ({ children, title, type }: {
   const [success, setSuccess] = React.useState<boolean | null>(null)
   const messageRef = useRef<HTMLDivElement>(null)
 
-  // Only one of the two lookup forms can be in flight — a submitted PayPal invoice
-  // ID and a submitted card lookup for the same buyer would race the same throttle.
+  // Only one of the two lookup forms can be in flight — every successful lookup sends a
+  // real email, so a double submission means a double send.
   const isAnyLookupLoading = isCardLoading || isPaypalLoading
 
   const handleYearChange = (evt: React.ChangeEvent<HTMLSelectElement>) => {
