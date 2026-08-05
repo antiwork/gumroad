@@ -1401,6 +1401,58 @@ describe CustomerMailer do
       expect(charge_queries.size).to be <= 2
       expect(order_queries.size).to be <= 2
     end
+
+    it "caps the number of rendered receipts, keeping the newest purchases" do
+      stub_const("CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES", 2)
+      many = create_list(:purchase, 4, link: product, seller:)
+
+      body = CustomerMailer.grouped_receipt(many.map(&:id)).message.decoded
+
+      expect(body.scan("Order ID").size).to eq(2)
+      expect(body).to include(many[2].external_id_for_invoice)
+      expect(body).to include(many[3].external_id_for_invoice)
+      expect(body).not_to include(many[0].external_id_for_invoice)
+      expect(body).not_to include(many[1].external_id_for_invoice)
+    end
+
+    it "sends only once for the same recipient and receipt set (retry after successful SMTP handoff must not re-deliver)" do
+      first = CustomerMailer.grouped_receipt(purchases.map(&:id))
+      expect(first.to).to eq([purchases.last.email])
+
+      second = CustomerMailer.grouped_receipt(purchases.map(&:id))
+      expect(second.message).to be_a(ActionMailer::Base::NullMail)
+    end
+
+    it "still sends when the send-once store is unavailable" do
+      allow($redis).to receive(:set).and_raise(Redis::CannotConnectError)
+      allow(ErrorNotifier).to receive(:notify)
+
+      mail = CustomerMailer.grouped_receipt(purchases.map(&:id))
+      expect(mail.to).to eq([purchases.last.email])
+      expect(ErrorNotifier).to have_received(:notify)
+    end
+
+    it "allows a different receipt set for the same recipient" do
+      CustomerMailer.grouped_receipt(purchases.map(&:id))
+
+      other_purchase = create(:purchase, link: product, seller:, email: purchases.last.email)
+      mail = CustomerMailer.grouped_receipt(purchases.map(&:id) + [other_purchase.id])
+      expect(mail.to).to eq([other_purchase.email])
+    end
+
+    it "renders the same receipt selection for repeated identical calls" do
+      stub_const("CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES", 2)
+      many = create_list(:purchase, 4, link: product, seller:)
+
+      selections = 2.times.map do
+        $redis.flushdb
+        body = CustomerMailer.grouped_receipt(many.map(&:id).shuffle).message.decoded
+        many.select { body.include?(_1.external_id_for_invoice) }.map(&:id)
+      end
+
+      expect(selections.uniq.size).to eq(1)
+      expect(selections.first.size).to eq(2)
+    end
   end
 
   describe "#refund" do

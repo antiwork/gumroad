@@ -35,6 +35,7 @@ class RedisKey
     def sales_related_products_internal_limit = "sales_related_products_internal_limit"
     def recommended_products_associated_product_ids_limit = "recommended_products_associated_product_ids_limit"
     def blast_recipients_slice_size = "blast:recipients_slice_size"
+    def grouped_receipt_send_claim(email, digest) = "grouped_receipt_send_claim:#{Digest::SHA256.hexdigest(email.to_s.downcase)}:#{digest}"
     def blast_sent_emails(blast_id) = "blast:#{blast_id}:sent_emails"
     def blast_audience_snapshot(blast_id) = "blast:#{blast_id}:audience_snapshot"
     def blast_non_opener_emails(blast_id) = "blast:#{blast_id}:non_opener_emails"
