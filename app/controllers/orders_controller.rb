@@ -448,13 +448,15 @@ class OrdersController < ApplicationController
       # An absent/blank :line_items must NOT earn the free-cart exemption — a vacuous
       # Array#all? would let a cartless request skip reCAPTCHA entirely. It also must not
       # 500: the old {} default handed #all? a bare ActionController::Parameters
-      # (GUMROAD-7B), and an explicit-but-empty list deep-munges to nil.
+      # (GUMROAD-7B).
       line_items = params.fetch(:line_items, [])
       return false if line_items.blank?
 
       line_items.all? do |product|
         product_link = Link.find_by(unique_permalink: product["permalink"])
-        !product_link.require_captcha? && product["perceived_price_cents"].to_s == "0"
+        # A bogus permalink must fail the exemption, not 500 — and not pass it either:
+        # `!product_link&.require_captcha?` would read `!nil` as captcha-free.
+        product_link.present? && !product_link.require_captcha? && product["perceived_price_cents"].to_s == "0"
       end
     end
 
