@@ -78,13 +78,13 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
                 {`${creatorProfile.reputation.average} from ${creatorProfile.reputation.count} verified ${creatorProfile.reputation.count === 1 ? "review" : "reviews"} across ${creatorProfile.reputation.products_count} products`}
               </div>
             ) : null}
-            {!isDesktop ? headerButtons : null}
           </div>
           {!hideFollowForm ? (
             <div className="flex basis-full items-center gap-3 border-b border-border p-4 lg:basis-auto lg:border-0 lg:p-0">
               <FollowForm creatorProfile={creatorProfile} />
             </div>
           ) : null}
+          {!isDesktop && headerButtons ? <div className="flex basis-full p-4 pt-0">{headerButtons}</div> : null}
           {isDesktop ? headerButtons : null}
         </div>
       </header>
