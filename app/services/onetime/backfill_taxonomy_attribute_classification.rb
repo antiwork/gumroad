@@ -70,7 +70,15 @@ module Onetime
           if @dry_run
             tick(:would_clear_orphaned)
           else
-            link.save_inferred_taxonomy_attribute_values({}) ? tick(:cleared_orphaned) : tick(:save_failed)
+            # A taxonomy move between select and write re-fires classify_taxonomy_attributes
+            # (Product::Taxonomies after_commit), which can give the link fresh inferred values
+            # or put it back in a registered taxonomy — reload and recheck right before writing
+            # so this pass doesn't stomp that with its stale in-memory copy.
+            link.reload
+            still_orphaned = registered_taxonomy_ids.blank? || registered_taxonomy_ids.exclude?(link.taxonomy_id)
+            if still_orphaned && link.inferred_taxonomy_attribute_values.present?
+              link.save_inferred_taxonomy_attribute_values({}) ? tick(:cleared_orphaned) : tick(:save_failed)
+            end
           end
         rescue => e
           @stats[:errors] += 1

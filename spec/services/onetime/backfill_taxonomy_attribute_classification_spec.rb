@@ -114,4 +114,21 @@ describe Onetime::BackfillTaxonomyAttributeClassification do
 
     expect(result[:stats][:cleared_orphaned]).to eq(0)
   end
+
+  it "does not erase a fresh inferred value written by a concurrent taxonomy move after selection" do
+    product = create(:product, taxonomy: other_taxonomy)
+    product.update_column(:json_data, { "inferred_taxonomy_attribute_values" => { "format" => "OTF" } })
+
+    allow_any_instance_of(Link).to receive(:reload).and_wrap_original do |original, *args|
+      # Simulate the taxonomy-change callback landing between select and write: the link
+      # moved into a registered taxonomy and got fresh inferred values in the meantime.
+      product.update_columns(taxonomy_id: fonts_taxonomy.id, json_data: { "inferred_taxonomy_attribute_values" => { "format" => "TTF" } })
+      original.call(*args)
+    end
+
+    result = described_class.process(dry_run: false)
+
+    expect(product.reload.inferred_taxonomy_attribute_values).to eq("format" => "TTF")
+    expect(result[:stats][:cleared_orphaned]).to eq(0)
+  end
 end
