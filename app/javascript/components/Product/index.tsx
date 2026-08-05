@@ -1039,7 +1039,7 @@ const SellerReputationSection = ({
   <section className="grid gap-2 p-6 not-first:border-t" aria-label="Creator rating">
     {!hasOwnReviews ? <div>This product has no reviews yet.</div> : null}
     <div className="flex flex-wrap items-center gap-1">
-      <Star pack="filled" className="size-5" />
+      <RatingStars rating={reputation.average} />
       <span>
         Creator rating: {reputation.average} from{" "}
         {seller ? (
