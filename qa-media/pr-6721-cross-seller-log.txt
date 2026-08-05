@@ -1,3 +1,0 @@
-bare-domain: https://gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org/l/xseller-old-974496 -> HTTP 200 final=https://gumbofilm.gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org/l/xseller-old-974496 h1="Beautiful films widget"
-claimant-own-subdomain: https://gumbofilm.gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org/l/xseller-old-974496 -> HTTP 200 final=https://gumbofilm.gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org/l/xseller-old-974496 h1="Beautiful films widget"
-mapping-owner-new-slug: https://seller.gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org/l/xseller-new-974496 -> HTTP 200 final=https://seller.gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org/l/xseller-new-974496 h1="Beautiful widget"
