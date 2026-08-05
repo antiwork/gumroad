@@ -206,7 +206,11 @@ def fill_in_credit_card(number: "4242424242424242", expiry: StripePaymentMethodH
 end
 
 def within_credit_card_frame(&block)
-  stripe_frame = all("iframe", wait: 10).find { |f| f["title"]&.include?("Secure") || f["src"]&.include?("elements-inner-card") } || first("iframe", wait: 10)
+  # No arbitrary fallback: an unmatched iframe (e.g. an analytics frame) would silently eat the
+  # fill, so this must find the actual CardElement frame or raise rather than guess.
+  stripe_frame = all("iframe", wait: 10).find { |f| f["title"]&.include?("Secure") || f["src"]&.include?("elements-inner-card") }
+  raise Capybara::ElementNotFound, "No CardElement iframe found" if stripe_frame.nil?
+
   within_frame(stripe_frame, &block)
 end
 
