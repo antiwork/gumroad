@@ -76,11 +76,9 @@ describe Pages::Interpolator do
         expect(result).to include(%(<span data-gumroad-field="rating">4</span>))
       end
 
-      # For a bundle each aggregation loads every content product's stat row, so per-marker
-      # recomputation would scale the query count with how often the page repeats the markers.
       it "computes the review summary once even when the markers repeat" do
         product = reviewed.reload
-        expect(product).to receive(:bundle_rating_stats).once.and_call_original
+        expect(product).to receive(:rating_stats).once.and_call_original
         html = %(<span data-gumroad-field="rating">x</span><span data-gumroad-field="review-count">x</span>) * 2
 
         result = described_class.interpolate(html, product:)
@@ -89,9 +87,9 @@ describe Pages::Interpolator do
         expect(result.scan(%(<span data-gumroad-field="review-count">4</span>)).size).to eq(2)
       end
 
-      # The native bundle page merges its contents' reviews in, so a bundle's own row alone
-      # would disagree with the page this markup replaces.
-      it "uses the combined bundle summary for a bundle" do
+      # Bundles carry their own reviews now (#6078), so the page shows the bundle's row alone
+      # rather than merging in what its contents earned on their own pages.
+      it "uses only the bundle's own reviews for a bundle" do
         bundle = create(:product, :bundle, name: "Bundle")
         inner = create(:product, user: bundle.user)
         3.times { review!(inner, 5) }
@@ -100,7 +98,7 @@ describe Pages::Interpolator do
 
         result = described_class.interpolate(%(<span data-gumroad-field="review-count">x</span>), product: bundle.reload)
 
-        expect(result).to include(%(<span data-gumroad-field="review-count">4</span>))
+        expect(result).to include(%(<span data-gumroad-field="review-count">1</span>))
       end
     end
 

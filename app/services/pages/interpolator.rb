@@ -14,9 +14,7 @@ class Pages::Interpolator
     "description" => ->(product) { ActionView::Base.full_sanitizer.sanitize(product.description.to_s) },
   }.freeze
 
-  # Both fields read the aggregate that interpolate computes at most once per render — for a
-  # bundle it loads every content product's stat row, so recomputing per marker scales the
-  # query count with how often the page repeats the markers.
+  # Both fields read the summary that interpolate computes at most once per render.
   REVIEW_FIELDS = {
     # Trailing ".0" is stripped because the native page renders the rating as a JSON number,
     # where 4.0 prints as "4".
@@ -24,13 +22,10 @@ class Pages::Interpolator
     "review-count" => ->(summary) { summary.fetch(:count).to_s },
   }.freeze
 
-  # bundle_rating_stats, not rating_stats: the native page merges a bundle's contents' reviews
-  # into one summary (ProductPresenter::ProductProps), so the plain row would disagree with the
-  # page this markup replaces.
   def self.review_summary(product)
     return unless product.display_product_reviews?
 
-    stats = product.bundle_rating_stats
+    stats = product.rating_stats
     return if stats[:count].zero?
 
     stats
