@@ -19,6 +19,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     purchases.reassign
     purchases.resend_all_receipts
     sendgrid_emails.remove_suppression
+    stranded_buyers.recover
   ].freeze
   ADMIN_PURCHASE_INCLUDES = [:link, :seller, :refunds, { affiliate_credit: :affiliate_user }, :early_fraud_warning, :disputes, :merchant_account].freeze
   USER_LOOKUP_BAD_REQUEST_MESSAGE = "email, user_id, or username is required"

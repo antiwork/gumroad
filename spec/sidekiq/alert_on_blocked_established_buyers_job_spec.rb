@@ -290,7 +290,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
 
   it "ignores a failure older than the lookback window" do
     settled_purchases(established_count)
-    blocked_attempt(created_at: described_class::FAILURE_LOOKBACK.ago - 1.day)
+    blocked_attempt(created_at: Risk::StrandedBuyerScanService::FAILURE_LOOKBACK.ago - 1.day)
     PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
 
     described_class.new.perform
@@ -547,7 +547,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
   end
 
   describe "when the scan hits its cap" do
-    before { stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 1) }
+    before { stub_const("Risk::StrandedBuyerScanService::MAX_CANDIDATES_SCANNED", 1) }
 
     it "says the counts are floors" do
       2.times do |index|
@@ -597,7 +597,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
   # A window holding exactly the budget is not truncated — the extra candidate plucked above the
   # budget is what distinguishes "exactly full" from "there are more".
   it "does not claim truncation when the window holds exactly the scan budget" do
-    stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 2)
+    stub_const("Risk::StrandedBuyerScanService::MAX_CANDIDATES_SCANNED", 2)
     2.times do |index|
       buyer_email = "buyer#{index}@example.com"
       settled_purchases(established_count, buyer_email:)

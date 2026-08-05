@@ -421,6 +421,13 @@ Rails.application.routes.draw do
             end
           end
 
+          resources :stranded_buyers, only: [] do
+            collection do
+              get :scan
+              post :recover
+            end
+          end
+
           resources :users, only: [] do
             collection do
               get :info
