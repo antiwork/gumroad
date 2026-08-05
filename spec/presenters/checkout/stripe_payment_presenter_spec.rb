@@ -1769,6 +1769,9 @@ describe Checkout::StripePaymentPresenter do
     it "mounts card + UPI for the flagged single paid-upfront INR membership slice" do
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 73_000)
+      # Deliberately no STRIPE_PAYMENT_ELEMENT_CHECKOUT flag: the UPI Autopay registration
+      # shape must survive a base-flag ramp-down (CardElement cannot mount UPI), so this
+      # example pins that the shape skips the flag-gated CardElement fallback.
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
       activate_buyer_currency_flags(seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
@@ -1795,6 +1798,36 @@ describe Checkout::StripePaymentPresenter do
           disable_wallets: true,
         )
       )
+    ensure
+      Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        Feature.deactivate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps the CardElement fallback for the UPI membership shape when its client-confirm lane cannot mount" do
+      # The base-flag exemption above only applies to a cart that will actually take the UPI
+      # client-confirm lane; with the client-confirm flag off, the shape falls back like any
+      # other cart instead of mounting a Payment Element the seller's flags don't allow.
+      seller = create(:user, disable_buyer_local_currency: false)
+      product = create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 73_000)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      Feature.activate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+      Feature.activate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.15", "India")
+
+      props = stripe_payment_props(
+        add_products: [checkout_product_for(product, price: 73_000, recurrence: BasePrice::Recurrence::MONTHLY)],
+        ip: "203.0.113.15"
+      )
+
+      expect(props).to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
     ensure
       Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
       if seller

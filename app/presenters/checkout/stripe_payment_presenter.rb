@@ -390,7 +390,14 @@ class Checkout::StripePaymentPresenter
     def fallback_reason_for(items)
       return "empty_cart" if items.empty?
       return "unknown_seller" if sellers.any?(&:blank?)
-      return "stripe_payment_element_flag_disabled" unless sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, _1) }
+      # The UPI Autopay registration shape keeps its client-confirm element even when the
+      # seller's base element flag is off: CardElement cannot mount UPI, and the shape is
+      # ramped by its own per-seller launch flag, so a base-flag ramp-down must not take the
+      # feature with it. Guarded on client-confirm eligibility so a cart that could not mount
+      # that lane anyway still falls back like any other.
+      unless sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, _1) }
+        return "stripe_payment_element_flag_disabled" unless recurring_upi_registration_shape?(items) && client_confirm_eligible?
+      end
       return nil if sellers.one? && setup_for_future_charges_without_charging?(items)
       return "setup_or_installment_flow" if items.any? { future_charge_setup_item?(_1) }
 
