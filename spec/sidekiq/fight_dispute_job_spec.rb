@@ -106,6 +106,16 @@ describe FightDisputeJob do
             it_behaves_like "does nothing"
           end
 
+          # 71.6h elapsed: the rounded hour count is 0 but 24 real minutes remain. Forwarding here
+          # spends the seller's revision time early — the exact-deadline gate must hold.
+          context "in the window's final fraction of an hour" do
+            before do
+              dispute_evidence.update!(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)
+            end
+
+            it_behaves_like "does nothing"
+          end
+
           context "when there are no more hours left to submit evidence" do
             before do
               dispute_evidence.update!(seller_contacted_at: DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours.ago)

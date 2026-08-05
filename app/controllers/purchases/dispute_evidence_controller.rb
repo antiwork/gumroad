@@ -38,11 +38,10 @@ class Purchases::DisputeEvidenceController < ApplicationController
 
   def update
     input_blobs = customer_communication_file_blobs
-    # A revision is additive per field: the form always posts all three text fields, so assigning
-    # them wholesale would let a seller who returns to attach a file blank the statement they wrote
-    # yesterday. But a field the seller explicitly cleared must still clear — only an ABSENT param
-    # means "leave unchanged", so params.require raises before this, and slice+compact_blank on the
-    # empty string would silently keep the old value the seller just deleted.
+    # assign_attributes writes exactly what the seller posted, including an explicit "" to clear a
+    # field (compact_blank used to drop those clears, forwarding the deleted text to Stripe). The
+    # form always posts all three fields rehydrated from the saved values (Show.tsx restoreChoice);
+    # that rehydration, not this layer, is what keeps a revision from blanking yesterday's statement.
     @dispute_evidence.assign_attributes(
       dispute_evidence_params.slice(:cancellation_rebuttal, :reason_for_winning, :refund_refusal_explanation)
     )

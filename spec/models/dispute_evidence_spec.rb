@@ -311,18 +311,18 @@ describe DisputeEvidence do
         .to eq(dispute_evidence.hours_left_to_submit_evidence)
     end
 
-    # The band where the old exact `elapsed < 72.hours` test in Charge::Disputable disagreed with
-    # this rounded one: it called the window open while the notice's own body would have read
-    # "in the next 0 hours". One predicate now answers for both, so the band cannot reopen.
-    it "reports no hours left once rounding takes the window to zero, where an exact test would not" do
+    # The rounded value must never disagree with window_open?: the mailers AND their gate with
+    # .positive?, so a 0 inside an open window would send/keep a notice with no submit link while
+    # the form still accepts evidence. Clamped to 1 in the window's final fraction of an hour.
+    it "stays positive while the window is open, even where rounding alone would report 0" do
       elapsed = (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours
 
-      expect(described_class.hours_left_in_window(elapsed.ago)).to eq(0)
-      expect(Time.current - elapsed.ago).to be < DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
+      expect(described_class.window_open?(elapsed.ago)).to be(true)
+      expect(described_class.hours_left_in_window(elapsed.ago)).to eq(1)
     end
 
-    it "goes negative past the window rather than flooring" do
-      expect(described_class.hours_left_in_window((DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 1).hours.ago)).to eq(-1)
+    it "reports 0 once the window has closed" do
+      expect(described_class.hours_left_in_window((DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 1).hours.ago)).to eq(0)
     end
   end
 

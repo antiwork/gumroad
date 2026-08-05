@@ -34,6 +34,22 @@ describe FightDisputesJob do
       end
     end
 
+    context "in the window's final fraction of an hour, where rounding alone reads 0 hours left" do
+      # 71.6h elapsed: 24 real minutes remain. A gate on the rounded hours would forward now,
+      # spending the seller's revision time up to 29 minutes early.
+      let!(:dispute_evidence_final_minutes) do
+        create(:dispute_evidence, seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)
+      end
+
+      it "does not forward until the exact deadline passes" do
+        expect(DisputeEvidence.window_open?(dispute_evidence_final_minutes.seller_contacted_at)).to be(true)
+
+        described_class.new.perform
+
+        expect(FightDisputeJob).not_to have_enqueued_sidekiq_job(dispute_evidence_final_minutes.dispute.id)
+      end
+    end
+
     context "when the dispute has reached a terminal state" do
       let!(:dispute_evidence_lost) { create(:dispute_evidence, seller_contacted_at: 80.hours.ago) }
       let!(:dispute_evidence_won) { create(:dispute_evidence, seller_contacted_at: 80.hours.ago) }

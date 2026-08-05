@@ -83,13 +83,14 @@ class DisputeEvidence < ApplicationRecord
     errors.add(:base, "Invalid file type.")
   end
 
-  # Hours the seller has left, from a stamp — display copy only (UI and email hour counts).
-  # Rounded, so it reads 0 up to ~29 minutes before seller_response_due_at actually arrives;
-  # anything gating a save or a submission must use window_open? below instead.
+  # Hours the seller has left, for display copy (UI and email hour counts). Rounded, but clamped
+  # to stay positive exactly while window_open? is — otherwise a notice sent in the window's last
+  # ~29 minutes quotes "0 hours" beside a live submit link, and mailer gates that AND with this
+  # number drop the link while the form still accepts evidence.
   def self.hours_left_in_window(seller_contacted_at)
-    return 0 if seller_contacted_at.nil?
+    return 0 unless window_open?(seller_contacted_at)
 
-    (SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - (Time.current - seller_contacted_at) / 1.hour).round
+    [(SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - (Time.current - seller_contacted_at) / 1.hour).round, 1].max
   end
 
   # Hours the seller has left to keep working on their statement. A saved statement does not close

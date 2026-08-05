@@ -312,6 +312,29 @@ describe CreateMissingDisputeEvidenceJob do
       end
     end
 
+    # The backdated window ends 24 real minutes from now: rounding alone reads it as elapsed, and
+    # the pre-fix gate took the submit-without-a-statement branch here — sending nothing to the
+    # seller who really had usable time.
+    context "when the backdated window has a fraction of an hour left" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { stripe_dispute_for(purchase) }
+
+      before { stub_processor_deadline((described_class::DEADLINE_BUFFER + 24.minutes).from_now) }
+
+      it "still asks the seller instead of submitting immediately" do
+        expect do
+          described_class.new.perform
+        end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice).with(dispute.id)
+
+        dispute_evidence = dispute.reload.dispute_evidence
+        expect(DisputeEvidence.window_open?(dispute_evidence.seller_contacted_at)).to be(true)
+        # Display copy is clamped to agree with the open window, so the notice quotes a usable
+        # hour count next to its submit link instead of "0 hours".
+        expect(dispute_evidence.hours_left_to_submit_evidence).to eq(1)
+        expect(FightDisputeJob.jobs.map { _1["args"] }).not_to include([dispute.id])
+      end
+    end
+
     context "when the deadline leaves the seller no usable time" do
       let!(:purchase) { charged_back_purchase }
       let!(:dispute) { stripe_dispute_for(purchase) }
