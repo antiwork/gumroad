@@ -9,14 +9,32 @@
 # touch anything that names an author, veto on any live chargeback, require the card-proven clean
 # history the live block rules themselves respect, attribute which rule wrote the block, clear the
 # person-bound rows, and verify per identifier that nothing active survived. Card-fingerprint rows
-# stay when the issuer is still declining that card, and email_domain rows always stay — a domain
-# block holds everyone at that domain, which is not this service's call to make.
+# stay when the issuer is still declining that card; domain and IP rows stay for a human — their
+# blast radius covers people this buyer's history never vouched for.
 #
 #   Risk::StrandedBuyerRecoveryService.call(email: "buyer@example.com")                  # dry run
 #   Risk::StrandedBuyerRecoveryService.call(email: "buyer@example.com", dry_run: false)  # clear
 class Risk::StrandedBuyerRecoveryService
   class VerificationFailedError < StandardError; end
   class UnsafeClearError < StandardError; end
+
+  # Only identifiers that are this buyer's alone — email and browser_guid are not realistically
+  # shared with an unrelated abuser. email_domain and ip_address are NOT here: one buyer's
+  # card-proven clean history says nothing about every other actor sharing that domain or IP
+  # (NAT, corporate mail relay, shared office network), so clearing those automatically would
+  # remove enforcement against people this buyer's history never vouched for. They fall through
+  # to withheld and wait on a human.
+  CLEARABLE_TYPES = [
+    PlatformBlock::TYPES[:browser_guid],
+    PlatformBlock::TYPES[:email],
+  ].freeze
+
+  # Buyer-bound in the sense that clearing helps THIS buyer, but with a blast radius wide enough
+  # that automation shouldn't decide alone — surfaced to a human instead of auto-cleared.
+  SHARED_RADIUS_TYPES = [
+    PlatformBlock::TYPES[:email_domain],
+    PlatformBlock::TYPES[:ip_address],
+  ].freeze
 
   # The in-app decline codes a PlatformBlock check writes on a checkout — a failure carrying one
   # is a buyer who actually hit our block, which is what gates the recovery email.
@@ -50,12 +68,11 @@ class Risk::StrandedBuyerRecoveryService
 
   def call
     return result(:noop, :buyer_not_found) if user.nil? && candidate_purchases.empty?
+    return result(:noop, :no_active_blocks) if active_blocks.empty?
 
     # Any row that names an author — a human admin OR the shared automation actor, which writes
     # confirmed-fraud blocks (chargeback count, EFW) — is a decision about this buyer, not a rule
     # that outlived itself. Only unattended rows (blocked_by nil) clear autonomously.
-    return result(:noop, :no_active_blocks) if active_blocks.empty?
-
     authored_rows = active_blocks.select { |block| authored?(block) }
     return result(:escalate, :authored_block, skipped: authored_rows.map { [_1, :authored] }) if authored_rows.any?
 
@@ -79,10 +96,15 @@ class Risk::StrandedBuyerRecoveryService
     return result(:noop, :nothing_clearable, attribution:, skipped: withheld) if clearable.empty?
 
     unless dry_run
-      clear!(clearable)
-      verify!(clearable)
-      record_admin_comment(attribution, clearable)
-      notify_buyer
+      # Wrapped so a mid-batch failure (concurrent re-block, reload mismatch, verification miss)
+      # rolls back every unblock! in this call instead of leaving enforcement partially removed
+      # with no admin comment recording what happened.
+      ActiveRecord::Base.transaction do
+        clear!(clearable)
+        verify!(clearable)
+        record_admin_comment(attribution, clearable)
+      end
+      notify_buyer(withheld)
     end
 
     result(:cleared, attribution[:rule], attribution:, cleared: clearable, skipped: withheld)
@@ -102,11 +124,13 @@ class Risk::StrandedBuyerRecoveryService
     # The raw checkout footprint, bounded the same way unblock_buyer! bounds its widening. Raw
     # rows anchor innocence and corroboration only — identifiers are harvested from
     # #buyer_purchases, the corroborated subset.
+    #
+    # A resolved user is the canonical identity — an email param supplied alongside user_id is
+    # only a lookup hint, never mixed into the scope, or a caller could pair a clean account's
+    # user_id with an unrelated victim's email to clear that victim's blocks.
     def candidate_purchases
       @_candidate_purchases ||= begin
-        scope = if user.present? && @email.present?
-          Purchase.where("purchaser_id = ? OR email = ?", user.id, @email)
-        elsif user.present?
+        scope = if user.present?
           Purchase.where("purchaser_id = ? OR email = ?", user.id, user.email)
         else
           Purchase.where(email: @email)
@@ -259,14 +283,15 @@ class Risk::StrandedBuyerRecoveryService
     end
 
     # Person-bound rows clear. A card the issuer is still refusing stays blocked — the block is not
-    # what is declining it. An email_domain row always stays: it holds everyone at that domain, an
-    # unbounded blast radius no single buyer's innocence can vouch for.
+    # what is declining it. Shared-radius rows (domain/IP) never auto-clear — see SHARED_RADIUS_TYPES.
     def partition_blocks
       clearable = []
       withheld = []
       active_blocks.each do |block|
-        if block.email_domain?
-          withheld << [block, :domain_wide_block]
+        if CLEARABLE_TYPES.include?(block.object_type)
+          clearable << block
+        elsif SHARED_RADIUS_TYPES.include?(block.object_type)
+          withheld << [block, :shared_identifier_needs_human_review]
         elsif block.charge_processor_fingerprint? && card_still_declining?(block.object_value)
           withheld << [block, :card_still_declining_at_issuer]
         else
@@ -343,7 +368,12 @@ class Risk::StrandedBuyerRecoveryService
     # an invitation anyone is waiting for.
     RECENT_FAILURE_WINDOW = 60.days
 
-    def notify_buyer
+    def notify_buyer(withheld)
+      # A retained card-fingerprint block means THIS card is still guaranteed to fail — telling the
+      # buyer to retry sends them straight into another decline. Domain/IP holds are informational
+      # (they gate other people's blocks, not this buyer's own retry), so they don't suppress the email.
+      return if withheld.any? { |block, reason| reason == :card_still_declining_at_issuer }
+
       failed = buyer_purchases.select { _1.failed? && _1.created_at >= RECENT_FAILURE_WINDOW.ago && _1.email.present? }.max_by(&:created_at)
       return if failed.nil? || BLOCK_ERROR_CODES.exclude?(failed.error_code)
 
