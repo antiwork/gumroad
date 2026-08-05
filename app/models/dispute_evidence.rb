@@ -83,14 +83,23 @@ class DisputeEvidence < ApplicationRecord
     errors.add(:base, "Invalid file type.")
   end
 
-  # Hours the seller has left, from a stamp. Every consumer must ask through here: the number the
-  # notice quotes and the number the gates test have to be the same one, or a window reads open to
-  # one caller while the email it triggers says "0 hours". Rounded, so callers that hold a raw
-  # timestamp cannot reintroduce a second arithmetic.
+  # Hours the seller has left, from a stamp, for DISPLAY COPY only (the UI/email hour count).
+  # Rounded, so it can report the window closed up to ~29 minutes before seller_response_due_at
+  # actually arrives — gating decisions must not use this. See window_open? below.
   def self.hours_left_in_window(seller_contacted_at)
     return 0 if seller_contacted_at.nil?
 
     (SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - (Time.current - seller_contacted_at) / 1.hour).round
+  end
+
+  # Exact comparison against seller_response_due_at. Anything deciding whether the window is
+  # STILL OPEN — accepting_evidence?, the hourly forward-to-Stripe jobs — must ask through here,
+  # never through hours_left_in_window: rounding it can close the window, or forward evidence to
+  # Stripe, up to ~29 minutes before the real deadline.
+  def self.window_open?(seller_contacted_at)
+    return false if seller_contacted_at.nil?
+
+    Time.current < seller_response_due_at(seller_contacted_at)
   end
 
   # Hours the seller has left to keep working on their statement. A saved statement does not close
@@ -142,7 +151,7 @@ class DisputeEvidence < ApplicationRecord
   def self.accepting_evidence?(seller_contacted_at:, resolved_at:)
     return false if evidence_submission_closed?(resolved_at:)
 
-    seller_contacted_at.present? && hours_left_in_window(seller_contacted_at).positive?
+    seller_contacted_at.present? && window_open?(seller_contacted_at)
   end
 
   # Is the notice itself still worth sending, whether or not we may ask for evidence? A dispute with

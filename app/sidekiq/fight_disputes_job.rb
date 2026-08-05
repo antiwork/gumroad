@@ -16,7 +16,7 @@ class FightDisputesJob
     # ready and got forwarded a second time. The scope is filtered on seller_contacted, so a NULL
     # stamp (owned by CreateMissingDisputeEvidenceJob) never reaches the arithmetic.
     DisputeEvidence.seller_contacted.not_resolved.includes(:dispute).find_each do |dispute_evidence|
-      next if DisputeEvidence.hours_left_in_window(dispute_evidence.seller_contacted_at).positive?
+      next if DisputeEvidence.window_open?(dispute_evidence.seller_contacted_at)
       next if TERMINAL_DISPUTE_STATES.include?(dispute_evidence.dispute.state)
       FightDisputeJob.perform_async(dispute_evidence.dispute.id)
     end

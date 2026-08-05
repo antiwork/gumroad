@@ -168,9 +168,32 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       expect(FightDisputeJob.jobs.size).to eq(0)
     end
 
-    # The form posts all three fields every time, so assigning them wholesale would let a seller who
-    # returns only to add a file blank the statement they wrote yesterday.
-    it "keeps fields the seller left blank on a later revision" do
+    # The form always posts all three fields, so assigning them wholesale would let a seller who
+    # returns only to add a file blank the statement they wrote yesterday — but a field genuinely
+    # OMITTED from this request (an older client, or a partial API call) is different from one the
+    # seller submitted as an explicit empty string, which is a request to clear it.
+    it "keeps fields omitted from a later revision's params" do
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: {
+          reason_for_winning: "First answer",
+          cancellation_rebuttal: "First rebuttal",
+          refund_refusal_explanation: "First refusal"
+        }
+      }
+
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: { reason_for_winning: "Revised answer" }
+      }
+
+      dispute_evidence.reload
+      expect(dispute_evidence.reason_for_winning).to eq("Revised answer")
+      expect(dispute_evidence.cancellation_rebuttal).to eq("First rebuttal")
+      expect(dispute_evidence.refund_refusal_explanation).to eq("First refusal")
+    end
+
+    it "clears fields the seller explicitly submits as blank on a later revision" do
       put :update, params: {
         purchase_id: purchase.external_id,
         dispute_evidence: {
@@ -191,8 +214,8 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
 
       dispute_evidence.reload
       expect(dispute_evidence.reason_for_winning).to eq("Revised answer")
-      expect(dispute_evidence.cancellation_rebuttal).to eq("First rebuttal")
-      expect(dispute_evidence.refund_refusal_explanation).to eq("First refusal")
+      expect(dispute_evidence.cancellation_rebuttal).to be_nil
+      expect(dispute_evidence.refund_refusal_explanation).to be_nil
     end
 
     context "when a signed_id for a PNG file is provided" do
@@ -228,6 +251,32 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
         expect(dispute_evidence.customer_communication_file.content_type).to eq("application/pdf")
 
         expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+      end
+    end
+
+    context "when a second revision uploads another file" do
+      before do
+        # Purging in test ENV returns Aws::S3::Errors::AccessDenied
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
+      end
+
+      # has_one_attached REPLACES the prior blob on a bare #attach, which would silently drop the
+      # first file the seller saved before it ever reaches Stripe.
+      it "merges the new file with the one already attached instead of replacing it" do
+        first_blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.pdf"), filename: "first.pdf", content_type: "application/pdf")
+        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_id: first_blob.signed_id } }
+        expect(dispute_evidence.reload.customer_communication_file.filename.to_s).to eq("first.pdf")
+
+        second_blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "second.png", content_type: "image/png")
+        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_id: second_blob.signed_id } }
+
+        dispute_evidence.reload
+        expect(dispute_evidence.customer_communication_file.attached?).to be(true)
+        expect(dispute_evidence.customer_communication_file.filename.to_s).to eq("customer_communication.pdf")
+        expect(dispute_evidence.customer_communication_file.content_type).to eq("application/pdf")
+
+        pages = PDF::Reader.new(StringIO.new(dispute_evidence.customer_communication_file.download)).pages
+        expect(pages.size).to eq(2)
       end
     end
 

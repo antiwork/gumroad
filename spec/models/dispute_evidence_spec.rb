@@ -311,10 +311,8 @@ describe DisputeEvidence do
         .to eq(dispute_evidence.hours_left_to_submit_evidence)
     end
 
-    # The band where the old exact `elapsed < 72.hours` test in Charge::Disputable disagreed with
-    # this rounded one: it called the window open while the notice's own body would have read
-    # "in the next 0 hours". One predicate now answers for both, so the band cannot reopen.
-    it "reports no hours left once rounding takes the window to zero, where an exact test would not" do
+    # Display copy only — gates use .window_open? below instead, which is exact.
+    it "reports no hours left once rounding takes the window to zero, even with real time still on the clock" do
       elapsed = (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours
 
       expect(described_class.hours_left_in_window(elapsed.ago)).to eq(0)
@@ -323,6 +321,23 @@ describe DisputeEvidence do
 
     it "goes negative past the window rather than flooring" do
       expect(described_class.hours_left_in_window((DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 1).hours.ago)).to eq(-1)
+    end
+  end
+
+  describe ".window_open?" do
+    it "is false without a stamp" do
+      expect(described_class.window_open?(nil)).to be(false)
+    end
+
+    it "is open right up to the exact deadline, not up to ~29 minutes early the way the rounded helper would read" do
+      elapsed = (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours
+
+      expect(described_class.window_open?(elapsed.ago)).to be(true)
+      expect(described_class.hours_left_in_window(elapsed.ago)).to eq(0)
+    end
+
+    it "closes exactly at the deadline" do
+      expect(described_class.window_open?(DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours.ago)).to be(false)
     end
   end
 
@@ -349,13 +364,17 @@ describe DisputeEvidence do
       expect(dispute_evidence.accepting_evidence?).to be(true)
     end
 
-    it "declines an elapsed window" do
-      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)).to be(false)
+    it "declines once the exact deadline has passed" do
+      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 0.01).hours.ago)).to be(false)
     end
 
-    it "still quotes the last whole hour rather than declining early" do
-      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 1.4).hours.ago)).to be(true)
-      expect(described_class.hours_left_in_window((DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 1.4).hours.ago)).to eq(1)
+    # Regression for the rounded-hours gate: 71h36m elapsed (0.4h left) used to round to 0 hours
+    # left and close the window ~24 minutes before the real seller_response_due_at.
+    it "keeps accepting right up to the exact deadline, where the rounded helper would already read 0 hours left" do
+      elapsed = (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours
+
+      expect(accepting?(seller_contacted_at: elapsed.ago)).to be(true)
+      expect(described_class.hours_left_in_window(elapsed.ago)).to eq(0)
     end
 
     # The controller bounces an unstamped row too ("You are not allowed to perform this action"), so
