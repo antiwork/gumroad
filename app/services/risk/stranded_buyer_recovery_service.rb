@@ -220,12 +220,32 @@ class Risk::StrandedBuyerRecoveryService
     # the reissued one with no history yet — the OLD card is what proves them.
     ANCHOR_FINGERPRINT_LIMIT = 10
 
+    # buyer_has_clean_payment_history? is a GLOBAL fingerprint check — it doesn't care whose email
+    # the other settled purchases carry. That's fine when called on a purchase an admin already
+    # knows is this buyer's; it's not fine here, where candidate_purchases includes any guest row
+    # typed with this email. An established cardholder could type the victim's email at ONE guest
+    # checkout with their own (elsewhere-clean) card and have that row corroborate itself — the
+    # "anchor" and the fingerprint's clean history would both trace back to a stranger. Require the
+    # clean-history purchases to ALSO share this row's email, so a card's history only vouches for
+    # the identity it was actually built under.
+    def own_clean_payment_history?(purchase)
+      return true if account_purchases.include?(purchase)
+
+      Purchase.successful.non_free.not_fully_refunded.not_chargedback_or_chargedback_reversed
+              .where(created_at: ..Purchase::Blockable::MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY.ago)
+              .where.not(id: purchase.id)
+              .where(stripe_fingerprint: purchase.stripe_fingerprint)
+              .where(email: purchase.email)
+              .limit(Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY)
+              .count >= Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
+    end
+
     def clean_history_anchors
       @_clean_history_anchors ||= candidate_purchases.select { _1.stripe_fingerprint.present? }
                                                      .sort_by { -_1.id }
                                                      .uniq(&:stripe_fingerprint)
                                                      .first(ANCHOR_FINGERPRINT_LIMIT)
-                                                     .select(&:buyer_has_clean_payment_history?)
+                                                     .select { own_clean_payment_history?(_1) }
     end
 
     def clean_history_anchor
@@ -331,7 +351,7 @@ class Risk::StrandedBuyerRecoveryService
     # snapshot a concurrent admin block or re-block can invalidate (same pattern as
     # AlertOnStaleBlocksHoldingEstablishedBuyersJob and Onetime::ClearMistakenBuyerBlocks).
     def clear!(blocks)
-      raise UnsafeClearError, "buyer no longer has clean payment history" unless clean_history_anchor.buyer_has_clean_payment_history?
+      raise UnsafeClearError, "buyer no longer has clean payment history" unless own_clean_payment_history?(clean_history_anchor)
       # Re-checked here, not only in #call: a chargeback recorded between the initial veto and this
       # write is a live dispute the batch decision never saw, and #call's result is a snapshot the
       # transaction's own guards (this one included) must re-assert against, same as the clean-history

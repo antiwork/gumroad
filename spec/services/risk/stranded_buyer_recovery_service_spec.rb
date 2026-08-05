@@ -102,6 +102,27 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.cleared.map(&:object_value)).not_to include("guid-other-account")
       expect(other_block.reload.blocked_at).to be_present
     end
+
+    # An attacker's own card is clean under THEIR OWN email, not the victim's — but a checkout
+    # email is unauthenticated, so they can type the victim's address at a single guest checkout.
+    # buyer_has_clean_payment_history? checks the fingerprint globally, blind to whose email the
+    # settled rows carry, so that fabricated row would otherwise self-corroborate off the
+    # attacker's own history and let recovery harvest (and unblock) the attacker's guid.
+    it "does not let an attacker's own clean card history corroborate a guest row typed with the victim's email" do
+      attacker_fingerprint = "attacker-own-card"
+      create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
+                  email: "attacker@example.net", stripe_fingerprint: attacker_fingerprint,
+                  purchase_state: "successful", created_at: 6.months.ago)
+      create(:purchase, email: buyer_email, purchase_state: "failed",
+                        browser_guid: "guid-attacker", stripe_fingerprint: attacker_fingerprint,
+                        created_at: 2.days.ago)
+      attacker_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-attacker")
+
+      result = call
+
+      expect(result.cleared.map(&:object_value)).not_to include("guid-attacker")
+      expect(attacker_block.reload.blocked_at).to be_present
+    end
   end
 
   describe "authored-block escalation" do
