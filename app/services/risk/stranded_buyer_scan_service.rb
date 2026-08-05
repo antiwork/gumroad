@@ -12,7 +12,9 @@ class Risk::StrandedBuyerScanService
   # to this scan forever.
   FAILURE_LOOKBACK = 30.days
 
-  # The decline codes an in-app PlatformBlock check can set on a checkout.
+  # The decline codes an in-app PlatformBlock check can set on a checkout. Must match
+  # Risk::StrandedBuyerRecoveryService::BLOCK_ERROR_CODES — the recovery service can act on any
+  # buyer this scan surfaces, so a code missing here is a buyer the recovery workflow never sees.
   #
   # ⚠️ This is the in-app set only. Whole-address `email` and `charge_processor_fingerprint` blocks
   # are enforced at Stripe via Radar value lists (Radar::ValueListSyncService), never by
@@ -22,6 +24,7 @@ class Risk::StrandedBuyerScanService
   BLOCK_ERROR_CODES = [
     PurchaseErrorCode::BLOCKED_BROWSER_GUID,
     PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN,
+    PurchaseErrorCode::BLOCKED_IP_ADDRESS,
   ].freeze
 
   # The bound on the work: how many buyers with a blocked checkout get their purchase history

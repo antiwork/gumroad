@@ -13,30 +13,34 @@ class DecliningPlatformBlocks
     @failures = failures
   end
 
-  # Two queries for the whole set rather than one per purchase.
+  # Three queries for the whole set rather than one per purchase.
   def call
-    guid_purchases, domain_purchases = failures.partition { |purchase| purchase.error_code == PurchaseErrorCode::BLOCKED_BROWSER_GUID }
+    guid_purchases, remaining = failures.partition { |purchase| purchase.error_code == PurchaseErrorCode::BLOCKED_BROWSER_GUID }
+    ip_purchases, domain_purchases = remaining.partition { |purchase| purchase.error_code == PurchaseErrorCode::BLOCKED_IP_ADDRESS }
 
     guids = guid_purchases.filter_map { |purchase| purchase.browser_guid.presence }.uniq
+    ips = ip_purchases.filter_map { |purchase| purchase.ip_address.presence }.uniq
     domains_by_purchase = domain_purchases.index_with { |purchase| blocked_domain_candidates(purchase) }
 
-    # Each lookup mirrors the check that declined this purchase, and the two checks do NOT agree on
+    # Each lookup mirrors the check that declined this purchase, and the checks do NOT agree on
     # type scope. Purchase::Risk#check_for_past_blocked_guids goes through #past_blocked_object,
     # which matches object_value alone — a guid string stored under any type declines the purchase,
     # so scoping to :browser_guid here would find nothing and drop the buyer from the report
-    # entirely. The domain check runs through AttributeBlockable, which does scope to
-    # :email_domain, so that lookup stays scoped.
+    # entirely. The domain and IP checks run through scoped lookups (AttributeBlockable,
+    # #check_for_past_fraudulent_ips), so those two stay scoped to their own object_type.
     #
     # The domain lookup also resolves by candidate order rather than by date, because
     # blocked_by_email_domain_if_fraudulent_transaction? short-circuits on the first of the four
     # domains that is blocked; that row holds this purchase even when another candidate carries an
     # older block.
     guid_blocks = guids.any? ? earliest_blocks_by_value(guids) : {}
+    ip_blocks = ips.any? ? earliest_blocks_by_value(ips, object_type: PlatformBlock::TYPES[:ip_address]) : {}
     all_domains = domains_by_purchase.values.flatten.uniq
     domain_blocks = all_domains.any? ? earliest_blocks_by_value(all_domains, object_type: PlatformBlock::TYPES[:email_domain]) : {}
 
     blocks = {}
     guid_purchases.each { |purchase| blocks[purchase.id] = guid_blocks[purchase.browser_guid&.downcase] }
+    ip_purchases.each { |purchase| blocks[purchase.id] = ip_blocks[purchase.ip_address&.downcase] }
     domain_purchases.each do |purchase|
       declining_domain = domains_by_purchase[purchase].find { |domain| domain_blocks.key?(domain.downcase) }
       blocks[purchase.id] = domain_blocks[declining_domain.downcase] if declining_domain

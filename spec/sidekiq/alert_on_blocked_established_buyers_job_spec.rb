@@ -18,8 +18,8 @@ describe AlertOnBlockedEstablishedBuyersJob do
   end
 
   def blocked_attempt(buyer_email: email, guid: browser_guid, created_at: 1.hour.ago,
-                      error_code: PurchaseErrorCode::BLOCKED_BROWSER_GUID)
-    create(:purchase, email: buyer_email, browser_guid: guid, created_at:,
+                      error_code: PurchaseErrorCode::BLOCKED_BROWSER_GUID, ip_address: nil)
+    create(:purchase, email: buyer_email, browser_guid: guid, created_at:, ip_address:,
                       purchase_state: "failed", error_code:)
   end
 
@@ -90,6 +90,22 @@ describe AlertOnBlockedEstablishedBuyersJob do
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message).to include(email)
       expect(message).to include("blocked by email_domain since #{block.blocked_at.to_date}")
+    end
+  end
+
+  # Greptile P1 (gumroad#7087): BLOCK_ERROR_CODES omitted BLOCKED_IP_ADDRESS, so an IP-blocked
+  # buyer never reached this alert (or the admin recovery API, which shares this scan) even though
+  # Risk::StrandedBuyerRecoveryService already knows how to clear an ip_address block.
+  it "alerts when the checkout failed on a blocked ip address" do
+    settled_purchases(established_count)
+    blocked_attempt(error_code: PurchaseErrorCode::BLOCKED_IP_ADDRESS, ip_address: "1.2.3.4")
+    block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "1.2.3.4", expires_in: 6.months)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include(email)
+      expect(message).to include("blocked by ip_address since #{block.blocked_at.to_date}")
     end
   end
 
