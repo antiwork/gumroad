@@ -42,6 +42,39 @@ describe MerchantCenterFeedService do
       expect(g_field(item, "condition")).to eq "new"
     end
 
+    it "converts non-USD prices to USD with checkout's rate source" do
+      create_eligible_product(price_currency_type: "eur", price_cents: 2600)
+
+      # 26.00 EUR at the test-fixture rate (0.81127 EUR/USD) — same conversion
+      # get_usd_cents performs at checkout.
+      expect(g_field(items(service.generate).first, "price")).to eq "32.05 USD"
+    end
+
+    it "emits free US shipping for digital products" do
+      create_eligible_product
+
+      shipping = items(service.generate).first.at_xpath("g:shipping", "g" => "http://base.google.com/ns/1.0")
+      expect(shipping.at_xpath("g:country", "g" => "http://base.google.com/ns/1.0").text).to eq "US"
+      expect(shipping.at_xpath("g:price", "g" => "http://base.google.com/ns/1.0").text).to eq "0.00 USD"
+    end
+
+    it "omits the shipping element for physical products" do
+      product = create(:physical_product, :recommendable, price_cents: 999)
+      create(:asset_preview, link: product)
+      product.reload
+
+      item = items(service.generate).first
+      expect(item).to be_present
+      expect(item.at_xpath("g:shipping", "g" => "http://base.google.com/ns/1.0")).to be_nil
+    end
+
+    it "excludes non-USD products when no conversion rate is available" do
+      create_eligible_product(price_currency_type: "eur", price_cents: 2600)
+      allow(service).to receive(:get_rate).and_raise(StandardError)
+
+      expect(items(service.generate)).to be_empty
+    end
+
     it "escapes XML-unsafe characters in product fields" do
       create_eligible_product(name: "Bells & <Whistles>")
 
@@ -126,10 +159,11 @@ describe MerchantCenterFeedService do
       expect(image_link).not_to include("/embed/")
     end
 
-    it "formats single-unit currency prices as whole units" do
+    it "converts single-unit currency prices to USD" do
       create_eligible_product(price_currency_type: "jpy", price_cents: 500)
 
-      expect(g_field(items(service.generate).first, "price")).to eq "500 JPY"
+      # 500 JPY at the test-fixture rate (78.3932 JPY/USD).
+      expect(g_field(items(service.generate).first, "price")).to eq "6.38 USD"
     end
 
     it "keeps the feed under the sitemap uploader's allowed S3 prefix" do
