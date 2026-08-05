@@ -31,6 +31,17 @@ describe Discover::TaxonomyAttributeClassifier do
 
       expect(described_class.classify!(product)).to eq(false)
     end
+
+    it "clears a stale inferred value when the product moves to an unregistered taxonomy" do
+      product = create(:product, taxonomy: fonts_taxonomy)
+      create(:product_file, link: product, url: "#{S3_BASE_URL}specs/font.otf")
+      described_class.classify!(product)
+      expect(product.reload.inferred_taxonomy_attribute_values).to eq("format" => "OTF")
+
+      product.update!(taxonomy: other_taxonomy)
+
+      expect(product.reload.inferred_taxonomy_attribute_values).to eq({})
+    end
   end
 
   describe ".inferred_values_for" do

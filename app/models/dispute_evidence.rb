@@ -83,10 +83,9 @@ class DisputeEvidence < ApplicationRecord
     errors.add(:base, "Invalid file type.")
   end
 
-  # Hours the seller has left, from a stamp. Every consumer must ask through here: the number the
-  # notice quotes and the number the gates test have to be the same one, or a window reads open to
-  # one caller while the email it triggers says "0 hours". Rounded, so callers that hold a raw
-  # timestamp cannot reintroduce a second arithmetic.
+  # Hours the seller has left, from a stamp — display copy only (UI and email hour counts).
+  # Rounded, so it reads 0 up to ~29 minutes before seller_response_due_at actually arrives;
+  # anything gating a save or a submission must use window_open? below instead.
   def self.hours_left_in_window(seller_contacted_at)
     return 0 if seller_contacted_at.nil?
 
@@ -106,6 +105,14 @@ class DisputeEvidence < ApplicationRecord
     return if seller_contacted_at.nil?
 
     seller_contacted_at + SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
+  end
+
+  # Exact comparison against the deadline, for anything that gates a save or a submission.
+  # hours_left_in_window rounds for display and closes the window up to 29 minutes early —
+  # this is what the permission and submission checks must use instead.
+  def self.window_open?(seller_contacted_at)
+    due_at = seller_response_due_at(seller_contacted_at)
+    due_at.present? && Time.current < due_at
   end
 
   def self.seller_response_reminder_at(seller_contacted_at)
@@ -142,7 +149,7 @@ class DisputeEvidence < ApplicationRecord
   def self.accepting_evidence?(seller_contacted_at:, resolved_at:)
     return false if evidence_submission_closed?(resolved_at:)
 
-    seller_contacted_at.present? && hours_left_in_window(seller_contacted_at).positive?
+    seller_contacted_at.present? && window_open?(seller_contacted_at)
   end
 
   # Is the notice itself still worth sending, whether or not we may ask for evidence? A dispute with
@@ -151,7 +158,7 @@ class DisputeEvidence < ApplicationRecord
   def self.notice_worth_sending?(seller_contacted_at:, resolved_at:)
     return false if evidence_submission_closed?(resolved_at:)
 
-    seller_contacted_at.nil? || hours_left_in_window(seller_contacted_at).positive?
+    seller_contacted_at.nil? || window_open?(seller_contacted_at)
   end
 
   def accepting_evidence?

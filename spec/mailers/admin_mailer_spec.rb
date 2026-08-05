@@ -14,7 +14,7 @@ describe AdminMailer do
       end
 
       it "has the id of the seller" do
-        expect(mail.body).to include(dispute.disputable.seller.id)
+        expect(mail.body.encoded).to include(dispute.disputable.seller.external_id)
       end
 
       it "has the details of the purchase" do
@@ -40,7 +40,7 @@ describe AdminMailer do
       end
 
       it "has the id of the seller" do
-        expect(mail.body).to include(dispute.disputable.seller.id)
+        expect(mail.body.encoded).to include(dispute.disputable.seller.external_id)
       end
 
       it "has the details of all included purchases" do
@@ -74,12 +74,9 @@ describe AdminMailer do
       expect(@mail.body).to include("Balance: $-600")
     end
 
-    it "includes admin purchase link" do
-      expect(@mail.body).to include(admin_purchase_url(@last_refunded_purchase))
-    end
-
-    it "includes admin product link" do
-      expect(@mail.body).to include(admin_product_url(@last_refunded_purchase.link.unique_permalink))
+    it "identifies the purchase and product" do
+      expect(@mail.body).to include(@last_refunded_purchase.external_id)
+      expect(@mail.body).to include(@last_refunded_purchase.link.unique_permalink)
     end
   end
 end

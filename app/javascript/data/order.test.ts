@@ -504,6 +504,68 @@ describe("startOrderCreation", () => {
     expect(result.lineItems[secondLine.uid]).toMatchObject({ success: true, permalink: secondLine.permalink });
     expect(result.lineItems[firstLine.uid]).not.toBe(result.lineItems[secondLine.uid]);
   });
+
+  it("maps a purchase-id-keyed confirm response back to the cart line by permalink", async () => {
+    // The legacy confirm endpoint (Order::ConfirmService) keys line items by purchase id, not
+    // cart uid. Dropping such a response loses its error_message and the buyer gets the generic
+    // failure copy instead of the SCA-specific one.
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardPayment = vi.fn().mockResolvedValue({ error: { type: "card_error" } });
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: {
+              success: true,
+              requires_card_action: true,
+              client_secret: "pi_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            "123456": {
+              success: false,
+              permalink: firstLine.permalink,
+              error_message: "We are unable to authenticate your payment method.",
+              name: null,
+              formatted_price: "$10",
+              error_code: null,
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    const result = await startOrderCreation(requestData, []);
+
+    expect(result.lineItems[firstLine.uid]).toMatchObject({
+      success: false,
+      error_message: "We are unable to authenticate your payment method.",
+    });
+  });
 });
 
 describe("startClientConfirmOrderCreation", () => {

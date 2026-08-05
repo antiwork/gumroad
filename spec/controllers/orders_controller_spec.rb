@@ -1135,6 +1135,33 @@ describe OrdersController, :vcr do
           end.to change(Purchase.successful, :count).by(2)
         end
 
+        it "still requires reCAPTCHA, without 500ing, when line_items is entirely absent from the request" do
+          # GUMROAD-7B: a request with no :line_items key used to crash (#all? on a bare
+          # ActionController::Parameters). A cartless request must not earn the free-cart
+          # exemption either -- vacuous [].all? would skip reCAPTCHA for exactly the
+          # bot/scanner traffic that omits line_items.
+          expect_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
+
+          expect do
+            post :create, params: { email: "test@test.com", price: "100", product_permalink: product_1.unique_permalink }
+          end.not_to raise_error
+
+          expect(response.parsed_body["success"]).to be(false)
+        end
+
+        it "still requires reCAPTCHA, without 500ing, when a line item's permalink matches no product" do
+          # The stale-checkout / deleted-product shape: a bogus permalink must fail the
+          # free-cart exemption (not 500 on the nil deref, and not pass it -- a
+          # `!product_link&.require_captcha?` would read `!nil` as captcha-free).
+          expect_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
+
+          expect do
+            post :create, params: { email: "test@test.com", line_items: [{ uid: "u0", permalink: "no-such-permalink", perceived_price_cents: "0", quantity: 1 }] }
+          end.not_to raise_error
+
+          expect(response.parsed_body["success"]).to be(false)
+        end
+
         it "verifies reCAPTCHA if any of the purchases require it" do
           allow_any_instance_of(Link).to receive(:require_captcha?).and_return(true)
 

@@ -52,7 +52,11 @@ module Onetime
 
       def backfill(link)
         inferred = Discover::TaxonomyAttributeClassifier.inferred_values_for(link)
-        return tick(:skipped_no_signal) if inferred.empty?
+
+        if inferred.empty?
+          return tick(:skipped_no_signal) if @dry_run || link.inferred_taxonomy_attribute_values.blank?
+          return link.save_inferred_taxonomy_attribute_values({}) ? tick(:cleared) : tick(:save_failed)
+        end
 
         inferred.each { |name, value| @value_distribution[name][value.to_s] += 1 }
         return tick(:would_infer) if @dry_run

@@ -265,8 +265,9 @@ const CheckoutIndexPage = () => {
   // all reading from the one lane that is actually in effect.
   //
   // Also gated on the same dynamic eligibility PaymentForm uses to mount the element (matching
-  // the summary in index.tsx), so the tip basis and the modal can never quote a listed currency
-  // for a cart whose element the client declines to mount.
+  // the summary in index.tsx): if a discount or surcharge reload drops the loaded canonical total
+  // below Stripe's Payment Element minimum, PaymentForm falls back to the CardElement and the
+  // charge is canonical USD, so the tip basis and the modal must fall back too.
   const listedCurrency =
     buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state)
       ? null

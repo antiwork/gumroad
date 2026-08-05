@@ -17,7 +17,6 @@ import {
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
   requiresReusablePaymentMethod,
-  stripePaymentElementAmountClamped,
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
   STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
   type CheckoutPaymentConfig,
@@ -76,6 +75,16 @@ const futureChargePaymentElementConfig: CheckoutPaymentConfig = {
     payment_method_creation: "manual",
     stripe_link_enabled: false,
   },
+};
+
+const cardElementConfig: CheckoutPaymentConfig = {
+  integration: "card_element",
+  fallback_reason: "stripe_payment_element_flag_disabled",
+  disable_wallets: false,
+  request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
+  flat_payment_methods: false,
+  elements_options: null,
 };
 
 const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
@@ -206,6 +215,10 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state())).toBe(true);
   });
 
+  it("falls back when the server selected the Card Element integration", () => {
+    expect(canUseStripePaymentElement(state({ checkoutPayment: cardElementConfig }))).toBe(false);
+  });
+
   it("falls back when the cart is empty", () => {
     expect(canUseStripePaymentElement(state({ products: [] }))).toBe(false);
   });
@@ -249,13 +262,45 @@ describe("canUseStripePaymentElement", () => {
     expect(canUseStripePaymentElement(state({ products: [product({ nativeType: "commission" })] }))).toBe(true);
   });
 
-  it("allows future-charge and installment flows in PaymentIntent mode", () => {
-    // Installment carts and mixed preorder/free-trial carts arrive in payment mode (pure setup
-    // carts get setup mode from the server); the element collects a reusable card and the
-    // server prices every charge.
+  it("falls back for future-charge flows in PaymentIntent mode", () => {
+    expect(canUseStripePaymentElement(state({ products: [product({ isPreorder: true })] }))).toBe(false);
+    expect(canUseStripePaymentElement(state({ products: [product({ hasFreeTrial: true })] }))).toBe(false);
+  });
+
+  it("allows installments on the canonical USD server-confirm element", () => {
     expect(canUseStripePaymentElement(state({ products: [product({ payInInstallments: true })] }))).toBe(true);
-    expect(canUseStripePaymentElement(state({ products: [product({ isPreorder: true })] }))).toBe(true);
-    expect(canUseStripePaymentElement(state({ products: [product({ hasFreeTrial: true })] }))).toBe(true);
+  });
+
+  it("falls back when the server-owned first charge is below Stripe's minimum", () => {
+    // The agreement total plus full tax would clear the floor, but the actual first charge does not.
+    expect(
+      canUseStripePaymentElement(
+        state({
+          products: [product({ price: 120, payInInstallments: true, installmentPlan: { numberOfInstallments: 3 } })],
+          surcharges: loadedSurcharges({ subtotal: 120, tax_cents: 60, charge_canonical_total_cents: 48 }),
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("allows installments on the buyer-currency presentment lane, whose quote prices the first installment", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({
+          checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+          products: [product({ payInInstallments: true })],
+        }),
+      ),
+    ).toBe(true);
+    // The lane does not admit the other future-charge shapes.
+    expect(
+      canUseStripePaymentElement(
+        state({
+          checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+          products: [product({ isPreorder: true })],
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("allows setup-mode checkout for preorder and free-trial flows", () => {
@@ -317,7 +362,7 @@ describe("canUseStripePaymentElement", () => {
     ).toBe(false);
   });
 
-  it("falls back in SetupIntent mode for products that are not future-charge ones", () => {
+  it("falls back in SetupIntent mode for non-future-charge, installment, and zero-amount products", () => {
     expect(
       canUseStripePaymentElement(
         state({
@@ -331,8 +376,6 @@ describe("canUseStripePaymentElement", () => {
         state({ checkoutPayment: futureChargePaymentElementConfig, products: [product({ payInInstallments: true })] }),
       ),
     ).toBe(false);
-    // A zero-amount preorder charges nothing now or later; setup mode mounts with no amount, so
-    // there is nothing to gate on.
     expect(
       canUseStripePaymentElement(
         state({
@@ -340,33 +383,31 @@ describe("canUseStripePaymentElement", () => {
           products: [product({ isPreorder: true, price: 0 })],
         }),
       ),
-    ).toBe(true);
-  });
-
-  it("keeps the element when a loaded zero total still requires payment, and drops it when it does not", () => {
-    const zeroTotal = {
-      type: "loaded" as const,
-      result: {
-        vat_id_valid: false,
-        has_vat_id_input: false,
-        shipping_rate_cents: 0,
-        tax_cents: 0,
-        tax_included_cents: 0,
-        subtotal: 0,
-        buyer_currency_quote: null,
-      },
-    };
-    // The default product fixture sets requirePayment, so a card is still collected.
-    expect(canUseStripePaymentElement(state({ surcharges: zeroTotal }))).toBe(true);
-    // A genuinely free cart renders no payment surface at all (the free-purchase path).
-    expect(
-      canUseStripePaymentElement(state({ surcharges: zeroTotal, products: [product({ requirePayment: false })] })),
     ).toBe(false);
   });
 
-  it("keeps the element when the loaded checkout total is below Stripe's USD minimum charge amount", () => {
-    // The mount amount is clamped to the floor (getStripePaymentElementAmount) instead of
-    // dropping the buyer onto a surface that no longer exists.
+  it("falls back when loaded checkout total is zero", () => {
+    expect(
+      canUseStripePaymentElement(
+        state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: 0,
+              buyer_currency_quote: null,
+            },
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("falls back when loaded checkout total is below Stripe's USD minimum charge amount", () => {
     expect(
       canUseStripePaymentElement(
         state({
@@ -384,7 +425,7 @@ describe("canUseStripePaymentElement", () => {
           },
         }),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("keeps the Payment Element path selected while the final total is pending", () => {
@@ -453,6 +494,10 @@ describe("canUseStripePaymentElementClientConfirm", () => {
 
   it("falls back when the server selected the server-confirm Payment Element integration", () => {
     expect(canUseStripePaymentElementClientConfirm(state())).toBe(false);
+  });
+
+  it("falls back when the server selected the Card Element integration", () => {
+    expect(canUseStripePaymentElementClientConfirm(state({ checkoutPayment: cardElementConfig }))).toBe(false);
   });
 
   it("falls back when the cart is empty", () => {
@@ -570,9 +615,7 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     expect(canUseStripePaymentElementClientConfirm(clientConfirmState({ surcharges: { type: "pending" } }))).toBe(true);
   });
 
-  it("keeps the element when the loaded checkout total is below Stripe's USD minimum charge amount", () => {
-    // Same clamp treatment as the server-confirm lane: the ConfirmationToken is amount-agnostic
-    // (the deferred intent carries the real amount), so a clamped mount stays payable.
+  it("falls back when the loaded checkout total is below Stripe's USD minimum charge amount", () => {
     expect(
       canUseStripePaymentElementClientConfirm(
         clientConfirmState({
@@ -590,7 +633,7 @@ describe("canUseStripePaymentElementClientConfirm", () => {
           },
         }),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
@@ -629,6 +672,9 @@ describe("requiresPaymentElementReusablePaymentMethod", () => {
       requiresPaymentElementReusablePaymentMethod(
         state({ products: [product(), product({ permalink: "commission", nativeType: "commission" })] }),
       ),
+    ).toBe(true);
+    expect(
+      requiresPaymentElementReusablePaymentMethod(state({ products: [product({ payInInstallments: true })] })),
     ).toBe(true);
   });
 });
@@ -699,6 +745,19 @@ describe("getStripePaymentElementAmount", () => {
     expect(getStripePaymentElementAmount(state({ surcharges: { type: "pending" } }))).toBeNull();
   });
 
+  it("returns the server-owned charge-now amount for a taxed installment cart", () => {
+    // This mirrors the request spec: $10 in three installments with 5.5% tax charges
+    // $3.34 + $0.18 today, while the full agreement is $10.55.
+    expect(
+      getStripePaymentElementAmount(
+        state({
+          products: [product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 3 } })],
+          surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 55, charge_canonical_total_cents: 352 }),
+        }),
+      ),
+    ).toBe(352);
+  });
+
   it("returns null for setup-mode checkout", () => {
     expect(
       getStripePaymentElementAmount(
@@ -707,30 +766,46 @@ describe("getStripePaymentElementAmount", () => {
     ).toBeNull();
   });
 
-  it("clamps a loaded total below Stripe's floor to the floor, with wallets suppressed", () => {
-    // Real carts can charge less than the mount floor (a discounted installment's first
-    // payment, offer-code drift); the mount amount is display plumbing on this lane, so it is
-    // clamped and stripePaymentElementAmountClamped keeps wallet sheets away from it.
-    const belowFloor = (subtotal: number) =>
-      state({
-        surcharges: {
-          type: "loaded",
-          result: {
-            vat_id_valid: false,
-            has_vat_id_input: false,
-            shipping_rate_cents: 0,
-            tax_cents: 0,
-            tax_included_cents: 0,
-            subtotal,
-            buyer_currency_quote: null,
+  it("returns null when the loaded checkout total is zero", () => {
+    expect(
+      getStripePaymentElementAmount(
+        state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: 0,
+              buyer_currency_quote: null,
+            },
           },
-        },
-      });
-    expect(getStripePaymentElementAmount(belowFloor(stripePaymentElementMinimumCharge - 1))).toBe(
-      stripePaymentElementMinimumCharge,
-    );
-    expect(stripePaymentElementAmountClamped(belowFloor(stripePaymentElementMinimumCharge - 1))).toBe(true);
-    expect(stripePaymentElementAmountClamped(belowFloor(stripePaymentElementMinimumCharge))).toBe(false);
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when the loaded checkout total is below Stripe's USD minimum charge amount", () => {
+    expect(
+      getStripePaymentElementAmount(
+        state({
+          surcharges: {
+            type: "loaded",
+            result: {
+              vat_id_valid: false,
+              has_vat_id_input: false,
+              shipping_rate_cents: 0,
+              tax_cents: 0,
+              tax_included_cents: 0,
+              subtotal: stripePaymentElementMinimumCharge - 1,
+              buyer_currency_quote: null,
+            },
+          },
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("returns a positive loaded total below Gumroad's USD minimum when the server selected Payment Element", () => {
@@ -855,13 +930,18 @@ describe("buyer-currency presentment lane", () => {
   it("mounts canonical USD when the surcharge response has no quote", () => {
     const s = state({
       checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      products: [product({ payInInstallments: true, installmentPlan: { numberOfInstallments: 3 } })],
       surcharges: {
         type: "loaded",
-        result: { ...loadedSurchargesWithQuote.result, buyer_currency_quote: null },
+        result: {
+          ...loadedSurchargesWithQuote.result,
+          charge_canonical_total_cents: 352,
+          buyer_currency_quote: null,
+        },
       },
     });
     expect(getStripePaymentElementPresentment(s)).toBeNull();
-    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+    expect(getStripePaymentElementAmount(s)).toBe(352);
   });
 
   it("mounts canonical USD when the quote allocation does not match the cart", () => {
@@ -890,11 +970,15 @@ describe("buyer-currency presentment lane", () => {
   it("mounts canonical USD when the buyer opts to save the card (canonical charge path)", () => {
     const s = state({
       checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
-      surcharges: loadedSurchargesWithQuote,
+      products: [product({ payInInstallments: true, installmentPlan: { numberOfInstallments: 3 } })],
+      surcharges: {
+        ...loadedSurchargesWithQuote,
+        result: { ...loadedSurchargesWithQuote.result, charge_canonical_total_cents: 352 },
+      },
       willSaveCard: true,
     });
     expect(getStripePaymentElementPresentment(s)).toBeNull();
-    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+    expect(getStripePaymentElementAmount(s)).toBe(352);
   });
 
   it("mounts canonical USD while a non-card payment method is selected", () => {
@@ -973,6 +1057,10 @@ describe("buyer-currency presentment lane", () => {
       // otherwise this change would alter mount behavior outside the presentment lane.
       expect(getStripePaymentElementMountCurrency(state())).toBe("usd");
       expect(getStripePaymentElementMountCurrency(state({ surcharges: { type: "pending" } }))).toBe("usd");
+    });
+
+    it("returns null for non-Payment-Element integrations", () => {
+      expect(getStripePaymentElementMountCurrency(state({ checkoutPayment: cardElementConfig }))).toBeNull();
     });
   });
 });
@@ -1806,7 +1894,12 @@ describe("reduceCheckoutState", () => {
 });
 
 const loadedSurcharges = (
-  overrides: Partial<{ subtotal: number; tax_cents: number; shipping_rate_cents: number }> = {},
+  overrides: Partial<{
+    subtotal: number;
+    tax_cents: number;
+    shipping_rate_cents: number;
+    charge_canonical_total_cents: number;
+  }> = {},
 ) =>
   ({
     type: "loaded",
@@ -1833,9 +1926,18 @@ describe("getChargeTodayPrice", () => {
     ).toBe(1_150);
   });
 
-  it("matches the checkout table's Payment today row for an installment cart", () => {
-    // $10 in 2 installments at 20% tax: the table presents the full tax with "Payment today"
-    // ($5 first installment + $2 tax = $7) and "Future installments" pre-tax ($5).
+  it("uses the server-owned amount for a taxed installment cart", () => {
+    expect(
+      getChargeTodayPrice(
+        state({
+          products: [product({ price: 1_000, payInInstallments: true, installmentPlan: { numberOfInstallments: 2 } })],
+          surcharges: loadedSurcharges({ subtotal: 1_000, tax_cents: 200, charge_canonical_total_cents: 600 }),
+        }),
+      ),
+    ).toBe(600);
+  });
+
+  it("falls back to the display-derived amount for an older surcharge response", () => {
     expect(
       getChargeTodayPrice(
         state({

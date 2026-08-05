@@ -29,6 +29,7 @@ describe "UPI Payment Element billing handling", type: :system, js: true do
   before do
     allow(GeoIp).to receive(:lookup).and_return(india)
     @seller = create(:user_with_compliance_info, disable_buyer_local_currency: false)
+    Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, @seller)
     Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, @seller)
     Feature.activate_user(:buyer_local_currency, @seller)
     Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @seller)
@@ -42,6 +43,7 @@ describe "UPI Payment Element billing handling", type: :system, js: true do
   end
 
   after do
+    Feature.deactivate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, @seller)
     Feature.deactivate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, @seller)
     Feature.deactivate_user(:buyer_local_currency, @seller)
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @seller)

@@ -168,9 +168,36 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       expect(FightDisputeJob.jobs.size).to eq(0)
     end
 
-    # The form posts all three fields every time, so assigning them wholesale would let a seller who
-    # returns only to add a file blank the statement they wrote yesterday.
+    # The form pre-fills a saved value into its editable control, so resubmitting it unchanged is
+    # what "leave alone" looks like at this layer — only an explicit clear should blank the field.
     it "keeps fields the seller left blank on a later revision" do
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: {
+          reason_for_winning: "First answer",
+          cancellation_rebuttal: "First rebuttal",
+          refund_refusal_explanation: "First refusal"
+        }
+      }
+
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: {
+          reason_for_winning: "Revised answer",
+          cancellation_rebuttal: "First rebuttal",
+          refund_refusal_explanation: "First refusal"
+        }
+      }
+
+      dispute_evidence.reload
+      expect(dispute_evidence.reason_for_winning).to eq("Revised answer")
+      expect(dispute_evidence.cancellation_rebuttal).to eq("First rebuttal")
+      expect(dispute_evidence.refund_refusal_explanation).to eq("First refusal")
+    end
+
+    # An explicitly-cleared field is not "left blank" — it is the seller retracting what they wrote,
+    # and the deadline job must forward that retraction rather than the stale saved text.
+    it "clears a field the seller explicitly blanked on a later revision" do
       put :update, params: {
         purchase_id: purchase.external_id,
         dispute_evidence: {
@@ -191,8 +218,8 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
 
       dispute_evidence.reload
       expect(dispute_evidence.reason_for_winning).to eq("Revised answer")
-      expect(dispute_evidence.cancellation_rebuttal).to eq("First rebuttal")
-      expect(dispute_evidence.refund_refusal_explanation).to eq("First refusal")
+      expect(dispute_evidence.cancellation_rebuttal).to be_nil
+      expect(dispute_evidence.refund_refusal_explanation).to be_nil
     end
 
     context "when a signed_id for a PNG file is provided" do
@@ -228,6 +255,29 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
         expect(dispute_evidence.customer_communication_file.content_type).to eq("application/pdf")
 
         expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+      end
+    end
+
+    # customer_communication_file is has_one_attached, so a bare #attach on this second save would
+    # replace rather than add to the first save's evidence — the exact loss Greptile flagged.
+    context "when a later revision adds another file" do
+      let(:first_blob) do
+        ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.pdf"), filename: "first.pdf", content_type: "application/pdf")
+      end
+      let(:second_blob) do
+        ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "second.png", content_type: "image/png")
+      end
+
+      it "merges the new file with the previously saved one instead of replacing it" do
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
+
+        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_id: first_blob.signed_id } }
+        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_id: second_blob.signed_id } }
+
+        dispute_evidence.reload
+        expect(dispute_evidence.customer_communication_file.filename.to_s).to eq("customer_communication.pdf")
+        pages = PDF::Reader.new(StringIO.new(dispute_evidence.customer_communication_file.download)).pages
+        expect(pages.size).to eq(2)
       end
     end
 

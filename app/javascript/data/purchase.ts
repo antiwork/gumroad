@@ -144,7 +144,6 @@ export const getPaymentDetailsSource = (
   switch (paymentMethod.cardParamsResult.type) {
     case "cc":
     case "error":
-      // card_element is the scoped SCA/mandate-confirm restoration lane (gumroad-private#1853).
       return usedStripePaymentElement ? "payment_element" : "card_element";
     case "cc-payment-request":
       return "payment_request";

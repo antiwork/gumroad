@@ -15,7 +15,7 @@ module Discover
 
     def self.classify!(link)
       classifier = classifier_for(link)
-      return false if classifier.nil?
+      return clear_inferred_values(link) if classifier.nil?
 
       classifier.new(link).classify!
     end
@@ -34,6 +34,12 @@ module Discover
       return nil if taxonomy.nil?
 
       CLASSIFIERS[taxonomy.ancestry_path.join("/")]
+    end
+
+    # A product moved off a classified taxonomy (or has none) must not keep a prior
+    # classifier's inferred values — nothing re-runs classify! for it again to clear them.
+    def self.clear_inferred_values(link)
+      link.inferred_taxonomy_attribute_values.present? ? link.save_inferred_taxonomy_attribute_values({}) : false
     end
   end
 end

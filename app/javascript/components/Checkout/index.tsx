@@ -262,9 +262,10 @@ export const Checkout = ({
   // Suppressed while the FX-quoted lane is displaying, so that exactly one lane is ever in effect
   // and `localCurrency` below cannot silently prefer one while the tip is computed for the other.
   //
-  // Also gated on the same dynamic eligibility PaymentForm uses to mount the element, so the
-  // summary can never show listed-currency totals for a cart whose element the client declines
-  // to mount (an emptied cart, a total that stopped requiring payment).
+  // Also gated on the same dynamic eligibility PaymentForm uses to mount the element: a discount
+  // or surcharge reload can drop the loaded canonical total below Stripe's Payment Element
+  // minimum after render, at which point PaymentForm falls back to the CardElement and the charge
+  // is canonical USD — so the summary must fall back with it.
   const listedCurrency =
     buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state)
       ? null

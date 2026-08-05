@@ -155,8 +155,15 @@ export const startOrderCreation = async (
         retryOfferCodeCandidates(requestData, retryOfferCodes),
       );
       // Key by uid, not permalink, which collides when the cart holds two variants of one product.
+      // The legacy confirm endpoint (Order::ConfirmService) still keys its line items by
+      // purchase id, which matches no cart uid — fall back to permalink matching for those
+      // responses, or every SCA outcome (including its error_message) is silently dropped and
+      // the buyer sees the generic "Sorry, something went wrong." copy.
+      const confirmLineItemResults = Object.values(orderConfirmResponse.line_items);
       const lineItems = requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((lineItems, lineItem) => {
-        const resultItem = orderConfirmResponse.line_items[lineItem.uid];
+        const resultItem =
+          orderConfirmResponse.line_items[lineItem.uid] ??
+          confirmLineItemResults.find((item) => item.permalink === lineItem.permalink);
         if (resultItem) lineItems[lineItem.uid] = resultItem;
         return lineItems;
       }, {});

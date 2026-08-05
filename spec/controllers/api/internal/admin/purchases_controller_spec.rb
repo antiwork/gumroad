@@ -1129,6 +1129,44 @@ describe Api::Internal::Admin::PurchasesController do
         "count" => 2
       )
     end
+
+    it "reports truncation when the buyer has more purchases than the grouped receipt renders" do
+      stub_const("CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES", 1)
+      buyer_email = "buyer@example.com"
+      create_list(:free_purchase, 2, email: buyer_email)
+
+      post :resend_all_receipts, params: { email: buyer_email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "message" => "Queued a grouped receipt covering the 1 most recent charges (of 2) to #{buyer_email}",
+        "count" => 2
+      )
+    end
+
+    it "does not report truncation when multiple purchases resolve to one shared chargeable" do
+      # A decoy that can't lose: without resolving to Charge::Chargeable, a naive
+      # purchase-count comparison would still see 2 rows > cap 1 and misreport
+      # truncation, even though the mailer renders the single shared charge whole.
+      stub_const("CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES", 1)
+      buyer_email = "buyer@example.com"
+      seller = create(:user)
+      product = create(:product, user: seller)
+      charge = create(:charge, seller:)
+      purchases = create_list(:purchase, 2, link: product, seller:, email: buyer_email)
+      charge.purchases << purchases
+      charge.order.purchases << purchases
+
+      post :resend_all_receipts, params: { email: buyer_email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "message" => "Successfully resent all receipts to #{buyer_email}",
+        "count" => 2
+      )
+    end
   end
 
   describe "POST refund_taxes" do
