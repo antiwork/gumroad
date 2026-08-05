@@ -281,6 +281,19 @@ describe Ai::AnthropicClient do
       expect(captured["fallbacks"]).to eq([{ "model" => "openai/gpt-4o" }])
     end
 
+    it "prefers a per-instance fallback_model over the config override" do
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_FALLBACK_MODEL").and_return("openai/gpt-4o")
+      captured = nil
+      stub_request(:post, openrouter_url)
+        .with { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      described_class.new(fallback_model: "anthropic/claude-opus-4.7")
+        .messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(captured["fallbacks"]).to eq([{ "model" => "anthropic/claude-opus-4.7" }])
+    end
+
     it "retries OpenRouter's 408 upstream-timeout status like other transient failures" do
       allow(client).to receive(:sleep)
       body = { "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }

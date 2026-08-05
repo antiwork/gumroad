@@ -59,12 +59,20 @@ class Ai::AnthropicClient
   # is exactly the store-management job the agent does for creators.
   DEFAULT_MODEL = "claude-opus-4-7"
   DEFAULT_MAX_TOKENS = 1024
-  # When requests go through OpenRouter, this model is tried if Claude itself errors out (provider
+  # When requests go through OpenRouter, this model is tried if the primary errors out (provider
   # down, rate limited, overloaded). OpenRouter translates the Anthropic-format request for the
   # fallback provider, so no OpenAI-specific code is needed here. The `~` prefix is OpenRouter's
   # "latest in this family" resolution, so we always fall back to the current GPT flagship without
-  # having to bump a pinned version. Overridable via the OPENROUTER_FALLBACK_MODEL config.
+  # having to bump a pinned version. Overridable per-instance (the store agent falls back to Opus
+  # instead) or via the OPENROUTER_FALLBACK_MODEL config.
   DEFAULT_FALLBACK_MODEL = "~openai/gpt-latest"
+
+  # Whether traffic routes through OpenRouter rather than Anthropic directly. Public because model
+  # choice depends on it: OpenRouter hosts non-Anthropic models (the store agent requests Grok),
+  # while a direct Anthropic connection can only serve Claude.
+  def self.openrouter_configured?
+    GlobalConfig.get("OPENROUTER_API_KEY").present?
+  end
 
   # How long we wait to open the connection and to send the request. These are short on purpose:
   # if Anthropic isn't reachable quickly, we want to fail fast and retry rather than sit on a dead
@@ -103,9 +111,10 @@ class Ai::AnthropicClient
   # duration of the response — a healthy stream that takes minutes to finish is fine as long as
   # tokens keep arriving. For a buffered request it bounds the wait for the response to start,
   # which is effectively the model's full generation time (nothing is sent until it finishes).
-  def initialize(timeout: 60, model: DEFAULT_MODEL)
+  def initialize(timeout: 60, model: DEFAULT_MODEL, fallback_model: nil)
     @timeout = timeout
     @model = model
+    @fallback_model_override = fallback_model
     # Seconds already spent sleeping between retries; compared against RETRY_SLEEP_BUDGET_IN_SECONDS.
     @retry_sleep_spent = 0.0
   end
@@ -469,7 +478,7 @@ class Ai::AnthropicClient
     # feature flag) keeps the switch trivially auditable: delete the key and traffic is back on
     # Anthropic directly.
     def openrouter?
-      openrouter_api_key.present?
+      self.class.openrouter_configured?
     end
 
     def openrouter_api_key
@@ -480,8 +489,12 @@ class Ai::AnthropicClient
       openrouter? ? OPENROUTER_API_URL : API_URL
     end
 
+    # Caller override first (the store agent falls back to Opus 5) so the config knob stays a
+    # global emergency override for the default GPT fallback only.
     def fallback_model
-      GlobalConfig.get("OPENROUTER_FALLBACK_MODEL").presence || DEFAULT_FALLBACK_MODEL
+      @fallback_model_override.presence ||
+        GlobalConfig.get("OPENROUTER_FALLBACK_MODEL").presence ||
+        DEFAULT_FALLBACK_MODEL
     end
 
     # Warn when the model that generated the response isn't the one we asked for — i.e. OpenRouter

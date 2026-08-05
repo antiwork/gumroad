@@ -3,9 +3,8 @@
 # Ai::StoreAgentService powers the conversational "Agent" dashboard tab. The seller chats with an
 # assistant that can answer questions about their store and *propose* changes to it.
 #
-# The agent runs on Anthropic's Claude Opus 4.7 (via Ai::AnthropicClient). Opus 4.7 currently leads
-# the vending-bench leaderboard for autonomous commercial operation, so it is the strongest model
-# for the agent's actual job: helping a creator run and grow their store.
+# The agent runs on Grok 4.5 via OpenRouter's Anthropic-compatible endpoint (see MODEL below), with
+# Claude Opus 5 as the request-level fallback when Grok errors.
 #
 # Safety model:
 #   - READ tools (api_read) run automatically and only ever query data the seller already owns. They
@@ -24,6 +23,14 @@ class Ai::StoreAgentService
   class Error < StandardError; end
 
   MODEL = Ai::AnthropicClient::DEFAULT_MODEL
+  # Grok is only reachable through OpenRouter, so the cutover keys off routing: a direct-Anthropic
+  # config keeps serving Opus unchanged.
+  OPENROUTER_MODEL = "x-ai/grok-4.5"
+  # When Grok errors (provider down, rate limited), OpenRouter retries the turn on this model
+  # rather than the client's default GPT fallback.
+  OPENROUTER_FALLBACK_MODEL = "anthropic/claude-opus-5"
+  # Below 100%, gates Grok vs Opus per seller in addition to OPENROUTER_API_KEY being configured.
+  GROK_RAMP_FEATURE = :store_agent_grok
   # Passed to Ai::AnthropicClient as its READ timeout. For the streamed reply this bounds silence
   # between chunks (not the total generation time — a long healthy stream is fine); for the buffered
   # calls it bounds the wait for the full response. Production showed a steady stream of 60-second
@@ -693,6 +700,7 @@ class Ai::StoreAgentService
     @completed_read_targets = {}
     @reads_completed_in_tool_batch = nil
     turn_contract_retries = 0
+    @turn_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     remaining_iterations = MAX_TOOL_ITERATIONS
     while remaining_iterations.positive?
@@ -703,6 +711,9 @@ class Ai::StoreAgentService
         tools: tool_schemas,
         max_tokens: MAX_REPLY_TOKENS,
       )
+      @last_stop_reason = result.stop_reason
+      @turn_iterations_used = MAX_TOOL_ITERATIONS - remaining_iterations
+      @turn_contract_retries = turn_contract_retries
 
       # The model hit MAX_REPLY_TOKENS mid-turn. Whatever came back is incomplete — a cut-off tool
       # call has unusable arguments, and a cut-off text answer would read as a complete reply when
@@ -732,6 +743,7 @@ class Ai::StoreAgentService
       proposed_action = apply_tool_uses(text: result.text, tool_uses: result.tool_uses, conversation:, proposed_action:)
     end
 
+    @turn_contract_retries = turn_contract_retries
     turn_result(reply: tool_cap_reply(proposed_action), proposed_action:)
   end
 
@@ -759,6 +771,7 @@ class Ai::StoreAgentService
     @completed_read_targets = {}
     @reads_completed_in_tool_batch = nil
     turn_contract_retries = 0
+    @turn_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     remaining_iterations = MAX_TOOL_ITERATIONS
     while remaining_iterations.positive?
@@ -801,6 +814,9 @@ class Ai::StoreAgentService
           emit.call(:reset, {}) if emitted_any
           raise
         end
+      @last_stop_reason = result.stop_reason
+      @turn_iterations_used = MAX_TOOL_ITERATIONS - remaining_iterations
+      @turn_contract_retries = turn_contract_retries
 
       # Same truncation handling as #respond. Anything this turn streamed is incomplete, so tell
       # the UI to discard it and stream the honest fallback instead of leaving half an answer (or
@@ -857,12 +873,31 @@ class Ai::StoreAgentService
     attr_reader :seller, :pundit_user
 
     def turn_result(reply:, proposed_action:)
+      outcome = proposed_action ? TURN_OUTCOME_PROPOSAL_READY : TURN_OUTCOME_REPLY_ONLY
+      log_turn_metrics(outcome:)
       {
-        outcome: proposed_action ? TURN_OUTCOME_PROPOSAL_READY : TURN_OUTCOME_REPLY_ONLY,
+        outcome:,
         reply:,
         proposed_action: proposed_action&.as_json,
         objects: deduped_objects,
       }
+    end
+
+    # One structured line per completed turn — model, tool iterations, stop_reason, contract
+    # retries, and latency are the signals the ramp's pass bar checks each step against.
+    def log_turn_metrics(outcome:)
+      latency_ms = @turn_started_at ? ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - @turn_started_at) * 1000).round : nil
+      Rails.logger.info(
+        {
+          event: "store_agent_turn",
+          model: @_client_model,
+          outcome:,
+          stop_reason: @last_stop_reason,
+          tool_iterations: @turn_iterations_used,
+          contract_retries: @turn_contract_retries,
+          latency_ms:,
+        }.to_json,
+      )
     end
 
     # A final model turn is valid only when its typed outcome agrees with the proposal this service
@@ -1509,7 +1544,13 @@ class Ai::StoreAgentService
     end
 
     def client
-      @_client ||= Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: MODEL)
+      @_client ||= if Ai::AnthropicClient.openrouter_configured? && Feature.active?(GROK_RAMP_FEATURE, seller)
+        @_client_model = OPENROUTER_MODEL
+        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: OPENROUTER_MODEL, fallback_model: OPENROUTER_FALLBACK_MODEL)
+      else
+        @_client_model = MODEL
+        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: MODEL)
+      end
     end
 
     # Two generic API tools plus one terminal marker. The endpoint id (constrained to the catalog by
