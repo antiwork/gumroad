@@ -172,30 +172,34 @@ def spec_candidates(path)
   end
 end
 
-specs = changed
-  .flat_map { |path| spec_candidates(path) }
-  .uniq
+specs = Set.new
+unattributed = []
 
-# Fanout expansion: registry hits add whole flow directories.
-fanout_dirs = changed.flat_map do |path|
-  FANOUT.select { |re, _| re.match?(path) }.values.flatten
-end.uniq
-specs |= fanout_dirs.select { |dir| Dir.exist?(dir) }
+changed.each do |path|
+  candidates = spec_candidates(path).select { |s| File.exist?(s) }
+  fanout_hits = FANOUT.select { |re, _| re.match?(path) }.values.flatten.select { |dir| Dir.exist?(dir) }
+  contributed = candidates + fanout_hits
 
-specs = specs.select { |spec| File.exist?(spec) || Dir.exist?(spec) }
+  if contributed.any?
+    specs.merge(contributed)
+  else
+    unattributed << path
+  end
+end
+
+# Any changed path that contributed no specs of its own is a mapping gap, not
+# a clean bill — even when OTHER paths in the same diff selected specs. This
+# catches both a lone boot/test-infrastructure change (Rakefile, bin/rspec,
+# .rspec, config.ru) and one hiding alongside a mapped file, where the old
+# specs.empty? guard was fooled into thinking the diff was fully covered.
+if unattributed.any?
+  escalate!("diff touches #{unattributed.first(5).join(', ')} but no specs were selected for it (mapping gap)")
+end
 
 # Knapsack consumes a plain file list, so directories expand to their spec files.
 specs = specs.flat_map { |s| Dir.exist?(s) ? Dir.glob("#{s}/**/*_spec.rb") : [s] }.uniq
 
 specs |= SMOKE_SPECS.select { |spec| File.exist?(spec) } if smoke
-
-# Any non-ignored change that selected nothing is a mapping gap, not a clean
-# bill — this also catches boot/test-infrastructure paths (Rakefile, bin/rspec,
-# .rspec, config.ru) that aren't under app/, lib/, or spec/ but can still
-# change what the suite runs or how it boots.
-if specs.empty? && changed.any?
-  escalate!("diff touches #{changed.first(5).join(', ')} but no specs were selected (mapping gap)")
-end
 
 escalate!("selection of #{specs.size} spec files exceeds #{MAX_SELECTED_FILES}") if specs.size > MAX_SELECTED_FILES
 
