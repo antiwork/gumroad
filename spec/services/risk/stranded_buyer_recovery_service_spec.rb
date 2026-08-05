@@ -123,6 +123,26 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.cleared.map(&:object_value)).not_to include("guid-attacker")
       expect(attacker_block.reload.blocked_at).to be_present
     end
+
+    # A logged-in buyer's checkout `email` is a typed field, not their authenticated identity —
+    # they can set it to anyone. Only the account's own email should ever be harvested from an
+    # account-owned row (Greptile P1: fails against the pre-fix code, which pushed the raw
+    # checkout email for every row in buyer_purchases, account-owned or not).
+    it "does not harvest an unrelated checkout email typed on the buyer's own account-owned purchase" do
+      account = create(:user, email: buyer_email)
+      history.each { _1.update!(purchaser: account) }
+      failed_purchase.update!(purchaser: account)
+      create(:purchase, purchaser: account, email: "unrelated-victim@example.net",
+                        stripe_fingerprint: "account-owner-own-card",
+                        purchase_state: "successful", created_at: 3.months.ago)
+      unrelated_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "unrelated-victim@example.net")
+
+      result = call
+
+      expect(result.verdict).to eq(:cleared)
+      expect(result.cleared.map(&:object_value)).not_to include("unrelated-victim@example.net")
+      expect(unrelated_block.reload.blocked_at).to be_present
+    end
   end
 
   describe "authored-block escalation" do

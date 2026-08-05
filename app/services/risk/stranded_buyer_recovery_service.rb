@@ -160,15 +160,20 @@ class Risk::StrandedBuyerRecoveryService
     end
 
     # Checkout paypal/gifter emails are typed-in third-party addresses, not the buyer's identity
-    # (see Purchase::Blockable#blockable_values_for, widened_emails: false) — only the row's own
-    # email and the account-owned purchaser_email count. Mirrors candidate_purchases: once a user
-    # resolves, a caller-supplied @email is a lookup hint only, never mixed into the identifier
-    # set — pushing it unconditionally let a clean account's user_id reach an unrelated victim's
-    # email block (Greptile P1, security: same class as the cross-identity fix in buyer_purchases).
+    # (see Purchase::Blockable#blockable_values_for, widened_emails: false). An account-owned row's
+    # raw `email` is the CHECKOUT-TYPED address, which a logged-in buyer can set to anyone —
+    # only the authenticated purchaser's own email counts there; the row's own `email` counts only
+    # for guest rows the fingerprint/account corroboration already vouched for (Greptile P1,
+    # security: an account owner typing another person's address must not clear that person's
+    # email block). Mirrors candidate_purchases: once a user resolves, a caller-supplied @email is
+    # a lookup hint only, never mixed into the identifier set.
     def identifier_emails
-      @_identifier_emails ||= buyer_purchases.flat_map { [_1.email, _1.purchaser_email] }
-                                             .push(user.present? ? user.email : @email)
-                                             .compact_blank.map(&:downcase).uniq
+      @_identifier_emails ||= begin
+        guest_rows = buyer_purchases - account_purchases
+        guest_rows.flat_map { [_1.email, _1.purchaser_email] }
+                  .push(user.present? ? user.email : @email)
+                  .compact_blank.map(&:downcase).uniq
+      end
     end
 
     def identifier_domains
