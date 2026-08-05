@@ -445,7 +445,10 @@ class OrdersController < ApplicationController
     end
 
     def all_free_products_without_captcha?
-      line_items = params.fetch(:line_items, {})
+      # Same default as fetch_affiliates below: an absent :line_items must behave like "no
+      # line items" (Array#all? on []), not the Hash default ActionController::Parameters has
+      # no #all? on (GUMROAD-7B, 500s on /orders(/prepare) requests missing line_items).
+      line_items = params.fetch(:line_items, [])
       line_items.all? do |product|
         product_link = Link.find_by(unique_permalink: product["permalink"])
         !product_link.require_captcha? && product["perceived_price_cents"].to_s == "0"
