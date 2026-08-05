@@ -206,18 +206,38 @@ def within_credit_card_frame(&block)
 end
 
 def fill_in_payment_element(number: "4242424242424242", expiry: StripePaymentMethodHelper::EXPIRY_MMYY, cvc: "123")
+  fields = {
+    ["Card number"] => number,
+    ["Expiration date", "Expiration", "MM / YY"] => expiry,
+    ["Security code", "CVC", "CVV"] => cvc,
+  }
   within_payment_element_frame do
-    fill_in_stripe_field ["Card number"], with: number
-    fill_in_stripe_field ["Expiration date", "Expiration", "MM / YY"], with: expiry
-    fill_in_stripe_field ["Security code", "CVC", "CVV"], with: cvc
+    fields.each { |labels, value| fill_in_stripe_field labels, with: value }
     uncheck_link_save_in_payment_element
+    # Link's email lookup re-renders the element's form mid-fill and can wipe a field that was
+    # already typed (an expiry left as "12 /" blocks confirm with no server round-trip, so the
+    # spec hangs on "Processing..."). Re-verify every field once the dust settles, refilling any
+    # that lost their value; the digit comparison ignores Stripe's display formatting.
+    page.document.synchronize do
+      fields.each do |labels, value|
+        field = find_stripe_field(labels)
+        next if field.value.to_s.gsub(/\D/, "") == value.to_s.gsub(/\D/, "")
+
+        field.fill_in(with: value)
+        raise Capybara::ExpectationNotMet, "Stripe #{labels.first} field lost its value; refilled"
+      end
+    end
   end
 end
 
 # With Link always enabled, the Payment Element may render Link's pre-checked
 # "Save my information for faster checkout" pane, whose required mobile-number
 # field would block confirm. Specs pay as a plain card guest, so uncheck it.
+# The pane renders on Link's schedule — after its email lookup round-trip — so
+# poll for it briefly instead of only glancing once.
 def uncheck_link_save_in_payment_element
+  return unless page.has_selector?(:checkbox, "Save my information for faster checkout", visible: false, wait: 5)
+
   save_checkbox = first(:checkbox, "Save my information for faster checkout", visible: false, wait: 0)
   save_checkbox.click if save_checkbox&.checked?
 rescue Capybara::ElementNotFound, Selenium::WebDriver::Error::ElementNotInteractableError
