@@ -139,9 +139,14 @@ module CheckoutHelpers
       expect(page).to have_command("Use a different card?")
       expect(page).to have_selector("[aria-label='Saved credit card']", text: logged_in_user.credit_card.visual)
     elsif !credit_card.nil? && !is_free
-      # Every checkout mounts the Payment Element now; forward a caller-supplied card into it
-      # (e.g. a decline or 3DS card), defaulting to 4242.
-      fill_in_payment_element(**(credit_card || {}).slice(:number, :expiry, :cvc).compact)
+      # The mounted card surface depends on the cart: SCA/mandate-shaped carts get the restored
+      # CardElement lane while everything else mounts the Payment Element, so probe for the
+      # element's iframe and fill whichever surface is actually there.
+      if page.has_selector?("iframe[src*='elements-inner-payment'], iframe[title*='payment input']", visible: false, wait: 5)
+        fill_in_payment_element(**(credit_card || {}).slice(:number, :expiry, :cvc).compact)
+      else
+        fill_in_credit_card(**credit_card.slice(:number, :expiry, :cvc, :zip_code).compact)
+      end
     end
   end
 
