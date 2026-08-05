@@ -46,6 +46,25 @@ describe("Product page reviews", js: true, type: :system) do
     expect(page).not_to have_text("0 ratings")
   end
 
+  it "emits rating markup only as JSON-LD, never as standalone microdata" do
+    visit product.long_url
+
+    expect(page).to have_text("Ratings")
+    # A microdata AggregateRating here has no itemscope Product ancestor, so Google reads it
+    # as a standalone unnamed item and flags "Missing field itemReviewed"
+    # (gumroad-private#1875). The JSON-LD block is the one source of rating markup.
+    expect(page).not_to have_selector("[itemprop='aggregateRating']", visible: :all)
+
+    structured_data = JSON.parse(page.find("script[type='application/ld+json']", visible: :all, match: :first).text(:all))
+    expect(structured_data["aggregateRating"]).to eq(
+      "@type" => "AggregateRating",
+      "ratingValue" => 2.8,
+      "reviewCount" => 6,
+      "bestRating" => 5,
+      "worstRating" => 1
+    )
+  end
+
   it "allows user to provide rating if already bought and displays the rating regardless of display_product_reviews being enabled for that product" do
     purchaser = create(:user)
     purchase = create(:purchase, link: product, purchaser:)
