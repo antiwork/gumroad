@@ -2440,9 +2440,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Bank Code", with: "060")
         fill_in("Account #", with: "000123456789")
         fill_in("Confirm account #", with: "000123456789")
-        # Seven digits: the shortest Cédula de Ciudadanía or Cédula de Extranjería number Stripe
-        # accepts for Colombia. Shorter numbers exist and are refused by Stripe, not by us.
-        fill_in("Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)", with: "1234567")
+        # Six digits: the shortest Cédula de Ciudadanía or Cédula de Extranjería number Stripe
+        # accepts for Colombia (floor widened from seven on 2026-08-05).
+        fill_in("Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)", with: "482913")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in COP.")
