@@ -96,11 +96,8 @@ class Purchase::PresentmentRefund
   def result
     return nil if purchase_presentment.blank? || canonical_gross_refund_cents <= 0
 
-    # Same as .from_presentment_amount / #tax_only_result: a prior refund without a
-    # presentment snapshot already reduced canonical refundable cents but consumed zero
-    # presentment here, so remaining presentment is unknowable. Fail closed rather than
-    # allocate against a skewed balance (remaining-balance math would over-size the
-    # presentment refund versus the original-totals path).
+    # Snapshotless-prior guard: see .from_presentment_amount for why remaining
+    # presentment becomes unknowable and we fail closed instead of allocating skewed.
     return nil if purchase.refunds.effective.any? { _1.presentment_amount_cents.to_i <= 0 }
 
     if refunds_remaining_presentment_amount?
@@ -139,10 +136,8 @@ class Purchase::PresentmentRefund
   def tax_only_result
     return nil if purchase_presentment.blank? || canonical_gross_refund_cents <= 0
 
-    # Same reasoning as .from_presentment_amount: a prior refund without a presentment
-    # snapshot already consumed canonical tax cents but counts as zero presentment tax
-    # here, so the remaining buyer-currency tax is unknowable — fail closed rather than
-    # send Stripe more tax than the purchase has left.
+    # Snapshotless-prior guard: see .from_presentment_amount for why remaining
+    # presentment becomes unknowable and we fail closed instead of allocating skewed.
     return nil if purchase.refunds.effective.any? { _1.presentment_amount_cents.to_i <= 0 }
 
     remaining_tax_cents = purchase_presentment.presentment_gumroad_tax_cents.to_i -
