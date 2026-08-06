@@ -824,10 +824,10 @@ describe Charge::Disputable, :vcr do
           end
         end
 
-        # The old gate tested `elapsed < 72.hours` exactly while every other consumer — including
-        # the notice's own body — asks the rounded hours_left_to_submit_evidence. Between 71.5h and
-        # 72h the two disagreed, so the gate called the window open and the email it sent read "in
-        # the next 0 hours". One predicate now answers for both.
+        # Between 71.5h and 72h the window is open by exact arithmetic while the rounded hour
+        # count reads 0. The gate here asks window_open? and sends; the mailer recomputes hours at
+        # render and drops the evidence ask (see contacting_creator_mailer_spec), so the seller
+        # still learns of the dispute without ever being quoted "0 hours".
         context "when rounding has taken the window to its last half hour" do
           let(:boundary_stamp) { (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago }
 
@@ -839,13 +839,13 @@ describe Charge::Disputable, :vcr do
             end
           end
 
-          it "does not send a notice that would quote zero hours" do
-            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
-
-            Purchase.handle_charge_event(event)
+          it "still sends the notice, leaving the zero-hours copy to the mailer's render-time gate" do
+            expect { Purchase.handle_charge_event(event) }
+              .to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice)
 
             evidence = purchase.reload.dispute.dispute_evidence
-            # Still inside the window by exact arithmetic, which is what made this band send.
+            # Open by exact arithmetic even though the rounded hour count reads 0 — the band where
+            # a rounded gate here would have silenced the notice entirely.
             expect(Time.current - evidence.seller_contacted_at)
               .to be < DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
             expect(evidence.hours_left_to_submit_evidence).to eq(0)

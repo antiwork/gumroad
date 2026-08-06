@@ -8,12 +8,11 @@ require "spec_helper"
 # (the path UPI uses — the cart is priced in the local currency and no FX quote is minted), does
 # a later charge present in the local currency, or does it fall back to canonical USD?
 #
-# Answer, measured here: it falls back to USD, and the reason is upstream of the renewal code.
-# Charge::MethodForcedPresentment#direct_listed_amount_result persists the presentment with
-# fx_rate: nil (asserted in its own spec). Purchase::FixLaterChargePresentmentService reads
-# `presentment.charge_presentment.fx_rate` and returns early when it is blank, so NO
-# LaterChargePresentment row is ever written. Purchase::LaterChargePresentmentService then hits
-# `fallback(:no_stored_presentment)` and the renewal charges canonical USD.
+# Answer on main was USD: Charge::MethodForcedPresentment#direct_listed_amount_result persists
+# the presentment with fx_rate: nil, and the fixing writer returned early on a blank fx_rate, so
+# no LaterChargePresentment row was ever written. This branch closes that gap for direct-listed
+# products: when fx_rate is blank but the product is priced in the presentment currency, the
+# fixing is derived from the purchase's stored product rate instead, so renewals keep INR.
 describe "method-forced (UPI-shaped) purchases and later-charge fixing" do
   let(:seller) { create(:user) }
   # Plain :merchant_account, not :merchant_account_stripe. The fixing writer never touches
@@ -65,16 +64,19 @@ describe "method-forced (UPI-shaped) purchases and later-charge fixing" do
     purchase
   end
 
-  it "writes NO fixing when the method-forced path left fx_rate null, so renewals lose INR" do
+  it "writes the fixing from the stored product rate when the method-forced path left fx_rate null, so renewals keep INR" do
     purchase = build_forced_currency_purchase(with_fx_rate: nil)
 
     Purchase::FixLaterChargePresentmentService.new(purchase:).perform
 
-    expect(subscription.reload.later_charge_presentments).to be_empty
+    fixing = subscription.reload.later_charge_presentments.sole
+    expect(fixing.presentment_currency).to eq(Currency::INR)
+    expect(fixing.presentment_price_cents).to eq(500_00)
+    expect(fixing.signup_currency_units_per_usd).to be_within(0.001).of(83)
 
     # Read the renewal side with a renewal-shaped purchase. The original signup purchase would
-    # hit the same fallback for a different reason (later_charge_owner nils out originals), which
-    # would leave this assertion green even if a fixing existed.
+    # skip the stored fixing for a different reason (later_charge_owner nils out originals),
+    # which would mask the fixing's existence.
     renewal = create(:purchase,
                      link: product,
                      seller:,
@@ -86,8 +88,8 @@ describe "method-forced (UPI-shaped) purchases and later-charge fixing" do
     service = Purchase::LaterChargePresentmentService.new(
       merchant_account:, purchases: [renewal], amount_cents: 602, gumroad_amount_cents: 60
     )
-    expect(service.perform).to be_nil
-    expect(service.fallback_reason).to eq(:no_stored_presentment)
+    service.perform
+    expect(service.fallback_reason).not_to eq(:no_stored_presentment)
   end
 
   it "writes the fixing when an fx_rate IS present, confirming fx_rate is the only blocker to the fixing being written" do

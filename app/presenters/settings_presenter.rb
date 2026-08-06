@@ -630,11 +630,14 @@ class SettingsPresenter
     end
 
     def user_details(user_compliance_info)
+      # Memoize: evaluated for both need_full_ssn and has_outstanding_full_ssn_requirement below,
+      # and each call re-queries — a second query could see a request marked provided in between.
+      outstanding_full_ssn_requirement = has_outstanding_full_ssn_requirement?
       {
         country_supports_native_payouts: seller.native_payouts_supported?,
         no_payout_rail_in_country: seller.no_payout_rail_in_compliance_country?,
         country_supports_iban: seller.country_supports_iban?,
-        need_full_ssn: seller.has_ever_been_requested_for_user_compliance_info_field?(UserComplianceInfoFields::Individual::TAX_ID),
+        need_full_ssn: outstanding_full_ssn_requirement,
         country_code: user_compliance_info.legal_entity_country_code,
         payout_currency: Country.new(user_compliance_info.legal_entity_country_code).payout_currency,
         is_from_europe: seller.signed_up_from_europe?,
@@ -661,7 +664,7 @@ class SettingsPresenter
         individual_tax_id_entered: user_compliance_info.individual_tax_id.present?,
         individual_tax_id_last_four: tax_id_last_four(user_compliance_info.individual_tax_id),
         individual_tax_id_is_last_four: tax_id_is_last_four_only?(user_compliance_info.individual_tax_id),
-        has_outstanding_full_ssn_requirement: has_outstanding_full_ssn_requirement?,
+        has_outstanding_full_ssn_requirement: outstanding_full_ssn_requirement,
         business_tax_id_entered: user_compliance_info.business_tax_id.present?,
         business_tax_id_last_four: tax_id_last_four(user_compliance_info.business_tax_id),
         requires_credit_card: seller.requires_credit_card?,

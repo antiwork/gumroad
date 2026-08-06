@@ -33,7 +33,7 @@ class ProductPresenter::ProductProps
         quantity_remaining: product.remaining_for_sale_count,
         long_url: product.long_url,
         is_sales_limited: product.max_purchase_count?,
-        ratings: product.display_product_reviews? ? product.bundle_rating_stats : nil,
+        ratings: product.display_product_reviews? ? product.rating_stats : nil,
         # Excludes this product so its own reviews never inflate the seller
         # rollup shown on its page (gumroad-private#1669).
         **(seller.reputation_summary_enabled? ? { seller_reputation: seller.seller_reputation_summary(exclude_product: product) } : {}),

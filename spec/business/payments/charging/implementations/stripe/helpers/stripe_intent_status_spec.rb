@@ -12,6 +12,10 @@ describe StripeIntentStatus do
       expect(described_class.client_handled_next_action?("alipay_handle_redirect", ["card"])).to eq(true)
     end
 
+    it "accepts UPI's browser-owned redirect or QR action" do
+      expect(described_class.client_handled_next_action?("upi_handle_redirect_or_display_qr_code", %w[card upi])).to eq(true)
+    end
+
     it "rejects non-redirect action types even when a client-redirect method is offered" do
       expect(described_class.client_handled_next_action?("boleto_display_details", %w[card klarna])).to eq(false)
     end

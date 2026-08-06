@@ -123,8 +123,10 @@ class Checkout::StripePaymentPresenter
       )
     end
 
-    # Client-confirm eligible carts are always one-time charges, so the setup branch above can
-    # never have claimed one (the resolver rejects setup_for_future carts).
+    # Client-confirm carts charge now, so the setup branch above can never have claimed one:
+    # one-time carts are one-time, and the UPI Autopay membership shape is paid upfront (it
+    # excludes preorders and free trials), registering reuse on a PaymentIntent rather than a
+    # SetupIntent.
     return client_confirm_props if client_confirm_eligible?
 
     payment_element_props(STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT)
@@ -254,6 +256,8 @@ class Checkout::StripePaymentPresenter
         # fails closed there instead of at Stripe. Only meaningful for USD-priced carts;
         # forced-currency carts never offer Klarna (see the resolver's launched_method_set).
         cart_total_usd_cents: items.all? { _1[:product_currency] == Currency::USD } ? items.sum { _1[:price_cents].to_i * (_1[:quantity] || 1).to_i } : nil,
+        # Only the narrow registration shape may use the recurring client-confirm lane.
+        recurring_upi_registration: recurring_upi_registration_shape?(items),
       )
     end
 
@@ -371,6 +375,7 @@ class Checkout::StripePaymentPresenter
       {
         integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
         fallback_reason: nil,
+        recurring_upi_registration: recurring_upi_registration_shape?(items),
         disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
         # The disable_wallets constraint is server-owned: when the cart can't take a wallet
@@ -385,7 +390,14 @@ class Checkout::StripePaymentPresenter
     def fallback_reason_for(items)
       return "empty_cart" if items.empty?
       return "unknown_seller" if sellers.any?(&:blank?)
-      return "stripe_payment_element_flag_disabled" unless sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, _1) }
+      # The UPI Autopay registration shape keeps its client-confirm element even when the
+      # seller's base element flag is off: CardElement cannot mount UPI, and the shape is
+      # ramped by its own per-seller launch flag, so a base-flag ramp-down must not take the
+      # feature with it. Guarded on client-confirm eligibility so a cart that could not mount
+      # that lane anyway still falls back like any other.
+      unless sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, _1) }
+        return "stripe_payment_element_flag_disabled" unless recurring_upi_registration_shape?(items) && client_confirm_eligible?
+      end
       return nil if sellers.one? && setup_for_future_charges_without_charging?(items)
       return "setup_or_installment_flow" if items.any? { future_charge_setup_item?(_1) }
 
@@ -475,6 +487,27 @@ class Checkout::StripePaymentPresenter
       end
     end
 
+    def recurring_upi_registration_shape?(items)
+      return false unless items.one?
+
+      item = items.first
+      seller = item[:seller]
+      return false unless buyer_country == Checkout::PaymentMethodResolver::IN_ALPHA2
+      return false unless Checkout::BuyerCurrencyEligibility.subscriptions_enabled?(seller)
+      return false unless Feature.active?(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
+      # Destination and direct-charge routing are outside the verified first rollout.
+      return false if seller.merchant_account(StripeChargeProcessor.charge_processor_id).present?
+      return false unless item[:recurrence].present?
+      return false if item[:pay_in_installments] || item[:offers_installment_plan]
+      return false if item[:is_preorder] || item[:has_free_trial] || item[:is_physical]
+      return false if item[:native_type] == Link::NATIVE_TYPE_COMMISSION
+      return false unless item[:product_currency] == Currency::INR
+      return false unless (item[:quantity] || 1).to_i == 1
+
+      amount_cents = item[:price_cents].to_i
+      amount_cents.positive? && amount_cents <= Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS
+    end
+
     def direct_listed_card_shape?(items)
       return false unless items.one?
 
@@ -534,7 +567,7 @@ class Checkout::StripePaymentPresenter
     def cart_items
       return [] if cart.blank?
 
-      cart.alive_cart_products.joins(:product).merge(Link.not_archived).includes(:option, product: :user).map do |cart_product|
+      cart.alive_cart_products.joins(:product).merge(Link.not_archived).includes(:option, product: [:user, :installment_plan]).map do |cart_product|
         product = cart_product.product
         item(
           seller: product.user,
@@ -542,8 +575,10 @@ class Checkout::StripePaymentPresenter
           quantity: cart_product.quantity,
           recurrence: cart_product.recurrence,
           pay_in_installments: cart_product.pay_in_installments,
+          offers_installment_plan: product.installment_plan.present?,
           is_preorder: product.is_in_preorder_state,
           has_free_trial: product.free_trial_enabled,
+          is_physical: product.is_physical || product.require_shipping?,
           native_type: product.native_type,
           buyer_currency_display: buyer_currency_display_props(product:, price_cents: cart_product.price, ip:),
           product_currency: product.price_currency_type.to_s.downcase,
@@ -565,8 +600,10 @@ class Checkout::StripePaymentPresenter
           quantity: checkout_product[:quantity],
           recurrence: checkout_product[:recurrence],
           pay_in_installments: checkout_product[:pay_in_installments],
+          offers_installment_plan: product[:installment_plan].present?,
           is_preorder: product[:is_preorder],
           has_free_trial: product[:free_trial].present?,
+          is_physical: product[:require_shipping],
           native_type: product[:native_type],
           buyer_currency_display: product[:buyer_currency_display],
           # currency_code is the product's own pricing currency (price_currency_type), set by
@@ -653,15 +690,17 @@ class Checkout::StripePaymentPresenter
 
     # quantity defaults to 1: price_cents is always the per-unit price, and the only current
     # consumer of quantity (the Klarna amount-window total) must not undercount multi-unit carts.
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false, has_customizable_price: false)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, is_physical:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false, has_customizable_price: false)
       {
         seller:,
         price_cents:,
         quantity:,
         recurrence:,
         pay_in_installments:,
+        offers_installment_plan:,
         is_preorder:,
         has_free_trial:,
+        is_physical:,
         native_type:,
         buyer_currency_display:,
         product_currency:,

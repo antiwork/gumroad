@@ -18,8 +18,8 @@ describe AlertOnBlockedEstablishedBuyersJob do
   end
 
   def blocked_attempt(buyer_email: email, guid: browser_guid, created_at: 1.hour.ago,
-                      error_code: PurchaseErrorCode::BLOCKED_BROWSER_GUID)
-    create(:purchase, email: buyer_email, browser_guid: guid, created_at:,
+                      error_code: PurchaseErrorCode::BLOCKED_BROWSER_GUID, ip_address: nil)
+    create(:purchase, email: buyer_email, browser_guid: guid, created_at:, ip_address:,
                       purchase_state: "failed", error_code:)
   end
 
@@ -90,6 +90,39 @@ describe AlertOnBlockedEstablishedBuyersJob do
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message).to include(email)
       expect(message).to include("blocked by email_domain since #{block.blocked_at.to_date}")
+    end
+  end
+
+  # Greptile P1 (gumroad#7087): BLOCK_ERROR_CODES omitted BLOCKED_IP_ADDRESS, so an IP-blocked
+  # buyer never reached this alert (or the admin recovery API, which shares this scan) even though
+  # Risk::StrandedBuyerRecoveryService already knows how to clear an ip_address block.
+  it "alerts when the checkout failed on a blocked ip address" do
+    settled_purchases(established_count)
+    blocked_attempt(error_code: PurchaseErrorCode::BLOCKED_IP_ADDRESS, ip_address: "1.2.3.4")
+    block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "1.2.3.4", expires_in: 6.months)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include(email)
+      expect(message).to include("blocked by ip_address since #{block.blocked_at.to_date}")
+    end
+  end
+
+  # Greptile P1 (gumroad#7087): the IP lookup here was scoped to object_type: ip_address, but
+  # Purchase::Risk#check_for_past_fraudulent_ips (what actually declined the purchase) matches
+  # object_value alone. A differently-typed active block sharing the same value still declines
+  # the purchase, so this report must resolve it the same way or it silently drops the buyer.
+  it "resolves a declining ip block even when it is stored under a different object_type" do
+    settled_purchases(established_count)
+    blocked_attempt(error_code: PurchaseErrorCode::BLOCKED_IP_ADDRESS, ip_address: "1.2.3.4")
+    block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "1.2.3.4", expires_in: 6.months)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include(email)
+      expect(message).to include("blocked by browser_guid since #{block.blocked_at.to_date}")
     end
   end
 
@@ -290,7 +323,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
 
   it "ignores a failure older than the lookback window" do
     settled_purchases(established_count)
-    blocked_attempt(created_at: described_class::FAILURE_LOOKBACK.ago - 1.day)
+    blocked_attempt(created_at: Risk::StrandedBuyerScanService::FAILURE_LOOKBACK.ago - 1.day)
     PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
 
     described_class.new.perform
@@ -547,7 +580,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
   end
 
   describe "when the scan hits its cap" do
-    before { stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 1) }
+    before { stub_const("Risk::StrandedBuyerScanService::MAX_CANDIDATES_SCANNED", 1) }
 
     it "says the counts are floors" do
       2.times do |index|
@@ -597,7 +630,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
   # A window holding exactly the budget is not truncated — the extra candidate plucked above the
   # budget is what distinguishes "exactly full" from "there are more".
   it "does not claim truncation when the window holds exactly the scan budget" do
-    stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 2)
+    stub_const("Risk::StrandedBuyerScanService::MAX_CANDIDATES_SCANNED", 2)
     2.times do |index|
       buyer_email = "buyer#{index}@example.com"
       settled_purchases(established_count, buyer_email:)

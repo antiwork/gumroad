@@ -211,6 +211,21 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
   end
 
+  it "reports a permanent rejection, not a retry-later one, for a private S3 bucket URL OpenAI can never fetch" do
+    image_urls = ["#{S3_BASE_URL}attachments/123/original/photo.png"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    unfetchable_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "image_url_unavailable" } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations).and_raise(unfetchable_error)
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNSUPPORTED_IMAGE_REASON])
+  end
+
   it "never logs an inline image payload verbatim" do
     inline = "data:image/png;base64,#{"A" * 400}"
     bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})

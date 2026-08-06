@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-# Seller-level rating rollup over per-product review stats, computed on read
-# (same maths as Link#bundle_rating_stats: sum the per-star counters, weight by
-# review count). Everything here is gated on the :seller_reputation_summary
-# Flipper flag via reputation_summary_enabled?.
+# Seller-level rating rollup over per-product review stats, computed on read:
+# sum the per-star counters, weight by review count. Everything here is gated on
+# the :seller_reputation_summary Flipper flag via reputation_summary_enabled?.
 module User::ReputationSummary
   # Below these the rollup reads as noise, not signal (gumroad-private#1669).
   # Product-owned numbers: change them in one line, not by redesign.

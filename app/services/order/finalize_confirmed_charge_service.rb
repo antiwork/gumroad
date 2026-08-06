@@ -6,8 +6,9 @@ class Order::FinalizeConfirmedChargeService
 
   attr_reader :charge_intent, :offer_codes
 
-  def initialize(order:, retry_offer_codes: nil)
+  def initialize(order:, charge_intent: nil, retry_offer_codes: nil)
     @order = order
+    @charge_intent = charge_intent
     @responses = {}
     @offer_codes = []
     @retry_offer_code_candidates = Order::OfferCodeRecoveryService.sanitize_retry_candidates(retry_offer_codes)
@@ -22,7 +23,7 @@ class Order::FinalizeConfirmedChargeService
       return mark_all_processing
     end
 
-    @charge_intent = ChargeProcessor.get_charge_intent(charge.merchant_account, charge.stripe_payment_intent_id)
+    @charge_intent ||= ChargeProcessor.get_charge_intent(charge.merchant_account, charge.stripe_payment_intent_id)
 
     failed_purchases = []
     order.purchases.each do |purchase|

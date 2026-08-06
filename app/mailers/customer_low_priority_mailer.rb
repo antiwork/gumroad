@@ -99,13 +99,15 @@ class CustomerLowPriorityMailer < ApplicationMailer
   def subscription_card_declined(subscription_id)
     @subscription = Subscription.find(subscription_id)
     @declined = true
-    @subject = "Your card was declined."
+    @payment_method_is_upi = @subscription.credit_card_to_charge&.recurring_upi?
+    @subject = @payment_method_is_upi ? "Your payment method needs attention." : "Your card was declined."
   end
 
   def subscription_card_declined_warning(subscription_id)
     @subscription = Subscription.find(subscription_id)
     @declined = true
-    @subject = "Your card was declined."
+    @payment_method_is_upi = @subscription.credit_card_to_charge&.recurring_upi?
+    @subject = @payment_method_is_upi ? "Your payment method needs attention." : "Your card was declined."
   end
 
   def subscription_charge_failed(subscription_id)
@@ -310,6 +312,22 @@ class CustomerLowPriorityMailer < ApplicationMailer
       reply_to: @product.user.support_or_form_email,
       subject: "Your order has shipped!",
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user, to: purchase.email)
+    )
+  end
+
+  # Sent after Risk::StrandedBuyerRecoveryService clears the blocks that were failing this buyer's
+  # checkouts, so they know retrying is worth their time. Deliberately vague about the mechanism:
+  # naming the systems involved helps nobody and reads as an accusation.
+  def blocked_purchase_resolved(purchase_id)
+    @purchase = Purchase.find(purchase_id)
+    return unless EmailFormatValidator.valid?(@purchase.email)
+
+    @product = @purchase.link
+
+    mail(
+      to: @purchase.email,
+      subject: "Your payment issue has been resolved",
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product&.user, to: @purchase.email)
     )
   end
 

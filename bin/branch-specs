@@ -2,30 +2,27 @@
 # frozen_string_literal: true
 
 # Prints the spec files a branch needs for confidence, instead of the whole
-# suite: specs mapped from changed files (same rules as bin/rspec-changed)
-# plus an always-on smoke set covering the core money paths end to end.
+# suite: specs mapped from changed files, expanded through a fanout registry
+# for files whose behavior many end-to-end specs depend on.
 #
 # Branch CI runs exactly this list (see .github/workflows/tests.yml
-# test_relevant); main still runs everything before a deploy.
+# test_relevant); main still runs everything before a deploy, and a PR can
+# opt into the full suite with the run-all-specs label.
+#
+# Exits 3 (ESCALATE) when the diff cannot be mapped safely — dependency,
+# config, migration, factory, or unmapped-helper changes, or a selection so
+# large the full suite is cheaper. CI turns that into "add run-all-specs".
 #
 # Usage:
 #   bin/branch-specs                 # print the list, one per line
 #   bin/branch-specs --base main     # diff against a different base ref
-#   bin/branch-specs --no-smoke      # mapped specs only
+#   bin/branch-specs --smoke         # include the legacy smoke set
 #   bin/rspec $(bin/branch-specs)    # run it locally
-#
-# Mapping rules:
-#   spec/**/*_spec.rb                    -> itself
-#   app/controllers/**/foo_controller.rb -> spec/controllers + spec/requests/**/foo_spec.rb
-#   app/<dir>/**/foo.rb                  -> spec/<dir>/**/foo_spec.rb
-#   lib/**/foo.rb                        -> spec/lib/**/foo_spec.rb
-#   app/models|services/**/foo.rb        -> spec/requests/**/foo*_spec.rb (E2E coverage)
 
 require "set"
 
-# Core end-to-end flows that run on every branch regardless of the diff:
-# a change that breaks buying, receipts, login, or the balance page must
-# not reach main on a trimmed run.
+# Legacy always-on smoke set, now opt-in (--smoke): money-path smoke coverage
+# on every branch moved to the run-all-specs label + main's full suite.
 SMOKE_SPECS = %w[
   spec/requests/checkout/payment_spec.rb
   spec/requests/checkout/form_spec.rb
@@ -35,6 +32,64 @@ SMOKE_SPECS = %w[
   spec/requests/balance_pages_spec.rb
 ].freeze
 
+# Fanout registry: files whose change puts whole flows at risk, mapped to the
+# spec directories that exercise those flows end to end. Reviewed like code —
+# additions come from post-merge misses (see ledger note in tests.yml).
+# #7070 lesson: the checkout presenter and payment JS gate which Stripe
+# surface EVERY checkout browser spec mounts; their unit specs alone prove
+# nothing about the flows.
+CHECKOUT_FLOW_SPECS = %w[
+  spec/requests/checkout
+  spec/requests/purchases
+  spec/requests/subscription
+].freeze
+
+FANOUT = {
+  %r{\Aapp/presenters/checkout/} => CHECKOUT_FLOW_SPECS,
+  %r{\Aapp/javascript/components/Checkout/} => CHECKOUT_FLOW_SPECS,
+  %r{\Aapp/javascript/data/(purchase|order|payment)} => CHECKOUT_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Checkout/} => CHECKOUT_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Subscriptions/} => CHECKOUT_FLOW_SPECS,
+  %r{\Aapp/services/order/} => CHECKOUT_FLOW_SPECS,
+  %r{\Aapp/services/charge/} => CHECKOUT_FLOW_SPECS,
+  %r{\Aapp/controllers/orders_controller\.rb\z} => CHECKOUT_FLOW_SPECS,
+  %r{\Aapp/controllers/stripe/} => CHECKOUT_FLOW_SPECS,
+  %r{\Aspec/support/checkout_helpers\.rb\z} => CHECKOUT_FLOW_SPECS,
+  %r{\Aspec/support/stripe_.*\.rb\z} => CHECKOUT_FLOW_SPECS,
+}.freeze
+
+# Support files with mappings; any OTHER spec/support change escalates.
+MAPPED_SUPPORT = FANOUT.keys.select { |re| re.source.start_with?('\Aspec/support') }.freeze
+
+# Paths that cannot be attributed to specs by filename: run the full suite.
+ESCALATE_PATTERNS = [
+  %r{\AGemfile},
+  %r{\Aconfig/},
+  %r{\Adb/},
+  %r{\Apackage\.json\z},
+  %r{\A(pnpm-lock\.yaml|yarn\.lock|package-lock\.json)\z},
+  %r{\Atsconfig},
+  %r{\Aspec/factories/},
+  %r{\Aspec/spec_helper\.rb\z},
+  %r{\Aspec/rails_helper\.rb\z},
+  %r{\Avite\.config},
+  %r{\A\.github/workflows/tests\.yml\z},
+].freeze
+
+# Paths that never affect the rspec suite.
+IGNORED_PATTERNS = [
+  %r{\Aqa-media/},
+  %r{\Adocs?/},
+  %r{\.md\z},
+  %r{\A\.agents/},
+  %r{\A\.claude/},
+].freeze
+
+# Above this many selected files the full suite's parallelism wins anyway.
+MAX_SELECTED_FILES = 120
+
+ESCALATE_EXIT = 3
+
 def git(*args)
   out = IO.popen(["git", *args], err: File::NULL, &:read)
   $?.success? ? out.split("\n") : []
@@ -42,7 +97,7 @@ end
 
 base = "origin/main"
 base_given = false
-smoke = true
+smoke = false
 
 argv = ARGV.dup
 until argv.empty?
@@ -50,7 +105,8 @@ until argv.empty?
   when "--base"
     base = argv.shift or abort("--base requires a ref")
     base_given = true
-  when "--no-smoke" then smoke = false
+  when "--smoke" then smoke = true
+  when "--no-smoke" then smoke = false # kept for compatibility
   when "-h", "--help"
     doc = File.read(__FILE__).lines
       .drop_while { |line| line.start_with?("#!") || line.include?("frozen_string_literal") || line.strip.empty? }
@@ -70,9 +126,25 @@ end
 merge_base = git("merge-base", base, "HEAD").first
 
 changed = Set.new
-changed.merge(git("diff", "--name-only", "--diff-filter=d", "#{merge_base}..HEAD")) if merge_base
-changed.merge(git("diff", "--name-only", "--diff-filter=d", "HEAD"))
+changed.merge(git("diff", "--name-only", "#{merge_base}..HEAD")) if merge_base
+changed.merge(git("diff", "--name-only", "HEAD"))
 changed.merge(git("ls-files", "--others", "--exclude-standard"))
+
+changed.reject! { |path| IGNORED_PATTERNS.any? { |re| re.match?(path) } }
+
+def escalate!(reason)
+  warn "bin/branch-specs: ESCALATE — #{reason}"
+  warn "Run the full suite instead: add the run-all-specs label to the PR."
+  exit ESCALATE_EXIT
+end
+
+unmappable = changed.select { |path| ESCALATE_PATTERNS.any? { |re| re.match?(path) } }
+escalate!("cannot attribute specs to: #{unmappable.first(5).join(', ')}") if unmappable.any?
+
+unmapped_support = changed.select do |path|
+  path.start_with?("spec/support/") && MAPPED_SUPPORT.none? { |re| re.match?(path) }
+end
+escalate!("unmapped spec/support change: #{unmapped_support.first(3).join(', ')}") if unmapped_support.any?
 
 def spec_candidates(path)
   case path
@@ -89,6 +161,8 @@ def spec_candidates(path)
       Dir.glob("spec/#{$1}/#{$2}#{$3}/**/*_spec.rb")
     e2e = Dir.glob("spec/requests/**/#{$3}*_spec.rb")
     unit + e2e
+  when %r{\Aapp/views/(.*)/[^/]+\z}
+    Dir.glob("spec/requests/#{$1}*_spec.rb") + Dir.glob("spec/views/#{$1}/**/*_spec.rb")
   when %r{\Aapp/([^/]+)/(.*)\.rb\z}
     ["spec/#{$1}/#{$2}_spec.rb"]
   when %r{\Alib/(.*)\.rb\z}
@@ -98,11 +172,35 @@ def spec_candidates(path)
   end
 end
 
-specs = changed
-  .flat_map { |path| spec_candidates(path) }
-  .uniq
-  .select { |spec| File.exist?(spec) }
+specs = Set.new
+unattributed = []
+
+changed.each do |path|
+  candidates = spec_candidates(path).select { |s| File.exist?(s) }
+  fanout_hits = FANOUT.select { |re, _| re.match?(path) }.values.flatten.select { |dir| Dir.exist?(dir) }
+  contributed = candidates + fanout_hits
+
+  if contributed.any?
+    specs.merge(contributed)
+  else
+    unattributed << path
+  end
+end
+
+# Any changed path that contributed no specs of its own is a mapping gap, not
+# a clean bill — even when OTHER paths in the same diff selected specs. This
+# catches both a lone boot/test-infrastructure change (Rakefile, bin/rspec,
+# .rspec, config.ru) and one hiding alongside a mapped file, where the old
+# specs.empty? guard was fooled into thinking the diff was fully covered.
+if unattributed.any?
+  escalate!("diff touches #{unattributed.first(5).join(', ')} but no specs were selected for it (mapping gap)")
+end
+
+# Knapsack consumes a plain file list, so directories expand to their spec files.
+specs = specs.flat_map { |s| Dir.exist?(s) ? Dir.glob("#{s}/**/*_spec.rb") : [s] }.uniq
 
 specs |= SMOKE_SPECS.select { |spec| File.exist?(spec) } if smoke
+
+escalate!("selection of #{specs.size} spec files exceeds #{MAX_SELECTED_FILES}") if specs.size > MAX_SELECTED_FILES
 
 puts specs.sort

@@ -8,14 +8,14 @@ describe Purchase::LaterChargePresentmentService do
   let(:product) { create(:membership_product, user: seller, price_cents: 1000) }
   let(:subscription) { create(:subscription, link: product, user: create(:user)) }
   let(:original_purchase) do
-    create(:membership_purchase, link: product, seller:, subscription:,
+    create(:membership_purchase, link: product, seller:, subscription:, merchant_account:,
                                  is_original_subscription_purchase: true, price_cents: 1000)
   end
   let(:renewal_purchase) do
     # The membership_purchase factory flags purchases as the original subscription purchase by
     # default, so a renewal has to clear that bit explicitly — RecurringChargeWorker's charges
     # are exactly the ones without it (Purchase.recurring_charge scope).
-    create(:membership_purchase, link: product, seller:, subscription:, price_cents: 1000,
+    create(:membership_purchase, link: product, seller:, subscription:, merchant_account:, price_cents: 1000,
                                  is_original_subscription_purchase: false)
   end
   let(:charge) { create(:charge, seller:, merchant_account:) }
@@ -32,8 +32,8 @@ describe Purchase::LaterChargePresentmentService do
   let(:quote) { double(id: "fxq_test_1", fx_rate: 0.8, expires_at: 1.day.from_now) }
 
   def service(purchases: [renewal_purchase], amount_cents: 1000, gumroad_amount_cents: 100, charge: self.charge,
-              merchant_account: self.merchant_account)
-    described_class.new(charge:, merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:)
+              merchant_account: self.merchant_account, **options)
+    described_class.new(charge:, merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, **options)
   end
 
   before do
@@ -201,10 +201,10 @@ describe Purchase::LaterChargePresentmentService do
 
   it "reads an installment plan fixing from its subscription" do
     installment_product = create(:product, :with_installment_plan, user: seller)
-    signup = create(:installment_plan_purchase, link: installment_product, seller:)
+    signup = create(:installment_plan_purchase, link: installment_product, seller:, merchant_account:)
     plan = signup.subscription
     installment = create(:recurring_installment_plan_purchase, link: installment_product, seller:,
-                                                               subscription: plan)
+                                                               subscription: plan, merchant_account:)
     create(:later_charge_presentment, owner: plan, presentment_currency: "eur",
                                       presentment_price_cents: 899, canonical_price_cents: 1000)
 
@@ -216,7 +216,7 @@ describe Purchase::LaterChargePresentmentService do
     authorization = create(:preorder_authorization_purchase, link: product, seller:,
                                                              displayed_price_cents: 1000, price_cents: 1000)
     authorization.update!(preorder:)
-    release = create(:purchase, link: product, seller:, preorder:, price_cents: 1000,
+    release = create(:purchase, link: product, seller:, preorder:, merchant_account:, price_cents: 1000,
                                 total_transaction_cents: 1000)
     create(:later_charge_presentment, owner: preorder, presentment_currency: "eur",
                                       presentment_price_cents: 899, canonical_price_cents: 1000)
@@ -226,9 +226,9 @@ describe Purchase::LaterChargePresentmentService do
 
   it "reads a commission fixing and converts its tip at today's rate" do
     commission_product = create(:commission_product, user: seller, price_cents: 2000)
-    deposit = create(:purchase, link: commission_product, seller:, price_cents: 1000,
+    deposit = create(:purchase, link: commission_product, seller:, merchant_account:, price_cents: 1000,
                                 total_transaction_cents: 1000, is_commission_deposit_purchase: true)
-    completion = create(:purchase, link: commission_product, seller:, price_cents: 1000,
+    completion = create(:purchase, link: commission_product, seller:, merchant_account:, price_cents: 1000,
                                    total_transaction_cents: 1100)
     completion.update!(is_commission_completion_purchase: true)
     completion.create_tip!(value_cents: 100, value_usd_cents: 100)
@@ -252,5 +252,157 @@ describe Purchase::LaterChargePresentmentService do
                  presentment.presentment_seller_tax_cents + presentment.presentment_gumroad_tax_cents +
                  presentment.presentment_shipping_cents
     expect(components).to eq(presentment.presentment_total_cents)
+  end
+
+  context "when the saved rail requires INR" do
+    let(:product) do
+      create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 83_000)
+    end
+
+    def create_inr_fixing
+      create(
+        :later_charge_presentment,
+        owner: subscription,
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 899,
+        signup_currency_units_per_usd: BigDecimal("1.111111111111111"),
+        effective_from: 1.day.ago
+      )
+    end
+
+    it "charges a valid INR fixing" do
+      create_inr_fixing
+
+      result = service(required_currency: Currency::INR).perform
+
+      expect(result.processor_currency).to eq(Currency::INR)
+    end
+
+    it "requests a payment-method update instead of using a fixing in another currency" do
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Required-currency renewal rejected before processor submit",
+        reason: :required_currency_mismatch,
+        required_currency: Currency::INR,
+        purchase_id: renewal_purchase.id,
+        charge_id: charge.id
+      )
+
+      expect do
+        service(required_currency: Currency::INR).perform
+      end.to raise_error(ChargeProcessorCardError) do |error|
+        expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+      end
+    end
+
+    it "requests a payment-method update instead of falling back to USD when the fixing is missing" do
+      stored.destroy!
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Required-currency renewal rejected before processor submit",
+        reason: :no_stored_presentment,
+        required_currency: Currency::INR,
+        purchase_id: renewal_purchase.id,
+        charge_id: charge.id
+      )
+
+      expect do
+        service(required_currency: Currency::INR).perform
+      end.to raise_error(ChargeProcessorCardError) do |error|
+        expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+      end
+    end
+
+    it "reports a temporary processor failure when the quote is unavailable" do
+      create_inr_fixing
+      allow(StripeFxQuote).to receive(:create).and_return(nil)
+      renewal = service(required_currency: Currency::INR)
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Required-currency renewal deferred before processor submit",
+        reason: :quote_unavailable,
+        required_currency: Currency::INR,
+        purchase_id: renewal_purchase.id,
+        charge_id: charge.id
+      )
+
+      expect { renewal.perform }.to raise_error(ChargeProcessorUnavailableError)
+      expect(renewal.fallback_reason).to eq(:quote_unavailable)
+    end
+
+    it "reports an unexpected quote failure as temporary" do
+      create_inr_fixing
+      error = StandardError.new("stripe down")
+      allow(StripeFxQuote).to receive(:create).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(
+        error,
+        context: { charge_id: charge.id, purchase_id: renewal_purchase.id }
+      ).ordered
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Required-currency renewal deferred before processor submit",
+        reason: :StandardError,
+        required_currency: Currency::INR,
+        purchase_id: renewal_purchase.id,
+        charge_id: charge.id
+      ).ordered
+
+      expect do
+        service(required_currency: Currency::INR).perform
+      end.to raise_error(ChargeProcessorUnavailableError)
+    end
+
+    it "writes a successor fixing from current direct-INR renewal terms" do
+      create_inr_fixing
+      renewal_purchase.update!(
+        price_cents: 1500,
+        total_transaction_cents: 1500,
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 124_500,
+        rate_converted_to_usd: BigDecimal("83")
+      )
+
+      expect { service(required_currency: Currency::INR, amount_cents: 1500).perform }
+        .to change(LaterChargePresentment, :count).by(1)
+
+      expect(subscription.current_later_charge_presentment).to have_attributes(
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 124_500,
+        canonical_price_cents: 1500,
+        signup_currency_units_per_usd: BigDecimal("83")
+      )
+    end
+
+    it "uses a successor fixing created before the renewal lock is acquired" do
+      stale = create_inr_fixing
+      renewal_purchase.update!(
+        price_cents: 1500,
+        total_transaction_cents: 1500,
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 124_500,
+        rate_converted_to_usd: BigDecimal("83")
+      )
+      successor = create(
+        :later_charge_presentment,
+        owner: subscription,
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 124_500,
+        canonical_price_cents: 1500,
+        signup_currency_units_per_usd: BigDecimal("83"),
+        effective_from: Time.current
+      )
+      allow(subscription).to receive(:current_later_charge_presentment).and_return(stale, successor)
+
+      result = nil
+      expect { result = service(required_currency: Currency::INR, amount_cents: 1500).perform }
+        .not_to change(LaterChargePresentment, :count)
+      expect(result.processor_amount_cents).to eq(124_500)
+    end
+
+    it "requests a payment-method update when a stale fixing lacks direct-INR renewal terms" do
+      create_inr_fixing
+      renewal_purchase.update!(price_cents: 1500, total_transaction_cents: 1500)
+
+      expect { service(required_currency: Currency::INR, amount_cents: 1500).perform }
+        .to raise_error(ChargeProcessorCardError) do |error|
+          expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+        end
+    end
   end
 end

@@ -21,21 +21,36 @@ class Purchase::SyncStatusWithChargeProcessorService
   def perform
     return false unless purchase.in_progress? || purchase.failed?
 
-    # Nothing below is idempotent — balance_transactions has no unique index on purchase_id — so
-    # two callers finalizing the same row would credit the seller twice and re-send the receipt.
-    # Every trigger (checkout, webhooks, SyncStuckPurchasesJob, the unbounded recovery pass) comes
-    # through here, so holding the row for the whole read-then-write is what makes them exclusive.
+    # Client-confirmed recovery must use the PaymentIntent finalizer so recurring instruments are
+    # persisted before fulfillment. The delegated finalizer owns its own row lock.
+    if client_confirmed_charge?
+      purchase.with_lock { restore_failed_purchase_to_in_progress! }
+      finalizer_args = { order: purchase.charge.order }
+      if @require_final_charge_status
+        charge_intent = ChargeProcessor.get_charge_intent(
+          purchase.charge.merchant_account,
+          purchase.charge.stripe_payment_intent_id
+        )
+        @charge_outcome = classify_charge_intent(charge_intent)
+        return false unless @charge_outcome == :succeeded
+
+        finalizer_args[:charge_intent] = charge_intent
+      end
+      finalizer = Order::FinalizeConfirmedChargeService.new(**finalizer_args)
+      begin
+        finalizer.perform
+      ensure
+        @charge_outcome = classify_charge_intent(finalizer.charge_intent)
+      end
+      return purchase.reload.successful?
+    end
+
+    # The generic path has no unique balance-transaction guard, so hold the row through fulfillment.
     purchase.with_lock do
       # Re-read under the lock: whoever we queued behind may have just finalized this row.
       next false unless purchase.in_progress? || purchase.failed?
 
-      if purchase.failed?
-        purchase.update!(purchase_state: "in_progress")
-        if purchase.is_gift_sender_purchase
-          purchase.gift_given&.update!(state: "in_progress")
-          purchase.gift_given&.giftee_purchase&.update!(purchase_state: "in_progress")
-        end
-      end
+      restore_failed_purchase_to_in_progress!
 
       charge = ChargeProcessor.get_or_search_charge(purchase)
       success_statuses = ChargeProcessor.charge_processor_success_statuses(purchase.charge_processor_id)
@@ -85,11 +100,17 @@ class Purchase::SyncStatusWithChargeProcessorService
     false
   rescue StandardError => e
     ErrorNotifier.notify(e) { |report| report.add_metadata(:purchase, { id: purchase.id }) }
-    purchase.mark_failed! if mark_as_failed
+    # An unavailable client-confirm finalizer cannot prove the PaymentIntent failed; it may already
+    # have captured funds. Leave it recoverable rather than telling the buyer payment failed.
+    purchase.mark_failed! if mark_as_failed && !client_confirmed_charge?
     false
   end
 
   private
+    def client_confirmed_charge?
+      purchase.charge&.client_confirmed?
+    end
+
     def classify(charge, success_statuses)
       return :missing if charge.nil?
       return :refunded if charge.try(:refunded) || charge.try(:refunded?)
@@ -98,6 +119,29 @@ class Purchase::SyncStatusWithChargeProcessorService
       return :pending if charge.status.in?(PENDING_CHARGE_STATUSES)
 
       :succeeded
+    end
+
+    def classify_charge_intent(charge_intent)
+      return if charge_intent.nil?
+
+      if charge_intent.succeeded?
+        success_statuses = ChargeProcessor.charge_processor_success_statuses(purchase.charge_processor_id)
+        classify(charge_intent.charge, success_statuses)
+      elsif charge_intent.processing? || charge_intent.awaiting_customer_initiated_payment?
+        :pending
+      else
+        :unsuccessful
+      end
+    end
+
+    def restore_failed_purchase_to_in_progress!
+      return unless purchase.failed?
+
+      purchase.update!(purchase_state: "in_progress")
+      if purchase.is_gift_sender_purchase
+        purchase.gift_given&.update!(state: "in_progress")
+        purchase.gift_given&.giftee_purchase&.update!(purchase_state: "in_progress")
+      end
     end
 
     def complete_later_charge_owner

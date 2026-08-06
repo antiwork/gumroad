@@ -41,6 +41,20 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
         fail_purchase
       end
     end
+  rescue StandardError => e
+    raise unless charge_intent.succeeded?
+
+    # Stripe has captured the payment, so a local invariant failure must not return a resubmittable
+    # error or transition the purchase to failed. The row stays recoverable by status sync.
+    ErrorNotifier.notify(
+      e,
+      context: {
+        purchase_id: purchase.id,
+        payment_intent_id: charge_intent.payment_intent.id,
+      }
+    )
+    purchase.reload.update_column(:stripe_status, StripeIntentStatus::SUCCESS)
+    :pending
   end
 
   private
@@ -50,6 +64,7 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
       purchase.charge_intent = charge_intent
       assign_confirmed_card_presentation(charge_intent.charge)
       purchase.save_charge_data(charge_intent.charge)
+      persist_recurring_payment_method!
 
       if purchase.errors.present?
         error_message = purchase.errors.full_messages[0]
@@ -59,6 +74,25 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
 
       handle_purchase_success
       nil
+    end
+
+    # Persist the reusable method before creating the subscription. Any missing invariant rolls
+    # back fulfillment so a retry cannot leave a live subscription without a renewable instrument.
+    def persist_recurring_payment_method!
+      return unless purchase.is_original_subscription_purchase?
+      return unless purchase.link.is_recurring_billing?
+      return if purchase.is_installment_payment? || purchase.is_gift_sender_purchase?
+      return if purchase.credit_card.present?
+
+      credit_card = CreditCard.create_from_client_confirmed_intent!(
+        payment_intent: charge_intent.payment_intent,
+        processor_charge: charge_intent.charge,
+        merchant_account: purchase.merchant_account
+      )
+      purchase.update!(credit_card:)
+      # save_charge_data ran before this client-confirmed card existed, so repeat the
+      # observability-only Indian-card check now that it can see the saved mandate source.
+      purchase.check_indian_card_mandate_was_registered(charge_intent.charge)
     end
 
     # Client-confirm checkout never builds a server-side chargeable, so derive

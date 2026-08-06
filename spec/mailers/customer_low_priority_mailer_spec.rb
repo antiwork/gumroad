@@ -3,6 +3,30 @@
 require "spec_helper"
 
 describe CustomerLowPriorityMailer do
+  describe "blocked_purchase_resolved" do
+    let(:purchase) { create(:purchase, purchase_state: "failed", email: "buyer@example.com") }
+
+    it "tells the buyer the issue is fixed and they can retry, without naming internals" do
+      mail = CustomerLowPriorityMailer.blocked_purchase_resolved(purchase.id)
+
+      expect(mail.to).to eq(["buyer@example.com"])
+      expect(mail.subject).to eq("Your payment issue has been resolved")
+      expect(mail.body.encoded).to include("payment issue on our side")
+      expect(mail.body.encoded).to include("You did nothing wrong")
+      expect(mail.body.encoded).to include("try your purchase again")
+      expect(mail.body.encoded).to include(purchase.link.name)
+      # The layout's CSS legitimately says "block"; the copy must not say these.
+      expect(mail.body.encoded).not_to match(/fraud|fingerprint|platform block|radar/i)
+    end
+
+    it "sends nothing to an invalid address" do
+      purchase.update_columns(email: "not-an-email")
+
+      mail = CustomerLowPriorityMailer.blocked_purchase_resolved(purchase.id)
+      expect(mail.to).to be_nil
+    end
+  end
+
   describe "subscription_autocancelled" do
     context "memberships" do
       before do
@@ -103,6 +127,31 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.encoded).to include subscription.link.name
       expect(mail.body.encoded).to include "/subscriptions/#{subscription.external_id}/manage?declined=true&amp;token=#{subscription.reload.token}"
     end
+
+    it "asks a UPI subscriber to update their payment method" do
+      upi_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        payment_method_type: "upi",
+        stripe_customer_id: "cus_upi",
+        processor_payment_method_id: "pm_upi",
+        stripe_fingerprint: "pm_upi",
+        visual: "UPI",
+        card_type: CardType::UPI,
+        card_country: Compliance::Countries::IND.alpha2,
+        recurring_authorization_verified_at: Time.current,
+        recurring_authorization_currency: Currency::INR,
+        recurring_authorization_max_amount_cents: 100_000
+      )
+      subscription = create(:subscription, link: create(:product), credit_card: upi_card)
+      create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+      mail = CustomerLowPriorityMailer.subscription_card_declined(subscription.id)
+
+      expect(mail.subject).to eq "Your payment method needs attention."
+      expect(mail.body.encoded).to include "saved UPI payment method"
+      expect(mail.body.encoded).to include "update your payment method"
+      expect(mail.body.encoded).not_to include "re-authorize or update your card"
+    end
   end
 
   describe "subscription_card_declined_warning" do
@@ -114,6 +163,31 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.encoded).to include subscription.link.name
       expect(mail.body.encoded).to include "This is a reminder"
       expect(mail.body.encoded).to include "/subscriptions/#{subscription.external_id}/manage?declined=true&amp;token=#{subscription.reload.token}"
+    end
+
+    it "reminds a UPI subscriber to update their payment method" do
+      upi_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        payment_method_type: "upi",
+        stripe_customer_id: "cus_upi_warning",
+        processor_payment_method_id: "pm_upi_warning",
+        stripe_fingerprint: "pm_upi_warning",
+        visual: "UPI",
+        card_type: CardType::UPI,
+        card_country: Compliance::Countries::IND.alpha2,
+        recurring_authorization_verified_at: Time.current,
+        recurring_authorization_currency: Currency::INR,
+        recurring_authorization_max_amount_cents: 100_000
+      )
+      subscription = create(:subscription, link: create(:product), credit_card: upi_card)
+      create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+      mail = CustomerLowPriorityMailer.subscription_card_declined_warning(subscription.id)
+
+      expect(mail.subject).to eq "Your payment method needs attention."
+      expect(mail.body.encoded).to include "saved UPI payment method"
+      expect(mail.body.encoded).to include "update your payment method"
+      expect(mail.body.encoded).not_to include "update your card"
     end
   end
 

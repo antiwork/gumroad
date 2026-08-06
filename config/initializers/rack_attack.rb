@@ -218,8 +218,8 @@ class Rack::Attack
   # match by regex like the throttles around this one so every suffix shares one counter
   # instead of each format getting its own budget. Lives outside the production-only block
   # above deliberately: like the help-center rule, an email-abuse limit belongs in staging too.
-  GROUPED_RECEIPT_LOOKUP_PATHS = %w[/charge_data /license_key_lookup_data /paypal_charge_data].to_h do |path|
-    [path, /\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/]
+  GROUPED_RECEIPT_LOOKUP_PATHS = %w[/charge_data /license_key_lookup_data /paypal_charge_data].index_with do |path|
+    /\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/
   end.freeze
   GROUPED_RECEIPT_LOOKUP_PATHS.each do |path, path_regexp|
     throttle_with_exponential_backoff(name: "/ip:#{path}", requests: 3, period: 20.seconds) do |req|

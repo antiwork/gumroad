@@ -52,6 +52,131 @@ describe Purchase::FinalizeConfirmedChargeService do
       end
     end
 
+    context "when a UPI membership signup succeeded" do
+      let(:seller) { create(:user) }
+      let(:product) do
+        create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 100_000)
+      end
+      let(:merchant_account) do
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                    charge_processor_merchant_id: nil)
+      end
+      let(:purchase) do
+        build(:membership_purchase, link: product, seller:, purchase_state: "in_progress",
+                                    merchant_account:, credit_card: nil, subscription: nil,
+                                    price_cents: 1205, total_transaction_cents: 1205,
+                                    displayed_price_currency_type: Currency::INR,
+                                    displayed_price_cents: 100_000,
+                                    rate_converted_to_usd: BigDecimal("83")).tap do |purchase|
+          purchase.price = product.prices.alive.first || product.prices.first
+          purchase.variant_attributes = []
+          purchase.save!(validate: false)
+        end
+      end
+      let(:processor_charge) do
+        BaseProcessorCharge.new.tap do |charge|
+          charge.id = "ch_upi_signup"
+          charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+          charge.payment_method_type = "upi"
+          charge.card_instance_id = "pm_upi_signup"
+          charge.card_fingerprint = "pm_upi_signup"
+          charge.card_type = CardType::UPI
+        end
+      end
+      let(:payment_intent) do
+        Stripe::PaymentIntent.construct_from(
+          id: "pi_upi_signup",
+          customer: "cus_upi_signup",
+          payment_method: "pm_upi_signup",
+          status: StripeIntentStatus::SUCCESS,
+          setup_future_usage: "off_session",
+          currency: Currency::INR,
+          metadata: {
+            StripeChargeProcessor::UPI_RECURRING_MAX_AMOUNT_METADATA_KEY => "100000"
+          }
+        )
+      end
+      let(:charge_intent) do
+        instance_double(
+          StripeChargeIntent,
+          succeeded?: true,
+          processing?: false,
+          charge: processor_charge,
+          payment_intent:
+        )
+      end
+
+      before do
+        allow(purchase).to receive(:save_charge_data)
+      end
+
+      it "saves the reusable authorization before subscription fulfillment" do
+        allow_any_instance_of(described_class).to receive(:handle_purchase_success)
+
+        result = described_class.new(purchase:, charge_intent:).perform
+
+        expect(result).to be_nil
+        expect(purchase.reload.credit_card).to be_upi
+        expect(purchase.credit_card).to have_attributes(
+          stripe_customer_id: "cus_upi_signup",
+          processor_payment_method_id: "pm_upi_signup",
+          recurring_authorization_currency: Currency::INR,
+          recurring_authorization_max_amount_cents: 100_000
+        )
+      end
+
+      it "fulfills the captured signup with its subscription, reusable method, and INR fixing" do
+        create(
+          :purchase_presentment,
+          purchase:,
+          charge_presentment: nil,
+          presentment_currency: Currency::INR,
+          presentment_price_cents: 100_000,
+          presentment_tip_cents: 0,
+          presentment_seller_tax_cents: 0,
+          presentment_gumroad_tax_cents: 0,
+          presentment_shipping_cents: 0,
+          presentment_total_cents: 100_000,
+          presentment_gumroad_amount_cents: 10_000
+        )
+
+        result = described_class.new(purchase:, charge_intent:).perform
+
+        expect(result).to be_nil
+        expect(purchase.reload).to be_successful
+        expect(purchase.credit_card).to be_recurring_upi
+        expect(purchase.subscription).to be_present
+        expect(purchase.subscription.credit_card).to eq(purchase.credit_card)
+        expect(purchase.subscription.current_later_charge_presentment).to have_attributes(
+          presentment_currency: Currency::INR,
+          presentment_price_cents: 100_000,
+          canonical_price_cents: 1205
+        )
+      end
+
+      it "keeps a captured payment recoverable when no INR fixing can be stored" do
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(RuntimeError), purchase_id: purchase.id).ordered
+        expect(ErrorNotifier).to receive(:notify).with(
+          instance_of(RuntimeError),
+          context: {
+            purchase_id: purchase.id,
+            payment_intent_id: payment_intent.id,
+          }
+        ).ordered
+
+        expect do
+          expect(described_class.new(purchase:, charge_intent:).perform).to eq(:pending)
+        end.to not_change(CreditCard, :count)
+          .and not_change(Subscription, :count)
+
+        expect(purchase.reload).to be_in_progress
+        expect(purchase.stripe_status).to eq(StripeIntentStatus::SUCCESS)
+        expect(purchase.credit_card).to be_nil
+        expect(purchase.subscription).to be_nil
+      end
+    end
+
     context "when the intent is still processing" do
       let(:purchase) { create(:purchase_in_progress) }
 

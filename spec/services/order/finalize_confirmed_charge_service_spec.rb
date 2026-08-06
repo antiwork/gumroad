@@ -111,6 +111,24 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
       expect(purchase.stripe_status).to eq("processing")
       expect(purchase.successful?).to be(false)
     end
+
+    it "reuses an intent already loaded by recovery" do
+      order = instance_double(Order, id: 1)
+      charge = instance_double(Charge, stripe_payment_intent_id: "pi_recovery")
+      product = instance_double(Link, unique_permalink: "recovery")
+      purchase = instance_double(Purchase, link: product, variant_attributes: [])
+      processing_intent = instance_double(StripeChargeIntent)
+      purchase_finalizer = instance_double(Purchase::FinalizeConfirmedChargeService, perform: :pending)
+      allow(order).to receive_messages(charges: [charge], purchases: [purchase], send_charge_receipts: nil)
+      expect(Purchase::FinalizeConfirmedChargeService).to receive(:new)
+        .with(purchase:, charge_intent: processing_intent)
+        .and_return(purchase_finalizer)
+      expect(ChargeProcessor).not_to receive(:get_charge_intent)
+
+      responses = described_class.new(order:, charge_intent: processing_intent).perform
+
+      expect(responses[cart_uid(purchase)][:processing]).to be(true)
+    end
   end
 
   context "when no charge with a payment intent exists" do

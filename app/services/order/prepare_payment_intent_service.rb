@@ -16,6 +16,8 @@ class Order::PreparePaymentIntentService
   # Same reasoning as the Klarna message above: a Pix amount-window rejection is deterministic for
   # this cart, so telling the buyer to try again would send them in a loop.
   PIX_AMOUNT_INELIGIBLE_MESSAGE = "This order's total is outside the amount Pix supports. Please choose a different payment method (you have not been charged)."
+  UPI_AUTOPAY_AMOUNT_INELIGIBLE_MESSAGE = "This membership's maximum recurring total exceeds the INR 15,000 UPI Autopay limit. Please choose a card instead (you have not been charged)."
+  UPI_MANDATE_DESCRIPTION = "Gumroad membership"
   # On a cross-border Pix payment charged on a GUMROAD-HELD account, Gumroad absorbs the Brazilian
   # IOF tax on the buyer's behalf so the amount in their banking app matches the price checkout
   # quoted them, and recovers it from the seller as a fee component
@@ -55,6 +57,7 @@ class Order::PreparePaymentIntentService
     return responses if preview.nil?
 
     apply_previewed_card_country(preview)
+    return responses if block_unsupported_recurring_payment_method
     return responses if block_region_locked_payment_method_country_mismatch
     return responses if block_purchasing_power_parity_mismatches
 
@@ -184,6 +187,7 @@ class Order::PreparePaymentIntentService
         # pre-charge seed rather than the final word. Left untouched for other methods, which
         # record card_type from the confirmed charge exactly as before.
         purchase.card_type = CardType::PIX if pix_selected?
+        purchase.card_type = CardType::UPI if upi_selected?
       end
     end
 
@@ -254,6 +258,21 @@ class Order::PreparePaymentIntentService
     # than re-deriving the check.
     def pix_selected?
       @previewed_payment_method_type == PIX_PAYMENT_METHOD_TYPE
+    end
+
+    def upi_selected?
+      @previewed_payment_method_type == Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE
+    end
+
+    # Recurring UPI enrollment persists only card and UPI methods after capture. Reject a stale or
+    # crafted wallet token before creating an intent so fulfillment cannot fail after money moves.
+    def block_unsupported_recurring_payment_method
+      return false unless recurring_upi_registration?
+      return false if @previewed_payment_method_type.in?(%w[card upi])
+
+      Rails.logger.info("UPI Autopay registration blocked for order #{order.id}: #{@previewed_payment_method_type.inspect} cannot be saved for renewals")
+      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
     end
 
     def block_purchasing_power_parity_mismatches
@@ -336,6 +355,82 @@ class Order::PreparePaymentIntentService
         amount_cents <= Checkout::PaymentMethodResolver::PIX_MAX_USD_CHARGE_CENTS
     end
 
+    # Apply UPI's cap to the renewal-aware maximum, not only today's discounted signup charge.
+    # Card remains usable because prepare narrows its ConfirmationToken to a card-only intent.
+    def block_upi_autopay_amount_outside_window(presentment)
+      return false unless recurring_upi_registration? && upi_selected?
+
+      mandate_amount_cents = upi_mandate_amount_cents(presentment)
+      return false if mandate_amount_cents.present? && mandate_amount_cents <= Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS
+
+      Rails.logger.info("UPI Autopay registration blocked for order #{order.id}: maximum INR debit #{mandate_amount_cents.inspect} is outside Stripe's recurring window")
+      purchases_to_charge.each { _1.error_code = PurchaseErrorCode::UPI_AUTOPAY_AMOUNT_OUTSIDE_WINDOW if _1.error_code.blank? }
+      cleanup_prepare_time_presentment_records
+      fail_purchases_with(UPI_AUTOPAY_AMOUNT_INELIGIBLE_MESSAGE)
+      true
+    end
+
+    def upi_mandate_amount_cents(presentment)
+      return if presentment.blank? || presentment.presentment_currency != Currency::INR
+      return unless amount_cents.positive?
+
+      canonical_maximum_cents = purchases_to_charge.first.mandate_maximum_amount_cents
+      return unless canonical_maximum_cents.to_i.positive?
+
+      [
+        Rational(canonical_maximum_cents * presentment.presentment_total_cents, amount_cents).ceil,
+        presentment.presentment_total_cents,
+      ].max
+    end
+
+    def upi_payment_method_options(presentment)
+      return unless recurring_upi_registration? && upi_selected?
+
+      {
+        upi: {
+          mandate_options: {
+            amount: upi_mandate_amount_cents(presentment),
+            amount_type: "maximum",
+            description: UPI_MANDATE_DESCRIPTION,
+          }
+        }
+      }
+    end
+
+    # Preserve the existing RBI e-mandate contract when card is selected from the same Element.
+    def recurring_indian_card_payment_method_options(presentment)
+      return unless recurring_upi_registration?
+      return unless @previewed_payment_method_type == "card"
+      return unless purchases_to_charge.first.card_country == Compliance::Countries::IND.alpha2
+
+      maximum_amount_cents = upi_mandate_amount_cents(presentment)
+      return unless maximum_amount_cents.present?
+
+      {
+        card: {
+          mandate_options: {
+            reference: StripeChargeProcessor::MANDATE_PREFIX + purchases_to_charge.first.external_id,
+            amount_type: "maximum",
+            amount: maximum_amount_cents,
+            currency: Currency::INR,
+            start_date: Time.current.to_i,
+            interval: "sporadic",
+            supported_types: ["india"],
+          }
+        }
+      }
+    end
+
+    def deferred_payment_method_options(presentment)
+      [
+        pix_payment_method_options,
+        upi_payment_method_options(presentment),
+        recurring_indian_card_payment_method_options(presentment),
+      ].compact.reduce({}) do |options, method_options|
+        options.deep_merge(method_options)
+      end.presence
+    end
+
     # Per-method options Stripe wants at intent CREATE time. Only sent when the buyer actually
     # picked Pix — Stripe rejects options for a method the intent doesn't list, and the previewed
     # method is what decides whether pix rides this intent at all.
@@ -415,6 +510,7 @@ class Order::PreparePaymentIntentService
     def prepare_unconfirmed_charge
       resolve_merchant_account_and_fees
       return if fail_all_purchases_when_any_errored
+      return if block_unsupported_upi_recurring_charge_model
       return if block_klarna_final_amount_outside_window
 
       charge = build_charge
@@ -426,6 +522,7 @@ class Order::PreparePaymentIntentService
       # presentment knows the charged amount in. Any rows persisted above are cleaned up inside the
       # gate, since a blocked order never gets an intent for them to belong to.
       return if block_pix_amount_outside_window(presentment)
+      return if block_upi_autopay_amount_outside_window(presentment)
       charge_intent = create_unconfirmed_intent(charge, presentment)
       if charge_intent.nil?
         # The presentment rows were persisted before the intent create failed, and the
@@ -458,6 +555,15 @@ class Order::PreparePaymentIntentService
       rest.each do |purchase|
         purchase.resolve_merchant_account_and_recompute_fees!(StripeChargeProcessor.charge_processor_id, merchant_account: first.merchant_account)
       end
+    end
+
+    def block_unsupported_upi_recurring_charge_model
+      return false unless recurring_upi_registration?
+      return false if merchant_account&.is_managed_by_gumroad?
+
+      Rails.logger.info("UPI Autopay registration blocked for order #{order.id}: merchant account #{merchant_account&.id.inspect} is not the verified platform charge model")
+      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
     end
 
     def build_charge
@@ -716,7 +822,11 @@ class Order::PreparePaymentIntentService
         payment_method_types: intent_payment_method_types(presentment),
         currency: presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY,
         stripe_fx_quote_id: presentment&.stripe_fx_quote_id,
-        payment_method_options: pix_payment_method_options
+        metadata: deferred_intent_metadata(charge, presentment),
+        payment_method_options: deferred_payment_method_options(presentment),
+        setup_future_usage: ("off_session" if recurring_upi_registration?),
+        customer_params: recurring_upi_customer_params,
+        customer_idempotency_key: recurring_upi_customer_idempotency_key
       )
     rescue ChargeProcessorCardError => e
       # The seller-proceeds guard is an expected buyer-facing rejection, not a generic prepare
@@ -747,6 +857,33 @@ class Order::PreparePaymentIntentService
         end
       end
       nil
+    end
+
+    def recurring_upi_customer_params
+      return unless recurring_upi_registration?
+
+      purchase = purchases_to_charge.first
+      {
+        email: purchase.email,
+        name: purchase.full_name.presence,
+        description: "UPI Autopay for order #{order.external_id}",
+        metadata: { order: order.external_id, purchase: purchase.external_id },
+      }.compact
+    end
+
+    def recurring_upi_customer_idempotency_key
+      return unless recurring_upi_registration?
+
+      "upi_autopay_customer_#{order.external_id}_#{order.created_at.to_i}_#{order.created_at.usec}"
+    end
+
+    def deferred_intent_metadata(charge, presentment)
+      metadata = { purchase: "#{Charge::COMBINED_CHARGE_PREFIX}#{charge.external_id}" }
+      return metadata unless recurring_upi_registration? && upi_selected?
+
+      metadata.merge(
+        StripeChargeProcessor::UPI_RECURRING_MAX_AMOUNT_METADATA_KEY => upi_mandate_amount_cents(presentment).to_s
+      )
     end
 
     # Non-nil once block_ineligible_for_client_confirm has passed: the deferred intent's
@@ -805,6 +942,10 @@ class Order::PreparePaymentIntentService
       # separately enforced fail-closed, before this method runs, by
       # block_region_locked_payment_method_country_mismatch.)
       method_types = (resolved_payment_method_types + [appendable_previewed_payment_method_type(presentment)]).compact.uniq
+      # Narrow card selection so UPI's cap cannot reject an otherwise valid card signup.
+      if recurring_upi_registration? && @previewed_payment_method_type == "card"
+        method_types -= [Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE]
+      end
       # The US-locked methods (Cash App Pay, ACH) are also USD-only: Stripe rejects creating an
       # intent in any other currency that lists them. Dropping them here is about currency
       # compatibility, not the buyer's location — a US-GeoIP buyer keeps them on USD intents.
@@ -968,15 +1109,14 @@ class Order::PreparePaymentIntentService
         buyer_country: buyer_country_alpha2,
         ppp_discounted: ppp_verification_applies?,
         # Same basis as the presenter's cart_product_currency (a uniform forced pricing currency,
-        # nil for mixed-currency/non-forced carts) so both sides resolve identical method sets —
-        # the Element's list and the deferred intent's list must match or Stripe rejects the
-        # ConfirmationToken.
+        # nil for mixed-currency/non-forced carts) so both sides resolve the same baseline method
+        # menu before prepare safely narrows it around the buyer's selected method.
         cart_product_currency: uniform_method_forced_purchase_currency,
         # Klarna's amount-window input (see the resolver), on the SAME basis the presenter used
         # when mounting the Element — nil unless every product is USD-priced, and the pre-tax,
         # pre-discount, quantity-inclusive item total when they are. Matching the basis matters
-        # because the Element's method list and the deferred intent's must match (Stripe rejects
-        # a payment_method_types-scoped ConfirmationToken against a mismatched intent): passing
+        # because the Element and prepare must agree whether the selected Klarna method belongs in
+        # the intent: passing
         # the tax-inclusive charged total, or a real USD total for a non-USD-priced cart the
         # presenter nil'ed out, would make the two sides resolve different Klarna answers near
         # the window edges and fail carts that never touched Klarna. Stripe validates Klarna's
@@ -986,8 +1126,43 @@ class Order::PreparePaymentIntentService
         # in intent_payment_method_types (other methods). Residual method-list drift (a stale
         # Element, flag flips mid-checkout) is covered by the previewed-method append in
         # intent_payment_method_types, which runs on every lane including this USD one.
-        cart_total_usd_cents: purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == Currency::USD } ? purchases_to_charge.sum { klarna_window_price_cents(_1) } : nil
+        cart_total_usd_cents: purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == Currency::USD } ? purchases_to_charge.sum { klarna_window_price_cents(_1) } : nil,
+        recurring_upi_registration: recurring_upi_registration_shape?
       ).resolve
+    end
+
+    # Re-check the presenter shape against server-owned purchases; only prepare can detect gifts.
+    def recurring_upi_registration_shape?
+      return @recurring_upi_registration_shape if defined?(@recurring_upi_registration_shape)
+
+      @recurring_upi_registration_shape = recurring_upi_registration_shape_value
+    end
+
+    def recurring_upi_registration_shape_value
+      return false unless purchases_to_charge.one?
+
+      purchase = purchases_to_charge.first
+      return false unless buyer_country_alpha2 == Checkout::PaymentMethodResolver::IN_ALPHA2
+      return false unless Checkout::BuyerCurrencyEligibility.subscriptions_enabled?(seller)
+      return false unless Feature.active?(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
+      return false if seller.merchant_account(StripeChargeProcessor.charge_processor_id).present?
+      return false unless purchase.is_original_subscription_purchase?
+      return false unless purchase.link.is_recurring_billing?
+      return false if purchase.is_installment_payment? || purchase.link.installment_plan.present?
+      return false if purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?
+      return false if purchase.is_gift_sender_purchase?
+      return false if purchase.link.is_physical || purchase.link.require_shipping?
+      return false if purchase.link.native_type == Link::NATIVE_TYPE_COMMISSION
+      return false unless purchase.link.price_currency_type.to_s.downcase == Currency::INR
+      return false unless purchase.quantity.to_i == 1
+
+      listed_amount_cents = klarna_window_price_cents(purchase)
+      listed_amount_cents.positive? && listed_amount_cents <= Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS
+    end
+
+    # Memoize the acquisition decision for the intent/customer work below.
+    def recurring_upi_registration?
+      payment_method_resolution.client_confirm_eligible? && recurring_upi_registration_shape?
     end
 
     # The Klarna amount-window basis for one purchase: the buyer's chosen pre-discount,

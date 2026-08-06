@@ -23,6 +23,9 @@ class StripeChargeProcessor
   REFUND_REASON_FRAUDULENT = "fraudulent"
 
   MANDATE_PREFIX = "Mandate-"
+  UPI_PAYMENT_METHOD_UPDATE_MESSAGE = "Your saved UPI payment method can no longer be used. Please update your payment method to continue your membership."
+  # Stripe does not echo UPI mandate_options, so finalization validates this server-authored copy.
+  UPI_RECURRING_MAX_AMOUNT_METADATA_KEY = "gumroad_upi_max_amount_cents"
 
   # Currencies Stripe charges in whole units instead of two-decimal minor units.
   # https://docs.stripe.com/currencies#zero-decimal
@@ -283,6 +286,8 @@ class StripeChargeProcessor
     charge_amount_cents = processor_amount_cents || amount_cents
     charge_currency = processor_currency || Currency::USD
     charge_gumroad_amount_cents = processor_gumroad_amount_cents || amount_for_gumroad_cents
+    upi_autopay = chargeable.is_a?(StripeChargeableUpi)
+    validate_upi_autopay_charge!(chargeable, charge_amount_cents, charge_currency, off_session:) if upi_autopay
 
     params = {
       amount: charge_amount_cents,
@@ -292,7 +297,7 @@ class StripeChargeProcessor
         purchase: reference
       },
       transfer_group:,
-      payment_method_types: ["card"],
+      payment_method_types: [upi_autopay ? Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE : "card"],
       off_session:,
       setup_future_usage: ("off_session" if should_setup_future_usage)
     }
@@ -300,13 +305,13 @@ class StripeChargeProcessor
     params[:fx_quote] = stripe_fx_quote_id if stripe_fx_quote_id.present?
     params.merge!(confirm: true) if off_session
 
-    params.merge!(mandate_options) if mandate_options.present?
+    params.merge!(mandate_options) if mandate_options.present? && !upi_autopay
 
     params.merge!(chargeable.stripe_charge_params)
 
     # Off-session recurring charges on Indian cards use e-mandates:
     # https://stripe.com/docs/india-recurring-payments?integration=paymentIntents-setupIntents
-    if off_session && chargeable.requires_mandate?
+    if off_session && chargeable.requires_mandate? && !upi_autopay
       mandate = get_mandate_id_from_chargeable(chargeable, merchant_account)
       if mandate.present?
         params.merge!(mandate:)
@@ -340,7 +345,7 @@ class StripeChargeProcessor
     end
 
     # Request 3DS manually when preparing future charges for all Indian cards. Ref: https://github.com/gumroad/web/issues/20783
-    params.deep_merge!(REQUEST_MANUAL_3DS_PARAMS) if should_setup_future_usage && chargeable.country == Compliance::Countries::IND.alpha2
+    params.deep_merge!(REQUEST_MANUAL_3DS_PARAMS) if should_setup_future_usage && !upi_autopay && chargeable.country == Compliance::Countries::IND.alpha2
 
     if statement_description
       statement_description = statement_description.gsub(%r{[^A-Z0-9./\s]}i, "").to_s.strip[0...22]
@@ -1340,6 +1345,31 @@ class StripeChargeProcessor
       ensure
         file.close!
       end
+    end
+
+    # UPI exposes no reusable Mandate id; Stripe selects it from the Customer + PaymentMethod.
+    # Validate the stored authorization before submit so renewals cannot drift or exceed its cap.
+    def validate_upi_autopay_charge!(chargeable, amount_cents, currency, off_session:)
+      reason =
+        if !off_session
+          "charge was not off-session"
+        elsif currency.to_s.downcase != Currency::INR
+          "charge currency was #{currency.inspect}"
+        elsif !chargeable.recurring_authorization_verified?
+          "authorization was not verified"
+        elsif chargeable.recurring_authorization_currency.to_s.downcase != Currency::INR
+          "stored authorization currency was #{chargeable.recurring_authorization_currency.inspect}"
+        elsif chargeable.recurring_authorization_max_amount_cents.to_i <= 0
+          "stored authorization maximum was missing"
+        elsif amount_cents > chargeable.recurring_authorization_max_amount_cents.to_i
+          "charge amount #{amount_cents} exceeded stored maximum #{chargeable.recurring_authorization_max_amount_cents}"
+        elsif amount_cents > Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS
+          "charge amount #{amount_cents} exceeded Stripe's UPI recurring limit"
+        end
+      return if reason.nil?
+
+      ErrorNotifier.notify("UPI Autopay renewal rejected before Stripe submit", reason:)
+      raise ChargeProcessorCardError.new(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED, UPI_PAYMENT_METHOD_UPDATE_MESSAGE)
     end
 
     def get_mandate_id_from_chargeable(chargeable, merchant_account)

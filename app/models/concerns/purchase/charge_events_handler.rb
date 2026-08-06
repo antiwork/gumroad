@@ -120,7 +120,7 @@ module Purchase::ChargeEventsHandler
     return finalize_client_confirmed_charge! if event.type == ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED && client_confirmed_charge?
 
     charged_purchases.each do |purchase|
-      next unless purchase.in_progress? && purchase.is_an_off_session_charge_on_indian_card?
+      next unless purchase.in_progress? && purchase.is_an_async_off_session_charge_in_india?
 
       stripe_charge = ChargeProcessor.get_charge(StripeChargeProcessor.charge_processor_id,
                                                  event.charge_id,
@@ -177,7 +177,7 @@ module Purchase::ChargeEventsHandler
     end
 
     charged_purchases.each do |purchase|
-      if purchase.in_progress? && purchase.is_an_off_session_charge_on_indian_card?
+      if purchase.in_progress? && purchase.is_an_async_off_session_charge_in_india?
         if purchase.subscription.present?
           purchase.subscription.handle_purchase_failure(purchase)
         else

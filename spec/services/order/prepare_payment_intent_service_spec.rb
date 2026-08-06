@@ -2265,6 +2265,192 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+
+    context "with a paid-upfront UPI Autopay membership" do
+      let(:seller) { create(:user, disable_buyer_local_currency: false) }
+      let(:product) do
+        create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 100_000)
+      end
+      let!(:platform_account) do
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                    charge_processor_merchant_id: nil)
+      end
+      let(:line_item) do
+        {
+          uid: "unique-id-0",
+          permalink: product.unique_permalink,
+          perceived_price_cents: 100_000,
+          quantity: 1,
+          price_id: product.prices.alive.first.external_id,
+        }
+      end
+
+      before do
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+        Feature.activate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+        Feature.activate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
+        Feature.activate_user(:checkout_local_method_upi, seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_upi_autopay")
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+        Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+        Feature.deactivate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+      end
+
+      def prepare_upi_autopay(order, params, payment_method_type: "upi")
+        preview = if payment_method_type == "card"
+          Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
+        elsif payment_method_type == "upi"
+          Stripe::StripeObject.construct_from(type: "upi", upi: {}, card: nil)
+        else
+          Stripe::StripeObject.construct_from(type: payment_method_type, payment_method_type.to_sym => {}, card: nil)
+        end
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_upi_autopay", client_secret: "pi_upi_autopay_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_upi_autopay").perform
+        [create_args, responses]
+      end
+
+      it "creates a customer-backed INR intent with card + UPI and recurring authorization options" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "India") }
+
+        create_args, responses = prepare_upi_autopay(order, params)
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args).to include(
+          merchant_account: platform_account,
+          currency: Currency::INR,
+          payment_method_types: %w[card upi],
+          setup_future_usage: "off_session"
+        )
+        expect(create_args[:customer_params]).to include(email: "buyer@example.com")
+        expect(create_args[:customer_idempotency_key])
+          .to eq("upi_autopay_customer_#{order.external_id}_#{order.created_at.to_i}_#{order.created_at.usec}")
+        expect(create_args[:customer_idempotency_key]).not_to include("ctoken_upi_autopay")
+        mandate_options = create_args.dig(:payment_method_options, :upi, :mandate_options)
+        expect(mandate_options).to include(
+          amount_type: "maximum",
+          description: described_class::UPI_MANDATE_DESCRIPTION
+        )
+        expect(mandate_options[:amount]).to be_between(1, Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS)
+        expect(create_args.dig(:metadata, StripeChargeProcessor::UPI_RECURRING_MAX_AMOUNT_METADATA_KEY))
+          .to eq(mandate_options[:amount].to_s)
+        expect(order.purchases.first.reload.card_type).to eq(CardType::UPI)
+      end
+
+      it "rejects registration before Stripe when renewal servicing is disabled" do
+        Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "India") }
+
+        create_args, responses = prepare_upi_autopay(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to be(false)
+        expect(order.charges).to be_empty
+      end
+
+      it "preserves the Indian-card e-mandate contract when card is selected on the same element" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow_any_instance_of(Purchase).to receive(:mandate_maximum_amount_cents).and_return(2_000_000)
+
+        create_args, responses = prepare_upi_autopay(order, params, payment_method_type: "card")
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:payment_method_types]).to eq(["card"])
+        expect(create_args[:metadata]).not_to have_key(StripeChargeProcessor::UPI_RECURRING_MAX_AMOUNT_METADATA_KEY)
+        expect(create_args.dig(:payment_method_options, :upi)).to be_nil
+        mandate_options = create_args.dig(:payment_method_options, :card, :mandate_options)
+        expect(mandate_options).to include(
+          amount_type: "maximum",
+          currency: Currency::INR,
+          interval: "sporadic",
+          supported_types: ["india"]
+        )
+        expect(mandate_options[:amount]).to be > Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS
+      end
+
+      it "rejects a crafted Link token before creating a recurring intent" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "India") }
+
+        create_args, responses = prepare_upi_autopay(order, params, payment_method_type: "link")
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to be(false)
+        expect(order.charges).to be_empty
+        expect(order.purchases.first.reload).to be_failed
+      end
+
+      it "fails before Stripe when the maximum permitted debit exceeds INR 15,000" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow_any_instance_of(Purchase).to receive(:mandate_maximum_amount_cents).and_return(2_000_000)
+
+        create_args, responses = prepare_upi_autopay(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"]).to include(
+          success: false,
+          error_code: PurchaseErrorCode::UPI_AUTOPAY_AMOUNT_OUTSIDE_WINDOW,
+          error_message: described_class::UPI_AUTOPAY_AMOUNT_INELIGIBLE_MESSAGE
+        )
+        expect(order.purchases.first.reload).to be_failed
+        expect(ChargePresentment.count).to eq(0)
+        expect(PurchasePresentment.count).to eq(0)
+      end
+
+      it "rejects a crafted gift before creating the recurring intent" do
+        params = { line_items: [line_item] }.merge(common_params).merge(
+          is_gift: "true",
+          giftee_email: "giftee@example.com",
+          gift_note: "Enjoy!"
+        )
+        order, = Order::CreateService.new(params:).perform
+        order.purchases.each { _1.update!(ip_country: "India") }
+        purchase = order.purchases.find(&:is_gift_sender_purchase?)
+
+        create_args, responses = prepare_upi_autopay(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.charges).to be_empty
+        expect(purchase.reload).to be_failed
+      end
+
+      it "rejects a seller-owned Stripe account before creating the recurring intent" do
+        create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_upi_autopay_destination")
+        seller.merchant_accounts.reset
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "India") }
+
+        create_args, responses = prepare_upi_autopay(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.charges).to be_empty
+        expect(order.purchases.first.reload).to be_failed
+      end
+    end
+
     context "with a method-forced Pix payment method" do
       let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
       let(:product) { create(:product, user: seller, price_currency_type: Currency::BRL, price_cents: 100_00) }

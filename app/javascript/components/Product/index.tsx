@@ -971,10 +971,11 @@ const Reviews = ({
           {`${formatOrderOfMagnitude(ratings.count, 1)} ${ratings.count === 1 ? "rating" : "ratings"}`})
         </div>
       </header>
-      <div itemProp="aggregateRating" itemType="https://schema.org/AggregateRating" itemScope className="hidden">
-        <div itemProp="reviewCount">{ratings.count}</div>
-        <div itemProp="ratingValue">{ratings.average}</div>
-      </div>
+      {/* Rating markup lives in the page's JSON-LD (Product::StructuredData), where the
+          AggregateRating nests under the Product. Do not re-add microdata here: this section
+          has no itemscope Product ancestor, so an itemscope block becomes a standalone
+          top-level AggregateRating that Google's Rich Results Test flags as
+          "Missing field itemReviewed" (gumroad-private#1875). */}
       <section className="grid grid-cols-[auto_1fr_auto] gap-3" aria-label="Ratings histogram">
         {([4, 3, 2, 1, 0] as const).map((rating) => (
           <RatingsHistogramRow rating={rating + 1} percentage={ratings.percentages[rating]} key={rating} />
@@ -1038,7 +1039,7 @@ const SellerReputationSection = ({
   <section className="grid gap-2 p-6 not-first:border-t" aria-label="Creator rating">
     {!hasOwnReviews ? <div>This product has no reviews yet.</div> : null}
     <div className="flex flex-wrap items-center gap-1">
-      <Star pack="filled" className="size-5" />
+      <RatingStars rating={reputation.average} />
       <span>
         Creator rating: {reputation.average} from{" "}
         {seller ? (

@@ -156,6 +156,36 @@ describe Subscription::UpdaterService, :vcr do
             expect(@user.reload.credit_card).to eq @credit_card
           end
         end
+
+        it "replaces a saved UPI payment method with a card" do
+          upi_card = CreditCard.create!(
+            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            payment_method_type: "upi",
+            stripe_customer_id: "cus_upi",
+            processor_payment_method_id: "pm_upi",
+            stripe_fingerprint: "pm_upi",
+            visual: "UPI",
+            card_type: CardType::UPI,
+            card_country: Compliance::Countries::IND.alpha2,
+            recurring_authorization_verified_at: Time.current,
+            recurring_authorization_currency: Currency::INR,
+            recurring_authorization_max_amount_cents: 100_000
+          )
+          @subscription.update!(credit_card: upi_card)
+          @original_purchase.update!(credit_card: upi_card)
+
+          result = Subscription::UpdaterService.new(
+            subscription: @subscription,
+            gumroad_guid: @gumroad_guid,
+            params: update_card_params,
+            logged_in_user: @user,
+            remote_ip: @remote_ip,
+          ).perform
+
+          expect(result[:success]).to be(true)
+          expect(@subscription.reload.credit_card).not_to be_recurring_upi
+          expect(@subscription.credit_card).not_to eq(upi_card)
+        end
       end
 
       describe "restarting a membership" do
@@ -2905,6 +2935,34 @@ describe Subscription::UpdaterService, :vcr do
           override_params: hash_including(perceived_price_cents: 12_34, is_upgrade_purchase: true),
           from_failed_charge_email: nil,
           off_session: true,
+          authenticated_offer_code_buyer: logged_in_user,
+        ).and_return(upgrade_purchase)
+
+        expect(service.send(:charge_user!)[:success]).to eq(true)
+      end
+
+      it "keeps a buyer-present update on-session when the saved payment method is recurring UPI" do
+        service.is_resubscribing = false
+        upgrade_purchase = instance_double(Purchase,
+                                           successful?: true,
+                                           test_successful?: false,
+                                           in_progress?: false,
+                                           errors: double(full_messages: []),
+                                           error_code: nil,
+                                           external_id: "upgrade-purchase")
+        saved_upi = instance_double(CreditCard, requires_mandate?: false, recurring_upi?: true)
+        allow(service).to receive(:amount_owed).and_return(12_34)
+        allow(service).to receive(:prorated_discount_price_cents).and_return(0)
+        allow(service).to receive(:upgrade?).and_return(true)
+        allow(service).to receive(:use_existing_card?).and_return(true)
+        allow(service).to receive(:send_subscription_updated_api_notification)
+        allow(service).to receive(:same_variants?).and_return(true)
+        allow(service).to receive(:success_message).and_return("Your membership has been updated.")
+        allow(subscription).to receive(:credit_card_to_charge).and_return(saved_upi)
+        expect(subscription).to receive(:charge!).with(
+          override_params: hash_including(perceived_price_cents: 12_34, is_upgrade_purchase: true),
+          from_failed_charge_email: nil,
+          off_session: false,
           authenticated_offer_code_buyer: logged_in_user,
         ).and_return(upgrade_purchase)
 
