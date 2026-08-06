@@ -56,14 +56,44 @@ end
 describe StripeMerchantAccountManager, ".clear_stale_payout_setup_rejection_notes" do
   let(:user) { create(:user) }
 
-  it "deletes the marked note once payout setup succeeds, so a later stale-payout-account lookup does not find it" do
+  it "deletes the marked note once the rejected field is resubmitted and accepted" do
     user.add_payout_note(
       content: "Our payment partner couldn't accept the Tax ID you entered.",
+      seller_visible: true,
+      json_data: {
+        StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+        StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "id_number",
+      }
+    )
+
+    described_class.send(:clear_stale_payout_setup_rejection_notes, user, resolved_fields: ["id_number"])
+
+    expect(user.latest_payout_setup_rejection_note).to be_nil
+  end
+
+  it "leaves the note in place when an unrelated field was the one resubmitted" do
+    user.add_payout_note(
+      content: "Our payment partner couldn't accept the Tax ID you entered.",
+      seller_visible: true,
+      json_data: {
+        StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+        StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "id_number",
+      }
+    )
+
+    described_class.send(:clear_stale_payout_setup_rejection_notes, user, resolved_fields: ["address"])
+
+    expect(user.latest_payout_setup_rejection_note).to be_present
+  end
+
+  it "clears a note with no recorded field on any success, same as before this fix" do
+    user.add_payout_note(
+      content: "Our payment partner couldn't accept the details you entered.",
       seller_visible: true,
       json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true }
     )
 
-    described_class.send(:clear_stale_payout_setup_rejection_notes, user)
+    described_class.send(:clear_stale_payout_setup_rejection_notes, user, resolved_fields: ["address"])
 
     expect(user.latest_payout_setup_rejection_note).to be_nil
   end
@@ -71,15 +101,16 @@ describe StripeMerchantAccountManager, ".clear_stale_payout_setup_rejection_note
   it "leaves other payout notes alone" do
     unrelated = user.add_payout_note(content: "Your payout was skipped because your balance was below the minimum.")
 
-    described_class.send(:clear_stale_payout_setup_rejection_notes, user)
+    described_class.send(:clear_stale_payout_setup_rejection_notes, user, resolved_fields: :all)
 
     expect(unrelated.reload.deleted_at).to be_nil
   end
 end
 
 # update_account is the code path that resolves a prior rejection: a successful call to Stripe
-# means the field it once refused now goes through. Guards against the mutant that deletes the
-# clear_stale_payout_setup_rejection_notes call from that method's success path.
+# means the field it once refused now goes through — but only if THAT field was on the payload.
+# Guards against the mutant that deletes the clear_stale_payout_setup_rejection_notes call from
+# that method's success path, and against widening it back to an unscoped clear.
 describe StripeMerchantAccountManager, "#update_account clearing a resolved rejection note", :vcr do
   let(:user) { create(:user) }
   let!(:user_compliance_info) { create(:user_compliance_info, user:) }
@@ -93,19 +124,37 @@ describe StripeMerchantAccountManager, "#update_account clearing a resolved reje
       stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info.external_id
       stripe_account
     end
+  end
 
+  it "clears the marked rejection note when the field it named is resubmitted and accepted" do
     user.add_payout_note(
       content: "Our payment partner couldn't accept the Tax ID you entered.",
       seller_visible: true,
-      json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true }
+      json_data: {
+        StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+        StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "id_number",
+      }
     )
-  end
-
-  it "clears the marked rejection note when the update succeeds" do
-    create(:user_compliance_info, user:, city: "Palo Alto")
+    create(:user_compliance_info, user:, individual_tax_id: "111223333")
 
     described_class.update_account(user, passphrase: "1234")
 
     expect(user.latest_payout_setup_rejection_note).to be_nil
+  end
+
+  it "leaves the marked rejection note when an unrelated field was the only one accepted", :vcr do
+    user.add_payout_note(
+      content: "Our payment partner couldn't accept the Tax ID you entered.",
+      seller_visible: true,
+      json_data: {
+        StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+        StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "id_number",
+      }
+    )
+    create(:user_compliance_info, user:, city: "Palo Alto")
+
+    described_class.update_account(user, passphrase: "1234")
+
+    expect(user.latest_payout_setup_rejection_note).to be_present
   end
 end

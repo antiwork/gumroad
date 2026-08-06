@@ -5,7 +5,7 @@ http_interactions:
     uri: https://api.stripe.com/v1/accounts
     body:
       encoding: UTF-8
-      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=248901874756&metadata[tos_agreement_id]=yz-bMbYw-mOLkYUZ-F7zkg%3D%3D&metadata[user_compliance_info_id]=5T-zi6t1ksIVSH_9UK5yIQ%3D%3D&tos_acceptance[date]=1786042563&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=edgar326114bf_11%40gumroad.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=94107&individual[address][country]=US&individual[id_number]=000000000
+      string: type=custom&requested_capabilities[0]=card_payments&requested_capabilities[1]=transfers&country=US&default_currency=usd&metadata[user_id]=6587105348950&metadata[tos_agreement_id]=hdpKl5ZZ4XTQ1_y-Zx58rw%3D%3D&metadata[user_compliance_info_id]=p7EwhWgpM-ZLUnaVPkiN0g%3D%3D&tos_acceptance[date]=1786044170&tos_acceptance[ip]=54.234.242.13&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=edgarc02bcfe9_17%40gumroad.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=San+Francisco&individual[address][state]=California&individual[address][postal_code]=94107&individual[address][country]=US&individual[id_number]=000000000
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -13,8 +13,10 @@ http_interactions:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_Pm0mt4fpayKb1c","request_duration_ms":3452}}'
       Idempotency-Key:
-      - c18eee84-6f63-4fb2-b68a-373357552771
+      - 395c5e88-362b-4041-ad9e-4ec4b957b84f
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -31,11 +33,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 06 Aug 2026 18:56:07 GMT
+      - Thu, 06 Aug 2026 19:22:53 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '5941'
+      - '5942'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -54,18 +56,18 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=w3xnsA1i9BNcwQJ3YEhhmUzO-ZEun9VuV8rEXB6w-bRExfYDKCm-gvoVufcJRzwTC83N5EEjeDSFK963;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=G_IhKtmhvPTg7_w14f_UNrMWQ7hWAT3m1mTCH6DbSWS3xP5qt2bN5BqnEY9yjVOI-QQoPpWpQpYXWpOe;
         report-to csp
       Idempotency-Key:
-      - c18eee84-6f63-4fb2-b68a-373357552771
+      - 395c5e88-362b-4041-ad9e-4ec4b957b84f
       Original-Request:
-      - req_7qhsHg1KdED7tJ
+      - req_rAPJUHwpoPixdT
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=w3xnsA1i9BNcwQJ3YEhhmUzO-ZEun9VuV8rEXB6w-bRExfYDKCm-gvoVufcJRzwTC83N5EEjeDSFK963&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=G_IhKtmhvPTg7_w14f_UNrMWQ7hWAT3m1mTCH6DbSWS3xP5qt2bN5BqnEY9yjVOI-QQoPpWpQpYXWpOe&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=w3xnsA1i9BNcwQJ3YEhhmUzO-ZEun9VuV8rEXB6w-bRExfYDKCm-gvoVufcJRzwTC83N5EEjeDSFK963&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=G_IhKtmhvPTg7_w14f_UNrMWQ7hWAT3m1mTCH6DbSWS3xP5qt2bN5BqnEY9yjVOI-QQoPpWpQpYXWpOe&t=1"
       Request-Id:
-      - req_7qhsHg1KdED7tJ
+      - req_rAPJUHwpoPixdT
       Stripe-Notice:
       - '2 notices for this request: (1) You are using an outdated API version (2023-10-16).
         We recommend upgrading to the latest API version, 2026-07-29.dahlia. See https://docs.stripe.com/upgrades
@@ -88,7 +90,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1U1WSVEcPZvVRRbP",
+          "id": "acct_1U1WsQEpLOIk0orZ",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -149,7 +151,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1786042565,
+          "created": 1786044172,
           "default_currency": "usd",
           "details_submitted": false,
           "email": null,
@@ -158,7 +160,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1U1WSVEcPZvVRRbP/external_accounts"
+            "url": "/v1/accounts/acct_1U1WsQEpLOIk0orZ/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -171,9 +173,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1U1WSVEcPZvVRRbPrnfn1gsS",
+            "id": "person_1U1WsQEpLOIk0orZxGsogrlz",
             "object": "person",
-            "account": "acct_1U1WSVEcPZvVRRbP",
+            "account": "acct_1U1WsQEpLOIk0orZ",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -182,13 +184,13 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1786042564,
+            "created": 1786044171,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar326114bf_11@gumroad.com",
+            "email": "edgarc02bcfe9_17@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -247,9 +249,9 @@ http_interactions:
             }
           },
           "metadata": {
-            "tos_agreement_id": "yz-bMbYw-mOLkYUZ-F7zkg==",
-            "user_compliance_info_id": "5T-zi6t1ksIVSH_9UK5yIQ==",
-            "user_id": "248901874756"
+            "tos_agreement_id": "hdpKl5ZZ4XTQ1_y-Zx58rw==",
+            "user_compliance_info_id": "p7EwhWgpM-ZLUnaVPkiN0g==",
+            "user_id": "6587105348950"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -328,16 +330,16 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1786042563,
+            "date": 1786044170,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Thu, 06 Aug 2026 18:56:07 GMT
+  recorded_at: Thu, 06 Aug 2026 19:22:53 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/accounts/acct_1U1WSVEcPZvVRRbP
+    uri: https://api.stripe.com/v1/accounts/acct_1U1WsQEpLOIk0orZ
     body:
       encoding: US-ASCII
       string: ''
@@ -349,7 +351,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_7qhsHg1KdED7tJ","request_duration_ms":4178}}'
+      - '{"last_request_metrics":{"request_id":"req_rAPJUHwpoPixdT","request_duration_ms":3281}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -366,11 +368,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 06 Aug 2026 18:56:08 GMT
+      - Thu, 06 Aug 2026 19:22:55 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '5941'
+      - '5942'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -389,16 +391,16 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=eqzUFPaiNOhea33DImzKkYzsD4ZWOnNyXfOQSisL_vOufsA_zILjm12P3zuoDVIgTVViTjjFRHcJbHFR;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=G_IhKtmhvPTg7_w14f_UNrMWQ7hWAT3m1mTCH6DbSWS3xP5qt2bN5BqnEY9yjVOI-QQoPpWpQpYXWpOe;
         report-to csp
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=eqzUFPaiNOhea33DImzKkYzsD4ZWOnNyXfOQSisL_vOufsA_zILjm12P3zuoDVIgTVViTjjFRHcJbHFR&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=G_IhKtmhvPTg7_w14f_UNrMWQ7hWAT3m1mTCH6DbSWS3xP5qt2bN5BqnEY9yjVOI-QQoPpWpQpYXWpOe&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=eqzUFPaiNOhea33DImzKkYzsD4ZWOnNyXfOQSisL_vOufsA_zILjm12P3zuoDVIgTVViTjjFRHcJbHFR&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=G_IhKtmhvPTg7_w14f_UNrMWQ7hWAT3m1mTCH6DbSWS3xP5qt2bN5BqnEY9yjVOI-QQoPpWpQpYXWpOe&t=1"
       Request-Id:
-      - req_qdRooVUbdNZqiZ
+      - req_8WlaKhDI83JZzH
       Stripe-Account:
-      - acct_1U1WSVEcPZvVRRbP
+      - acct_1U1WsQEpLOIk0orZ
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-07-29.dahlia. See https://docs.stripe.com/upgrades
@@ -418,7 +420,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1U1WSVEcPZvVRRbP",
+          "id": "acct_1U1WsQEpLOIk0orZ",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -479,7 +481,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1786042565,
+          "created": 1786044172,
           "default_currency": "usd",
           "details_submitted": false,
           "email": null,
@@ -488,7 +490,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1U1WSVEcPZvVRRbP/external_accounts"
+            "url": "/v1/accounts/acct_1U1WsQEpLOIk0orZ/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -501,9 +503,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1U1WSVEcPZvVRRbPrnfn1gsS",
+            "id": "person_1U1WsQEpLOIk0orZxGsogrlz",
             "object": "person",
-            "account": "acct_1U1WSVEcPZvVRRbP",
+            "account": "acct_1U1WsQEpLOIk0orZ",
             "address": {
               "city": "San Francisco",
               "country": "US",
@@ -512,13 +514,13 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1786042564,
+            "created": 1786044171,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar326114bf_11@gumroad.com",
+            "email": "edgarc02bcfe9_17@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -577,9 +579,9 @@ http_interactions:
             }
           },
           "metadata": {
-            "tos_agreement_id": "yz-bMbYw-mOLkYUZ-F7zkg==",
-            "user_compliance_info_id": "5T-zi6t1ksIVSH_9UK5yIQ==",
-            "user_id": "248901874756"
+            "tos_agreement_id": "hdpKl5ZZ4XTQ1_y-Zx58rw==",
+            "user_compliance_info_id": "p7EwhWgpM-ZLUnaVPkiN0g==",
+            "user_id": "6587105348950"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -658,19 +660,19 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1786042563,
+            "date": 1786044170,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Thu, 06 Aug 2026 18:56:08 GMT
+  recorded_at: Thu, 06 Aug 2026 19:22:55 GMT
 - request:
     method: post
-    uri: https://api.stripe.com/v1/accounts/acct_1U1WSVEcPZvVRRbP
+    uri: https://api.stripe.com/v1/accounts/acct_1U1WsQEpLOIk0orZ
     body:
       encoding: UTF-8
-      string: metadata[user_id]=248901874756&metadata[tos_agreement_id]=yz-bMbYw-mOLkYUZ-F7zkg%3D%3D&metadata[user_compliance_info_id]=0CJSXTRcNwLc47k_MuXKZg%3D%3D&tos_acceptance[date]=1786042563&tos_acceptance[ip]=54.234.242.13&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[email]=edgar326114bf_11%40gumroad.com&individual[phone]=0000000000&individual[address][city]=Palo+Alto&capabilities[card_payments][requested]=true&capabilities[transfers][requested]=true
+      string: metadata[user_id]=6587105348950&metadata[tos_agreement_id]=hdpKl5ZZ4XTQ1_y-Zx58rw%3D%3D&metadata[user_compliance_info_id]=rfa936FHOTAFtBNIQlQvFA%3D%3D&tos_acceptance[date]=1786044170&tos_acceptance[ip]=54.234.242.13&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[email]=edgarc02bcfe9_17%40gumroad.com&individual[phone]=0000000000&individual[address][city]=Palo+Alto&capabilities[card_payments][requested]=true&capabilities[transfers][requested]=true
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -679,9 +681,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_qdRooVUbdNZqiZ","request_duration_ms":680}}'
+      - '{"last_request_metrics":{"request_id":"req_8WlaKhDI83JZzH","request_duration_ms":499}}'
       Idempotency-Key:
-      - 68e9f54a-3a2c-43fd-ab13-5af07390e70c
+      - dc311e73-6487-40a7-9466-71011a73e5d5
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -698,11 +700,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 06 Aug 2026 18:56:10 GMT
+      - Thu, 06 Aug 2026 19:22:57 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '5941'
+      - '5942'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -721,20 +723,20 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=eqzUFPaiNOhea33DImzKkYzsD4ZWOnNyXfOQSisL_vOufsA_zILjm12P3zuoDVIgTVViTjjFRHcJbHFR;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=G_IhKtmhvPTg7_w14f_UNrMWQ7hWAT3m1mTCH6DbSWS3xP5qt2bN5BqnEY9yjVOI-QQoPpWpQpYXWpOe;
         report-to csp
       Idempotency-Key:
-      - 68e9f54a-3a2c-43fd-ab13-5af07390e70c
+      - dc311e73-6487-40a7-9466-71011a73e5d5
       Original-Request:
-      - req_UJSWCnH1JUkHd4
+      - req_b0p8DHJQtqkEZs
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=eqzUFPaiNOhea33DImzKkYzsD4ZWOnNyXfOQSisL_vOufsA_zILjm12P3zuoDVIgTVViTjjFRHcJbHFR&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=G_IhKtmhvPTg7_w14f_UNrMWQ7hWAT3m1mTCH6DbSWS3xP5qt2bN5BqnEY9yjVOI-QQoPpWpQpYXWpOe&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=eqzUFPaiNOhea33DImzKkYzsD4ZWOnNyXfOQSisL_vOufsA_zILjm12P3zuoDVIgTVViTjjFRHcJbHFR&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=G_IhKtmhvPTg7_w14f_UNrMWQ7hWAT3m1mTCH6DbSWS3xP5qt2bN5BqnEY9yjVOI-QQoPpWpQpYXWpOe&t=1"
       Request-Id:
-      - req_UJSWCnH1JUkHd4
+      - req_b0p8DHJQtqkEZs
       Stripe-Account:
-      - acct_1U1WSVEcPZvVRRbP
+      - acct_1U1WsQEpLOIk0orZ
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-07-29.dahlia. See https://docs.stripe.com/upgrades
@@ -756,7 +758,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "acct_1U1WSVEcPZvVRRbP",
+          "id": "acct_1U1WsQEpLOIk0orZ",
           "object": "account",
           "business_profile": {
             "annual_revenue": null,
@@ -817,7 +819,7 @@ http_interactions:
             "type": "application"
           },
           "country": "US",
-          "created": 1786042565,
+          "created": 1786044172,
           "default_currency": "usd",
           "details_submitted": false,
           "email": null,
@@ -826,7 +828,7 @@ http_interactions:
             "data": [],
             "has_more": false,
             "total_count": 0,
-            "url": "/v1/accounts/acct_1U1WSVEcPZvVRRbP/external_accounts"
+            "url": "/v1/accounts/acct_1U1WsQEpLOIk0orZ/external_accounts"
           },
           "future_requirements": {
             "alternatives": [],
@@ -839,9 +841,9 @@ http_interactions:
             "pending_verification": []
           },
           "individual": {
-            "id": "person_1U1WSVEcPZvVRRbPrnfn1gsS",
+            "id": "person_1U1WsQEpLOIk0orZxGsogrlz",
             "object": "person",
-            "account": "acct_1U1WSVEcPZvVRRbP",
+            "account": "acct_1U1WsQEpLOIk0orZ",
             "address": {
               "city": "Palo Alto",
               "country": "US",
@@ -850,13 +852,13 @@ http_interactions:
               "postal_code": "94107",
               "state": "California"
             },
-            "created": 1786042564,
+            "created": 1786044171,
             "dob": {
               "day": 1,
               "month": 1,
               "year": 1901
             },
-            "email": "edgar326114bf_11@gumroad.com",
+            "email": "edgarc02bcfe9_17@gumroad.com",
             "first_name": "Chuck",
             "future_requirements": {
               "alternatives": [],
@@ -915,9 +917,9 @@ http_interactions:
             }
           },
           "metadata": {
-            "tos_agreement_id": "yz-bMbYw-mOLkYUZ-F7zkg==",
-            "user_compliance_info_id": "0CJSXTRcNwLc47k_MuXKZg==",
-            "user_id": "248901874756"
+            "tos_agreement_id": "hdpKl5ZZ4XTQ1_y-Zx58rw==",
+            "user_compliance_info_id": "rfa936FHOTAFtBNIQlQvFA==",
+            "user_id": "6587105348950"
           },
           "payouts_enabled": false,
           "requirements": {
@@ -996,11 +998,11 @@ http_interactions:
             "sepa_debit_payments": {}
           },
           "tos_acceptance": {
-            "date": 1786042563,
+            "date": 1786044170,
             "ip": "54.234.242.13",
             "user_agent": null
           },
           "type": "custom"
         }
-  recorded_at: Thu, 06 Aug 2026 18:56:10 GMT
+  recorded_at: Thu, 06 Aug 2026 19:22:57 GMT
 recorded_with: VCR 6.2.0
