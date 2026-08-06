@@ -163,6 +163,26 @@ describe("CustomHtmlPreview products bridge", () => {
     expect(mocks.request).not.toHaveBeenCalled();
   });
 
+  it("replies to the window that sent the request, not whatever the iframe's contentWindow is by the time it resolves", async () => {
+    let resolveRequest: (value: unknown) => void = () => undefined;
+    mocks.request.mockReturnValue(new Promise((resolve) => (resolveRequest = resolve)));
+    const { frame } = renderPreview();
+
+    const originalSource = frame.contentWindow;
+    const originalPost = vi.fn();
+    if (originalSource)
+      Object.defineProperty(originalSource, "postMessage", { value: originalPost, configurable: true });
+    postFromFrame(frame, { type: "gumroad:products", offset: 0, limit: 1, requestId: "gumroad-products-1" });
+
+    // Simulate a preview reload swapping in a new document before the in-flight request settles.
+    const replacementPost = vi.fn();
+    Object.defineProperty(frame, "contentWindow", { value: { postMessage: replacementPost }, configurable: true });
+
+    resolveRequest(jsonResponse({ success: true, products: [], products_total: 0, prices: {} }));
+    await waitFor(() => expect(originalPost).toHaveBeenCalled());
+    expect(replacementPost).not.toHaveBeenCalled();
+  });
+
   it("ignores messages of other types", async () => {
     const { frame } = renderPreview();
 

@@ -50,8 +50,13 @@ export const CustomHtmlPreview = ({
       const message = e.data;
 
       const requestId = typia.is<string>(message.requestId) ? message.requestId : null;
+      // Target the window that SENT the request (e.source), not frame.contentWindow at reply
+      // time — a preview reload swaps the iframe's document mid-flight, and a stale reply
+      // reusing the old request ID would otherwise resolve the new document's promise with the
+      // old document's catalogue data.
+      const sourceWindow = e.source;
       const reply = (payload: Record<string, unknown>) => {
-        frame.contentWindow?.postMessage({ ...payload, type: "gumroad:products:result", requestId }, "*");
+        sourceWindow?.postMessage({ ...payload, type: "gumroad:products:result", requestId }, "*");
       };
 
       const offset = message.offset;
