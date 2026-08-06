@@ -111,7 +111,11 @@ class AutoTopUpNegativeDestinationBalancesJob
       # Stripe actually processed the transfer, so the claim stays held — same convention as
       # StripePayoutProcessor's PAYOUT_OUTCOME_UNKNOWN — and the candidate escalates to a human
       # instead of a blind retry that could double-transfer once Stripe's own idempotency window
-      # (24h) has lapsed.
+      # (24h) has lapsed. PERSIST it (drop the TTL): a fixed-duration hold would itself lapse
+      # past that 24h window and let an unattended retry recreate the exact risk this branch
+      # exists to avoid — only a human clearing the key (once they've confirmed with Stripe
+      # what actually happened) may retry.
+      $redis.persist(transfer_key) if transfer_key
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     end
 

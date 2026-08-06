@@ -271,6 +271,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     expect($redis.get(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))).to be_nil # leg-two claim untouched by a transfer-scoped claim
     transfer_key = "#{dedupe_key}:0:72850"
     expect($redis.get(transfer_key)).not_to be_nil # held, not released — next run must not blindly retry
+    expect($redis.ttl(transfer_key)).to eq(-1) # persisted: only a human clearing it can unblock a retry, never a lapsed TTL
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
       expect(message).to include("ERROR")
