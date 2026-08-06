@@ -112,10 +112,8 @@ class PublicController < ApplicationController
       path.split("/").reverse.find(&:present?) || query
     end
 
-    # Optional narrowing so a buyer who remembers roughly when they were charged doesn't
-    # have to render every purchase on the account (gumroad-private#1869). Month is only
-    # applied when year is also present — the frontend disables the month picker until a
-    # year is chosen, but an unauthenticated GET can still send month alone.
+    # Month is only applied when year is also present — the frontend disables the month
+    # picker until a year is chosen, but an unauthenticated GET can still send month alone.
     EARLIEST_PURCHASE_YEAR = 2011
 
     def scope_by_year_and_month(purchases, year, month)

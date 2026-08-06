@@ -14,7 +14,6 @@ import { Label } from "$app/components/ui/Label"
 import { PageHeader } from "$app/components/ui/PageHeader"
 import { Select } from "$app/components/ui/Select"
 
-// Gumroad's founding year — the earliest a purchase could exist.
 const EARLIEST_PURCHASE_YEAR = 2011
 const currentYear = new Date().getFullYear()
 const YEARS = Array.from({ length: currentYear - EARLIEST_PURCHASE_YEAR + 1 }, (_, i) => currentYear - i)
@@ -40,7 +39,10 @@ const LookupLayout = ({ children, title, type }: {
   const messageRef = useRef<HTMLDivElement>(null)
 
   // Only one of the two lookup forms can be in flight — every successful lookup sends a
-  // real email, so a double submission means a double send.
+  // real email, so a double submission means a double send. A ref (not state) gates entry
+  // into each handler, since state updates aren't visible synchronously across two submits
+  // batched in the same tick — the disabled buttons alone don't close that window.
+  const lookupInFlightRef = useRef(false)
   const isAnyLookupLoading = isCardLoading || isPaypalLoading
 
   const handleYearChange = (evt: React.ChangeEvent<HTMLSelectElement>) => {
@@ -49,6 +51,7 @@ const LookupLayout = ({ children, title, type }: {
   }
 
   const handleCardLookup = async () => {
+    if (lookupInFlightRef.current) return
     let hasError = false;
 
     if (!email.value.length) {
@@ -65,6 +68,7 @@ const LookupLayout = ({ children, title, type }: {
       return;
     }
 
+    lookupInFlightRef.current = true
     setIsCardLoading(true)
     try {
       const result =
@@ -87,15 +91,18 @@ const LookupLayout = ({ children, title, type }: {
       showAlert(error.message, "error")
     } finally {
       setIsCardLoading(false)
+      lookupInFlightRef.current = false
     }
   }
 
   const handlePaypalLookup = async () => {
+    if (lookupInFlightRef.current) return
     if (!invoiceId.value.length) {
       setInvoiceId((prevInvoiceId) => ({ ...prevInvoiceId, error: true }))
       return
     }
 
+    lookupInFlightRef.current = true
     setIsPaypalLoading(true)
     try {
       const result = await lookupPaypalCharges({ invoiceId: invoiceId.value })
@@ -105,6 +112,7 @@ const LookupLayout = ({ children, title, type }: {
       showAlert(error.message, "error")
     } finally {
       setIsPaypalLoading(false)
+      lookupInFlightRef.current = false
     }
   }
 
