@@ -41,6 +41,11 @@ export const CustomHtmlPreview = ({
   className?: string;
 }) => {
   const frameRef = React.useRef<HTMLIFrameElement>(null);
+  // Bumped on every iframe load (including the first). e.source is the frame's WindowProxy,
+  // which is navigation-stable in real browsers — capturing it does NOT identify the document
+  // that sent the request, so a reply after reload would still land in the new document. This
+  // generation is the only thing that actually changes on reload, so it's what gates the reply.
+  const generationRef = React.useRef(0);
 
   React.useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -50,13 +55,13 @@ export const CustomHtmlPreview = ({
       const message = e.data;
 
       const requestId = typia.is<string>(message.requestId) ? message.requestId : null;
-      // Target the window that SENT the request (e.source), not frame.contentWindow at reply
-      // time — a preview reload swaps the iframe's document mid-flight, and a stale reply
-      // reusing the old request ID would otherwise resolve the new document's promise with the
-      // old document's catalogue data.
-      const sourceWindow = e.source;
+      const requestGeneration = generationRef.current;
       const reply = (payload: Record<string, unknown>) => {
-        sourceWindow?.postMessage({ ...payload, type: "gumroad:products:result", requestId }, "*");
+        // Frame reloaded since this request was received: the document that's listening now is
+        // not the one that asked, and a reused request id would resolve its promise with stale
+        // data. Drop the reply rather than deliver it to whatever document is there now.
+        if (generationRef.current !== requestGeneration) return;
+        frame.contentWindow?.postMessage({ ...payload, type: "gumroad:products:result", requestId }, "*");
       };
 
       const offset = message.offset;
@@ -98,5 +103,14 @@ export const CustomHtmlPreview = ({
     return () => window.removeEventListener("message", onMessage);
   }, [productsSrc, productsDefaultLimit]);
 
-  return <iframe ref={frameRef} title={title} src={src} sandbox="allow-scripts" className={className} />;
+  return (
+    <iframe
+      ref={frameRef}
+      title={title}
+      src={src}
+      sandbox="allow-scripts"
+      className={className}
+      onLoad={() => (generationRef.current += 1)}
+    />
+  );
 };

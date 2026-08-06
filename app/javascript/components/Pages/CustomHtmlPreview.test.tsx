@@ -163,24 +163,29 @@ describe("CustomHtmlPreview products bridge", () => {
     expect(mocks.request).not.toHaveBeenCalled();
   });
 
-  it("replies to the window that sent the request, not whatever the iframe's contentWindow is by the time it resolves", async () => {
+  it("drops a reply if the frame reloads before the in-flight request settles", async () => {
     let resolveRequest: (value: unknown) => void = () => undefined;
     mocks.request.mockReturnValue(new Promise((resolve) => (resolveRequest = resolve)));
-    const { frame } = renderPreview();
+    const { frame, post } = renderPreview();
 
-    const originalSource = frame.contentWindow;
-    const originalPost = vi.fn();
-    if (originalSource)
-      Object.defineProperty(originalSource, "postMessage", { value: originalPost, configurable: true });
     postFromFrame(frame, { type: "gumroad:products", offset: 0, limit: 1, requestId: "gumroad-products-1" });
 
-    // Simulate a preview reload swapping in a new document before the in-flight request settles.
-    const replacementPost = vi.fn();
-    Object.defineProperty(frame, "contentWindow", { value: { postMessage: replacementPost }, configurable: true });
+    // Real navigation keeps the WindowProxy identity but fires "load" — that's the only signal
+    // available to tell the old document apart from whatever replaces it.
+    frame.dispatchEvent(new Event("load"));
 
     resolveRequest(jsonResponse({ success: true, products: [], products_total: 0, prices: {} }));
-    await waitFor(() => expect(originalPost).toHaveBeenCalled());
-    expect(replacementPost).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("still replies normally when no reload happened before the request settled", async () => {
+    mocks.request.mockResolvedValue(jsonResponse({ success: true, products: [], products_total: 0, prices: {} }));
+    const { frame, post } = renderPreview();
+
+    postFromFrame(frame, { type: "gumroad:products", offset: 0, limit: 1, requestId: "gumroad-products-1" });
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ success: true }), "*"));
   });
 
   it("ignores messages of other types", async () => {
