@@ -348,26 +348,15 @@ class Checkout::BuyerCurrencyQuote
     # complete that checkout at all, and reloading reproduced it.
     recurring, one_time = products.partition(&:is_recurring_billing?)
     return if recurring.any? && one_time.any?
-    # A tip on a non-USD listing is not safe to quote: it is computed twice on the way to a
-    # purchase (once by the surcharge request that mints this quote, again by the order
-    # builder), and on a non-USD listing the two convert at different points, disagree by a
-    # cent, and `verify!` then fails the buyer's payment on "total mismatch". A USD listing
-    # has no conversion, so both sides agree.
+    # Tip on a non-USD listing is not safe to quote: the surcharge request and the order
+    # builder split it over different price bases and convert at different points, so the
+    # two can disagree by a cent and `verify!` fails the buyer's payment on "total mismatch".
+    # Shipping now converts the same way on both paths (sum(convert) on each), so it's safe
+    # to quote; tip isn't.
     #
-    # Tip: the surcharge request splits it over each line's canonical USD price
-    # (`state.products[].price`, already through `convertToUSD`); the order splits it over
-    # each line's *listed* price and the server runs that back through `get_usd_cents` with
-    # the product's currency (Purchase::CreateService).
-    #
-    # Shipping used to diverge the same way (surcharge converted the summed listed rates;
-    # Purchase converted each term), but CustomerSurchargeController now passes the product
-    # currency into calculate_shipping_rate so both paths share sum(convert). Shipping alone
-    # is therefore safe to quote; tip is not.
-    #
-    # The gate is cart-level, not per-line, because the largest-remainder tip split hands
-    # leftover cents to different lines depending on the price basis: a cent landing on a USD
-    # line at quote time can land on the non-USD line at submit, so a per-line check would
-    # mint a token whose per-line totals then fail verification.
+    # The gate is cart-level, not per-line, because the largest-remainder tip split can hand a
+    # cent to a different line between quote and submit, so a per-line check could mint a
+    # token whose per-line totals then fail verification.
     if products.any? { |product| product.price_currency_type.to_s.downcase != Currency::USD } &&
        line_items.any? { |line| line.tip_cents.to_i.positive? }
       return
