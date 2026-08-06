@@ -44,6 +44,20 @@ CHECKOUT_FLOW_SPECS = %w[
   spec/requests/subscription
 ].freeze
 
+# Unauthenticated charge/license lookup surfaces (PublicController).
+PUBLIC_LOOKUP_SPECS = %w[
+  spec/controllers/public_controller_spec.rb
+  spec/requests/license_key_lookup_spec.rb
+  spec/requests/products/show/license_key_lookup_form_spec.rb
+].freeze
+
+# Creator storefront/profile pages.
+PROFILE_FLOW_SPECS = %w[
+  spec/requests/user
+  spec/requests/profile_analytics_spec.rb
+  spec/requests/profile_custom_html_spec.rb
+].freeze
+
 FANOUT = {
   %r{\Aapp/presenters/checkout/} => CHECKOUT_FLOW_SPECS,
   %r{\Aapp/javascript/components/Checkout/} => CHECKOUT_FLOW_SPECS,
@@ -56,6 +70,26 @@ FANOUT = {
   %r{\Aapp/controllers/stripe/} => CHECKOUT_FLOW_SPECS,
   %r{\Aspec/support/checkout_helpers\.rb\z} => CHECKOUT_FLOW_SPECS,
   %r{\Aspec/support/stripe_.*\.rb\z} => CHECKOUT_FLOW_SPECS,
+  # #7101 gap: the unauthenticated charge/license lookup forms and their data
+  # layer render through PublicController; these specs are their e2e coverage.
+  %r{\Aapp/javascript/components/Public/} => PUBLIC_LOOKUP_SPECS,
+  %r{\Aapp/javascript/pages/Public/} => PUBLIC_LOOKUP_SPECS,
+  %r{\Aapp/javascript/data/(charge|license)} => PUBLIC_LOOKUP_SPECS,
+  # fix-profile-header-mobile-gap gap: profile components mount on the
+  # storefront pages exercised by the user/profile request specs.
+  %r{\Aapp/javascript/components/Profile/} => PROFILE_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Profile/} => PROFILE_FLOW_SPECS,
+  # Help-center article partials render through the help_center request specs;
+  # the per-article view glob finds nothing because specs aren't per-article.
+  %r{\Aapp/views/help_center/} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
+}.freeze
+
+# Config files with dedicated request coverage. Everything else under
+# config/ still escalates via ESCALATE_PATTERNS; entries here are reviewed
+# like FANOUT — a file belongs only when a spec exists whose entire purpose
+# is exercising it.
+CONFIG_SPEC_MAP = {
+  "config/initializers/rack_attack.rb" => %w[spec/requests/rack_attack_spec.rb],
 }.freeze
 
 # Support files with mappings; any OTHER spec/support change escalates.
@@ -138,13 +172,26 @@ def escalate!(reason)
   exit ESCALATE_EXIT
 end
 
-unmappable = changed.select { |path| ESCALATE_PATTERNS.any? { |re| re.match?(path) } }
+unmappable = changed.select do |path|
+  ESCALATE_PATTERNS.any? { |re| re.match?(path) } && !CONFIG_SPEC_MAP.key?(path)
+end
 escalate!("cannot attribute specs to: #{unmappable.first(5).join(', ')}") if unmappable.any?
 
 unmapped_support = changed.select do |path|
   path.start_with?("spec/support/") && MAPPED_SUPPORT.none? { |re| re.match?(path) }
 end
 escalate!("unmapped spec/support change: #{unmapped_support.first(3).join(', ')}") if unmapped_support.any?
+
+# Content attribution fallback for Ruby files whose spec lives under a
+# different name. Camelizes the basename (colombia_id_number →
+# ColombiaIdNumber) and greps specs for either form. Word-boundary anchored
+# so short names don't false-positive.
+def specs_mentioning(basename)
+  camel = basename.split("_").map(&:capitalize).join
+  pattern = "\\b(#{Regexp.escape(basename)}|#{Regexp.escape(camel)})\\b"
+  out = IO.popen(["grep", "-rlE", pattern, "spec/", "--include=*_spec.rb"], err: File::NULL, &:read)
+  $?.success? ? out.split("\n") : []
+end
 
 def spec_candidates(path)
   case path
@@ -177,11 +224,25 @@ unattributed = []
 
 changed.each do |path|
   candidates = spec_candidates(path).select { |s| File.exist?(s) }
-  fanout_hits = FANOUT.select { |re, _| re.match?(path) }.values.flatten.select { |dir| Dir.exist?(dir) }
-  contributed = candidates + fanout_hits
+  fanout_hits = FANOUT.select { |re, _| re.match?(path) }.values.flatten.select { |dir| Dir.exist?(dir) || File.exist?(dir) }
+  config_hits = (CONFIG_SPEC_MAP[path] || []).select { |s| File.exist?(s) }
+  contributed = candidates + fanout_hits + config_hits
 
   if contributed.any?
     specs.merge(contributed)
+  elsif path.match?(%r{\Aapp/javascript/.*\.test\.(ts|tsx)\z}) ||
+        (path.match?(%r{\Aapp/javascript/.*\.(ts|tsx)\z}) &&
+         File.exist?(path.sub(/\.(ts|tsx)\z/, '.test.\1')))
+    # Covered by vitest, which lint_js runs on every PR (npm test). A
+    # co-located .test file is that module's suite; neither needs rspec.
+    next
+  elsif path.match?(%r{\A(lib|app)/.*\.rb\z}) &&
+        (by_content = specs_mentioning(File.basename(path, ".rb"))).any?
+    # Name-based mapping missed (spec lives under another name, e.g.
+    # lib/utilities/compliance/colombia_id_number.rb tested via
+    # update_user_compliance_info_spec.rb). Content attribution: any spec
+    # that mentions the file's basename exercises it.
+    specs.merge(by_content)
   else
     unattributed << path
   end
