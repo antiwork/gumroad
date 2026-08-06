@@ -192,7 +192,7 @@ class Rack::Attack
   # The file capture stops at a dot so `.json`/`.xml` format variants share one bucket —
   # route segments never contain dots, so anything after one is a format suffix.
   # GET/HEAD only: this route never serves other verbs, and matching every method let an
-  # unauthenticated POST flood exhaust a buyer's own download bucket (Greptile P1, #6846).
+  # unauthenticated POST flood exhaust a buyer's own download bucket.
   throttle_with_exponential_backoff(name: "mobile_url_redirect_download/token", requests: 60, period: 60.seconds, max_level: 1) do |req|
     next unless %w[GET HEAD].include?(req.request_method)
 
