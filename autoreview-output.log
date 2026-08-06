@@ -1,0 +1,12 @@
+autoreview target: branch
+branch: fix/mobile-throttle-method-restrict
+engine: codex
+model: gpt-5.6-sol
+fallback_model: gpt-5.6-terra
+thinking: high
+tools: on
+web_search: on
+ref: origin/main
+trufflehog: clean (20.5s)
+refusing binary changes in branch diff because their contents cannot be reviewed:
+- qa-media/pr-7099-rack-attack-specs.png
