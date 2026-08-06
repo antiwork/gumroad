@@ -265,11 +265,9 @@ module Product::Searchable
               end
             end
 
-            # Tokens are `<attribute name>:<value>`, not `<taxonomy id>:<attribute name>:<value>` —
-            # two different taxonomies can independently define the same attribute name/value and
-            # produce the same token. Requiring taxonomy_id here (already ANDed as its own `must`
-            # above) keeps a filter request pinned to the taxonomy it was rendered for, so a caller
-            # that omits taxonomy_id can no longer pull in every taxonomy sharing that token.
+            # Tokens are `<attribute name>:<value>` with no taxonomy identity, so two taxonomies
+            # can share a token; requiring taxonomy_id here keeps the filter scoped to the one
+            # it was rendered for.
             if params[:taxonomy_attribute_filters] && params[:taxonomy_id]
               Array.wrap(params[:taxonomy_attribute_filters])
                 .group_by { |token| token.to_s.split(":", 2).first }
