@@ -100,10 +100,8 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
             {...lazyLoadingProps}
           />
         ))}
-        {/* A src-less <img> here rendered the browser's broken-image icon for every
-            wishlist with no thumbnails (https://gumroad.com/software-development, reported
-            by @GergelyOrosz). The figure's own bg-(image:--product-cover-placeholder)
-            background already covers this case, so render nothing. */}
+        {/* No <img> when there are no thumbnails — the figure's own
+            bg-(image:--product-cover-placeholder) background covers the empty case. */}
       </ProductCardFigure>
       <section className="flex flex-1 flex-col lg:flex-2 lg:gap-8 lg:px-6 lg:py-4">
         <ProductCardHeader className="lg:border-b-0 lg:p-0">
