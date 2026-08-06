@@ -4,9 +4,10 @@ class SendWorkflowPostEmailsJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
-  def perform(post_id, earliest_valid_time = nil)
+  def perform(post_id, earliest_valid_time = nil, reschedule_on_stale = false)
     @post = Installment.find(post_id)
     @workflow = @post.workflow
+    @reschedule_on_stale = reschedule_on_stale
     return unless @workflow.alive? && @post.alive? && @post.published?
 
     @rule_version = @post.installment_rule.version
@@ -53,12 +54,12 @@ class SendWorkflowPostEmailsJob
         purchase = member.details["purchases"].find { _1["id"] == id }
         return log_unresolvable_recipient(member:, type:) if purchase.nil?
         created_at = Time.zone.parse(purchase["created_at"])
-        SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, id, nil, nil)
+        enqueue_installment_worker(created_at:, purchase_id: id)
       elsif type == :follower
         id ||= member.details.dig("follower", "id")
         return log_unresolvable_recipient(member:, type:) if id.nil?
         created_at = Time.zone.parse(member.details.dig("follower", "created_at"))
-        SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, id, nil)
+        enqueue_installment_worker(created_at:, follower_id: id)
       elsif type == :affiliate
         affiliate = resolve_affiliate(member:, id:)
         return log_unresolvable_recipient(member:, type:) if affiliate.nil?
@@ -71,8 +72,15 @@ class SendWorkflowPostEmailsJob
         affiliate_user_id = Affiliate.where(id: affiliate["id"]).pick(:affiliate_user_id)
         return log_unresolvable_recipient(member:, type:) if affiliate_user_id.nil?
         created_at = Time.zone.parse(affiliate["created_at"])
-        SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, nil, affiliate_user_id)
+        enqueue_installment_worker(created_at:, affiliate_user_id:)
       end
+    end
+
+    def enqueue_installment_worker(created_at:, purchase_id: nil, follower_id: nil, affiliate_user_id: nil)
+      args = [@post.id, @rule_version, purchase_id, follower_id, affiliate_user_id]
+      args.push(nil, created_at.iso8601) if @reschedule_on_stale
+      worker = @reschedule_on_stale ? SendWorkflowInstallmentRescheduleJob : SendWorkflowInstallmentWorker
+      worker.perform_at(created_at + @rule_delay, *args)
     end
 
     # A person can be an affiliate for several of the seller's products, and `details["affiliates"]`

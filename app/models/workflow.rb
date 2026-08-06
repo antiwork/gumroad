@@ -51,12 +51,15 @@ class Workflow < ApplicationRecord
   end
 
   def mark_deleted!
-    self.deleted_at = Time.current
-    installments.each do |installment|
-      installment.mark_deleted!
-      installment.installment_rule.mark_deleted!
+    self.class.transaction do
+      lock!
+      self.deleted_at = Time.current
+      installments.each do |installment|
+        installment.mark_deleted!
+        installment.installment_rule.mark_deleted!
+      end
+      save!
     end
-    save!
   end
 
   def publish!
@@ -88,7 +91,7 @@ class Workflow < ApplicationRecord
     first_published_at.nil?
   end
 
-  def schedule_installment(installment, old_delayed_delivery_time: nil)
+  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, reschedule_on_stale: false)
     return if installment.abandoned_cart_type?
     return unless alive?
     return unless installment.published?
@@ -110,12 +113,14 @@ class Workflow < ApplicationRecord
     # installment has not been delivered to them and needs to be (re-)scheduled.
     earliest_valid_time = if old_delayed_delivery_time.nil?
       nil
-    elsif installment.is_for_new_customers_of_workflow && installment.published_at >= old_delayed_delivery_time.seconds.ago
+    elsif installment.is_for_new_customers_of_workflow && installment.published_at >= cutoff_reference_time - old_delayed_delivery_time.seconds
       installment.published_at
     else
-      old_delayed_delivery_time.seconds.ago
+      cutoff_reference_time - old_delayed_delivery_time.seconds
     end
 
-    SendWorkflowPostEmailsJob.perform_async(installment.id, earliest_valid_time&.iso8601)
+    args = [installment.id, earliest_valid_time&.iso8601]
+    args << true if reschedule_on_stale
+    SendWorkflowPostEmailsJob.perform_async(*args)
   end
 end

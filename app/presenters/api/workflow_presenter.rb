@@ -27,8 +27,12 @@ class Api::WorkflowPresenter
       created_at: workflow.created_at,
       updated_at: workflow.updated_at,
     }
-    payload[:emails] = email_props if include_emails
+    payload[:emails] = present_emails(emails) if include_emails
     payload
+  end
+
+  def email_props(email)
+    present_emails([email]).sole
   end
 
   private
@@ -43,9 +47,9 @@ class Api::WorkflowPresenter
         .to_a
     end
 
-    def email_props
-      open_counts = batched_open_counts
-      click_counts = batched_click_counts
+    def present_emails(emails)
+      open_counts = batched_open_counts(emails)
+      click_counts = batched_click_counts(emails)
 
       emails.map do |email|
         sent_count = email.customer_count.to_i
@@ -76,8 +80,8 @@ class Api::WorkflowPresenter
       end
     end
 
-    def batched_open_counts
-      batched_counts(:unique_open_count) do |missing_ids|
+    def batched_open_counts(emails)
+      batched_counts(emails, :unique_open_count) do |missing_ids|
         pipeline = [
           { "$match" => { "installment_id" => { "$in" => missing_ids } } },
           { "$group" => { "_id" => "$installment_id", "count" => { "$sum" => 1 } } },
@@ -88,8 +92,8 @@ class Api::WorkflowPresenter
       end
     end
 
-    def batched_click_counts
-      batched_counts(:unique_click_count) do |missing_ids|
+    def batched_click_counts(emails)
+      batched_counts(emails, :unique_click_count) do |missing_ids|
         CreatorEmailClickSummary
           .in(installment_id: missing_ids)
           .only(:installment_id, :total_unique_clicks)
@@ -99,7 +103,7 @@ class Api::WorkflowPresenter
       end
     end
 
-    def batched_counts(cache_key)
+    def batched_counts(emails, cache_key)
       keys_by_id = emails.to_h do |email|
         event_key = email.key_for_cache(cache_key)
         [email.id, { event: event_key, api: "#{API_CACHE_PREFIX}_#{event_key}" }]

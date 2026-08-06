@@ -358,6 +358,25 @@ describe "InstallmentSendInstallment"  do
 
             expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@installment_2.id, 1, @purchase.id, nil)
           end
+
+          it "preserves the reschedule reference when it defers the email" do
+            reference_time = 2.days.ago.change(usec: 0).iso8601
+
+            @installment_2.send_installment_from_workflow_for_purchase(
+              @purchase.id,
+              reschedule_reference_time: reference_time
+            )
+
+            expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+              @installment_2.id,
+              1,
+              @purchase.id,
+              nil,
+              nil,
+              nil,
+              reference_time
+            )
+          end
         end
 
         it "sends the next workflow post email when the previous one was deleted" do

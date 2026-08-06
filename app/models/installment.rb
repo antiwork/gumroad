@@ -423,7 +423,7 @@ class Installment < ApplicationRecord
     end
   end
 
-  def send_installment_from_workflow_for_purchase(purchase_id)
+  def send_installment_from_workflow_for_purchase(purchase_id, reschedule_reference_time: nil)
     sale = Purchase.find(purchase_id)
     return if sale.is_recurring_subscription_charge
     # Cancellation posts are delivered on the subscription path, which rechecks the membership
@@ -448,7 +448,10 @@ class Installment < ApplicationRecord
     if Time.current < expected_delivery_time_for_sale
       # reschedule for later if it's too soon to send (only applicable for subscriptions
       # that have been terminated and later restarted)
-      SendWorkflowInstallmentWorker.perform_at(expected_delivery_time_for_sale + 1.minute, id, installment_rule.version, sale.id, nil)
+      args = [id, installment_rule.version, sale.id, nil]
+      args.push(nil, nil, reschedule_reference_time) if reschedule_reference_time.present?
+      worker = reschedule_reference_time.present? ? SendWorkflowInstallmentRescheduleJob : SendWorkflowInstallmentWorker
+      worker.perform_at(expected_delivery_time_for_sale + 1.minute, *args)
     else
       SentPostEmail.ensure_uniqueness(post: self, email: sale.email) do
         recipient = { email: sale.email, purchase: sale }
