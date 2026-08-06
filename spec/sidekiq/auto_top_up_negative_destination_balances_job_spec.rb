@@ -138,4 +138,23 @@ describe AutoTopUpNegativeDestinationBalancesJob do
   ensure
     Feature.deactivate(:auto_topup_negative_destination_balances)
   end
+
+  it "releases the dedupe claim on a Stripe failure so the next run can retry instead of being blocked for 7 days" do
+    residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_raise(Stripe::InvalidRequestError.new("boom", nil))
+    described_class.new.perform
+
+    expect($redis.get(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))).to be_nil
+
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_call_original
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).once
+
+    described_class.new.perform
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+  end
 end

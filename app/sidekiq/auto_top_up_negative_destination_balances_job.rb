@@ -54,7 +54,11 @@ class AutoTopUpNegativeDestinationBalancesJob
       end
 
       dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(entry[:merchant_account].id)
-      if $redis.get(dedupe_key).to_i == amount_cents
+      # Claim the key with NX *before* calling Stripe, not after: a claim-after-transfer ordering
+      # leaves a crash between "Stripe accepted the transfer" and "we recorded that" free to retry
+      # and double-transfer. NX makes the claim itself the idempotency boundary; release it in the
+      # rescue below so a failed attempt (no money moved) is retryable on the next run.
+      unless $redis.set(dedupe_key, amount_cents, ex: DEDUPE_TTL, nx: true)
         return { entry:, verdict: :escalate, reason: "already topped up #{amount_cents} cents for this account — awaiting the leg-two reconciliation pass before retrying" }
       end
 
@@ -65,9 +69,11 @@ class AutoTopUpNegativeDestinationBalancesJob
         amount_cents:,
         metadata: { user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id, reason: "negative_destination_balance_topup" }
       )
-      $redis.set(dedupe_key, amount_cents, ex: DEDUPE_TTL)
       { entry:, verdict: :topped_up, reason: nil, amount_cents:, currency: entry[:merchant_account].currency }
     rescue => e
+      # The claim above is optimistic — Stripe never confirmed money moved, so release it or a
+      # transient failure would otherwise block this candidate from a legitimate retry for 7 days.
+      $redis.del(dedupe_key) if dedupe_key
       # One candidate's Stripe failure must not strand the rest of the run or the report.
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     end
