@@ -145,39 +145,55 @@ describe RecoverStrandedBuyersJob do
     end
   end
 
-  it "bounds one run to MAX_RECOVERIES_PER_RUN candidates" do
-    many = (described_class::MAX_RECOVERIES_PER_RUN + 5).times.map do |i|
+  it "bounds one run to at most MAX_RECOVERIES_PER_RUN candidates even when a day's bucket is larger" do
+    # A pool many multiples of ROTATION_BUCKETS forces today's bucket above MAX_RECOVERIES_PER_RUN
+    # for some day; walk every day of a cycle and check each run's own call count individually.
+    many = (described_class::ROTATION_BUCKETS * (described_class::MAX_RECOVERIES_PER_RUN + 3)).times.map do |i|
       candidate.merge(email: "buyer#{i}@example.com")
     end
     allow(Risk::StrandedBuyerScanService).to receive(:call).and_return(stranded: many, truncated: false)
-    allow(Risk::StrandedBuyerRecoveryService).to receive(:call)
-      .and_return(recovery_result(:skip, :no_clean_payment_history))
 
-    described_class.new.perform
-
-    expect(Risk::StrandedBuyerRecoveryService).to have_received(:call).exactly(described_class::MAX_RECOVERIES_PER_RUN).times
-  end
-
-  # A dry run mutates nothing, so without rotation the same head-of-scan candidates would be
-  # re-evaluated forever and the rest of the population never seen.
-  it "rotates the window across days so every candidate is eventually processed" do
-    many = (described_class::MAX_RECOVERIES_PER_RUN * 2).times.map do |i|
-      candidate.merge(email: "buyer#{i}@example.com")
-    end
-    allow(Risk::StrandedBuyerScanService).to receive(:call).and_return(stranded: many, truncated: false)
-    allow(Risk::StrandedBuyerRecoveryService).to receive(:call)
-      .and_return(recovery_result(:skip, :no_clean_payment_history))
-
-    seen = Set.new
-    allow(Risk::StrandedBuyerRecoveryService).to receive(:call) do |email:, **|
-      seen << email
+    calls_this_run = 0
+    allow(Risk::StrandedBuyerRecoveryService).to receive(:call) do
+      calls_this_run += 1
       recovery_result(:skip, :no_clean_payment_history)
     end
 
-    travel_to(Date.new(2026, 8, 6)) { described_class.new.perform }
-    travel_to(Date.new(2026, 8, 7)) { described_class.new.perform }
+    per_run_counts = (0...described_class::ROTATION_BUCKETS).map do |offset|
+      calls_this_run = 0
+      travel_to(Date.new(2026, 1, 1) + offset) { described_class.new.perform }
+      calls_this_run
+    end
 
-    expect(seen.size).to eq(many.size)
+    expect(per_run_counts).to all(be <= described_class::MAX_RECOVERIES_PER_RUN)
+    expect(per_run_counts.max).to eq(described_class::MAX_RECOVERIES_PER_RUN)
+  end
+
+  # A dry run mutates nothing, so without day-bucketing the same population would be re-evaluated
+  # forever. Bucketing by a hash of each buyer's OWN email (not their position in the scan array)
+  # means the buyer's day assignment is stable across runs even as the scan's membership/order
+  # churns — walk every day of a full cycle and everyone must have been selected exactly once.
+  it "processes every candidate exactly once across a full rotation cycle, immune to scan churn between runs" do
+    many = (described_class::ROTATION_BUCKETS * 3).times.map { |i| candidate.merge(email: "buyer#{i}@example.com") }
+    allow(Risk::StrandedBuyerRecoveryService).to receive(:call).and_return(recovery_result(:skip, :no_clean_payment_history))
+
+    seen = Hash.new(0)
+    allow(Risk::StrandedBuyerScanService).to receive(:call) do
+      # Simulate churn: reshuffle scan order every run, the exact shape that broke the
+      # array-index rotation this replaced.
+      { stranded: many.shuffle, truncated: false }
+    end
+    allow(Risk::StrandedBuyerRecoveryService).to receive(:call) do |email:, **|
+      seen[email] += 1
+      recovery_result(:skip, :no_clean_payment_history)
+    end
+
+    (0...described_class::ROTATION_BUCKETS).each do |offset|
+      travel_to(Date.new(2026, 1, 1) + offset) { described_class.new.perform }
+    end
+
+    expect(seen.keys).to match_array(many.map { |c| c[:email] })
+    expect(seen.values.uniq).to eq([1])
   end
 
   it "is registered on the schedule so it actually runs" do

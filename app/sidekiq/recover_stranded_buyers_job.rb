@@ -11,8 +11,14 @@ class RecoverStrandedBuyersJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low
 
-  # Bounds one run's blast radius; rotation below guarantees the rest are reached on later runs.
+  # Bounds one run's blast radius; the bucketing below guarantees the rest are reached on later runs.
   MAX_RECOVERIES_PER_RUN = 25
+
+  # Coverage cycle length in days. Each buyer's bucket is a hash of their OWN email, so unlike an
+  # index into the scan array, it survives other buyers joining/leaving or the scan's rank order
+  # shifting day to day — the property Greptile's array-rotation review kept catching. Sized so a
+  # ~240-candidate population (25/day/bucket) clears the full cycle inside the window.
+  ROTATION_BUCKETS = 30
 
   # Escalations are the run's point — each names a buyer a human decision is holding. Cleared and
   # skipped buyers are counted, not listed.
@@ -32,12 +38,23 @@ class RecoverStrandedBuyersJob
 
   private
     # A dry run clears nothing and a stuck candidate's rank never decays (settled_purchases cannot
-    # grow for someone who cannot check out), so taking the head of the scan every day would
-    # re-evaluate the same buyers forever and never reach the rest. Rotating the start by day
-    # walks the window across the whole population over successive runs in either mode.
+    # grow for someone who cannot check out), so a fixed head-of-scan window would re-evaluate the
+    # same buyers forever. An array-index rotation doesn't fix that either: it walks positions in
+    # THIS run's array, so a buyer's day assignment moves whenever the scan's order or membership
+    # shifts, and a persistently non-clearing buyer can be rotated back into the unselected tail
+    # every day it runs (Greptile P1, rounds 1-3). Bucketing by a hash of the buyer's own identity
+    # against a FIXED modulus is immune to both: a buyer's day assignment depends only on who they
+    # are, never on the scan's order, size, or who else is in it this run.
     def window(candidates)
-      offset = (Date.current.yday * MAX_RECOVERIES_PER_RUN) % candidates.size
-      candidates.rotate(offset).first(MAX_RECOVERIES_PER_RUN)
+      return candidates if candidates.size <= MAX_RECOVERIES_PER_RUN
+
+      today = Date.current.yday % ROTATION_BUCKETS
+      due_today = candidates.select { |c| bucket(c[:email]) == today }
+      due_today.first(MAX_RECOVERIES_PER_RUN)
+    end
+
+    def bucket(email)
+      Digest::MD5.hexdigest(email.downcase).to_i(16) % ROTATION_BUCKETS
     end
 
     def recover(candidate, live:)
