@@ -74,21 +74,20 @@ class ScheduledPayout < ApplicationRecord
           user
         )
 
-        if payment.blank? || payment.failed?
-          # Real failures (validation errors from Payouts.create_payment, or a payment that
-          # failed during preparation) should still raise so the rescue below resets the
-          # scheduled payout to "pending" and it is retried.
-          raise "Payout failed: #{payment_errors.join(", ")}" if payment_errors.present?
+        if payment.blank?
+          # No payable balance — retrying won't conjure one, so flag instead of retrying forever
+          # (same trap #6028 fixed for this exit specifically).
+          update!(status: "flagged", executed_at: nil)
+          return :flagged
+        end
 
-          if payment&.failed?
-            raise "Payout failed: #{payment.errors.full_messages.first || "Payment failed during preparation"}"
+        if payment.failed?
+          if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
+            raise "Payout failed: #{payment_errors&.join(", ") || "Payment failed during preparation"}"
           end
 
-          # The user has no payable balance, so there is nothing to pay out. Retrying won't
-          # help: the daily ExecuteScheduledPayoutsJob would pick this record up again every
-          # day and fail the same way forever (raising resets the status to "pending" below).
-          # Instead, flag the scheduled payout so an admin reviews it once and cancels it or
-          # issues the payout manually if the balance situation changes.
+          # A non-requeueable preparation failure (no merchant account, currency mismatch,
+          # destination-ledger drift) needs a human to act — retrying tomorrow can't fix it.
           update!(status: "flagged", executed_at: nil)
           return :flagged
         end
@@ -100,9 +99,16 @@ class ScheduledPayout < ApplicationRecord
           ProcessPaymentWorker.perform_in(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, payment.id)
         else
           PayoutProcessorType.get(payout_processor_type).process_payments([payment])
+          payment.reload
 
-          if payment.reload.failed?
-            raise "Payout failed: #{payment.errors.full_messages.first || "Payment processing failed"}"
+          if payment.failed?
+            if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
+              raise "Payout failed: #{payment.errors.full_messages.first || "Payment processing failed"}"
+            end
+
+            # Same terminal-vs-requeueable distinction as the preparation-failure branch above.
+            update!(status: "flagged", executed_at: nil)
+            return :flagged
           end
         end
       rescue => e
