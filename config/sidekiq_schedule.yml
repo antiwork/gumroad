@@ -185,6 +185,11 @@ alert_on_blocked_established_buyers:
   class: AlertOnBlockedEstablishedBuyersJob
   queue: low
   description: Reports buyers with settled payment history whose checkouts are failing on a platform block
+recover_stranded_buyers:
+  cron: "40 11 * * *" # UTC 11:40 — after the 11:10 alert, so the report and the recovery read the same day's scan
+  class: RecoverStrandedBuyersJob
+  queue: low
+  description: Runs StrandedBuyerRecoveryService over the scan's candidates (dry-run unless auto_recover_stranded_buyers is active)
 alert_on_stale_blocks_holding_established_buyers:
   cron: "0 12 * * 1" # UTC 12:00 Monday
   class: AlertOnStaleBlocksHoldingEstablishedBuyersJob
