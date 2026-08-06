@@ -13,7 +13,13 @@ import { request } from "$app/utils/request";
 // picks an account, and offset/limit are validated before they reach it. The sandbox has no
 // allow-same-origin, so e.origin is "null" and e.source is the only usable check — same as
 // the production wrapper.
-type ProductsRequest = { type: "gumroad:products"; offset?: unknown; limit?: unknown; requestId?: unknown };
+type ProductsRequest = {
+  type: "gumroad:products";
+  offset?: unknown;
+  limit?: unknown;
+  requestId?: unknown;
+  documentToken?: unknown;
+};
 type ProductsSlice = {
   success: true;
   products: unknown[];
@@ -50,8 +56,17 @@ export const CustomHtmlPreview = ({
       const message = e.data;
 
       const requestId = typia.is<string>(message.requestId) ? message.requestId : null;
+      // The document itself mints this token on script execution (see PRODUCTS_BRIDGE_SCRIPT) and
+      // only accepts a reply carrying it back. e.source (the WindowProxy) is navigation-stable, so
+      // it can't tell a replaced document apart from the one that asked — echoing the token lets
+      // each document self-filter replies meant for whatever occupied the frame before it, without
+      // this side having to track load/reload timing at all.
+      const documentToken = typia.is<string>(message.documentToken) ? message.documentToken : null;
       const reply = (payload: Record<string, unknown>) => {
-        frame.contentWindow?.postMessage({ ...payload, type: "gumroad:products:result", requestId }, "*");
+        frame.contentWindow?.postMessage(
+          { ...payload, type: "gumroad:products:result", requestId, documentToken },
+          "*",
+        );
       };
 
       const offset = message.offset;
@@ -93,5 +108,13 @@ export const CustomHtmlPreview = ({
     return () => window.removeEventListener("message", onMessage);
   }, [productsSrc, productsDefaultLimit]);
 
-  return <iframe ref={frameRef} title={title} src={src} sandbox="allow-scripts" className={className} />;
+  return (
+    <iframe
+      ref={frameRef}
+      title={title}
+      src={src}
+      sandbox="allow-scripts"
+      className={className}
+    />
+  );
 };
