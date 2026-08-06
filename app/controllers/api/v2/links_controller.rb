@@ -27,7 +27,10 @@ class Api::V2::LinksController < Api::V2::BaseController
     { variant_categories_alive: [{ alive_variants: :alive_rich_contents }] },
   ]).freeze
 
-  before_action(only: [:show, :index, :custom_html]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
+  COMPS_EXAMPLES_COUNT = 5
+  COMPS_PRICE_PERCENTS = [25, 50, 75].freeze
+
+  before_action(only: [:show, :index, :custom_html, :comps]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html, :edit_custom_html]) { doorkeeper_authorize! :edit_products }
   before_action :reject_unsupported_upload_fields, only: [:update, :create]
   before_action :resolve_category_param, only: [:update, :create]
@@ -212,6 +215,58 @@ class Api::V2::LinksController < Api::V2::BaseController
   def show
     ActiveRecord::Associations::Preloader.new(records: [@product], associations: SHOW_PRODUCT_ASSOCIATIONS).call
     success_with_product(@product)
+  end
+
+  def comps
+    if params[:taxonomy].blank? && params[:query].blank?
+      return render_response(false, message: "A taxonomy or query parameter is required.")
+    end
+
+    taxonomy = nil
+    if params[:taxonomy].present?
+      taxonomy = if params[:taxonomy].to_s.match?(/\A\d+\z/)
+        Taxonomy.find_by(id: params[:taxonomy])
+      else
+        Taxonomy.find_by_path(params[:taxonomy].to_s.split("/"))
+      end
+      return render_response(false, message: "The taxonomy was not found.") if taxonomy.nil?
+    end
+
+    search_params = {
+      size: COMPS_EXAMPLES_COUNT,
+      sort: ProductSortKey::REVENUE_DESCENDING,
+      track_total_hits: true,
+    }
+    search_params[:query] = params[:query] if params[:query].present?
+    if taxonomy
+      search_params[:taxonomy_id] = taxonomy.id
+      search_params[:include_taxonomy_descendants] = true
+    end
+
+    options = Link.search_options(search_params)
+    # Free products would drag the percentiles toward zero without telling the caller
+    # anything about what buyers pay; comps are only meaningful over priced listings.
+    (options[:query][:bool][:filter] ||= []) << { range: { price_cents: { gt: 0 } } }
+    options[:aggregations] = {
+      price_percentiles: { percentiles: { field: "price_cents", percents: COMPS_PRICE_PERCENTS } },
+    }
+
+    response = Link.search(options)
+    percentile_values = response.aggregations.dig("price_percentiles", "values") || {}
+
+    examples = response.records.map do |product|
+      {
+        name: product.name,
+        price: product.price_formatted_including_rental_verbose,
+        url: product.long_url,
+      }
+    end
+
+    render_response(true, comps: {
+                      count: response.results.total,
+                      price_cents: COMPS_PRICE_PERCENTS.index_with { |p| percentile_values["#{p}.0"]&.round }.transform_keys { |p| "p#{p}" },
+                      examples:,
+                    })
   end
 
   def update

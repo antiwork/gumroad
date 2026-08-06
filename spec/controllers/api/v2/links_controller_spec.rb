@@ -2351,4 +2351,100 @@ describe Api::V2::LinksController do
       end
     end
   end
+
+  describe "GET 'comps'" do
+    before do
+      @action = :comps
+      @params = {}
+    end
+
+    it_behaves_like "authorized oauth v1 api method"
+
+    describe "when logged in with public scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_public")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "requires a taxonomy or query" do
+        get @action, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "A taxonomy or query parameter is required."
+        }.as_json)
+      end
+
+      it "errors on an unknown taxonomy path" do
+        get @action, params: @params.merge(taxonomy: "no-such/category")
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The taxonomy was not found."
+        }.as_json)
+      end
+
+      describe "with indexed products" do
+        before do
+          films = Taxonomy.find_or_create_by!(slug: "films")
+          @documentary = Taxonomy.find_or_create_by!(slug: "documentary", parent: films)
+
+          @cheap = create(:product, :recommendable, name: "Cheap film", price_cents: 900)
+          @mid = create(:product, :recommendable, name: "Mid film", price_cents: 1500)
+          @nested = create(:product, :recommendable, name: "Nested documentary", price_cents: 2900)
+          @nested.update!(taxonomy: @documentary)
+          # Extra sales make @mid the top example under the sales_volume ordering.
+          create_list(:purchase, 3, link: @mid, created_at: 1.week.ago)
+
+          # Priced at creation so the trait's sale is chargeable, then made free.
+          free = create(:product, :recommendable, name: "Free film", price_cents: 900)
+          free.update!(price_cents: 0)
+          create(:product, :with_films_taxonomy, name: "Not discoverable", price_cents: 5000)
+
+          Link.import(refresh: true, force: true)
+        end
+
+        it "returns the count, price percentiles, and top examples for a taxonomy path including descendants" do
+          get @action, params: @params.merge(taxonomy: "films")
+
+          body = response.parsed_body
+          expect(body["success"]).to be(true)
+
+          comps = body["comps"]
+          # Free and non-discoverable products are excluded; the documentary descendant is included.
+          expect(comps["count"]).to eq(3)
+          expect(comps["price_cents"]["p50"]).to eq(1500)
+          expect(comps["price_cents"]["p25"]).to be_between(900, 1500)
+          expect(comps["price_cents"]["p75"]).to be_between(1500, 2900)
+          expect(comps["examples"]).to eq([
+                                            { "name" => "Mid film", "price" => "$15", "url" => @mid.long_url },
+                                            { "name" => "Nested documentary", "price" => "$29", "url" => @nested.long_url },
+                                            { "name" => "Cheap film", "price" => "$9", "url" => @cheap.long_url },
+                                          ])
+        end
+
+        it "scopes to a nested taxonomy path" do
+          get @action, params: @params.merge(taxonomy: "films/documentary")
+
+          comps = response.parsed_body["comps"]
+          expect(comps["count"]).to eq(1)
+          expect(comps["examples"].sole["name"]).to eq("Nested documentary")
+        end
+
+        it "accepts a numeric taxonomy id" do
+          get @action, params: @params.merge(taxonomy: @documentary.id.to_s)
+
+          expect(response.parsed_body["comps"]["count"]).to eq(1)
+        end
+
+        it "filters by full-text query" do
+          get @action, params: @params.merge(query: "documentary")
+
+          comps = response.parsed_body["comps"]
+          expect(comps["count"]).to eq(1)
+          expect(comps["examples"].sole["name"]).to eq("Nested documentary")
+        end
+      end
+    end
+  end
 end
