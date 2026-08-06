@@ -232,17 +232,36 @@ describe ScheduledPayout do
         expect(scheduled_payout.reload.status).to eq("executed")
       end
 
-      it "raises if payout fails" do
-        payment = instance_double(Payment, failed?: true, errors: double(full_messages: ["Stripe account not found"]))
-        allow(payment).to receive(:reload).and_return(payment)
+      it "raises when the failure reason is requeueable" do
+        payment = instance_double(Payment, failed?: false, failure_reason: Payment::FailureReason::PROCESSOR_RATE_LIMITED,
+                                            errors: double(full_messages: ["Stripe rate limited"]))
+        allow(payment).to receive(:reload) { allow(payment).to receive(:failed?).and_return(true); payment }
         processor = class_double(StripePayoutProcessor, process_payments: nil)
         allow(Payouts).to receive(:create_payment)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
           .and_return([payment, nil])
         allow(PayoutProcessorType).to receive(:get).with(user.current_payout_processor).and_return(processor)
 
-        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: Stripe account not found/)
+        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: Stripe rate limited/)
         expect(scheduled_payout.reload.status).to eq("pending")
+      end
+
+      it "flags for review instead of raising when the failure reason is not requeueable" do
+        # A CANNOT_PAY failure (e.g. Stripe capabilities missing) needs the seller or an admin to
+        # act — retrying the next day would raise identically forever, same trap as #6028's
+        # zero-balance fix. Regression coverage for GUMROAD-10K (43 events/0 users since 07-22).
+        payment = instance_double(Payment, failed?: false, failure_reason: Payment::FailureReason::CANNOT_PAY,
+                                            errors: double(full_messages: ["Your destination account needs to have at least one of the following capabilities enabled: transfers"]))
+        allow(payment).to receive(:reload) { allow(payment).to receive(:failed?).and_return(true); payment }
+        processor = class_double(StripePayoutProcessor, process_payments: nil)
+        allow(Payouts).to receive(:create_payment)
+          .with(Date.yesterday.to_s, user.current_payout_processor, user)
+          .and_return([payment, nil])
+        allow(PayoutProcessorType).to receive(:get).with(user.current_payout_processor).and_return(processor)
+
+        expect(scheduled_payout.execute!).to eq(:flagged)
+        expect(scheduled_payout.reload.status).to eq("flagged")
+        expect(scheduled_payout.executed_at).to be_nil
       end
 
       it "flags the payout for review when no payable balance is available" do
@@ -255,27 +274,31 @@ describe ScheduledPayout do
         expect(scheduled_payout.executed_at).to be_nil
       end
 
-      it "raises without processing when the payment failed during preparation" do
+      it "flags without raising when the payment failed during preparation" do
         # Payouts.create_payment can return a payment that the payout processor already marked as
-        # failed (e.g. no valid merchant account). Such a payment must not be sent to
-        # process_payments — the scheduled payout resets to pending and the error surfaces instead.
+        # failed during preparation (e.g. no valid merchant account, currency mismatch, ledger
+        # drift). None of these are transient, so the scheduled payout flags for a human instead
+        # of raising into a daily retry loop. Regression coverage for GUMROAD-10K/GUMROAD-V-style
+        # "no valid merchant account found for user" failures (43 events/0 users since 07-22).
         payment = instance_double(Payment, failed?: true)
         allow(Payouts).to receive(:create_payment)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
           .and_return([payment, ["Cannot process payout: no valid merchant account found for user."]])
         expect(PayoutProcessorType).not_to receive(:get)
 
-        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: Cannot process payout: no valid merchant account found for user\./)
-        expect(scheduled_payout.reload.status).to eq("pending")
+        expect(scheduled_payout.execute!).to eq(:flagged)
+        expect(scheduled_payout.reload.status).to eq("flagged")
+        expect(scheduled_payout.executed_at).to be_nil
       end
 
-      it "raises with payment errors when create_payment returns errors" do
+      it "flags without raising when create_payment returns errors" do
         allow(Payouts).to receive(:create_payment)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
           .and_return([nil, ["Stripe account not connected"]])
 
-        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: Stripe account not connected/)
-        expect(scheduled_payout.reload.status).to eq("pending")
+        expect(scheduled_payout.execute!).to eq(:flagged)
+        expect(scheduled_payout.reload.status).to eq("flagged")
+        expect(scheduled_payout.executed_at).to be_nil
       end
     end
 
