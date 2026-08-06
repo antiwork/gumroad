@@ -166,6 +166,27 @@ describe Pages::Interpolator do
       expect(result).to include("cell")
     end
 
+    it "unwraps a multi-paragraph description out of a phrasing-only marker (e.g. <p>) instead of nesting invalid HTML" do
+      product.update!(description: "<p>First paragraph.</p><p>Second paragraph.</p>")
+      html = %(<p data-gumroad-field="description">placeholder</p>)
+
+      result = described_class.interpolate(html, product: product)
+
+      expect(result).to include("<p>First paragraph.</p><p>Second paragraph.</p>")
+      # The marker itself must not survive wrapping the block content — a browser would have
+      # auto-closed it on the first nested <p> anyway, which is the bug this guards against.
+      expect(result).not_to match(%r{<p data-gumroad-field="description">})
+    end
+
+    it "leaves a single-line description nested inside its own <p> marker (no block tags, no unwrap needed)" do
+      product.update!(description: "Just one line, no breaks.")
+      html = %(<p data-gumroad-field="description">placeholder</p>)
+
+      result = described_class.interpolate(html, product: product)
+
+      expect(result).to include(%(<p data-gumroad-field="description">Just one line, no breaks.</p>))
+    end
+
     it "prepares <a data-gumroad-action='buy'> for the delegated checkout bridge" do
       html = %(<a data-gumroad-action="buy" href="#">Buy</a>)
 
