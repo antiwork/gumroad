@@ -1,14 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Tests for bin/branch-specs' mapping layers, pinned to the four real
-# escalations from 2026-08-05/06 that each cost a red CI round-trip:
-#
-#   #7101  app/javascript/components/Public/, app/javascript/data/charge.ts
-#   #7098  app/javascript/components/Profile/Layout.tsx
-#   #7099  config/initializers/rack_attack.rb
-#   #7097  co-located vitest module + lib/ file with a differently-named spec
-#          + help_center article partial
+# Tests for bin/branch-specs' mapping layers: Public/Profile component
+# fanout, a per-file config/ exception list, vitest co-location, lib/app
+# content-attribution fallback, and help_center view mapping.
 #
 # Same shape as check_migration_versions_test.rb: throwaway git repos, no
 # Rails. The selector runs from the repo root of the throwaway repo, so each
@@ -73,7 +68,7 @@ end
 
 SPEC_STUB = "# frozen_string_literal: true\n"
 
-# --- #7101: Public lookup components + data layer -> PublicController coverage
+# Public lookup components + data layer -> PublicController coverage
 check(
   "Public lookup component maps to public_controller + license lookup specs",
   base_files: {
@@ -92,7 +87,7 @@ check(
   ],
 )
 
-# --- #7098: Profile component -> storefront request specs
+# Profile component -> storefront request specs
 check(
   "Profile component fans out to user/profile request specs",
   base_files: {
@@ -103,7 +98,7 @@ check(
   expect_specs: %w[spec/requests/user/profile_spec.rb],
 )
 
-# --- #7099: rack_attack initializer -> its dedicated request spec
+# rack_attack initializer -> its dedicated request spec
 check(
   "rack_attack initializer maps to rack_attack_spec instead of escalating",
   base_files: {
@@ -122,7 +117,7 @@ check(
   expect_escalate: true,
 )
 
-# --- #7097 (a): co-located vitest module is not a mapping gap
+# Co-located vitest module is not a mapping gap
 check(
   "TS module with co-located .test.ts does not escalate",
   base_files: {
@@ -141,7 +136,7 @@ check(
   expect_specs: %w[spec/models/widget_spec.rb],
 )
 
-# --- #7097 (b): lib file with differently-named spec found by content
+# lib file resolves via content attribution when name mapping misses
 check(
   "lib file resolves via content attribution when name mapping misses",
   base_files: {
@@ -153,7 +148,7 @@ check(
   expect_specs: %w[spec/services/update_user_compliance_info_spec.rb],
 )
 
-# --- #7097 (c): help_center article partial -> help_center request specs
+# help_center article partial -> help_center request specs
 check(
   "help_center article partial maps to help_center request specs",
   base_files: {
