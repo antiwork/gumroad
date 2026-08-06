@@ -114,20 +114,24 @@ class PublicController < ApplicationController
 
     # Month is only applied when year is also present — the frontend disables the month
     # picker until a year is chosen, but an unauthenticated GET can still send month alone.
+    # An empty window falls back to the unscoped set, mirroring the product-query fallback
+    # above: the response must not reveal WHEN an email purchased, only whether it ever did.
+    # Ceiling is +1 year so a client ahead of UTC around New Year isn't silently unscoped.
     EARLIEST_PURCHASE_YEAR = 2011
 
     def scope_by_year_and_month(purchases, year, month)
       # to_s first: `?year[]=2024` yields an Array, and Array#to_i would 500.
       year_i = year.to_s.to_i
-      return purchases if year_i < EARLIEST_PURCHASE_YEAR || year_i > Time.current.year
+      return purchases if year_i < EARLIEST_PURCHASE_YEAR || year_i > Time.current.year + 1
 
       month_i = month.to_s.to_i
-      if (1..12).cover?(month_i)
+      scoped = if (1..12).cover?(month_i)
         range_start = Time.utc(year_i, month_i)
         purchases.where(created_at: range_start...range_start.next_month)
       else
         range_start = Time.utc(year_i)
         purchases.where(created_at: range_start...range_start.next_year)
       end
+      scoped.exists? ? scoped : purchases
     end
 end

@@ -136,6 +136,17 @@ describe PublicController, type: :controller, inertia: true do
       get :charge_data, params: { last_4: "4242", email: "edgar@gumroad.com", month: "3" }
       expect(response.parsed_body["success"]).to be(true)
     end
+
+    it "falls back to the unscoped set when the chosen window has no purchases, so the response cannot reveal when an email purchased" do
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+
+      purchase = create(:purchase, price_cents: 100, fee_cents: 30, card_visual: "**** 4242", email: "edgar@gumroad.com", created_at: Time.utc(2023, 6, 1))
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with([purchase.id]).and_return(mail_double)
+      get :charge_data, params: { last_4: "4242", email: "edgar@gumroad.com", year: "2015" }
+      expect(response.parsed_body["success"]).to be(true)
+    end
   end
 
   describe "GET license_key_lookup_data" do
