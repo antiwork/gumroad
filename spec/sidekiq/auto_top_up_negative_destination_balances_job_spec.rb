@@ -304,4 +304,50 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
     $redis.del("#{RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)}:0:72850")
   end
+
+  it "does not overfund when only one of two previously-funded rows reconciles, leaving the other still outstanding" do
+    row_a = residue_row(-100_00)
+    residue_row(-150_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 250_00)).once
+    described_class.new.perform
+
+    # Only row_a reconciles; row_b (still unpaid, still funded) survives — partial reconciliation.
+    row_a.mark_processing!
+    row_a.mark_paid!
+
+    expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("ESCALATE")).once
+    expect($redis.get(dedupe_key).to_i).to eq(250_00) # unchanged — row_b's funding credit must survive row_a's reconciliation
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+  end
+
+  it "serializes overlapping runs for the same account so a stale read cannot produce two transfers for one shortfall" do
+    residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+    lock_key = "#{dedupe_key}:lock"
+
+    # Simulate a concurrent run already holding the per-account lock.
+    $redis.set(lock_key, 1, ex: 60, nx: true)
+
+    expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("already in progress")).once
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+    $redis.del("#{RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)}:lock")
+  end
 end

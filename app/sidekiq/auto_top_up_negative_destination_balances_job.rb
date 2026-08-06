@@ -54,16 +54,22 @@ class AutoTopUpNegativeDestinationBalancesJob
       end
 
       dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(entry[:merchant_account].id)
+      # Serializes the read-decide-transfer sequence per account: two overlapping runs (a retry
+      # firing while the prior attempt is still mid-flight, or a manual rerun) would otherwise both
+      # read the same stale funded_cents, mint distinct amount-scoped transfer_keys, and both pass
+      # their own SET NX — sending the full stale snapshot twice instead of one delta. The lock is
+      # released before returning on every path (ensure below), including inside the rescues.
+      lock_key = "#{dedupe_key}:lock"
+      return { entry:, verdict: :escalate, reason: "a top-up decision for this account is already in progress" } unless $redis.set(lock_key, 1, ex: 60, nx: true)
+
       funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
       funded_cents = funded_amount&.to_i
       funded_ids = funded_ids_str.to_s.split("-").map(&:to_i)
       # The funded state is scoped to the SPECIFIC rows it was measured against, not just the
-      # account. A later sighting where every one of those rows is STILL in the unpaid set is the
-      # same unresolved trip (rows may have grown — an additional row landing is not
-      # reconciliation). Once leg two pays/zeroes any of them, they drop out of the unpaid scan —
-      # that's the actual "reconciled" signal, not a same/lower amount, which a fresh independent
-      # shortfall on the same account can produce by coincidence and get wrongly withheld for 7 days.
-      if funded_ids.any? && !(funded_ids - entry[:balance_ids]).empty?
+      # account. Reconciliation is only complete once NONE of those rows remain in the unpaid set —
+      # clearing on the first row to disappear (rather than the last) would drop credit for the
+      # rows still outstanding, and the next run would transfer their already-funded share again.
+      if funded_ids.any? && (funded_ids & entry[:balance_ids]).empty?
         funded_cents = nil
       end
 
@@ -117,6 +123,8 @@ class AutoTopUpNegativeDestinationBalancesJob
       # what actually happened) may retry.
       $redis.persist(transfer_key) if transfer_key
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
+    ensure
+      $redis.del(lock_key) if lock_key
     end
 
     def message_for(outcomes, live:, total:)
