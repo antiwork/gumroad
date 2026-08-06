@@ -281,6 +281,7 @@ module StripeMerchantAccountManager
 
     clear_stale_postal_code_failure_notes(user)
     clear_stale_bank_sync_failure_notes(user)
+    clear_stale_payout_setup_rejection_notes(user)
 
     merchant_account
   rescue => e
@@ -579,6 +580,11 @@ module StripeMerchantAccountManager
     if person_address_submitted || address_submitted?(account_update.sent_attributes, entity_key)
       clear_stale_postal_code_failure_notes(user)
     end
+
+    # Reaching here means Stripe accepted the update without raising, so any earlier rejection
+    # marker is resolved — leaving it would send a seller whose setup now works back to fix an
+    # already-fixed field, or block a since-unrelated publish attempt with stale guidance.
+    clear_stale_payout_setup_rejection_notes(user)
   rescue Stripe::InvalidRequestError => e
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     raise
@@ -1712,8 +1718,15 @@ module StripeMerchantAccountManager
       content: "#{ACCOUNT_REJECTION_NOTE_PREFIX}: #{details.join(' ')} — #{error.message.to_s.truncate(300)}",
       seller_visible: false
     )
+
+    # payout_setup_rejection_seller_message returns nil for bank-account rejections, which have
+    # their own dedicated seller messaging elsewhere — writing a note with nil content would fail
+    # Comment's presence validation and reach ErrorNotifier on every one of them.
+    seller_message = payout_setup_rejection_seller_message(error, user)
+    return if seller_message.blank?
+
     user.add_payout_note(
-      content: payout_setup_rejection_seller_message(error, user),
+      content: seller_message,
       seller_visible: true,
       json_data: { PAYOUT_SETUP_REJECTION_NOTE_FLAG => true }
     )
@@ -1734,6 +1747,25 @@ module StripeMerchantAccountManager
         .update_all(deleted_at: Time.current)
   rescue => e
     Rails.logger.error "Failed to clear stale postal-code failure notes for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  # Deletes the marked seller-visible rejection note once the payout setup it describes has gone
+  # through, so `Link#publish_blocked_message` and `User#latest_payout_setup_rejection_note` stop
+  # finding it. json_data is a serialized text column MySQL cannot filter on directly (same
+  # constraint as the LIKE prefilter above), so the flag is narrowed with a LIKE on its serialized
+  # form before the in-memory check that actually reads it.
+  private_class_method
+  def self.clear_stale_payout_setup_rejection_notes(user)
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("json_data LIKE ?", "%#{PAYOUT_SETUP_REJECTION_NOTE_FLAG}%")
+        .select { |note| note.json_data[PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
+        .each { |note| note.update!(deleted_at: Time.current) }
+  rescue => e
+    Rails.logger.error "Failed to clear stale payout-setup-rejection notes for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
   end
 

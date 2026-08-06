@@ -36,8 +36,18 @@ module User::Comments
   # The newest payout note recorded because Stripe rejected the seller's payout setup, or nil.
   # Marked with StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG when written, so a
   # reader that needs this specific note is not left guessing from the newest visible one.
+  #
+  # Queried independently of recent_payout_notes' MAX_NOTES_SCANNED cap: that cap exists for the
+  # Payouts banner, which only ever wants the newest note regardless of which one it is. This
+  # reader wants one SPECIFIC note, which weekly-retry breadcrumbs and other payout notes can push
+  # past row 25 while it is still the live rejection blocking the seller.
   def latest_payout_setup_rejection_note
-    recent_payout_notes.find { |note| note.json_data[StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
+    comments.with_type_payout_note
+            .alive
+            .where(author_id: GUMROAD_ADMIN_ID)
+            .where("json_data LIKE ?", "%#{StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG}%")
+            .order(created_at: :desc, id: :desc)
+            .find { |note| note.json_data[StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
   end
 
   # The newest payout note on the account, seller-facing or internal.
