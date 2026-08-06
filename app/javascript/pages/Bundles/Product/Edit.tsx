@@ -349,7 +349,7 @@ export default function BundlesProductEdit() {
               form.setData((data) => ({
                 ...data,
                 price_cents: priceCents,
-                ...(priceCents === 0 && { customizable_price: true }),
+                customizable_price: priceCents === 0,
               }));
             }}
             setSuggestedPriceCents={(suggestedPriceCents) => form.setData("suggested_price_cents", suggestedPriceCents)}
