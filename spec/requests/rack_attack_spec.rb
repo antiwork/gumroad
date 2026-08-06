@@ -397,6 +397,26 @@ describe "Rack::Attack throttle", type: :request do
         expect(Rack::Attack.configuration.throttled?(request_for.call("/api/mobile/url_redirects/download/token123/file789"))).to be(false)
       end
     end
+
+    it "does not let POST requests to the same path consume or trip the GET/HEAD download bucket" do
+      request_for = lambda do |path, method|
+        Rack::Attack::Request.new(
+          Rack::MockRequest.env_for(path, method: method, input: "", "HTTP_CF_CONNECTING_IP" => "203.0.113.92")
+        )
+      end
+
+      travel_to(Time.current) do
+        100.times do
+          expect(Rack::Attack.configuration.throttled?(request_for.call("/api/mobile/url_redirects/download/token123/file456", "POST"))).to be(false)
+        end
+
+        60.times do |i|
+          expect(Rack::Attack.configuration.throttled?(request_for.call("/api/mobile/url_redirects/download/token123/file456", "GET"))).to be(false), "GET request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(Rack::Attack.configuration.throttled?(request_for.call("/api/mobile/url_redirects/download/token123/file456", "GET"))).to be(true)
+      end
+    end
   end
 
   describe "PUT /api/v2/products/:id per-token throttle" do
