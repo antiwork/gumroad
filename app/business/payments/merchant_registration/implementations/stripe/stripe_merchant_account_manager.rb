@@ -1260,14 +1260,17 @@ module StripeMerchantAccountManager
     ADDRESS_SUBHASH_KEYS.any? { |address_key| entity[address_key].present? }
   end
 
-  # Leaf key names actually sent to Stripe, at any nesting depth — used to tell whether a
-  # rejection note's specific field (see stripe_rejected_field) was part of THIS submission.
+  # Key names actually sent to Stripe, at every nesting depth — used to tell whether a rejection
+  # note's specific field (see stripe_rejected_field below) was part of THIS submission.
+  # stripe_rejected_field records the LAST bracket segment of Stripe's param, which for a
+  # compound field like "individual[dob]" is the parent key "dob", not one of its day/month/year
+  # leaves — so parent keys must be included here too, not just leaves (Greptile finding).
   private_class_method
   def self.submitted_field_names(sent_attributes)
     return [] unless sent_attributes.is_a?(Hash)
 
     sent_attributes.flat_map do |key, value|
-      value.is_a?(Hash) ? submitted_field_names(value) : key.to_s
+      value.is_a?(Hash) ? [key.to_s] + submitted_field_names(value) : key.to_s
     end
   end
 

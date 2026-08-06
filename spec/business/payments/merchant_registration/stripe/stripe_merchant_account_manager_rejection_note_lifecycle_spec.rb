@@ -105,6 +105,24 @@ describe StripeMerchantAccountManager, ".clear_stale_payout_setup_rejection_note
 
     expect(unrelated.reload.deleted_at).to be_nil
   end
+
+  it "clears a note rejected on a compound field like dob when only its leaf keys were resubmitted (Greptile finding on round 2)" do
+    user.add_payout_note(
+      content: "Our payment partner couldn't accept the date of birth you entered.",
+      seller_visible: true,
+      json_data: {
+        StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+        StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "dob",
+      }
+    )
+    submitted_fields = described_class.send(
+      :submitted_field_names, individual: { dob: { day: 2, month: 3, year: 1990 } }
+    )
+
+    described_class.send(:clear_stale_payout_setup_rejection_notes, user, resolved_fields: submitted_fields)
+
+    expect(user.latest_payout_setup_rejection_note).to be_nil
+  end
 end
 
 # update_account is the code path that resolves a prior rejection: a successful call to Stripe
