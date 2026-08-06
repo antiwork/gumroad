@@ -157,4 +157,39 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.deactivate(:auto_topup_negative_destination_balances)
     $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
   end
+
+  it "refreshes the dedupe TTL instead of letting it lapse while a candidate is still outstanding" do
+    residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).once
+
+    described_class.new.perform
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+    $redis.expire(dedupe_key, 1.hour)
+
+    described_class.new.perform
+
+    expect($redis.ttl(dedupe_key)).to be > 1.hour
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+  end
+
+  it "passes a stable idempotency key to Stripe so an ambiguous local retry doesn't double-transfer" do
+    residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
+      hash_including(idempotency_key: dedupe_key)
+    )
+
+    described_class.new.perform
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+  end
 end

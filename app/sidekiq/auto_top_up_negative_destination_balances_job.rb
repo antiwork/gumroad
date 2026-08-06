@@ -59,6 +59,11 @@ class AutoTopUpNegativeDestinationBalancesJob
       # and double-transfer. NX makes the claim itself the idempotency boundary; release it in the
       # rescue below so a failed attempt (no money moved) is retryable on the next run.
       unless $redis.set(dedupe_key, amount_cents, ex: DEDUPE_TTL, nx: true)
+        # Still outstanding: keep the claim alive for another DEDUPE_TTL window rather than let it
+        # lapse mid-reconciliation — a fixed 7-day expiry only makes sense if the candidate stops
+        # reappearing; refreshing on every re-sighting means it only actually expires once leg two
+        # is done and the candidate disappears from the scan for a full week.
+        $redis.expire(dedupe_key, DEDUPE_TTL)
         return { entry:, verdict: :escalate, reason: "already topped up #{amount_cents} cents for this account — awaiting the leg-two reconciliation pass before retrying" }
       end
 
@@ -67,6 +72,12 @@ class AutoTopUpNegativeDestinationBalancesJob
         stripe_account_id: entry[:merchant_account].charge_processor_merchant_id,
         currency: entry[:merchant_account].currency,
         amount_cents:,
+        # Stripe's own idempotency window (24h) is the real backstop against an ambiguous local
+        # outcome (timeout/network drop after Stripe already accepted the transfer): the dedupe
+        # key is stable per account while unclaimed, so a retry hitting Stripe again with the
+        # same key returns the original transfer instead of creating a second one — independent
+        # of whether the redis claim above got released by the rescue clause.
+        idempotency_key: dedupe_key,
         metadata: { user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id, reason: "negative_destination_balance_topup" }
       )
       { entry:, verdict: :topped_up, reason: nil, amount_cents:, currency: entry[:merchant_account].currency }
