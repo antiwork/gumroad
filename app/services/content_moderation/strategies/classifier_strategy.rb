@@ -39,6 +39,12 @@ class ContentModeration::Strategies::ClassifierStrategy
   # static, so "try again later" can never come true.
   UNSUPPORTED = :unsupported
   PERMANENT_REJECTION_CODES = %w[invalid_data_url invalid_image_format file_too_large].freeze
+  # The raw (unsigned) private-bucket prefix — what `gumroad-cli files upload`
+  # and other API::V2::FilesController writes hand back. OpenAI 400s fetching
+  # it with `image_url_unavailable` every time (403, not a signed-URL expiry),
+  # so unlike the same code on a product/post's expired signed URL, a retry
+  # here can never succeed.
+  UNFETCHABLE_PRIVATE_BUCKET_URL_PREFIX = S3_BASE_URL
   UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."
   # Not "inline": `file_too_large` reaches here for a remote URL OpenAI
   # downloaded and refused, not only for a `data:` payload we refused locally.
@@ -323,6 +329,8 @@ class ContentModeration::Strategies::ClassifierStrategy
         # perform) reproduces on every save of the same content, so it must not
         # be reported as a passing failure.
         code = body.is_a?(Hash) ? body.dig("error", "code") : nil
+        return UNSUPPORTED if code == "image_url_unavailable" && skip_url.to_s.start_with?(UNFETCHABLE_PRIVATE_BUCKET_URL_PREFIX)
+
         PERMANENT_REJECTION_CODES.include?(code) ? UNSUPPORTED : nil
       end
     end
