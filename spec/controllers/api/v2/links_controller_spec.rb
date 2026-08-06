@@ -2400,6 +2400,11 @@ describe Api::V2::LinksController do
           free = create(:product, :recommendable, name: "Free film", price_cents: 900)
           free.update!(price_cents: 0)
           create(:product, :with_films_taxonomy, name: "Not discoverable", price_cents: 5000)
+          # Same raw cents as @mid, different currency — decoy for the currency-mixing bug:
+          # without the currency filter this would sit at the same "1500" and flip which
+          # product the sales_volume ordering surfaces first.
+          @eur_decoy = create(:product, :recommendable, name: "EUR film", price_cents: 1500, price_currency_type: "eur")
+          create_list(:purchase, 5, link: @eur_decoy, created_at: 1.week.ago)
 
           # sales_volume is derived from the purchases index, so import it before products.
           Purchase.import(refresh: true, force: true)
@@ -2413,8 +2418,10 @@ describe Api::V2::LinksController do
           expect(body["success"]).to be(true)
 
           comps = body["comps"]
-          # Free and non-discoverable products are excluded; the documentary descendant is included.
+          # Free, non-discoverable, and non-USD products are excluded; the documentary
+          # descendant is included.
           expect(comps["count"]).to eq(3)
+          expect(comps["currency"]).to eq("usd")
           expect(comps["price_cents"]["p50"]).to eq(1500)
           expect(comps["price_cents"]["p25"]).to be_between(900, 1500)
           expect(comps["price_cents"]["p75"]).to be_between(1500, 2900)
@@ -2423,6 +2430,33 @@ describe Api::V2::LinksController do
                                             { "name" => "Nested documentary", "price" => "$29", "url" => @nested.long_url },
                                             { "name" => "Cheap film", "price" => "$9", "url" => @cheap.long_url },
                                           ])
+        end
+
+        it "excludes listings priced in a different currency from the default USD comps" do
+          get @action, params: @params.merge(taxonomy: "films")
+
+          comps = response.parsed_body["comps"]
+          # The EUR decoy outsells @mid 5:3 and shares its raw cent value; a mutant that drops
+          # the currency filter would let it win the top-example slot despite being un-comparable.
+          expect(comps["examples"].map { |e| e["name"] }).to_not include("EUR film")
+        end
+
+        it "scopes comps to an explicitly requested currency" do
+          get @action, params: @params.merge(taxonomy: "films", price_currency_type: "eur")
+
+          comps = response.parsed_body["comps"]
+          expect(comps["currency"]).to eq("eur")
+          expect(comps["count"]).to eq(1)
+          expect(comps["examples"].sole["name"]).to eq("EUR film")
+        end
+
+        it "rejects an unsupported currency" do
+          get @action, params: @params.merge(taxonomy: "films", price_currency_type: "zzz")
+
+          expect(response.parsed_body).to eq({
+            success: false,
+            message: "'zzz' is not a supported currency."
+          }.as_json)
         end
 
         it "scopes to a nested taxonomy path" do

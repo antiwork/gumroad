@@ -222,6 +222,12 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "A taxonomy or query parameter is required.")
     end
 
+    # Percentiles over raw price_cents are only comparable within one currency — a $10 and a
+    # €10 listing both contribute "1000" otherwise. Pin the aggregation to one currency rather
+    # than converting at query time, matching how #create/#update already gate currency.
+    currency = params.key?(:price_currency_type) ? normalize_price_currency_type(params[:price_currency_type]) : Currency::USD
+    return render_response(false, message: "'#{params[:price_currency_type]}' is not a supported currency.") unless CURRENCY_CHOICES.key?(currency)
+
     taxonomy = nil
     if params[:taxonomy].present?
       taxonomy = if params[:taxonomy].to_s.match?(/\A\d+\z/)
@@ -246,7 +252,9 @@ class Api::V2::LinksController < Api::V2::BaseController
     options = Link.search_options(search_params)
     # Free products would drag the percentiles toward zero without telling the caller
     # anything about what buyers pay; comps are only meaningful over priced listings.
-    (options[:query][:bool][:filter] ||= []) << { range: { price_cents: { gt: 0 } } }
+    # The currency term keeps every contributing document (and the percentiles they feed)
+    # denominated the same way.
+    (options[:query][:bool][:filter] ||= []) << { range: { price_cents: { gt: 0 } } } << { term: { price_currency_type: currency } }
     options[:aggregations] = {
       price_percentiles: { percentiles: { field: "price_cents", percents: COMPS_PRICE_PERCENTS } },
     }
@@ -264,6 +272,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     render_response(true, comps: {
                       count: response.results.total,
+                      currency:,
                       price_cents: COMPS_PRICE_PERCENTS.index_with { |p| percentile_values["#{p}.0"]&.round }.transform_keys { |p| "p#{p}" },
                       examples:,
                     })
