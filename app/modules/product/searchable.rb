@@ -265,7 +265,10 @@ module Product::Searchable
               end
             end
 
-            if params[:taxonomy_attribute_filters]
+            # Tokens are `<attribute name>:<value>` with no taxonomy identity, so two taxonomies
+            # can share a token; requiring taxonomy_id here keeps the filter scoped to the one
+            # it was rendered for.
+            if params[:taxonomy_attribute_filters] && params[:taxonomy_id]
               Array.wrap(params[:taxonomy_attribute_filters])
                 .group_by { |token| token.to_s.split(":", 2).first }
                 .each_value do |tokens|
