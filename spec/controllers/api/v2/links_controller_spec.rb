@@ -2401,6 +2401,8 @@ describe Api::V2::LinksController do
           free.update!(price_cents: 0)
           create(:product, :with_films_taxonomy, name: "Not discoverable", price_cents: 5000)
 
+          # sales_volume is derived from the purchases index, so import it before products.
+          Purchase.import(refresh: true, force: true)
           Link.import(refresh: true, force: true)
         end
 
