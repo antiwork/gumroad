@@ -618,15 +618,17 @@ export function computeTipForPrice(state: State, price: number, permalink: strin
 }
 
 // Computes each cart line's tip so the per-line integers sum exactly to the tip the buyer
-// selected. `computeTipForPrice` rounds each line independently, which can overshoot for a
-// fixed tip: two equal items with a 1-cent fixed tip each round to 1 cent, sending 2 cents
-// of tip in total even though `computeTip(state)` is 1 cent. Fixed tips are instead split
-// with a largest-remainder allocation (floor every line's exact proportional share, then
-// hand the leftover cents to the lines with the largest fractional parts). Every consumer
-// that builds per-line money for the server (the surcharge quote request and the order's
-// line items) must use this same function, because the buyer-currency quote token is
-// verified at charge time by comparing the quote's line totals against the purchases' —
-// two call sites rounding differently would make every affected charge fail verification.
+// selected (the same figure TipSelector / Subtotal / confirm show via `computeTip`, or its
+// listed-currency counterpart). `computeTipForPrice` rounds each line independently, which
+// overshoots for both tip types: two equal items with a 1-cent fixed tip each round to 1 cent
+// (2 charged vs 1 chosen), and prices like [999, 1999, 2999] at 20% round to 200+400+600 = 1200
+// while `computeTip` is 1199. Both tip types therefore use largest-remainder allocation (floor
+// every line's exact proportional share, then hand leftover cents to the lines with the largest
+// fractional parts). Every consumer that builds per-line money for the server (the surcharge
+// quote request and the order's line items) must use this same function, because the
+// buyer-currency quote token is verified at charge time by comparing the quote's line totals
+// against the purchases': two call sites rounding differently would make every affected charge
+// fail verification.
 export function computeTipsForLines(
   state: State,
   lines: { price: number; permalink: string | undefined }[],
@@ -647,8 +649,16 @@ export function computeTipsForLines(
     }
     return allocateFixedTipCents(listedAmount ?? state.tip.amount ?? 0, lines, totalPriceCents);
   }
-  const percentage = state.tip.percentage;
-  return lines.map((line) => Math.round((percentage / 100) * line.price));
+  // One cart tip, then the same allocator fixed tips use. On a normal cart the line
+  // tips sum to the display tip; when line bases are smaller than the cart total
+  // (commission deposit / free-trial zeroing), leftover tip stays uncollected, same
+  // as fixed tips.
+  if (basis === "listed") {
+    const totalPriceCents = lines.reduce((sum, line) => sum + line.price, 0);
+    const tipCents = Math.round((state.tip.percentage / 100) * totalPriceCents);
+    return allocateFixedTipCents(tipCents, lines, totalPriceCents);
+  }
+  return allocateFixedTipCents(computeTip(state), lines, getTotalPriceFromProducts(state));
 }
 
 // The tip to DISPLAY on the method-forced listed-currency lane, in the listed currency's minor
@@ -672,6 +682,8 @@ export function computeTipForListedLines(state: State, lines: { price: number; p
 }
 
 function allocateFixedTipCents(tipAmountCents: number, lines: { price: number }[], totalPriceCents: number): number[] {
+  // Used for both fixed tip amounts and the single cart tip derived from a percentage, so
+  // per-line integers always sum to the tip the buyer saw (or the listed-lane equivalent).
   if (tipAmountCents <= 0 || totalPriceCents <= 0) return lines.map(() => 0);
 
   const exactShares = lines.map((line) => (tipAmountCents * line.price) / totalPriceCents);
