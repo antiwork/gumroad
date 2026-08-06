@@ -206,13 +206,32 @@ describe RecoverStrandedBuyersJob do
 
     seen = Hash.new(0)
     2.times do |cycle|
-      travel_to(Date.new(2026, 1, 30) + (cycle * described_class::ROTATION_BUCKETS)) do
+      travel_to(described_class::ROTATION_EPOCH + (cycle * described_class::ROTATION_BUCKETS)) do
         job.send(:window, many).each { |c| seen[c[:email]] += 1 }
       end
     end
 
     expect(seen.keys.uniq.size).to be > described_class::MAX_RECOVERIES_PER_RUN
     expect(seen.values).to all(eq(1))
+  end
+
+  # Greptile's calendar-reset P1: `yday`-derived cycle counters wrap 0-12 every January, so any
+  # bucket with more than 13 pages permanently strands its last page(s). A 326-buyer bucket needs
+  # 14 pages, so this must span a January 1st boundary and still reach every page.
+  it "reaches every page of a large oversized bucket across a full year, including the January reset" do
+    bucket_size = 326 # Greptile's example: 14 pages of 25, only 12-13 of which a yday-derived cycle would ever reach.
+    many = bucket_size.times.map { |i| candidate.merge(email: "bigbucket#{i}@example.com") }
+    job = described_class.new
+    allow(job).to receive(:bucket).and_return(0)
+
+    seen = Hash.new(0)
+    # One run per rotation day for a bit over a year — enough cycles to cross Jan 1 twice and to
+    # exceed the 13-cycle ceiling a `yday`-derived counter would impose.
+    (0...(described_class::ROTATION_BUCKETS * 14)).each do |offset|
+      travel_to(described_class::ROTATION_EPOCH + 150 + offset) { job.send(:window, many).each { |c| seen[c[:email]] += 1 } }
+    end
+
+    expect(seen.keys.uniq).to match_array(many.map { |c| c[:email] })
   end
 
   it "is registered on the schedule so it actually runs" do

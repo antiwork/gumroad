@@ -24,6 +24,10 @@ class RecoverStrandedBuyersJob
   # skipped buyers are counted, not listed.
   MAX_REPORTED_ESCALATIONS = 15
 
+  # Anchor for the sub-rotation cycle counter below. Must be a fixed date, not `Date.current.yday`
+  # (which resets every January and starves any oversized-bucket page past index 12 — Greptile P1).
+  ROTATION_EPOCH = Date.new(2020, 1, 1)
+
   def perform
     scan = Risk::StrandedBuyerScanService.call
     return if scan[:stranded].empty?
@@ -48,17 +52,20 @@ class RecoverStrandedBuyersJob
     def window(candidates)
       return candidates if candidates.size <= MAX_RECOVERIES_PER_RUN
 
-      today = Date.current.yday % ROTATION_BUCKETS
-      due_today = candidates.select { |c| bucket(c[:email]) == today }.sort_by { _1[:email] }
+      elapsed_days = (Date.current - ROTATION_EPOCH).to_i
+      due_today = candidates.select { |c| bucket(c[:email]) == elapsed_days % ROTATION_BUCKETS }.sort_by { _1[:email] }
       return due_today if due_today.size <= MAX_RECOVERIES_PER_RUN
 
       # A bucket bigger than MAX_RECOVERIES_PER_RUN needs its own sub-rotation, or the same ordered
       # prefix would run every 30-day cycle and the tail would never be reached (Greptile P1). Page
       # through it by cycle count (sorted by email so the page assignment is independent of scan
-      # order/size) so every page — and eventually every buyer in the bucket — gets a turn.
+      # order/size) so every page — and eventually every buyer in the bucket — gets a turn. `cycle`
+      # MUST derive from the same elapsed-day clock as `due_today` above, not `Date.current.yday`:
+      # yday resets every January while elapsed_days doesn't, so a `yday`-derived cycle drifts out
+      # of phase with the (correctly monotonic) due-day check across a year boundary, silently
+      # dropping one page and double-running another (Greptile P1).
       pages = due_today.each_slice(MAX_RECOVERIES_PER_RUN).to_a
-      cycle = Date.current.yday / ROTATION_BUCKETS
-      pages[cycle % pages.size]
+      pages[(elapsed_days / ROTATION_BUCKETS) % pages.size]
     end
 
     def bucket(email)
