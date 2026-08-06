@@ -76,3 +76,36 @@ describe StripeMerchantAccountManager, ".clear_stale_payout_setup_rejection_note
     expect(unrelated.reload.deleted_at).to be_nil
   end
 end
+
+# update_account is the code path that resolves a prior rejection: a successful call to Stripe
+# means the field it once refused now goes through. Guards against the mutant that deletes the
+# clear_stale_payout_setup_rejection_notes call from that method's success path.
+describe StripeMerchantAccountManager, "#update_account clearing a resolved rejection note", :vcr do
+  let(:user) { create(:user) }
+  let!(:user_compliance_info) { create(:user_compliance_info, user:) }
+  let!(:tos_agreement) { create(:tos_agreement, user:) }
+  let!(:merchant_account) { described_class.create_account(user, passphrase: "1234") }
+
+  before do
+    original_stripe_account_retrieve = Stripe::Account.method(:retrieve)
+    allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do |*args|
+      stripe_account = original_stripe_account_retrieve.call(*args)
+      stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info.external_id
+      stripe_account
+    end
+
+    user.add_payout_note(
+      content: "Our payment partner couldn't accept the Tax ID you entered.",
+      seller_visible: true,
+      json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true }
+    )
+  end
+
+  it "clears the marked rejection note when the update succeeds" do
+    create(:user_compliance_info, user:, city: "Palo Alto")
+
+    described_class.update_account(user, passphrase: "1234")
+
+    expect(user.latest_payout_setup_rejection_note).to be_nil
+  end
+end
