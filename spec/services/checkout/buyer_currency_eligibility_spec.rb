@@ -443,6 +443,9 @@ describe Checkout::BuyerCurrencyEligibility do
   end
 
   it "falls back when a buyer-currency purchase carries shipping" do
+    # Shipping conversion now matches surcharge vs charge, but the direct-listed Element still
+    # mounts product price only and payment.ts keeps shipping out of directListedCardActive.
+    # Eligibility must stay aligned with that mount path.
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),

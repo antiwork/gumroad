@@ -37,7 +37,10 @@ class CustomerSurchargeController < ApplicationController
       tax_result = surcharges[:sales_tax_result]
       vat_id_valid = tax_result.business_vat_status == :valid
       has_vat_id_input ||= tax_result.to_hash[:has_vat_id_input]
-      shipping_usd_cents = get_usd_cents(product.price_currency_type, surcharges[:shipping_rate])
+      # Already USD: calculate_surcharges converts each listed rate term the same way
+      # Purchase#calculate_shipping does. Do not convert the aggregate again: convert(sum)
+      # and sum(convert) disagree by a cent under non-integer FX rates.
+      shipping_usd_cents = surcharges[:shipping_rate]
       shipping_rate += shipping_usd_cents
       tax_cents = tax_result.tax_cents
       if tax_cents > 0
@@ -57,7 +60,7 @@ class CustomerSurchargeController < ApplicationController
         shipping_usd_cents:,
         charge_tax_result: charge_details[:surcharges]&.fetch(:sales_tax_result),
         charge_tip_cents: charge_details[:tip_cents],
-        charge_shipping_usd_cents: charge_details[:surcharges] ? get_usd_cents(product.price_currency_type, charge_details[:surcharges].fetch(:shipping_rate)) : 0,
+        charge_shipping_usd_cents: charge_details[:surcharges] ? charge_details[:surcharges].fetch(:shipping_rate) : 0,
         charge_now: charge_details[:charge_now],
         later_charge_kind: charge_details[:kind],
         later_charge_price_cents: charge_details[:later_price_cents]
@@ -202,7 +205,13 @@ class CustomerSurchargeController < ApplicationController
       end
 
       shipping_destination = ShippingDestination.for_product_and_country_code(product:, country_code: params[:country])
-      shipping_rate = shipping_destination&.calculate_shipping_rate(quantity:) || 0
+      # Pass the product's listed currency so each rate term is converted the same way the
+      # charge path does in Purchase#calculate_shipping. Calling this with the USD default and
+      # converting the summed listed cents afterward is not equivalent under rounding.
+      shipping_rate = shipping_destination&.calculate_shipping_rate(
+        quantity:,
+        currency_type: product.price_currency_type
+      ) || 0
 
       sales_tax_result = SalesTaxCalculator.new(product:,
                                                 price_cents: price,

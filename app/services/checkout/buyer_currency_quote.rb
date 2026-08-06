@@ -348,31 +348,28 @@ class Checkout::BuyerCurrencyQuote
     # complete that checkout at all, and reloading reproduced it.
     recurring, one_time = products.partition(&:is_recurring_billing?)
     return if recurring.any? && one_time.any?
-    # A tip or shipping charge on a non-USD listing is not safe to quote: both are computed
-    # twice on the way to a purchase (once by the surcharge request that mints this quote,
-    # again by the order builder), and on a non-USD listing the two convert at different
-    # points, disagree by a cent, and `verify!` then fails the buyer's payment on "total
-    # mismatch". A USD listing has no conversion, so both sides agree.
+    # A tip on a non-USD listing is not safe to quote: it is computed twice on the way to a
+    # purchase (once by the surcharge request that mints this quote, again by the order
+    # builder), and on a non-USD listing the two convert at different points, disagree by a
+    # cent, and `verify!` then fails the buyer's payment on "total mismatch". A USD listing
+    # has no conversion, so both sides agree.
     #
     # Tip: the surcharge request splits it over each line's canonical USD price
     # (`state.products[].price`, already through `convertToUSD`); the order splits it over
     # each line's *listed* price and the server runs that back through `get_usd_cents` with
     # the product's currency (Purchase::CreateService).
     #
-    # Shipping: CustomerSurchargeController asks ShippingDestination#calculate_shipping_rate
-    # with no currency, so it sums the listed one-item and multiple-items rates and converts
-    # the sum once; Purchase#calculate_shipping passes the currency and converts each term
-    # separately. E.g. a EUR listing at rate 0.879624, 250 one-item + 200 multiple-items,
-    # quantity 2, signs 3922 against a charge computing 3921. Shipping also feeds the tax
-    # base, where the surcharge endpoint passes the listed-unit figure and
-    # Purchase#calculate_taxes the converted USD one — a larger divergence than a cent.
+    # Shipping used to diverge the same way (surcharge converted the summed listed rates;
+    # Purchase converted each term), but CustomerSurchargeController now passes the product
+    # currency into calculate_shipping_rate so both paths share sum(convert). Shipping alone
+    # is therefore safe to quote; tip is not.
     #
     # The gate is cart-level, not per-line, because the largest-remainder tip split hands
     # leftover cents to different lines depending on the price basis: a cent landing on a USD
     # line at quote time can land on the non-USD line at submit, so a per-line check would
     # mint a token whose per-line totals then fail verification.
     if products.any? { |product| product.price_currency_type.to_s.downcase != Currency::USD } &&
-       line_items.any? { |line| line.tip_cents.to_i.positive? || line.shipping_cents.to_i.positive? }
+       line_items.any? { |line| line.tip_cents.to_i.positive? }
       return
     end
 
