@@ -87,7 +87,7 @@
                 Deposit paid
               </h4>
             </td>
-            <td><%= @purchase.formatted_display_price %></td>
+            <td style="white-space: nowrap;"><%= @purchase.formatted_display_price %></td>
           </tr>
         <% end %>
 
@@ -98,7 +98,7 @@
                 Tip
               </h4>
             </td>
-            <td><%= format_just_price_in_cents(@purchase.tip.value_cents, @purchase.displayed_price_currency_type) %></td>
+            <td style="white-space: nowrap;"><%= format_just_price_in_cents(@purchase.tip.value_cents, @purchase.displayed_price_currency_type) %></td>
           </tr>
         <% end %>
         <% if call.present? %>
@@ -193,7 +193,7 @@
           <td>
             <h4>Product price</h4>
           </td>
-          <td><%= @purchase.formatted_display_price %></td>
+          <td style="white-space: nowrap;"><%= @purchase.formatted_display_price %></td>
         </tr>
         <% if @purchase.quantity > 1 %>
           <tr>
@@ -208,7 +208,7 @@
             <td>
               <h4>Shipping rate</h4>
             </td>
-            <td><%= @purchase.formatted_shipping_amount %></td>
+            <td style="white-space: nowrap;"><%= @purchase.formatted_shipping_amount %></td>
           </tr>
         <% end %>
         <%= render partial: "notify_table_discount_upsell_rows" %>
@@ -217,14 +217,14 @@
             <td>
               <h4><%= @purchase.seller_tax_label %></h4>
             </td>
-            <td><%= @purchase.formatted_seller_tax_amount %></td>
+            <td style="white-space: nowrap;"><%= @purchase.formatted_seller_tax_amount %></td>
           </tr>
         <% end %>
         <tr>
           <td>
             <h4>Order total</h4>
           </td>
-          <td><%= @purchase.formatted_total_price %></td>
+          <td style="white-space: nowrap;"><%= @purchase.formatted_total_price %></td>
         </tr>
       </tbody>
     </table>
