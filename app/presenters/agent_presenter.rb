@@ -22,6 +22,10 @@ class AgentPresenter
                        "have #{MoneyFormatter.format(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT, :usd, no_cents_if_whole: true, symbol: true)} " \
                        "in sales and your first payout has completed. Nothing to apply for — it appears here on its own."
 
+  # Short form of the same threshold for the nav row badge (gumroad-private#1773), where the full
+  # LOCKED_EXPLANATION sentence has no room.
+  LOCKED_NAV_BADGE = "#{MoneyFormatter.format(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT, :usd, no_cents_if_whole: true, symbol: true)} to unlock"
+
   def initialize(pundit_user:)
     @pundit_user = pundit_user
     @seller = pundit_user.seller

@@ -109,6 +109,7 @@ const buildUser = (promotedNavItems: string[]): LoggedInUser => ({
   canCreateBrandAccount: false,
   hasPayoutSetupToPort: false,
   promotedNavItems,
+  agentNavBadge: null,
   isGumroadAdmin: false,
   isImpersonating: false,
   lazyLoadOffscreenDiscoverImages: false,
@@ -277,5 +278,26 @@ describe("dashboard nav progressive disclosure", () => {
     // A promoted row sits at the top level, where prefetching costs nothing: promoting an
     // already-recorded destination is a no-op.
     expect(linkPropsByText.get("Products")?.prefetch).not.toBe(false);
+  });
+});
+
+describe("agent nav badge (gumroad-private#1773)", () => {
+  it("states the threshold on the Agent row for a seller under the earned-access bar", () => {
+    renderNav({
+      withUser: (user) => {
+        user.agentNavBadge = "$100 to unlock";
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Everything else" }));
+    expect(within(navScrollRegion()).getByRole("link", { name: /Agent.*\$100 to unlock/u })).toBeTruthy();
+  });
+
+  it("shows no badge once the seller is eligible", () => {
+    renderNav();
+
+    fireEvent.click(screen.getByRole("button", { name: "Everything else" }));
+    const agentLink = within(navScrollRegion()).getByRole("link", { name: "Agent" });
+    expect(agentLink.textContent.trim()).toBe("Agent");
   });
 });

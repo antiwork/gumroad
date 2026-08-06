@@ -158,6 +158,7 @@ describe "RenderingExtension" do
                 is_gumroad_admin: false,
                 is_impersonating: true,
                 promoted_nav_items: [],
+                agent_nav_badge: nil,
                 lazy_load_offscreen_discover_images: false,
               },
               current_seller: UserPresenter.new(user: seller).as_current_seller,
@@ -194,6 +195,24 @@ describe "RenderingExtension" do
           create(:ach_account, user:)
 
           expect(custom_context[:logged_in_user][:has_payout_setup_to_port]).to eq(true)
+        end
+      end
+
+      describe "agent_nav_badge" do
+        let(:seller) { create(:named_seller) }
+        let(:user) { seller }
+        let(:pundit_user) { SellerContext.new(user:, seller:) }
+
+        it "states the threshold for a seller under the earned-access bar (gumroad-private#1773)" do
+          allow(seller).to receive(:eligible_for_store_agent?).and_return(false)
+
+          expect(custom_context[:logged_in_user][:agent_nav_badge]).to eq(AgentPresenter::LOCKED_NAV_BADGE)
+        end
+
+        it "is nil once the seller is eligible" do
+          allow(seller).to receive(:eligible_for_store_agent?).and_return(true)
+
+          expect(custom_context[:logged_in_user][:agent_nav_badge]).to be_nil
         end
       end
     end

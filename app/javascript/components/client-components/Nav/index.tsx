@@ -39,6 +39,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Nav as NavFramework, NavSection } from "$app/components/Nav";
+import { Pill } from "$app/components/ui/Pill";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -123,6 +124,7 @@ type NavItem = {
   additionalPatterns?: string[];
   text: string;
   icon: React.ReactNode;
+  badge?: React.ReactNode;
   onClick?: (event: React.MouseEvent) => void;
 };
 
@@ -178,6 +180,14 @@ export const Nav = (props: Props) => {
       visible: !!loggedInUser?.policies.user.view_store_agent,
       text: "Agent",
       icon: <MessageBubbleDots pack="filled" className="size-5" />,
+      // The row itself states the bar so a seller who never opens the tab still learns why it
+      // isn't pinned yet (gumroad-private#1773) — isPinned below keeps it out of the core list
+      // until they've earned it or used it once.
+      badge: loggedInUser?.agentNavBadge ? (
+        <Pill size="small" className="shrink-0 text-xs">
+          {loggedInUser.agentNavBadge}
+        </Pill>
+      ) : undefined,
       href: Routes.agent_url(routeParams),
       exactHrefMatch: true,
     },

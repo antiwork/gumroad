@@ -95,6 +95,11 @@ export type LoggedInUser = {
    * not in the core set renders under "Everything else" until they use it.
    */
   promotedNavItems: string[];
+  /**
+   * Threshold copy for the Agent nav row when this seller is under the earned-access bar (see
+   * AgentPresenter::LOCKED_NAV_BADGE), null once eligible.
+   */
+  agentNavBadge: string | null;
   isGumroadAdmin: boolean;
   isImpersonating: boolean;
   /**
@@ -117,6 +122,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     has_payout_setup_to_port: boolean;
     policies: Policies;
     promoted_nav_items: string[];
+    agent_nav_badge: string | null;
     confirmed: boolean;
     is_gumroad_admin: boolean;
     is_impersonating: boolean;
@@ -134,6 +140,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     hasPayoutSetupToPort: parsed.has_payout_setup_to_port,
     policies: parsed.policies,
     promotedNavItems: parsed.promoted_nav_items,
+    agentNavBadge: parsed.agent_nav_badge,
     isGumroadAdmin: parsed.is_gumroad_admin,
     isImpersonating: parsed.is_impersonating,
     lazyLoadOffscreenDiscoverImages: parsed.lazy_load_offscreen_discover_images,

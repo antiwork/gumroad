@@ -57,6 +57,10 @@ module RenderingExtension
           user.payment_address.present?,
         policies: policies_props(pundit_user),
         promoted_nav_items: user.promoted_nav_item_keys,
+        # Nil once eligible so the badge disappears the moment access is earned. Only meaningful
+        # alongside view_store_agent (gumroad-private#1773): a role that can't see the tab at all
+        # has nothing to unlock.
+        agent_nav_badge: pundit_user.seller.eligible_for_store_agent? ? nil : AgentPresenter::LOCKED_NAV_BADGE,
         is_gumroad_admin: user.is_team_member?,
         is_impersonating:,
         lazy_load_offscreen_discover_images: Feature.active?(:lazy_load_offscreen_discover_images, user),
