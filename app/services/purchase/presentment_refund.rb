@@ -96,13 +96,25 @@ class Purchase::PresentmentRefund
   def result
     return nil if purchase_presentment.blank? || canonical_gross_refund_cents <= 0
 
+    # Same as .from_presentment_amount / #tax_only_result: a prior refund without a
+    # presentment snapshot already reduced canonical refundable cents but consumed zero
+    # presentment here, so remaining presentment is unknowable. Fail closed rather than
+    # allocate against a skewed balance (remaining-balance math would over-size the
+    # presentment refund versus the original-totals path).
+    return nil if purchase.refunds.effective.any? { _1.presentment_amount_cents.to_i <= 0 }
+
     if refunds_remaining_presentment_amount?
-      build_result(amount_cents: remaining_presentment_amount_cents,
-                   component_cents: remaining_component_cents)
+      amount_cents = remaining_presentment_amount_cents
+      return nil if amount_cents <= 0
+
+      build_result(amount_cents:, component_cents: remaining_component_cents)
     else
+      return nil if remaining_presentment_amount_cents <= 0
+
       amount_cents = partial_presentment_amount_cents
-      build_result(amount_cents:,
-                   component_cents: allocate_components(amount_cents))
+      return nil if amount_cents <= 0
+
+      build_result(amount_cents:, component_cents: allocate_components(amount_cents))
     end
   end
 
@@ -151,12 +163,14 @@ class Purchase::PresentmentRefund
     end
 
     def partial_presentment_amount_cents
-      # Split the presentment total between the refunded and unrefunded canonical
-      # portions so the refunded share is exact-cent consistent with the total.
+      # Allocate against the REMAINING presentment/canonical balances (not the
+      # original totals), same invariant as .from_presentment_amount: repeated
+      # seller partials must not exhaust presentment cents through rounding while
+      # canonical refundable cents remain (or drive component remainders negative).
       refunded_share = Charge.allocate_by_largest_remainder(
-        purchase_presentment.presentment_total_cents,
-        [canonical_gross_refund_cents, purchase.total_transaction_cents - canonical_gross_refund_cents],
-        purchase.total_transaction_cents
+        remaining_presentment_amount_cents,
+        [canonical_gross_refund_cents, purchase.gross_amount_refundable_cents - canonical_gross_refund_cents],
+        purchase.gross_amount_refundable_cents
       ).first
       [refunded_share, remaining_presentment_amount_cents].min
     end
@@ -164,13 +178,9 @@ class Purchase::PresentmentRefund
     def allocate_components(amount_cents)
       Charge.allocate_by_largest_remainder(
         amount_cents,
-        original_component_cents,
-        purchase_presentment.presentment_total_cents
+        remaining_component_cents,
+        remaining_presentment_amount_cents
       )
-    end
-
-    def original_component_cents
-      COMPONENT_KEYS.map { purchase_presentment.public_send(_1).to_i }
     end
 
     def remaining_component_cents

@@ -80,6 +80,144 @@ describe Purchase::PresentmentRefund do
     expect(result.presentment_shipping_cents).to eq(0)
   end
 
+  def component_values(result)
+    [
+      result.presentment_price_cents,
+      result.presentment_tip_cents,
+      result.presentment_seller_tax_cents,
+      result.presentment_gumroad_tax_cents,
+      result.presentment_shipping_cents,
+    ]
+  end
+
+  def record_presentment_refund!(canonical_cents:, result:)
+    refund = build(:refund, purchase:, total_transaction_cents: canonical_cents, amount_cents: canonical_cents)
+    result.json_data.each { |key, value| refund.public_send("#{key}=", value) }
+    purchase.refunds << refund
+    refund
+  end
+
+  # Seller-path trap: three equal 33-canonical partials on 100 canonical / 135
+  # presentment. Allocating each against ORIGINAL totals yields 45+45+45=135
+  # presentment while 1 canonical cent remains (and drives component remainders
+  # negative). Allocating against REMAINING balances leaves 1 presentment cent
+  # for that last canonical cent.
+  it "allocates repeated seller partials against remaining balances so the last canonical cent stays refundable" do
+    presentment_refunded = 0
+    components_refunded = [0, 0, 0, 0, 0]
+
+    3.times do
+      result = described_class.new(purchase:, canonical_gross_refund_cents: 33).result
+      expect(result).to be_present
+      expect(result.presentment_amount_cents).to be_positive
+      expect(component_values(result).sum).to eq(result.presentment_amount_cents)
+      expect(component_values(result)).to all(be >= 0)
+
+      record_presentment_refund!(canonical_cents: 33, result:)
+      presentment_refunded += result.presentment_amount_cents
+      components_refunded = components_refunded.zip(component_values(result)).map(&:sum)
+    end
+
+    expect(presentment_refunded).to eq(134)
+    expect(presentment_refunded).to be < 135
+    expect(purchase.gross_amount_refundable_cents).to eq(1)
+    expect(components_refunded).to all(be >= 0)
+    expect(components_refunded.sum).to eq(134)
+
+    original_components = [
+      purchase.purchase_presentment.presentment_price_cents,
+      purchase.purchase_presentment.presentment_tip_cents,
+      purchase.purchase_presentment.presentment_seller_tax_cents,
+      purchase.purchase_presentment.presentment_gumroad_tax_cents,
+      purchase.purchase_presentment.presentment_shipping_cents,
+    ]
+    expect(original_components.zip(components_refunded).map { |o, r| o - r }).to all(be >= 0)
+
+    final = described_class.new(purchase:, canonical_gross_refund_cents: 1).result
+    expect(final.presentment_amount_cents).to eq(1)
+    expect(component_values(final).sum).to eq(1)
+    expect(component_values(final)).to all(be >= 0)
+    expect(presentment_refunded + final.presentment_amount_cents).to eq(135)
+    expect(components_refunded.zip(component_values(final)).map(&:sum)).to eq(original_components)
+  end
+
+  it "keeps seller-path partial component allocation inside remaining component balances" do
+    # Three equal partials against ORIGINAL component weights over-allocate seller
+    # tax and Gumroad tax (negative remainders). Remaining-weight allocation stays
+    # inside each component's leftover balance.
+    3.times do
+      result = described_class.new(purchase:, canonical_gross_refund_cents: 33).result
+      remaining_before = described_class::COMPONENT_KEYS.map do |key|
+        purchase.purchase_presentment.public_send(key).to_i -
+          purchase.refunds.effective.sum { _1.public_send(key).to_i }
+      end
+
+      expect(component_values(result).zip(remaining_before).all? { |got, rem| got <= rem }).to eq(true)
+      expect(component_values(result)).to all(be >= 0)
+      expect(component_values(result).sum).to eq(result.presentment_amount_cents)
+
+      record_presentment_refund!(canonical_cents: 33, result:)
+    end
+
+    remaining_after = described_class::COMPONENT_KEYS.map do |key|
+      purchase.purchase_presentment.public_send(key).to_i -
+        purchase.refunds.effective.sum { _1.public_send(key).to_i }
+    end
+    expect(remaining_after).to all(be >= 0)
+    expect(remaining_after.sum).to eq(1)
+  end
+
+  it "leaves a positive presentment amount for the final one-cent seller refund after three 33-cent partials" do
+    3.times do
+      result = described_class.new(purchase:, canonical_gross_refund_cents: 33).result
+      record_presentment_refund!(canonical_cents: 33, result:)
+    end
+
+    expect(purchase.gross_amount_refundable_cents).to eq(1)
+    leftover_presentment = purchase.purchase_presentment.presentment_total_cents -
+      purchase.refunds.effective.sum { _1.presentment_amount_cents.to_i }
+    expect(leftover_presentment).to eq(1)
+
+    final = described_class.new(purchase:, canonical_gross_refund_cents: 1).result
+    expect(final.presentment_amount_cents).to eq(1)
+    expect(component_values(final).sum).to eq(1)
+    expect(component_values(final)).to all(be >= 0)
+  end
+
+  it "returns nil for a seller partial when a prior refund has no presentment snapshot" do
+    # Remaining-balance math would otherwise over-size the presentment refund
+    # (canonical already reduced; presentment remaining still looks full).
+    refund = build(:refund, purchase:, total_transaction_cents: 40, amount_cents: 40)
+    purchase.refunds << refund
+    expect(refund.presentment_amount_cents.to_i).to eq(0)
+    expect(purchase.gross_amount_refundable_cents).to eq(60)
+
+    expect(described_class.new(purchase:, canonical_gross_refund_cents: 30).result).to be_nil
+  end
+
+  it "returns nil when presentment cents are already exhausted but canonical refundable remains" do
+    # Legacy stuck state from original-weight allocation: presentment fully refunded,
+    # 1 canonical cent left. Fail closed instead of returning a zero-amount Result.
+    3.times do
+      refund = build(:refund, purchase:, total_transaction_cents: 33, amount_cents: 33)
+      refund.presentment_currency = Currency::CAD
+      refund.presentment_amount_cents = 45
+      refund.presentment_price_cents = 33
+      refund.presentment_tip_cents = 3
+      refund.presentment_seller_tax_cents = 2
+      refund.presentment_gumroad_tax_cents = 7
+      refund.presentment_shipping_cents = 0
+      purchase.refunds << refund
+    end
+    expect(purchase.gross_amount_refundable_cents).to eq(1)
+    expect(
+      purchase.purchase_presentment.presentment_total_cents -
+        purchase.refunds.effective.sum { _1.presentment_amount_cents.to_i }
+    ).to eq(0)
+
+    expect(described_class.new(purchase:, canonical_gross_refund_cents: 1).result).to be_nil
+  end
+
   describe "#tax_only_result" do
     it "returns nil for canonical purchases" do
       purchase.purchase_presentment.destroy!
