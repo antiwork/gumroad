@@ -12,7 +12,7 @@ class RecoverStrandedBuyersJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low
 
-  # Bounds one run's blast radius; the scan re-surfaces whoever is left on the next run.
+  # Bounds one run's blast radius; rotation below guarantees the rest are reached on later runs.
   MAX_RECOVERIES_PER_RUN = 25
 
   # Escalations are the run's point — each names a buyer a human decision is holding. Cleared and
@@ -24,7 +24,7 @@ class RecoverStrandedBuyersJob
     return if scan[:stranded].empty?
 
     live = Feature.active?(:auto_recover_stranded_buyers)
-    outcomes = scan[:stranded].first(MAX_RECOVERIES_PER_RUN).map { |candidate| recover(candidate, live:) }
+    outcomes = window(scan[:stranded]).map { |candidate| recover(candidate, live:) }
 
     InternalNotificationWorker.perform_async(
       "risk", "Stranded buyer recovery", message_for(outcomes, live:, total: scan[:stranded].size)
@@ -32,6 +32,15 @@ class RecoverStrandedBuyersJob
   end
 
   private
+    # A dry run clears nothing and a stuck candidate's rank never decays (settled_purchases cannot
+    # grow for someone who cannot check out), so taking the head of the scan every day would
+    # re-evaluate the same buyers forever and never reach the rest. Rotating the start by day
+    # walks the window across the whole population over successive runs in either mode.
+    def window(candidates)
+      offset = (Date.current.yday * MAX_RECOVERIES_PER_RUN) % candidates.size
+      candidates.rotate(offset).first(MAX_RECOVERIES_PER_RUN)
+    end
+
     def recover(candidate, live:)
       result = Risk::StrandedBuyerRecoveryService.call(
         email: candidate[:email],
@@ -40,11 +49,12 @@ class RecoverStrandedBuyersJob
       )
       { email: candidate[:email], verdict: result.verdict, reason: result.reason,
         cleared: result.cleared.size, withheld: result.skipped.size }
-    rescue Risk::StrandedBuyerRecoveryService::UnsafeClearError,
-           Risk::StrandedBuyerRecoveryService::VerificationFailedError => e
-      # One buyer's failed clear must not strand the rest of the run; the transaction inside the
-      # service already rolled their rows back.
-      { email: candidate[:email], verdict: :error, reason: e.message, cleared: 0, withheld: 0 }
+    rescue => e
+      # One buyer's failure must not strand the rest of the run or the report — anything the
+      # service raises (its own guard errors, a deadlock on unblock!, RecordInvalid from the admin
+      # comment) becomes a named ERROR line. A live clear that failed mid-transaction already
+      # rolled its rows back inside the service.
+      { email: candidate[:email], verdict: :error, reason: "#{e.class}: #{e.message}", cleared: 0, withheld: 0 }
     end
 
     def message_for(outcomes, live:, total:)
