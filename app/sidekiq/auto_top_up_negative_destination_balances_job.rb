@@ -33,6 +33,7 @@ class AutoTopUpNegativeDestinationBalancesJob
     return if scan[:payable].empty?
 
     live = Feature.active?(:auto_topup_negative_destination_balances)
+    refresh_funded_state_ttls(scan[:payable])
     candidates = scan[:payable].first(MAX_TOPUPS_PER_RUN)
     outcomes = candidates.map { |entry| topup(entry, live:) }
 
@@ -42,6 +43,20 @@ class AutoTopUpNegativeDestinationBalancesJob
   end
 
   private
+    # Only `topup` (called on the first MAX_TOPUPS_PER_RUN candidates) refreshes an account's
+    # funded-state TTL — an account outside that cap would otherwise have its 7-day dedupe lapse
+    # while genuinely still unreconciled, letting a later re-fund of a surviving row collide with
+    # a since-added new row's delta (the changed-fingerprint transfer_key can't tell the two
+    # apart once the TTL is gone). Runs for every payable candidate, capped or not.
+    def refresh_funded_state_ttls(payable)
+      payable.each do |entry|
+        dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(entry[:merchant_account].id)
+        _funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
+        funded_ids = funded_ids_str.to_s.split("-").map(&:to_i)
+        $redis.expire(dedupe_key, DEDUPE_TTL) if (funded_ids & entry[:balance_ids]).any?
+      end
+    end
+
     # A RETIRED merchant account cannot receive a Stripe transfer (the connected account is
     # closed); a post-cutoff-only trip means the whole-ledger gap is smaller than the
     # cycle-window figure would suggest; and an amount we already transferred for this account
@@ -133,6 +148,14 @@ class AutoTopUpNegativeDestinationBalancesJob
       # double-transfer. Release only on an error we know is safe to retry (see rescue below).
       return { entry:, verdict: :escalate, reason: "a top-up for this account and amount is already in flight" } unless $redis.set(transfer_key, 1, ex: DEDUPE_TTL, nx: true)
 
+      # Marks the account unresolved BEFORE calling Stripe, not just from the rescue below: the
+      # account lock's TTL only bounds a well-behaved call, so a request that outlives it (Stripe
+      # slow, not erroring) leaves the lock's protection gone while this call is still in flight.
+      # A second run that acquires the expired lock now sees this marker and escalates instead of
+      # reading a stale funded_signed and minting its own transfer_key for the same gap. Cleared
+      # below once the outcome (success or a safe-to-retry error) is known.
+      $redis.set(unresolved_key, to_transfer_cents)
+
       StripeTransferInternallyToCreator.transfer_funds_to_account(
         message_why: "Reconciling negative destination ledger (gumroad-private#1903, auto top-up leg)",
         stripe_account_id: entry[:merchant_account].charge_processor_merchant_id,
@@ -153,11 +176,13 @@ class AutoTopUpNegativeDestinationBalancesJob
       # pass (same convention as the ambiguous-error rescue below).
       $redis.persist(transfer_key)
       $redis.set(dedupe_key, "#{amount_cents}:#{entry[:balance_ids].join("-")}", ex: DEDUPE_TTL)
+      $redis.del(unresolved_key)
       { entry:, verdict: :topped_up, reason: nil, amount_cents: to_transfer_cents, currency: entry[:merchant_account].currency }
     rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
       # Neither error moves money (a bad param is rejected before charge; a 429 never reaches
-      # Stripe's processing), so it's safe to release the claim for a legitimate retry.
+      # Stripe's processing), so it's safe to release both claims for a legitimate retry.
       $redis.del(transfer_key) if transfer_key
+      $redis.del(unresolved_key) if unresolved_key
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     rescue => e
       # Everything else (timeouts, connection drops, Stripe 5xx) is ambiguous about whether
@@ -167,12 +192,9 @@ class AutoTopUpNegativeDestinationBalancesJob
       # (24h) has lapsed. PERSIST it (drop the TTL): a fixed-duration hold would itself lapse
       # past that 24h window and let an unattended retry recreate the exact risk this branch
       # exists to avoid — only a human clearing the key (once they've confirmed with Stripe
-      # what actually happened) may retry.
+      # what actually happened) may retry. unresolved_key was already set before the Stripe call
+      # (so an expired-lock race can't slip past it); nothing more to do here.
       $redis.persist(transfer_key) if transfer_key
-      # Blocks the account (not just this transfer_key) until a human resolves it: leaving only
-      # the transfer_key held meant a grown shortfall next run computed its delta against a
-      # funded_cents that never accounted for this possibly-sent amount, and could overfund it.
-      $redis.set("#{dedupe_key}:unresolved", to_transfer_cents) if to_transfer_cents
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     ensure
       $redis.eval(LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [lock_token]) if lock_token

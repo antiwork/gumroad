@@ -480,4 +480,58 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     $redis.del("#{dedupe_key}:unresolved")
     $redis.del("#{dedupe_key}:#{fingerprint_for(row.id)}:0:10000")
   end
+
+  it "refreshes an account's funded-state TTL even when it falls outside the per-run processing cap" do
+    row = residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    described_class.new.perform
+    expect($redis.get(dedupe_key).to_i).to eq(100_00)
+    $redis.expire(dedupe_key, 1.hour) # simulate the funded-state TTL nearly lapsing
+
+    # Stub the scan so this account's candidate is pushed past MAX_TOPUPS_PER_RUN, exercising the
+    # exact "outside the cap" path the finding describes.
+    allow(AlertOnNegativeDestinationBalancesJob).to receive(:scan).and_wrap_original do |original|
+      result = original.call
+      filler = result[:payable].first.merge(merchant_account: merchant_account, full_total: 0, balance_ids: [])
+      result[:payable] = [filler] * AutoTopUpNegativeDestinationBalancesJob::MAX_TOPUPS_PER_RUN + result[:payable]
+      result
+    end
+
+    described_class.new.perform
+
+    expect($redis.ttl(dedupe_key)).to be > 1.hour
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(dedupe_key)
+    $redis.del("#{dedupe_key}:#{fingerprint_for(row.id)}:0:10000")
+  end
+
+  it "escalates instead of double-transferring when a second run acquires an expired account lock while the first is still mid-Stripe-call" do
+    residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    # Simulate the first run: it claimed the account lock, marked the account unresolved (now
+    # done BEFORE the Stripe call), and is still mid-flight when its lock TTL lapses.
+    lock_key = "#{dedupe_key}:lock"
+    $redis.set(lock_key, "expired-run-token", ex: 1)
+    $redis.set("#{dedupe_key}:unresolved", 100_00)
+    sleep 1.1
+
+    expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("ambiguous Stripe outcome")).once
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(dedupe_key)
+    $redis.del("#{dedupe_key}:unresolved")
+    $redis.del("#{dedupe_key}:lock")
+  end
 end
