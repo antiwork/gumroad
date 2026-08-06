@@ -54,38 +54,53 @@ class AutoTopUpNegativeDestinationBalancesJob
       end
 
       dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(entry[:merchant_account].id)
-      # Claim the key with NX *before* calling Stripe, not after: a claim-after-transfer ordering
-      # leaves a crash between "Stripe accepted the transfer" and "we recorded that" free to retry
-      # and double-transfer. NX makes the claim itself the idempotency boundary; release it in the
-      # rescue below so a failed attempt (no money moved) is retryable on the next run.
-      unless $redis.set(dedupe_key, amount_cents, ex: DEDUPE_TTL, nx: true)
-        # Still outstanding: keep the claim alive for another DEDUPE_TTL window rather than let it
-        # lapse mid-reconciliation — a fixed 7-day expiry only makes sense if the candidate stops
-        # reappearing; refreshing on every re-sighting means it only actually expires once leg two
-        # is done and the candidate disappears from the scan for a full week.
+      funded_cents = $redis.get(dedupe_key)&.to_i
+
+      # A shortfall that grew since the last funded amount (leg two is only partially done, or a
+      # new trip landed) needs its own transfer for the delta, not a blanket escalate — otherwise
+      # the extra amount is stuck unfunded until someone manually reconciles. An unchanged or
+      # shrunk shortfall means leg two hasn't happened yet (or is in progress): keep withholding.
+      if funded_cents && amount_cents <= funded_cents
         $redis.expire(dedupe_key, DEDUPE_TTL)
-        return { entry:, verdict: :escalate, reason: "already topped up #{amount_cents} cents for this account — awaiting the leg-two reconciliation pass before retrying" }
+        return { entry:, verdict: :escalate, reason: "already topped up #{funded_cents} cents for this account — awaiting the leg-two reconciliation pass before retrying" }
       end
+
+      to_transfer_cents = funded_cents ? amount_cents - funded_cents : amount_cents
+      # The transfer's own idempotency key is scoped to the specific (account, funded-so-far,
+      # target) transition, not just the account — a delta transfer needs a boundary distinct
+      # from the one that funded the earlier, smaller amount.
+      transfer_key = "#{dedupe_key}:#{funded_cents || 0}:#{amount_cents}"
+
+      # Claim before calling Stripe, not after: a claim-after-transfer ordering leaves a crash
+      # between "Stripe accepted the transfer" and "we recorded that" free to retry and
+      # double-transfer. Release only on an error we know is safe to retry (see rescue below).
+      return { entry:, verdict: :escalate, reason: "a top-up for this account and amount is already in flight" } unless $redis.set(transfer_key, 1, ex: DEDUPE_TTL, nx: true)
 
       StripeTransferInternallyToCreator.transfer_funds_to_account(
         message_why: "Reconciling negative destination ledger (gumroad-private#1903, auto top-up leg)",
         stripe_account_id: entry[:merchant_account].charge_processor_merchant_id,
         currency: entry[:merchant_account].currency,
-        amount_cents:,
+        amount_cents: to_transfer_cents,
         # Stripe's own idempotency window (24h) is the real backstop against an ambiguous local
-        # outcome (timeout/network drop after Stripe already accepted the transfer): the dedupe
-        # key is stable per account while unclaimed, so a retry hitting Stripe again with the
-        # same key returns the original transfer instead of creating a second one — independent
-        # of whether the redis claim above got released by the rescue clause.
-        idempotency_key: dedupe_key,
+        # outcome (timeout/network drop after Stripe already accepted the transfer): transfer_key
+        # is stable for this specific delta, so a retry hitting Stripe again with the same key
+        # returns the original transfer instead of creating a second one.
+        idempotency_key: transfer_key,
         metadata: { user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id, reason: "negative_destination_balance_topup" }
       )
-      { entry:, verdict: :topped_up, reason: nil, amount_cents:, currency: entry[:merchant_account].currency }
+      $redis.set(dedupe_key, amount_cents, ex: DEDUPE_TTL)
+      { entry:, verdict: :topped_up, reason: nil, amount_cents: to_transfer_cents, currency: entry[:merchant_account].currency }
+    rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
+      # Neither error moves money (a bad param is rejected before charge; a 429 never reaches
+      # Stripe's processing), so it's safe to release the claim for a legitimate retry.
+      $redis.del(transfer_key) if transfer_key
+      { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     rescue => e
-      # The claim above is optimistic — Stripe never confirmed money moved, so release it or a
-      # transient failure would otherwise block this candidate from a legitimate retry for 7 days.
-      $redis.del(dedupe_key) if dedupe_key
-      # One candidate's Stripe failure must not strand the rest of the run or the report.
+      # Everything else (timeouts, connection drops, Stripe 5xx) is ambiguous about whether
+      # Stripe actually processed the transfer, so the claim stays held — same convention as
+      # StripePayoutProcessor's PAYOUT_OUTCOME_UNKNOWN — and the candidate escalates to a human
+      # instead of a blind retry that could double-transfer once Stripe's own idempotency window
+      # (24h) has lapsed.
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     end
 

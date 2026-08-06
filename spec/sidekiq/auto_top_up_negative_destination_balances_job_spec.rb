@@ -184,12 +184,101 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
 
     expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
-      hash_including(idempotency_key: dedupe_key)
+      hash_including(idempotency_key: "#{dedupe_key}:0:72850")
     )
 
     described_class.new.perform
   ensure
     Feature.deactivate(:auto_topup_negative_destination_balances)
     $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+  end
+
+  it "funds only the incremental delta when a reconciled shortfall grows before leg two lands" do
+    residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    described_class.new.perform
+    expect($redis.get(dedupe_key).to_i).to eq(100_00)
+
+    residue_row(-150_00) # total shortfall is now 250_00 cents across both rows
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
+      hash_including(amount_cents: 150_00, idempotency_key: "#{dedupe_key}:10000:25000")
+    )
+
+    described_class.new.perform
+
+    expect($redis.get(dedupe_key).to_i).to eq(250_00)
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+  end
+
+  it "keeps escalating without a second transfer when the shortfall is unchanged or has shrunk" do
+    residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    described_class.new.perform
+
+    expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("ESCALATE")).once
+    expect($redis.get(dedupe_key).to_i).to eq(100_00)
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+  end
+
+  it "does not release the dedupe claim on an ambiguous Stripe error, so the candidate escalates rather than retries blind" do
+    residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_raise(Stripe::APIConnectionError.new("connection dropped"))
+    described_class.new.perform
+
+    expect($redis.get(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))).to be_nil # leg-two claim untouched by a transfer-scoped claim
+    transfer_key = "#{dedupe_key}:0:72850"
+    expect($redis.get(transfer_key)).not_to be_nil # held, not released — next run must not blindly retry
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include("ERROR")
+      expect(message).to include("APIConnectionError")
+    end
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+    $redis.del("#{RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)}:0:72850")
+  end
+
+  it "releases the dedupe claim on a validation-style Stripe error, so the candidate is retryable" do
+    residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_raise(Stripe::InvalidRequestError.new("bad param", nil))
+    described_class.new.perform
+
+    transfer_key = "#{dedupe_key}:0:72850"
+    expect($redis.get(transfer_key)).to be_nil # released — safe to retry next run
+
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_call_original
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).once
+
+    described_class.new.perform
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+    $redis.del("#{RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)}:0:72850")
   end
 end
