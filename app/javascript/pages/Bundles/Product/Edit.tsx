@@ -10,12 +10,14 @@ import {
   CUSTOM_BUTTON_TEXT_OPTIONS,
   RatingsWithPercentages,
 } from "$app/parsers/product";
-import { CurrencyCode, currencyCodeList } from "$app/utils/currency";
+import { CurrencyCode, currencyCodeList, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { BundleEditLayout, useProductUrl } from "$app/components/BundleEdit/Layout";
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
 import { BundleProduct } from "$app/components/BundleEdit/types";
+import { computeDiscountedPriceCents, computeStandaloneTotalCents } from "$app/components/BundleEdit/utils";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { NumberInput } from "$app/components/NumberInput";
 import { Seller } from "$app/components/Product";
 import { Attribute, AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor";
@@ -28,9 +30,11 @@ import { PriceEditor } from "$app/components/ProductEdit/ProductTab/PriceEditor"
 import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { RefundPolicy, RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
 import { OfferCode, PublicFileWithStatus } from "$app/components/ProductEdit/state";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { Pill } from "$app/components/ui/Pill";
 import { Switch } from "$app/components/ui/Switch";
 
 type ProductPageProps = {
@@ -122,6 +126,25 @@ export default function BundlesProductEdit() {
   const [initialBundle] = React.useState(bundle);
   const [showRefundPolicyPreview, setShowRefundPolicyPreview] = React.useState(false);
   const [publicFiles, setPublicFiles] = React.useState(bundle.public_files);
+  // Not persisted: applying a discount just computes and sets price_cents, so the toggle does not
+  // survive re-opening the editor (see gumroad-private#1909 for the live-sync alternative).
+  const [discountPercent, setDiscountPercent] = React.useState<number | null>(null);
+
+  const standaloneTotalCents = computeStandaloneTotalCents(bundle.products);
+
+  const applyDiscountPercent = (value: number | null) => {
+    if (value !== null && (value < 0 || value > 100)) return;
+    setDiscountPercent(value);
+    if (value === null) return;
+    form.setData((data) => {
+      const priceCents = computeDiscountedPriceCents(standaloneTotalCents, value);
+      return {
+        ...data,
+        price_cents: priceCents,
+        ...(priceCents === 0 && { customizable_price: true }),
+      };
+    });
+  };
 
   const { isUploading, setImagesUploading } = useImageUpload();
 
@@ -283,17 +306,50 @@ export default function BundlesProductEdit() {
         </section>
         <section className="grid gap-8 border-t border-border p-4 md:p-8">
           <h2>Pricing</h2>
+          {bundle.products.length > 0 ? (
+            <Fieldset>
+              <Label htmlFor={`${uid}-discount-percent`}>Discount off standalone prices</Label>
+              <InputGroup>
+                <NumberInput value={discountPercent} onChange={applyDiscountPercent}>
+                  {(inputProps) => (
+                    <Input
+                      id={`${uid}-discount-percent`}
+                      type="text"
+                      placeholder="0"
+                      aria-label="Discount off standalone prices"
+                      {...inputProps}
+                    />
+                  )}
+                </NumberInput>
+                <Pill className="-mr-2 shrink-0">%</Pill>
+              </InputGroup>
+              <FieldsetDescription>
+                Sets the price below to{" "}
+                {formatPriceCentsWithCurrencySymbol(
+                  form.data.price_currency_type,
+                  computeDiscountedPriceCents(standaloneTotalCents, discountPercent ?? 0),
+                  { symbolFormat: "long" },
+                )}{" "}
+                — the products&apos;{" "}
+                {formatPriceCentsWithCurrencySymbol(form.data.price_currency_type, standaloneTotalCents, {
+                  symbolFormat: "long",
+                })}{" "}
+                standalone total minus {discountPercent ?? 0}%. Editing the price directly clears this.
+              </FieldsetDescription>
+            </Fieldset>
+          ) : null}
           <PriceEditor
             priceCents={form.data.price_cents}
             suggestedPriceCents={form.data.suggested_price_cents}
             isPWYW={form.data.customizable_price}
-            setPriceCents={(priceCents) =>
+            setPriceCents={(priceCents) => {
+              setDiscountPercent(null);
               form.setData((data) => ({
                 ...data,
                 price_cents: priceCents,
                 ...(priceCents === 0 && { customizable_price: true }),
-              }))
-            }
+              }));
+            }}
             setSuggestedPriceCents={(suggestedPriceCents) => form.setData("suggested_price_cents", suggestedPriceCents)}
             setIsPWYW={(isPWYW) => form.setData("customizable_price", isPWYW)}
             currencyType={form.data.price_currency_type}
