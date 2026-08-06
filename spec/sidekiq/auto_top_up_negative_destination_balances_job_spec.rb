@@ -66,6 +66,44 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.deactivate(:auto_topup_negative_destination_balances)
   end
 
+  it "does not repeat a transfer for an unchanged candidate on a later run" do
+    residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).once
+
+    described_class.new.perform
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("ESCALATE")).once
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+  end
+
+  it "withholds a post-cutoff-only candidate for human review instead of transferring" do
+    residue_row(-728_50)
+    make_payable
+    allow(AlertOnNegativeDestinationBalancesJob).to receive(:scan).and_wrap_original do |original|
+      result = original.call
+      result[:payable] = result[:payable].map { |entry| entry.merge(post_cutoff: true) }
+      result
+    end
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include("ESCALATE")
+      expect(message).to include("post-cutoff")
+    end
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
   it "escalates a RETIRED merchant account instead of attempting a transfer" do
     residue_row(-728_50)
     make_payable

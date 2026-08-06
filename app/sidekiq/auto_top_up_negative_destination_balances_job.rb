@@ -1,22 +1,10 @@
 # frozen_string_literal: true
 
-# Automates the FIRST of the two repair legs AlertOnNegativeDestinationBalancesJob's report
-# describes (gumroad-private#1903): wiring the connected account's Stripe balance back to >= 0 so
-# the next payout cycle doesn't fail on it. The SECOND leg — zeroing the internal Balance row that
-# caused the drift — stays a human decision (see below), so this job's own effect is invisible to
-# `AlertOnNegativeDestinationBalancesJob`'s scan until that second leg lands; it will keep
-# reporting the same candidate every day until a human reconciles the row, which is expected.
-#
-# Why the second leg isn't automated: `full_total`/`set_total` are the SIGNED SUM of possibly
-# several Balance rows (see AlertOnNegativeDestinationBalancesJob#candidate_pairs), so "zero it"
-# means picking which row(s) absorb the correction — a judgment call the drift-guard pattern
-# (gp#989/#1027/#1042/#1082/#1127/#1849) has always left to a human. Topping up the Stripe side
-# first is safe and reversible-in-effect (it only ever ADDS funds to a seller's own account); it
-# never risks writing a wrong number into a ledger row.
-#
-# Clears live only behind :auto_topup_negative_destination_balances. With the flag off every
-# candidate is dry-run and the report says what WOULD have been transferred, mirroring
-# RecoverStrandedBuyersJob's rollout pattern (gumroad-private#1902).
+# Automates leg one (Stripe-side top-up) of the two-leg repair AlertOnNegativeDestinationBalancesJob
+# describes (gp#1903). Leg two — zeroing the internal Balance row(s), a judgment call since
+# full_total/set_total is a signed sum of possibly several rows — stays human (drift-guard
+# pattern: gp#989/#1027/#1042/#1082/#1127/#1849). Until leg two lands, this job's effect is
+# invisible to the alert's scan, so a topped-up candidate keeps reappearing daily — expected.
 class AutoTopUpNegativeDestinationBalancesJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low
@@ -25,6 +13,10 @@ class AutoTopUpNegativeDestinationBalancesJob
   # ranks worst-first (AlertOnNegativeDestinationBalancesJob#report_order), so a bounded run
   # reaches the biggest gaps first rather than an arbitrary subset.
   MAX_TOPUPS_PER_RUN = 10
+
+  # A leg-two reconciliation pass can take days; this only needs to outlive the daily scan
+  # cadence so a candidate isn't re-transferred before a human gets to it.
+  DEDUPE_TTL = 7.days
 
   def perform
     scan = AlertOnNegativeDestinationBalancesJob.scan
@@ -41,12 +33,17 @@ class AutoTopUpNegativeDestinationBalancesJob
 
   private
     # A RETIRED merchant account cannot receive a Stripe transfer (the connected account is
-    # closed), and a post-cutoff-only trip means the whole-ledger gap is smaller than the
-    # cycle-window figure would suggest — both stay withheld for a human rather than risk
-    # transferring against a total that will not hold at payout time.
+    # closed); a post-cutoff-only trip means the whole-ledger gap is smaller than the
+    # cycle-window figure would suggest; and an amount we already transferred for this account
+    # means leg two hasn't landed yet — all three stay withheld for a human rather than risk
+    # transferring twice or against a total that won't hold at payout time.
     def topup(entry, live:)
       if entry[:retired]
         return { entry:, verdict: :escalate, reason: "merchant account is RETIRED — cannot transfer to a closed Stripe account" }
+      end
+
+      if entry[:post_cutoff]
+        return { entry:, verdict: :escalate, reason: "post-cutoff-only trip — whole-ledger gap may not hold at payout time" }
       end
 
       amount_cents = entry[:full_total].abs
@@ -56,6 +53,11 @@ class AutoTopUpNegativeDestinationBalancesJob
         return { entry:, verdict: :dry_run, reason: nil, amount_cents:, currency: entry[:merchant_account].currency }
       end
 
+      dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(entry[:merchant_account].id)
+      if $redis.get(dedupe_key).to_i == amount_cents
+        return { entry:, verdict: :escalate, reason: "already topped up #{amount_cents} cents for this account — awaiting the leg-two reconciliation pass before retrying" }
+      end
+
       StripeTransferInternallyToCreator.transfer_funds_to_account(
         message_why: "Reconciling negative destination ledger (gumroad-private#1903, auto top-up leg)",
         stripe_account_id: entry[:merchant_account].charge_processor_merchant_id,
@@ -63,6 +65,7 @@ class AutoTopUpNegativeDestinationBalancesJob
         amount_cents:,
         metadata: { user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id, reason: "negative_destination_balance_topup" }
       )
+      $redis.set(dedupe_key, amount_cents, ex: DEDUPE_TTL)
       { entry:, verdict: :topped_up, reason: nil, amount_cents:, currency: entry[:merchant_account].currency }
     rescue => e
       # One candidate's Stripe failure must not strand the rest of the run or the report.
