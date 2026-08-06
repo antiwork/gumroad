@@ -68,20 +68,26 @@ class ScheduledPayout < ApplicationRecord
     if process_payout
       begin
         payout_processor_type = processor.presence || user.current_payout_processor
-        payment, _payment_errors = Payouts.create_payment(
+        payment, payment_errors = Payouts.create_payment(
           Date.yesterday.to_s,
           payout_processor_type,
           user
         )
 
-        if payment.blank? || payment.failed?
-          # Payouts.create_payment can fail two structurally different ways: `payment_errors`
-          # non-empty (payment.failed? during preparation — no merchant account, currency
-          # mismatch, destination-ledger drift) or `payment` itself nil (no payable balance).
-          # None of these are transient — retrying tomorrow can't fix a missing merchant account
-          # any more than it can conjure a balance, so all of them flag for a human instead of
-          # raising into an infinite daily retry loop (the same trap #6028 fixed for the
-          # zero-balance case specifically; this generalizes it to every failure here).
+        if payment.blank?
+          # No payable balance — retrying won't conjure one, so flag instead of retrying forever
+          # (same trap #6028 fixed for this exit specifically).
+          update!(status: "flagged", executed_at: nil)
+          return :flagged
+        end
+
+        if payment.failed?
+          if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
+            raise "Payout failed: #{payment_errors&.join(", ") || "Payment failed during preparation"}"
+          end
+
+          # A non-requeueable preparation failure (no merchant account, currency mismatch,
+          # destination-ledger drift) needs a human to act — retrying tomorrow can't fix it.
           update!(status: "flagged", executed_at: nil)
           return :flagged
         end
@@ -95,16 +101,14 @@ class ScheduledPayout < ApplicationRecord
           PayoutProcessorType.get(payout_processor_type).process_payments([payment])
           payment.reload
 
-          if payment.failed? && !Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
-            # A non-requeueable failure (e.g. CANNOT_PAY: missing merchant account or Stripe
-            # capabilities) needs the seller or an admin to act — retrying daily can't help and
-            # just re-raises identically forever, same trap #6028 fixed for the zero-balance case.
+          if payment.failed?
+            if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
+              raise "Payout failed: #{payment.errors.full_messages.first || "Payment processing failed"}"
+            end
+
+            # Same terminal-vs-requeueable distinction as the preparation-failure branch above.
             update!(status: "flagged", executed_at: nil)
             return :flagged
-          end
-
-          if payment.failed?
-            raise "Payout failed: #{payment.errors.full_messages.first || "Payment processing failed"}"
           end
         end
       rescue => e
