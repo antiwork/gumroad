@@ -171,6 +171,11 @@ class AlertOnNegativeDestinationBalancesJob
         # cycle total stays the honest figure — that credit is not available to the tripping run.
         full_total = in_cycle ? [full_set.sum(:holding_amount_cents), set_total].min : set_total
 
+        # One pluck for both id ordering and per-row amounts — the auto top-up job needs the
+        # per-row breakdown (not just the aggregate) to credit only the rows that actually
+        # survive between runs, rather than treating a partially-reconciled set as all-or-nothing.
+        row_pairs = full_set.order(:id).pluck(:id, :holding_amount_cents)
+
         return {
           user:,
           merchant_account:,
@@ -181,7 +186,8 @@ class AlertOnNegativeDestinationBalancesJob
           # can tell "this candidate's underlying balances are unchanged" from "leg two reconciled
           # the old rows and a new, independent shortfall landed on the same account" — the two
           # look identical if you only compare amounts.
-          balance_ids: full_set.order(:id).pluck(:id),
+          balance_ids: row_pairs.map(&:first),
+          balance_amounts: row_pairs.to_h,
           retired: !merchant_account.alive?,
           unpaid_usd_cents:,
           post_cutoff: !in_cycle,

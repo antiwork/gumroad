@@ -59,19 +59,23 @@ class AutoTopUpNegativeDestinationBalancesJob
       # read the same stale funded_cents, mint distinct amount-scoped transfer_keys, and both pass
       # their own SET NX — sending the full stale snapshot twice instead of one delta. The lock is
       # released before returning on every path (ensure below), including inside the rescues.
+      # TTL is sized to comfortably outlive a real Stripe call (connect + read timeout + one retry),
+      # not just the local read-decide step — a lock that expired mid-call let a second run acquire
+      # it, see a bigger shortfall (new row, or leg two still pending), and mint its own transfer_key
+      # before the first call's outcome was known, double-transferring the overlapping amount.
       lock_key = "#{dedupe_key}:lock"
-      return { entry:, verdict: :escalate, reason: "a top-up decision for this account is already in progress" } unless $redis.set(lock_key, 1, ex: 60, nx: true)
+      return { entry:, verdict: :escalate, reason: "a top-up decision for this account is already in progress" } unless $redis.set(lock_key, 1, ex: 300, nx: true)
 
       funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
       funded_cents = funded_amount&.to_i
       funded_ids = funded_ids_str.to_s.split("-").map(&:to_i)
-      # The funded state is scoped to the SPECIFIC rows it was measured against, not just the
-      # account. Reconciliation is only complete once NONE of those rows remain in the unpaid set —
-      # clearing on the first row to disappear (rather than the last) would drop credit for the
-      # rows still outstanding, and the next run would transfer their already-funded share again.
-      if funded_ids.any? && (funded_ids & entry[:balance_ids]).empty?
-        funded_cents = nil
-      end
+      # Credit is tracked per surviving ROW, not as one all-or-nothing aggregate: a partially
+      # reconciled set (some funded rows gone, others still outstanding, maybe a brand-new row
+      # added) would otherwise either re-transfer already-funded rows (crediting nothing) or, worse,
+      # suppress a genuinely new shortfall because the stale aggregate still "covered" the current
+      # total. Only the funded rows still present in the current unpaid set count as credit.
+      surviving_funded_ids = funded_ids & entry[:balance_ids]
+      funded_cents = surviving_funded_ids.any? ? surviving_funded_ids.sum { |id| entry[:balance_amounts].fetch(id, 0).abs } : nil
 
       # A shortfall that grew since the last funded amount (leg two is only partially done, or a
       # new trip landed) needs its own transfer for the delta, not a blanket escalate — otherwise
@@ -105,6 +109,13 @@ class AutoTopUpNegativeDestinationBalancesJob
         idempotency_key: transfer_key,
         metadata: { user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id, reason: "negative_destination_balance_topup" }
       )
+      # PERSIST (drop the 7-day TTL) the instant Stripe accepts: the vulnerable window is between
+      # here and the dedupe_key write below — if the worker dies in it, the transfer_key must not
+      # be free to expire and get reused once Stripe's own 24h idempotency window has also lapsed,
+      # or a later scan would create a genuinely new transfer for the same accepted delta. It is
+      # only safe to drop because a human clears it explicitly as part of the leg-two reconciliation
+      # pass (same convention as the ambiguous-error rescue below).
+      $redis.persist(transfer_key)
       $redis.set(dedupe_key, "#{amount_cents}:#{entry[:balance_ids].join("-")}", ex: DEDUPE_TTL)
       { entry:, verdict: :topped_up, reason: nil, amount_cents: to_transfer_cents, currency: entry[:merchant_account].currency }
     rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e

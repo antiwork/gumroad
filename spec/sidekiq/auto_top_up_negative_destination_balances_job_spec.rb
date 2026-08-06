@@ -350,4 +350,64 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
     $redis.del("#{RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)}:lock")
   end
+
+  it "holds the per-account lock long enough to outlive a real Stripe call, not just the local read-decide step" do
+    residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+    lock_key = "#{dedupe_key}:lock"
+    allow($redis).to receive(:set).and_call_original
+
+    described_class.new.perform
+
+    # By the time perform returns the lock is released again, so assert the TTL it was set with
+    # rather than its live value — a 60s lock would have let a second run acquire it mid-Stripe-call.
+    expect($redis).to have_received(:set).with(lock_key, 1, ex: 300, nx: true)
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(dedupe_key)
+    $redis.del(lock_key)
+  end
+
+  it "credits only the surviving funded rows, not the whole prior aggregate, so a new shortfall next to an untouched funded row is not suppressed" do
+    row_a = residue_row(-100_00)
+    residue_row(-200_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 300_00)).once
+    described_class.new.perform
+
+    # row_a reconciles; row_b (still funded) survives; a brand-new, unrelated row_c lands alongside it.
+    row_a.mark_processing!
+    row_a.mark_paid!
+    residue_row(-50_00)
+
+    # Only row_b's 200_00 credit should carry forward — the aggregate 300_00 must not swallow row_c's
+    # new 50_00 shortfall (the exact "Aggregate credit suppresses new negative rows" scenario).
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 50_00)).once
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("ESCALATE")).exactly(0).times
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+  end
+
+  it "persists the transfer claim the instant Stripe accepts, before the funded-state write, so a crash in between can't be retried once the local TTL lapses" do
+    residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+    transfer_key = "#{dedupe_key}:0:72850"
+
+    described_class.new.perform
+
+    expect($redis.ttl(transfer_key)).to eq(-1) # persisted, not left on the 7-day TTL
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+    $redis.del("#{RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)}:0:72850")
+  end
 end
