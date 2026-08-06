@@ -1,5 +1,0 @@
-MARK ddl_present={"recurring_authorization_verified_at" => true, "recurring_authorization_currency" => true, "recurring_authorization_max_amount_cents" => true, "stripe_account_id" => true, "processor_payment_method_id" => true}
-MARK ddl_missing=[]
-MARK schema_migrations_20261206=["20261206000000", "20261206000001", "20261206000002", "20261206000003", "20261206000004", "20261206000005", "20261206000006", "20261206000008", "20261206000009", "20261206000010", "20261206000011", "20261206000012", "20261206000013", "20261206000014", "20261206000015", "20261206000017", "20261206000018", "20261206000019", "20261206000020", "20261206000021", "20261206000022", "20261206000023"]
-MARK recurring_upi?=false
-MARK DONE=1
