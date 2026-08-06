@@ -82,21 +82,26 @@ class AutoTopUpNegativeDestinationBalancesJob
         return { entry:, verdict: :escalate, reason: "a top-up decision for this account is already in progress" }
       end
 
-      funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
-      funded_cents = funded_amount&.to_i
+      _funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
       funded_ids = funded_ids_str.to_s.split("-").map(&:to_i)
       # Credit is tracked per surviving ROW, not as one all-or-nothing aggregate: a partially
       # reconciled set (some funded rows gone, others still outstanding, maybe a brand-new row
       # added) would otherwise either re-transfer already-funded rows (crediting nothing) or, worse,
       # suppress a genuinely new shortfall because the stale aggregate still "covered" the current
       # total. Only the funded rows still present in the current unpaid set count as credit.
+      #
+      # Summed SIGNED (not per-row abs): full_total is a signed net, and a funded set can mix
+      # signs (a positive residue row alongside a larger negative one). Summing magnitudes
+      # overstates credit whenever that happens — it double-counts what full_total already nets
+      # out — so credit must live on the same signed basis as full_total for the comparison below
+      # to mean anything.
       surviving_funded_ids = funded_ids & entry[:balance_ids]
-      funded_cents = surviving_funded_ids.any? ? surviving_funded_ids.sum { |id| entry[:balance_amounts].fetch(id, 0).abs } : nil
+      funded_signed = surviving_funded_ids.any? ? surviving_funded_ids.sum { |id| entry[:balance_amounts].fetch(id, 0) } : nil
 
       # An earlier ambiguous Stripe outcome for this account (below) means we don't know whether
       # that amount was actually transferred. Escalating regardless of the current shortfall —
       # rather than only when it's unchanged — is what stops a grown shortfall from computing a
-      # delta against a funded_cents that might itself be wrong by the unresolved amount.
+      # delta against a funded_signed that might itself be wrong by the unresolved amount.
       unresolved_key = "#{dedupe_key}:unresolved"
       if (unresolved_amount = $redis.get(unresolved_key))
         return { entry:, verdict: :escalate, reason: "a prior transfer to this account had an ambiguous Stripe outcome (#{unresolved_amount} cents) — a human must confirm with Stripe and clear #{unresolved_key} before this account tops up again" }
@@ -106,16 +111,22 @@ class AutoTopUpNegativeDestinationBalancesJob
       # new trip landed) needs its own transfer for the delta, not a blanket escalate — otherwise
       # the extra amount is stuck unfunded until someone manually reconciles. An unchanged or
       # shrunk shortfall means leg two hasn't happened yet (or is in progress): keep withholding.
-      if funded_cents && amount_cents <= funded_cents
+      # Comparison stays in signed space (full_total >= funded_signed, both negative-going) rather
+      # than on abs magnitudes — that's what makes it correct for a mixed-sign funded set too.
+      if funded_signed && entry[:full_total] >= funded_signed
         $redis.expire(dedupe_key, DEDUPE_TTL)
-        return { entry:, verdict: :escalate, reason: "already topped up #{funded_cents} cents for this account — awaiting the leg-two reconciliation pass before retrying" }
+        return { entry:, verdict: :escalate, reason: "already topped up #{funded_signed.abs} cents for this account — awaiting the leg-two reconciliation pass before retrying" }
       end
 
-      to_transfer_cents = funded_cents ? amount_cents - funded_cents : amount_cents
-      # The transfer's own idempotency key is scoped to the specific (account, funded-so-far,
-      # target) transition, not just the account — a delta transfer needs a boundary distinct
-      # from the one that funded the earlier, smaller amount.
-      transfer_key = "#{dedupe_key}:#{funded_cents || 0}:#{amount_cents}"
+      to_transfer_cents = funded_signed ? (entry[:full_total] - funded_signed).abs : amount_cents
+      # The transfer's own idempotency key is scoped to the specific (account, current row set,
+      # funded-so-far, target) transition, not just the amounts — an amount-only key persisted
+      # forever (below) would otherwise collide across two UNRELATED shortfalls that happen to
+      # land on the same funded/target cents for this account, permanently blocking the second one
+      # since SET NX sees the first transfer's still-persisted key. The row-set fingerprint is what
+      # tells two same-amount shortfalls apart.
+      row_fingerprint = Digest::SHA1.hexdigest(entry[:balance_ids].join("-"))[0, 12]
+      transfer_key = "#{dedupe_key}:#{row_fingerprint}:#{funded_signed&.abs || 0}:#{amount_cents}"
 
       # Claim before calling Stripe, not after: a claim-after-transfer ordering leaves a crash
       # between "Stripe accepted the transfer" and "we recorded that" free to retry and
