@@ -55,12 +55,14 @@ module RenderingExtension
         has_payout_setup_to_port: user.alive_user_compliance_info.present? ||
           (user.active_bank_account.present? && !user.active_bank_account.is_a?(CardBankAccount)) ||
           user.payment_address.present?,
-        policies: policies_props(pundit_user),
+        policies: (policies = policies_props(pundit_user)),
         promoted_nav_items: user.promoted_nav_item_keys,
-        # Nil once eligible so the badge disappears the moment access is earned. Only meaningful
-        # alongside view_store_agent (gumroad-private#1773): a role that can't see the tab at all
-        # has nothing to unlock.
-        agent_nav_badge: pundit_user.seller.eligible_for_store_agent? ? nil : AgentPresenter::LOCKED_NAV_BADGE,
+        # Derived from policies rather than a fresh eligible_for_store_agent? call: that predicate
+        # is deliberately unmemoized (see User#eligible_for_store_agent?) and backs two ES
+        # aggregations, so a second call here would double them on every dashboard render.
+        # view_store_agent? && !use_store_agent? is exactly "can see the tab, hasn't earned it" —
+        # a role without view_store_agent gets nil and never sees the badge at all.
+        agent_nav_badge: policies[:user][:view_store_agent] && !policies[:user][:use_store_agent] ? AgentPresenter::LOCKED_NAV_BADGE : nil,
         is_gumroad_admin: user.is_team_member?,
         is_impersonating:,
         lazy_load_offscreen_discover_images: Feature.active?(:lazy_load_offscreen_discover_images, user),

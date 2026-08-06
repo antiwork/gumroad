@@ -203,7 +203,7 @@ describe "RenderingExtension" do
         let(:user) { seller }
         let(:pundit_user) { SellerContext.new(user:, seller:) }
 
-        it "states the threshold for a seller under the earned-access bar (gumroad-private#1773)" do
+        it "states the row is locked for a seller under the earned-access bar (gumroad-private#1773)" do
           allow(seller).to receive(:eligible_for_store_agent?).and_return(false)
 
           expect(custom_context[:logged_in_user][:agent_nav_badge]).to eq(AgentPresenter::LOCKED_NAV_BADGE)
@@ -213,6 +213,28 @@ describe "RenderingExtension" do
           allow(seller).to receive(:eligible_for_store_agent?).and_return(true)
 
           expect(custom_context[:logged_in_user][:agent_nav_badge]).to be_nil
+        end
+
+        it "is nil for a role that can't see the tab at all, even when under the bar" do
+          # Support role: no owner/admin/marketing, so view_store_agent? is false — the badge
+          # would otherwise disclose the seller's sub-threshold revenue status to a role that
+          # can't even reach the tab.
+          support_member = create(:user)
+          create(:team_membership, user: support_member, seller:, role: TeamMembership::ROLE_SUPPORT)
+          allow(seller).to receive(:eligible_for_store_agent?).and_return(false)
+
+          result = RenderingExtension.custom_context(StubbedViewContext.new(SellerContext.new(user: support_member, seller:)))
+
+          expect(result[:logged_in_user][:agent_nav_badge]).to be_nil
+        end
+
+        it "does not call the unmemoized eligibility predicate a second time" do
+          # Regression for gumroad-private#1773: policies_props already resolves eligibility via
+          # use_store_agent?, and User#eligible_for_store_agent? is deliberately not memoized
+          # (it backs two Elasticsearch aggregations), so a second call would double them.
+          expect(seller).to receive(:eligible_for_store_agent?).once.and_return(true)
+
+          custom_context
         end
       end
     end

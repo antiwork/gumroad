@@ -120,6 +120,14 @@ describe "Agent tab", type: :system, js: true do
         expect(page).to have_link("Agent")
       end
 
+      # The badge itself renders on the row (gumroad-private#1773). It's pinned here rather than
+      # under "Everything else" because we're currently viewing /agent — the nav pins whatever page
+      # is open regardless of promotion state.
+      within "nav[aria-label='Main']" do
+        expect(page).to have_text(AgentPresenter::LOCKED_NAV_BADGE)
+      end
+      screenshot("09_locked_nav_badge")
+
       # Composer and starter chips are inert: nothing here can reach an endpoint that would 401.
       expect(find_field("Message", disabled: true)).to be_present
       expect(find("button[type=submit][aria-label='Send']", visible: :all)).to be_disabled

@@ -43,4 +43,15 @@ describe AgentPresenter do
       expect(described_class::LOCKED_EXPLANATION).to_not match(/contact (us|support)|email us|get in touch/i)
     end
   end
+
+  describe "LOCKED_NAV_BADGE" do
+    # eligible_for_store_agent? also requires a completed payout, so a seller can be well past
+    # $100 in sales and still ineligible — naming the sales figure here would read as wrong for
+    # that seller. Only LOCKED_EXPLANATION, which states both conditions, may name the amount.
+    it "does not name the sales figure, unlike LOCKED_EXPLANATION" do
+      formatted = MoneyFormatter.format(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT, :usd, no_cents_if_whole: true, symbol: true)
+
+      expect(described_class::LOCKED_NAV_BADGE).to_not include(formatted)
+    end
+  end
 end

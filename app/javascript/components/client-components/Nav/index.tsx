@@ -180,9 +180,9 @@ export const Nav = (props: Props) => {
       visible: !!loggedInUser?.policies.user.view_store_agent,
       text: "Agent",
       icon: <MessageBubbleDots pack="filled" className="size-5" />,
-      // The row itself states the bar so a seller who never opens the tab still learns why it
-      // isn't pinned yet (gumroad-private#1773) — isPinned below keeps it out of the core list
-      // until they've earned it or used it once.
+      // States the bar right on the row so a seller who expands "Everything else" doesn't have to
+      // open the tab to learn it's locked (gumroad-private#1773). Still requires expanding the
+      // disclosure once, since eligibility plays no part in isPinned below.
       badge: loggedInUser?.agentNavBadge ? (
         <Pill size="small" className="shrink-0 text-xs">
           {loggedInUser.agentNavBadge}

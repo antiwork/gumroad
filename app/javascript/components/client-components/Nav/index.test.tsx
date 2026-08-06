@@ -282,15 +282,17 @@ describe("dashboard nav progressive disclosure", () => {
 });
 
 describe("agent nav badge (gumroad-private#1773)", () => {
-  it("states the threshold on the Agent row for a seller under the earned-access bar", () => {
+  it("renders the row's badge for a seller under the earned-access bar", () => {
+    // A sentinel rather than "$100 to unlock": the row is value-agnostic about what the badge
+    // says (AgentPresenter::LOCKED_NAV_BADGE owns the copy), this just proves it's rendered.
     renderNav({
       withUser: (user) => {
-        user.agentNavBadge = "$100 to unlock";
+        user.agentNavBadge = "TEST BADGE";
       },
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Everything else" }));
-    expect(within(navScrollRegion()).getByRole("link", { name: /Agent.*\$100 to unlock/u })).toBeTruthy();
+    expect(within(navScrollRegion()).getByRole("link", { name: /Agent.*TEST BADGE/u })).toBeTruthy();
   });
 
   it("shows no badge once the seller is eligible", () => {
