@@ -126,8 +126,8 @@ export default function BundlesProductEdit() {
   const [initialBundle] = React.useState(bundle);
   const [showRefundPolicyPreview, setShowRefundPolicyPreview] = React.useState(false);
   const [publicFiles, setPublicFiles] = React.useState(bundle.public_files);
-  // Not persisted: applying a discount just computes and sets price_cents, so the toggle does not
-  // survive re-opening the editor (see gumroad-private#1909 for the live-sync alternative).
+  // Not persisted: applying a discount just computes and sets price_cents, so it does not
+  // survive re-opening the editor.
   const [discountPercent, setDiscountPercent] = React.useState<number | null>(null);
 
   const standaloneTotalCents = computeStandaloneTotalCents(bundle.products);
@@ -141,7 +141,7 @@ export default function BundlesProductEdit() {
       return {
         ...data,
         price_cents: priceCents,
-        ...(priceCents === 0 && { customizable_price: true }),
+        customizable_price: priceCents === 0,
       };
     });
   };
@@ -323,19 +323,21 @@ export default function BundlesProductEdit() {
                 </NumberInput>
                 <Pill className="-mr-2 shrink-0">%</Pill>
               </InputGroup>
-              <FieldsetDescription>
-                Sets the price below to{" "}
-                {formatPriceCentsWithCurrencySymbol(
-                  form.data.price_currency_type,
-                  computeDiscountedPriceCents(standaloneTotalCents, discountPercent ?? 0),
-                  { symbolFormat: "long" },
-                )}{" "}
-                — the products&apos;{" "}
-                {formatPriceCentsWithCurrencySymbol(form.data.price_currency_type, standaloneTotalCents, {
-                  symbolFormat: "long",
-                })}{" "}
-                standalone total minus {discountPercent ?? 0}%. Editing the price directly clears this.
-              </FieldsetDescription>
+              {discountPercent !== null ? (
+                <FieldsetDescription>
+                  Sets the price below to{" "}
+                  {formatPriceCentsWithCurrencySymbol(
+                    form.data.price_currency_type,
+                    computeDiscountedPriceCents(standaloneTotalCents, discountPercent),
+                    { symbolFormat: "long" },
+                  )}{" "}
+                  — the products&apos;{" "}
+                  {formatPriceCentsWithCurrencySymbol(form.data.price_currency_type, standaloneTotalCents, {
+                    symbolFormat: "long",
+                  })}{" "}
+                  standalone total minus {discountPercent}%. Editing the price directly clears this.
+                </FieldsetDescription>
+              ) : null}
             </Fieldset>
           ) : null}
           <PriceEditor
