@@ -54,7 +54,18 @@ class AutoTopUpNegativeDestinationBalancesJob
       end
 
       dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(entry[:merchant_account].id)
-      funded_cents = $redis.get(dedupe_key)&.to_i
+      funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
+      funded_cents = funded_amount&.to_i
+      funded_ids = funded_ids_str.to_s.split("-").map(&:to_i)
+      # The funded state is scoped to the SPECIFIC rows it was measured against, not just the
+      # account. A later sighting where every one of those rows is STILL in the unpaid set is the
+      # same unresolved trip (rows may have grown — an additional row landing is not
+      # reconciliation). Once leg two pays/zeroes any of them, they drop out of the unpaid scan —
+      # that's the actual "reconciled" signal, not a same/lower amount, which a fresh independent
+      # shortfall on the same account can produce by coincidence and get wrongly withheld for 7 days.
+      if funded_ids.any? && !(funded_ids - entry[:balance_ids]).empty?
+        funded_cents = nil
+      end
 
       # A shortfall that grew since the last funded amount (leg two is only partially done, or a
       # new trip landed) needs its own transfer for the delta, not a blanket escalate — otherwise
@@ -88,7 +99,7 @@ class AutoTopUpNegativeDestinationBalancesJob
         idempotency_key: transfer_key,
         metadata: { user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id, reason: "negative_destination_balance_topup" }
       )
-      $redis.set(dedupe_key, amount_cents, ex: DEDUPE_TTL)
+      $redis.set(dedupe_key, "#{amount_cents}:#{entry[:balance_ids].join("-")}", ex: DEDUPE_TTL)
       { entry:, verdict: :topped_up, reason: nil, amount_cents: to_transfer_cents, currency: entry[:merchant_account].currency }
     rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
       # Neither error moves money (a bad param is rejected before charge; a 429 never reaches

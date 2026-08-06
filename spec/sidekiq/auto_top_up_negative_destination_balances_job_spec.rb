@@ -217,6 +217,28 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
   end
 
+  it "funds a new independent shortfall instead of treating it as already covered, once the old funded rows are reconciled" do
+    old_row = residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    described_class.new.perform
+
+    # Leg two reconciles: the old row is paid off and a new, unrelated shortfall lands.
+    old_row.mark_processing!
+    old_row.mark_paid!
+    residue_row(-50_00)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 50_00)).once
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("ESCALATE")).exactly(0).times
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+  end
+
   it "keeps escalating without a second transfer when the shortfall is unchanged or has shrunk" do
     residue_row(-100_00)
     make_payable

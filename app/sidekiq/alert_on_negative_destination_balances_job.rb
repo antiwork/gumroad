@@ -177,6 +177,11 @@ class AlertOnNegativeDestinationBalancesJob
           set_total:,
           full_total:,
           row_count: set.count,
+          # Fingerprints the specific rows behind full_total, so a consumer (the auto top-up job)
+          # can tell "this candidate's underlying balances are unchanged" from "leg two reconciled
+          # the old rows and a new, independent shortfall landed on the same account" — the two
+          # look identical if you only compare amounts.
+          balance_ids: full_set.order(:id).pluck(:id),
           retired: !merchant_account.alive?,
           unpaid_usd_cents:,
           post_cutoff: !in_cycle,
