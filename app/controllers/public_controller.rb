@@ -28,6 +28,7 @@ class PublicController < ApplicationController
   def charge_data
     purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
     purchases = purchases.where("card_visual like ?", "%#{params[:last_4]}%") if params[:last_4].present? && params[:last_4].length == 4
+    purchases = scope_by_year_and_month(purchases, params[:year], params[:month])
     if purchases.none?
       render json: { success: false }
     else
@@ -38,6 +39,7 @@ class PublicController < ApplicationController
 
   def license_key_lookup_data
     all_purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
+    all_purchases = scope_by_year_and_month(all_purchases, params[:year], params[:month])
     purchases = all_purchases
     if params[:product_query].present?
       query = extract_permalink_from_query(params[:product_query].strip)
@@ -108,5 +110,24 @@ class PublicController < ApplicationController
 
       path = URI.parse(query).path rescue query
       path.split("/").reverse.find(&:present?) || query
+    end
+
+    # Month is only applied when year is also present — the frontend disables the month
+    # picker until a year is chosen, but an unauthenticated GET can still send month alone.
+    EARLIEST_PURCHASE_YEAR = 2011
+
+    def scope_by_year_and_month(purchases, year, month)
+      # to_s first: `?year[]=2024` yields an Array, and Array#to_i would 500.
+      year_i = year.to_s.to_i
+      return purchases if year_i < EARLIEST_PURCHASE_YEAR || year_i > Time.current.year
+
+      month_i = month.to_s.to_i
+      if (1..12).cover?(month_i)
+        range_start = Time.utc(year_i, month_i)
+        purchases.where(created_at: range_start...range_start.next_month)
+      else
+        range_start = Time.utc(year_i)
+        purchases.where(created_at: range_start...range_start.next_year)
+      end
     end
 end

@@ -108,6 +108,34 @@ describe PublicController, type: :controller, inertia: true do
       get :charge_data, params: { last_4: "4242", email: "edgar@gumroad.com" }
       expect(response.parsed_body["success"]).to be(true)
     end
+
+    it "scopes to the given year when present" do
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+
+      in_year = create(:purchase, price_cents: 100, fee_cents: 30, card_visual: "**** 4242", email: "edgar@gumroad.com", created_at: Time.utc(2024, 6, 1))
+      create(:purchase, price_cents: 100, fee_cents: 30, card_visual: "**** 4242", email: "edgar@gumroad.com", created_at: Time.utc(2023, 6, 1))
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with([in_year.id]).and_return(mail_double)
+      get :charge_data, params: { last_4: "4242", email: "edgar@gumroad.com", year: "2024" }
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "scopes to the given year and month together, ignoring month without a year" do
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+
+      in_month = create(:purchase, price_cents: 100, fee_cents: 30, card_visual: "**** 4242", email: "edgar@gumroad.com", created_at: Time.utc(2024, 3, 15))
+      other_month = create(:purchase, price_cents: 100, fee_cents: 30, card_visual: "**** 4242", email: "edgar@gumroad.com", created_at: Time.utc(2024, 4, 1))
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with([in_month.id]).and_return(mail_double)
+      get :charge_data, params: { last_4: "4242", email: "edgar@gumroad.com", year: "2024", month: "3" }
+      expect(response.parsed_body["success"]).to be(true)
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([in_month.id, other_month.id])).and_return(mail_double)
+      get :charge_data, params: { last_4: "4242", email: "edgar@gumroad.com", month: "3" }
+      expect(response.parsed_body["success"]).to be(true)
+    end
   end
 
   describe "GET license_key_lookup_data" do
@@ -167,6 +195,28 @@ describe PublicController, type: :controller, inertia: true do
       expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([other_purchase.id, wanted_purchase.id])).and_return(mail_double)
       get :license_key_lookup_data, params: { email: }
       expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "scopes to the given year, including the product-query fallback set" do
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+
+      in_year = create(:purchase, link: wanted_product, email:, created_at: Time.utc(2024, 5, 1))
+      other_purchase.update!(created_at: Time.utc(2023, 5, 1))
+      wanted_purchase.update!(created_at: Time.utc(2023, 6, 1))
+
+      expect(CustomerMailer).to receive(:grouped_receipt).with([in_year.id]).and_return(mail_double)
+      get :license_key_lookup_data, params: { email:, product_query: "some product I never bought", year: "2024" }
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "does not 500 on array-valued year/month params" do
+      mail_double = double
+      allow(mail_double).to receive(:deliver_later)
+      allow(CustomerMailer).to receive(:grouped_receipt).and_return(mail_double)
+
+      get :license_key_lookup_data, params: { email:, year: ["2024"], month: ["3"] }
+      expect(response).to have_http_status(:ok)
     end
 
     it "does not treat LIKE wildcards in the query as wildcards, falling back to all purchases" do

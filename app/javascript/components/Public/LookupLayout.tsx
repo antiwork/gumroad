@@ -1,4 +1,4 @@
-import { Paypal } from "@boxicons/react";
+import { Paypal } from "@boxicons/react"
 import React, { useEffect, useRef } from "react"
 
 import { lookupCharges, lookupLicenseKey, lookupPaypalCharges } from "$app/data/charge"
@@ -12,6 +12,15 @@ import { FormSection } from "$app/components/ui/FormSection"
 import { Input } from "$app/components/ui/Input"
 import { Label } from "$app/components/ui/Label"
 import { PageHeader } from "$app/components/ui/PageHeader"
+import { Select } from "$app/components/ui/Select"
+
+const EARLIEST_PURCHASE_YEAR = 2011
+const currentYear = new Date().getFullYear()
+const YEARS = Array.from({ length: currentYear - EARLIEST_PURCHASE_YEAR + 1 }, (_, i) => currentYear - i)
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+]
 
 const LookupLayout = ({ children, title, type }: {
   children?: React.ReactNode
@@ -21,13 +30,28 @@ const LookupLayout = ({ children, title, type }: {
   const [email, setEmail] = React.useState<{ value: string; error?: boolean }>({ value: "" })
   const [last4, setLast4] = React.useState<{ value: string; error?: boolean }>({ value: "" })
   const [productQuery, setProductQuery] = React.useState("")
+  const [year, setYear] = React.useState("")
+  const [month, setMonth] = React.useState("")
   const [invoiceId, setInvoiceId] = React.useState<{ value: string; error?: boolean }>({ value: "" })
   const [isCardLoading, setIsCardLoading] = React.useState(false)
   const [isPaypalLoading, setIsPaypalLoading] = React.useState(false)
   const [success, setSuccess] = React.useState<boolean | null>(null)
   const messageRef = useRef<HTMLDivElement>(null)
 
+  // Only one of the two lookup forms can be in flight — every successful lookup sends a
+  // real email, so a double submission means a double send. A ref (not state) gates entry
+  // into each handler, since state updates aren't visible synchronously across two submits
+  // batched in the same tick — the disabled buttons alone don't close that window.
+  const lookupInFlightRef = useRef(false)
+  const isAnyLookupLoading = isCardLoading || isPaypalLoading
+
+  const handleYearChange = (evt: React.ChangeEvent<HTMLSelectElement>) => {
+    setYear(evt.target.value)
+    setMonth("")
+  }
+
   const handleCardLookup = async () => {
+    if (lookupInFlightRef.current) return
     let hasError = false;
 
     if (!email.value.length) {
@@ -44,27 +68,41 @@ const LookupLayout = ({ children, title, type }: {
       return;
     }
 
+    lookupInFlightRef.current = true
     setIsCardLoading(true)
     try {
       const result =
         type === "licenseKey"
-          ? await lookupLicenseKey({ email: email.value, productQuery: productQuery.trim() || null })
-          : await lookupCharges({ email: email.value, last4: last4.value })
+          ? await lookupLicenseKey({
+              email: email.value,
+              productQuery: productQuery.trim() || null,
+              year: year || null,
+              month: year && month ? month : null,
+            })
+          : await lookupCharges({
+              email: email.value,
+              last4: last4.value,
+              year: year || null,
+              month: year && month ? month : null,
+            })
       setSuccess(result.success)
     } catch (error) {
       assertResponseError(error);
       showAlert(error.message, "error")
     } finally {
       setIsCardLoading(false)
+      lookupInFlightRef.current = false
     }
   }
 
   const handlePaypalLookup = async () => {
+    if (lookupInFlightRef.current) return
     if (!invoiceId.value.length) {
       setInvoiceId((prevInvoiceId) => ({ ...prevInvoiceId, error: true }))
       return
     }
 
+    lookupInFlightRef.current = true
     setIsPaypalLoading(true)
     try {
       const result = await lookupPaypalCharges({ invoiceId: invoiceId.value })
@@ -74,6 +112,7 @@ const LookupLayout = ({ children, title, type }: {
       showAlert(error.message, "error")
     } finally {
       setIsPaypalLoading(false)
+      lookupInFlightRef.current = false
     }
   }
 
@@ -161,7 +200,29 @@ const LookupLayout = ({ children, title, type }: {
                 />
               </Fieldset>
             )}
-            <Button color="primary" type="submit" disabled={isCardLoading}>
+            <Fieldset>
+              <Label htmlFor="year">When did you make the purchase? (optional)</Label>
+              <Select id="year" value={year} onChange={handleYearChange}>
+                <option value="">Any year</option>
+                {YEARS.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </Select>
+            </Fieldset>
+            <Fieldset>
+              <Label htmlFor="month">Month (optional)</Label>
+              <Select id="month" value={month} disabled={!year} onChange={(evt) => setMonth(evt.target.value)}>
+                <option value="">Any month</option>
+                {MONTHS.map((name, i) => (
+                  <option key={name} value={i + 1}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </Fieldset>
+            <Button color="primary" type="submit" disabled={isAnyLookupLoading}>
               {isCardLoading ? "Searching..." : "Search"}
             </Button>
           </FormSection>
@@ -194,7 +255,7 @@ const LookupLayout = ({ children, title, type }: {
               <Button
                 color="paypal"
                 type="submit"
-                disabled={isPaypalLoading}
+                disabled={isAnyLookupLoading}
               >
                 <Paypal pack="brands" className="size-5" />
                 {isPaypalLoading ? "Searching..." : "Search"}
