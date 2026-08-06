@@ -208,6 +208,37 @@ describe("ProfileSectionsForm", () => {
     expect(nestedCard(originalSection)).toEqual({ type: "upsellCard", attrs: { id: "upsell-1", productId: "prod-1" } });
   });
 
+  it("select-all treats a stale persisted product ID as not shown, and selects the remaining available product", () => {
+    const withProducts = props();
+    withProducts.tabs = [{ name: "Home", sections: ["section-1"] }];
+    withProducts.sections = [
+      {
+        id: "section-1",
+        type: "SellerProfileProductsSection",
+        header: "",
+        hide_header: false,
+        add_new_products: false,
+        default_product_sort: "page_layout",
+        show_filters: false,
+        // "prod-stale" no longer exists in `products` below; only "prod-a" is available and shown.
+        shown_products: ["prod-a", "prod-stale"],
+        search_results: { products: [], total: 0, filetypes_data: [], tags_data: [], taxonomy_attributes_data: [] },
+      },
+    ];
+    withProducts.products = [
+      { id: "prod-a", name: "Product A" },
+      { id: "prod-b", name: "Product B" },
+    ];
+    const tracked = trackState();
+    render(<ProfileSectionsForm {...withProducts} onChange={tracked.onChange} />);
+
+    // Only "prod-a" is actually shown among available products, so the control must read "Select
+    // all" (not "Deselect all") and clicking it must add "prod-b" rather than clearing the section.
+    expect(screen.getByRole("button", { name: "Select all" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    expect(tracked.latest().sections[0]).toMatchObject({ shown_products: ["prod-a", "prod-b"] });
+  });
+
   it("creates a subscribe section with an empty heading like every other section type", () => {
     const empty = props();
     empty.tabs = [{ name: "Home", sections: [] }];

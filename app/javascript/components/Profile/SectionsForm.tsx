@@ -374,6 +374,7 @@ const ProductsSectionFields = ({
   );
   const orderedProducts = orderedProductIds.flatMap((id) => state.products.find((product) => product.id === id) ?? []);
   const canReorder = section.default_product_sort === "page_layout";
+  const allShown = orderedProductIds.every((id) => section.shown_products.includes(id));
 
   const toggleProduct = (id: string) =>
     update({
@@ -430,11 +431,13 @@ const ProductsSectionFields = ({
               onClick={() =>
                 update({
                   ...section,
-                  shown_products: section.shown_products.length === orderedProductIds.length ? [] : orderedProductIds,
+                  // Compare against IDs actually shown, not raw shown_products.length, since it can carry
+                  // stale IDs for products no longer in orderedProductIds.
+                  shown_products: allShown ? [] : orderedProductIds,
                 })
               }
             >
-              {section.shown_products.length === orderedProductIds.length ? "Deselect all" : "Select all"}
+              {allShown ? "Deselect all" : "Select all"}
             </button>
           ) : null}
         </FieldsetTitle>
