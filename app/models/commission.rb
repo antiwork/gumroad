@@ -53,7 +53,11 @@ class Commission < ApplicationRecord
     completion_purchase.inherit_offer_code_from(deposit_purchase)
 
     if completion_tip_value_cents.positive?
-      completion_purchase.build_tip(value_cents: completion_tip_value_cents)
+      # Presentment accounting reads value_usd_cents; schema default is 0 if omitted.
+      completion_purchase.build_tip(
+        value_cents: completion_tip_value_cents,
+        value_usd_cents: completion_tip_value_usd_cents
+      )
     end
 
     if deposit_purchase.is_purchasing_power_parity_discounted &&
