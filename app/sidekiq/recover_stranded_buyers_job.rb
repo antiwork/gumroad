@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-# Runs Risk::StrandedBuyerRecoveryService over the scan's candidates on a schedule, so recovery
-# no longer waits on a human reading the AlertOnBlockedEstablishedBuyersJob report
-# (gumroad-private#1902). A job rather than the admin recover endpoint because one recovery's
-# history scans can exceed the HTTP edge budget — measured 504s on the two smallest candidates.
+# Runs Risk::StrandedBuyerRecoveryService over the scan's candidates on a schedule instead of
+# waiting on a human to read AlertOnBlockedEstablishedBuyersJob's report. A Sidekiq job rather than
+# the admin recover endpoint because one recovery's history scans can exceed the HTTP edge budget.
 #
 # Clears live only behind :auto_recover_stranded_buyers; with the flag off every candidate is
 # dry-run and the report says what WOULD have cleared, so the rollout can be judged from real
