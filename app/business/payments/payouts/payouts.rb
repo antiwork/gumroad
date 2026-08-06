@@ -581,11 +581,8 @@ class Payouts
       payable_balances = payout_processor.filter_aggregate_payable_balances(user, payable_balances)
     end
 
-    # Select unpaid under the same lock that transitions: two overlapping create_payment
-    # calls (instant + scheduled, duplicate jobs) can both load the same unpaid rows, and
-    # an unconditional mark_processing! then raises InvalidTransition for the loser. Skip
-    # balances that left unpaid while we waited, and only return those we actually marked
-    # so a concurrent winner's balances are not attached to a second Payment.
+    # Eligibility check and transition happen under the same lock, so only balances we
+    # actually claim are returned.
     payable_balances.filter_map do |balance|
       balance.with_lock do
         next unless balance.unpaid?
