@@ -581,10 +581,19 @@ class Payouts
       payable_balances = payout_processor.filter_aggregate_payable_balances(user, payable_balances)
     end
 
-    payable_balances.each do |balance|
-      balance.with_lock { balance.mark_processing! }
+    # Select unpaid under the same lock that transitions: two overlapping create_payment
+    # calls (instant + scheduled, duplicate jobs) can both load the same unpaid rows, and
+    # an unconditional mark_processing! then raises InvalidTransition for the loser. Skip
+    # balances that left unpaid while we waited, and only return those we actually marked
+    # so a concurrent winner's balances are not attached to a second Payment.
+    payable_balances.filter_map do |balance|
+      balance.with_lock do
+        next unless balance.unpaid?
+
+        balance.mark_processing!
+        balance
+      end
     end
-    payable_balances
   end
   private_class_method :mark_balances_processing
 end
