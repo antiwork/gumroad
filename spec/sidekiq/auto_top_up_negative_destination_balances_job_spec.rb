@@ -362,8 +362,10 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     described_class.new.perform
 
     # By the time perform returns the lock is released again, so assert the TTL it was set with
-    # rather than its live value — a 60s lock would have let a second run acquire it mid-Stripe-call.
-    expect($redis).to have_received(:set).with(lock_key, 1, ex: 300, nx: true)
+    # rather than its live value — an expired-mid-call lock would have let a second run acquire it.
+    worst_case_stripe_call = Stripe.read_timeout * (Stripe.max_network_retries + 1)
+    expect(described_class::LOCK_TTL).to be > worst_case_stripe_call.seconds
+    expect($redis).to have_received(:set).with(lock_key, anything, ex: described_class::LOCK_TTL.to_i, nx: true)
   ensure
     Feature.deactivate(:auto_topup_negative_destination_balances)
     $redis.del(dedupe_key)
@@ -409,5 +411,44 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.deactivate(:auto_topup_negative_destination_balances)
     $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
     $redis.del("#{RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)}:0:72850")
+  end
+
+  it "does not release a lock held by a different run's token, so a CAS race can't let a third run in early" do
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+    lock_key = "#{dedupe_key}:lock"
+    $redis.set(lock_key, "someone-elses-token", nx: true)
+
+    # Simulates this job's own release firing after its lock already expired and got reacquired
+    # by a second run — the CAS comparison must refuse to delete a token it didn't set.
+    $redis.eval(described_class::LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: ["stale-token"])
+
+    expect($redis.get(lock_key)).to eq("someone-elses-token")
+  ensure
+    $redis.del(lock_key)
+  end
+
+  it "escalates a grown shortfall rather than computing a delta against funded_cents while a prior transfer's outcome is unresolved" do
+    residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_raise(Stripe::APIConnectionError.new("connection dropped"))
+    described_class.new.perform
+    expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
+
+    # The shortfall grows before the ambiguous Stripe outcome is resolved — must not fund the
+    # naive delta (which would ignore the possibly-already-sent 100_00 and risk overfunding).
+    residue_row(-50_00)
+    expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("ambiguous Stripe outcome")).once
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(dedupe_key)
+    $redis.del("#{dedupe_key}:unresolved")
+    $redis.del("#{dedupe_key}:0:10000")
   end
 end

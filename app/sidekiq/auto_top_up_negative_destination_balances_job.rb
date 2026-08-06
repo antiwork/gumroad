@@ -18,6 +18,16 @@ class AutoTopUpNegativeDestinationBalancesJob
   # cadence so a candidate isn't re-transferred before a human gets to it.
   DEDUPE_TTL = 7.days
 
+  # Must outlive one Stripe call including its own retries (Stripe.max_network_retries), or an
+  # expired-but-still-in-flight lock lets a second run acquire it and mint its own transfer_key
+  # off a stale snapshot — the same race the lock exists to prevent, just delayed past its TTL.
+  LOCK_TTL = 20.minutes
+  LOCK_RELEASE_SCRIPT = <<~LUA.squish
+    if redis.call('get', KEYS[1]) == ARGV[1] then
+      return redis.call('del', KEYS[1])
+    end
+  LUA
+
   def perform
     scan = AlertOnNegativeDestinationBalancesJob.scan
     return if scan[:payable].empty?
@@ -64,7 +74,13 @@ class AutoTopUpNegativeDestinationBalancesJob
       # it, see a bigger shortfall (new row, or leg two still pending), and mint its own transfer_key
       # before the first call's outcome was known, double-transferring the overlapping amount.
       lock_key = "#{dedupe_key}:lock"
-      return { entry:, verdict: :escalate, reason: "a top-up decision for this account is already in progress" } unless $redis.set(lock_key, 1, ex: 300, nx: true)
+      lock_token = SecureRandom.uuid
+      # CAS token, not a bare flag: a TTL-expired lock reacquired by a second run must not have
+      # its lock deleted out from under it by this run's `ensure` — that would let a THIRD run in
+      # while the second is still mid-Stripe-call, the exact race LOCK_TTL sizing is meant to close.
+      unless $redis.set(lock_key, lock_token, ex: LOCK_TTL.to_i, nx: true)
+        return { entry:, verdict: :escalate, reason: "a top-up decision for this account is already in progress" }
+      end
 
       funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
       funded_cents = funded_amount&.to_i
@@ -76,6 +92,15 @@ class AutoTopUpNegativeDestinationBalancesJob
       # total. Only the funded rows still present in the current unpaid set count as credit.
       surviving_funded_ids = funded_ids & entry[:balance_ids]
       funded_cents = surviving_funded_ids.any? ? surviving_funded_ids.sum { |id| entry[:balance_amounts].fetch(id, 0).abs } : nil
+
+      # An earlier ambiguous Stripe outcome for this account (below) means we don't know whether
+      # that amount was actually transferred. Escalating regardless of the current shortfall —
+      # rather than only when it's unchanged — is what stops a grown shortfall from computing a
+      # delta against a funded_cents that might itself be wrong by the unresolved amount.
+      unresolved_key = "#{dedupe_key}:unresolved"
+      if (unresolved_amount = $redis.get(unresolved_key))
+        return { entry:, verdict: :escalate, reason: "a prior transfer to this account had an ambiguous Stripe outcome (#{unresolved_amount} cents) — a human must confirm with Stripe and clear #{unresolved_key} before this account tops up again" }
+      end
 
       # A shortfall that grew since the last funded amount (leg two is only partially done, or a
       # new trip landed) needs its own transfer for the delta, not a blanket escalate — otherwise
@@ -133,9 +158,13 @@ class AutoTopUpNegativeDestinationBalancesJob
       # exists to avoid — only a human clearing the key (once they've confirmed with Stripe
       # what actually happened) may retry.
       $redis.persist(transfer_key) if transfer_key
+      # Blocks the account (not just this transfer_key) until a human resolves it: leaving only
+      # the transfer_key held meant a grown shortfall next run computed its delta against a
+      # funded_cents that never accounted for this possibly-sent amount, and could overfund it.
+      $redis.set("#{dedupe_key}:unresolved", to_transfer_cents) if to_transfer_cents
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     ensure
-      $redis.del(lock_key) if lock_key
+      $redis.eval(LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [lock_token]) if lock_token
     end
 
     def message_for(outcomes, live:, total:)
