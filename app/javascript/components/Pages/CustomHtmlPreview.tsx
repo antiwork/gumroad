@@ -13,7 +13,13 @@ import { request } from "$app/utils/request";
 // picks an account, and offset/limit are validated before they reach it. The sandbox has no
 // allow-same-origin, so e.origin is "null" and e.source is the only usable check — same as
 // the production wrapper.
-type ProductsRequest = { type: "gumroad:products"; offset?: unknown; limit?: unknown; requestId?: unknown };
+type ProductsRequest = {
+  type: "gumroad:products";
+  offset?: unknown;
+  limit?: unknown;
+  requestId?: unknown;
+  documentToken?: unknown;
+};
 type ProductsSlice = {
   success: true;
   products: unknown[];
@@ -41,11 +47,6 @@ export const CustomHtmlPreview = ({
   className?: string;
 }) => {
   const frameRef = React.useRef<HTMLIFrameElement>(null);
-  // Bumped on every iframe load (including the first). e.source is the frame's WindowProxy,
-  // which is navigation-stable in real browsers — capturing it does NOT identify the document
-  // that sent the request, so a reply after reload would still land in the new document. This
-  // generation is the only thing that actually changes on reload, so it's what gates the reply.
-  const generationRef = React.useRef(0);
 
   React.useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -55,13 +56,17 @@ export const CustomHtmlPreview = ({
       const message = e.data;
 
       const requestId = typia.is<string>(message.requestId) ? message.requestId : null;
-      const requestGeneration = generationRef.current;
+      // The document itself mints this token on script execution (see PRODUCTS_BRIDGE_SCRIPT) and
+      // only accepts a reply carrying it back. e.source (the WindowProxy) is navigation-stable, so
+      // it can't tell a replaced document apart from the one that asked — echoing the token lets
+      // each document self-filter replies meant for whatever occupied the frame before it, without
+      // this side having to track load/reload timing at all.
+      const documentToken = typia.is<string>(message.documentToken) ? message.documentToken : null;
       const reply = (payload: Record<string, unknown>) => {
-        // Frame reloaded since this request was received: the document that's listening now is
-        // not the one that asked, and a reused request id would resolve its promise with stale
-        // data. Drop the reply rather than deliver it to whatever document is there now.
-        if (generationRef.current !== requestGeneration) return;
-        frame.contentWindow?.postMessage({ ...payload, type: "gumroad:products:result", requestId }, "*");
+        frame.contentWindow?.postMessage(
+          { ...payload, type: "gumroad:products:result", requestId, documentToken },
+          "*",
+        );
       };
 
       const offset = message.offset;
@@ -110,7 +115,6 @@ export const CustomHtmlPreview = ({
       src={src}
       sandbox="allow-scripts"
       className={className}
-      onLoad={() => (generationRef.current += 1)}
     />
   );
 };
