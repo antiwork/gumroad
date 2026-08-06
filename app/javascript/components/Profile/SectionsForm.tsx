@@ -791,12 +791,15 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
 
     const original = sections.find((section) => section.id === sectionId);
     if (!original) return;
+    // The duplicate button only renders for sections on the selected tab, but guard anyway:
+    // without this, an id not on selectedTab.sections would still get appended to `sections`
+    // with no tab referencing it, leaving an orphan no page can show or manage.
+    if (!selectedTab.sections.includes(sectionId)) return;
 
     const copy = withFreshUpsellCards({ ...original, id: GuidGenerator.generate() });
     const nextTabs = tabs.map((tab) => {
       if (tab.id !== selectedTab.id) return tab;
       const index = tab.sections.indexOf(sectionId);
-      if (index < 0) return tab;
       const nextSections = [...tab.sections];
       nextSections.splice(index + 1, 0, copy.id);
       return { ...tab, sections: nextSections };
