@@ -142,13 +142,28 @@ describe Pages::Interpolator do
       expect(result).to include(">$5 once<")
     end
 
-    it "replaces data-gumroad-field='description' with plain-text description" do
-      html = %(<p data-gumroad-field="description">placeholder</p>)
+    it "preserves the description's paragraph/heading structure instead of collapsing it to plain text" do
+      product.update!(description: "<h1>Title</h1><p>First paragraph.</p><p>Second <strong>paragraph</strong>.</p>")
+      html = %(<div data-gumroad-field="description">placeholder</div>)
 
       result = described_class.interpolate(html, product: product)
 
-      expect(result).to include("Real description")
-      expect(result).not_to include("<strong>")
+      expect(result).to include("<h1>Title</h1>")
+      expect(result).to include("<p>First paragraph.</p>")
+      expect(result).to include("<p>Second <strong>paragraph</strong>.</p>")
+      expect(result).not_to include("placeholder")
+    end
+
+    it "strips tags outside the description allowlist but keeps their text" do
+      product.update!(description: %(<p>Safe</p><script>alert("xss")</script><table><tr><td>cell</td></tr></table>))
+      html = %(<div data-gumroad-field="description"></div>)
+
+      result = described_class.interpolate(html, product: product)
+
+      expect(result).to include("<p>Safe</p>")
+      expect(result).not_to include("<script>")
+      expect(result).not_to include("<table>")
+      expect(result).to include("cell")
     end
 
     it "prepares <a data-gumroad-action='buy'> for the delegated checkout bridge" do
