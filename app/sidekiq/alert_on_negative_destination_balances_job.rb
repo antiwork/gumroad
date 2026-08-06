@@ -34,6 +34,12 @@ class AlertOnNegativeDestinationBalancesJob
     InternalNotificationWorker.perform_async("payouts", "Negative destination balances", message_for(scan))
   end
 
+  # Reused by AutoTopUpNegativeDestinationBalancesJob (gumroad-private#1903) so the top-up leg
+  # scans the SAME candidate set this report describes, rather than re-deriving it and drifting.
+  def self.scan
+    new.send(:scan_for_negative_destinations)
+  end
+
   private
     # Sellers whose Stripe-held balance set nets negative AND who are payable now, so the next payout
     # run reaches them. `truncated` means the candidate window was cut short, so the counts are floors.
