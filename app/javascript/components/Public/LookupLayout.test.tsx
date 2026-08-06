@@ -3,6 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import * as React from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { assertDefined } from "$app/utils/assert"
+
 import LookupLayout from "$app/components/Public/LookupLayout"
 
 vi.mock("$app/data/charge", () => ({
@@ -31,8 +33,8 @@ describe("LookupLayout", () => {
     // Both submits fire inside one act() batch so React hasn't committed the disabled-state
     // render before the second handler runs — the window the reported race depends on.
     await act(async () => {
-      fireEvent.click(cardButton!)
-      fireEvent.click(paypalButton!)
+      fireEvent.click(assertDefined(cardButton))
+      fireEvent.click(assertDefined(paypalButton))
       await new Promise((resolve) => setTimeout(resolve, 30))
     })
 
