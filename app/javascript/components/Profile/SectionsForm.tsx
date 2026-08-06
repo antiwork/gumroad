@@ -793,7 +793,9 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     if (!original) return;
     // The duplicate button only renders for sections on the selected tab, but guard anyway:
     // without this, an id not on selectedTab.sections would still get appended to `sections`
-    // with no tab referencing it, leaving an orphan no page can show or manage.
+    // with no tab referencing it, leaving an orphan no page can show or manage. Past this point
+    // `indexOf` below can't be -1: `useTabs` derives `selectedTab` from `tabs`, so the selected
+    // tab's `sections` is the same array this closure maps over.
     if (!selectedTab.sections.includes(sectionId)) return;
 
     const copy = withFreshUpsellCards({ ...original, id: GuidGenerator.generate() });
