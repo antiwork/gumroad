@@ -420,7 +420,24 @@ const ProductsSectionFields = ({
         label="Add new products by default"
       />
       <Fieldset>
-        <FieldsetTitle>Products</FieldsetTitle>
+        <FieldsetTitle>
+          Products
+          {orderedProducts.length ? (
+            <button
+              type="button"
+              className="cursor-pointer border-none bg-transparent p-0 text-sm font-normal underline"
+              disabled={disabled}
+              onClick={() =>
+                update({
+                  ...section,
+                  shown_products: section.shown_products.length === orderedProductIds.length ? [] : orderedProductIds,
+                })
+              }
+            >
+              {section.shown_products.length === orderedProductIds.length ? "Deselect all" : "Select all"}
+            </button>
+          ) : null}
+        </FieldsetTitle>
         {orderedProducts.length ? (
           <SortableList
             currentOrder={orderedProductIds}
