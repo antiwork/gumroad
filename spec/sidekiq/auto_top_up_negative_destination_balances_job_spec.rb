@@ -510,6 +510,43 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     $redis.del("#{dedupe_key}:#{fingerprint_for(row.id)}:0:10000")
   end
 
+  it "keeps a surviving row's funded-state TTL alive while its account is below minimum, off the payable scan entirely" do
+    row = residue_row(-100_00)
+    payable_balance = create(:balance, user: seller, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+                                       date: in_cycle_date, amount_cents: 200_00, holding_amount_cents: 200_00)
+    seller.reload
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    described_class.new.perform
+    expect($redis.get(dedupe_key).to_i).to eq(100_00)
+    $redis.expire(dedupe_key, 1.hour)
+
+    # The account drops below its payout minimum: `scan[:payable]` is empty, and this row's only
+    # trace is `unreconciled_not_payable`. Without the off-scan refresh, `perform` would return
+    # before touching the TTL at all (payable is empty) and it would lapse.
+    payable_balance.update!(amount_cents: 0, holding_amount_cents: 0)
+    seller.reload
+    described_class.new.perform
+
+    expect($redis.ttl(dedupe_key)).to be > 1.hour
+
+    # Now a brand-new, independent row lands and the account is payable again. The surviving
+    # 100_00 credit must still be recognized so only the new row's delta is funded.
+    new_row = residue_row(-50_00)
+    payable_balance.update!(amount_cents: 200_00, holding_amount_cents: 200_00)
+    seller.reload
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 50_00)).once
+
+    described_class.new.perform
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(dedupe_key)
+    $redis.del("#{dedupe_key}:#{fingerprint_for(row.id)}:0:10000")
+    $redis.del("#{dedupe_key}:#{fingerprint_for(row.id, new_row&.id)}:10000:15000") if new_row
+  end
+
   it "escalates instead of double-transferring when a second run acquires an expired account lock while the first is still mid-Stripe-call" do
     residue_row(-100_00)
     make_payable

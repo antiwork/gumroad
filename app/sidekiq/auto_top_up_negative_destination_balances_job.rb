@@ -30,10 +30,14 @@ class AutoTopUpNegativeDestinationBalancesJob
 
   def perform
     scan = AlertOnNegativeDestinationBalancesJob.scan
+    # Refresh BEFORE the early return: an account can hold funded credit for a still-unreconciled
+    # row while temporarily below the payout minimum (absent from scan[:payable] entirely), and a
+    # scan with no payable candidates this run must not skip refreshing it — that's exactly the
+    # gap that let credit expire off-scan and a later top-up double-fund a surviving row.
+    refresh_funded_state_ttls(scan[:payable] + scan[:unreconciled_not_payable])
     return if scan[:payable].empty?
 
     live = Feature.active?(:auto_topup_negative_destination_balances)
-    refresh_funded_state_ttls(scan[:payable])
     candidates = scan[:payable].first(MAX_TOPUPS_PER_RUN)
     outcomes = candidates.map { |entry| topup(entry, live:) }
 
@@ -43,13 +47,14 @@ class AutoTopUpNegativeDestinationBalancesJob
   end
 
   private
-    # Only `topup` (called on the first MAX_TOPUPS_PER_RUN candidates) refreshes an account's
-    # funded-state TTL — an account outside that cap would otherwise have its 7-day dedupe lapse
-    # while genuinely still unreconciled, letting a later re-fund of a surviving row collide with
-    # a since-added new row's delta (the changed-fingerprint transfer_key can't tell the two
-    # apart once the TTL is gone). Runs for every payable candidate, capped or not.
-    def refresh_funded_state_ttls(payable)
-      payable.each do |entry|
+    # Only `topup` (called on the first MAX_TOPUPS_PER_RUN candidates) used to be the sole place
+    # that refreshed an account's funded-state TTL. Now runs for every payable AND
+    # below-minimum-but-tripped candidate the scan reports (capped-out payable ones too) — an
+    # account outside `topup`'s reach would otherwise have its 7-day dedupe lapse while genuinely
+    # still unreconciled, letting a later re-fund of a surviving row collide with a since-added new
+    # row's delta (the changed-fingerprint transfer_key can't tell the two apart once the TTL is gone).
+    def refresh_funded_state_ttls(candidates)
+      candidates.each do |entry|
         dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(entry[:merchant_account].id)
         _funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
         funded_ids = funded_ids_str.to_s.split("-").map(&:to_i)

@@ -50,6 +50,11 @@ class AlertOnNegativeDestinationBalancesJob
 
       payable = []
       not_payable = 0
+      # Balance-id fingerprints for tripped-but-below-minimum accounts, so a consumer tracking
+      # funded credit against specific rows (AutoTopUpNegativeDestinationBalancesJob) can still
+      # refresh that credit's TTL while an account is temporarily unpayable — otherwise credit for
+      # a still-unreconciled row silently expires off-scan and a later top-up double-funds it.
+      unreconciled_not_payable = []
 
       candidates.each do |user_id, merchant_account_id|
         merchant_account = MerchantAccount.find_by(id: merchant_account_id)
@@ -73,11 +78,15 @@ class AlertOnNegativeDestinationBalancesJob
         if entry
           payable << entry
         else
-          not_payable += 1 if tripped_window(full_set)
+          tripped = tripped_window(full_set)
+          if tripped
+            not_payable += 1
+            unreconciled_not_payable << { merchant_account:, balance_ids: tripped.first.order(:id).pluck(:id) }
+          end
         end
       end
 
-      { payable: report_order(payable), not_payable:, truncated: }
+      { payable: report_order(payable), not_payable:, unreconciled_not_payable:, truncated: }
     end
 
     # One entry per (seller, merchant account) whose Stripe-held set nets negative on EITHER window —
