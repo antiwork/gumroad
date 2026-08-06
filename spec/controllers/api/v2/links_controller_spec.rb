@@ -2375,6 +2375,26 @@ describe Api::V2::LinksController do
         }.as_json)
       end
 
+      it "rejects a non-scalar query instead of passing it to Elasticsearch" do
+        get @action, params: @params.merge(query: ["x"])
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "query must be a string."
+        }.as_json)
+      end
+
+      it "returns an empty result set when nothing matches" do
+        recreate_model_index(Link)
+
+        get @action, params: @params.merge(query: "zz-nothing-matches-this")
+
+        comps = response.parsed_body["comps"]
+        expect(comps["count"]).to eq(0)
+        expect(comps["price_cents"]).to eq("p25" => nil, "p50" => nil, "p75" => nil)
+        expect(comps["examples"]).to eq([])
+      end
+
       it "errors on an unknown taxonomy path" do
         get @action, params: @params.merge(taxonomy: "no-such/category")
 
@@ -2479,6 +2499,25 @@ describe Api::V2::LinksController do
           comps = response.parsed_body["comps"]
           expect(comps["count"]).to eq(1)
           expect(comps["examples"].sole["name"]).to eq("Nested documentary")
+        end
+      end
+
+      describe "with a tiered membership" do
+        before do
+          # Tiered memberships index price_cents as 0 (tier prices live on the variants), so
+          # they pin the available_price_cents filter: a price_cents filter would drop them.
+          @membership = create(:membership_product_with_preset_tiered_pricing, :recommendable, name: "Members club")
+          Purchase.import(refresh: true, force: true)
+          Link.import(refresh: true, force: true)
+        end
+
+        it "counts the membership and aggregates its tier prices" do
+          get @action, params: @params.merge(query: "members club")
+
+          comps = response.parsed_body["comps"]
+          expect(comps["count"]).to eq(1)
+          expect(comps["price_cents"]["p50"]).to be_between(300, 500)
+          expect(comps["examples"].sole["name"]).to eq("Members club")
         end
       end
     end

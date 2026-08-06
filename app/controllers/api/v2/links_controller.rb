@@ -218,6 +218,10 @@ class Api::V2::LinksController < Api::V2::BaseController
   end
 
   def comps
+    if params[:query].present? && !params[:query].is_a?(String)
+      return render_response(false, message: "query must be a string.")
+    end
+
     if params[:taxonomy].blank? && params[:query].blank?
       return render_response(false, message: "A taxonomy or query parameter is required.")
     end
@@ -250,13 +254,13 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
 
     options = Link.search_options(search_params)
-    # Free products would drag the percentiles toward zero without telling the caller
-    # anything about what buyers pay; comps are only meaningful over priced listings.
-    # The currency term keeps every contributing document (and the percentiles they feed)
-    # denominated the same way.
-    (options[:query][:bool][:filter] ||= []) << { range: { price_cents: { gt: 0 } } } << { term: { price_currency_type: currency } }
+    # available_price_cents carries the purchasable amounts for every product shape (tiered
+    # memberships index price_cents as 0), and excluding zeros keeps free listings from
+    # dragging the percentiles toward nothing buyers actually pay. The currency term keeps
+    # every contributing document (and the percentiles they feed) denominated the same way.
+    (options[:query][:bool][:filter] ||= []) << { range: { available_price_cents: { gt: 0 } } } << { term: { price_currency_type: currency } }
     options[:aggregations] = {
-      price_percentiles: { percentiles: { field: "price_cents", percents: COMPS_PRICE_PERCENTS } },
+      price_percentiles: { percentiles: { field: "available_price_cents", percents: COMPS_PRICE_PERCENTS } },
     }
 
     response = Link.search(options)
