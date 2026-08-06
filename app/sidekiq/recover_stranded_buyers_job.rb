@@ -49,8 +49,16 @@ class RecoverStrandedBuyersJob
       return candidates if candidates.size <= MAX_RECOVERIES_PER_RUN
 
       today = Date.current.yday % ROTATION_BUCKETS
-      due_today = candidates.select { |c| bucket(c[:email]) == today }
-      due_today.first(MAX_RECOVERIES_PER_RUN)
+      due_today = candidates.select { |c| bucket(c[:email]) == today }.sort_by { _1[:email] }
+      return due_today if due_today.size <= MAX_RECOVERIES_PER_RUN
+
+      # A bucket bigger than MAX_RECOVERIES_PER_RUN needs its own sub-rotation, or the same ordered
+      # prefix would run every 30-day cycle and the tail would never be reached (Greptile P1). Page
+      # through it by cycle count (sorted by email so the page assignment is independent of scan
+      # order/size) so every page — and eventually every buyer in the bucket — gets a turn.
+      pages = due_today.each_slice(MAX_RECOVERIES_PER_RUN).to_a
+      cycle = Date.current.yday / ROTATION_BUCKETS
+      pages[cycle % pages.size]
     end
 
     def bucket(email)

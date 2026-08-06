@@ -196,6 +196,25 @@ describe RecoverStrandedBuyersJob do
     expect(seen.values.uniq).to eq([1])
   end
 
+  # Greptile's oversized-bucket P1: >25 candidates sharing a day bucket must not run the same
+  # ordered prefix every cycle forever — the tail needs its own turn eventually.
+  it "reaches every candidate in an oversized bucket across successive cycles, not just the first page" do
+    bucket_size = described_class::MAX_RECOVERIES_PER_RUN + 5
+    many = bucket_size.times.map { |i| candidate.merge(email: "bucketmate#{i}@example.com") }
+    job = described_class.new
+    allow(job).to receive(:bucket).and_return(0)
+
+    seen = Hash.new(0)
+    2.times do |cycle|
+      travel_to(Date.new(2026, 1, 30) + (cycle * described_class::ROTATION_BUCKETS)) do
+        job.send(:window, many).each { |c| seen[c[:email]] += 1 }
+      end
+    end
+
+    expect(seen.keys.uniq.size).to be > described_class::MAX_RECOVERIES_PER_RUN
+    expect(seen.values).to all(eq(1))
+  end
+
   it "is registered on the schedule so it actually runs" do
     schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
 
