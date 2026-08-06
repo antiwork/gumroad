@@ -374,6 +374,7 @@ const ProductsSectionFields = ({
   );
   const orderedProducts = orderedProductIds.flatMap((id) => state.products.find((product) => product.id === id) ?? []);
   const canReorder = section.default_product_sort === "page_layout";
+  const allShown = orderedProductIds.every((id) => section.shown_products.includes(id));
 
   const toggleProduct = (id: string) =>
     update({
@@ -420,7 +421,26 @@ const ProductsSectionFields = ({
         label="Add new products by default"
       />
       <Fieldset>
-        <FieldsetTitle>Products</FieldsetTitle>
+        <FieldsetTitle>
+          Products
+          {orderedProducts.length ? (
+            <button
+              type="button"
+              className="cursor-pointer border-none bg-transparent p-0 text-sm font-normal underline"
+              disabled={disabled}
+              onClick={() =>
+                update({
+                  ...section,
+                  // Compare against IDs actually shown, not raw shown_products.length, since it can carry
+                  // stale IDs for products no longer in orderedProductIds.
+                  shown_products: allShown ? [] : orderedProductIds,
+                })
+              }
+            >
+              {allShown ? "Deselect all" : "Select all"}
+            </button>
+          ) : null}
+        </FieldsetTitle>
         {orderedProducts.length ? (
           <SortableList
             currentOrder={orderedProductIds}
