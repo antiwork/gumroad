@@ -12,7 +12,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
   describe "#perform with a follower" do
     before do
-      @basic_follower = create(:active_follower, user: @seller, created_at: 2.day.ago)
+      followed_at = 2.days.ago
+      @basic_follower = create(:active_follower, user: @seller, created_at: followed_at, confirmed_at: followed_at)
     end
 
     it "ignores deleted workflows" do
@@ -68,6 +69,26 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
     it "preserves the trigger time for recipients from a reschedule" do
       described_class.new.perform(@post.id, nil, true)
 
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      ).immediately
+    end
+
+    it "includes a follower who confirmed after the reschedule cutoff" do
+      @basic_follower.update_columns(created_at: 3.days.ago)
+      @basic_follower.update!(confirmed_at: 1.hour.ago)
+      cutoff = 1.day.ago
+
+      described_class.new.perform(@post.id, cutoff.iso8601, true)
+
+      expect(@basic_follower.created_at).to be < cutoff
+      expect(@basic_follower.confirmed_at).to be > cutoff
       expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
         @post.id,
         @post_rule.version,

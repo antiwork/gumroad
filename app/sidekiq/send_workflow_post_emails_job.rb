@@ -14,14 +14,17 @@ class SendWorkflowPostEmailsJob
     @rule_delay = @post.installment_rule.delayed_delivery_time
 
     @filters = @post.audience_members_filter_params
-    @filters[:created_after] = Time.zone.parse(earliest_valid_time) if earliest_valid_time
+    @original_filters = @filters.dup
+    @recipient_cutoff_time = Time.zone.parse(earliest_valid_time) if earliest_valid_time
+    @filters[:created_after] = @recipient_cutoff_time if @recipient_cutoff_time
     Makara::Context.release_all
     # Same protection as SendPostBlastEmailsJob: for sellers with very large audiences the
     # filter query can exceed the database's default 5-minute statement cap, so raise it for
     # this one query.
     @members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
-      AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).
+      members = AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).
         select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
+      (members + confirmed_follower_members_after_cutoff).uniq(&:id)
     end
 
     @members.each do |member|
@@ -44,6 +47,26 @@ class SendWorkflowPostEmailsJob
   end
 
   private
+    def confirmed_follower_members_after_cutoff
+      return [] if @recipient_cutoff_time.nil?
+      return [] unless @post.follower_type? || @post.audience_type?
+
+      follower_emails = Follower.active
+        .where(followed_id: @post.seller_id)
+        .where("confirmed_at > ?", @recipient_cutoff_time)
+        .select("LOWER(followers.email)")
+      member_ids = AudienceMember
+        .where(seller_id: @post.seller_id, email: follower_emails)
+        .select(:id)
+
+      AudienceMember.filter(
+        seller_id: @post.seller_id,
+        params: @original_filters,
+        with_ids: true,
+        ids: member_ids
+      ).select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
+    end
+
     def enqueue_email_job(member:, type:, id:)
       # The id columns come from an aggregate over a JSON_TABLE join, and a row can be
       # filtered out of that join even though the member still qualifies (see the comment

@@ -117,6 +117,20 @@ describe Api::V2::Workflows::EmailsController do
       expect(workflow.installments.alive).to be_empty
     end
 
+    it "does not add an email after the workflow product changes owner" do
+      token = create_access_token("edit_emails")
+      product = create(:product)
+      workflow = create(:workflow, seller: @user, link: product, workflow_type: Workflow::PRODUCT_TYPE)
+
+      post @action, params: @params.merge(access_token: token.token, workflow_id: workflow.external_id)
+
+      expect(response.parsed_body).to eq({
+        success: false,
+        message: "The workflow was not found.",
+      }.as_json)
+      expect(workflow.installments.alive).to be_empty
+    end
+
     it "rejects incomplete and invalid delays" do
       token = create_access_token("edit_emails")
       invalid_delays = [

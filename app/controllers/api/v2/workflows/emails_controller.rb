@@ -32,6 +32,9 @@ class Api::V2::Workflows::EmailsController < Api::V2::BaseController
 
     def fetch_workflow
       @workflow = current_seller.workflows.alive.find_by_external_id(params[:workflow_id])
+      if @workflow&.product_or_variant_type? && @workflow.link&.user != current_seller
+        @workflow = nil
+      end
       error_with_object(:workflow, nil) if @workflow.nil?
     end
 
