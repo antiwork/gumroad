@@ -120,8 +120,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         @sales << create(:membership_purchase, link: @products[2], created_at: 6.hours.ago)
 
         @followers = []
-        @followers << create(:active_follower, user: @seller, created_at: 5.days.ago)
-        @followers << create(:active_follower, user: @seller, email: @sales[0].email, created_at: 5.hours.ago)
+        @followers << create(:active_follower, user: @seller, created_at: 5.days.ago, confirmed_at: 5.days.ago)
+        @followers << create(:active_follower, user: @seller, email: @sales[0].email, created_at: 5.hours.ago, confirmed_at: 5.hours.ago)
 
         @affiliates = []
         @affiliates << create(:direct_affiliate, seller: @seller, send_posts: true, created_at: 4.hours.ago)
@@ -176,8 +176,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         described_class.new.perform(@post.id)
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(2)
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil).immediately
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil, nil, @followers[0].confirmed_at.iso8601).immediately
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil, nil, @followers[1].confirmed_at.iso8601).at(19.hours.from_now)
       end
 
       it "when follower_type? is true and a bought-product filter is set, it still sends to the matching follower" do
@@ -185,7 +185,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         described_class.new.perform(@post.id)
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil, nil, @followers[1].confirmed_at.iso8601).at(19.hours.from_now)
       end
 
       it "when affiliate_type? is true, it sends the expected emails at the right times" do
@@ -272,8 +272,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(7)
 
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil).immediately
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil, nil, @followers[0].confirmed_at.iso8601).immediately
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil, nil, @followers[1].confirmed_at.iso8601).at(19.hours.from_now)
 
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
 
