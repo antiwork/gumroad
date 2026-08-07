@@ -10,6 +10,10 @@
 class RecoverStrandedBuyersJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low, lock: :until_executed
+  include RecurringLockTtl
+  # RUN_BUDGET stops new recoveries, so the worst case is the budget plus the recovery already
+  # in flight when it elapses (a single recovery has run past 2 minutes; give it ten).
+  recurring_lock_ttl max_attempt: 25.minutes
 
   # Bounds one run's blast radius; the bucketing below guarantees the rest are reached on later runs.
   MAX_RECOVERIES_PER_RUN = 25
