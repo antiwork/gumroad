@@ -3,6 +3,8 @@
 class Purchases::DisputeEvidenceController < ApplicationController
   layout "inertia"
 
+  SECURE_ID_SCOPE = "dispute_evidence"
+
   # Sellers reach this page from a one-off emailed link and have only 72 hours
   # (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS) to send us their
   # side of a chargeback before we forward whatever we have to the card network.
@@ -21,11 +23,17 @@ class Purchases::DisputeEvidenceController < ApplicationController
   before_action :set_purchase, :set_dispute_evidence
   before_action :check_if_needs_redirect, except: [:success]
 
+  # The chargeback emails link with a token scoped to SECURE_ID_SCOPE, expiring with the
+  # evidence window itself, so a stale or forwarded link stops working the moment the window
+  # does. purchase.external_id is buyer-visible (library/download data), so it must never
+  # resolve here on its own — only an authenticated seller-owner may fall back to it, which
+  # covers already-delivered emails sent before this scope existed.
+
   def show
     set_meta_tag(title: "Submit additional information")
     set_noindex_header
 
-    render inertia: "Purchases/DisputeEvidence/Show", props: DisputeEvidencePagePresenter.new(@dispute_evidence).props
+    render inertia: "Purchases/DisputeEvidence/Show", props: DisputeEvidencePagePresenter.new(@dispute_evidence, purchase_route_id: @purchase_route_id).props
   end
 
   def success
@@ -33,7 +41,7 @@ class Purchases::DisputeEvidenceController < ApplicationController
     set_noindex_header
 
     render inertia: "Purchases/DisputeEvidence/Success",
-           props: DisputeEvidencePagePresenter.new(@dispute_evidence).success_props
+           props: DisputeEvidencePagePresenter.new(@dispute_evidence, purchase_route_id: @purchase_route_id).success_props
   end
 
   def update
@@ -75,15 +83,36 @@ class Purchases::DisputeEvidenceController < ApplicationController
     # closes, which is what lets the seller keep revising. An already-elapsed window never reaches
     # this point: check_if_needs_redirect refuses the save, because a submission the job is already
     # forwarding cannot be added to.
-    redirect_to success_purchase_dispute_evidence_path(@purchase.external_id), status: :see_other
+    redirect_to success_purchase_dispute_evidence_path(@purchase_route_id), status: :see_other
   rescue ActiveRecord::RecordInvalid
     merged_blob&.purge
-    redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: @dispute_evidence.errors.full_messages.to_sentence
+    redirect_to purchase_dispute_evidence_path(@purchase_route_id), alert: @dispute_evidence.errors.full_messages.to_sentence
   rescue DisputeEvidence::MergeCustomerCommunicationFilesService::MergeError => e
-    redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: e.message
+    redirect_to purchase_dispute_evidence_path(@purchase_route_id), alert: e.message
   end
 
   private
+    def set_purchase
+      requested_id = params[:purchase_id] || params[:id]
+      @purchase = Purchase.find_by_secure_external_id(requested_id, scope: SECURE_ID_SCOPE)
+      if @purchase
+        @purchase_route_id = requested_id
+      else
+        @purchase = legacy_seller_purchase(requested_id)
+        @purchase_route_id = @purchase&.external_id
+      end
+      @purchase || e404
+    end
+
+    # Pre-existing emails already delivered with the buyer-visible external_id keep working, but
+    # only for the account that owns the sale — a signed-out or buyer request never reaches this.
+    def legacy_seller_purchase(requested_id)
+      return unless logged_in_user
+
+      purchase = Purchase.find_by_external_id(requested_id)
+      purchase if purchase && logged_in_user.role_owner_for?(purchase.seller)
+    end
+
     def dispute_evidence_params
       params.require(:dispute_evidence).permit(
         :reason_for_winning,
