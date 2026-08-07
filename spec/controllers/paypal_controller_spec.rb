@@ -348,19 +348,23 @@ describe PaypalController, :vcr do
     let!(:merchant_account) { create(:merchant_account_paypal, user: product.user, charge_processor_merchant_id: "CJS32DZ7NDN5L") }
 
     before do
-      allow(PaypalChargeProcessor).to receive(:update_order_from_product_info).and_return(true)
+      expect(PaypalChargeProcessor).to receive(:update_order_from_product_info).and_call_original
     end
 
     it "updates the paypal order with the given info and returns true" do
-      post :update_order, params: { order_id: "27B71908FM8616631", product: updated_product_info }
+      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(product_info)
+
+      post :update_order, params: { order_id: paypal_order_id, product: updated_product_info }
 
       expect(response.parsed_body["success"]).to be(true)
     end
 
     it "returns false if updating the paypal order with the given info fails" do
-      expect(PaypalChargeProcessor).to receive(:update_order_from_product_info).and_raise(ChargeProcessorError)
+      expect(PaypalChargeProcessor).to receive(:update_order).and_raise(ChargeProcessorError)
 
-      post :update_order, params: { order_id: "27B71908FM8616631", product: updated_product_info }
+      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(product_info)
+
+      post :update_order, params: { order_id: paypal_order_id, product: updated_product_info }
 
       expect(response.parsed_body["success"]).to be(false)
     end
