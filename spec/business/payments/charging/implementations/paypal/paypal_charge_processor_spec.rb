@@ -1342,7 +1342,7 @@ describe PaypalChargeProcessor, :vcr do
   end
 
   describe "#capture_order" do
-    def paypal_capture_response(total: "13.50", currency: "USD", status: PaypalApiPaymentStatus::COMPLETED)
+    def paypal_capture_response(total: "13.50", currency: "USD", status: PaypalApiPaymentStatus::COMPLETED, merchant_id: "MN7CSWD6RCNJ8")
       capture = OpenStruct.new(
         id: "79740133TG6557546",
         status:,
@@ -1351,7 +1351,8 @@ describe PaypalChargeProcessor, :vcr do
       )
       OpenStruct.new(
         purchase_units: [OpenStruct.new(
-          payments: OpenStruct.new(captures: [capture])
+          payments: OpenStruct.new(captures: [capture]),
+          payee: OpenStruct.new(merchant_id:)
         )]
       )
     end
@@ -1370,6 +1371,31 @@ describe PaypalChargeProcessor, :vcr do
 
     it "rejects a completed PayPal capture below Gumroad's expected order total" do
       allow(PaypalChargeProcessor).to receive(:capture).and_return(paypal_capture_response(total: "6.75"))
+
+      expect do
+        subject.capture_order(order_id: "80T882348N361143U", expected_purchase_unit_info:)
+      end.to raise_error(ChargeProcessorError, /captured amount does not match/)
+    end
+
+    it "refunds a mismatched capture instead of leaving the underpayment settled" do
+      merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8")
+      allow(PaypalChargeProcessor).to receive(:capture).and_return(paypal_capture_response(total: "6.75"))
+      expect(subject).to receive(:refund!).with(
+        "79740133TG6557546",
+        merchant_account:,
+        paypal_order_purchase_unit_refund: true
+      )
+
+      expect do
+        subject.capture_order(order_id: "80T882348N361143U", expected_purchase_unit_info:)
+      end.to raise_error(ChargeProcessorError, /captured amount does not match/)
+    end
+
+    it "still raises the amount-mismatch error even if reversing the capture fails" do
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8")
+      allow(PaypalChargeProcessor).to receive(:capture).and_return(paypal_capture_response(total: "6.75"))
+      allow(subject).to receive(:refund!).and_raise(ChargeProcessorInvalidRequestError, "boom")
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ChargeProcessorInvalidRequestError), hash_including(reason: "mismatched_capture_refund_failed"))
 
       expect do
         subject.capture_order(order_id: "80T882348N361143U", expected_purchase_unit_info:)

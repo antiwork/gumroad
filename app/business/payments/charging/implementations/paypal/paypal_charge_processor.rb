@@ -722,7 +722,14 @@ class PaypalChargeProcessor
     if capture.status.downcase == PaypalApiPaymentStatus::COMPLETED.downcase ||
         (capture.status.downcase == PaypalApiPaymentStatus::PENDING.downcase &&
             capture.status_details.reason.upcase == "PENDING_REVIEW")
-      ensure_captured_amount_matches!(capture, expected_purchase_unit_info) if expected_purchase_unit_info.present?
+      if expected_purchase_unit_info.present?
+        begin
+          ensure_captured_amount_matches!(capture, expected_purchase_unit_info)
+        rescue ChargeProcessorError => e
+          refund_mismatched_capture!(paypal_transaction, capture)
+          raise e
+        end
+      end
       charge = PaypalCharge.new(paypal_transaction_id: capture.id,
                                 order_api_used: true,
                                 payment_details: paypal_transaction)
@@ -761,6 +768,19 @@ class PaypalChargeProcessor
     if captured_total != expected_total
       raise ChargeProcessorError, "PayPal captured amount does not match Gumroad order amount"
     end
+  end
+
+  # Reverses a capture that already settled with the wrong amount so the underpayment
+  # doesn't sit unreconciled — a mismatch here means real money moved before the check
+  # in ensure_captured_amount_matches! ran. Swallows refund failures so the original
+  # amount-mismatch error still surfaces to the caller; Sentry has the refund failure for follow-up.
+  def refund_mismatched_capture!(paypal_transaction, capture)
+    merchant_id = paypal_transaction.purchase_units[0].payee.merchant_id
+    refund!(capture.id,
+            merchant_account: MerchantAccount.find_by(charge_processor_merchant_id: merchant_id),
+            paypal_order_purchase_unit_refund: true)
+  rescue StandardError => e
+    ErrorNotifier.notify(e, capture_id: capture.id, reason: "mismatched_capture_refund_failed")
   end
 
   def refund!(charge_id, amount_cents: nil, merchant_account: nil, paypal_order_purchase_unit_refund: nil, purchase: nil, **_args)
