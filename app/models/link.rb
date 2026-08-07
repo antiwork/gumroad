@@ -1541,7 +1541,9 @@ class Link < ApplicationRecord
     def generate_unique_permalink
       chars = ("a".."z").to_a
       candidate = chars.sample
-      while self.class.exists?(unique_permalink: candidate) || user.links.where(custom_permalink: candidate).exists? do
+      # "comps" is routed as a collection action on /v2/products, so a product holding it as
+      # its unique_permalink would be unreachable through the API's show/update endpoints.
+      while candidate == "comps" || self.class.exists?(unique_permalink: candidate) || user.links.where(custom_permalink: candidate).exists? do
         candidate += chars.sample
       end
       candidate

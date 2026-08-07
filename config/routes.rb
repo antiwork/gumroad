@@ -103,6 +103,9 @@ Rails.application.routes.draw do
       resources :help_articles, only: [:index, :show], param: :slug, path: "help/articles"
       resource :refund_policy, only: [:show, :update], controller: :refund_policies
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do
+        collection do
+          get :comps
+        end
         resources :custom_fields, only: [:index, :create, :update, :destroy]
         resources :offer_codes, only: [:index, :create, :show, :update, :destroy]
         resources :variant_categories, only: [:index, :create, :show, :update, :destroy] do

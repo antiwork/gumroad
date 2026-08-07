@@ -2351,4 +2351,175 @@ describe Api::V2::LinksController do
       end
     end
   end
+
+  describe "GET 'comps'" do
+    before do
+      @action = :comps
+      @params = {}
+    end
+
+    it_behaves_like "authorized oauth v1 api method"
+
+    describe "when logged in with public scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_public")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "requires a taxonomy or query" do
+        get @action, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "A taxonomy or query parameter is required."
+        }.as_json)
+      end
+
+      it "rejects a non-scalar query instead of passing it to Elasticsearch" do
+        get @action, params: @params.merge(query: ["x"])
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "query must be a string."
+        }.as_json)
+      end
+
+      it "returns an empty result set when nothing matches" do
+        recreate_model_index(Link)
+
+        get @action, params: @params.merge(query: "zz-nothing-matches-this")
+
+        comps = response.parsed_body["comps"]
+        expect(comps["count"]).to eq(0)
+        expect(comps["price_cents"]).to eq("p25" => nil, "p50" => nil, "p75" => nil)
+        expect(comps["examples"]).to eq([])
+      end
+
+      it "errors on an unknown taxonomy path" do
+        get @action, params: @params.merge(taxonomy: "no-such/category")
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The taxonomy was not found."
+        }.as_json)
+      end
+
+      describe "with indexed products" do
+        before do
+          films = Taxonomy.find_or_create_by!(slug: "films")
+          @documentary = Taxonomy.find_or_create_by!(slug: "documentary", parent: films)
+
+          @cheap = create(:product, :recommendable, name: "Cheap film", price_cents: 900)
+          @mid = create(:product, :recommendable, name: "Mid film", price_cents: 1500)
+          @nested = create(:product, :recommendable, name: "Nested documentary", price_cents: 2900)
+          @nested.update!(taxonomy: @documentary)
+          # Extra sales make @mid the top example under the sales_volume ordering.
+          create_list(:purchase, 3, link: @mid, created_at: 1.week.ago)
+
+          # Priced at creation so the trait's sale is chargeable, then made free.
+          free = create(:product, :recommendable, name: "Free film", price_cents: 900)
+          free.update!(price_cents: 0)
+          create(:product, :with_films_taxonomy, name: "Not discoverable", price_cents: 5000)
+          # Same raw cents as @mid, different currency — decoy for the currency-mixing bug:
+          # without the currency filter this would sit at the same "1500" and flip which
+          # product the sales_volume ordering surfaces first.
+          @eur_decoy = create(:product, :recommendable, name: "EUR film", price_cents: 1500, price_currency_type: "eur")
+          create_list(:purchase, 5, link: @eur_decoy, created_at: 1.week.ago)
+
+          # sales_volume is derived from the purchases index, so import it before products.
+          Purchase.import(refresh: true, force: true)
+          Link.import(refresh: true, force: true)
+        end
+
+        it "returns the count, price percentiles, and top examples for a taxonomy path including descendants" do
+          get @action, params: @params.merge(taxonomy: "films")
+
+          body = response.parsed_body
+          expect(body["success"]).to be(true)
+
+          comps = body["comps"]
+          # Free, non-discoverable, and non-USD products are excluded; the documentary
+          # descendant is included.
+          expect(comps["count"]).to eq(3)
+          expect(comps["currency"]).to eq("usd")
+          expect(comps["price_cents"]["p50"]).to eq(1500)
+          expect(comps["price_cents"]["p25"]).to be_between(900, 1500)
+          expect(comps["price_cents"]["p75"]).to be_between(1500, 2900)
+          expect(comps["examples"]).to eq([
+                                            { "name" => "Mid film", "price" => "$15", "url" => @mid.long_url },
+                                            { "name" => "Nested documentary", "price" => "$29", "url" => @nested.long_url },
+                                            { "name" => "Cheap film", "price" => "$9", "url" => @cheap.long_url },
+                                          ])
+        end
+
+        it "excludes listings priced in a different currency from the default USD comps" do
+          get @action, params: @params.merge(taxonomy: "films")
+
+          comps = response.parsed_body["comps"]
+          # The EUR decoy outsells @mid 5:3 and shares its raw cent value; a mutant that drops
+          # the currency filter would let it win the top-example slot despite being un-comparable.
+          expect(comps["examples"].map { |e| e["name"] }).to_not include("EUR film")
+        end
+
+        it "scopes comps to an explicitly requested currency" do
+          get @action, params: @params.merge(taxonomy: "films", price_currency_type: "eur")
+
+          comps = response.parsed_body["comps"]
+          expect(comps["currency"]).to eq("eur")
+          expect(comps["count"]).to eq(1)
+          expect(comps["examples"].sole["name"]).to eq("EUR film")
+        end
+
+        it "rejects an unsupported currency" do
+          get @action, params: @params.merge(taxonomy: "films", price_currency_type: "zzz")
+
+          expect(response.parsed_body).to eq({
+            success: false,
+            message: "'zzz' is not a supported currency."
+          }.as_json)
+        end
+
+        it "scopes to a nested taxonomy path" do
+          get @action, params: @params.merge(taxonomy: "films/documentary")
+
+          comps = response.parsed_body["comps"]
+          expect(comps["count"]).to eq(1)
+          expect(comps["examples"].sole["name"]).to eq("Nested documentary")
+        end
+
+        it "accepts a numeric taxonomy id" do
+          get @action, params: @params.merge(taxonomy: @documentary.id.to_s)
+
+          expect(response.parsed_body["comps"]["count"]).to eq(1)
+        end
+
+        it "filters by full-text query" do
+          get @action, params: @params.merge(query: "documentary")
+
+          comps = response.parsed_body["comps"]
+          expect(comps["count"]).to eq(1)
+          expect(comps["examples"].sole["name"]).to eq("Nested documentary")
+        end
+      end
+
+      describe "with a tiered membership" do
+        before do
+          # Tiered memberships index price_cents as 0 (tier prices live on the variants), so
+          # they pin the available_price_cents filter: a price_cents filter would drop them.
+          @membership = create(:membership_product_with_preset_tiered_pricing, :recommendable, name: "Members club")
+          Purchase.import(refresh: true, force: true)
+          Link.import(refresh: true, force: true)
+        end
+
+        it "counts the membership and aggregates its tier prices" do
+          get @action, params: @params.merge(query: "members club")
+
+          comps = response.parsed_body["comps"]
+          expect(comps["count"]).to eq(1)
+          expect(comps["price_cents"]["p50"]).to be_between(300, 500)
+          expect(comps["examples"].sole["name"]).to eq("Members club")
+        end
+      end
+    end
+  end
 end
