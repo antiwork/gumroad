@@ -649,16 +649,14 @@ export function computeTipsForLines(
     }
     return allocateFixedTipCents(listedAmount ?? state.tip.amount ?? 0, lines, totalPriceCents);
   }
-  // One cart tip, then the same allocator fixed tips use. On a normal cart the line
-  // tips sum to the display tip; when line bases are smaller than the cart total
-  // (commission deposit / free-trial zeroing), leftover tip stays uncollected, same
-  // as fixed tips.
-  if (basis === "listed") {
-    const totalPriceCents = lines.reduce((sum, line) => sum + line.price, 0);
-    const tipCents = Math.round((state.tip.percentage / 100) * totalPriceCents);
-    return allocateFixedTipCents(tipCents, lines, totalPriceCents);
-  }
-  return allocateFixedTipCents(computeTip(state), lines, getTotalPriceFromProducts(state));
+  // One cart tip, then the same allocator fixed tips use. The tip must be derived from the
+  // caller's own line bases, never from `state.products`: on the canonical lane the caller's
+  // prices are the products' own minor units while `state.products` holds unrounded USD, so
+  // mixing them misprices every non-USD cart's tip. Deriving from the lines is unit-correct on
+  // both lanes, and commission-deposit lines tip on the deposit they charge today, as before.
+  const totalPriceCents = lines.reduce((sum, line) => sum + line.price, 0);
+  const tipCents = Math.round((state.tip.percentage / 100) * totalPriceCents);
+  return allocateFixedTipCents(tipCents, lines, totalPriceCents);
 }
 
 // The tip to DISPLAY on the method-forced listed-currency lane, in the listed currency's minor

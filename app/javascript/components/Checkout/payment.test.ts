@@ -2224,6 +2224,20 @@ describe("computeTipsForLines", () => {
     }
   });
 
+  // The canonical lane's callers (Show.tsx order lines) pass prices in the product's OWN minor
+  // units, while state.products holds unrounded USD — a KRW ₩5,000 product reads 500_000 in the
+  // lines and ~521 in state. Percentage tips must be derived from the lines themselves; reading
+  // the cart total from state.products misprices every non-USD tip (tipping_spec.rb "computes
+  // the correct tip", KRW).
+  it("computes canonical-lane percentage tips in the caller's line units for non-USD products", () => {
+    const s = state({
+      products: tippableProducts([521]),
+      tip: { type: "percentage", percentage: 20 },
+    });
+    const lines = [{ price: 500_000, permalink: "product-0" }];
+    expect(computeTipsForLines(s, lines)).toEqual([100_000]);
+  });
+
   it("keeps listed-basis percentage tips summing to round(pct * listedTotal)", () => {
     const s = state({
       products: tippableProducts([916, 916]),
