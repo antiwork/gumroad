@@ -1017,7 +1017,7 @@ describe ContactingCreatorMailer do
       purchase = create(:purchase, link: product, email: "ibuy@gumroad.com", offer_code:)
       mail = ContactingCreatorMailer.notify(purchase.id)
       expect(mail.body.encoded).to include "Discount"
-      expect(mail.body.encoded).to include "Black Friday (10% off)"
+      expect(Nokogiri::HTML(mail.body.encoded).text).to include "Black Friday (10% off)"
 
       expect_push_alert(seller.id, mail.subject)
     end
@@ -1051,7 +1051,7 @@ describe ContactingCreatorMailer do
       )
       mail = ContactingCreatorMailer.notify(upsell_purchase.purchase.id)
       expect(mail.body.encoded).to include "Upsell"
-      expect(mail.body.encoded).to include "Complete course (20% off)"
+      expect(Nokogiri::HTML(mail.body.encoded).text).to include "Complete course (20% off)"
 
       expect_push_alert(seller.id, mail.subject)
     end

@@ -550,7 +550,7 @@ const CustomersPage = ({
                           timeZone: currentSeller.timeZone.name,
                         })}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         {customer.transaction_url_for_seller ? (
                           <a href={customer.transaction_url_for_seller}>{price}</a>
                         ) : (
