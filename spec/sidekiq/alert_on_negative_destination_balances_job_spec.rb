@@ -97,6 +97,27 @@ describe AlertOnNegativeDestinationBalancesJob do
     )
   end
 
+  it "carries post-cutoff rows in the below-minimum candidate's balance ids so funded credit past the cutoff keeps its TTL" do
+    residue_row(-728_50)
+    make_payable
+
+    other = create(:user)
+    other_account = create(:merchant_account, user: other, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                              charge_processor_merchant_id: "acct_negdest_#{SecureRandom.hex(6)}",
+                                              currency: Currency::PHP, country: "PH")
+    in_cycle_row = create(:balance, user: other, merchant_account: other_account, date: in_cycle_date,
+                                    amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -100_00)
+    post_cutoff_row = create(:balance, user: other, merchant_account: other_account,
+                                       date: User::PayoutSchedule.next_scheduled_payout_end_date + 1,
+                                       amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: 25_00)
+
+    scan = described_class.scan
+
+    expect(scan[:unreconciled_not_payable]).to contain_exactly(
+      { merchant_account: other_account, balance_ids: [in_cycle_row.id, post_cutoff_row.id] }
+    )
+  end
+
   it "stays silent for a negative destination total matched by a negative USD ledger, which is refund netting the payout handles" do
     create(:balance, user: seller, merchant_account:, date: in_cycle_date,
                      amount_cents: -728_50, holding_currency: Currency::PHP, holding_amount_cents: -728_50)

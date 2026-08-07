@@ -81,7 +81,11 @@ class AlertOnNegativeDestinationBalancesJob
           tripped = tripped_window(full_set)
           if tripped
             not_payable += 1
-            unreconciled_not_payable << { merchant_account:, balance_ids: tripped.first.order(:id).pluck(:id) }
+            # The funded-TTL refresher intersects stored funded IDs against this list. It must
+            # carry the account's FULL unpaid set, not the tripped window's: when the cycle
+            # window trips, a funded row past the cutoff would be absent, its credit would
+            # expire, and a later payable scan would transfer the full shortfall again.
+            unreconciled_not_payable << { merchant_account:, balance_ids: full_set.order(:id).pluck(:id) }
           end
         end
       end
