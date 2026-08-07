@@ -23,11 +23,9 @@ class Purchases::DisputeEvidenceController < ApplicationController
   before_action :set_purchase, :set_dispute_evidence
   before_action :check_if_needs_redirect, except: [:success]
 
-  # The chargeback emails link with a token scoped to SECURE_ID_SCOPE, expiring with the
-  # evidence window itself, so a stale or forwarded link stops working the moment the window
-  # does. purchase.external_id is buyer-visible (library/download data), so it must never
-  # resolve here on its own — only an authenticated seller-owner may fall back to it, which
-  # covers already-delivered emails sent before this scope existed.
+  # external_id is buyer-visible (library/download data), so it must never resolve on its
+  # own — only an authenticated seller-owner may fall back to it, for emails sent before
+  # SECURE_ID_SCOPE existed.
 
   def show
     set_meta_tag(title: "Submit additional information")
