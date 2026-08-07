@@ -145,6 +145,22 @@ describe RecoverStrandedBuyersJob do
     end
   end
 
+  it "stops starting recoveries once the run budget elapses and reports the remainder as unprocessed" do
+    candidates = 3.times.map { |i| candidate.merge(email: "slow#{i}@example.com") }
+    allow(Risk::StrandedBuyerScanService).to receive(:call).and_return(stranded: candidates, truncated: false)
+    allow(Risk::StrandedBuyerRecoveryService).to receive(:call) do
+      travel described_class::RUN_BUDGET + 1.minute
+      recovery_result(:skip, :no_clean_payment_history)
+    end
+
+    travel_to(Time.current) { described_class.new.perform }
+
+    expect(Risk::StrandedBuyerRecoveryService).to have_received(:call).once
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("2 due today left unprocessed")
+    end
+  end
+
   it "bounds one run to at most MAX_RECOVERIES_PER_RUN candidates even when a day's bucket is larger" do
     # A pool many multiples of ROTATION_BUCKETS forces today's bucket above MAX_RECOVERIES_PER_RUN
     # for some day; walk every day of a cycle and check each run's own call count individually.
@@ -159,7 +175,9 @@ describe RecoverStrandedBuyersJob do
       recovery_result(:skip, :no_clean_payment_history)
     end
 
-    per_run_counts = (0...described_class::ROTATION_BUCKETS).map do |offset|
+    # Three full cycles: an oversized bucket serves a different page each cycle, so which day
+    # saturates the cap depends on the cycle counter — one cycle alone can miss every full page.
+    per_run_counts = (0...(described_class::ROTATION_BUCKETS * 3)).map do |offset|
       calls_this_run = 0
       travel_to(Date.new(2026, 1, 1) + offset) { described_class.new.perform }
       calls_this_run

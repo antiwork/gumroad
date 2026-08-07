@@ -9,16 +9,23 @@
 # candidates before any enforcement is removed.
 class RecoverStrandedBuyersJob
   include Sidekiq::Job
-  sidekiq_options retry: 1, queue: :low
+  sidekiq_options retry: 1, queue: :low, lock: :until_executed
 
   # Bounds one run's blast radius; the bucketing below guarantees the rest are reached on later runs.
   MAX_RECOVERIES_PER_RUN = 25
 
+  # One recovery's history scans can run past two minutes (see the class comment), so a full
+  # window of 25 could hold a :low worker for most of an hour and a mid-run deploy restart
+  # would re-run the whole window under retry: 1. Stop starting new recoveries past this and
+  # report the remainder as unprocessed instead.
+  RUN_BUDGET = 15.minutes
+
   # Coverage cycle length in days. Each buyer's bucket is a hash of their OWN email, so unlike an
   # index into the scan array, it survives other buyers joining/leaving or the scan's rank order
   # shifting day to day — the property Greptile's array-rotation review kept catching. Sized so a
-  # ~240-candidate population (25/day/bucket) clears the full cycle inside the window.
-  ROTATION_BUCKETS = 30
+  # ~240-candidate population hashes to ~24 per bucket — inside MAX_RECOVERIES_PER_RUN — and the
+  # full cycle clears in ~10 days.
+  ROTATION_BUCKETS = 10
 
   # Escalations are the run's point — each names a buyer a human decision is holding. Cleared and
   # skipped buyers are counted, not listed.
@@ -33,10 +40,18 @@ class RecoverStrandedBuyersJob
     return if scan[:stranded].empty?
 
     live = Feature.active?(:auto_recover_stranded_buyers)
-    outcomes = window(scan[:stranded]).map { |candidate| recover(candidate, live:) }
+    deadline = Time.current + RUN_BUDGET
+    selected = window(scan[:stranded])
+    outcomes = []
+    selected.each do |candidate|
+      break if Time.current >= deadline
+
+      outcomes << recover(candidate, live:)
+    end
 
     InternalNotificationWorker.perform_async(
-      "risk", "Stranded buyer recovery", message_for(outcomes, live:, total: scan[:stranded].size)
+      "risk", "Stranded buyer recovery",
+      message_for(outcomes, live:, total: scan[:stranded].size, out_of_budget: selected.size - outcomes.size)
     )
   end
 
@@ -53,7 +68,7 @@ class RecoverStrandedBuyersJob
       return candidates if candidates.size <= MAX_RECOVERIES_PER_RUN
 
       elapsed_days = (Date.current - ROTATION_EPOCH).to_i
-      due_today = candidates.select { |c| bucket(c[:email]) == elapsed_days % ROTATION_BUCKETS }.sort_by { _1[:email] }
+      due_today = candidates.select { |c| bucket(c[:email]) == elapsed_days % ROTATION_BUCKETS }.sort_by { _1[:email].to_s }
       return due_today if due_today.size <= MAX_RECOVERIES_PER_RUN
 
       # A bucket bigger than MAX_RECOVERIES_PER_RUN needs its own sub-rotation, or the same ordered
@@ -69,7 +84,9 @@ class RecoverStrandedBuyersJob
     end
 
     def bucket(email)
-      Digest::MD5.hexdigest(email.downcase).to_i(16) % ROTATION_BUCKETS
+      # to_s: a scan candidate with a blank email must land in a bucket (and later fail loudly
+      # as that recovery's ERROR line) rather than raise here and take down the whole run.
+      Digest::MD5.hexdigest(email.to_s.downcase).to_i(16) % ROTATION_BUCKETS
     end
 
     def recover(candidate, live:)
@@ -88,7 +105,7 @@ class RecoverStrandedBuyersJob
       { email: candidate[:email], verdict: :error, reason: "#{e.class}: #{e.message}", cleared: 0, withheld: 0 }
     end
 
-    def message_for(outcomes, live:, total:)
+    def message_for(outcomes, live:, total:, out_of_budget: 0)
       counts = outcomes.group_by { _1[:verdict] }.transform_values(&:size)
       escalations = outcomes.select { _1[:verdict] == :escalate }
       errors = outcomes.select { _1[:verdict] == :error }
@@ -100,6 +117,7 @@ class RecoverStrandedBuyersJob
           "#{counts[:cleared].to_i} of #{outcomes.size} stranded buyers processed " \
           "(#{total} candidates total): #{blocks_cleared} blocks cleared, #{withheld} withheld for a human, " \
           "#{counts[:skip].to_i} skipped, #{counts[:noop].to_i} no-ops.",
+        (out_of_budget.positive? ? "#{out_of_budget} due today left unprocessed — the run budget ran out; they stay due on their bucket's next turn." : nil),
         ("" if escalations.any?),
         *escalations.first(MAX_REPORTED_ESCALATIONS).map { |o| "• ESCALATE #{o[:email]} — authored block, needs a human decision" },
         (escalations.size > MAX_REPORTED_ESCALATIONS ? "…and #{escalations.size - MAX_REPORTED_ESCALATIONS} more escalations." : nil),
