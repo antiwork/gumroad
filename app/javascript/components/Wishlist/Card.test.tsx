@@ -43,10 +43,8 @@ const renderCard = (props: React.ComponentProps<typeof Card>) =>
   );
 
 describe("Wishlist Card", () => {
-  // A wishlist with no thumbnails (e.g. its only product has none) used to render a bare
-  // <img> with no src, which shows the browser's broken-image icon on production
-  // (https://gumroad.com/software-development, reported by @GergelyOrosz). The figure's
-  // own placeholder background covers the empty case, so no <img> at all should render.
+  // No <img> should render when there are no thumbnails — the figure's own
+  // placeholder background covers the empty case.
   it("renders no <img> when the wishlist has no thumbnails", () => {
     const { container } = renderCard({ wishlist: wishlist({ thumbnails: [] }) });
 

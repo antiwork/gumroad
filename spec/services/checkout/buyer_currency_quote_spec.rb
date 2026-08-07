@@ -580,15 +580,11 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 13_75)
     end
 
-    it "withholds the quote when a non-USD listing carries shipping, because the two sides convert it differently" do
-      # Same defect as the tip, reached a different way, so it needs the same gate.
-      #
-      # The surcharge endpoint sums the listed one-item and multiple-items shipping rates and
-      # converts that sum to USD once. Purchase#calculate_shipping converts each of the two
-      # rates on its own and adds them afterwards. Those disagree by a cent whenever both
-      # terms round the same way, and the signed token then fails verification at charge time.
-      # The listed-versus-converted shipping figure also reaches SalesTaxCalculator on the two
-      # sides, so the tax can move too.
+    it "quotes a non-USD listing that carries shipping once surcharge and charge convert each rate term the same way" do
+      # Shipping used to diverge (surcharge convert(sum) vs purchase sum(convert)) and the
+      # quote was withheld. CustomerSurchargeController now passes the product currency into
+      # calculate_shipping_rate, matching Purchase#calculate_shipping, so shipping alone is
+      # safe to quote. Tip remains gated separately.
       eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
       shipped_eur_line = described_class::LineItem.new(
         permalink: eur_product.unique_permalink, product: eur_product,
@@ -596,13 +592,14 @@ describe Checkout::BuyerCurrencyQuote do
         gumroad_tax_cents: 0, shipping_cents: 5_00
       )
 
-      expect(described_class.create(line_items: [shipped_eur_line], canonical_total_cents: 15_00, ip: "24.48.0.1")).to be_nil
+      result = described_class.create(line_items: [shipped_eur_line], canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 18_75)
     end
 
     it "still quotes shipping that rides on a USD listing" do
-      # Shipping is only unsafe in combination with a non-USD listing: with nothing to convert
-      # both sides compute the same figure. USD-listed shipping already ships and must not
-      # regress, so this is what stops the gate above quietly reverting the whole change.
+      # USD-listed shipping has nothing to convert, so both sides already agreed. Keep this
+      # as a regression against a tip-only gate accidentally swallowing USD shipping too.
       shipped_usd_line = described_class::LineItem.new(
         permalink: product.unique_permalink, product:,
         price_cents: 10_00, tip_cents: 0, seller_tax_cents: 0,
@@ -614,8 +611,9 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 18_75)
     end
 
-    it "withholds the quote for the whole cart when only one line pairs shipping with a non-USD listing" do
-      # One offending line is enough: the quote locks a single total for the entire cart.
+    it "quotes a mixed cart when only shipping (not tip) rides on a non-USD listing" do
+      # Shipping conversion now matches on both sides, so one non-USD shipped line no longer
+      # forces the whole cart back to USD.
       eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
       lines = [
         described_class::LineItem.new(permalink: product.unique_permalink, product:,
@@ -626,7 +624,9 @@ describe Checkout::BuyerCurrencyQuote do
                                       gumroad_tax_cents: 0, shipping_cents: 5_00),
       ]
 
-      expect(described_class.create(line_items: lines, canonical_total_cents: 25_00, ip: "24.48.0.1")).to be_nil
+      result = described_class.create(line_items: lines, canonical_total_cents: 25_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 31_25)
     end
 
     it "withholds the quote for the whole cart when only one line pairs a tip with a non-USD listing" do

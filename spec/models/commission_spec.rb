@@ -109,6 +109,44 @@ describe Commission, :vcr do
       expect { commission.create_completion_purchase! }.to raise_error(ActiveRecord::RecordInvalid)
     end
 
+    # Tip USD must be set on the completion tip: LaterChargePresentment.canonical_price_cents_for
+    # subtracts tip.value_usd_cents, and a 0 default would make a principal-only fixing look stale.
+    it "persists completion tip USD so a buyer-presentment fixing still matches when tipped" do
+      product = create(:commission_product)
+      merchant_account = create(:merchant_account, user: product.user, charge_processor_merchant_id: "commission-tip-usd-presentment")
+      deposit_purchase = create(
+        :purchase,
+        link: product,
+        merchant_account:,
+        is_commission_deposit_purchase: true,
+        price_cents: 1_100,
+        total_transaction_cents: 1_100
+      )
+      # Distinct presentment vs USD proves we do not copy value_cents into value_usd_cents.
+      deposit_purchase.create_tip!(value_cents: 80, value_usd_cents: 100)
+      commission = create(:commission, status: Commission::STATUS_IN_PROGRESS, deposit_purchase:)
+      attach_commission_file(commission)
+      fixing = create(
+        :later_charge_presentment,
+        owner: commission,
+        presentment_currency: "eur",
+        presentment_price_cents: 899,
+        canonical_price_cents: 1_000
+      )
+
+      expect_any_instance_of(Purchase).to receive(:process!) do |completion_purchase|
+        expect(completion_purchase.tip.value_cents).to eq(80)
+        expect(completion_purchase.tip.value_usd_cents).to eq(100)
+        completion_purchase.price_cents = 1_000
+        completion_purchase.total_transaction_cents = 1_100
+        expect(LaterChargePresentment.canonical_price_cents_for(completion_purchase))
+          .to eq(fixing.canonical_price_cents)
+        completion_purchase.errors.add(:base, "Stop before charging")
+      end
+
+      expect { commission.create_completion_purchase! }.to raise_error(ActiveRecord::RecordInvalid)
+    end
+
     context "when the deposit is no longer chargeable" do
       let(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
       let(:deposit_purchase) { commission.deposit_purchase }
@@ -197,7 +235,8 @@ describe Commission, :vcr do
         attach_commission_file(commission)
         deposit_purchase.update!(zip_code: "10001")
         deposit_purchase.update!(displayed_price_cents: 100)
-        deposit_purchase.create_tip!(value_cents: 20)
+        # Distinct presentment vs USD proves we do not copy value_cents into value_usd_cents.
+        deposit_purchase.create_tip!(value_cents: 20, value_usd_cents: 25)
         deposit_purchase.variant_attributes << create(:variant, name: "Deluxe")
       end
 
@@ -228,6 +267,7 @@ describe Commission, :vcr do
         expect(completion_purchase.offer_code).to eq(deposit_purchase.offer_code)
         expect(completion_purchase.is_commission_completion_purchase).to be true
         expect(completion_purchase.tip.value_cents).to eq(20)
+        expect(completion_purchase.tip.value_usd_cents).to eq(25)
         expect(completion_purchase.variant_attributes).to eq(deposit_purchase.variant_attributes)
         expect(completion_purchase).to be_successful
 

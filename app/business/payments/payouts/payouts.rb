@@ -581,10 +581,16 @@ class Payouts
       payable_balances = payout_processor.filter_aggregate_payable_balances(user, payable_balances)
     end
 
-    payable_balances.each do |balance|
-      balance.with_lock { balance.mark_processing! }
+    # Eligibility check and transition happen under the same lock, so only balances we
+    # actually claim are returned.
+    payable_balances.filter_map do |balance|
+      balance.with_lock do
+        next unless balance.unpaid?
+
+        balance.mark_processing!
+        balance
+      end
     end
-    payable_balances
   end
   private_class_method :mark_balances_processing
 end

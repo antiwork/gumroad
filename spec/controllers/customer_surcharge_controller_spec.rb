@@ -270,6 +270,48 @@ describe CustomerSurchargeController, :vcr do
     expect(response.parsed_body).to eq(expected_surcharge_response(shipping_rate_cents: 20, tax_cents: 32, subtotal: 300))
   end
 
+  it "converts each non-USD shipping rate term the same way the charge path does" do
+    # Purchase#calculate_shipping calls calculate_shipping_rate with the product currency
+    # (sum of per-term conversions). The surcharge path used to convert the summed listed
+    # cents afterward, which disagrees by a cent for non-integer FX rates and made checkout
+    # display a different shipping total than the charge booked.
+    eur_product = create(:physical_product, user: @user, price_currency_type: Currency::EUR, price_cents: 1000)
+    eur_product.shipping_destinations.destroy_all
+    destination = create(
+      :shipping_destination,
+      country_code: Compliance::Countries::DEU.alpha2,
+      one_item_rate_cents: 250,
+      multiple_items_rate_cents: 200
+    )
+    eur_product.shipping_destinations << destination
+    allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR).and_return("0.879624")
+
+    expected_shipping_usd = destination.calculate_shipping_rate(quantity: 2, currency_type: Currency::EUR)
+    expect(expected_shipping_usd).to eq(511)
+    # convert(sum) of the listed one+multiple terms: the old surcharge path's answer.
+    expect(destination.send(:get_usd_cents, Currency::EUR, 450)).to eq(512)
+
+    purchase = build(
+      :purchase,
+      link: eur_product,
+      seller: @user,
+      quantity: 2,
+      country: "Germany"
+    )
+    purchase.send(:calculate_shipping)
+    expect(purchase.shipping_cents).to eq(expected_shipping_usd)
+
+    post "calculate_all",
+         params: {
+           products: [{ permalink: eur_product.unique_permalink, price: 1137, quantity: 2 }],
+           country: Compliance::Countries::DEU.alpha2
+         },
+         as: :json
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["shipping_rate_cents"]).to eq(purchase.shipping_cents)
+  end
+
   context "for a subscription", :vcr do
     context "when original purchase was charged VAT" do
       before :each do

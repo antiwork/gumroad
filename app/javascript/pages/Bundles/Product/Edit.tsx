@@ -10,12 +10,18 @@ import {
   CUSTOM_BUTTON_TEXT_OPTIONS,
   RatingsWithPercentages,
 } from "$app/parsers/product";
-import { CurrencyCode, currencyCodeList } from "$app/utils/currency";
+import { CurrencyCode, currencyCodeList, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { BundleEditLayout, useProductUrl } from "$app/components/BundleEdit/Layout";
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
 import { BundleProduct } from "$app/components/BundleEdit/types";
+import {
+  computeDiscountedPriceCents,
+  computeStandaloneTotalCents,
+  transitionCustomizablePrice,
+} from "$app/components/BundleEdit/utils";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { NumberInput } from "$app/components/NumberInput";
 import { Seller } from "$app/components/Product";
 import { Attribute, AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor";
@@ -28,9 +34,11 @@ import { PriceEditor } from "$app/components/ProductEdit/ProductTab/PriceEditor"
 import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { RefundPolicy, RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
 import { OfferCode, PublicFileWithStatus } from "$app/components/ProductEdit/state";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { Pill } from "$app/components/ui/Pill";
 import { Switch } from "$app/components/ui/Switch";
 
 type ProductPageProps = {
@@ -122,6 +130,31 @@ export default function BundlesProductEdit() {
   const [initialBundle] = React.useState(bundle);
   const [showRefundPolicyPreview, setShowRefundPolicyPreview] = React.useState(false);
   const [publicFiles, setPublicFiles] = React.useState(bundle.public_files);
+  // Not persisted: applying a discount just computes and sets price_cents, so it does not
+  // survive re-opening the editor.
+  const [discountPercent, setDiscountPercent] = React.useState<number | null>(null);
+
+  const standaloneTotalCents = computeStandaloneTotalCents(bundle.products);
+
+  const discountPercentError = discountPercent !== null && (discountPercent < 0 || discountPercent > 100);
+
+  const applyDiscountPercent = (value: number | null) => {
+    setDiscountPercent(value);
+    if (value === null || value < 0 || value > 100) return;
+    form.setData((data) => {
+      const priceCents = computeDiscountedPriceCents(standaloneTotalCents, value);
+      return {
+        ...data,
+        price_cents: priceCents,
+        customizable_price: transitionCustomizablePrice(
+          data.price_cents,
+          priceCents,
+          data.customizable_price,
+          priorCustomizablePriceRef.current,
+        ),
+      };
+    });
+  };
 
   const { isUploading, setImagesUploading } = useImageUpload();
 
@@ -156,6 +189,20 @@ export default function BundlesProductEdit() {
     default_offer_code: bundle.default_offer_code,
     price_currency_type: currency_type,
   });
+
+  // Tracks customizable_price from the last time price_cents was nonzero, so a temporary $0 dip
+  // (which forces PWYW on) doesn't erase a seller's deliberate PWYW choice once the price returns.
+  // Seed false when the initial price is already 0: that PWYW is forced by the price, not chosen.
+  const priorCustomizablePriceRef = React.useRef(form.data.price_cents === 0 ? false : form.data.customizable_price);
+  React.useEffect(() => {
+    if (form.data.price_cents !== 0) priorCustomizablePriceRef.current = form.data.customizable_price;
+  }, [form.data.price_cents, form.data.customizable_price]);
+
+  // Products keep their own currency, and the total sums raw minor units — summing across
+  // currencies would state a total that is simply wrong, and converting is the server's job.
+  const canTotalStandalonePrices =
+    bundle.products.length > 0 &&
+    bundle.products.every(({ currency_code }) => currency_code === form.data.price_currency_type);
 
   if (!currentSeller) return null;
 
@@ -283,23 +330,81 @@ export default function BundlesProductEdit() {
         </section>
         <section className="grid gap-8 border-t border-border p-4 md:p-8">
           <h2>Pricing</h2>
+          {canTotalStandalonePrices ? (
+            <Fieldset state={discountPercentError ? "danger" : undefined}>
+              <Label htmlFor={`${uid}-discount-percent`}>Discount off standalone prices</Label>
+              <InputGroup>
+                <NumberInput value={discountPercent} onChange={applyDiscountPercent}>
+                  {(inputProps) => (
+                    <Input
+                      id={`${uid}-discount-percent`}
+                      type="text"
+                      aria-describedby={`${uid}-discount-percent-description`}
+                      aria-invalid={discountPercentError}
+                      {...inputProps}
+                    />
+                  )}
+                </NumberInput>
+                <Pill className="-mr-2 shrink-0">%</Pill>
+              </InputGroup>
+              {/* Referenced via aria-describedby, and edits to an already-referenced description
+                  are not announced — aria-live carries the recomputed amount to screen readers. */}
+              <FieldsetDescription id={`${uid}-discount-percent-description`} aria-live="polite">
+                {discountPercentError ? (
+                  <>Enter a discount between 0% and 100%. The amount below is unchanged.</>
+                ) : discountPercent !== null ? (
+                  <>
+                    Amount becomes{" "}
+                    {formatPriceCentsWithCurrencySymbol(
+                      form.data.price_currency_type,
+                      computeDiscountedPriceCents(standaloneTotalCents, discountPercent),
+                      { symbolFormat: "long" },
+                    )}
+                    : {discountPercent}% off the{" "}
+                    {formatPriceCentsWithCurrencySymbol(form.data.price_currency_type, standaloneTotalCents, {
+                      symbolFormat: "long",
+                    })}{" "}
+                    standalone total. Editing the amount removes the discount.
+                  </>
+                ) : (
+                  <>
+                    Your products total{" "}
+                    {formatPriceCentsWithCurrencySymbol(form.data.price_currency_type, standaloneTotalCents, {
+                      symbolFormat: "long",
+                    })}{" "}
+                    when sold separately.
+                  </>
+                )}
+              </FieldsetDescription>
+            </Fieldset>
+          ) : null}
           <PriceEditor
             priceCents={form.data.price_cents}
             suggestedPriceCents={form.data.suggested_price_cents}
             isPWYW={form.data.customizable_price}
-            setPriceCents={(priceCents) =>
+            setPriceCents={(priceCents) => {
+              setDiscountPercent(null);
               form.setData((data) => ({
                 ...data,
                 price_cents: priceCents,
-                ...(priceCents === 0 && { customizable_price: true }),
-              }))
-            }
+                customizable_price: transitionCustomizablePrice(
+                  data.price_cents,
+                  priceCents,
+                  data.customizable_price,
+                  priorCustomizablePriceRef.current,
+                ),
+              }));
+            }}
             setSuggestedPriceCents={(suggestedPriceCents) => form.setData("suggested_price_cents", suggestedPriceCents)}
             setIsPWYW={(isPWYW) => form.setData("customizable_price", isPWYW)}
             currencyType={form.data.price_currency_type}
             currencyCodeSelector={{
               options: currencyCodeList,
-              onChange: (currencyCode) => form.setData("price_currency_type", currencyCode),
+              onChange: (currencyCode) => {
+                // The discount was computed from totals in the previous currency.
+                setDiscountPercent(null);
+                form.setData("price_currency_type", currencyCode);
+              },
             }}
             eligibleForInstallmentPlans={bundle.eligible_for_installment_plans}
             allowInstallmentPlan={form.data.allow_installment_plan}
