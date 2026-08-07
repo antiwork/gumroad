@@ -113,9 +113,13 @@ module WithFiltering
     true
   end
 
+  # Bounds the parsed value so a compact exponent-form price (e.g. "1e100000") can't force
+  # BigDecimal#to_i to allocate a many-thousand-digit Integer.
+  MAX_PRICE_FILTER_MAGNITUDE = BigDecimal("1e15")
+
   def price_filter_cents(value, currency)
     amount = BigDecimal(value.to_s)
-    return nil unless amount.finite?
+    return nil unless amount.finite? && amount.abs <= MAX_PRICE_FILTER_MAGNITUDE
 
     currency_cents = (amount * unit_scaling_factor(currency)).to_i
     get_usd_cents(currency, currency_cents)

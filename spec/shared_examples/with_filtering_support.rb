@@ -72,6 +72,13 @@ shared_examples_for "common customer recipient filter validation behavior" do |a
         expect(filterable_object.paid_more_than_cents).to be_nil
       end
 
+      it "drops a finite but oversized exponent-form price filter" do
+        params[:paid_more_than] = "1e100000"
+
+        expect { add_and_validate_filters }.not_to raise_error
+        expect(filterable_object.paid_more_than_cents).to be_nil
+      end
+
       context "when paid_more_than_cents and paid_less_than_cents are given" do
         let(:params) do
           {
