@@ -219,7 +219,37 @@ describe Api::V2::Workflows::EmailsController do
       token = create_access_token("edit_emails")
       workflow = create(:audience_workflow, seller: @user)
 
-      put @action, params: @params.merge(access_token: token.token, workflow_id: workflow.external_id)
+      expect do
+        put @action, params: @params.merge(access_token: token.token, workflow_id: workflow.external_id)
+      end.not_to change { workflow.installments.alive.count }
+
+      expect(response.parsed_body).to eq({
+        success: false,
+        message: "The email was not found.",
+      }.as_json)
+      expect(@email.reload.message).to eq("<p>Original body</p>")
+    end
+
+    it "does not update through an unknown workflow" do
+      token = create_access_token("edit_emails")
+
+      expect do
+        put @action, params: @params.merge(access_token: token.token, workflow_id: "unknown")
+      end.not_to change(Installment, :count)
+
+      expect(response.parsed_body).to eq({
+        success: false,
+        message: "The workflow was not found.",
+      }.as_json)
+      expect(@email.reload.message).to eq("<p>Original body</p>")
+    end
+
+    it "does not create an email for an unknown email ID" do
+      token = create_access_token("edit_emails")
+
+      expect do
+        put @action, params: @params.merge(access_token: token.token, email_id: "unknown")
+      end.not_to change { @workflow.installments.alive.count }
 
       expect(response.parsed_body).to eq({
         success: false,
