@@ -5,17 +5,12 @@ import { CurrencyCode } from "$app/utils/currency";
 
 import { useProductUrl } from "$app/components/BundleEdit/Layout";
 import { BundleProduct } from "$app/components/BundleEdit/types";
+import { computeStandalonePrice } from "$app/components/BundleEdit/utils";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Product, Seller } from "$app/components/Product";
 import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { RefundPolicy, RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
-
-const computeStandalonePrice = (bundleProduct: BundleProduct) =>
-  (bundleProduct.price_cents +
-    (bundleProduct.variants?.list.find(({ id }) => id === bundleProduct.variants?.selected_id)?.price_difference ??
-      0)) *
-  bundleProduct.quantity;
 
 type ProductPreviewBundle = {
   name: string;
