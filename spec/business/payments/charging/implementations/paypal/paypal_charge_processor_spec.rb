@@ -550,7 +550,7 @@ describe PaypalChargeProcessor, :vcr do
 
       it "does not report an unsupported precision fee when the matching purchase is not successful" do
         create(:purchase, purchase_state: "failed", stripe_transaction_id: "capture-id",
-                           processor_fee_cents: nil, processor_fee_cents_currency: nil)
+                          processor_fee_cents: nil, processor_fee_cents_currency: nil)
         allow(ErrorNotifier).to receive(:notify)
 
         described_class.handle_order_events(
