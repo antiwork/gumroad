@@ -29,3 +29,9 @@ export const transitionCustomizablePrice = (
   nextPriceCents: number,
   customizablePrice: boolean,
 ) => (nextPriceCents === 0 ? true : previousPriceCents === 0 ? false : customizablePrice);
+
+// price_cents from a discount was computed against the standalone total in the OLD currency,
+// so it is a minor-unit amount mislabeled under the new currency code, not a converted price —
+// only a discount-derived price is stale on a currency switch; a manually-typed one carries over.
+export const resetPriceOnCurrencyChange = (hadDiscount: boolean) =>
+  hadDiscount ? { priceCents: 0, customizablePrice: true } : null;
