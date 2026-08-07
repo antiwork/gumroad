@@ -61,19 +61,24 @@ describe("computeDiscountedPriceCents", () => {
 
 describe("transitionCustomizablePrice", () => {
   it("turns pay-what-you-want on when the price becomes 0", () => {
-    expect(transitionCustomizablePrice(500, 0, false)).toBe(true);
-    expect(transitionCustomizablePrice(0, 0, true)).toBe(true);
+    expect(transitionCustomizablePrice(500, 0, false, false)).toBe(true);
+    expect(transitionCustomizablePrice(0, 0, true, true)).toBe(true);
   });
 
-  it("clears the auto-set flag when the price leaves 0", () => {
-    expect(transitionCustomizablePrice(0, 500, true)).toBe(false);
+  it("restores the prior PWYW state when the price leaves 0", () => {
+    expect(transitionCustomizablePrice(0, 500, true, false)).toBe(false);
+  });
+
+  it("keeps a deliberate pay-what-you-want across a temporary $0 dip", () => {
+    // 500 (PWYW on) -> 0 (forced PWYW) -> 500: prior deliberate PWYW survives the dip.
+    expect(transitionCustomizablePrice(0, 500, true, true)).toBe(true);
   });
 
   it("keeps a deliberate pay-what-you-want across nonzero price edits", () => {
-    expect(transitionCustomizablePrice(500, 600, true)).toBe(true);
+    expect(transitionCustomizablePrice(500, 600, true, true)).toBe(true);
   });
 
   it("does not enable pay-what-you-want on a nonzero edit of a fixed-price bundle", () => {
-    expect(transitionCustomizablePrice(500, 600, false)).toBe(false);
+    expect(transitionCustomizablePrice(500, 600, false, false)).toBe(false);
   });
 });

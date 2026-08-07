@@ -146,7 +146,12 @@ export default function BundlesProductEdit() {
       return {
         ...data,
         price_cents: priceCents,
-        customizable_price: transitionCustomizablePrice(data.price_cents, priceCents, data.customizable_price),
+        customizable_price: transitionCustomizablePrice(
+          data.price_cents,
+          priceCents,
+          data.customizable_price,
+          priorCustomizablePriceRef.current,
+        ),
       };
     });
   };
@@ -184,6 +189,13 @@ export default function BundlesProductEdit() {
     default_offer_code: bundle.default_offer_code,
     price_currency_type: currency_type,
   });
+
+  // Tracks customizable_price from the last time price_cents was nonzero, so a temporary $0 dip
+  // (which forces PWYW on) doesn't erase a seller's deliberate PWYW choice once the price returns.
+  const priorCustomizablePriceRef = React.useRef(form.data.customizable_price);
+  React.useEffect(() => {
+    if (form.data.price_cents !== 0) priorCustomizablePriceRef.current = form.data.customizable_price;
+  }, [form.data.price_cents, form.data.customizable_price]);
 
   // Products keep their own currency, and the total sums raw minor units — summing across
   // currencies would state a total that is simply wrong, and converting is the server's job.
@@ -374,7 +386,12 @@ export default function BundlesProductEdit() {
               form.setData((data) => ({
                 ...data,
                 price_cents: priceCents,
-                customizable_price: transitionCustomizablePrice(data.price_cents, priceCents, data.customizable_price),
+                customizable_price: transitionCustomizablePrice(
+                  data.price_cents,
+                  priceCents,
+                  data.customizable_price,
+                  priorCustomizablePriceRef.current,
+                ),
               }));
             }}
             setSuggestedPriceCents={(suggestedPriceCents) => form.setData("suggested_price_cents", suggestedPriceCents)}
