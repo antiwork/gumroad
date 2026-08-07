@@ -182,9 +182,9 @@ export const CreateWorkflowEmail = () => (
     "send_emails": true,
     "delay": { "amount": 4, "unit": "week" },
     "sent_count": 0,
-    "open_count": 0,
+    "open_count": null,
     "open_rate": null,
-    "click_count": 0,
+    "click_count": null,
     "click_rate": null,
     "created_at": "2026-08-06T12:00:00.000Z",
     "updated_at": "2026-08-06T12:00:00.000Z"

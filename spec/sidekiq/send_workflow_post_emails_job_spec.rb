@@ -41,12 +41,28 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(SendWorkflowInstallmentWorker.jobs).to be_empty
 
       described_class.new.perform(@post.id, 3.days.ago.iso8601)
-      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @basic_follower.id, nil)
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      )
 
       # does not limit when earliest_valid_time is nil
       SendWorkflowInstallmentWorker.jobs.clear
       described_class.new.perform(@post.id, nil)
-      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @basic_follower.id, nil)
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      )
     end
 
     it "preserves the trigger time for recipients from a reschedule" do
@@ -59,8 +75,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         @basic_follower.id,
         nil,
         nil,
-        @basic_follower.created_at.iso8601
-      ).immediately
+        @basic_follower.confirmed_at.iso8601
+      ).at(@basic_follower.confirmed_at + @post_rule.delayed_delivery_time)
     end
   end
 

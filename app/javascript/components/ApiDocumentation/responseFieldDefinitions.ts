@@ -817,13 +817,21 @@ export const WORKFLOW_EMAIL_FIELDS: FieldDefinition[] = [
     ],
   },
   { name: "sent_count", type: "number", description: "Number of emails sent for this step" },
-  { name: "open_count", type: "number", description: "Number of unique opens for this step" },
+  {
+    name: "open_count",
+    type: "number | null",
+    description: "Number of unique opens for this step; null in create and update responses",
+  },
   {
     name: "open_rate",
     type: "number | null",
     description: "Unique opens as a percentage of sent emails; null before any emails are sent",
   },
-  { name: "click_count", type: "number", description: "Number of unique clicks for this step" },
+  {
+    name: "click_count",
+    type: "number | null",
+    description: "Number of unique clicks for this step; null in create and update responses",
+  },
   {
     name: "click_rate",
     type: "number | null",

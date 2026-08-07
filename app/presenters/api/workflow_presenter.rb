@@ -31,8 +31,8 @@ class Api::WorkflowPresenter
     payload
   end
 
-  def email_props(email)
-    present_emails([email]).sole
+  def email_props(email, include_analytics: true)
+    present_emails([email], include_analytics:).sole
   end
 
   private
@@ -47,14 +47,14 @@ class Api::WorkflowPresenter
         .to_a
     end
 
-    def present_emails(emails)
-      open_counts = batched_open_counts(emails)
-      click_counts = batched_click_counts(emails)
+    def present_emails(emails, include_analytics: true)
+      open_counts = include_analytics ? batched_open_counts(emails) : {}
+      click_counts = include_analytics ? batched_click_counts(emails) : {}
 
       emails.map do |email|
         sent_count = email.customer_count.to_i
-        open_count = open_counts.fetch(email.id, 0)
-        click_count = click_counts.fetch(email.id, 0)
+        open_count = open_counts.fetch(email.id, nil)
+        click_count = click_counts.fetch(email.id, nil)
 
         {
           id: email.external_id,
@@ -71,9 +71,9 @@ class Api::WorkflowPresenter
           },
           sent_count:,
           open_count:,
-          open_rate: rate(open_count, sent_count),
+          open_rate: open_count.nil? ? nil : rate(open_count, sent_count),
           click_count:,
-          click_rate: rate(click_count, sent_count),
+          click_rate: click_count.nil? ? nil : rate(click_count, sent_count),
           created_at: email.created_at,
           updated_at: email.updated_at,
         }

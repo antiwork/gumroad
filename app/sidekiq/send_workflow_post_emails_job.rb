@@ -58,8 +58,8 @@ class SendWorkflowPostEmailsJob
       elsif type == :follower
         id ||= member.details.dig("follower", "id")
         return log_unresolvable_recipient(member:, type:) if id.nil?
-        created_at = Time.zone.parse(member.details.dig("follower", "created_at"))
-        enqueue_installment_worker(created_at:, follower_id: id)
+        created_at = Follower.where(id:).pick(:confirmed_at) || Time.zone.parse(member.details.dig("follower", "created_at"))
+        enqueue_installment_worker(created_at:, follower_id: id, preserve_reference_time: true)
       elsif type == :affiliate
         affiliate = resolve_affiliate(member:, id:)
         return log_unresolvable_recipient(member:, type:) if affiliate.nil?
@@ -76,9 +76,9 @@ class SendWorkflowPostEmailsJob
       end
     end
 
-    def enqueue_installment_worker(created_at:, purchase_id: nil, follower_id: nil, affiliate_user_id: nil)
+    def enqueue_installment_worker(created_at:, purchase_id: nil, follower_id: nil, affiliate_user_id: nil, preserve_reference_time: false)
       args = [@post.id, @rule_version, purchase_id, follower_id, affiliate_user_id]
-      args.push(nil, created_at.iso8601) if @reschedule_on_stale
+      args.push(nil, created_at.iso8601) if @reschedule_on_stale || preserve_reference_time
       worker = @reschedule_on_stale ? SendWorkflowInstallmentRescheduleJob : SendWorkflowInstallmentWorker
       worker.perform_at(created_at + @rule_delay, *args)
     end

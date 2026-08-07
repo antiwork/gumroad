@@ -52,7 +52,8 @@ class Api::V2::Workflows::EmailsController < Api::V2::BaseController
 
       if success
         saved_email = service.saved_installments.sole
-        render_response(true, email: Api::WorkflowPresenter.new(workflow: @workflow).email_props(saved_email))
+        email_props = Api::WorkflowPresenter.new(workflow: @workflow).email_props(saved_email, include_analytics: false)
+        render_response(true, email: email_props)
       else
         render_bad_request(errors.full_messages.first)
       end

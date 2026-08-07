@@ -82,7 +82,8 @@ class SendWorkflowInstallmentWorker
         purchase = Purchase.find_by(id: purchase_id)&.original_purchase
         installment.workflow_delivery_reference_time(purchase) if purchase.present?
       elsif follower_id.present?
-        Follower.where(id: follower_id).pick(:created_at)
+        follower = Follower.find_by(id: follower_id)
+        follower&.confirmed_at || follower&.created_at
       elsif affiliate_user_id.present?
         email = User.where(id: affiliate_user_id).pick(:email)
         audience = current_audience_member_and_match(installment:, email:)

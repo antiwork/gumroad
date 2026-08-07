@@ -115,7 +115,7 @@ describe SendWorkflowInstallmentWorker do
     end
 
     it "reschedules a recipient from an older API reschedule with the current rule" do
-      reference_time = 2.days.ago.change(usec: 0)
+      reference_time = @follower.confirmed_at.change(usec: 0)
       stale_version = @installment_rule.version
       @installment_rule.update!(delayed_delivery_time: 3.days)
       expect(PostSendgridApi).not_to receive(:process)
@@ -144,7 +144,8 @@ describe SendWorkflowInstallmentWorker do
     end
 
     it "reschedules an overdue ordinary job after the rule version changes" do
-      reference_time = @follower.created_at.change(usec: 0)
+      @follower.update_columns(created_at: 5.days.ago, confirmed_at: 2.days.ago)
+      reference_time = @follower.confirmed_at.change(usec: 0)
       stale_version = @installment_rule.version
       @installment_rule.update!(delayed_delivery_time: 3.days)
       expect(PostSendgridApi).not_to receive(:process)
@@ -171,7 +172,7 @@ describe SendWorkflowInstallmentWorker do
     end
 
     it "does not reschedule a recipient who already received the email" do
-      reference_time = 2.days.ago.change(usec: 0)
+      reference_time = @follower.confirmed_at.change(usec: 0)
       stale_version = @installment_rule.version
       @installment_rule.update!(delayed_delivery_time: 3.days)
       create(:sent_post_email, post: @installment, email: @follower.email)

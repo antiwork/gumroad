@@ -60,7 +60,20 @@ describe Api::V2::Workflows::EmailsController do
         "message" => "<p>Keep going.</p>",
         "state" => Installment::DRAFT,
         "delay" => { "amount" => 4, "unit" => InstallmentRule::WEEK },
+        "open_count" => nil,
+        "click_count" => nil,
       )
+    end
+
+    it "does not query analytics after the email commits" do
+      token = create_access_token("edit_emails")
+      allow(CreatorEmailOpenEvent).to receive(:collection).and_raise("analytics unavailable")
+      allow(CreatorEmailClickSummary).to receive(:in).and_raise("analytics unavailable")
+
+      post @action, params: @params.merge(access_token: token.token)
+
+      expect(response.parsed_body["success"]).to be(true)
+      expect(@workflow.installments.alive.count).to eq(1)
     end
 
     it "activates a new email when the workflow is published without changing workflow state" do
