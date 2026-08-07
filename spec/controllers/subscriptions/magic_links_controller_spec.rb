@@ -58,6 +58,15 @@ describe Subscriptions::MagicLinksController, inertia: true do
       expect(@subscription.reload.token).to_not be_nil
     end
 
+    it "replaces an existing token after validating the email source" do
+      @subscription.refresh_token
+      original_token = @subscription.token
+
+      post :create, params: { subscription_id: @subscription.external_id, email_source: "user" }
+
+      expect(@subscription.reload.token).to_not eq(original_token)
+    end
+
     it "sets the token to expire in 24 hours" do
       expect(@subscription.token_expires_at).to be_nil
       post :create, params: { subscription_id: @subscription.external_id, email_source: "user" }
@@ -66,7 +75,7 @@ describe Subscriptions::MagicLinksController, inertia: true do
 
     it "sends the magic link email and redirects with flash" do
       mail_double = double
-      allow(mail_double).to receive(:deliver_later)
+      expect(mail_double).to receive(:deliver_later).with(queue: "critical")
       expect(CustomerMailer).to receive(:subscription_magic_link).and_return(mail_double)
       post :create, params: { subscription_id: @subscription.external_id, email_source: "user" }
 
@@ -118,6 +127,38 @@ describe Subscriptions::MagicLinksController, inertia: true do
         it "raises a 404 error" do
           expect do
             post :create, params: { subscription_id: @subscription.external_id, email_source: "invalid source" }
+          end.to raise_error(ActionController::RoutingError, "Not Found")
+        end
+
+        it "does not replace an existing magic-link token" do
+          @subscription.refresh_token
+          original_token = @subscription.token
+
+          expect do
+            post :create, params: { subscription_id: @subscription.external_id, email_source: "invalid source" }
+          end.to raise_error(ActionController::RoutingError, "Not Found")
+
+          expect(@subscription.reload.token).to eq(original_token)
+        end
+      end
+
+      context "when the email source is missing" do
+        it "raises a 404 error without replacing an existing magic-link token" do
+          @subscription.refresh_token
+          original_token = @subscription.token
+
+          expect do
+            post :create, params: { subscription_id: @subscription.external_id }
+          end.to raise_error(ActionController::RoutingError, "Not Found")
+
+          expect(@subscription.reload.token).to eq(original_token)
+        end
+      end
+
+      context "when the email source is not a string" do
+        it "raises a 404 error" do
+          expect do
+            post :create, params: { subscription_id: @subscription.external_id, email_source: ["user"] }
           end.to raise_error(ActionController::RoutingError, "Not Found")
         end
       end
