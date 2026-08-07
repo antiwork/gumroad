@@ -473,6 +473,65 @@ describe PaypalChargeProcessor, :vcr do
         expect(purchase.processor_fee_cents_currency).to eq("GBP")
       end
 
+      it "keeps a decimal PayPal fee in exact minor units" do
+        purchase = instance_double(Purchase)
+        successful_purchases = instance_double(ActiveRecord::Relation)
+        allow(Purchase).to receive(:successful).and_return(successful_purchases)
+        allow(successful_purchases).to receive(:find_by).with(stripe_transaction_id: "capture-id").and_return(purchase)
+        expect(purchase).to receive(:processor_fee_cents_currency=).with("USD")
+        allow(purchase).to receive(:processor_fee_cents_currency).and_return("USD")
+        expect(purchase).to receive(:processor_fee_cents=).with(115)
+        expect(purchase).to receive(:save!)
+
+        described_class.handle_order_events(
+          "event_type" => PaypalEventType::PAYMENT_CAPTURE_COMPLETED,
+          "resource" => {
+            "id" => "capture-id",
+            "seller_receivable_breakdown" => { "paypal_fee" => { "value" => "1.15", "currency_code" => "USD" } }
+          }
+        )
+      end
+
+      it "persists an exact decimal PayPal fee" do
+        purchase = build(:purchase, purchase_state: "successful", stripe_transaction_id: "capture-id", processor_fee_cents: nil, processor_fee_cents_currency: nil)
+        purchase.save!(validate: false)
+        allow(purchase).to receive(:save!).and_wrap_original { |original| original.call(validate: false) }
+        successful_purchases = instance_double(ActiveRecord::Relation)
+        allow(Purchase).to receive(:successful).and_return(successful_purchases)
+        allow(successful_purchases).to receive(:find_by).with(stripe_transaction_id: "capture-id").and_return(purchase)
+
+        described_class.handle_order_events(
+          "event_type" => PaypalEventType::PAYMENT_CAPTURE_COMPLETED,
+          "resource" => {
+            "id" => "capture-id",
+            "seller_receivable_breakdown" => { "paypal_fee" => { "value" => "1.15", "currency_code" => "USD" } }
+          }
+        )
+
+        expect(purchase.reload).to have_attributes(processor_fee_cents: 115, processor_fee_cents_currency: "USD")
+      end
+
+      it "skips and reports a PayPal fee with unsupported precision" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.handle_order_events(
+          "id" => "event-id",
+          "event_type" => PaypalEventType::PAYMENT_CAPTURE_COMPLETED,
+          "resource" => {
+            "id" => "capture-id",
+            "seller_receivable_breakdown" => { "paypal_fee" => { "value" => "1.151", "currency_code" => "TND" } }
+          }
+        )
+
+        expect(ErrorNotifier).to have_received(:notify).with(
+          "PayPal capture completed webhook: fee has unsupported precision; skipping fee update",
+          capture_id: "capture-id",
+          fee_currency: "TND",
+          fee_value: "1.151",
+          webhook_event_id: "event-id"
+        )
+      end
+
       it "does nothing if seller_receivable_breakdown is absent" do
         purchase = create(:purchase, stripe_transaction_id: "5B223658W54364539",
                                      processor_fee_cents: nil, processor_fee_cents_currency: nil)

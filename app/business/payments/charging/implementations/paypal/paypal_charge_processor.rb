@@ -136,14 +136,34 @@ class PaypalChargeProcessor
     paypal_fee = event_info.dig("resource", "seller_receivable_breakdown", "paypal_fee")
     return if paypal_fee.blank?
 
+    fee_cents = paypal_fee_cents(paypal_fee["value"], paypal_fee["currency_code"])
+    unless fee_cents
+      ErrorNotifier.notify(
+        "PayPal capture completed webhook: fee has unsupported precision; skipping fee update",
+        capture_id: event_info.dig("resource", "id"),
+        fee_currency: paypal_fee["currency_code"],
+        fee_value: paypal_fee["value"],
+        webhook_event_id: event_info["id"]
+      )
+      return
+    end
+
     purchase = Purchase.successful.find_by(stripe_transaction_id: event_info["resource"]["id"])
     return unless purchase
 
     purchase.processor_fee_cents_currency = paypal_fee["currency_code"]
-    purchase.processor_fee_cents = paypal_fee["value"].to_f * unit_scaling_factor(purchase.processor_fee_cents_currency)
+    purchase.processor_fee_cents = fee_cents
     purchase.save!
   end
   private_class_method :handle_payment_capture_completed_event
+
+  def self.paypal_fee_cents(value, currency)
+    scaled_fee = BigDecimal(value) * unit_scaling_factor(currency)
+    scaled_fee.to_i if scaled_fee.finite? && scaled_fee == scaled_fee.to_i
+  rescue ArgumentError, TypeError, FloatDomainError
+    nil
+  end
+  private_class_method :paypal_fee_cents
 
   def self.handle_payment_capture_denied_event(event_info)
     refund_purchase(capture_id: event_info["resource"]["id"])
