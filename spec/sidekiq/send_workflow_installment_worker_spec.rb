@@ -231,6 +231,7 @@ describe SendWorkflowInstallmentWorker do
       create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
       create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
       purchase.add_to_audience_member_details
+      later_purchase = create(:free_purchase, link: product, email: purchase.email, created_at: Time.current)
       workflow = create(:workflow, seller:, link: product)
       installment = create(
         :installment,
@@ -244,6 +245,14 @@ describe SendWorkflowInstallmentWorker do
       stale_version = rule.version
       rule.update!(delayed_delivery_time: 3.days)
       reference_time = installment.workflow_delivery_reference_time(purchase).change(usec: 0)
+      member = AudienceMember.find_by!(seller:, email: purchase.email)
+      current_match = AudienceMember.filter(
+        seller_id: seller.id,
+        params: installment.audience_members_filter_params,
+        with_ids: true,
+        ids: [member.id]
+      ).sole
+      expect(current_match.purchase_id).to eq(later_purchase.id)
 
       expect do
         described_class.new.perform(

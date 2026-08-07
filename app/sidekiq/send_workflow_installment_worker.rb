@@ -112,7 +112,8 @@ class SendWorkflowInstallmentWorker
       ).first
       return false if current_match.nil?
       if purchase.present?
-        return false if current_match.purchase_id != purchase.id
+        purchase_is_current = member.details.fetch("purchases", []).any? { _1["id"] == purchase.id }
+        return false unless purchase_is_current && installment.workflow.applies_to_purchase?(purchase)
 
         valid_reference_times = [
           purchase.created_at.change(usec: 0),
