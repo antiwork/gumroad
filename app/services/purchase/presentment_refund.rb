@@ -100,18 +100,22 @@ class Purchase::PresentmentRefund
     # presentment becomes unknowable and we fail closed instead of allocating skewed.
     return nil if purchase.refunds.effective.any? { _1.presentment_amount_cents.to_i <= 0 }
 
+    component_cents = remaining_component_cents
+    # The original-total allocator could overdraw a component before exhausting the total.
+    return nil if component_cents.any?(&:negative?)
+
     if refunds_remaining_presentment_amount?
       amount_cents = remaining_presentment_amount_cents
       return nil if amount_cents <= 0
 
-      build_result(amount_cents:, component_cents: remaining_component_cents)
+      build_result(amount_cents:, component_cents:)
     else
       return nil if remaining_presentment_amount_cents <= 0
 
       amount_cents = partial_presentment_amount_cents
       return nil if amount_cents <= 0
 
-      build_result(amount_cents:, component_cents: allocate_components(amount_cents))
+      build_result(amount_cents:, component_cents: allocate_components(amount_cents, component_cents))
     end
   end
 
@@ -120,12 +124,14 @@ class Purchase::PresentmentRefund
   def result_for_presentment_amount(presentment_amount_cents)
     return nil if purchase_presentment.blank? || presentment_amount_cents.to_i <= 0
 
+    component_cents = remaining_component_cents
+    return nil if component_cents.any?(&:negative?)
+
     if presentment_amount_cents == remaining_presentment_amount_cents
-      build_result(amount_cents: presentment_amount_cents,
-                   component_cents: remaining_component_cents)
+      build_result(amount_cents: presentment_amount_cents, component_cents:)
     else
       build_result(amount_cents: presentment_amount_cents,
-                   component_cents: allocate_components(presentment_amount_cents))
+                   component_cents: allocate_components(presentment_amount_cents, component_cents))
     end
   end
 
@@ -170,10 +176,10 @@ class Purchase::PresentmentRefund
       [refunded_share, remaining_presentment_amount_cents].min
     end
 
-    def allocate_components(amount_cents)
+    def allocate_components(amount_cents, component_cents)
       Charge.allocate_by_largest_remainder(
         amount_cents,
-        remaining_component_cents,
+        component_cents,
         remaining_presentment_amount_cents
       )
     end

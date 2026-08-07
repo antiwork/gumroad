@@ -167,6 +167,31 @@ describe Purchase::PresentmentRefund do
     expect(remaining_after.sum).to eq(1)
   end
 
+  it "fails closed when legacy partial refunds already over-allocated a component" do
+    # The original-total allocator could overdraw a small component before exhausting the total.
+    6.times do
+      refund = build(:refund, purchase:, total_transaction_cents: 10, amount_cents: 10)
+      refund.presentment_currency = Currency::CAD
+      refund.presentment_amount_cents = 14
+      refund.presentment_price_cents = 10
+      refund.presentment_tip_cents = 1
+      refund.presentment_seller_tax_cents = 1
+      refund.presentment_gumroad_tax_cents = 2
+      refund.presentment_shipping_cents = 0
+      purchase.refunds << refund
+    end
+
+    expect(purchase.gross_amount_refundable_cents).to eq(40)
+    remaining_components = described_class::COMPONENT_KEYS.map do |key|
+      purchase.purchase_presentment.public_send(key).to_i -
+        purchase.refunds.effective.sum { _1.public_send(key).to_i }
+    end
+    expect(remaining_components).to eq([40, 4, -1, 8, 0])
+
+    expect(described_class.new(purchase:, canonical_gross_refund_cents: 39).result).to be_nil
+    expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 50)).to be_nil
+  end
+
   it "leaves a positive presentment amount for the final one-cent seller refund after three 33-cent partials" do
     3.times do
       result = described_class.new(purchase:, canonical_gross_refund_cents: 33).result
