@@ -18,7 +18,6 @@ import { BundleProduct } from "$app/components/BundleEdit/types";
 import {
   computeDiscountedPriceCents,
   computeStandaloneTotalCents,
-  resetPriceOnCurrencyChange,
   transitionCustomizablePrice,
 } from "$app/components/BundleEdit/utils";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -384,14 +383,9 @@ export default function BundlesProductEdit() {
             currencyCodeSelector={{
               options: currencyCodeList,
               onChange: (currencyCode) => {
-                const reset = resetPriceOnCurrencyChange(discountPercent !== null);
+                // The discount was computed from totals in the previous currency.
                 setDiscountPercent(null);
-                form.setData((data) => ({
-                  ...data,
-                  price_currency_type: currencyCode,
-                  price_cents: reset?.priceCents ?? data.price_cents,
-                  customizable_price: reset?.customizablePrice ?? data.customizable_price,
-                }));
+                form.setData("price_currency_type", currencyCode);
               },
             }}
             eligibleForInstallmentPlans={bundle.eligible_for_installment_plans}

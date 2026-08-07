@@ -5,7 +5,6 @@ import {
   computeDiscountedPriceCents,
   computeStandalonePrice,
   computeStandaloneTotalCents,
-  resetPriceOnCurrencyChange,
   transitionCustomizablePrice,
 } from "$app/components/BundleEdit/utils";
 
@@ -76,15 +75,5 @@ describe("transitionCustomizablePrice", () => {
 
   it("does not enable pay-what-you-want on a nonzero edit of a fixed-price bundle", () => {
     expect(transitionCustomizablePrice(500, 600, false)).toBe(false);
-  });
-});
-
-describe("resetPriceOnCurrencyChange", () => {
-  it("resets price and re-enables pay-what-you-want when a discount was applied", () => {
-    expect(resetPriceOnCurrencyChange(true)).toEqual({ priceCents: 0, customizablePrice: true });
-  });
-
-  it("leaves the price untouched when the amount was typed manually", () => {
-    expect(resetPriceOnCurrencyChange(false)).toBeNull();
   });
 });
