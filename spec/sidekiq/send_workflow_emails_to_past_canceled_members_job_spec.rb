@@ -81,6 +81,19 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
     expect(SendWorkflowInstallmentWorker.jobs).to be_empty
   end
 
+  it "retries if a required rule version is not visible" do
+    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+
+    expect do
+      described_class.new.perform(
+        @installment.id,
+        2.days.to_i,
+        Time.current.iso8601,
+        @rule.version + 1
+      )
+    end.to raise_error(SendWorkflowEmailsToPastCanceledMembersJob::RuleNotCommittedError)
+  end
+
   it "does not reschedule a cancellation that predates publication for a new-recipient workflow" do
     @workflow.update!(send_to_past_customers: false)
     @installment.update!(published_at: 2.hours.ago, is_for_new_customers_of_workflow: true)

@@ -1,6 +1,23 @@
 # frozen_string_literal: true
 
 class InstallmentRule < ApplicationRecord
+  VERSION_CACHE_TTL = 1.day
+  PENDING_VERSION_CACHE_TTL = 5.minutes
+  CACHE_VERSION_SCRIPT = <<~LUA
+    local current = redis.call("GET", KEYS[1])
+    if not current or tonumber(ARGV[1]) >= tonumber(current) then
+      redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[2])
+      return 1
+    end
+    return 0
+  LUA
+  CLEAR_VERSION_SCRIPT = <<~LUA
+    if redis.call("GET", KEYS[1]) == ARGV[1] then
+      return redis.call("DEL", KEYS[1])
+    end
+    return 0
+  LUA
+
   has_paper_trail version: :paper_trail_version
 
   include Deletable
@@ -24,6 +41,24 @@ class InstallmentRule < ApplicationRecord
   # at 1 even though the schema shows a default value of 0. If there is no rule to go with an installment, we pass version = 0 as a
   # parameter so changing version to start at 0 will disrupt current installment jobs in the queue.
   before_save :increment_version, if: :delivery_date_changed?
+  # Publish before commit so stale jobs wait for the primary; the short TTL bounds an interrupted transaction.
+  after_save :cache_pending_version
+  after_commit :promote_cached_version
+  after_rollback :clear_cached_version
+
+  def self.cached_version(installment_id)
+    $redis.get(RedisKey.workflow_installment_rule_version(installment_id))&.to_i
+  end
+
+  def cache_version!(expires_in: VERSION_CACHE_TTL)
+    return if installment_id.nil?
+
+    $redis.eval(
+      CACHE_VERSION_SCRIPT,
+      keys: [RedisKey.workflow_installment_rule_version(installment_id)],
+      argv: [version, expires_in.to_i]
+    )
+  end
 
   # Public: Converts the delayed_delivery_time back into the number the creator entered using the time period of the rule
   #
@@ -51,6 +86,26 @@ class InstallmentRule < ApplicationRecord
   end
 
   private
+    def cache_pending_version
+      cache_version!(expires_in: PENDING_VERSION_CACHE_TTL)
+    end
+
+    def promote_cached_version
+      cache_version!
+    rescue Redis::BaseError => e
+      ErrorNotifier.notify(e, installment_rule_id: id)
+    end
+
+    def clear_cached_version
+      return if installment_id.nil?
+
+      $redis.eval(
+        CLEAR_VERSION_SCRIPT,
+        keys: [RedisKey.workflow_installment_rule_version(installment_id)],
+        argv: [version]
+      )
+    end
+
     # Private: Increments version of InstallmentRule. This is so PublishInstallment jobs are ignored if the version of the job does not match the
     # most recent version of the InstallmentRule. We want to update the version every time the creator changes when it is scheduled.
     def increment_version

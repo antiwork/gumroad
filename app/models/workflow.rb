@@ -91,18 +91,20 @@ class Workflow < ApplicationRecord
     first_published_at.nil?
   end
 
-  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, reschedule_on_stale: false)
+  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, reschedule_on_stale: false, minimum_rule_version: nil)
     return if installment.abandoned_cart_type?
     return unless alive?
     return unless installment.published?
 
     if member_cancellation_trigger?
       if old_delayed_delivery_time.present? && reschedule_on_stale
-        SendWorkflowEmailsToPastCanceledMembersJob.perform_async(
+        args = [
           installment.id,
           old_delayed_delivery_time,
           cutoff_reference_time.iso8601
-        )
+        ]
+        args << minimum_rule_version if minimum_rule_version.present?
+        SendWorkflowEmailsToPastCanceledMembersJob.perform_async(*args)
       elsif send_to_past_customers?
         SendWorkflowEmailsToPastCanceledMembersJob.perform_async(installment.id)
       end
@@ -128,7 +130,8 @@ class Workflow < ApplicationRecord
     end
 
     args = [installment.id, earliest_valid_time&.iso8601]
-    args << true if reschedule_on_stale
+    args << true if reschedule_on_stale || minimum_rule_version.present?
+    args << minimum_rule_version if minimum_rule_version.present?
     SendWorkflowPostEmailsJob.perform_async(*args)
   end
 end

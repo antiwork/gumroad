@@ -1,17 +1,27 @@
 # frozen_string_literal: true
 
 class SendWorkflowPostEmailsJob
+  class RuleNotCommittedError < StandardError; end
+
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
-  def perform(post_id, earliest_valid_time = nil, reschedule_on_stale = false)
+  FOLLOWER_LOOKUP_BATCH_SIZE = 1_000
+
+  def perform(post_id, earliest_valid_time = nil, reschedule_on_stale = false, minimum_rule_version = nil)
+    ActiveRecord::Base.connection.stick_to_primary! if minimum_rule_version.present?
     @post = Installment.find(post_id)
     @workflow = @post.workflow
     @reschedule_on_stale = reschedule_on_stale
     return unless @workflow.alive? && @post.alive? && @post.published?
 
-    @rule_version = @post.installment_rule.version
-    @rule_delay = @post.installment_rule.delayed_delivery_time
+    rule = @post.installment_rule
+    if minimum_rule_version.present? && (rule.nil? || rule.version < minimum_rule_version)
+      raise RuleNotCommittedError
+    end
+    rule.cache_version!
+    @rule_version = rule.version
+    @rule_delay = rule.delayed_delivery_time
 
     @filters = @post.audience_members_filter_params
     @original_filters = @filters.dup
@@ -24,7 +34,9 @@ class SendWorkflowPostEmailsJob
     @members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
       members = AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).
         select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
-      (members + confirmed_follower_members_after_cutoff).uniq(&:id)
+      members = merge_confirmed_followers_after_cutoff(members)
+      @follower_confirmation_times_by_id = follower_confirmation_times_by_id(members)
+      members
     end
 
     @members.each do |member|
@@ -59,12 +71,27 @@ class SendWorkflowPostEmailsJob
         .where(seller_id: @post.seller_id, email: follower_emails)
         .select(:id)
 
-      AudienceMember.filter(
+      members = AudienceMember.filter(
         seller_id: @post.seller_id,
         params: @original_filters,
         with_ids: true,
         ids: member_ids
       ).select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
+      # A purchase filter can hide the follower JSON_TABLE row, but every member here matched the follower subquery.
+      members.each { _1.follower_id = _1.details.dig("follower", "id") }
+      members
+    end
+
+    def merge_confirmed_followers_after_cutoff(members)
+      members_by_id = members.index_by(&:id)
+      confirmed_follower_members_after_cutoff.each do |follower_member|
+        if (member = members_by_id[follower_member.id])
+          member.follower_id ||= follower_member.follower_id
+        else
+          members << follower_member
+        end
+      end
+      members
     end
 
     def enqueue_email_job(member:, type:, id:)
@@ -81,7 +108,7 @@ class SendWorkflowPostEmailsJob
       elsif type == :follower
         id ||= member.details.dig("follower", "id")
         return log_unresolvable_recipient(member:, type:) if id.nil?
-        created_at = Follower.where(id:).pick(:confirmed_at) || Time.zone.parse(member.details.dig("follower", "created_at"))
+        created_at = @follower_confirmation_times_by_id[id] || Time.zone.parse(member.details.dig("follower", "created_at"))
         enqueue_installment_worker(created_at:, follower_id: id, preserve_reference_time: true)
       elsif type == :affiliate
         affiliate = resolve_affiliate(member:, id:)
@@ -104,6 +131,19 @@ class SendWorkflowPostEmailsJob
       args.push(nil, created_at.iso8601) if @reschedule_on_stale || preserve_reference_time
       worker = @reschedule_on_stale ? SendWorkflowInstallmentRescheduleJob : SendWorkflowInstallmentWorker
       worker.perform_at(created_at + @rule_delay, *args)
+    end
+
+    def follower_confirmation_times_by_id(members)
+      return {} unless @post.follower_type? || @post.audience_type?
+
+      follower_ids = if @post.follower_type?
+        members.filter_map { _1.follower_id || _1.details.dig("follower", "id") }
+      else
+        members.filter_map(&:follower_id)
+      end
+      follower_ids.uniq.each_slice(FOLLOWER_LOOKUP_BATCH_SIZE).each_with_object({}) do |ids, confirmation_times|
+        confirmation_times.merge!(Follower.where(id: ids).pluck(:id, :confirmed_at).to_h)
+      end
     end
 
     # A person can be an affiliate for several of the seller's products, and `details["affiliates"]`

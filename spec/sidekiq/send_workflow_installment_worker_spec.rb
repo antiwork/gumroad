@@ -27,9 +27,13 @@ describe SendWorkflowInstallmentWorker do
       SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, @purchase.id, nil, nil)
     end
 
-    it "does not call mailer if different version" do
+    it "retries if the queued version is not visible" do
       expect(PostSendgridApi).not_to receive(:process)
-      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version + 1, @purchase.id, nil, nil)
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_call_original
+
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version + 1, @purchase.id, nil, nil)
+      end.to raise_error(SendWorkflowInstallmentWorker::RuleNotCommittedError)
     end
 
     it "does not call mailer if deleted installment" do
@@ -101,6 +105,7 @@ describe SendWorkflowInstallmentWorker do
 
     it "calls follower mailer if same version" do
       allow(PostSendgridApi).to receive(:process)
+      expect(InstallmentRule).not_to receive(:find_by)
       SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
       expect(PostSendgridApi).to have_received(:process).with(
         post: @installment,
@@ -109,9 +114,44 @@ describe SendWorkflowInstallmentWorker do
       )
     end
 
-    it "does not call mailer if different version" do
+    it "delivers an ordinary audience job when a purchase filter hides the joined follower id" do
+      product = create(:product, user: @user, price_cents: 0)
+      purchase = create(:free_purchase, link: product, email: @follower.email)
+      purchase.add_to_audience_member_details
+      @installment.update!(installment_type: Installment::AUDIENCE_TYPE, bought_products: [product.unique_permalink])
+      member = AudienceMember.find_by!(seller: @user, email: @follower.email)
+      current_match = AudienceMember.filter(
+        seller_id: @user.id,
+        params: @installment.audience_members_filter_params,
+        with_ids: true,
+        ids: [member.id]
+      ).sole
+      expect(current_match.follower_id).to be_nil
+
+      reference_time = @follower.confirmed_at.change(usec: 0)
+      allow(PostSendgridApi).to receive(:process)
+
+      described_class.new.perform(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        @follower.id,
+        nil,
+        nil,
+        reference_time.iso8601
+      )
+      expect(PostSendgridApi).to have_received(:process).with(
+        post: @installment,
+        recipients: [{ email: @follower.email, follower: @follower, url_redirect: UrlRedirect.find_by(installment: @installment) }],
+        cache: {}
+      )
+    end
+
+    it "retries if the queued version is not visible" do
       expect(PostSendgridApi).not_to receive(:process)
-      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version + 1, nil, @follower.id, nil)
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version + 1, nil, @follower.id, nil)
+      end.to raise_error(SendWorkflowInstallmentWorker::RuleNotCommittedError)
     end
 
     it "reschedules a recipient from an older API reschedule with the current rule" do
@@ -180,6 +220,26 @@ describe SendWorkflowInstallmentWorker do
 
       expect do
         SendWorkflowInstallmentWorker.new.perform(
+          @installment.id,
+          stale_version,
+          nil,
+          @follower.id,
+          nil,
+          nil,
+          reference_time.iso8601
+        )
+      end.not_to change(SendWorkflowInstallmentRescheduleJob.jobs, :size)
+    end
+
+    it "does not reschedule a recipient whose trigger predates publication" do
+      @follower.update!(confirmed_at: 2.hours.ago)
+      @installment.update!(is_for_new_customers_of_workflow: true, published_at: 1.hour.ago)
+      reference_time = @follower.confirmed_at.change(usec: 0)
+      stale_version = @installment_rule.version
+      @installment_rule.update!(delayed_delivery_time: 3.days)
+
+      expect do
+        described_class.new.perform(
           @installment.id,
           stale_version,
           nil,
@@ -323,6 +383,58 @@ describe SendWorkflowInstallmentWorker do
         nil,
         reference_time.iso8601
       ).at(reference_time + rule.delayed_delivery_time)
+    end
+
+    it "uses the latest reference time after another membership restart" do
+      seller = create(:user)
+      product = create(:subscription_product, user: seller)
+      subscription = create(:subscription, link: product)
+      purchase = create(
+        :free_purchase,
+        link: product,
+        subscription:,
+        is_original_subscription_purchase: true,
+        email: "restarted-again@example.com",
+        created_at: 10.days.ago
+      )
+      create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
+      create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 8.days.ago)
+      previous_reference_time = purchase.created_at + 1.day
+      create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 7.days.ago)
+      create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
+      purchase.add_to_audience_member_details
+      workflow = create(:workflow, seller:, link: product)
+      installment = create(
+        :installment,
+        seller:,
+        link: product,
+        workflow:,
+        published_at: Time.current,
+        installment_type: Installment::PRODUCT_TYPE
+      )
+      rule = create(:installment_rule, installment:, delayed_delivery_time: 5.days)
+      current_reference_time = installment.workflow_delivery_reference_time(purchase).change(usec: 0)
+
+      described_class.new.perform(
+        installment.id,
+        rule.version,
+        purchase.id,
+        nil,
+        nil,
+        nil,
+        previous_reference_time.iso8601
+      )
+
+      expect(current_reference_time).not_to eq(previous_reference_time)
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        installment.id,
+        rule.version,
+        purchase.id,
+        nil,
+        nil,
+        nil,
+        current_reference_time.iso8601
+      ).at(current_reference_time + rule.delayed_delivery_time)
     end
   end
 

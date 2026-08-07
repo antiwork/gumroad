@@ -1,30 +1,45 @@
 # frozen_string_literal: true
 
 class SendWorkflowInstallmentWorker
+  class RuleNotCommittedError < StandardError; end
+
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
   def perform(installment_id, version, purchase_id, follower_id, affiliate_user_id = nil, subscription_id = nil, reschedule_reference_time = nil)
-    installment = Installment.find_by(id: installment_id)
+    expected_rule_version = current_rule_version(installment_id)
+    return if expected_rule_version.nil?
+    ActiveRecord::Base.connection.stick_to_primary! if expected_rule_version != version
 
-    return if installment.nil?
+    installment = Installment.find_by(id: installment_id)
+    installment_rule = installment&.installment_rule
+    if installment.nil? || installment_rule.nil? || installment_rule.version != version
+      ActiveRecord::Base.connection.stick_to_primary!
+      installment = Installment.find_by(id: installment_id)
+      return if installment.nil?
+
+      installment_rule = installment.installment_rule
+      return if installment_rule.nil?
+    end
+    if installment_rule.version < expected_rule_version || installment_rule.version < version
+      raise RuleNotCommittedError
+    end
     return if installment.seller&.suspended?
     return unless installment.workflow.alive?
     return unless installment.alive?
     return unless installment.published?
 
-    installment_rule = installment.installment_rule
-    return if installment_rule.nil?
     if installment_rule.version != version
-      return if installment_rule.version < version
-
-      reschedule_reference_time ||= current_recipient_reference_time(
+      current_reference_time = current_recipient_reference_time(
         installment:,
         purchase_id:,
         follower_id:,
         affiliate_user_id:,
         subscription_id:
       )
+      if reschedule_reference_time.nil? || purchase_id.present?
+        reschedule_reference_time = current_reference_time
+      end
       return if reschedule_reference_time.nil?
       return unless recipient_matches_current_audience?(
         installment:,
@@ -45,6 +60,36 @@ class SendWorkflowInstallmentWorker
         reschedule_reference_time:
       )
       return
+    end
+    if purchase_id.present? && reschedule_reference_time.present?
+      current_reference_time = current_recipient_reference_time(
+        installment:,
+        purchase_id:,
+        follower_id:,
+        affiliate_user_id:,
+        subscription_id:
+      )
+      if current_reference_time.present? && current_reference_time != reschedule_reference_time
+        return unless recipient_matches_current_audience?(
+          installment:,
+          purchase_id:,
+          follower_id:,
+          affiliate_user_id:,
+          subscription_id:,
+          reschedule_reference_time: current_reference_time
+        )
+        reschedule_with_current_rule(
+          installment:,
+          installment_rule:,
+          version:,
+          purchase_id:,
+          follower_id:,
+          affiliate_user_id:,
+          subscription_id:,
+          reschedule_reference_time: current_reference_time
+        )
+        return
+      end
     end
     if reschedule_reference_time.present?
       return unless recipient_matches_current_audience?(
@@ -74,6 +119,18 @@ class SendWorkflowInstallmentWorker
   end
 
   private
+    def current_rule_version(installment_id)
+      cached_version = InstallmentRule.cached_version(installment_id)
+      return cached_version if cached_version.present?
+
+      ActiveRecord::Base.connection.stick_to_primary!
+      rule = InstallmentRule.find_by(installment_id:)
+      rule&.cache_version!
+      rule&.version
+    ensure
+      Makara::Context.release_all
+    end
+
     def current_recipient_reference_time(installment:, purchase_id:, follower_id:, affiliate_user_id:, subscription_id:)
       recipient_ids = [purchase_id, follower_id, affiliate_user_id, subscription_id]
       return unless recipient_ids.one?(&:present?)
@@ -118,6 +175,9 @@ class SendWorkflowInstallmentWorker
       return false unless recipient_ids.one?(&:present?)
 
       reference_time = Time.zone.iso8601(reschedule_reference_time)
+      if installment.is_for_new_customers_of_workflow && reference_time < installment.published_at
+        return false
+      end
       if subscription_id.present?
         subscription = Subscription.find_by(id: subscription_id)
         return false if subscription.nil? || subscription.alive?
@@ -156,7 +216,8 @@ class SendWorkflowInstallmentWorker
         return valid_reference_times.include?(reference_time)
       end
       if follower_id.present?
-        return false unless current_match.follower_id == follower_id
+        current_follower_id = current_match.follower_id || member.details.dig("follower", "id")
+        return false unless current_follower_id == follower_id
 
         follower = Follower.active.find_by(id: follower_id)
         return false if follower.nil?

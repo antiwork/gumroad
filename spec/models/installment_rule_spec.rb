@@ -29,6 +29,20 @@ describe InstallmentRule do
       expect(@post_rule.reload.version).to eq(2)
     end
 
+    it "publishes the new version to the shared delivery cache" do
+      @post_rule.update!(delayed_delivery_time: 100)
+
+      expect(described_class.cached_version(@post.id)).to eq(@post_rule.version)
+    end
+
+    it "does not fail after the database commit if Redis is unavailable" do
+      error = Redis::CannotConnectError.new("unavailable")
+      allow(@post_rule).to receive(:cache_version!).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: @post_rule.id)
+
+      expect { @post_rule.send(:promote_cached_version) }.not_to raise_error
+    end
+
     it "does not increment the version if period is changed" do
       expect do
         @post_rule.time_period = "DAY"

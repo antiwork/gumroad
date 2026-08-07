@@ -12,7 +12,8 @@ describe ScheduleWorkflowInstallmentJob do
         kind_of(Installment),
         old_delayed_delivery_time: 1.hour.to_i,
         cutoff_reference_time:,
-        reschedule_on_stale: true
+        reschedule_on_stale: true,
+        minimum_rule_version: rule.version
       )
 
     described_class.new.perform(installment.id, rule.version, 1.hour.to_i, cutoff_reference_time.iso8601)
@@ -30,7 +31,8 @@ describe ScheduleWorkflowInstallmentJob do
         kind_of(Installment),
         old_delayed_delivery_time: 1.hour.to_i,
         cutoff_reference_time:,
-        reschedule_on_stale: true
+        reschedule_on_stale: true,
+        minimum_rule_version: rule.version
       )
 
     described_class.new.perform(installment.id, rule.version - 1, 1.hour.to_i, cutoff_reference_time.iso8601)
@@ -76,6 +78,8 @@ describe ScheduleWorkflowInstallmentJob do
     rule.update!(delayed_delivery_time: 7.days)
     old_delayed_delivery_time = 3.days.to_i
     reference_time = installment.workflow_delivery_reference_time(purchase).change(usec: 0)
+    expect_any_instance_of(Subscription).not_to receive(:last_resubscribed_at)
+    expect_any_instance_of(Subscription).not_to receive(:last_deactivated_at)
 
     described_class.new.perform(
       installment.id,
@@ -130,5 +134,25 @@ describe ScheduleWorkflowInstallmentJob do
 
     expect(installment.workflow_delivery_reference_time(purchase)).to be < installment.published_at
     expect(SendWorkflowInstallmentRescheduleJob.jobs).to be_empty
+  end
+
+  it "limits the resubscription repair scan to the recipient window" do
+    seller = create(:user)
+    product = create(:subscription_product, user: seller)
+    recent_subscription = create(:subscription, link: product)
+    old_subscription = create(:subscription, link: product)
+    recent_restart = create(:subscription_event, subscription: recent_subscription, event_type: :restarted, occurred_at: 1.day.ago)
+    recent_restart.update_columns(seller_id: nil)
+    create(:subscription_event, subscription: old_subscription, event_type: :restarted, occurred_at: 10.days.ago)
+    workflow = build(:seller_workflow, seller:)
+
+    candidates = described_class.new.send(
+      :candidate_subscriptions,
+      workflow,
+      restarted_after: 3.days.ago
+    )
+
+    expect(candidates).to include(recent_subscription)
+    expect(candidates).not_to include(old_subscription)
   end
 end

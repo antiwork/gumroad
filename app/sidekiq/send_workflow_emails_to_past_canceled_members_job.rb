@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
 class SendWorkflowEmailsToPastCanceledMembersJob
+  class RuleNotCommittedError < StandardError; end
+
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
-  def perform(installment_id, old_delayed_delivery_time = nil, cutoff_reference_time = nil)
+  def perform(installment_id, old_delayed_delivery_time = nil, cutoff_reference_time = nil, minimum_rule_version = nil)
+    ActiveRecord::Base.connection.stick_to_primary! if minimum_rule_version.present?
     installment = Installment.find(installment_id)
     workflow = installment.workflow
     return unless workflow&.alive? && installment.alive? && installment.published?
@@ -16,6 +19,8 @@ class SendWorkflowEmailsToPastCanceledMembersJob
 
     rule = installment.installment_rule
     return if rule.nil?
+    raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
+    rule.cache_version!
 
     delay = rule.delayed_delivery_time
     rule_version = rule.version

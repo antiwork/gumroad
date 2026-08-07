@@ -36,6 +36,34 @@ describe Workflow do
       )
     end
 
+    it "carries the observed rule version into a reschedule scan" do
+      workflow = create(:audience_workflow, published_at: 1.day.ago)
+      installment = create(
+        :workflow_installment,
+        workflow:,
+        seller: workflow.seller,
+        published_at: workflow.published_at,
+        is_for_new_customers_of_workflow: false,
+      )
+      cutoff_reference_time = Time.current.change(usec: 0)
+      minimum_rule_version = installment.installment_rule.version
+
+      workflow.schedule_installment(
+        installment,
+        old_delayed_delivery_time: 6.hours.to_i,
+        cutoff_reference_time:,
+        reschedule_on_stale: true,
+        minimum_rule_version:
+      )
+
+      expect(SendWorkflowPostEmailsJob).to have_enqueued_sidekiq_job(
+        installment.id,
+        (cutoff_reference_time - 6.hours).iso8601,
+        true,
+        minimum_rule_version
+      )
+    end
+
     it "reschedules pending cancellation emails after a rule edit for a new-recipient workflow" do
       workflow = create(
         :workflow,
@@ -43,19 +71,23 @@ describe Workflow do
         send_to_past_customers: false
       )
       installment = create(:published_installment, workflow:, seller: workflow.seller, link: workflow.link)
+      rule = create(:installment_rule, installment:)
       cutoff_reference_time = Time.current.change(usec: 0)
+      minimum_rule_version = rule.version
 
       workflow.schedule_installment(
         installment,
         old_delayed_delivery_time: 1.day.to_i,
         cutoff_reference_time:,
-        reschedule_on_stale: true
+        reschedule_on_stale: true,
+        minimum_rule_version:
       )
 
       expect(SendWorkflowEmailsToPastCanceledMembersJob).to have_enqueued_sidekiq_job(
         installment.id,
         1.day.to_i,
-        cutoff_reference_time.iso8601
+        cutoff_reference_time.iso8601,
+        minimum_rule_version
       )
       expect(SendWorkflowPostEmailsJob.jobs).to be_empty
     end
