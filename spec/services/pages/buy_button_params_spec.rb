@@ -85,7 +85,21 @@ describe Pages::BuyButtonParams do
 
       it "passes through a price at or above the minimum" do
         node = node_for(%(<a data-gumroad-action="buy" data-gumroad-price="9.99">Buy</a>))
-        expect(described_class.from(node, product:)).to eq(price: 9.99)
+        expect(described_class.from(node, product:)).to eq(price: "9.99")
+      end
+
+      it "passes through an exact decimal price at the minimum" do
+        product.update!(price_cents: 1_999)
+        node = node_for(%(<a data-gumroad-action="buy" data-gumroad-price="19.99">Buy</a>))
+
+        expect(described_class.from(node, product:)).to eq(price: "19.99")
+      end
+
+      it "uses the product currency's minor-unit scale" do
+        product.update!(price_currency_type: "jpy", price_cents: 1_999)
+        node = node_for(%(<a data-gumroad-action="buy" data-gumroad-price="1999">Buy</a>))
+
+        expect(described_class.from(node, product:)).to eq(price: "1999")
       end
 
       it "drops the attribute when the product isn't pay-what-you-want" do

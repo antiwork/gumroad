@@ -22,6 +22,9 @@
 # recurrences) are memoized on the instance so a page with many buy buttons
 # doesn't re-query `product.options` / `product.recurrences` per button.
 class Pages::BuyButtonParams
+  PRICE_INPUT_MAX_LENGTH = 64
+  PRICE_INPUT_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
+
   # One-shot helper for callers validating a single node. The interpolator
   # instantiates the validator once and reuses it across all buy buttons.
   def self.from(node, product:)
@@ -72,18 +75,16 @@ class Pages::BuyButtonParams
       raw = node["data-gumroad-price"]
       return nil if raw.blank?
 
-      val = Float(raw, exception: false)
-      return nil unless val && val.finite? && val > 0
+      raw = raw.to_s
+      return nil if raw.length > PRICE_INPUT_MAX_LENGTH || !raw.match?(PRICE_INPUT_PATTERN)
 
-      # Convert to cents the same way the checkout does — LinksController#show
-      # uses (price.to_f * 100).to_i — so this validation never admits a price the
-      # checkout would itself truncate below the minimum and refuse to honor. The
-      # float quirk (e.g. 9.99 → 998) lives on both sides; dropping such a
-      # boundary price here just falls the buy button back to the default checkout.
-      val_cents = (val * 100).to_i
+      value = BigDecimal(raw)
+      return nil unless value.positive?
+
+      val_cents = (value * (product.single_unit_currency? ? 1 : 100)).round
       return nil if val_cents < product.price_cents.to_i
 
-      val
+      raw
     end
 
     def recurrence(node)

@@ -236,6 +236,18 @@ describe Pages::Interpolator do
       expect(result).to include(%(data-gumroad-checkout-params='{"variant":"Pro plan","quantity":2}'))
     end
 
+    it "bakes an exact PWYW minimum into the checkout href and payload" do
+      product = create(:product, customizable_price: true, price_cents: 1_999)
+
+      result = described_class.interpolate(
+        %(<a data-gumroad-action="buy" data-gumroad-price="19.99">Buy</a>),
+        product: product
+      )
+
+      expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true&amp;price=19.99"))
+      expect(result).to include(%(data-gumroad-checkout-params='{"price":"19.99"}'))
+    end
+
     it "silently drops selection attributes the product can't honor (lenient fallback)" do
       product = create(:product, price_cents: 100) # simple product, no variants/PWYW/quantity/recurrence
 
