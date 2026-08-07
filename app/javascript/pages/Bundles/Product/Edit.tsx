@@ -15,7 +15,11 @@ import { CurrencyCode, currencyCodeList, formatPriceCentsWithCurrencySymbol } fr
 import { BundleEditLayout, useProductUrl } from "$app/components/BundleEdit/Layout";
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
 import { BundleProduct } from "$app/components/BundleEdit/types";
-import { computeDiscountedPriceCents, computeStandaloneTotalCents } from "$app/components/BundleEdit/utils";
+import {
+  computeDiscountedPriceCents,
+  computeStandaloneTotalCents,
+  transitionCustomizablePrice,
+} from "$app/components/BundleEdit/utils";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { NumberInput } from "$app/components/NumberInput";
 import { Seller } from "$app/components/Product";
@@ -141,7 +145,7 @@ export default function BundlesProductEdit() {
       return {
         ...data,
         price_cents: priceCents,
-        customizable_price: priceCents === 0,
+        customizable_price: transitionCustomizablePrice(data.price_cents, priceCents, data.customizable_price),
       };
     });
   };
@@ -349,7 +353,7 @@ export default function BundlesProductEdit() {
               form.setData((data) => ({
                 ...data,
                 price_cents: priceCents,
-                customizable_price: priceCents === 0,
+                customizable_price: transitionCustomizablePrice(data.price_cents, priceCents, data.customizable_price),
               }));
             }}
             setSuggestedPriceCents={(suggestedPriceCents) => form.setData("suggested_price_cents", suggestedPriceCents)}

@@ -20,3 +20,12 @@ export const computeStandaloneTotalCents = (products: PricedBundleProduct[]) =>
 
 export const computeDiscountedPriceCents = (standaloneTotalCents: number, discountPercent: number) =>
   Math.max(0, Math.round(standaloneTotalCents * (1 - discountPercent / 100)));
+
+// A $0 bundle must be pay-what-you-want, and leaving $0 clears that auto-set flag — but a
+// nonzero-to-nonzero edit must not touch a PWYW the seller enabled deliberately (PWYW with a
+// nonzero minimum is a supported state; see PriceEditor's "Minimum amount" field).
+export const transitionCustomizablePrice = (
+  previousPriceCents: number,
+  nextPriceCents: number,
+  customizablePrice: boolean,
+) => (nextPriceCents === 0 ? true : previousPriceCents === 0 ? false : customizablePrice);

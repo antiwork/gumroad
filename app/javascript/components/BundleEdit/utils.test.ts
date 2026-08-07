@@ -5,6 +5,7 @@ import {
   computeDiscountedPriceCents,
   computeStandalonePrice,
   computeStandaloneTotalCents,
+  transitionCustomizablePrice,
 } from "$app/components/BundleEdit/utils";
 
 const product = (priceCents: number, quantity = 1, priceDifference: number | null = null) => ({
@@ -55,5 +56,24 @@ describe("computeDiscountedPriceCents", () => {
 
   it("never returns a negative price", () => {
     expect(computeDiscountedPriceCents(2800, 150)).toBe(0);
+  });
+});
+
+describe("transitionCustomizablePrice", () => {
+  it("turns pay-what-you-want on when the price becomes 0", () => {
+    expect(transitionCustomizablePrice(500, 0, false)).toBe(true);
+    expect(transitionCustomizablePrice(0, 0, true)).toBe(true);
+  });
+
+  it("clears the auto-set flag when the price leaves 0", () => {
+    expect(transitionCustomizablePrice(0, 500, true)).toBe(false);
+  });
+
+  it("keeps a deliberate pay-what-you-want across nonzero price edits", () => {
+    expect(transitionCustomizablePrice(500, 600, true)).toBe(true);
+  });
+
+  it("does not enable pay-what-you-want on a nonzero edit of a fixed-price bundle", () => {
+    expect(transitionCustomizablePrice(500, 600, false)).toBe(false);
   });
 });
