@@ -716,10 +716,11 @@ describe Payouts do
   describe ".create_payment" do
     let(:payout_date) { Date.today - 1 }
     let(:user) { create(:user) }
+    let!(:merchant_account) { create(:merchant_account, user:) }
 
     before do
       create(:ach_account, user:)
-      create(:balance, user:, date: payout_date - 1, amount_cents: 10_00)
+      create(:balance, user:, merchant_account:, date: payout_date - 1, amount_cents: 10_00)
     end
 
     it "marks the payment as processing when preparation succeeds" do
@@ -756,6 +757,50 @@ describe Payouts do
         expect(payment.state).to eq("failed")
         expect(payment_errors).to eq([error_message])
       end.not_to raise_error
+    end
+
+    it "skips a balance that left unpaid between selection and lock instead of raising" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      balance = user.balances.sole
+      expect(balance).to be_unpaid
+
+      # Simulate the concurrent loser: it selected this row while unpaid, then the winner
+      # marked it processing before the loser's with_lock ran. unpaid_balances_up_to_date
+      # would normally omit processing rows, so stub the stale selection the loser still holds.
+      balance.mark_processing!
+      allow(user).to receive(:unpaid_balances_up_to_date).with(payout_date).and_return(Balance.where(id: balance.id))
+
+      # Without the unpaid? guard, mark_processing! raises StateMachines::InvalidTransition.
+      marked = nil
+      expect do
+        marked = described_class.send(:mark_balances_processing, payout_date, PayoutProcessorType::STRIPE, user)
+      end.not_to raise_error
+
+      expect(marked).to eq([])
+      expect(balance.reload).to be_processing
+    end
+
+    it "marks only still-unpaid balances when a concurrent winner took part of the selection" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      first = user.balances.sole
+      second = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 5_00)
+      expect(first).to be_unpaid
+      expect(second).to be_unpaid
+
+      # Stale selection holds both ids as unpaid in memory; the winner already claimed `first`.
+      first.mark_processing!
+      allow(user).to receive(:unpaid_balances_up_to_date).with(payout_date).and_return(
+        Balance.where(id: [first.id, second.id]).order(:id)
+      )
+
+      marked = nil
+      expect do
+        marked = described_class.send(:mark_balances_processing, payout_date, PayoutProcessorType::STRIPE, user)
+      end.not_to raise_error
+
+      expect(marked.map(&:id)).to eq([second.id])
+      expect(first.reload).to be_processing
+      expect(second.reload).to be_processing
     end
   end
 
