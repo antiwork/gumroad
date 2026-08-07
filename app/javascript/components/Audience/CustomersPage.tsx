@@ -461,7 +461,7 @@ const CustomersPage = ({
                 <TableRow>
                   <TableHead>Email</TableHead>
                   {showNameColumn ? <TableHead>Name</TableHead> : null}
-                  <TableHead>Product</TableHead>
+                  <TableHead {...thProps("product_name")}>Product</TableHead>
                   <TableHead {...thProps("created_at")}>Purchase Date</TableHead>
                   <TableHead {...thProps("price_cents")}>Price</TableHead>
                 </TableRow>
