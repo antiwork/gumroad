@@ -108,13 +108,5 @@ export const CustomHtmlPreview = ({
     return () => window.removeEventListener("message", onMessage);
   }, [productsSrc, productsDefaultLimit]);
 
-  return (
-    <iframe
-      ref={frameRef}
-      title={title}
-      src={src}
-      sandbox="allow-scripts"
-      className={className}
-    />
-  );
+  return <iframe ref={frameRef} title={title} src={src} sandbox="allow-scripts" className={className} />;
 };
