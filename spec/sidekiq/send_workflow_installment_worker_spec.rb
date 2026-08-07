@@ -143,6 +143,33 @@ describe SendWorkflowInstallmentWorker do
       ).at(reference_time + 3.days)
     end
 
+    it "reschedules an overdue ordinary job after the rule version changes" do
+      reference_time = @follower.created_at.change(usec: 0)
+      stale_version = @installment_rule.version
+      @installment_rule.update!(delayed_delivery_time: 3.days)
+      expect(PostSendgridApi).not_to receive(:process)
+
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(
+          @installment.id,
+          stale_version,
+          nil,
+          @follower.id,
+          nil
+        )
+      end.to change(SendWorkflowInstallmentRescheduleJob.jobs, :size).by(1)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        @follower.id,
+        nil,
+        nil,
+        reference_time.iso8601
+      ).at(reference_time + 3.days)
+    end
+
     it "does not reschedule a recipient who already received the email" do
       reference_time = 2.days.ago.change(usec: 0)
       stale_version = @installment_rule.version

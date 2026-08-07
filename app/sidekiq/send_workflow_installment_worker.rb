@@ -15,7 +15,17 @@ class SendWorkflowInstallmentWorker
 
     installment_rule = installment.installment_rule
     return if installment_rule.nil?
-    if reschedule_reference_time.present?
+    if installment_rule.version != version
+      return if installment_rule.version < version
+
+      reschedule_reference_time ||= current_recipient_reference_time(
+        installment:,
+        purchase_id:,
+        follower_id:,
+        affiliate_user_id:,
+        subscription_id:
+      )
+      return if reschedule_reference_time.nil?
       return unless recipient_matches_current_audience?(
         installment:,
         purchase_id:,
@@ -24,8 +34,6 @@ class SendWorkflowInstallmentWorker
         subscription_id:,
         reschedule_reference_time:
       )
-    end
-    if installment_rule.version != version
       reschedule_with_current_rule(
         installment:,
         installment_rule:,
@@ -37,6 +45,16 @@ class SendWorkflowInstallmentWorker
         reschedule_reference_time:
       )
       return
+    end
+    if reschedule_reference_time.present?
+      return unless recipient_matches_current_audience?(
+        installment:,
+        purchase_id:,
+        follower_id:,
+        affiliate_user_id:,
+        subscription_id:,
+        reschedule_reference_time:
+      )
     end
 
     if purchase_id.present? && follower_id.nil? && affiliate_user_id.nil? && subscription_id.nil?
@@ -56,6 +74,27 @@ class SendWorkflowInstallmentWorker
   end
 
   private
+    def current_recipient_reference_time(installment:, purchase_id:, follower_id:, affiliate_user_id:, subscription_id:)
+      recipient_ids = [purchase_id, follower_id, affiliate_user_id, subscription_id]
+      return unless recipient_ids.one?(&:present?)
+
+      reference_time = if purchase_id.present?
+        purchase = Purchase.find_by(id: purchase_id)&.original_purchase
+        installment.workflow_delivery_reference_time(purchase) if purchase.present?
+      elsif follower_id.present?
+        Follower.where(id: follower_id).pick(:created_at)
+      elsif affiliate_user_id.present?
+        email = User.where(id: affiliate_user_id).pick(:email)
+        audience = current_audience_member_and_match(installment:, email:)
+        affiliate_id = audience&.last&.affiliate_id
+        DirectAffiliate.alive.find_by(id: affiliate_id, affiliate_user_id:)&.created_at
+      elsif subscription_id.present?
+        Subscription.where(id: subscription_id).pick(:deactivated_at)
+      end
+
+      reference_time&.change(usec: 0)&.iso8601
+    end
+
     def reschedule_with_current_rule(installment:, installment_rule:, version:, purchase_id:, follower_id:, affiliate_user_id:, subscription_id:, reschedule_reference_time:)
       return if reschedule_reference_time.nil? || installment_rule.version < version
 
@@ -101,16 +140,10 @@ class SendWorkflowInstallmentWorker
       return false if email.nil?
       return false if SentPostEmail.exists?(post: installment, email:)
 
-      member = AudienceMember.find_by(seller_id: installment.seller_id, email: email.downcase)
-      return false if member.nil?
+      audience = current_audience_member_and_match(installment:, email:)
+      return false if audience.nil?
 
-      current_match = AudienceMember.filter(
-        seller_id: installment.seller_id,
-        params: installment.audience_members_filter_params,
-        with_ids: true,
-        ids: [member.id]
-      ).first
-      return false if current_match.nil?
+      member, current_match = audience
       if purchase.present?
         purchase_is_current = member.details.fetch("purchases", []).any? { _1["id"] == purchase.id }
         return false unless purchase_is_current && installment.workflow.applies_to_purchase?(purchase)
@@ -132,5 +165,20 @@ class SendWorkflowInstallmentWorker
       end
 
       true
+    end
+
+    def current_audience_member_and_match(installment:, email:)
+      return if email.nil?
+
+      member = AudienceMember.find_by(seller_id: installment.seller_id, email: email.downcase)
+      return if member.nil?
+
+      current_match = AudienceMember.filter(
+        seller_id: installment.seller_id,
+        params: installment.audience_members_filter_params,
+        with_ids: true,
+        ids: [member.id]
+      ).first
+      [member, current_match] if current_match.present?
     end
 end
