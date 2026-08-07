@@ -512,6 +512,7 @@ describe PaypalChargeProcessor, :vcr do
       end
 
       it "skips and reports a PayPal fee with unsupported precision" do
+        create(:purchase, stripe_transaction_id: "capture-id", processor_fee_cents: nil, processor_fee_cents_currency: nil)
         allow(ErrorNotifier).to receive(:notify)
 
         described_class.handle_order_events(
@@ -530,6 +531,38 @@ describe PaypalChargeProcessor, :vcr do
           fee_value: "1.151",
           webhook_event_id: "event-id"
         )
+      end
+
+      it "does not report an unsupported precision fee when no successful purchase matches the capture" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.handle_order_events(
+          "id" => "event-id",
+          "event_type" => PaypalEventType::PAYMENT_CAPTURE_COMPLETED,
+          "resource" => {
+            "id" => "unmatched-capture-id",
+            "seller_receivable_breakdown" => { "paypal_fee" => { "value" => "1.151", "currency_code" => "TND" } }
+          }
+        )
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      it "does not report an unsupported precision fee when the matching purchase is not successful" do
+        create(:purchase, purchase_state: "failed", stripe_transaction_id: "capture-id",
+                           processor_fee_cents: nil, processor_fee_cents_currency: nil)
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.handle_order_events(
+          "id" => "event-id",
+          "event_type" => PaypalEventType::PAYMENT_CAPTURE_COMPLETED,
+          "resource" => {
+            "id" => "capture-id",
+            "seller_receivable_breakdown" => { "paypal_fee" => { "value" => "1.151", "currency_code" => "TND" } }
+          }
+        )
+
+        expect(ErrorNotifier).not_to have_received(:notify)
       end
 
       it "does nothing if seller_receivable_breakdown is absent" do

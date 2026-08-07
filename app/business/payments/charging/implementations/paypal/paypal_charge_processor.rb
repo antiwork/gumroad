@@ -136,6 +136,9 @@ class PaypalChargeProcessor
     paypal_fee = event_info.dig("resource", "seller_receivable_breakdown", "paypal_fee")
     return if paypal_fee.blank?
 
+    purchase = Purchase.successful.find_by(stripe_transaction_id: event_info["resource"]["id"])
+    return unless purchase
+
     fee_cents = paypal_fee_cents(paypal_fee["value"], paypal_fee["currency_code"])
     unless fee_cents
       ErrorNotifier.notify(
@@ -147,9 +150,6 @@ class PaypalChargeProcessor
       )
       return
     end
-
-    purchase = Purchase.successful.find_by(stripe_transaction_id: event_info["resource"]["id"])
-    return unless purchase
 
     purchase.processor_fee_cents_currency = paypal_fee["currency_code"]
     purchase.processor_fee_cents = fee_cents
