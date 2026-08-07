@@ -630,7 +630,15 @@ class PaypalChargeProcessor
       raise ChargeProcessorError, "PayPal order currency changed when updating order"
     end
 
-    if BigDecimal(purchase_unit_info[:total].to_s) < BigDecimal(current_total.to_s)
+    begin
+      current_total_decimal = BigDecimal(current_total.to_s)
+      requested_total_decimal = BigDecimal(purchase_unit_info[:total].to_s)
+    rescue ArgumentError, TypeError
+      ErrorNotifier.notify("PayPal order total is not numeric when updating order")
+      raise ChargeProcessorError, "PayPal order total is not numeric when updating order"
+    end
+
+    if requested_total_decimal < current_total_decimal
       ErrorNotifier.notify("PayPal order update attempted to lower order total")
       raise ChargeProcessorError, "PayPal order update cannot lower the order total"
     end
