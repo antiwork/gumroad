@@ -45,14 +45,14 @@ class RecoverStrandedBuyersJob
 
     live = Feature.active?(:auto_recover_stranded_buyers)
     deadline = Time.current + RUN_BUDGET
-    bucket_id, selected = window(scan[:stranded])
+    page_key, selected = window(scan[:stranded])
     outcomes = []
     selected.each do |candidate|
       break if Time.current >= deadline
 
       outcomes << recover(candidate, live:)
     end
-    save_page_cursor(bucket_id, outcomes.size) if bucket_id
+    save_page_cursor(page_key, outcomes.size) if page_key
 
     InternalNotificationWorker.perform_async(
       "risk", "Stranded buyer recovery",
@@ -70,8 +70,12 @@ class RecoverStrandedBuyersJob
     # against a FIXED modulus is immune to both: a buyer's day assignment depends only on who they
     # are, never on the scan's order, size, or who else is in it this run.
     #
-    # Returns [bucket_id, selected] — bucket_id is nil unless an oversized bucket's page needed its
-    # own rotation cursor (see save_page_cursor).
+    # Returns [page_key, selected] — page_key is nil unless an oversized bucket's page needed its
+    # own rotation cursor (see save_page_cursor). page_key identifies THIS PAGE specifically
+    # (bucket_id + which page within it), not just the bucket: a bucket's pages are all reached in
+    # turn (see the cycle index below), and a cursor shared across pages accumulates identically on
+    # every occurrence regardless of which page ran — so on same-sized pages `cursor % page.size` is
+    # always 0 and every page replays its own first prefix forever (Greptile P1).
     def window(candidates)
       return [nil, candidates] if candidates.size <= MAX_RECOVERIES_PER_RUN
 
@@ -89,18 +93,20 @@ class RecoverStrandedBuyersJob
       # of phase with the (correctly monotonic) due-day check across a year boundary, silently
       # dropping one page and double-running another (Greptile P1).
       pages = due_today.each_slice(MAX_RECOVERIES_PER_RUN).to_a
-      page = pages[(elapsed_days / ROTATION_BUCKETS) % pages.size]
+      cycle = (elapsed_days / ROTATION_BUCKETS) % pages.size
+      page = pages[cycle]
+      page_key = [bucket_id, cycle]
 
       # A page's own composition and order are deterministic, so a run that hits RUN_BUDGET partway
       # through always stops at the same buyer, on every future occurrence of this exact page — the
       # suffix after them never gets a turn (Greptile P1). Rotating the page by a cursor that
-      # advances every time this bucket runs moves a different buyer to the front each occurrence,
-      # so a persistently slow buyer no longer blocks the same suffix forever.
-      [bucket_id, page.rotate(page_cursor(bucket_id) % page.size)]
+      # advances every time THIS PAGE runs moves a different buyer to the front each occurrence, so
+      # a persistently slow buyer no longer blocks the same suffix forever.
+      [page_key, page.rotate(page_cursor(page_key) % page.size)]
     end
 
-    def page_cursor(bucket_id)
-      $redis.get(RedisKey.recover_stranded_buyers_page_cursor(bucket_id)).to_i
+    def page_cursor(page_key)
+      $redis.get(RedisKey.recover_stranded_buyers_page_cursor(page_key)).to_i
     rescue => e
       ErrorNotifier.notify(e)
       0
@@ -108,9 +114,9 @@ class RecoverStrandedBuyersJob
 
     # Persisted even when the run finished the whole page (outcomes.size == page.size): incrementing
     # past the page length is harmless since the next rotate is modulo the (possibly different-sized)
-    # page this bucket returns next time, and it keeps the starting point moving instead of resetting.
-    def save_page_cursor(bucket_id, outcomes_count)
-      $redis.incrby(RedisKey.recover_stranded_buyers_page_cursor(bucket_id), outcomes_count)
+    # page this key returns next time, and it keeps the starting point moving instead of resetting.
+    def save_page_cursor(page_key, outcomes_count)
+      $redis.incrby(RedisKey.recover_stranded_buyers_page_cursor(page_key), outcomes_count)
     rescue => e
       ErrorNotifier.notify(e)
     end

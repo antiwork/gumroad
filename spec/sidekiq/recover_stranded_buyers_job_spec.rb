@@ -266,13 +266,41 @@ describe RecoverStrandedBuyersJob do
     allow(job).to receive(:bucket).and_return(0)
 
     _bucket_id, first_occurrence = travel_to(described_class::ROTATION_EPOCH) { job.send(:window, many) }
-    job.send(:save_page_cursor, 0, 1) # simulate a run that only got through the first buyer
+    job.send(:save_page_cursor, [0, 0], 1) # simulate a run that only got through the first buyer
     # Same bucket (0), same cycle (window is (elapsed_days / ROTATION_BUCKETS) % pages.size, so
     # advancing by exactly ROTATION_BUCKETS**2 days returns to cycle 0 for bucket 0) — the exact
     # occurrence a fixed-order page would replay identically.
     _bucket_id, second_occurrence = travel_to(described_class::ROTATION_EPOCH + (described_class::ROTATION_BUCKETS**2)) { job.send(:window, many) }
 
     expect(second_occurrence.first).not_to eq(first_occurrence.first)
+  end
+
+  # Greptile's shared-bucket-cursor P1: a cursor keyed on bucket_id alone accumulates identically
+  # regardless of which page within the bucket ran, so on same-sized pages `cursor % page.size`
+  # returns to 0 whenever the cursor's total equals a multiple of the page size — replaying every
+  # page's own first prefix and stranding its suffix forever. Five same-sized pages that each
+  # advance the shared cursor by 5 land back on cursor 0 mod 25 for every page's second occurrence.
+  it "advances each page's own cursor independently, not a cursor shared across the bucket's pages" do
+    bucket_size = described_class::MAX_RECOVERIES_PER_RUN * 5 # five full 25-buyer pages
+    many = bucket_size.times.map { |i| candidate.merge(email: "sharedbucket#{i.to_s.rjust(3, '0')}@example.com") }
+    job = described_class.new
+    allow(job).to receive(:bucket).and_return(0)
+
+    first_prefixes = {}
+    (0...5).each do |cycle|
+      travel_to(described_class::ROTATION_EPOCH + (cycle * described_class::ROTATION_BUCKETS)) do
+        _page_key, page = job.send(:window, many)
+        first_prefixes[cycle] = page.first(5)
+        job.send(:save_page_cursor, [0, cycle], 5) # each occurrence only got through 5 buyers
+      end
+    end
+
+    (0...5).each do |cycle|
+      travel_to(described_class::ROTATION_EPOCH + ((cycle + 5) * described_class::ROTATION_BUCKETS)) do
+        _page_key, page = job.send(:window, many)
+        expect(page.first(5)).not_to eq(first_prefixes[cycle])
+      end
+    end
   end
 
   it "is registered on the schedule so it actually runs" do

@@ -87,9 +87,12 @@ class RedisKey
     # High-water mark for AlertSellersOfUndeliveredReceiptsJob: the last email_infos id it judged.
     def undelivered_receipt_sweep_cursor = "undelivered_receipt_sweep:cursor"
     def stale_block_sweep_cursor = "stale_block_sweep:cursor"
-    # How far RecoverStrandedBuyersJob has rotated an oversized bucket's page so a run that hits
-    # RUN_BUDGET partway through doesn't restart the same page at the same buyer next occurrence.
-    def recover_stranded_buyers_page_cursor(bucket_id) = "recover_stranded_buyers:page_cursor:#{bucket_id}"
+    # How far RecoverStrandedBuyersJob has rotated a SPECIFIC oversized-bucket page (bucket_id,
+    # cycle) so a run that hits RUN_BUDGET partway through doesn't restart that page at the same
+    # buyer next occurrence. Keyed per page, not per bucket: a bucket's several pages are all
+    # reached in turn, and a cursor shared across them would accumulate identically regardless of
+    # which page ran, so on same-sized pages it always lands back on the same prefix.
+    def recover_stranded_buyers_page_cursor(page_key) = "recover_stranded_buyers:page_cursor:#{page_key.join(":")}"
     # High-water mark for RepairOrderChargeOutcomesJob's backlog pass: the last orders id it walked.
     def order_charge_outcome_repair_cursor = "order_charge_outcome_repair:cursor"
     # Fixed at lap start so the walk keeps making forward progress even while new failing orders
