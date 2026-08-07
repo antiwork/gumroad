@@ -225,7 +225,8 @@ describe RecoverStrandedBuyersJob do
     seen = Hash.new(0)
     2.times do |cycle|
       travel_to(described_class::ROTATION_EPOCH + (cycle * described_class::ROTATION_BUCKETS)) do
-        job.send(:window, many).each { |c| seen[c[:email]] += 1 }
+        _bucket_id, page = job.send(:window, many)
+        page.each { |c| seen[c[:email]] += 1 }
       end
     end
 
@@ -246,10 +247,32 @@ describe RecoverStrandedBuyersJob do
     # One run per rotation day for a bit over a year — enough cycles to cross Jan 1 twice and to
     # exceed the 13-cycle ceiling a `yday`-derived counter would impose.
     (0...(described_class::ROTATION_BUCKETS * 14)).each do |offset|
-      travel_to(described_class::ROTATION_EPOCH + 150 + offset) { job.send(:window, many).each { |c| seen[c[:email]] += 1 } }
+      travel_to(described_class::ROTATION_EPOCH + 150 + offset) do
+        _bucket_id, page = job.send(:window, many)
+        page.each { |c| seen[c[:email]] += 1 }
+      end
     end
 
     expect(seen.keys.uniq).to match_array(many.map { |c| c[:email] })
+  end
+
+  # Greptile's run-budget-starves-page-suffix P1: an oversized page's composition and order are
+  # deterministic per occurrence, so a run that always exhausts RUN_BUDGET on the same early buyer
+  # would restart at that same buyer every time this page recurs, never reaching the suffix.
+  it "advances the page's starting point across successive occurrences of the same page" do
+    bucket_size = described_class::MAX_RECOVERIES_PER_RUN + 5
+    many = bucket_size.times.map { |i| candidate.merge(email: "slowbucket#{i.to_s.rjust(2, '0')}@example.com") }
+    job = described_class.new
+    allow(job).to receive(:bucket).and_return(0)
+
+    _bucket_id, first_occurrence = travel_to(described_class::ROTATION_EPOCH) { job.send(:window, many) }
+    job.send(:save_page_cursor, 0, 1) # simulate a run that only got through the first buyer
+    # Same bucket (0), same cycle (window is (elapsed_days / ROTATION_BUCKETS) % pages.size, so
+    # advancing by exactly ROTATION_BUCKETS**2 days returns to cycle 0 for bucket 0) — the exact
+    # occurrence a fixed-order page would replay identically.
+    _bucket_id, second_occurrence = travel_to(described_class::ROTATION_EPOCH + (described_class::ROTATION_BUCKETS**2)) { job.send(:window, many) }
+
+    expect(second_occurrence.first).not_to eq(first_occurrence.first)
   end
 
   it "is registered on the schedule so it actually runs" do

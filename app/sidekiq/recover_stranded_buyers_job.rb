@@ -45,13 +45,14 @@ class RecoverStrandedBuyersJob
 
     live = Feature.active?(:auto_recover_stranded_buyers)
     deadline = Time.current + RUN_BUDGET
-    selected = window(scan[:stranded])
+    bucket_id, selected = window(scan[:stranded])
     outcomes = []
     selected.each do |candidate|
       break if Time.current >= deadline
 
       outcomes << recover(candidate, live:)
     end
+    save_page_cursor(bucket_id, outcomes.size) if bucket_id
 
     InternalNotificationWorker.perform_async(
       "risk", "Stranded buyer recovery",
@@ -68,12 +69,16 @@ class RecoverStrandedBuyersJob
     # every day it runs (Greptile P1, rounds 1-3). Bucketing by a hash of the buyer's own identity
     # against a FIXED modulus is immune to both: a buyer's day assignment depends only on who they
     # are, never on the scan's order, size, or who else is in it this run.
+    #
+    # Returns [bucket_id, selected] — bucket_id is nil unless an oversized bucket's page needed its
+    # own rotation cursor (see save_page_cursor).
     def window(candidates)
-      return candidates if candidates.size <= MAX_RECOVERIES_PER_RUN
+      return [nil, candidates] if candidates.size <= MAX_RECOVERIES_PER_RUN
 
       elapsed_days = (Date.current - ROTATION_EPOCH).to_i
-      due_today = candidates.select { |c| bucket(c[:email]) == elapsed_days % ROTATION_BUCKETS }.sort_by { _1[:email].to_s }
-      return due_today if due_today.size <= MAX_RECOVERIES_PER_RUN
+      bucket_id = elapsed_days % ROTATION_BUCKETS
+      due_today = candidates.select { |c| bucket(c[:email]) == bucket_id }.sort_by { _1[:email].to_s }
+      return [nil, due_today] if due_today.size <= MAX_RECOVERIES_PER_RUN
 
       # A bucket bigger than MAX_RECOVERIES_PER_RUN needs its own sub-rotation, or the same ordered
       # prefix would run every 30-day cycle and the tail would never be reached (Greptile P1). Page
@@ -84,7 +89,30 @@ class RecoverStrandedBuyersJob
       # of phase with the (correctly monotonic) due-day check across a year boundary, silently
       # dropping one page and double-running another (Greptile P1).
       pages = due_today.each_slice(MAX_RECOVERIES_PER_RUN).to_a
-      pages[(elapsed_days / ROTATION_BUCKETS) % pages.size]
+      page = pages[(elapsed_days / ROTATION_BUCKETS) % pages.size]
+
+      # A page's own composition and order are deterministic, so a run that hits RUN_BUDGET partway
+      # through always stops at the same buyer, on every future occurrence of this exact page — the
+      # suffix after them never gets a turn (Greptile P1). Rotating the page by a cursor that
+      # advances every time this bucket runs moves a different buyer to the front each occurrence,
+      # so a persistently slow buyer no longer blocks the same suffix forever.
+      [bucket_id, page.rotate(page_cursor(bucket_id) % page.size)]
+    end
+
+    def page_cursor(bucket_id)
+      $redis.get(RedisKey.recover_stranded_buyers_page_cursor(bucket_id)).to_i
+    rescue => e
+      ErrorNotifier.notify(e)
+      0
+    end
+
+    # Persisted even when the run finished the whole page (outcomes.size == page.size): incrementing
+    # past the page length is harmless since the next rotate is modulo the (possibly different-sized)
+    # page this bucket returns next time, and it keeps the starting point moving instead of resetting.
+    def save_page_cursor(bucket_id, outcomes_count)
+      $redis.incrby(RedisKey.recover_stranded_buyers_page_cursor(bucket_id), outcomes_count)
+    rescue => e
+      ErrorNotifier.notify(e)
     end
 
     def bucket(email)
