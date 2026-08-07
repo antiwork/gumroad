@@ -102,6 +102,14 @@ class AutoTopUpNegativeDestinationBalancesJob
         return { entry:, verdict: :escalate, reason: "a top-up decision for this account is already in progress" }
       end
 
+      # Re-read the specific rows scan identified rather than trust its snapshot: a payout,
+      # refund, credit, or the leg-two reconciliation pass can change these Balance rows between
+      # scan and this account's turn — the lock above only serializes this job's own runs against
+      # each other, not against every other writer of Balance#holding_amount_cents. Deciding off
+      # the stale scan total would transfer against a gap that no longer exists.
+      current_total_cents = Balance.unpaid.where(id: entry[:balance_ids]).sum(:holding_amount_cents)
+      return { entry:, verdict: :noop, reason: "reconciled since scan — nothing left to transfer" } unless current_total_cents.negative?
+
       _funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
       funded_ids = funded_ids_str.to_s.split("-").map(&:to_i)
       # Credit is tracked per surviving ROW, not as one all-or-nothing aggregate: a partially
@@ -133,12 +141,12 @@ class AutoTopUpNegativeDestinationBalancesJob
       # shrunk shortfall means leg two hasn't happened yet (or is in progress): keep withholding.
       # Comparison stays in signed space (full_total >= funded_signed, both negative-going) rather
       # than on abs magnitudes — that's what makes it correct for a mixed-sign funded set too.
-      if funded_signed && entry[:full_total] >= funded_signed
+      if funded_signed && current_total_cents >= funded_signed
         $redis.expire(dedupe_key, DEDUPE_TTL)
         return { entry:, verdict: :escalate, reason: "already topped up #{funded_signed.abs} cents for this account — awaiting the leg-two reconciliation pass before retrying" }
       end
 
-      to_transfer_cents = funded_signed ? (entry[:full_total] - funded_signed).abs : amount_cents
+      to_transfer_cents = funded_signed ? (current_total_cents - funded_signed).abs : current_total_cents.abs
       # The transfer's own idempotency key is scoped to the specific (account, current row set,
       # funded-so-far, target) transition, not just the amounts — an amount-only key persisted
       # forever (below) would otherwise collide across two UNRELATED shortfalls that happen to
@@ -146,7 +154,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       # since SET NX sees the first transfer's still-persisted key. The row-set fingerprint is what
       # tells two same-amount shortfalls apart.
       row_fingerprint = Digest::SHA1.hexdigest(entry[:balance_ids].join("-"))[0, 12]
-      transfer_key = "#{dedupe_key}:#{row_fingerprint}:#{funded_signed&.abs || 0}:#{amount_cents}"
+      transfer_key = "#{dedupe_key}:#{row_fingerprint}:#{funded_signed&.abs || 0}:#{current_total_cents.abs}"
 
       # Claim before calling Stripe, not after: a claim-after-transfer ordering leaves a crash
       # between "Stripe accepted the transfer" and "we recorded that" free to retry and
@@ -180,7 +188,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       # only safe to drop because a human clears it explicitly as part of the leg-two reconciliation
       # pass (same convention as the ambiguous-error rescue below).
       $redis.persist(transfer_key)
-      $redis.set(dedupe_key, "#{amount_cents}:#{entry[:balance_ids].join("-")}", ex: DEDUPE_TTL)
+      $redis.set(dedupe_key, "#{current_total_cents.abs}:#{entry[:balance_ids].join("-")}", ex: DEDUPE_TTL)
       $redis.del(unresolved_key)
       { entry:, verdict: :topped_up, reason: nil, amount_cents: to_transfer_cents, currency: entry[:merchant_account].currency }
     rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e

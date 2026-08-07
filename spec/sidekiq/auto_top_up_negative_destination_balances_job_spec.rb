@@ -88,6 +88,31 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
   end
 
+  it "re-reads the Balance rows instead of trusting the scan snapshot, so a reconciliation between scan and transfer noops instead of transferring a stale amount" do
+    row = residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    # A leg-two reconciliation pass (or a payout, refund, or credit) can zero this row after
+    # `scan` already captured it but before this account's turn to transfer — the mechanism
+    # T-Rex's stale-snapshot finding proved.
+    allow(AlertOnNegativeDestinationBalancesJob).to receive(:scan).and_wrap_original do |original|
+      result = original.call
+      row.update!(holding_amount_cents: 0)
+      result
+    end
+
+    expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to start_with("Topped up 0 of 1 candidates")
+    end
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
   it "withholds a post-cutoff-only candidate for human review instead of transferring" do
     residue_row(-728_50)
     make_payable
