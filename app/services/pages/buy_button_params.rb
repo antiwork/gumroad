@@ -83,6 +83,7 @@ class Pages::BuyButtonParams
 
       val_cents = (value * (product.single_unit_currency? ? 1 : 100)).round
       return nil if val_cents < product.price_cents.to_i
+      return nil if val_cents > BasePrice::Shared::MAX_PRICE_CENTS
 
       raw
     end

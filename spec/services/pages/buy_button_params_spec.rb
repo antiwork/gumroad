@@ -113,6 +113,12 @@ describe Pages::BuyButtonParams do
         expect(described_class.from(node, product:)).to eq({})
       end
 
+      it "drops a price above the maximum allowed price" do
+        max_price = BasePrice::Shared::MAX_PRICE_CENTS
+        node = node_for(%(<a data-gumroad-action="buy" data-gumroad-price="#{(max_price + 100) / 100.0}">Buy</a>))
+        expect(described_class.from(node, product:)).to eq({})
+      end
+
       it "drops a non-numeric value" do
         node = node_for(%(<a data-gumroad-action="buy" data-gumroad-price="free">Buy</a>))
         expect(described_class.from(node, product:)).to eq({})
