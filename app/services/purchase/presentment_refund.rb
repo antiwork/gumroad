@@ -96,13 +96,26 @@ class Purchase::PresentmentRefund
   def result
     return nil if purchase_presentment.blank? || canonical_gross_refund_cents <= 0
 
+    # Snapshotless-prior guard: see .from_presentment_amount for why remaining
+    # presentment becomes unknowable and we fail closed instead of allocating skewed.
+    return nil if purchase.refunds.effective.any? { _1.presentment_amount_cents.to_i <= 0 }
+
+    component_cents = remaining_component_cents
+    # The original-total allocator could overdraw a component before exhausting the total.
+    return nil if component_cents.any?(&:negative?)
+
     if refunds_remaining_presentment_amount?
-      build_result(amount_cents: remaining_presentment_amount_cents,
-                   component_cents: remaining_component_cents)
+      amount_cents = remaining_presentment_amount_cents
+      return nil if amount_cents <= 0
+
+      build_result(amount_cents:, component_cents:)
     else
+      return nil if remaining_presentment_amount_cents <= 0
+
       amount_cents = partial_presentment_amount_cents
-      build_result(amount_cents:,
-                   component_cents: allocate_components(amount_cents))
+      return nil if amount_cents <= 0
+
+      build_result(amount_cents:, component_cents: allocate_components(amount_cents, component_cents))
     end
   end
 
@@ -111,12 +124,14 @@ class Purchase::PresentmentRefund
   def result_for_presentment_amount(presentment_amount_cents)
     return nil if purchase_presentment.blank? || presentment_amount_cents.to_i <= 0
 
+    component_cents = remaining_component_cents
+    return nil if component_cents.any?(&:negative?)
+
     if presentment_amount_cents == remaining_presentment_amount_cents
-      build_result(amount_cents: presentment_amount_cents,
-                   component_cents: remaining_component_cents)
+      build_result(amount_cents: presentment_amount_cents, component_cents:)
     else
       build_result(amount_cents: presentment_amount_cents,
-                   component_cents: allocate_components(presentment_amount_cents))
+                   component_cents: allocate_components(presentment_amount_cents, component_cents))
     end
   end
 
@@ -127,10 +142,8 @@ class Purchase::PresentmentRefund
   def tax_only_result
     return nil if purchase_presentment.blank? || canonical_gross_refund_cents <= 0
 
-    # Same reasoning as .from_presentment_amount: a prior refund without a presentment
-    # snapshot already consumed canonical tax cents but counts as zero presentment tax
-    # here, so the remaining buyer-currency tax is unknowable — fail closed rather than
-    # send Stripe more tax than the purchase has left.
+    # Snapshotless-prior guard: see .from_presentment_amount for why remaining
+    # presentment becomes unknowable and we fail closed instead of allocating skewed.
     return nil if purchase.refunds.effective.any? { _1.presentment_amount_cents.to_i <= 0 }
 
     remaining_tax_cents = purchase_presentment.presentment_gumroad_tax_cents.to_i -
@@ -151,26 +164,24 @@ class Purchase::PresentmentRefund
     end
 
     def partial_presentment_amount_cents
-      # Split the presentment total between the refunded and unrefunded canonical
-      # portions so the refunded share is exact-cent consistent with the total.
+      # Allocate against the REMAINING presentment/canonical balances (not the
+      # original totals), same invariant as .from_presentment_amount: repeated
+      # seller partials must not exhaust presentment cents through rounding while
+      # canonical refundable cents remain (or drive component remainders negative).
       refunded_share = Charge.allocate_by_largest_remainder(
-        purchase_presentment.presentment_total_cents,
-        [canonical_gross_refund_cents, purchase.total_transaction_cents - canonical_gross_refund_cents],
-        purchase.total_transaction_cents
+        remaining_presentment_amount_cents,
+        [canonical_gross_refund_cents, purchase.gross_amount_refundable_cents - canonical_gross_refund_cents],
+        purchase.gross_amount_refundable_cents
       ).first
       [refunded_share, remaining_presentment_amount_cents].min
     end
 
-    def allocate_components(amount_cents)
+    def allocate_components(amount_cents, component_cents)
       Charge.allocate_by_largest_remainder(
         amount_cents,
-        original_component_cents,
-        purchase_presentment.presentment_total_cents
+        component_cents,
+        remaining_presentment_amount_cents
       )
-    end
-
-    def original_component_cents
-      COMPONENT_KEYS.map { purchase_presentment.public_send(_1).to_i }
     end
 
     def remaining_component_cents
