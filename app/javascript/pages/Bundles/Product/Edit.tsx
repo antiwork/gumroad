@@ -192,7 +192,8 @@ export default function BundlesProductEdit() {
 
   // Tracks customizable_price from the last time price_cents was nonzero, so a temporary $0 dip
   // (which forces PWYW on) doesn't erase a seller's deliberate PWYW choice once the price returns.
-  const priorCustomizablePriceRef = React.useRef(form.data.customizable_price);
+  // Seed false when the initial price is already 0: that PWYW is forced by the price, not chosen.
+  const priorCustomizablePriceRef = React.useRef(form.data.price_cents === 0 ? false : form.data.customizable_price);
   React.useEffect(() => {
     if (form.data.price_cents !== 0) priorCustomizablePriceRef.current = form.data.customizable_price;
   }, [form.data.price_cents, form.data.customizable_price]);
