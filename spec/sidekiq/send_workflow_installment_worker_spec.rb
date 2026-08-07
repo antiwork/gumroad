@@ -191,6 +191,26 @@ describe SendWorkflowInstallmentWorker do
       end.not_to change(SendWorkflowInstallmentRescheduleJob.jobs, :size)
     end
 
+    it "does not attach an old job to a later confirmation" do
+      old_reference_time = @follower.confirmed_at.change(usec: 0)
+      stale_version = @installment_rule.version
+      @installment_rule.update!(delayed_delivery_time: 3.days)
+      @follower.update!(confirmed_at: 1.hour.from_now)
+      SendWorkflowInstallmentWorker.jobs.clear
+
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(
+          @installment.id,
+          stale_version,
+          nil,
+          @follower.id,
+          nil,
+          nil,
+          old_reference_time.iso8601
+        )
+      end.not_to change(SendWorkflowInstallmentRescheduleJob.jobs, :size)
+    end
+
     it "does not call mailer if deleted installment" do
       @installment.update_attribute(:deleted_at, Time.current)
       expect(PostSendgridApi).not_to receive(:process)

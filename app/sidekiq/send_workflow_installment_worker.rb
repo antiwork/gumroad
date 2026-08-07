@@ -155,7 +155,14 @@ class SendWorkflowInstallmentWorker
         ]
         return valid_reference_times.include?(reference_time)
       end
-      return current_match.follower_id == follower_id if follower_id.present?
+      if follower_id.present?
+        return false unless current_match.follower_id == follower_id
+
+        follower = Follower.active.find_by(id: follower_id)
+        return false if follower.nil?
+
+        return follower.confirmed_at.change(usec: 0) == reference_time
+      end
       if affiliate_user_id.present?
         return false if current_match.affiliate_id.nil?
 
