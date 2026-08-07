@@ -56,6 +56,7 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
 
   it "reschedules pending cancellation emails when send_to_past_customers is false" do
     @workflow.update!(send_to_past_customers: false)
+    @installment.update!(published_at: 2.hours.ago, is_for_new_customers_of_workflow: true)
     recent = create(:subscription, link: @product, cancelled_at: 1.hour.ago, deactivated_at: 1.hour.ago)
     create(:free_purchase, is_original_subscription_purchase: true, link: @product, subscription: recent, created_at: 2.hours.ago)
     old_delayed_delivery_time = 2.days.to_i
@@ -77,6 +78,22 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
       reference_time.iso8601
     ).at(reference_time + @rule.delayed_delivery_time)
     expect(SendWorkflowInstallmentRescheduleJob.jobs.size).to eq(1)
+    expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+  end
+
+  it "does not reschedule a cancellation that predates publication for a new-recipient workflow" do
+    @workflow.update!(send_to_past_customers: false)
+    @installment.update!(published_at: 2.hours.ago, is_for_new_customers_of_workflow: true)
+    old = create(:subscription, link: @product, cancelled_at: 3.hours.ago, deactivated_at: 3.hours.ago)
+    create(:free_purchase, is_original_subscription_purchase: true, link: @product, subscription: old, created_at: 1.day.ago)
+
+    described_class.new.perform(
+      @installment.id,
+      2.days.to_i,
+      Time.current.iso8601
+    )
+
+    expect(SendWorkflowInstallmentRescheduleJob.jobs).to be_empty
     expect(SendWorkflowInstallmentWorker.jobs).to be_empty
   end
 

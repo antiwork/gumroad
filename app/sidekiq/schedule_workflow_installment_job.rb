@@ -38,6 +38,7 @@ class ScheduleWorkflowInstallmentJob
         next if purchase.nil? || !workflow.applies_to_purchase?(purchase)
 
         reference_time = installment.workflow_delivery_reference_time(purchase).change(usec: 0)
+        next if installment.is_for_new_customers_of_workflow && reference_time < installment.published_at
         next unless reference_time + old_delayed_delivery_time > cutoff_reference_time
 
         SendWorkflowInstallmentRescheduleJob.perform_at(

@@ -29,6 +29,7 @@ class SendWorkflowEmailsToPastCanceledMembersJob
 
       if rescheduling
         reference_time = subscription.deactivated_at.change(usec: 0)
+        next if installment.is_for_new_customers_of_workflow && reference_time < installment.published_at
         next unless reference_time + old_delayed_delivery_time > cutoff
 
         SendWorkflowInstallmentRescheduleJob.perform_at(

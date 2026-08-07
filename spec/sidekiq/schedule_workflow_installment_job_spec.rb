@@ -54,8 +54,15 @@ describe ScheduleWorkflowInstallmentJob do
     )
     create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
     create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
-    workflow = create(:workflow, seller: product.user, link: product, published_at: 1.day.ago)
-    installment = create(:workflow_installment, workflow:, seller: product.user, link: product, published_at: workflow.published_at)
+    workflow = create(:workflow, seller: product.user, link: product, published_at: 3.days.ago)
+    installment = create(
+      :workflow_installment,
+      workflow:,
+      seller: product.user,
+      link: product,
+      published_at: workflow.published_at,
+      is_for_new_customers_of_workflow: true
+    )
     rule = installment.installment_rule
     rule.update!(delayed_delivery_time: 7.days)
     old_delayed_delivery_time = 3.days.to_i
@@ -79,5 +86,40 @@ describe ScheduleWorkflowInstallmentJob do
       nil,
       reference_time.iso8601
     ).at(reference_time + rule.delayed_delivery_time)
+  end
+
+  it "does not reschedule a resubscribed membership whose trigger predates publication" do
+    product = create(:subscription_product)
+    subscription = create(:subscription, link: product)
+    purchase = create(
+      :free_purchase,
+      link: product,
+      subscription:,
+      is_original_subscription_purchase: true,
+      created_at: 10.days.ago
+    )
+    create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
+    create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
+    workflow = create(:workflow, seller: product.user, link: product, published_at: 1.day.ago)
+    installment = create(
+      :workflow_installment,
+      workflow:,
+      seller: product.user,
+      link: product,
+      published_at: workflow.published_at,
+      is_for_new_customers_of_workflow: true
+    )
+    rule = installment.installment_rule
+    rule.update!(delayed_delivery_time: 7.days)
+
+    described_class.new.perform(
+      installment.id,
+      rule.version,
+      3.days.to_i,
+      cutoff_reference_time.iso8601
+    )
+
+    expect(installment.workflow_delivery_reference_time(purchase)).to be < installment.published_at
+    expect(SendWorkflowInstallmentRescheduleJob.jobs).to be_empty
   end
 end
