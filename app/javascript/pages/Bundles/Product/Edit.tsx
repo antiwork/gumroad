@@ -136,10 +136,11 @@ export default function BundlesProductEdit() {
 
   const standaloneTotalCents = computeStandaloneTotalCents(bundle.products);
 
+  const discountPercentError = discountPercent !== null && (discountPercent < 0 || discountPercent > 100);
+
   const applyDiscountPercent = (value: number | null) => {
-    if (value !== null && (value < 0 || value > 100)) return;
     setDiscountPercent(value);
-    if (value === null) return;
+    if (value === null || value < 0 || value > 100) return;
     form.setData((data) => {
       const priceCents = computeDiscountedPriceCents(standaloneTotalCents, value);
       return {
@@ -183,6 +184,12 @@ export default function BundlesProductEdit() {
     default_offer_code: bundle.default_offer_code,
     price_currency_type: currency_type,
   });
+
+  // Products keep their own currency, and the total sums raw minor units — summing across
+  // currencies would state a total that is simply wrong, and converting is the server's job.
+  const canTotalStandalonePrices =
+    bundle.products.length > 0 &&
+    bundle.products.every(({ currency_code }) => currency_code === form.data.price_currency_type);
 
   if (!currentSeller) return null;
 
@@ -310,8 +317,8 @@ export default function BundlesProductEdit() {
         </section>
         <section className="grid gap-8 border-t border-border p-4 md:p-8">
           <h2>Pricing</h2>
-          {bundle.products.length > 0 ? (
-            <Fieldset>
+          {canTotalStandalonePrices ? (
+            <Fieldset state={discountPercentError ? "danger" : undefined}>
               <Label htmlFor={`${uid}-discount-percent`}>Discount off standalone prices</Label>
               <InputGroup>
                 <NumberInput value={discountPercent} onChange={applyDiscountPercent}>
@@ -319,29 +326,43 @@ export default function BundlesProductEdit() {
                     <Input
                       id={`${uid}-discount-percent`}
                       type="text"
-                      placeholder="0"
-                      aria-label="Discount off standalone prices"
+                      aria-describedby={`${uid}-discount-percent-description`}
+                      aria-invalid={discountPercentError}
                       {...inputProps}
                     />
                   )}
                 </NumberInput>
                 <Pill className="-mr-2 shrink-0">%</Pill>
               </InputGroup>
-              {discountPercent !== null ? (
-                <FieldsetDescription>
-                  Sets the price below to{" "}
-                  {formatPriceCentsWithCurrencySymbol(
-                    form.data.price_currency_type,
-                    computeDiscountedPriceCents(standaloneTotalCents, discountPercent),
-                    { symbolFormat: "long" },
-                  )}{" "}
-                  — the products&apos;{" "}
-                  {formatPriceCentsWithCurrencySymbol(form.data.price_currency_type, standaloneTotalCents, {
-                    symbolFormat: "long",
-                  })}{" "}
-                  standalone total minus {discountPercent}%. Editing the price directly clears this.
-                </FieldsetDescription>
-              ) : null}
+              {/* Referenced via aria-describedby, and edits to an already-referenced description
+                  are not announced — aria-live carries the recomputed amount to screen readers. */}
+              <FieldsetDescription id={`${uid}-discount-percent-description`} aria-live="polite">
+                {discountPercentError ? (
+                  <>Enter a discount between 0% and 100%. The amount below is unchanged.</>
+                ) : discountPercent !== null ? (
+                  <>
+                    Amount becomes{" "}
+                    {formatPriceCentsWithCurrencySymbol(
+                      form.data.price_currency_type,
+                      computeDiscountedPriceCents(standaloneTotalCents, discountPercent),
+                      { symbolFormat: "long" },
+                    )}
+                    : {discountPercent}% off the{" "}
+                    {formatPriceCentsWithCurrencySymbol(form.data.price_currency_type, standaloneTotalCents, {
+                      symbolFormat: "long",
+                    })}{" "}
+                    standalone total. Editing the amount removes the discount.
+                  </>
+                ) : (
+                  <>
+                    Your products total{" "}
+                    {formatPriceCentsWithCurrencySymbol(form.data.price_currency_type, standaloneTotalCents, {
+                      symbolFormat: "long",
+                    })}{" "}
+                    when sold separately.
+                  </>
+                )}
+              </FieldsetDescription>
             </Fieldset>
           ) : null}
           <PriceEditor
@@ -361,7 +382,11 @@ export default function BundlesProductEdit() {
             currencyType={form.data.price_currency_type}
             currencyCodeSelector={{
               options: currencyCodeList,
-              onChange: (currencyCode) => form.setData("price_currency_type", currencyCode),
+              onChange: (currencyCode) => {
+                // The discount was computed from totals in the previous currency.
+                setDiscountPercent(null);
+                form.setData("price_currency_type", currencyCode);
+              },
             }}
             eligibleForInstallmentPlans={bundle.eligible_for_installment_plans}
             allowInstallmentPlan={form.data.allow_installment_plan}
