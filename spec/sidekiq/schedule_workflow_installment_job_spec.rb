@@ -41,4 +41,43 @@ describe ScheduleWorkflowInstallmentJob do
       described_class.new.perform(-1, 1, nil, cutoff_reference_time.iso8601)
     end.to raise_error(ScheduleWorkflowInstallmentJob::RuleNotCommittedError)
   end
+
+  it "reschedules a pending email for a resubscribed membership outside the normal purchase cutoff" do
+    product = create(:subscription_product)
+    subscription = create(:subscription, link: product)
+    purchase = create(
+      :free_purchase,
+      link: product,
+      subscription:,
+      is_original_subscription_purchase: true,
+      created_at: 10.days.ago
+    )
+    create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
+    create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
+    workflow = create(:workflow, seller: product.user, link: product, published_at: 1.day.ago)
+    installment = create(:workflow_installment, workflow:, seller: product.user, link: product, published_at: workflow.published_at)
+    rule = installment.installment_rule
+    rule.update!(delayed_delivery_time: 7.days)
+    old_delayed_delivery_time = 3.days.to_i
+    reference_time = installment.workflow_delivery_reference_time(purchase).change(usec: 0)
+
+    described_class.new.perform(
+      installment.id,
+      rule.version,
+      old_delayed_delivery_time,
+      cutoff_reference_time.iso8601
+    )
+
+    expect(purchase.created_at + old_delayed_delivery_time).to be < cutoff_reference_time
+    expect(reference_time + old_delayed_delivery_time).to be > cutoff_reference_time
+    expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+      installment.id,
+      rule.version,
+      purchase.id,
+      nil,
+      nil,
+      nil,
+      reference_time.iso8601
+    ).at(reference_time + rule.delayed_delivery_time)
+  end
 end

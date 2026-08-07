@@ -215,6 +215,58 @@ describe SendWorkflowInstallmentWorker do
         )
       end.not_to change(SendWorkflowInstallmentRescheduleJob.jobs, :size)
     end
+
+    it "reschedules a pending email from a resubscribed membership with its adjusted reference time" do
+      seller = create(:user)
+      product = create(:subscription_product, user: seller)
+      subscription = create(:subscription, link: product)
+      purchase = create(
+        :free_purchase,
+        link: product,
+        subscription:,
+        is_original_subscription_purchase: true,
+        email: "resubscribed@example.com",
+        created_at: 10.days.ago
+      )
+      create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
+      create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
+      purchase.add_to_audience_member_details
+      workflow = create(:workflow, seller:, link: product)
+      installment = create(
+        :installment,
+        seller:,
+        link: product,
+        workflow:,
+        published_at: Time.current,
+        installment_type: Installment::PRODUCT_TYPE
+      )
+      rule = create(:installment_rule, installment:, delayed_delivery_time: 1.day)
+      stale_version = rule.version
+      rule.update!(delayed_delivery_time: 3.days)
+      reference_time = installment.workflow_delivery_reference_time(purchase).change(usec: 0)
+
+      expect do
+        described_class.new.perform(
+          installment.id,
+          stale_version,
+          purchase.id,
+          nil,
+          nil,
+          nil,
+          reference_time.iso8601
+        )
+      end.to change(SendWorkflowInstallmentRescheduleJob.jobs, :size).by(1)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        installment.id,
+        rule.version,
+        purchase.id,
+        nil,
+        nil,
+        nil,
+        reference_time.iso8601
+      ).at(reference_time + rule.delayed_delivery_time)
+    end
   end
 
   describe "member_cancellation_installment" do
@@ -225,7 +277,7 @@ describe SendWorkflowInstallmentWorker do
       @workflow = create(:workflow, seller: @creator, link: @product, workflow_trigger: "member_cancellation")
       @installment = create(:published_installment, link: @product, workflow: @workflow, workflow_trigger: "member_cancellation")
       @installment_rule = create(:installment_rule, installment: @installment, delayed_delivery_time: 1.day)
-      @sale = create(:purchase, is_original_subscription_purchase: true, link: @product, subscription: @subscription, email: "test@gmail.com", created_at: 1.week.ago, price_cents: 100)
+      @sale = create(:free_purchase, is_original_subscription_purchase: true, link: @product, subscription: @subscription, email: "test@gmail.com", created_at: 1.week.ago)
     end
 
     it "calls cancellation mailer if given subscription id" do
@@ -235,6 +287,35 @@ describe SendWorkflowInstallmentWorker do
         cache: {}
       )
       SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, nil, nil, @subscription.id)
+    end
+
+    it "reschedules a stale cancellation email from its deactivation time" do
+      stale_version = @installment_rule.version
+      @installment_rule.update!(delayed_delivery_time: 3.days)
+      reference_time = @subscription.deactivated_at.change(usec: 0)
+      expect(PostSendgridApi).not_to receive(:process)
+
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(
+          @installment.id,
+          stale_version,
+          nil,
+          nil,
+          nil,
+          @subscription.id,
+          reference_time.iso8601
+        )
+      end.to change(SendWorkflowInstallmentRescheduleJob.jobs, :size).by(1)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        nil,
+        nil,
+        @subscription.id,
+        reference_time.iso8601
+      ).at(reference_time + @installment_rule.delayed_delivery_time)
     end
   end
 

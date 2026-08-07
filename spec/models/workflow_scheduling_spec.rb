@@ -35,5 +35,29 @@ describe Workflow do
         (cutoff_reference_time - old_delayed_delivery_time.seconds).iso8601
       )
     end
+
+    it "reschedules pending cancellation emails after a rule edit for a new-recipient workflow" do
+      workflow = create(
+        :workflow,
+        workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER,
+        send_to_past_customers: false
+      )
+      installment = create(:published_installment, workflow:, seller: workflow.seller, link: workflow.link)
+      cutoff_reference_time = Time.current.change(usec: 0)
+
+      workflow.schedule_installment(
+        installment,
+        old_delayed_delivery_time: 1.day.to_i,
+        cutoff_reference_time:,
+        reschedule_on_stale: true
+      )
+
+      expect(SendWorkflowEmailsToPastCanceledMembersJob).to have_enqueued_sidekiq_job(
+        installment.id,
+        1.day.to_i,
+        cutoff_reference_time.iso8601
+      )
+      expect(SendWorkflowPostEmailsJob.jobs).to be_empty
+    end
   end
 end

@@ -21,6 +21,7 @@ class SendWorkflowInstallmentWorker
         purchase_id:,
         follower_id:,
         affiliate_user_id:,
+        subscription_id:,
         reschedule_reference_time:
       )
     end
@@ -72,7 +73,23 @@ class SendWorkflowInstallmentWorker
       )
     end
 
-    def recipient_matches_current_audience?(installment:, purchase_id:, follower_id:, affiliate_user_id:, reschedule_reference_time:)
+    def recipient_matches_current_audience?(installment:, purchase_id:, follower_id:, affiliate_user_id:, subscription_id:, reschedule_reference_time:)
+      recipient_ids = [purchase_id, follower_id, affiliate_user_id, subscription_id]
+      return false unless recipient_ids.one?(&:present?)
+
+      reference_time = Time.zone.iso8601(reschedule_reference_time)
+      if subscription_id.present?
+        subscription = Subscription.find_by(id: subscription_id)
+        return false if subscription.nil? || subscription.alive?
+
+        purchase = subscription.original_purchase
+        return false if purchase.nil? || subscription.deactivated_at.nil?
+        return false if SentPostEmail.exists?(post: installment, email: purchase.email)
+        return false if installment.workflow.present? && !installment.workflow.applies_to_purchase?(purchase)
+
+        return subscription.deactivated_at.change(usec: 0) == reference_time
+      end
+
       purchase = Purchase.find_by(id: purchase_id)&.original_purchase if purchase_id.present?
       email = if purchase.present?
         purchase.email
@@ -97,7 +114,11 @@ class SendWorkflowInstallmentWorker
       if purchase.present?
         return false if current_match.purchase_id != purchase.id
 
-        return purchase.created_at.change(usec: 0) == Time.zone.iso8601(reschedule_reference_time)
+        valid_reference_times = [
+          purchase.created_at.change(usec: 0),
+          installment.workflow_delivery_reference_time(purchase).change(usec: 0),
+        ]
+        return valid_reference_times.include?(reference_time)
       end
       return current_match.follower_id == follower_id if follower_id.present?
       if affiliate_user_id.present?
@@ -106,7 +127,7 @@ class SendWorkflowInstallmentWorker
         affiliate = DirectAffiliate.alive.find_by(id: current_match.affiliate_id, affiliate_user_id:)
         return false if affiliate.nil?
 
-        return affiliate.created_at.change(usec: 0) == Time.zone.iso8601(reschedule_reference_time)
+        return affiliate.created_at.change(usec: 0) == reference_time
       end
 
       true
