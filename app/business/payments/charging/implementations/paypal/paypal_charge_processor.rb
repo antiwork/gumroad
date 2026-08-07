@@ -608,43 +608,8 @@ class PaypalChargeProcessor
                                                    total_cents_usd: get_usd_cents(currency, product_info[:total_cents].to_i),
                                                    quantity: product_info[:quantity].to_i)
 
-    ensure_order_update_does_not_lower_total!(paypal_order_id, purchase_unit_info)
-
     update_order(paypal_order_id, purchase_unit_info)
   end
-
-  def self.ensure_order_update_does_not_lower_total!(paypal_order_id, purchase_unit_info)
-    order_details = fetch_order(order_id: paypal_order_id)
-    current_amount = order_details.dig("purchase_units", 0, "amount")
-    current_total = current_amount&.fetch("value", nil)
-    current_currency = current_amount&.fetch("currency_code", nil)
-
-    if current_total.blank? || current_currency.blank?
-      ErrorNotifier.notify("PayPal order total missing when updating order")
-      raise ChargeProcessorError, "PayPal order total missing when updating order"
-    end
-
-    requested_currency = purchase_unit_info[:currency].to_s
-    unless current_currency.casecmp?(requested_currency)
-      ErrorNotifier.notify("PayPal order currency changed when updating order")
-      raise ChargeProcessorError, "PayPal order currency changed when updating order"
-    end
-
-    begin
-      current_total_decimal = BigDecimal(current_total.to_s)
-      requested_total_decimal = BigDecimal(purchase_unit_info[:total].to_s)
-    rescue ArgumentError, TypeError
-      ErrorNotifier.notify("PayPal order total is not numeric when updating order")
-      raise ChargeProcessorError, "PayPal order total is not numeric when updating order"
-    end
-
-    if requested_total_decimal < current_total_decimal
-      ErrorNotifier.notify("PayPal order update attempted to lower order total")
-      raise ChargeProcessorError, "PayPal order update cannot lower the order total"
-    end
-  end
-
-  private_class_method :ensure_order_update_does_not_lower_total!
 
   def self.create_order(purchase_unit_info)
     if purchase_unit_info.blank?
@@ -724,13 +689,15 @@ class PaypalChargeProcessor
                            Charge.find_by_external_id(reference.sub(Charge::COMBINED_CHARGE_PREFIX, "")) :
                            Purchase.find_by_external_id(reference)
 
+    expected_purchase_unit_info = charge_or_purchase.is_a?(Charge) ?
+                                    self.class.paypal_order_info_from_charge(charge_or_purchase) :
+                                    self.class.paypal_order_info(charge_or_purchase)
+
     if chargeable.instance_of?(PaypalApprovedOrderChargeable)
       update_invoice_id(order_id: charge_or_purchase.paypal_order_id, invoice_id: reference)
-      capture_order(order_id: charge_or_purchase.paypal_order_id)
+      capture_order(order_id: charge_or_purchase.paypal_order_id, expected_purchase_unit_info:)
     else
-      paypal_order_id = charge_or_purchase.is_a?(Charge) ?
-                          self.class.create_order_from_charge(charge_or_purchase) :
-                          self.class.create_order_from_purchase(charge_or_purchase)
+      paypal_order_id = self.class.create_order(expected_purchase_unit_info)
       charge_or_purchase.update!(paypal_order_id:)
       charge_or_purchase.purchases.each { |purchase| purchase.update!(paypal_order_id:) } if charge_or_purchase.is_a?(Charge)
       capture_order(order_id: paypal_order_id, billing_agreement_id: chargeable.fingerprint)
@@ -748,13 +715,14 @@ class PaypalChargeProcessor
     end
   end
 
-  def capture_order(order_id:, billing_agreement_id: nil)
+  def capture_order(order_id:, billing_agreement_id: nil, expected_purchase_unit_info: nil)
     paypal_transaction = self.class.capture(order_id:, billing_agreement_id:)
     capture = paypal_transaction.purchase_units[0].payments.captures[0]
 
     if capture.status.downcase == PaypalApiPaymentStatus::COMPLETED.downcase ||
         (capture.status.downcase == PaypalApiPaymentStatus::PENDING.downcase &&
             capture.status_details.reason.upcase == "PENDING_REVIEW")
+      ensure_captured_amount_matches!(capture, expected_purchase_unit_info) if expected_purchase_unit_info.present?
       charge = PaypalCharge.new(paypal_transaction_id: capture.id,
                                 order_api_used: true,
                                 payment_details: paypal_transaction)
@@ -770,6 +738,28 @@ class PaypalChargeProcessor
       raise ChargeProcessorCardError.new("paypal_capture_failure",
                                          "PayPal transaction failed with status #{capture.status}",
                                          charge_id: capture.id)
+    end
+  end
+
+  def ensure_captured_amount_matches!(capture, expected_purchase_unit_info)
+    captured_amount = capture.amount
+    captured_currency = captured_amount&.currency_code
+    captured_value = captured_amount&.value
+    expected_currency = expected_purchase_unit_info[:currency].to_s.upcase
+
+    if captured_currency.blank? || captured_value.blank? || !captured_currency.casecmp?(expected_currency)
+      raise ChargeProcessorError, "PayPal captured amount does not match Gumroad order amount"
+    end
+
+    begin
+      captured_total = BigDecimal(captured_value.to_s)
+      expected_total = BigDecimal(expected_purchase_unit_info[:total].to_s)
+    rescue ArgumentError, TypeError
+      raise ChargeProcessorError, "PayPal captured amount does not match Gumroad order amount"
+    end
+
+    if captured_total != expected_total
+      raise ChargeProcessorError, "PayPal captured amount does not match Gumroad order amount"
     end
   end
 
