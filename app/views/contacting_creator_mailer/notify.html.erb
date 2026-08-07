@@ -122,7 +122,7 @@
             <td>
               <h4><%= affiliate.collaborator? ? "Collaborator commission" : "Affiliate commission" %></h4>
             </td>
-            <td><%= "#{Money.new(@purchase.affiliate_credit_cents + @purchase.affiliate_credit.fee_cents).format(no_cents_if_whole: true, symbol: true)} (#{@purchase.affiliate_credit.basis_points / 100}%)" %></td>
+            <td style="white-space: nowrap;"><%= "#{Money.new(@purchase.affiliate_credit_cents + @purchase.affiliate_credit.fee_cents).format(no_cents_if_whole: true, symbol: true)} (#{@purchase.affiliate_credit.basis_points / 100}%)" %></td>
           </tr>
         <% end %>
         <% if @purchase.utm_link.present? %>
