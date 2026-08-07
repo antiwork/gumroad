@@ -13,13 +13,12 @@ class Subscriptions::MagicLinksController < ApplicationController
   end
 
   def create
-    @subscription.refresh_token
-
     emails = @subscription.emails
-    email_source = params[:email_source].to_sym
+    email_source = params[:email_source].to_sym if params[:email_source].is_a?(String)
     email = emails[email_source]
     e404 if email.nil?
 
+    @subscription.refresh_token
     CustomerMailer.subscription_magic_link(@subscription.id, email).deliver_later(queue: "critical")
 
     redirect_to new_subscription_magic_link_path(@subscription.external_id, email_sent: email_source),
