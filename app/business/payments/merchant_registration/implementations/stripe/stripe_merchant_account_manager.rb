@@ -65,6 +65,10 @@ module StripeMerchantAccountManager
   # at that specific note rather than whatever seller-visible payout note happens to be newest.
   PAYOUT_SETUP_REJECTION_NOTE_FLAG = "payout_setup_rejection"
 
+  # The Stripe field name the note's rejection named (see stripe_rejected_field below), so a later
+  # update can tell whether IT resolved this note rather than some unrelated field.
+  PAYOUT_SETUP_REJECTED_FIELD_KEY = "payout_setup_rejected_field"
+
   # Prefix for the breadcrumb left when Stripe refuses the service agreement we derived from the
   # seller's legal-entity country. See update_account_attributes below.
   SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX = "Stripe rejected service agreement"
@@ -281,6 +285,7 @@ module StripeMerchantAccountManager
 
     clear_stale_postal_code_failure_notes(user)
     clear_stale_bank_sync_failure_notes(user)
+    clear_stale_payout_setup_rejection_notes(user)
 
     merchant_account
   rescue => e
@@ -579,6 +584,12 @@ module StripeMerchantAccountManager
     if person_address_submitted || address_submitted?(account_update.sent_attributes, entity_key)
       clear_stale_postal_code_failure_notes(user)
     end
+
+    # Only the specific field a prior rejection named is what that rejection's note describes —
+    # an unrelated accepted field (e.g. only the city changed) resolves nothing about it, and
+    # clearing on any success reverts to a seller-visible note vanishing for a still-unfixed
+    # rejection (Greptile finding on this PR).
+    clear_stale_payout_setup_rejection_notes(user, resolved_fields: submitted_field_names(account_update.sent_attributes))
   rescue Stripe::InvalidRequestError => e
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     raise
@@ -1249,6 +1260,20 @@ module StripeMerchantAccountManager
     ADDRESS_SUBHASH_KEYS.any? { |address_key| entity[address_key].present? }
   end
 
+  # Key names actually sent to Stripe, at every nesting depth — used to tell whether a rejection
+  # note's specific field (see stripe_rejected_field below) was part of THIS submission.
+  # stripe_rejected_field records the LAST bracket segment of Stripe's param, which for a
+  # compound field like "individual[dob]" is the parent key "dob", not one of its day/month/year
+  # leaves — so parent keys must be included here too, not just leaves (Greptile finding).
+  private_class_method
+  def self.submitted_field_names(sent_attributes)
+    return [] unless sent_attributes.is_a?(Hash)
+
+    sent_attributes.flat_map do |key, value|
+      value.is_a?(Hash) ? [key.to_s] + submitted_field_names(value) : key.to_s
+    end
+  end
+
   def self.get_diff_attributes(current_attributes, last_attributes)
     # Stripe will error if we send unchanged data for locked fields of a verified user.
     # To work around this, we send only attributes that are not in last_attributes or are different in current_attributes.
@@ -1712,10 +1737,20 @@ module StripeMerchantAccountManager
       content: "#{ACCOUNT_REJECTION_NOTE_PREFIX}: #{details.join(' ')} — #{error.message.to_s.truncate(300)}",
       seller_visible: false
     )
+
+    # payout_setup_rejection_seller_message returns nil for bank-account rejections, which have
+    # their own dedicated seller messaging elsewhere — writing a note with nil content would fail
+    # Comment's presence validation and reach ErrorNotifier on every one of them.
+    seller_message = payout_setup_rejection_seller_message(error, user)
+    return if seller_message.blank?
+
     user.add_payout_note(
-      content: payout_setup_rejection_seller_message(error, user),
+      content: seller_message,
       seller_visible: true,
-      json_data: { PAYOUT_SETUP_REJECTION_NOTE_FLAG => true }
+      json_data: {
+        PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+        PAYOUT_SETUP_REJECTED_FIELD_KEY => stripe_rejected_field(error),
+      }
     )
   rescue => e
     # A missing breadcrumb must never turn into a second failure on top of the original
@@ -1734,6 +1769,37 @@ module StripeMerchantAccountManager
         .update_all(deleted_at: Time.current)
   rescue => e
     Rails.logger.error "Failed to clear stale postal-code failure notes for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  # Deletes the marked seller-visible rejection note once the payout setup it describes has gone
+  # through, so `Link#publish_blocked_message` and `User#latest_payout_setup_rejection_note` stop
+  # finding it. json_data is a serialized text column MySQL cannot filter on directly (same
+  # constraint as the LIKE prefilter above), so the flag is narrowed with a LIKE on its serialized
+  # form before the in-memory check that actually reads it.
+  #
+  # `resolved_fields: :all` clears every marked note regardless of which field it named — correct
+  # only at account creation, where there is no prior submission to have been partial. Other
+  # callers pass the fields they actually sent, so a note whose rejection named a specific field
+  # stays until that field is resubmitted and accepted, rather than being wiped by an unrelated
+  # accepted field. A note with no recorded field (undiagnosed rejections with no Stripe `param`,
+  # and notes written before this field was tracked) has nothing to scope to, so any success still
+  # clears it — that was the only behavior before this fix.
+  private_class_method
+  def self.clear_stale_payout_setup_rejection_notes(user, resolved_fields: :all)
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("json_data LIKE ?", "%#{PAYOUT_SETUP_REJECTION_NOTE_FLAG}%")
+        .select { |note| note.json_data[PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
+        .select do |note|
+          rejected_field = note.json_data[PAYOUT_SETUP_REJECTED_FIELD_KEY]
+          resolved_fields == :all || rejected_field.nil? || resolved_fields.include?(rejected_field)
+        end
+        .each { |note| note.update!(deleted_at: Time.current) }
+  rescue => e
+    Rails.logger.error "Failed to clear stale payout-setup-rejection notes for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
   end
 
