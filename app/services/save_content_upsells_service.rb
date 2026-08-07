@@ -18,16 +18,18 @@ class SaveContentUpsellsService
     new_upsell_ids = new_upsell_cards.map { |card| card["id"] }.compact
     remaining_old_upsell_ids = old_upsell_ids.tally
 
-    delete_removed_upsells!(old_upsell_ids - new_upsell_ids)
+    Upsell.transaction do
+      delete_removed_upsells!(old_upsell_ids - new_upsell_ids)
 
-    new_upsell_cards.each do |card|
-      next if consume_old_upsell_id?(card["id"], remaining_old_upsell_ids)
+      new_upsell_cards.each do |card|
+        next if consume_old_upsell_id?(card["id"], remaining_old_upsell_ids)
 
-      card.remove_attribute("id")
-      product_id = ObfuscateIds.decrypt(card["productid"])
-      variant_id = ObfuscateIds.decrypt(card["variantid"]) if card["variantid"]
-      discount = parse_discount(card["discount"]) if card["discount"]
-      card["id"] = create_upsell!(product_id, variant_id, discount).external_id
+        card.remove_attribute("id")
+        product_id = ObfuscateIds.decrypt(card["productid"])
+        variant_id = ObfuscateIds.decrypt(card["variantid"]) if card["variantid"]
+        discount = parse_discount(card["discount"]) if card["discount"]
+        card["id"] = create_upsell!(product_id, variant_id, discount).external_id
+      end
     end
 
     new_doc.to_html
@@ -39,16 +41,18 @@ class SaveContentUpsellsService
     new_upsell_ids = new_upsell_nodes.map { |node| node.dig("attrs", "id") }.compact
     remaining_old_upsell_ids = old_upsell_ids.tally
 
-    delete_removed_upsells!(old_upsell_ids - new_upsell_ids)
+    Upsell.transaction do
+      delete_removed_upsells!(old_upsell_ids - new_upsell_ids)
 
-    new_upsell_nodes.each do |node|
-      next if consume_old_upsell_id?(node.dig("attrs", "id"), remaining_old_upsell_ids)
+      new_upsell_nodes.each do |node|
+        next if consume_old_upsell_id?(node.dig("attrs", "id"), remaining_old_upsell_ids)
 
-      node["attrs"].delete("id")
-      product_id = ObfuscateIds.decrypt(node.dig("attrs", "productId"))
-      variant_id = ObfuscateIds.decrypt(node.dig("attrs", "variantId")) if node.dig("attrs", "variantId")
-      discount = node.dig("attrs", "discount")
-      node["attrs"]["id"] = create_upsell!(product_id, variant_id, discount).external_id
+        node["attrs"].delete("id")
+        product_id = ObfuscateIds.decrypt(node.dig("attrs", "productId"))
+        variant_id = ObfuscateIds.decrypt(node.dig("attrs", "variantId")) if node.dig("attrs", "variantId")
+        discount = node.dig("attrs", "discount")
+        node["attrs"]["id"] = create_upsell!(product_id, variant_id, discount).external_id
+      end
     end
 
     content

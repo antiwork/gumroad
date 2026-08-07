@@ -124,6 +124,15 @@ describe SaveContentUpsellsService do
         expect(upsell.reload.deleted?).to be true
         expect(offer_code.reload.deleted?).to be true
       end
+
+      it "keeps the old upsell when a new card is invalid" do
+        invalid_content = %(<upsell-card productid="invalid"></upsell-card>)
+        service = described_class.new(seller:, content: invalid_content, old_content:)
+
+        expect { service.from_html }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(upsell.reload).to be_alive
+        expect(offer_code.reload).to be_alive
+      end
     end
   end
 
@@ -262,6 +271,15 @@ describe SaveContentUpsellsService do
 
         expect(upsell.reload.deleted?).to be true
         expect(offer_code.reload.deleted?).to be true
+      end
+
+      it "keeps the old upsell when a new node is invalid" do
+        invalid_content = [{ "type" => "upsellCard", "attrs" => { "productId" => "invalid" } }]
+        service = described_class.new(seller:, content: invalid_content, old_content:)
+
+        expect { service.from_rich_content }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(upsell.reload).to be_alive
+        expect(offer_code.reload).to be_alive
       end
     end
   end
