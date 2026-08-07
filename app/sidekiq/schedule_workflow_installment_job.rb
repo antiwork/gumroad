@@ -12,6 +12,7 @@ class ScheduleWorkflowInstallmentJob
 
     current_version = installment.installment_rule.version
     raise RuleNotCommittedError if current_version < rule_version
+    return unless installment.workflow.alive? && installment.alive? && installment.published?
 
     # An older rule can own a wider recipient window. Preserve that window when a newer
     # rule commits first; SentPostEmail's unique key prevents duplicate delivery.

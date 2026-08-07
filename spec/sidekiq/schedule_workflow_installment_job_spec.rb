@@ -42,6 +42,15 @@ describe ScheduleWorkflowInstallmentJob do
     end.to raise_error(ScheduleWorkflowInstallmentJob::RuleNotCommittedError)
   end
 
+  it "does not reschedule after the installment becomes unpublished" do
+    installment.update!(published_at: nil)
+    expect_any_instance_of(Workflow).not_to receive(:schedule_installment)
+
+    described_class.new.perform(installment.id, rule.version, 1.hour.to_i, cutoff_reference_time.iso8601)
+
+    expect(SendWorkflowInstallmentRescheduleJob.jobs).to be_empty
+  end
+
   it "reschedules a pending email for a resubscribed membership outside the normal purchase cutoff" do
     product = create(:subscription_product)
     subscription = create(:subscription, link: product)
