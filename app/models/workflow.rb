@@ -63,46 +63,52 @@ class Workflow < ApplicationRecord
   end
 
   def publish!
-    return true if published_at.present?
+    with_transition_lock do
+      next true if published_at.present?
 
-    if !abandoned_cart_type? && !seller.eligible_to_send_emails?
-      errors.add(:base, "You cannot publish a workflow until you have made at least #{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in total earnings and received a payout")
-      raise ActiveRecord::RecordInvalid.new(self)
-    end
+      if !abandoned_cart_type? && !seller.eligible_to_send_emails?
+        errors.add(:base, "You cannot publish a workflow until you have made at least #{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in total earnings and received a payout")
+        raise ActiveRecord::RecordInvalid.new(self)
+      end
 
-    self.published_at = DateTime.current
-    self.first_published_at ||= published_at
-    installments.alive.find_each do |installment|
-      installment.publish!(published_at:)
-      schedule_installment(installment)
+      self.published_at = DateTime.current
+      self.first_published_at ||= published_at
+      installments.alive.find_each do |installment|
+        installment.publish!(published_at:)
+        AfterCommitEverywhere.after_commit { schedule_installment(installment) }
+      end
+      save!
     end
-    save!
   end
 
   def unpublish!
-    return true if published_at.nil?
+    with_transition_lock do
+      next true if published_at.nil?
 
-    self.published_at = nil
-    installments.alive.find_each(&:unpublish!)
-    save!
+      self.published_at = nil
+      installments.alive.find_each(&:unpublish!)
+      save!
+    end
   end
 
   def has_never_been_published?
     first_published_at.nil?
   end
 
-  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, reschedule_on_stale: false)
+  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, reschedule_on_stale: false, minimum_rule_version: nil)
     return if installment.abandoned_cart_type?
     return unless alive?
     return unless installment.published?
 
     if member_cancellation_trigger?
-      if old_delayed_delivery_time.present? && reschedule_on_stale
-        SendWorkflowEmailsToPastCanceledMembersJob.perform_async(
+      if reschedule_on_stale
+        args = [
           installment.id,
           old_delayed_delivery_time,
           cutoff_reference_time.iso8601
-        )
+        ]
+        args << minimum_rule_version if minimum_rule_version.present?
+        SendWorkflowEmailsToPastCanceledMembersJob.perform_async(*args)
       elsif send_to_past_customers?
         SendWorkflowEmailsToPastCanceledMembersJob.perform_async(installment.id)
       end
@@ -110,8 +116,8 @@ class Workflow < ApplicationRecord
     end
 
     return unless new_customer_trigger?
-    # don't schedule the installment if it is only for new customers/followers and it hasn't been scheduled before (old_delayed_delivery_time is nil)
-    return if old_delayed_delivery_time.nil? && installment.is_for_new_customers_of_workflow
+    # A new-step repair runs after commit; the initial publish relies on recipient callbacks.
+    return if old_delayed_delivery_time.nil? && installment.is_for_new_customers_of_workflow && !reschedule_on_stale
 
     # earliest_valid_time is:
     #   `installment.published_at` if the installment is for new customers only
@@ -120,7 +126,7 @@ class Workflow < ApplicationRecord
     # We only want the purchases and/or followers created after earliest_valid_time because the specified
     # installment has not been delivered to them and needs to be (re-)scheduled.
     earliest_valid_time = if old_delayed_delivery_time.nil?
-      nil
+      installment.is_for_new_customers_of_workflow ? installment.published_at : nil
     elsif installment.is_for_new_customers_of_workflow && installment.published_at >= cutoff_reference_time - old_delayed_delivery_time.seconds
       installment.published_at
     else
@@ -128,7 +134,18 @@ class Workflow < ApplicationRecord
     end
 
     args = [installment.id, earliest_valid_time&.iso8601]
-    args << true if reschedule_on_stale
+    args << true if reschedule_on_stale || minimum_rule_version.present?
+    args << minimum_rule_version if minimum_rule_version.present?
     SendWorkflowPostEmailsJob.perform_async(*args)
   end
+
+  private
+    def with_transition_lock
+      self.class.transaction do
+        # An update acquires the same row lock when a callback leaves the workflow dirty.
+        save! if has_changes_to_save?
+        lock!
+        yield
+      end
+    end
 end

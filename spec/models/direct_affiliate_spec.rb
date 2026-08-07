@@ -255,6 +255,59 @@ describe DirectAffiliate do
       expect(SendWorkflowInstallmentWorker.jobs.size).to eq(2)
     end
 
+    it "preserves the workflow trigger time" do
+      reference_time = 2.hours.ago.change(usec: 0)
+      direct_affiliate.product_affiliates.find_by!(link_id: product.id).update_columns(created_at: reference_time)
+      installment = affiliate_workflow.installments.first
+      rule = installment.installment_rule
+
+      direct_affiliate.schedule_workflow_jobs
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        installment.id,
+        rule.version,
+        nil,
+        nil,
+        affiliate_user.id,
+        nil,
+        reference_time.iso8601
+      ).at(reference_time + rule.delayed_delivery_time)
+    end
+
+    it "uses the trigger time for a product in the workflow scope" do
+      product_reference_time = 2.days.ago.change(usec: 0)
+      direct_affiliate.product_affiliates.find_by!(link_id: product.id).update_columns(created_at: product_reference_time)
+      other_product = create(:product, user: seller)
+      create(:product_affiliate, affiliate: direct_affiliate, product: other_product, created_at: 1.hour.ago)
+      installment = affiliate_workflow.installments.first
+      installment.update!(affiliate_products: [product.unique_permalink])
+      rule = installment.installment_rule
+
+      direct_affiliate.schedule_workflow_jobs
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        installment.id,
+        rule.version,
+        nil,
+        nil,
+        affiliate_user.id,
+        nil,
+        product_reference_time.iso8601
+      ).at(product_reference_time + rule.delayed_delivery_time)
+    end
+
+    it "does not schedule a product-scoped workflow for another product assignment" do
+      other_product = create(:product, user: seller)
+      other_product_affiliate = create(:product_affiliate, affiliate: direct_affiliate, product: other_product)
+      affiliate_workflow.installments.each do |installment|
+        installment.update!(affiliate_products: [product.unique_permalink])
+      end
+
+      direct_affiliate.schedule_workflow_jobs(triggering_product_affiliates: [other_product_affiliate])
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+    end
+
     it "does not enqueue installment jobs when the workflow is marked as member_cancellation and an affiliate is created" do
       affiliate_workflow.update!(workflow_trigger: "member_cancellation")
 

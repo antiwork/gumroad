@@ -29,6 +29,56 @@ describe InstallmentRule do
       expect(@post_rule.reload.version).to eq(2)
     end
 
+    it "publishes the new version to the shared delivery cache" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      rule.update!(delayed_delivery_time: 100)
+
+      expect(described_class.cached_version(post.id)).to eq(rule.version)
+    end
+
+    it "does not fail after the database commit if Redis is unavailable" do
+      error = Redis::CannotConnectError.new("unavailable")
+      allow(@post_rule).to receive(:cache_version!).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: @post_rule.id)
+
+      expect { @post_rule.send(:promote_cached_version) }.not_to raise_error
+    end
+
+    it "does not fail after the database commit if RedisClient raises an error" do
+      error = RedisClient::Error.new("unavailable")
+      allow(@post_rule).to receive(:cache_version!).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: @post_rule.id)
+
+      expect { @post_rule.send(:promote_cached_version) }.not_to raise_error
+    end
+
+    it "does not require Redis before committing a new rule" do
+      post = create(:installment, link: @product, installment_type: "product")
+      rule = build(:installment_rule, installment: post, to_be_published_at: 1.week.from_now)
+      expect(rule).not_to receive(:cache_version!)
+
+      expect { rule.save! }.not_to raise_error
+    end
+
+    it "does not require Redis before committing a change that keeps the version" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      error = RedisClient::Error.new("unavailable")
+      allow(rule).to receive(:cache_version!).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: rule.id)
+
+      expect { rule.update!(time_period: "week") }.not_to raise_error
+    end
+
+    it "does not cache versions for scheduled post rules" do
+      expect(@post_rule).not_to receive(:cache_version!)
+
+      @post_rule.update!(to_be_published_at: 1.month.from_now)
+    end
+
     it "does not increment the version if period is changed" do
       expect do
         @post_rule.time_period = "DAY"

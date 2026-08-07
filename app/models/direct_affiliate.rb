@@ -93,15 +93,28 @@ class DirectAffiliate < Affiliate
       .sum(:price_cents)
   end
 
-  def schedule_workflow_jobs
+  def schedule_workflow_jobs(triggering_product_affiliates: product_affiliates)
     workflows = seller.workflows.alive.affiliate_or_audience_type
+    triggering_product_affiliates = triggering_product_affiliates.to_a
+    triggering_product_affiliates = ProductAffiliate.where(id: triggering_product_affiliates.map(&:id)).includes(:product).to_a
     workflows.each do |workflow|
       next unless workflow.new_customer_trigger?
       workflow.installments.alive.each do |installment|
         installment_rule = installment.installment_rule
         next if installment_rule.nil?
-        SendWorkflowInstallmentWorker.perform_in(installment_rule.delayed_delivery_time,
-                                                 installment.id, installment_rule.version, nil, nil, affiliate_user.id)
+        reference_time = workflow_reference_time(installment:, product_affiliates: triggering_product_affiliates)
+        next if reference_time.nil?
+
+        SendWorkflowInstallmentWorker.perform_at(
+          reference_time + installment_rule.delayed_delivery_time,
+          installment.id,
+          installment_rule.version,
+          nil,
+          nil,
+          affiliate_user.id,
+          nil,
+          reference_time.iso8601
+        )
       end
     end
   end
@@ -128,6 +141,14 @@ class DirectAffiliate < Affiliate
   end
 
   private
+    def workflow_reference_time(installment:, product_affiliates:)
+      if installment.affiliate_products.present?
+        product_permalinks = installment.affiliate_products.to_set
+        product_affiliates = product_affiliates.select { product_permalinks.include?(_1.product.unique_permalink) }
+      end
+      product_affiliates.filter_map(&:created_at).max&.change(usec: 0)
+    end
+
     def destination_url_or_username_required
       return if destination_url.present? || seller&.username.present?
 

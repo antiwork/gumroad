@@ -127,6 +127,7 @@ class Workflow::SaveInstallmentsService
         installment.is_for_new_customers_of_workflow = !workflow.send_to_past_customers
       end
 
+      installment.published_at = workflow.published_at if replace_all
       installment.workflow_installment_published_once_already = workflow.first_published_at.present?
     end
 

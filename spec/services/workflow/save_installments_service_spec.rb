@@ -379,6 +379,31 @@ describe Workflow::SaveInstallmentsService do
       expect(workflow.installments.alive.last.published_at).to be_nil
     end
 
+    it "aligns an existing installment with workflow state during a full save" do
+      installment = create(:workflow_installment, workflow:, seller:, link: product, published_at: 1.day.ago)
+      params[:installments] = [default_installment_params.merge(id: installment.external_id)]
+      expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
+
+      described_class.new(seller:, params:, workflow:, preview_email_recipient:).process
+
+      expect(installment.reload.published_at).to be_nil
+    end
+
+    it "keeps existing installment state during a partial save" do
+      installment = create(:workflow_installment, workflow:, seller:, link: product, published_at: 1.day.ago)
+      params[:installments] = [default_installment_params.slice(:message).merge(id: installment.external_id)]
+
+      described_class.new(
+        seller:,
+        params:,
+        workflow:,
+        preview_email_recipient:,
+        replace_all: false
+      ).process
+
+      expect(installment.reload.published_at).to be_present
+    end
+
     it "does not add an installment after the workflow is deleted" do
       Workflow.where(id: workflow.id).update_all(deleted_at: Time.current)
       params[:installments] = [default_installment_params.merge(id: SecureRandom.uuid)]

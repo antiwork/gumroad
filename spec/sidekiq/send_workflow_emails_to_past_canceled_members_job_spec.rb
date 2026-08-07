@@ -81,6 +81,58 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
     expect(SendWorkflowInstallmentWorker.jobs).to be_empty
   end
 
+  it "repairs cancellations added during a new installment transaction" do
+    @workflow.update!(send_to_past_customers: false)
+    @installment.update!(published_at: 2.hours.ago, is_for_new_customers_of_workflow: true)
+    recent = create(:subscription, link: @product, cancelled_at: 1.hour.ago, deactivated_at: 1.hour.ago)
+    create(:free_purchase, is_original_subscription_purchase: true, link: @product, subscription: recent, created_at: 2.hours.ago)
+
+    described_class.new.perform(
+      @installment.id,
+      nil,
+      Time.current.iso8601,
+      @rule.version
+    )
+
+    reference_time = recent.deactivated_at.change(usec: 0)
+    expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+      @installment.id,
+      @rule.version,
+      nil,
+      nil,
+      nil,
+      recent.id,
+      reference_time.iso8601
+    ).at(reference_time + @rule.delayed_delivery_time)
+  end
+
+  it "retries if a required rule version is not visible" do
+    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+
+    expect do
+      described_class.new.perform(
+        @installment.id,
+        2.days.to_i,
+        Time.current.iso8601,
+        @rule.version + 1
+      )
+    end.to raise_error(SendWorkflowEmailsToPastCanceledMembersJob::RuleNotCommittedError)
+  end
+
+  it "keeps the repair scan on the primary connection" do
+    job = described_class.new
+    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).ordered.and_call_original
+    expect(job).to receive(:candidate_subscriptions).with(@workflow).ordered.and_return(Subscription.none)
+    expect(Makara::Context).to receive(:release_all).ordered
+
+    job.perform(
+      @installment.id,
+      2.days.to_i,
+      Time.current.iso8601,
+      @rule.version
+    )
+  end
+
   it "does not reschedule a cancellation that predates publication for a new-recipient workflow" do
     @workflow.update!(send_to_past_customers: false)
     @installment.update!(published_at: 2.hours.ago, is_for_new_customers_of_workflow: true)

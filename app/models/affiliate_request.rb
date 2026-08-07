@@ -88,13 +88,13 @@ class AffiliateRequest < ApplicationRecord
         affiliate.send_posts = true
       end
 
-      affiliate.product_affiliates.build(
+      product_affiliate = affiliate.product_affiliates.build(
         link_id: self_service_affiliate_product.product_id,
         destination_url: self_service_affiliate_product.destination_url,
         affiliate_basis_points: self_service_affiliate_product.affiliate_basis_points || affiliate.affiliate_basis_points
       )
       affiliate.save!
-      affiliate.schedule_workflow_jobs
+      affiliate.schedule_workflow_jobs(triggering_product_affiliates: [product_affiliate])
       product_ids << self_service_affiliate_product.product_id
     end
 
