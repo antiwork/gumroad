@@ -14,6 +14,12 @@ describe("Dispute evidence page", type: :system, js: true) do
     )
   end
 
+  # gp#1921: login is now required outright, so system specs must sign in as the seller-owner
+  # to reach a page that used to be reachable via the token alone.
+  before do
+    login_as(purchase.seller)
+  end
+
   # Saving no longer forwards to Stripe — we hold the response until the deadline — but the
   # confirmation modal stays, because after the deadline nothing more can be added.
   def submit_and_confirm
