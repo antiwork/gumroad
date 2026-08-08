@@ -40,7 +40,12 @@ class Discover::RecentlyViewedPresenter
     end
     return nil if cards.blank?
 
-    { products: cards }
+    # Anonymous visitors are keyed server-side by the _gumroad_guid cookie, which the client
+    # can't read (httponly). Without this, every anonymous browser shares one "anonymous"
+    # localStorage key, so replacing the cookie (cleared, new profile) leaves the new
+    # identity's history hidden behind the old identity's Clear cutoff. Hashed rather than
+    # passed raw since the guid is otherwise never exposed to JS.
+    { products: cards, anonymous_key: user.present? ? nil : Digest::SHA256.hexdigest(browser_guid)[0, 16] }
   end
 
   private

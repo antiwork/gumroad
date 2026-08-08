@@ -130,4 +130,17 @@ describe("RecentlyViewed", () => {
     );
     expect(screen.queryByText("Product")).not.toBeNull();
   });
+
+  it("does not apply one anonymous browser identity's clear cutoff to a different one sharing the browser", () => {
+    const oldProduct = productAt("old", "Old Product", "2026-01-01T00:00:00.000Z");
+    renderRow({ products: [oldProduct], anonymous_key: "guid-a" });
+    screen.getByText("Clear").click();
+    cleanup();
+
+    // A different server-derived anonymous_key (browser GUID cookie replaced, localStorage
+    // retained) is a different identity and must not inherit guid A's cutoff — this is the
+    // gap a single shared "anonymous" bucket had.
+    renderRow({ products: [oldProduct], anonymous_key: "guid-b" });
+    expect(screen.queryByText("Old Product")).not.toBeNull();
+  });
 });

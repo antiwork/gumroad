@@ -92,6 +92,25 @@ describe Discover::RecentlyViewedPresenter do
 
         expect(result).to be_nil
       end
+
+      it "derives a stable anonymous_key from the browser guid and omits it for logged-in users" do
+        anon_result = described_class.new(user: nil, browser_guid:, request:).props
+        expect(anon_result[:anonymous_key]).to eq(Digest::SHA256.hexdigest(browser_guid)[0, 16])
+
+        add_page_view(product, 1.day.ago.iso8601, user_id: user.id)
+        ProductPageView.__elasticsearch__.refresh_index!
+        expect(presenter.props[:anonymous_key]).to be_nil
+      end
+
+      it "gives different browser guids different anonymous keys" do
+        other_guid = SecureRandom.uuid
+        add_page_view(product, 1.day.ago.iso8601, browser_guid: other_guid)
+        ProductPageView.__elasticsearch__.refresh_index!
+
+        key_a = described_class.new(user: nil, browser_guid:, request:).props[:anonymous_key]
+        key_b = described_class.new(user: nil, browser_guid: other_guid, request:).props[:anonymous_key]
+        expect(key_a).not_to eq(key_b)
+      end
     end
   end
 end
