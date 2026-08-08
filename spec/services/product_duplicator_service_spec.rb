@@ -142,6 +142,43 @@ describe ProductDuplicatorService do
     expect(duplicate_product.product_refund_policy.fine_print).to eq(product.product_refund_policy.fine_print)
   end
 
+  describe "profile sections" do
+    it "duplicates the product's own profile sections and repoints `sections` at the new rows" do
+      other_product = create(:product, user: seller)
+      products_section = create(:seller_profile_products_section, seller:, product:, header: "Related", shown_products: [other_product.id], add_new_products: false)
+      featured_section = create(:seller_profile_featured_product_section, seller:, product:, header: "Featured", featured_product_id: other_product.id)
+      product.update!(sections: [products_section.id, featured_section.id], main_section_index: 1)
+
+      duplicate_product = ProductDuplicatorService.new(product.id).duplicate
+
+      expect(duplicate_product.seller_profile_sections.count).to eq(2)
+      expect(duplicate_product.sections).not_to include(products_section.id, featured_section.id)
+
+      duplicated_products_section = duplicate_product.seller_profile_sections.find_by(header: "Related")
+      expect(duplicated_products_section.shown_products).to eq([other_product.id])
+      duplicated_featured_section = duplicate_product.seller_profile_sections.find_by(header: "Featured")
+      expect(duplicated_featured_section.featured_product_id).to eq(other_product.id)
+
+      # Order-sensitive: `sections` must preserve the source's order (products section first,
+      # featured section second), not just contain the same ids — `main_section_index` is a
+      # plain array position into this array.
+      expect(duplicate_product.sections).to eq([duplicated_products_section.id, duplicated_featured_section.id])
+      expect(duplicate_product.main_section_index).to eq(1)
+      expect(duplicate_product.sections[duplicate_product.main_section_index]).to eq(duplicated_featured_section.id)
+
+      # Source product's sections and their scoping are untouched.
+      expect(product.reload.sections).to eq([products_section.id, featured_section.id])
+      expect(products_section.reload.product_id).to eq(product.id)
+    end
+
+    it "does not create profile sections when the product has none" do
+      duplicate_product = ProductDuplicatorService.new(product.id).duplicate
+
+      expect(duplicate_product.sections).to eq([])
+      expect(duplicate_product.seller_profile_sections.count).to eq(0)
+    end
+  end
+
   it "duplicates the product and marks is_duplicating as false" do
     product.update!(is_duplicating: true)
 
