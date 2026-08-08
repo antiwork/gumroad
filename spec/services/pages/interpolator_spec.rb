@@ -142,13 +142,49 @@ describe Pages::Interpolator do
       expect(result).to include(">$5 once<")
     end
 
-    it "replaces data-gumroad-field='description' with plain-text description" do
+    it "preserves the description's paragraph/heading structure instead of collapsing it to plain text" do
+      product.update!(description: "<h1>Title</h1><p>First paragraph.</p><p>Second <strong>paragraph</strong>.</p>")
+      html = %(<div data-gumroad-field="description">placeholder</div>)
+
+      result = described_class.interpolate(html, product: product)
+
+      expect(result).to include("<h1>Title</h1>")
+      expect(result).to include("<p>First paragraph.</p>")
+      expect(result).to include("<p>Second <strong>paragraph</strong>.</p>")
+      expect(result).not_to include("placeholder")
+    end
+
+    it "strips tags outside the description allowlist but keeps their text" do
+      product.update!(description: %(<p>Safe</p><script>alert("xss")</script><table><tr><td>cell</td></tr></table>))
+      html = %(<div data-gumroad-field="description"></div>)
+
+      result = described_class.interpolate(html, product: product)
+
+      expect(result).to include("<p>Safe</p>")
+      expect(result).not_to include("<script>")
+      expect(result).not_to include("<table>")
+      expect(result).to include("cell")
+    end
+
+    it "unwraps a multi-paragraph description out of a phrasing-only marker (e.g. <p>) instead of nesting invalid HTML" do
+      product.update!(description: "<p>First paragraph.</p><p>Second paragraph.</p>")
       html = %(<p data-gumroad-field="description">placeholder</p>)
 
       result = described_class.interpolate(html, product: product)
 
-      expect(result).to include("Real description")
-      expect(result).not_to include("<strong>")
+      expect(result).to include("<p>First paragraph.</p><p>Second paragraph.</p>")
+      # The marker itself must not survive wrapping the block content — a browser would have
+      # auto-closed it on the first nested <p> anyway, which is the bug this guards against.
+      expect(result).not_to match(%r{<p data-gumroad-field="description">})
+    end
+
+    it "leaves a single-line description nested inside its own <p> marker (no block tags, no unwrap needed)" do
+      product.update!(description: "Just one line, no breaks.")
+      html = %(<p data-gumroad-field="description">placeholder</p>)
+
+      result = described_class.interpolate(html, product: product)
+
+      expect(result).to include(%(<p data-gumroad-field="description">Just one line, no breaks.</p>))
     end
 
     it "prepares <a data-gumroad-action='buy'> for the delegated checkout bridge" do
