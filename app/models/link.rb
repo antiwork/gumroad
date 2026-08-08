@@ -1401,11 +1401,9 @@ class Link < ApplicationRecord
     product_refund_policy || build_product_refund_policy(seller: user)
   end
 
-  # `.on_profile`: this is driven by the ShareTab picker, which only lists the seller's
-  # real profile sections. Without the scope this also walks every OTHER product's own
-  # private per-product section and can strip products from it, since a freshly
-  # duplicated section's shown_products starts as a copy of the whole original list
-  # (gp#1935 — this was quietly corrupting sibling duplicates' rendered carousels).
+  # `.on_profile`: a duplicate's own per-product section starts as a copy of the
+  # original's shown_products, so an unscoped write here can silently strip products
+  # from a sibling duplicate's section.
   def show_in_sections!(section_external_ids)
     user.with_profile_sections_lock do
       user.seller_profile_products_sections.on_profile.reload.each do |section|
