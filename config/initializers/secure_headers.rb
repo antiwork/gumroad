@@ -222,7 +222,9 @@ SecureHeaders::Configuration.default do |config|
       config.csp[:connect_src] << "ws://#{host}:3036" # Vite HMR websocket
     end
     cable_scheme = PROTOCOL == "https" ? "wss" : "ws"
-    cable_port = PROTOCOL == "https" ? 8081 : 8080
+    # bin/dev-lane exports ANYCABLE_PORT per lane (8081-8083); without reading it here,
+    # the CSP only ever allows 8080 and every nonzero lane's websocket gets blocked.
+    cable_port = ENV.fetch("ANYCABLE_PORT") { PROTOCOL == "https" ? 8081 : 8080 }
     config.csp[:connect_src] << "#{cable_scheme}://#{ANYCABLE_HOST}:#{cable_port}" # Required by AnyCable
     config.csp[:connect_src] << "http:"
     config.csp[:script_src] << "http:"
