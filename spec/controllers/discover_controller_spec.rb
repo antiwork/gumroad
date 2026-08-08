@@ -125,6 +125,49 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(props).not_to have_key("recommended_wishlists")
       end
 
+      describe "recently_viewed partial props" do
+        before do
+          request.headers["X-Inertia-Partial-Data"] = "recently_viewed"
+        end
+
+        it "returns nil when the feature flag is off" do
+          get :index
+
+          expect(response).to be_successful
+          expect(response.parsed_body.fetch("props")["recently_viewed"]).to be_nil
+        end
+
+        it "returns the visitor's recently viewed products when the flag is on" do
+          Feature.activate(:discover_recently_viewed)
+          user = create(:user)
+          sign_in user
+          product = create(:product, :recommendable, name: "Seen Before")
+          Link.import(force: true, refresh: true)
+          add_page_view(product, 1.day.ago.iso8601, user_id: user.id)
+          ProductPageView.__elasticsearch__.refresh_index!
+
+          get :index
+
+          expect(response).to be_successful
+          data = response.parsed_body.fetch("props").fetch("recently_viewed")
+          expect(data["products"].map { _1["name"] }).to eq(["Seen Before"])
+          expect(data["products"].first["url"]).to include("recommended_by=recently_viewed")
+        ensure
+          Feature.deactivate(:discover_recently_viewed)
+        end
+
+        it "returns nil when an offer code is present" do
+          Feature.activate(:discover_recently_viewed)
+
+          get :index, params: { offer_code: SearchProducts::BLACK_FRIDAY_CODE }
+
+          expect(response).to be_successful
+          expect(response.parsed_body.fetch("props")["recently_viewed"]).to be_nil
+        ensure
+          Feature.deactivate(:discover_recently_viewed)
+        end
+      end
+
       context "autocomplete_results partial reload" do
         it "returns autocomplete results with empty query" do
           request.headers["X-Inertia-Partial-Data"] = "autocomplete_results"

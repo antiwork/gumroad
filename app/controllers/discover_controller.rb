@@ -69,10 +69,23 @@ class DiscoverController < ApplicationController
       black_friday_stats: -> { black_friday_feature_active? ? BlackFridayStatsService.fetch_stats : nil },
       recommended_products: InertiaRails.defer { recommendations },
       recommended_wishlists: InertiaRails.defer { recommended_wishlists_data },
+      recently_viewed: InertiaRails.defer { recently_viewed_data },
     }
   end
 
   private
+    def recently_viewed_data
+      return nil unless Feature.active?(:discover_recently_viewed, logged_in_user)
+      return nil if params[:offer_code].present?
+
+      Discover::RecentlyViewedPresenter.new(
+        user: logged_in_user,
+        browser_guid: cookies[:_gumroad_guid],
+        request:,
+        include_rated_as_adult: logged_in_user&.show_nsfw_products? || false
+      ).props
+    end
+
     def recommendations
       # Don't show any recommended/featured products when offer codes are present
       return [] if params[:offer_code].present?
