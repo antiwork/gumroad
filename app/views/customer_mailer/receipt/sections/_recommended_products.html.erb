@@ -4,13 +4,15 @@
     <h3><%= recommended_products_info.title %></h3>
     <table class="reset two-product-card-table">
       <tbody>
-        <tr>
-          <% recommended_products_info.products.each do |product| %>
-            <td>
-              <%= render("customer_mailer/receipt/product_card", product: product) %>
-            </td>
-          <% end %>
-        </tr>
+        <% recommended_products_info.products.each_slice(2) do |row_products| %>
+          <tr>
+            <% row_products.each do |product| %>
+              <td>
+                <%= render("customer_mailer/receipt/product_card", product: product) %>
+              </td>
+            <% end %>
+          </tr>
+        <% end %>
       </tbody>
     </table>
   </div>
