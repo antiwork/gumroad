@@ -471,6 +471,7 @@ describe PostToPingEndpointsWorker, :vcr do
     end
 
     it "does not post to the app's post url if the post url is invalid", :skip_resource_subscription_dns_stub do
+      allow(ResourceSubscription).to receive(:resolve_addresses).and_return([IPAddr.new("93.184.216.34")])
       allow(ResourceSubscription).to receive(:resolve_addresses).with("localhost").and_return([IPAddr.new("127.0.0.1")])
       @resource_subscription.update!(post_url: "http://localhost/path")
       purchase = create(:purchase, link: @product)
@@ -557,7 +558,8 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).to receive(:post).with(@refunded_resource_subscription.post_url,
                                               timeout: 5,
                                               body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => @refunded_resource_subscription.content_type }).and_return(@http_double)
+                                              headers: { "Content-Type" => @refunded_resource_subscription.content_type },
+                                              no_follow: true).and_return(@http_double)
 
       PostToPingEndpointsWorker.new.perform(purchase.id, nil, ResourceSubscription::REFUNDED_RESOURCE_NAME)
     end
@@ -573,7 +575,8 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).to receive(:post).with(@cancelled_resource_subscription.post_url,
                                               timeout: 5,
                                               body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => @cancelled_resource_subscription.content_type }).and_return(@http_double)
+                                              headers: { "Content-Type" => @cancelled_resource_subscription.content_type },
+                                              no_follow: true).and_return(@http_double)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::CANCELLED_RESOURCE_NAME, subscription.id)
     end
@@ -588,7 +591,8 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).to receive(:post).with(@subscription_ended_resource_subscription.post_url,
                                               timeout: 5,
                                               body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => @subscription_ended_resource_subscription.content_type }).and_return(@http_double)
+                                              headers: { "Content-Type" => @subscription_ended_resource_subscription.content_type },
+                                              no_follow: true).and_return(@http_double)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME, subscription.id)
     end
@@ -616,7 +620,8 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).to receive(:post).with(@subscription_restarted_resource_subscription.post_url,
                                               timeout: 5,
                                               body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => @subscription_restarted_resource_subscription.content_type }).and_return(@http_double)
+                                              headers: { "Content-Type" => @subscription_restarted_resource_subscription.content_type },
+                                              no_follow: true).and_return(@http_double)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::SUBSCRIPTION_RESTARTED_RESOURCE_NAME, subscription.id)
     end
@@ -639,7 +644,8 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).to receive(:post).with(@subscription_updated_resource_subscription.post_url,
                                               timeout: 5,
                                               body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => @subscription_updated_resource_subscription.content_type }).and_return(@http_double)
+                                              headers: { "Content-Type" => @subscription_updated_resource_subscription.content_type },
+                                              no_follow: true).and_return(@http_double)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::SUBSCRIPTION_UPDATED_RESOURCE_NAME, subscription.id, { "foo" => "bar" })
     end
@@ -658,7 +664,8 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).to receive(:post).with(dispute_resource_subscription.post_url,
                                               timeout: 5,
                                               body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => dispute_resource_subscription.content_type }).and_return(@http_double)
+                                              headers: { "Content-Type" => dispute_resource_subscription.content_type },
+                                              no_follow: true).and_return(@http_double)
 
       PostToPingEndpointsWorker.new.perform(purchase.id, nil, ResourceSubscription::DISPUTE_RESOURCE_NAME)
     end
@@ -677,7 +684,8 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).to receive(:post).with(dispute_won_resource_subscription.post_url,
                                               timeout: 5,
                                               body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => dispute_won_resource_subscription.content_type }).and_return(@http_double)
+                                              headers: { "Content-Type" => dispute_won_resource_subscription.content_type },
+                                              no_follow: true).and_return(@http_double)
 
       PostToPingEndpointsWorker.new.perform(purchase.id, nil, ResourceSubscription::DISPUTE_WON_RESOURCE_NAME)
     end

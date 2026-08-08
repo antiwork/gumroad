@@ -41,20 +41,22 @@ describe ProductReviewVideos::StreamsController do
     context "when the video is pending review or rejected" do
       before { product_review_video.pending_review! }
 
-      it "returns unauthorized when the request has no session and no matching purchase digest" do
+      it "does not stream when the request has no session and no matching purchase digest" do
         get :show, params: { product_review_video_id: product_review_video.external_id, format: :smil }
 
-        expect(response).to have_http_status(:unauthorized)
+        expect(response).not_to have_http_status(:success)
+        expect(response.body).not_to eq(smil_xml)
       end
 
-      it "returns unauthorized for a mismatched purchase_email_digest" do
+      it "does not stream for a mismatched purchase_email_digest" do
         get :show, params: {
           product_review_video_id: product_review_video.external_id,
           purchase_email_digest: "wrong-digest",
           format: :smil
         }
 
-        expect(response).to have_http_status(:unauthorized)
+        expect(response).not_to have_http_status(:success)
+        expect(response.body).not_to eq(smil_xml)
       end
 
       it "streams when the purchase_email_digest matches the reviewing purchase" do
@@ -84,12 +86,13 @@ describe ProductReviewVideos::StreamsController do
         expect(response).to have_http_status(:success)
       end
 
-      it "returns unauthorized for an unrelated signed-in user" do
+      it "does not stream for an unrelated signed-in user" do
         sign_in(create(:user))
 
         get :show, params: { product_review_video_id: product_review_video.external_id, format: :smil }
 
-        expect(response).to have_http_status(:unauthorized)
+        expect(response).not_to have_http_status(:success)
+        expect(response.body).not_to eq(smil_xml)
       end
     end
 

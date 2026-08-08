@@ -38,6 +38,7 @@ describe ResourceSubscription do
     end
 
     it "rejects the exact literal hostnames the old blocklist covered" do
+      stub_resolution("127.0.0.1", "127.0.0.1")
       stub_resolution("localhost", "127.0.0.1")
       stub_resolution("0.0.0.0", "0.0.0.0")
       expect(ResourceSubscription.valid_post_url?("http://127.0.0.1/path")).to eq(false)
