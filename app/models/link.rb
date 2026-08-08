@@ -1401,9 +1401,14 @@ class Link < ApplicationRecord
     product_refund_policy || build_product_refund_policy(seller: user)
   end
 
+  # `.on_profile`: this is driven by the ShareTab picker, which only lists the seller's
+  # real profile sections. Without the scope this also walks every OTHER product's own
+  # private per-product section and can strip products from it, since a freshly
+  # duplicated section's shown_products starts as a copy of the whole original list
+  # (gp#1935 — this was quietly corrupting sibling duplicates' rendered carousels).
   def show_in_sections!(section_external_ids)
     user.with_profile_sections_lock do
-      user.seller_profile_products_sections.reload.each do |section|
+      user.seller_profile_products_sections.on_profile.reload.each do |section|
         shown = section.shown_products.include?(id)
         selected = section_external_ids.include?(section.external_id)
         if selected && !shown
@@ -1755,9 +1760,12 @@ class Link < ApplicationRecord
     # Without this, the section keeps pointing at the dead product id and
     # renders as an empty container the seller can't remove, since
     # ProfileSectionsPresenter filters shown products by is_alive_on_profile.
+    # Scoped to `.on_profile`: per-product sections (product_id set) are each
+    # product's own private page section and never list OTHER products in
+    # shown_products, so they're not this method's concern (gp#1935).
     def remove_from_profile_sections!
       user.with_profile_sections_lock do
-        user.seller_profile_products_sections.reload.each do |section|
+        user.seller_profile_products_sections.on_profile.reload.each do |section|
           next unless section.shown_products.include?(id)
           section.update!(shown_products: section.shown_products - [id])
         end
@@ -1848,9 +1856,11 @@ class Link < ApplicationRecord
       CreateLicensesForExistingCustomersWorker.perform_in(5.seconds, id)
     end
 
+    # `.on_profile`: only the seller's real profile sections auto-add new products;
+    # a duplicate's own per-product section must never gain OTHER products (gp#1935).
     def add_to_profile_sections
       user.with_profile_sections_lock do
-        user.seller_profile_products_sections.reload.each do |section|
+        user.seller_profile_products_sections.on_profile.reload.each do |section|
           next unless section.add_new_products
           section.update!(shown_products: section.shown_products + [id])
         end

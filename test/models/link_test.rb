@@ -576,6 +576,16 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [1, 2, 3, product.id].sort, section.reload.shown_products.sort
   end
 
+  test "adding to profile sections skips per-product sections (gp#1935)" do
+    seller = create_user
+    other_product = create_product(user: seller)
+    per_product_section = create_seller_profile_products_section(seller:, product: other_product, add_new_products: true)
+
+    product = create_product(user: seller)
+
+    assert_not_includes per_product_section.reload.shown_products, product.id
+  end
+
   # --- associations ----------------------------------------------------------
 
   test "has_many self_service_affiliate_products with product_id foreign key" do
@@ -3398,6 +3408,17 @@ class LinkTest < ActiveSupport::TestCase
     product.show_in_sections!([section2.external_id])
     assert_equal [], section1.reload.shown_products
     assert_equal [product.id], section2.reload.shown_products
+  end
+
+  test "show_in_sections! does not touch another product's own per-product section (gp#1935)" do
+    seller = create_user
+    product = create_product(user: seller)
+    other_product = create_product(user: seller)
+    per_product_section = create_seller_profile_products_section(seller:, product: other_product, shown_products: [product.id, other_product.id])
+
+    product.show_in_sections!([])
+
+    assert_equal [product.id, other_product.id], per_product_section.reload.shown_products
   end
 
   # --- #variants_or_skus -----------------------------------------------------
