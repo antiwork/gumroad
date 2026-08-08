@@ -175,7 +175,7 @@ const FileUploadMenu = ({
   </Menu>
 );
 
-const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
+export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
   const {
     id,
     product,
