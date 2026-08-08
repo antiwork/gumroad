@@ -45,12 +45,4 @@ class ProductReviewVideos::StreamsController < ApplicationController
         params[:purchase_email_digest].to_s
       )
     end
-
-    # authorize raises Pundit::NotAuthorizedError rather than returning false, so without this
-    # override the exception reaches PunditAuthorization's default handler and redirects to the
-    # dashboard — the wrong response for a machine-consumed SMIL/CloudFront-URL endpoint with no
-    # session UI to redirect to.
-    def user_not_authorized(_exception)
-      head :unauthorized
-    end
 end
