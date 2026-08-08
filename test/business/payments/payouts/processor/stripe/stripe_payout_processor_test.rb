@@ -150,6 +150,16 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     end
   end
 
+  test "is_user_payable when the user's previous processing payout is older than STUCK_PROCESSING_AGE returns true (gp#1918)" do
+    with_cassette("is_user_payable/when_the_user_has_a_previous_payout_in_processing_state/returns_false") do
+      setup_is_user_payable
+      payment = create_payment(user: @u1, processor: "STRIPE", processor_fee_cents: 10, stripe_transfer_id: "tr_1234", stripe_connect_account_id: "acct_1234")
+      payment.update_column(:created_at, (Payment::STUCK_PROCESSING_AGE + 1.day).ago)
+
+      assert_equal true, StripePayoutProcessor.is_user_payable(@u1, 10_01)
+    end
+  end
+
   test "is_user_payable when the user has a previous payout in processing state adds a payout skipped note if the flag is set" do
     with_cassette("is_user_payable/when_the_user_has_a_previous_payout_in_processing_state/adds_a_payout_skipped_note_if_the_flag_is_set") do
       setup_is_user_payable
