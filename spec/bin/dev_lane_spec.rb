@@ -22,7 +22,8 @@ RSpec.describe "bin/dev-lane" do
       "REDIS_HOST" => "localhost:6379/0",
       "SIDEKIQ_REDIS_HOST" => "localhost:6379/1",
       "RPUSH_REDIS_HOST" => "localhost:6379/2",
-      "RACK_ATTACK_REDIS_HOST" => "localhost:6379/3"
+      "RACK_ATTACK_REDIS_HOST" => "localhost:6379/3",
+      "ANYCABLE_REDIS_URL" => "redis://localhost:6379/0"
     )
   end
 
@@ -38,7 +39,8 @@ RSpec.describe "bin/dev-lane" do
       "REDIS_HOST" => "localhost:6379/8",
       "SIDEKIQ_REDIS_HOST" => "localhost:6379/9",
       "RPUSH_REDIS_HOST" => "localhost:6379/10",
-      "RACK_ATTACK_REDIS_HOST" => "localhost:6379/11"
+      "RACK_ATTACK_REDIS_HOST" => "localhost:6379/11",
+      "ANYCABLE_REDIS_URL" => "redis://localhost:6379/8"
     )
   end
 

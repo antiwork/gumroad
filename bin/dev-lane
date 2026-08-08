@@ -49,10 +49,14 @@ REDIS_HOST="localhost:6379/${redis_base}"
 SIDEKIQ_REDIS_HOST="localhost:6379/$((redis_base + 1))"
 RPUSH_REDIS_HOST="localhost:6379/$((redis_base + 2))"
 RACK_ATTACK_REDIS_HOST="localhost:6379/$((redis_base + 3))"
+# AnyCable (config/anycable.yml, anycable-go) resolves pub/sub via ANYCABLE_REDIS_URL,
+# then REDIS_URL, then a shared default — reuse REDIS_HOST's already-isolated db so
+# lanes don't cross-broadcast, rather than spending a 5th db index per lane.
+ANYCABLE_REDIS_URL="redis://${REDIS_HOST}"
 
 export LANE PORT DEV_LANE_PORT VITE_RUBY_PORT DATABASE_NAME MONGO_DATABASE_NAME
 export REDIS_HOST SIDEKIQ_REDIS_HOST RPUSH_REDIS_HOST RACK_ATTACK_REDIS_HOST
-export ES_INDEX_SUFFIX ANYCABLE_PORT ANYCABLE_RPC_PORT
+export ES_INDEX_SUFFIX ANYCABLE_PORT ANYCABLE_RPC_PORT ANYCABLE_REDIS_URL
 
 if [[ "$print_env" == true ]]; then
   printf '%s\n' \
@@ -68,7 +72,8 @@ if [[ "$print_env" == true ]]; then
     "RACK_ATTACK_REDIS_HOST=${RACK_ATTACK_REDIS_HOST}" \
     "ES_INDEX_SUFFIX=${ES_INDEX_SUFFIX}" \
     "ANYCABLE_PORT=${ANYCABLE_PORT}" \
-    "ANYCABLE_RPC_PORT=${ANYCABLE_RPC_PORT}"
+    "ANYCABLE_RPC_PORT=${ANYCABLE_RPC_PORT}" \
+    "ANYCABLE_REDIS_URL=${ANYCABLE_REDIS_URL}"
   exit 0
 fi
 
