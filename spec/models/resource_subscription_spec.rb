@@ -35,6 +35,14 @@ describe ResourceSubscription do
       expect(described_class.valid_post_url?("http://[fc00::1]/path")).to be(false)
     end
 
+    it "allows public IPv4 and IPv6 literal post_urls for delivery-time validation" do
+      # Resolv.getaddresses never resolves IP literals (ruby-lang bug #17112), so this
+      # must short-circuit on the literal itself rather than fall through to the
+      # require_resolvable branch, which would otherwise silently drop delivery.
+      expect(described_class.valid_post_url?("http://52.1.2.3/webhook", require_resolvable: true)).to be(true)
+      expect(described_class.valid_post_url?("http://[2600::1]/hook", require_resolvable: true)).to be(true)
+    end
+
     it "rejects DNS names that resolve to blocked addresses when resolution is required" do
       allow(Resolv).to receive(:getaddresses).with("metadata.example.com").and_return(["169.254.169.254"])
       allow(Resolv).to receive(:getaddresses).with("mixed.example.com").and_return(["203.0.114.10", "10.0.0.5"])

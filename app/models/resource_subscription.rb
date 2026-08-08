@@ -78,13 +78,18 @@ class ResourceSubscription < ApplicationRecord
     return false if uri.host.blank?
     return false if uri.host.downcase == "localhost"
 
+    literal_host = uri.host.delete_prefix("[").delete_suffix("]")
     host_ip = begin
-      IPAddr.new(uri.host)
+      IPAddr.new(literal_host)
     rescue IPAddr::InvalidAddressError
       nil
     end
     return false if host_ip.present? && blocked_post_url_ip?(host_ip)
     return false if host_ip.nil? && uri.host.match?(/\A[\dA-Fa-f:.]+\z/)
+    # IP literals never resolve via Resolv (no DNS/hosts lookup applies), so skip
+    # straight to the allow decision instead of letting resolution emptiness fall
+    # through to the require_resolvable branch below.
+    return true if host_ip.present?
 
     resolved_ips = Resolv.getaddresses(uri.host).map { IPAddr.new(_1) }
     return !require_resolvable if resolved_ips.empty?
