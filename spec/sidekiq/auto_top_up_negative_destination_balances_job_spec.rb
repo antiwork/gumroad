@@ -113,6 +113,33 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.deactivate(:auto_topup_negative_destination_balances)
   end
 
+  it "includes rows created after the scan in the transfer decision and idempotency fingerprint" do
+    row = residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+    new_row = nil
+
+    allow(AlertOnNegativeDestinationBalancesJob).to receive(:scan).and_wrap_original do |original|
+      result = original.call
+      new_row = residue_row(-50_00)
+      result
+    end
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
+      hash_including(
+        amount_cents: 150_00,
+        idempotency_key: satisfy { |key| key == "#{dedupe_key}:#{fingerprint_for(row.id, new_row.id)}:0:15000" }
+      )
+    )
+
+    described_class.new.perform
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(dedupe_key) if dedupe_key
+    $redis.del("#{dedupe_key}:#{fingerprint_for(row.id, new_row&.id)}:0:15000") if dedupe_key && new_row
+  end
+
   it "withholds a post-cutoff-only candidate for human review instead of transferring" do
     residue_row(-728_50)
     make_payable
@@ -570,6 +597,31 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     $redis.del(dedupe_key)
     $redis.del("#{dedupe_key}:#{fingerprint_for(row.id)}:0:10000")
     $redis.del("#{dedupe_key}:#{fingerprint_for(row.id, new_row&.id)}:10000:15000") if new_row
+  end
+
+  it "keeps a surviving funded row's TTL alive even when a positive row masks the account from the scan" do
+    row = residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    described_class.new.perform
+    expect($redis.get(dedupe_key).to_i).to eq(100_00)
+    $redis.expire(dedupe_key, 1.hour)
+
+    # The funded row still exists, but an offsetting positive row makes both account-level scan
+    # windows non-negative. It will not appear in payable or unreconciled_not_payable, so only the
+    # redis-key sweep can keep its funded credit from lapsing.
+    residue_row(150_00)
+
+    described_class.new.perform
+
+    expect($redis.ttl(dedupe_key)).to be > 1.hour
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(dedupe_key)
+    $redis.del("#{dedupe_key}:#{fingerprint_for(row.id)}:0:10000")
   end
 
   it "escalates instead of double-transferring when a second run acquires an expired account lock while the first is still mid-Stripe-call" do

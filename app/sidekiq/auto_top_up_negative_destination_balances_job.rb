@@ -35,6 +35,7 @@ class AutoTopUpNegativeDestinationBalancesJob
     # scan with no payable candidates this run must not skip refreshing it — that's exactly the
     # gap that let credit expire off-scan and a later top-up double-fund a surviving row.
     refresh_funded_state_ttls(scan[:payable] + scan[:unreconciled_not_payable])
+    refresh_masked_funded_state_ttls
     return if scan[:payable].empty?
 
     live = Feature.active?(:auto_topup_negative_destination_balances)
@@ -59,6 +60,25 @@ class AutoTopUpNegativeDestinationBalancesJob
         _funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
         funded_ids = funded_ids_str.to_s.split("-").map(&:to_i)
         $redis.expire(dedupe_key, DEDUPE_TTL) if (funded_ids & entry[:balance_ids]).any?
+      end
+    end
+
+    # A funded row can be temporarily hidden from AlertOnNegativeDestinationBalancesJob.scan when
+    # an offsetting positive row makes both the cycle window and whole-ledger account aggregate
+    # non-negative. That does NOT mean leg two reconciled the funded row; if the funded row is still
+    # unpaid, keep its credit alive so removing/paying the masking row later cannot double-fund it.
+    def refresh_masked_funded_state_ttls
+      $redis.scan_each(match: "auto_topup_negative_destination_balance:*:last_amount_cents") do |dedupe_key|
+        merchant_account_id = dedupe_key[/auto_topup_negative_destination_balance:(\d+):last_amount_cents\z/, 1]
+        next if merchant_account_id.blank?
+
+        _funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
+        funded_ids = funded_ids_str.to_s.split("-").map(&:to_i)
+        next if funded_ids.empty?
+
+        if Balance.unpaid.where(merchant_account_id:, id: funded_ids).exists?
+          $redis.expire(dedupe_key, DEDUPE_TTL)
+        end
       end
     end
 
@@ -102,12 +122,19 @@ class AutoTopUpNegativeDestinationBalancesJob
         return { entry:, verdict: :escalate, reason: "a top-up decision for this account is already in progress" }
       end
 
-      # Re-read the specific rows scan identified rather than trust its snapshot: a payout,
-      # refund, credit, or the leg-two reconciliation pass can change these Balance rows between
-      # scan and this account's turn — the lock above only serializes this job's own runs against
-      # each other, not against every other writer of Balance#holding_amount_cents. Deciding off
-      # the stale scan total would transfer against a gap that no longer exists.
-      current_total_cents = Balance.unpaid.where(id: entry[:balance_ids]).sum(:holding_amount_cents)
+      # Re-read the whole current unpaid ledger for the account rather than trust the scan's row
+      # snapshot: a payout, refund, credit, leg-two reconciliation, or brand-new Balance row can
+      # land between scan and this account's turn. The lock above only serializes this job's own
+      # runs against each other, not against every other writer of Balance#holding_amount_cents.
+      # Deciding off stale row ids would either transfer against a gap that no longer exists or miss
+      # a new row that must be included in the delta and transfer fingerprint.
+      current_balance_pairs = Balance.unpaid
+                                     .where(user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id)
+                                     .order(:id)
+                                     .pluck(:id, :holding_amount_cents)
+      current_balance_amounts = current_balance_pairs.to_h
+      current_balance_ids = current_balance_amounts.keys
+      current_total_cents = current_balance_amounts.values.sum
       return { entry:, verdict: :noop, reason: "reconciled since scan — nothing left to transfer" } unless current_total_cents.negative?
 
       _funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
@@ -123,8 +150,8 @@ class AutoTopUpNegativeDestinationBalancesJob
       # overstates credit whenever that happens — it double-counts what full_total already nets
       # out — so credit must live on the same signed basis as full_total for the comparison below
       # to mean anything.
-      surviving_funded_ids = funded_ids & entry[:balance_ids]
-      funded_signed = surviving_funded_ids.any? ? surviving_funded_ids.sum { |id| entry[:balance_amounts].fetch(id, 0) } : nil
+      surviving_funded_ids = funded_ids & current_balance_ids
+      funded_signed = surviving_funded_ids.any? ? surviving_funded_ids.sum { |id| current_balance_amounts.fetch(id, 0) } : nil
 
       # An earlier ambiguous Stripe outcome for this account (below) means we don't know whether
       # that amount was actually transferred. Escalating regardless of the current shortfall —
@@ -153,7 +180,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       # land on the same funded/target cents for this account, permanently blocking the second one
       # since SET NX sees the first transfer's still-persisted key. The row-set fingerprint is what
       # tells two same-amount shortfalls apart.
-      row_fingerprint = Digest::SHA1.hexdigest(entry[:balance_ids].join("-"))[0, 12]
+      row_fingerprint = Digest::SHA1.hexdigest(current_balance_ids.join("-"))[0, 12]
       transfer_key = "#{dedupe_key}:#{row_fingerprint}:#{funded_signed&.abs || 0}:#{current_total_cents.abs}"
 
       # Claim before calling Stripe, not after: a claim-after-transfer ordering leaves a crash
@@ -188,7 +215,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       # only safe to drop because a human clears it explicitly as part of the leg-two reconciliation
       # pass (same convention as the ambiguous-error rescue below).
       $redis.persist(transfer_key)
-      $redis.set(dedupe_key, "#{current_total_cents.abs}:#{entry[:balance_ids].join("-")}", ex: DEDUPE_TTL)
+      $redis.set(dedupe_key, "#{current_total_cents.abs}:#{current_balance_ids.join("-")}", ex: DEDUPE_TTL)
       $redis.del(unresolved_key)
       { entry:, verdict: :topped_up, reason: nil, amount_cents: to_transfer_cents, currency: entry[:merchant_account].currency }
     rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
