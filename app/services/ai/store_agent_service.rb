@@ -4,7 +4,8 @@
 # assistant that can answer questions about their store and *propose* changes to it.
 #
 # The agent runs on Grok 4.5 via OpenRouter's Anthropic-compatible endpoint (see MODEL below), with
-# Claude Opus 5 as the request-level fallback when Grok errors.
+# Claude Opus 5 as the request-level fallback when Grok errors. DeepSeek V4 Flash is ramped
+# independently as a third option (see DEEPSEEK_MODEL below), also falling back to Opus.
 #
 # Safety model:
 #   - READ tools (api_read) run automatically and only ever query data the seller already owns. They
@@ -23,14 +24,24 @@ class Ai::StoreAgentService
   class Error < StandardError; end
 
   MODEL = Ai::AnthropicClient::DEFAULT_MODEL
-  # Grok is only reachable through OpenRouter, so the cutover keys off routing: a direct-Anthropic
-  # config keeps serving Opus unchanged.
+  # Grok and DeepSeek are only reachable through OpenRouter, so the cutover keys off routing: a
+  # direct-Anthropic config keeps serving Opus unchanged.
   OPENROUTER_MODEL = "x-ai/grok-4.5"
   # When Grok errors (provider down, rate limited), OpenRouter retries the turn on this model
   # rather than the client's default GPT fallback.
   OPENROUTER_FALLBACK_MODEL = "anthropic/claude-opus-5"
   # Below 100%, gates Grok vs Opus per seller in addition to OPENROUTER_API_KEY being configured.
   GROK_RAMP_FEATURE = :store_agent_grok
+  # DeepSeek V4 Flash: cheap, fast MoE model worth ramping as a third option alongside Claude and
+  # Grok — same OpenRouter routing and Anthropic-compatible endpoint, so no client changes needed
+  # beyond the model id. Falls back to Opus rather than Grok so a DeepSeek outage doesn't cascade
+  # into a second experimental model.
+  DEEPSEEK_MODEL = "deepseek/deepseek-v4-flash-0731"
+  DEEPSEEK_FALLBACK_MODEL = "anthropic/claude-opus-5"
+  # Below 100%, gates DeepSeek vs Opus per seller in addition to OPENROUTER_API_KEY being
+  # configured. Independent of GROK_RAMP_FEATURE — see #client for precedence when both are active
+  # for the same seller (DeepSeek is checked first; a seller in both ramps gets DeepSeek).
+  DEEPSEEK_RAMP_FEATURE = :store_agent_deepseek
   # Passed to Ai::AnthropicClient as its READ timeout. For the streamed reply this bounds silence
   # between chunks (not the total generation time — a long healthy stream is fine); for the buffered
   # calls it bounds the wait for the full response. Production showed a steady stream of 60-second
@@ -1544,7 +1555,10 @@ class Ai::StoreAgentService
     end
 
     def client
-      @_client ||= if Ai::AnthropicClient.openrouter_configured? && Feature.active?(GROK_RAMP_FEATURE, seller)
+      @_client ||= if Ai::AnthropicClient.openrouter_configured? && Feature.active?(DEEPSEEK_RAMP_FEATURE, seller)
+        @_client_model = DEEPSEEK_MODEL
+        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: DEEPSEEK_MODEL, fallback_model: DEEPSEEK_FALLBACK_MODEL)
+      elsif Ai::AnthropicClient.openrouter_configured? && Feature.active?(GROK_RAMP_FEATURE, seller)
         @_client_model = OPENROUTER_MODEL
         Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: OPENROUTER_MODEL, fallback_model: OPENROUTER_FALLBACK_MODEL)
       else
