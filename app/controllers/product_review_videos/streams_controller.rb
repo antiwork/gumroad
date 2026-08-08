@@ -25,7 +25,13 @@ class ProductReviewVideos::StreamsController < ApplicationController
         skip_authorization
         true
       else
-        authorize @product_review_video, :stream?
+        # authorize raises rather than returning false, so the SMIL denial must be caught here to
+        # produce the protocol-appropriate :unauthorized response `show` returns on `false`.
+        begin
+          authorize @product_review_video, :stream?
+        rescue Pundit::NotAuthorizedError
+          false
+        end
       end
     end
 

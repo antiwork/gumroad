@@ -44,7 +44,7 @@ describe ProductReviewVideos::StreamsController do
       it "does not stream when the request has no session and no matching purchase digest" do
         get :show, params: { product_review_video_id: product_review_video.external_id, format: :smil }
 
-        expect(response).not_to have_http_status(:success)
+        expect(response).to have_http_status(:unauthorized)
         expect(response.body).not_to eq(smil_xml)
       end
 
