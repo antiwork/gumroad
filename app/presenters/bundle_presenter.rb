@@ -38,7 +38,8 @@ class BundlePresenter
   end
 
   def edit_share_props
-    profile_sections = bundle.user.seller_profile_products_sections
+    # See ProductPresenter#edit_props for why this must exclude per-product sections (gp#1935).
+    profile_sections = bundle.user.seller_profile_products_sections.on_profile
     shared_props.merge(
       taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_category_picker,
       profile_sections: profile_sections.map do |section|
@@ -130,7 +131,7 @@ class BundlePresenter
           display_product_reviews: bundle.display_product_reviews,
           is_adult: bundle.is_adult,
           discover_fee_per_thousand: bundle.discover_fee_per_thousand,
-          section_ids: bundle.user.seller_profile_products_sections.filter_map { |section| section.external_id if section.shown_products.include?(bundle.id) },
+          section_ids: bundle.user.seller_profile_products_sections.on_profile.filter_map { |section| section.external_id if section.shown_products.include?(bundle.id) },
           is_published: !bundle.draft && bundle.alive?,
           products: bundle.bundle_products.alive.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).map { self.class.bundle_product(product: _1.product, quantity: _1.quantity, selected_variant_id: _1.variant&.external_id) },
           collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,

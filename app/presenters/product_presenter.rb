@@ -109,7 +109,11 @@ class ProductPresenter
 
   def edit_props
     refund_policy = product.find_or_initialize_product_refund_policy
-    profile_sections = product.user.seller_profile_products_sections
+    # `.on_profile` excludes the per-product SellerProfileProductsSection rows
+    # ProductDuplicatorService provisions for each duplicate's own page (they carry
+    # product_id, not nil) — without it every duplicate adds another toggle to this
+    # picker instead of the seller's real profile sections (gp#1935).
+    profile_sections = product.user.seller_profile_products_sections.on_profile
     collaborator = product.collaborator_for_display
     cancellation_discount = product.cancellation_discount_offer_code
     default_offer_code = product.default_offer_code
