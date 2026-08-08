@@ -152,14 +152,19 @@ describe ProductDuplicatorService do
       duplicate_product = ProductDuplicatorService.new(product.id).duplicate
 
       expect(duplicate_product.seller_profile_sections.count).to eq(2)
-      expect(duplicate_product.sections).to match_array(duplicate_product.seller_profile_sections.pluck(:id))
       expect(duplicate_product.sections).not_to include(products_section.id, featured_section.id)
-      expect(duplicate_product.main_section_index).to eq(1)
 
       duplicated_products_section = duplicate_product.seller_profile_sections.find_by(header: "Related")
       expect(duplicated_products_section.shown_products).to eq([other_product.id])
       duplicated_featured_section = duplicate_product.seller_profile_sections.find_by(header: "Featured")
       expect(duplicated_featured_section.featured_product_id).to eq(other_product.id)
+
+      # Order-sensitive: `sections` must preserve the source's order (products section first,
+      # featured section second), not just contain the same ids — `main_section_index` is a
+      # plain array position into this array.
+      expect(duplicate_product.sections).to eq([duplicated_products_section.id, duplicated_featured_section.id])
+      expect(duplicate_product.main_section_index).to eq(1)
+      expect(duplicate_product.sections[duplicate_product.main_section_index]).to eq(duplicated_featured_section.id)
 
       # Source product's sections and their scoping are untouched.
       expect(product.reload.sections).to eq([products_section.id, featured_section.id])
