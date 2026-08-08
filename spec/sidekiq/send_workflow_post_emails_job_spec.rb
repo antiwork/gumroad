@@ -459,7 +459,9 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         # Reproduce the case Greptile flagged: the member still qualifies, but the aggregate over
         # the JSON_TABLE join hands back a NULL affiliate id, so the job resolves it itself.
         allow(member).to receive(:details).and_return(details)
-        allow(member).to receive(:affiliate_id).and_return(nil)
+        affiliate_id = nil
+        allow(member).to receive(:affiliate_id) { affiliate_id }
+        allow(member).to receive(:affiliate_id=) { |value| affiliate_id = value }
         allow(AudienceMember).to receive(:filter).and_return(double(select: [member]))
 
         described_class.new.perform(@post.id)
@@ -479,7 +481,9 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
           { "id" => @affiliates[0].id + 1_000, "product_id" => @products[2].id, "created_at" => 1.hour.ago.iso8601 },
         ]
         allow(member).to receive(:details).and_return(details)
-        allow(member).to receive(:affiliate_id).and_return(nil)
+        affiliate_id = nil
+        allow(member).to receive(:affiliate_id) { affiliate_id }
+        allow(member).to receive(:affiliate_id=) { |value| affiliate_id = value }
         allow(AudienceMember).to receive(:filter).and_return(double(select: [member]))
 
         expect(Rails.logger).to receive(:error).with(/could not resolve a affiliate recipient/)
