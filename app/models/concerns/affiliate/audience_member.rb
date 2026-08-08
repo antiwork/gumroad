@@ -12,12 +12,20 @@ module Affiliate::AudienceMember
     return unless persisted? && type == "DirectAffiliate" && should_be_audience_member?
 
     product_id = product_or_id.is_a?(Link) ? product_or_id.id : product_or_id
+    retried ||= false
     member = AudienceMember.find_or_initialize_by(email: affiliate_user.email, seller:)
     return if member.details["affiliates"]&.any? { _1["id"] == id && _1["product_id"] == product_id }
 
     member.details["affiliates"] ||= []
     member.details["affiliates"] << audience_member_details(product_id:)
     member.save!
+  rescue ActiveRecord::RecordNotUnique
+    # See Purchase::AudienceMember#add_to_audience_member_details for the race and the
+    # `retried ||=` gotcha (a plain `= false` above is fine here since this method only retries
+    # once and returns on the second pass through no fault of its own state).
+    raise if retried
+    retried = true
+    retry
   end
 
   def update_audience_member_with_removed_product(product_or_id)

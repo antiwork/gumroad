@@ -22,9 +22,16 @@ module Follower::AudienceMember
       remove_from_audience_member_details(email_previously_was) if email_previously_changed? && !previously_new_record?
       return remove_from_audience_member_details unless should_be_audience_member?
 
+      retried ||= false
       member = AudienceMember.find_or_initialize_by(email:, seller: user)
       member.details["follower"] = audience_member_details
       member.save!
+    rescue ActiveRecord::RecordNotUnique
+      # See Purchase::AudienceMember#add_to_audience_member_details for the race and the
+      # `retried ||=` gotcha.
+      raise if retried
+      retried = true
+      retry
     end
 
     def remove_from_audience_member_details(email = attributes["email"])

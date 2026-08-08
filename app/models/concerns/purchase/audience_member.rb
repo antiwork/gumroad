@@ -72,11 +72,20 @@ module Purchase::AudienceMember
   def add_to_audience_member_details
     return unless should_be_audience_member?
 
+    retried ||= false
     member = AudienceMember.find_or_initialize_by(email:, seller:)
     member.details["purchases"] ||= []
     member.details["purchases"].delete_if { _1["id"] == id }
     member.details["purchases"] << audience_member_details
     member.save!
+  rescue ActiveRecord::RecordNotUnique
+    # Two concurrent saves for the same buyer (e.g. a double-submitted checkout) can both
+    # find_or_initialize_by a fresh record and race to insert it; the retry's find_or_initialize_by
+    # deterministically finds the winner's row instead of racing again. `retried ||=` (not `=`)
+    # because `retry` re-runs this whole method body, including the assignment above.
+    raise if retried
+    retried = true
+    retry
   end
 
   def remove_from_audience_member_details(email = attributes["email"])
