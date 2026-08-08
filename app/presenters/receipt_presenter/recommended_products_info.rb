@@ -14,16 +14,14 @@ class ReceiptPresenter::RecommendedProductsInfo
   end
 
   def products
-    @_products ||= begin
-      recommended_product_infos.map do |product_info|
-        ProductPresenter.card_for_web(
-          product: product_info.product,
-          recommended_by: product_info.recommended_by,
-          target: product_info.target,
-          recommender_model_name: product_info.recommender_model_name,
-          affiliate_id: product_info.affiliate_id,
-          )
-      end
+    @_products ||= recommended_product_infos.map do |product_info|
+      ProductPresenter.card_for_web(
+        product: product_info.product,
+        recommended_by: product_info.recommended_by,
+        target: product_info.target,
+        recommender_model_name: product_info.recommender_model_name,
+        affiliate_id: product_info.affiliate_id,
+        )
     end
   end
 
