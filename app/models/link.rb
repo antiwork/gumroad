@@ -584,32 +584,15 @@ class Link < ApplicationRecord
   end
   alias_method :streamable, :streamable?
 
-  # Whether a $0 checkout of this product must still solve a CAPTCHA.
+  # Whether a $0 checkout must still solve a CAPTCHA. Free checkouts have no card to
+  # decline, but each one still sends a receipt from our transactional mailer, making a
+  # free product a way to relay mail through Gumroad's reputation.
   #
-  # Free checkouts are the cheapest thing to automate on Gumroad: there is no card to
-  # decline and no money at risk, but every completed checkout still sends a receipt from
-  # our transactional mailer. That makes a free product an attractive way to relay mail
-  # through Gumroad's sending reputation.
-  #
-  # Two independent reasons to require the check:
-  #
-  # 1. NEW SELLER. An account younger than REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN has no
-  #    track record, so we ask for the check by default.
-  #
-  # 2. SELLER IS NOT IN GOOD STANDING. Account age alone turned out to be the wrong test:
-  #    in July 2026 a seller whose account was over four years old scripted 150,529 free
-  #    checkouts of their own product in four days, mailing 148,535 scraped addresses
-  #    (gumroad-private#1397). They sailed past the age check purely by being old. What
-  #    actually distinguished them was risk state — they were flagged, not compliant.
-  #
-  #    So we also require the check whenever the seller is not `compliant`. Note that
-  #    `not_reviewed` is the DEFAULT state for the long tail of accounts that have simply
-  #    never been looked at, so this deliberately covers "unknown" as well as "known bad" —
-  #    for a free order, an unverified seller is exactly the case where a cheap bot check is
-  #    worth it. Suspended sellers cannot transact at all, so they never reach here.
-  #
-  # Compliant sellers — reviewed and cleared, and the source of ~85% of legitimate free
-  # checkout volume — are unaffected, so the common path stays frictionless.
+  # Required for new sellers (no track record yet), and for any seller not `compliant` —
+  # age alone isn't a safe signal: a 4-year-old account scripted 150k+ free checkouts to
+  # scraped addresses in 2026 (gumroad-private#1397) while sailing past an age-only check.
+  # `not_reviewed` (the default for accounts nobody has looked at) is deliberately included
+  # here alongside known-bad states. Suspended sellers never reach this method.
   def require_captcha?
     return true if user.created_at > REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN.ago
 
@@ -835,16 +818,10 @@ class Link < ApplicationRecord
   end
 
   def sales_count_for_inventory
-    # The counter-cache column is kept in sync by Purchase/Subscription callbacks and has been
-    # the production source since 2026-04 (the inventory_counter_cache flag was 100% on; removed
-    # via gp#1208). The live SUM fallback is gone with the flag.
-    #
-    # Read the column fresh from the database rather than trusting this instance's loaded
-    # attribute: the callbacks bump the counter with `update_all` (no in-memory sync), so a
-    # Link object loaded before a concurrent purchase would otherwise report a stale count.
-    # Inventory protection (Purchase#sold_out under the per-product semaphore) depends on
-    # seeing the committed value. This is a primary-key point read — still far cheaper than
-    # the SUM over purchases it replaced.
+    # Read the column fresh from the DB, not this instance's loaded attribute: the
+    # counter-cache callbacks bump it with `update_all` (no in-memory sync), so a stale
+    # Link could under/over-report during a concurrent purchase. Inventory protection
+    # (Purchase#sold_out, under the per-product semaphore) depends on the committed value.
     return sales_count_for_inventory_cache unless persisted?
 
     self.class.where(id: id).pick(:sales_count_for_inventory_cache)
@@ -1262,16 +1239,9 @@ class Link < ApplicationRecord
   end
   alias_method :has_adult_keywords, :has_adult_keywords?
 
-  # Public: Check if a zip archive should ever be generated for this product
-  # This is for a product in general, not a specific purchase of a product.
-  #
-  # Examples:
-  #
-  # If a product is rent_only, no files can be downloaded, so don't bother generating
-  # a zip file. Return false.
-  #
-  # If a product is rentable and buyable, there is the possibility for some buyers to
-  # download product_files. A zip archive should be prepared. Return true.
+  # Public: Check if a zip archive should ever be generated for this product (in general, not
+  # for a specific purchase). False for rent_only or stampable-PDF products, since neither
+  # produces downloadable files.
   def is_downloadable?
     purchase_type != "rent_only" && !has_stampable_pdfs? && has_downloadable_content?
   end
@@ -1519,22 +1489,8 @@ class Link < ApplicationRecord
       self.filetype = filetype.downcase if filetype.present?
     end
 
-    # public: remove_xml_tags
-    #
-    # Users can add XML tags unknowingly to their product description while copy pasting from another application such as Microsoft Word.
-    #
-    # We see 2 cases where XML tags appear in product descriptions.
-    #
-    # First case, we see an XML comment tag:
-    #
-    # <!--?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?-->
-    #
-    # Second case, we have an XML tag inserted by copy pasting from Microsoft Word:
-    #
-    # <!--[if gte mso 9]><xml>\n <w:WordDocument>\n  <w:View>Normal</w:View>\n  <w:Zoom>0</w:Zoom>\n
-    # <w:DoNotOptimizeForBrowser></w:DoNotOptimizeForBrowser>\n </w:WordDocument>\n</xml><![endif]-->
-    #
-    # In both cases we want to remove these added tags. The regex used in this method will remove both of these tags.
+    # Removes XML tags accidentally pasted into descriptions from other apps (e.g. Word),
+    # such as `<!--?xml ... ?-->` comment tags and `<!--[if gte mso 9]>...<![endif]-->` blocks.
     def remove_xml_tags
       return if description.blank?
 
