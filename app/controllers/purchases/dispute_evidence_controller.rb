@@ -20,12 +20,19 @@ class Purchases::DisputeEvidenceController < ApplicationController
   # the contacted/not-yet-submitted/not-resolved window.
   skip_before_action :check_suspended
 
+  # Sahil's direction on gp#1921: "The seller should need to be logged in to provide this
+  # evidence." A signed, scoped, expiring token proves the emailed link was legitimate, but it
+  # does not prove the browser holding it is the seller — the link can be forwarded/leaked, and
+  # the token alone was the surface the original IDOR abused. Requiring login closes that gap
+  # even for the scoped-token path; a seller signed out on the device that received the email is
+  # redirected to log in first (see authenticate_user!), same UX as any other seller-only page.
+  before_action :authenticate_user!
   before_action :set_purchase, :set_dispute_evidence
   before_action :check_if_needs_redirect, except: [:success]
 
   # external_id is buyer-visible (library/download data), so it must never resolve on its
-  # own — only an authenticated seller-owner may fall back to it, for emails sent before
-  # SECURE_ID_SCOPE existed.
+  # own. Both the scoped token AND the legacy external_id now additionally require the
+  # authenticated user to own the sale — a valid token is necessary but no longer sufficient.
 
   def show
     set_meta_tag(title: "Submit additional information")
@@ -92,23 +99,11 @@ class Purchases::DisputeEvidenceController < ApplicationController
   private
     def set_purchase
       requested_id = params[:purchase_id] || params[:id]
-      @purchase = Purchase.find_by_secure_external_id(requested_id, scope: SECURE_ID_SCOPE)
-      if @purchase
-        @purchase_route_id = requested_id
-      else
-        @purchase = legacy_seller_purchase(requested_id)
-        @purchase_route_id = @purchase&.external_id
-      end
+      scoped_purchase = Purchase.find_by_secure_external_id(requested_id, scope: SECURE_ID_SCOPE)
+      @purchase = scoped_purchase || Purchase.find_by_external_id(requested_id)
+      @purchase_route_id = scoped_purchase ? requested_id : @purchase&.external_id
+      @purchase = nil unless @purchase && logged_in_user.role_owner_for?(@purchase.seller)
       @purchase || e404
-    end
-
-    # Pre-existing emails already delivered with the buyer-visible external_id keep working, but
-    # only for the account that owns the sale — a signed-out or buyer request never reaches this.
-    def legacy_seller_purchase(requested_id)
-      return unless logged_in_user
-
-      purchase = Purchase.find_by_external_id(requested_id)
-      purchase if purchase && logged_in_user.role_owner_for?(purchase.seller)
     end
 
     def dispute_evidence_params

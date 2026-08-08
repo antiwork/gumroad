@@ -13,6 +13,14 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
     )
   end
 
+  # gp#1921: a valid scoped token is no longer sufficient on its own — the authenticated
+  # user must also be the seller who owns the sale. Sign in as the seller by default so the
+  # existing token-based scenarios below still exercise the window/status logic they intend
+  # to, and override sign_in explicitly in the specs that are testing authentication itself.
+  before do
+    sign_in(purchase.seller)
+  end
+
   describe "GET show" do
     context "when the seller hasn't been contacted" do
       before do
@@ -437,21 +445,25 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
 
   # gp#1921: purchase.external_id is buyer-visible via the library/download pages, so the disputing
   # buyer must never be able to use it to read or overwrite the seller's chargeback response.
+  # Login is now required outright (Sahil's direction on gp#1921), so a signed-out request is
+  # redirected to log in rather than 404ing — but no signed-in identity other than the seller
+  # who owns the sale, including via a valid scoped token, can ever resolve the purchase.
   describe "buyer access via the legacy buyer-visible external_id" do
-    it "404s the show page for a signed-out request" do
-      expect do
-        get :show, params: { purchase_id: purchase.external_id }
-      end.to raise_error(ActionController::RoutingError)
+    before { sign_out(purchase.seller) }
+
+    it "redirects a signed-out show request to log in" do
+      get :show, params: { purchase_id: purchase.external_id }
+
+      expect(response).to redirect_to(login_path(next: purchase_dispute_evidence_path(purchase.external_id)))
     end
 
-    it "404s the update for a signed-out request and does not save anything" do
-      expect do
-        put :update, params: {
-          purchase_id: purchase.external_id,
-          dispute_evidence: { reason_for_winning: "Overwritten by the buyer" }
-        }
-      end.to raise_error(ActionController::RoutingError)
+    it "redirects a signed-out update request to log in and does not save anything" do
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: { reason_for_winning: "Overwritten by the buyer" }
+      }
 
+      expect(response).to redirect_to(login_path(next: purchase_dispute_evidence_path(purchase.external_id)))
       expect(dispute_evidence.reload.reason_for_winning).to be_nil
     end
 
@@ -469,6 +481,22 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       expect do
         get :show, params: { purchase_id: purchase.external_id }
       end.to raise_error(ActionController::RoutingError)
+    end
+
+    # The scoped token alone is exactly the surface gp#1921 reported: it was sufficient by
+    # itself before this fix, so an unrelated signed-in user must still 404 even holding it.
+    it "404s for an unrelated signed-in user holding a valid scoped token" do
+      sign_in(create(:user))
+
+      expect do
+        get :show, params: { purchase_id: evidence_token }
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    it "redirects a signed-out request holding a valid scoped token to log in" do
+      get :show, params: { purchase_id: evidence_token }
+
+      expect(response).to redirect_to(login_path(next: purchase_dispute_evidence_path(evidence_token)))
     end
   end
 
