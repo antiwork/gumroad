@@ -30,6 +30,11 @@ class ProductReviewVideos::StreamingUrlsController < ApplicationController
         skip_authorization
         true
       else
+        unless user_signed_in?
+          skip_authorization
+          return false
+        end
+
         authorize @product_review_video, :stream?
       end
     end

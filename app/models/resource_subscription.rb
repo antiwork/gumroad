@@ -76,6 +76,7 @@ class ResourceSubscription < ApplicationRecord
     uri = URI.parse(post_url)
     return false unless uri.kind_of?(URI::HTTP)
     return false if uri.host.blank?
+    return false if uri.host.downcase == "localhost"
 
     host_ip = begin
       IPAddr.new(uri.host)
