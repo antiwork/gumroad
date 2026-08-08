@@ -49,11 +49,20 @@ class CustomersController < Sellers::BaseController
            }
   end
 
+  # Text fields aren't sortable in ES; product_name sorts on its keyword subfield.
+  SORT_KEY_TO_SEARCH_FIELD = {
+    "created_at" => "created_at",
+    "price_cents" => "price_cents",
+    "product_name" => "product_name.raw",
+  }.freeze
+
   def paged
     params[:page] = params[:page].to_i - 1
+    sort_field = SORT_KEY_TO_SEARCH_FIELD[params.dig(:sort, :key)]
+    sort_direction = params.dig(:sort, :direction) == "asc" ? "asc" : "desc"
     sales = fetch_sales(
       query: params[:query],
-      sort: params[:sort] ? { params[:sort][:key] => { order: params[:sort][:direction] } } : nil,
+      sort: sort_field ? { sort_field => { order: sort_direction } } : nil,
       products: Link.by_external_ids(params[:products]),
       variants: BaseVariant.by_external_ids(params[:variants]),
       excluded_products: Link.by_external_ids(params[:excluded_products]),

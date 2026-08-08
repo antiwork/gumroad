@@ -203,6 +203,36 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
         end
       end
     end
+
+    describe "sorting by product name" do
+      let(:customer_ids) { -> (res) { res.parsed_body.deep_symbolize_keys[:customers].map { _1[:id] } } }
+      let(:banana_product) { create(:product, user: seller, name: "Banana Pack") }
+      let(:apple_product) { create(:product, user: seller, name: "Apple Pack") }
+      let!(:banana_purchase) { create(:purchase, seller:, link: banana_product) }
+      let!(:apple_purchase) { create(:purchase, seller:, link: apple_product) }
+
+      before do
+        stub_const("CustomersController::CUSTOMERS_PER_PAGE", 10)
+        index_model_records(Purchase)
+      end
+
+      it "sorts by product name in both directions" do
+        get :paged, params: { page: 1, sort: { key: "product_name", direction: "asc" } }
+        expect(response).to be_successful
+        expect(customer_ids[response].first(2)).to eq([apple_purchase.external_id, banana_purchase.external_id])
+
+        get :paged, params: { page: 1, sort: { key: "product_name", direction: "desc" } }
+        expect(response).to be_successful
+        expect(customer_ids[response].index(banana_purchase.external_id)).to be < customer_ids[response].index(apple_purchase.external_id)
+      end
+
+      it "falls back to the default sort for keys outside the whitelist" do
+        get :paged, params: { page: 1, sort: { key: "email", direction: "asc" } }
+        expect(response).to be_successful
+        # Default is created_at desc — the two newest purchases come first.
+        expect(customer_ids[response].first(2)).to match_array([banana_purchase.external_id, apple_purchase.external_id])
+      end
+    end
   end
 
   describe "GET paged with active_customers_only filter" do
