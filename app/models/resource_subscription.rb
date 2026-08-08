@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "ipaddr"
+require "resolv"
+
 class ResourceSubscription < ApplicationRecord
   include ExternalId
   include Deletable
@@ -22,7 +25,33 @@ class ResourceSubscription < ApplicationRecord
                           DISPUTE_RESOURCE_NAME,
                           DISPUTE_WON_RESOURCE_NAME].freeze
 
-  INVALID_POST_URL_HOSTS = %w(127.0.0.1 localhost 0.0.0.0)
+  BLOCKED_POST_URL_IP_RANGES = [
+    "0.0.0.0/8",
+    "10.0.0.0/8",
+    "100.64.0.0/10",
+    "127.0.0.0/8",
+    "169.254.0.0/16",
+    "172.16.0.0/12",
+    "192.0.0.0/24",
+    "192.0.2.0/24",
+    "192.168.0.0/16",
+    "198.18.0.0/15",
+    "198.51.100.0/24",
+    "203.0.113.0/24",
+    "224.0.0.0/4",
+    "240.0.0.0/4",
+    "255.255.255.255/32",
+    "::/128",
+    "::1/128",
+    "::ffff:0:0/96",
+    "64:ff9b:1::/48",
+    "100::/64",
+    "2001:2::/48",
+    "2001:db8::/32",
+    "fc00::/7",
+    "fe80::/10",
+    "ff00::/8"
+  ].map { IPAddr.new(_1) }.freeze
 
   belongs_to :user, optional: true
   belongs_to :oauth_application, optional: true
@@ -43,11 +72,29 @@ class ResourceSubscription < ApplicationRecord
     VALID_RESOURCE_NAMES.include?(resource_name)
   end
 
-  def self.valid_post_url?(post_url)
+  def self.valid_post_url?(post_url, require_resolvable: false)
     uri = URI.parse(post_url)
-    uri.kind_of?(URI::HTTP) && INVALID_POST_URL_HOSTS.exclude?(uri.host)
-  rescue URI::InvalidURIError
+    return false unless uri.kind_of?(URI::HTTP)
+    return false if uri.host.blank?
+
+    host_ip = begin
+      IPAddr.new(uri.host)
+    rescue IPAddr::InvalidAddressError
+      nil
+    end
+    return false if host_ip.present? && blocked_post_url_ip?(host_ip)
+    return false if host_ip.nil? && uri.host.match?(/\A[\dA-Fa-f:.]+\z/)
+
+    resolved_ips = Resolv.getaddresses(uri.host).map { IPAddr.new(_1) }
+    return !require_resolvable if resolved_ips.empty?
+
+    resolved_ips.none? { blocked_post_url_ip?(_1) }
+  rescue URI::InvalidURIError, IPAddr::InvalidAddressError, Resolv::ResolvError, TypeError
     false
+  end
+
+  def self.blocked_post_url_ip?(ip)
+    BLOCKED_POST_URL_IP_RANGES.any? { _1.include?(ip) }
   end
 
   private

@@ -47,6 +47,7 @@ describe PostToPingEndpointsWorker, :vcr do
     @http_double = double
     allow(@http_double).to receive(:success?).and_return(true)
     allow(@http_double).to receive(:code).and_return(200)
+    allow(Resolv).to receive(:getaddresses).and_return(["203.0.114.10"])
   end
 
   it "enqueues job PostToIndividualPingEndpointWorker with the correct parameters" do
@@ -479,6 +480,16 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(PostToIndividualPingEndpointWorker).to_not have_enqueued_sidekiq_job(@resource_subscription.post_url, anything, @resource_subscription.content_type, anything)
     end
 
+    it "does not enqueue post URLs that resolve to private addresses at delivery time" do
+      @resource_subscription.update!(post_url: "https://metadata.example.com/hook")
+      allow(Resolv).to receive(:getaddresses).with("metadata.example.com").and_return(["169.254.169.254"])
+      purchase = create(:purchase, link: @product)
+
+      PostToPingEndpointsWorker.new.perform(purchase.id, nil)
+
+      expect(PostToIndividualPingEndpointWorker).to_not have_enqueued_sidekiq_job(@resource_subscription.post_url, anything, @resource_subscription.content_type, anything)
+    end
+
     it "does not post to the app's post url if the user hasn't given view_sales permissions to the app" do
       another_app = create(:oauth_application, owner: create(:user), name: "another app")
       create("doorkeeper/access_token", application: another_app, resource_owner_id: @user.id, scopes: "edit_products")
@@ -555,6 +566,7 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params.deep_stringify_keys)
       expect(HTTParty).to receive(:post).with(@refunded_resource_subscription.post_url,
                                               timeout: 5,
+                                              follow_redirects: false,
                                               body: params.deep_stringify_keys,
                                               headers: { "Content-Type" => @refunded_resource_subscription.content_type }).and_return(@http_double)
 
@@ -571,6 +583,7 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params.deep_stringify_keys)
       expect(HTTParty).to receive(:post).with(@cancelled_resource_subscription.post_url,
                                               timeout: 5,
+                                              follow_redirects: false,
                                               body: params.deep_stringify_keys,
                                               headers: { "Content-Type" => @cancelled_resource_subscription.content_type }).and_return(@http_double)
 
@@ -586,6 +599,7 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params.deep_stringify_keys)
       expect(HTTParty).to receive(:post).with(@subscription_ended_resource_subscription.post_url,
                                               timeout: 5,
+                                              follow_redirects: false,
                                               body: params.deep_stringify_keys,
                                               headers: { "Content-Type" => @subscription_ended_resource_subscription.content_type }).and_return(@http_double)
 
@@ -614,6 +628,7 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params.deep_stringify_keys)
       expect(HTTParty).to receive(:post).with(@subscription_restarted_resource_subscription.post_url,
                                               timeout: 5,
+                                              follow_redirects: false,
                                               body: params.deep_stringify_keys,
                                               headers: { "Content-Type" => @subscription_restarted_resource_subscription.content_type }).and_return(@http_double)
 
@@ -637,6 +652,7 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params.deep_stringify_keys)
       expect(HTTParty).to receive(:post).with(@subscription_updated_resource_subscription.post_url,
                                               timeout: 5,
+                                              follow_redirects: false,
                                               body: params.deep_stringify_keys,
                                               headers: { "Content-Type" => @subscription_updated_resource_subscription.content_type }).and_return(@http_double)
 
@@ -656,6 +672,7 @@ describe PostToPingEndpointsWorker, :vcr do
                                                   headers: { "Content-Type" => @user.notification_content_type })
       expect(HTTParty).to receive(:post).with(dispute_resource_subscription.post_url,
                                               timeout: 5,
+                                              follow_redirects: false,
                                               body: params.deep_stringify_keys,
                                               headers: { "Content-Type" => dispute_resource_subscription.content_type }).and_return(@http_double)
 
@@ -675,6 +692,7 @@ describe PostToPingEndpointsWorker, :vcr do
                                                   headers: { "Content-Type" => @user.notification_content_type })
       expect(HTTParty).to receive(:post).with(dispute_won_resource_subscription.post_url,
                                               timeout: 5,
+                                              follow_redirects: false,
                                               body: params.deep_stringify_keys,
                                               headers: { "Content-Type" => dispute_won_resource_subscription.content_type }).and_return(@http_double)
 

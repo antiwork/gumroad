@@ -10,7 +10,7 @@ class ForeignWebhooksController < ApplicationController
   ].freeze
 
   skip_before_action :verify_authenticity_token
-  before_action :validate_sns_webhook, only: [:mediaconvert]
+  before_action :validate_sns_webhook, only: [:sns, :mediaconvert, :sns_aws_config]
 
   before_action only: [:stripe] do
     endpoint_secret = GlobalConfig.dig(:stripe, :endpoint_secret)

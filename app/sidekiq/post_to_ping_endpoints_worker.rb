@@ -28,7 +28,7 @@ class PostToPingEndpointsWorker
     return if post_urls.empty?
 
     post_urls.each do |post_url, content_type|
-      next unless ResourceSubscription.valid_post_url?(post_url)
+      next unless ResourceSubscription.valid_post_url?(post_url, require_resolvable: true)
       PostToIndividualPingEndpointWorker.perform_async(post_url, ping_params.deep_stringify_keys, content_type, user.id)
     end
   end

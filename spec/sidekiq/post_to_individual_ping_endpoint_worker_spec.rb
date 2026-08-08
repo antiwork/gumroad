@@ -7,12 +7,13 @@ describe PostToIndividualPingEndpointWorker do
     @http_double = double
     allow(@http_double).to receive(:success?).and_return(true)
     allow(@http_double).to receive(:code).and_return(200)
+    allow(Resolv).to receive(:getaddresses).and_return(["203.0.114.10"])
   end
 
   describe "post to individual endpoint" do
     context "when the content_type is application/x-www-form-urlencoded" do
       it "posts to the right endpoint using the right params" do
-        expect(HTTParty).to receive(:post).with("http://notification.com", timeout: 5, body: { "a" => 1 }, headers: { "Content-Type" => "application/x-www-form-urlencoded" }).and_return(@http_double)
+        expect(HTTParty).to receive(:post).with("http://notification.com", timeout: 5, follow_redirects: false, body: { "a" => 1 }, headers: { "Content-Type" => "application/x-www-form-urlencoded" }).and_return(@http_double)
 
         expect do
           PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s)
@@ -23,6 +24,7 @@ describe PostToIndividualPingEndpointWorker do
         expect(HTTParty).to receive(:post).with(
           "http://notification.com",
           timeout: 5,
+          follow_redirects: false,
           body: {
             "name %5Bfor field%5D %5B%5B%5D%5D!@\#$%^&" => 1,
             "custom_fields" => {
@@ -49,7 +51,7 @@ describe PostToIndividualPingEndpointWorker do
 
     context "when the content_type is application/json" do
       it "posts to the right endpoint using the right params" do
-        expect(HTTParty).to receive(:post).with("http://notification.com", timeout: 5, body: { "some [thing]" => 1 }.to_json, headers: { "Content-Type" => "application/json" }).and_return(@http_double)
+        expect(HTTParty).to receive(:post).with("http://notification.com", timeout: 5, follow_redirects: false, body: { "some [thing]" => 1 }.to_json, headers: { "Content-Type" => "application/json" }).and_return(@http_double)
 
         expect do
           PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "some [thing]" => 1 }, Mime[:json].to_s)
@@ -67,6 +69,13 @@ describe PostToIndividualPingEndpointWorker do
     PostToIndividualPingEndpointWorker.new.perform("http://example.com", { "q" => 47 })
 
     expect(messages).to include("[SocketError] PostToIndividualPingEndpointWorker error content_type=#{Mime[:url_encoded_form]} user_id=")
+  end
+
+  it "does not post to private IPs resolved at delivery time" do
+    allow(Resolv).to receive(:getaddresses).with("metadata.example.com").and_return(["169.254.169.254"])
+    expect(HTTParty).not_to receive(:post)
+
+    PostToIndividualPingEndpointWorker.new.perform("https://metadata.example.com/hook", { "q" => 47 })
   end
 
   it "re-raises a non-internet error" do
@@ -95,7 +104,7 @@ describe PostToIndividualPingEndpointWorker do
 
   describe "logging" do
     it "does not log the endpoint URL or payload" do
-      expect(HTTParty).to receive(:post).with("https://notification.com", timeout: 5, body: { "a" => 1 }, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
+      expect(HTTParty).to receive(:post).with("https://notification.com", timeout: 5, follow_redirects: false, body: { "a" => 1 }, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
       messages = []
       allow(Rails.logger).to receive(:info) { |message| messages << message }
 
@@ -107,7 +116,7 @@ describe PostToIndividualPingEndpointWorker do
     it "does not log license keys or webhook credentials" do
       endpoint = "https://notification.com/webhook?token=endpoint-secret"
       payload = { "license_key" => "license-secret", "email" => "buyer@example.com" }
-      expect(HTTParty).to receive(:post).with(endpoint, timeout: 5, body: payload, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
+      expect(HTTParty).to receive(:post).with(endpoint, timeout: 5, follow_redirects: false, body: payload, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
       messages = []
       allow(Rails.logger).to receive(:info) { |message| messages << message }
 

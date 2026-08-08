@@ -8,6 +8,8 @@ class PostToIndividualPingEndpointWorker
   BACKOFF_STRATEGY = [60, 180, 600, 3600].freeze
 
   def perform(post_url, params, content_type = Mime[:url_encoded_form].to_s, user_id = nil)
+    return unless ResourceSubscription.valid_post_url?(post_url, require_resolvable: true)
+
     retry_count = params["retry_count"] || 0
 
     body = if content_type == Mime[:json]
@@ -18,7 +20,7 @@ class PostToIndividualPingEndpointWorker
       params
     end
 
-    response = HTTParty.post(post_url, body:, timeout: 5, headers: { "Content-Type" => content_type })
+    response = HTTParty.post(post_url, body:, timeout: 5, follow_redirects: false, headers: { "Content-Type" => content_type })
 
     Rails.logger.info("PostToIndividualPingEndpointWorker response=#{response.code} content_type=#{content_type} user_id=#{user_id}")
 
