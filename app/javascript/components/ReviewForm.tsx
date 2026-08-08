@@ -404,6 +404,7 @@ export const ReviewForm = React.forwardRef<
           }}
           onUiStateChange={setVideoRecorderUiState}
           disabled={disabled}
+          purchaseEmailDigest={purchaseEmailDigest}
         />
         {uploadProgressDisplay}
       </>

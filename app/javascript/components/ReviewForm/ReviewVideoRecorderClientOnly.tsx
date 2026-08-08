@@ -135,6 +135,7 @@ export default function ReviewVideoRecorderClientOnly({
   onVideoChange,
   onUiStateChange,
   disabled = false,
+  purchaseEmailDigest,
   reacquireStream,
 }: ReviewVideoRecorderProps & {
   reacquireStream: () => void;
@@ -281,7 +282,13 @@ export default function ReviewVideoRecorderClientOnly({
       );
     }
     if (videoState.kind === "existing") {
-      return <ReviewVideoPlayer videoId={videoState.id} thumbnail={videoState.thumbnailUrl} />;
+      return (
+        <ReviewVideoPlayer
+          videoId={videoState.id}
+          thumbnail={videoState.thumbnailUrl}
+          purchaseEmailDigest={purchaseEmailDigest}
+        />
+      );
     }
     return null;
   };

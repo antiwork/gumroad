@@ -7,7 +7,7 @@ import { createJWPlayer } from "$app/utils/jwPlayer";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 
-function usePlayer(videoId: string, uid: string) {
+function usePlayer(videoId: string, uid: string, purchaseEmailDigest?: string) {
   const [loading, setLoading] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const playerRef = useRef<jwplayer.JWPlayer | null>(null);
@@ -15,7 +15,7 @@ function usePlayer(videoId: string, uid: string) {
   const onPlay = useCallback(async () => {
     setLoading(true);
 
-    const { streaming_urls } = await getStreamingUrls(videoId);
+    const { streaming_urls } = await getStreamingUrls(videoId, purchaseEmailDigest);
 
     playerRef.current = await createJWPlayer(`${uid}-video`, {
       playlist: [{ sources: streaming_urls.map((file) => ({ file })) }],
@@ -39,10 +39,18 @@ function usePlayer(videoId: string, uid: string) {
   return { loading, showPlayer, onPlay, playerId: `${uid}-video` };
 }
 
-export const ReviewVideoPlayer = ({ videoId, thumbnail }: { videoId: string; thumbnail?: string | null }) => {
+export const ReviewVideoPlayer = ({
+  videoId,
+  thumbnail,
+  purchaseEmailDigest,
+}: {
+  videoId: string;
+  thumbnail?: string | null;
+  purchaseEmailDigest?: string | undefined;
+}) => {
   const uid = React.useId();
 
-  const { loading, showPlayer, onPlay, playerId } = usePlayer(videoId, uid);
+  const { loading, showPlayer, onPlay, playerId } = usePlayer(videoId, uid, purchaseEmailDigest);
 
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-sm bg-black">

@@ -93,10 +93,10 @@ export const getReview = async (reviewId: string): Promise<{ review: Review }> =
   return typia.assert<{ review: Review }>(await response.json());
 };
 
-export const getStreamingUrls = async (id: string) => {
+export const getStreamingUrls = async (id: string, purchaseEmailDigest?: string) => {
   const response = await request({
     method: "GET",
-    url: Routes.product_review_video_streaming_urls_path(id),
+    url: Routes.product_review_video_streaming_urls_path(id, { purchase_email_digest: purchaseEmailDigest }),
     accept: "json",
   });
 

@@ -14,6 +14,7 @@ export type ReviewVideoRecorderProps = {
   onVideoChange: (newVideoState: VideoState) => void;
   onUiStateChange?: (state: ReviewVideoRecorderUiState) => void;
   disabled?: boolean;
+  purchaseEmailDigest?: string | undefined;
 };
 
 export const ReviewVideoRecorderContainer = ({ children }: { children?: React.ReactNode }) => (

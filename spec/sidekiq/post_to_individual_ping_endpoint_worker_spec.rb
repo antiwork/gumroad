@@ -5,15 +5,18 @@ require "spec_helper"
 describe PostToIndividualPingEndpointWorker do
   before do
     @http_double = double
-    allow(@http_double).to receive(:success?).and_return(true)
-    allow(@http_double).to receive(:code).and_return(200)
+    allow(@http_double).to receive(:is_a?).with(Net::HTTPSuccess).and_return(true)
+    allow(@http_double).to receive(:code).and_return("200")
     allow(Resolv).to receive(:getaddresses).and_return(["203.0.114.10"])
   end
 
   describe "post to individual endpoint" do
     context "when the content_type is application/x-www-form-urlencoded" do
       it "posts to the right endpoint using the right params" do
-        expect(HTTParty).to receive(:post).with("http://notification.com", timeout: 5, follow_redirects: false, body: { "a" => 1 }, headers: { "Content-Type" => "application/x-www-form-urlencoded" }).and_return(@http_double)
+        expect(SsrfFilter).to receive(:post).with(
+          "http://notification.com",
+          hash_including(body: "a=1", headers: { "Content-Type" => "application/x-www-form-urlencoded" })
+        ).and_return(@http_double)
 
         expect do
           PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s)
@@ -21,18 +24,12 @@ describe PostToIndividualPingEndpointWorker do
       end
 
       it "posts to the right endpoint and encodes brackets" do
-        expect(HTTParty).to receive(:post).with(
-          "http://notification.com",
-          timeout: 5,
-          follow_redirects: false,
-          body: {
-            "name %5Bfor field%5D %5B%5B%5D%5D!@\#$%^&" => 1,
-            "custom_fields" => {
-              "name %5Bfor field%5D %5B%5B%5D%5D!@\#$%^&" => 1
-            }
-          },
-          headers: { "Content-Type" => "application/x-www-form-urlencoded" }
-        ).and_return(@http_double)
+        expect(SsrfFilter).to receive(:post) do |url, options|
+          expect(url).to eq("http://notification.com")
+          expect(options[:headers]).to eq({ "Content-Type" => "application/x-www-form-urlencoded" })
+          expect(CGI.unescape(options[:body])).to include("name %5Bfor field%5D %5B%5B%5D%5D!@#$%^&=1")
+          @http_double
+        end
 
         expect do
           PostToIndividualPingEndpointWorker.new.perform(
@@ -51,7 +48,10 @@ describe PostToIndividualPingEndpointWorker do
 
     context "when the content_type is application/json" do
       it "posts to the right endpoint using the right params" do
-        expect(HTTParty).to receive(:post).with("http://notification.com", timeout: 5, follow_redirects: false, body: { "some [thing]" => 1 }.to_json, headers: { "Content-Type" => "application/json" }).and_return(@http_double)
+        expect(SsrfFilter).to receive(:post).with(
+          "http://notification.com",
+          hash_including(body: { "some [thing]" => 1 }.to_json, headers: { "Content-Type" => "application/json" })
+        ).and_return(@http_double)
 
         expect do
           PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "some [thing]" => 1 }, Mime[:json].to_s)
@@ -61,10 +61,10 @@ describe PostToIndividualPingEndpointWorker do
   end
 
   it "does not raise when it encounters an internet error" do
-    allow(HTTParty).to receive(:post).and_raise(SocketError.new("socket error message"))
+    allow(SsrfFilter).to receive(:post).and_raise(SocketError.new("socket error message"))
     messages = []
     allow(Rails.logger).to receive(:info) { |message| messages << message }
-    expect(HTTParty).to receive(:post).exactly(1).times
+    expect(SsrfFilter).to receive(:post).exactly(1).times
 
     PostToIndividualPingEndpointWorker.new.perform("http://example.com", { "q" => 47 })
 
@@ -73,13 +73,25 @@ describe PostToIndividualPingEndpointWorker do
 
   it "does not post to private IPs resolved at delivery time" do
     allow(Resolv).to receive(:getaddresses).with("metadata.example.com").and_return(["169.254.169.254"])
-    expect(HTTParty).not_to receive(:post)
+    expect(SsrfFilter).not_to receive(:post)
 
     PostToIndividualPingEndpointWorker.new.perform("https://metadata.example.com/hook", { "q" => 47 })
   end
 
+  it "does not raise when every address SsrfFilter re-resolves at connection time turns out private" do
+    # Models a DNS-rebinding attempt: valid_post_url? sees a public address, but the hostname
+    # answers with a private address by the time SsrfFilter connects.
+    allow(SsrfFilter).to receive(:post).and_raise(SsrfFilter::PrivateIPAddress.new("no public ip addresses"))
+    messages = []
+    allow(Rails.logger).to receive(:info) { |message| messages << message }
+
+    PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
+
+    expect(messages).to include("[SsrfFilter::PrivateIPAddress] PostToIndividualPingEndpointWorker error content_type=#{Mime[:url_encoded_form]} user_id=")
+  end
+
   it "re-raises a non-internet error" do
-    allow(HTTParty).to receive(:post).and_raise(StandardError)
+    allow(SsrfFilter).to receive(:post).and_raise(StandardError)
 
     expect do
       PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
@@ -87,24 +99,24 @@ describe PostToIndividualPingEndpointWorker do
   end
 
   it "retries 50x status codes the right number of times and does not raise", :sidekiq_inline do
-    allow(@http_double).to receive(:success?).and_return(false)
-    allow(@http_double).to receive(:code).and_return(500)
-    expect(HTTParty).to receive(:post).exactly(4).times.with("http://notification.com", kind_of(Hash)).and_return(@http_double)
+    allow(@http_double).to receive(:is_a?).with(Net::HTTPSuccess).and_return(false)
+    allow(@http_double).to receive(:code).and_return("500")
+    expect(SsrfFilter).to receive(:post).exactly(4).times.with("http://notification.com", kind_of(Hash)).and_return(@http_double)
 
     PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "b" => 3 })
   end
 
   it "does not retry other status codes", :sidekiq_inline do
-    allow(@http_double).to receive(:success?).and_return(false)
-    allow(@http_double).to receive(:code).and_return(417)
-    expect(HTTParty).to receive(:post).exactly(1).times.with("http://notification.com", kind_of(Hash)).and_return(@http_double)
+    allow(@http_double).to receive(:is_a?).with(Net::HTTPSuccess).and_return(false)
+    allow(@http_double).to receive(:code).and_return("417")
+    expect(SsrfFilter).to receive(:post).exactly(1).times.with("http://notification.com", kind_of(Hash)).and_return(@http_double)
 
     PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "c" => 17 })
   end
 
   describe "logging" do
     it "does not log the endpoint URL or payload" do
-      expect(HTTParty).to receive(:post).with("https://notification.com", timeout: 5, follow_redirects: false, body: { "a" => 1 }, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
+      expect(SsrfFilter).to receive(:post).with("https://notification.com", kind_of(Hash)).and_return(@http_double)
       messages = []
       allow(Rails.logger).to receive(:info) { |message| messages << message }
 
@@ -116,7 +128,7 @@ describe PostToIndividualPingEndpointWorker do
     it "does not log license keys or webhook credentials" do
       endpoint = "https://notification.com/webhook?token=endpoint-secret"
       payload = { "license_key" => "license-secret", "email" => "buyer@example.com" }
-      expect(HTTParty).to receive(:post).with(endpoint, timeout: 5, follow_redirects: false, body: payload, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
+      expect(SsrfFilter).to receive(:post).with(endpoint, kind_of(Hash)).and_return(@http_double)
       messages = []
       allow(Rails.logger).to receive(:info) { |message| messages << message }
 

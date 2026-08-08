@@ -42,11 +42,13 @@ export const Review = ({
   seller,
   canRespond,
   hideResponse = false,
+  purchaseEmailDigest,
 }: {
   review: ReviewType;
   seller: Seller | null;
   canRespond: boolean;
   hideResponse?: boolean;
+  purchaseEmailDigest?: string | undefined;
 }) => {
   const [review, setReview] = React.useState(initialReview);
   const [isEditing, setIsEditing] = React.useState(false);
@@ -66,7 +68,13 @@ export const Review = ({
           ) : null}
         </span>
         {review.message ? <p className="m-0">{review.message}</p> : null}
-        {review.video ? <ReviewVideoPlayer videoId={review.video.id} thumbnail={review.video.thumbnail_url} /> : null}
+        {review.video ? (
+          <ReviewVideoPlayer
+            videoId={review.video.id}
+            thumbnail={review.video.thumbnail_url}
+            purchaseEmailDigest={purchaseEmailDigest}
+          />
+        ) : null}
         <section className="flex flex-wrap items-center gap-1">
           <ReviewUserAttribution avatarUrl={review.rater.avatar_url} name={review.rater.name} isBuyer />
         </section>
