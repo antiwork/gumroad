@@ -576,14 +576,27 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [1, 2, 3, product.id].sort, section.reload.shown_products.sort
   end
 
-  test "adding to profile sections skips per-product sections (gp#1935)" do
+  test "adding to profile sections honors add_new_products on per-product sections" do
     seller = create_user
     other_product = create_product(user: seller)
-    per_product_section = create_seller_profile_products_section(seller:, product: other_product, add_new_products: true)
+    opted_in = create_seller_profile_products_section(seller:, product: other_product, add_new_products: true)
+    opted_out = create_seller_profile_products_section(seller:, product: other_product, add_new_products: false)
 
     product = create_product(user: seller)
 
-    assert_not_includes per_product_section.reload.shown_products, product.id
+    assert_includes opted_in.reload.shown_products, product.id
+    assert_not_includes opted_out.reload.shown_products, product.id
+  end
+
+  test "delete! strips the product id from per-product sections too (gp#1935 review)" do
+    seller = create_user
+    product = create_product(user: seller)
+    other_product = create_product(user: seller)
+    per_product_section = create_seller_profile_products_section(seller:, product: other_product, shown_products: [product.id, other_product.id])
+
+    product.delete!
+
+    assert_equal [other_product.id], per_product_section.reload.shown_products
   end
 
   # --- associations ----------------------------------------------------------
