@@ -58,7 +58,9 @@ module Affiliate::AudienceMember
       member = retried ? AudienceMember.lock.find_or_initialize_by(email: affiliate_user.email, seller:) : AudienceMember.find_or_initialize_by(email: affiliate_user.email, seller:)
       member.details["affiliates"] ||= []
       product_affiliates.each do
-        member.details["affiliates"] << audience_member_details(product_id: _1.link_id)
+        product_id = _1.link_id
+        next if member.details["affiliates"].any? { it["id"] == id && it["product_id"] == product_id }
+        member.details["affiliates"] << audience_member_details(product_id:)
       end
       member.save!
     rescue ActiveRecord::RecordNotUnique
