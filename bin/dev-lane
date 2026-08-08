@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 usage() {
   echo "Usage: bin/dev-lane <N> [--print-env] [-- <extra foreman args>]" >&2
@@ -24,9 +25,10 @@ if [[ $# -gt 0 ]]; then
   shift
 fi
 
-# DEV_LANE_PORT, not PORT: foreman injects its own PORT (base 5000) into every
-# Procfile process, so a bare ${PORT:-3000} in Procfile.dev would boot plain
-# `bin/dev` on 5000. PORT is still exported for direct `rails s` outside foreman.
+# DEV_LANE_PORT, not PORT: plain `bin/dev` inherits no PORT, so foreman would
+# inject its default base (5000) into a bare ${PORT:-3000} web line. Under
+# dev-lane the exported PORT doubles as foreman's base, which is harmless —
+# nothing but the web line reads the injected values.
 PORT=$((3000 + LANE))
 DEV_LANE_PORT="$PORT"
 # Step 2 per lane so no lane lands on 3037, the test-env vite port (config/vite.json).
@@ -38,29 +40,39 @@ if [[ "$LANE" -eq 0 ]]; then
   DATABASE_NAME="gumroad_development"
   MONGO_DATABASE_NAME="gumroad_log_development"
   ES_INDEX_SUFFIX=""
+  REDIS_HOST="localhost:6379/0"
+  SIDEKIQ_REDIS_HOST="localhost:6379/1"
+  RPUSH_REDIS_HOST="localhost:6379/2"
+  RACK_ATTACK_REDIS_HOST="localhost:6379/3"
 else
   DATABASE_NAME="gumroad_development_lane${LANE}"
   MONGO_DATABASE_NAME="gumroad_log_development_lane${LANE}"
   ES_INDEX_SUFFIX="_lane${LANE}"
+  # Two Redis databases per extra lane, not four: databases 10-13 are the test
+  # suite's fallback block and its leases start at 14 (config/test_redis_isolation.rb),
+  # both flushed before every example — 4-9 is the only band safe from test runs,
+  # which is exactly two per lane. The namespaced stores (rpush "rpush:*",
+  # rack-attack "rack::attack:*") share a db with an unprefixed one.
+  redis_base=$((4 + (LANE - 1) * 2))
+  REDIS_HOST="localhost:6379/${redis_base}"
+  SIDEKIQ_REDIS_HOST="localhost:6379/$((redis_base + 1))"
+  RPUSH_REDIS_HOST="localhost:6379/${redis_base}"
+  RACK_ATTACK_REDIS_HOST="localhost:6379/$((redis_base + 1))"
 fi
 
-redis_base=$((LANE * 4))
-REDIS_HOST="localhost:6379/${redis_base}"
-SIDEKIQ_REDIS_HOST="localhost:6379/$((redis_base + 1))"
-RPUSH_REDIS_HOST="localhost:6379/$((redis_base + 2))"
-RACK_ATTACK_REDIS_HOST="localhost:6379/$((redis_base + 3))"
-# AnyCable (config/anycable.yml, anycable-go) resolves pub/sub via ANYCABLE_REDIS_URL,
-# then REDIS_URL, then a shared default — reuse REDIS_HOST's already-isolated db so
-# lanes don't cross-broadcast, rather than spending a 5th db index per lane.
+# AnyCable ignores the *_REDIS_HOST vars: pub/sub resolves via ANYCABLE_REDIS_URL
+# (else a shared default) and the browser dials the ANYCABLE_WEBSOCKET_URL that
+# .env.development pins to :8080 — both must be lane-scoped or every lane's
+# clients authenticate against lane 0.
 ANYCABLE_REDIS_URL="redis://${REDIS_HOST}"
+ANYCABLE_WEBSOCKET_URL="ws://cable.localhost:${ANYCABLE_PORT}/cable"
 
-export LANE PORT DEV_LANE_PORT VITE_RUBY_PORT DATABASE_NAME MONGO_DATABASE_NAME
+export PORT DEV_LANE_PORT VITE_RUBY_PORT DATABASE_NAME MONGO_DATABASE_NAME
 export REDIS_HOST SIDEKIQ_REDIS_HOST RPUSH_REDIS_HOST RACK_ATTACK_REDIS_HOST
-export ES_INDEX_SUFFIX ANYCABLE_PORT ANYCABLE_RPC_PORT ANYCABLE_REDIS_URL
+export ES_INDEX_SUFFIX ANYCABLE_PORT ANYCABLE_RPC_PORT ANYCABLE_REDIS_URL ANYCABLE_WEBSOCKET_URL
 
 if [[ "$print_env" == true ]]; then
   printf '%s\n' \
-    "LANE=${LANE}" \
     "PORT=${PORT}" \
     "DEV_LANE_PORT=${DEV_LANE_PORT}" \
     "VITE_RUBY_PORT=${VITE_RUBY_PORT}" \
@@ -73,7 +85,8 @@ if [[ "$print_env" == true ]]; then
     "ES_INDEX_SUFFIX=${ES_INDEX_SUFFIX}" \
     "ANYCABLE_PORT=${ANYCABLE_PORT}" \
     "ANYCABLE_RPC_PORT=${ANYCABLE_RPC_PORT}" \
-    "ANYCABLE_REDIS_URL=${ANYCABLE_REDIS_URL}"
+    "ANYCABLE_REDIS_URL=${ANYCABLE_REDIS_URL}" \
+    "ANYCABLE_WEBSOCKET_URL=${ANYCABLE_WEBSOCKET_URL}"
   exit 0
 fi
 

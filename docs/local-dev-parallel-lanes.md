@@ -11,11 +11,11 @@ Lane 0 preserves the existing `bin/dev` values. Lanes 1–3 derive isolated valu
 | Lane | Rails port | Vite port | Database | Redis DBs | ES suffix | Mongo database | AnyCable WS / RPC |
 | --- | ---: | ---: | --- | --- | --- | --- | --- |
 | 0 | 3000 | 3036 | `gumroad_development` | 0–3 | none | `gumroad_log_development` | 8080 / 50051 |
-| 1 | 3001 | 3038 | `gumroad_development_lane1` | 4–7 | `_lane1` | `gumroad_log_development_lane1` | 8081 / 50052 |
-| 2 | 3002 | 3040 | `gumroad_development_lane2` | 8–11 | `_lane2` | `gumroad_log_development_lane2` | 8082 / 50053 |
-| 3 | 3003 | 3042 | `gumroad_development_lane3` | 12–15 | `_lane3` | `gumroad_log_development_lane3` | 8083 / 50054 |
+| 1 | 3001 | 3038 | `gumroad_development_lane1` | 4–5 | `_lane1` | `gumroad_log_development_lane1` | 8081 / 50052 |
+| 2 | 3002 | 3040 | `gumroad_development_lane2` | 6–7 | `_lane2` | `gumroad_log_development_lane2` | 8082 / 50053 |
+| 3 | 3003 | 3042 | `gumroad_development_lane3` | 8–9 | `_lane3` | `gumroad_log_development_lane3` | 8083 / 50054 |
 
-Vite ports step by two so no lane collides with 3037, the test environment's Vite port.
+Vite ports step by two so no lane collides with 3037, the test environment's Vite port. Extra lanes get two Redis databases (app+rpush, sidekiq+rack-attack — the namespaced stores share) because databases 10 and above belong to the test suite: 10–13 are `.env.test`'s fallback block and `config/test_redis_isolation.rb` leases from 14 up, both flushed before every example. That test-suite boundary is also why lanes stop at 3.
 
 ## First-time setup
 
@@ -35,6 +35,4 @@ Then create and populate that lane's Elasticsearch indices in the console:
 DevTools.delete_all_indices_and_reindex_all
 ```
 
-The test suite already follows the same per-run isolation convention through `LANE` and database-name environment variables; development lanes extend that convention to all local services.
-
-Redis defaults to 16 databases, and each lane consumes four. For that reason, `bin/dev-lane` accepts only lanes 0–3.
+The test suite already isolates per run through `TEST_DATABASE_NAME` and Redis database leasing (`config/test_redis_isolation.rb`); development lanes extend the same idea to the dev server stack.
