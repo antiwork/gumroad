@@ -8,6 +8,7 @@ import { request } from "$app/utils/request";
 
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { Button, NavigationButton } from "$app/components/Button";
+import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { type EmailConfirmation, EmailConfirmationBanner } from "$app/components/EmailConfirmationBanner";
 import { CliIcon } from "$app/components/icons/getting-started/CliIcon";
@@ -19,7 +20,6 @@ import { FirstProductIcon } from "$app/components/icons/getting-started/FirstPro
 import { FirstSaleIcon } from "$app/components/icons/getting-started/FirstSaleIcon";
 import { GettingStartedIconProps } from "$app/components/icons/getting-started/GettingStartedIconProps";
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
-import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PasskeySetupPrompt } from "$app/components/PasskeySetupPrompt";
