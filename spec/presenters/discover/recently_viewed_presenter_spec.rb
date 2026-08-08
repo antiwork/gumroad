@@ -78,6 +78,25 @@ describe Discover::RecentlyViewedPresenter do
       end
     end
 
+    context "when repeat views of a few products fill the first page" do
+      it "pages past the repeats to surface older distinct products" do
+        others = create_list(:product, 6, :recommendable)
+        Link.import(force: true, refresh: true)
+
+        # 55 repeat views of `product`, most recent first — a single 50-item fetch sorted desc
+        # would be entirely these repeats, leaving no room to discover the 7 distinct products
+        # viewed earlier but still inside the 30-day window.
+        55.times { |i| add_page_view(product, (i + 1).hours.ago.iso8601, user_id: user.id) }
+        add_page_view(other_product, 2.days.ago.iso8601, user_id: user.id)
+        others.each { |p| add_page_view(p, 2.days.ago.iso8601, user_id: user.id) }
+        ProductPageView.__elasticsearch__.refresh_index!
+
+        expect(presenter.props[:products].map { _1[:name] }).to match_array(
+          [product, other_product, *others].map(&:name),
+        )
+      end
+    end
+
     context "when anonymous" do
       before do
         add_page_view(product, 1.day.ago.iso8601, browser_guid:)

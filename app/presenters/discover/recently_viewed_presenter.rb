@@ -5,6 +5,10 @@ class Discover::RecentlyViewedPresenter
   VIEW_WINDOW = 30.days
   # Views are one event per page load, so over-fetch before deduplicating to product ids.
   VIEW_FETCH_SIZE = 50
+  # A visitor who repeatedly opens a handful of products can fill a single page with repeats;
+  # page further rather than stop at one batch, but bound the total so a very repetitive visitor
+  # can't force unbounded ES reads.
+  MAX_VIEW_FETCH = 250
 
   def initialize(user:, browser_guid:, request:, include_rated_as_adult: false)
     @user = user
@@ -61,11 +65,22 @@ class Discover::RecentlyViewedPresenter
         }
       end
 
-      ProductPageView.search(
-        query: { bool: identity },
-        sort: { timestamp: :desc },
-        size: VIEW_FETCH_SIZE,
-      ).to_a
+      views = []
+      distinct_product_ids = Set.new
+      from = 0
+      loop do
+        batch = ProductPageView.search(
+          query: { bool: identity },
+          sort: { timestamp: :desc },
+          size: VIEW_FETCH_SIZE,
+          from:,
+        ).to_a
+        views.concat(batch)
+        distinct_product_ids.merge(batch.map { |v| v["_source"]["product_id"] })
+        from += VIEW_FETCH_SIZE
+        break if batch.size < VIEW_FETCH_SIZE || distinct_product_ids.size >= PRODUCT_COUNT || from >= MAX_VIEW_FETCH
+      end
+      views
     end
 
     def timestamp_filter
