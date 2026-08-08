@@ -54,7 +54,10 @@ describe Discover::RecentlyViewedPresenter do
       end
 
       it "hides products rated as adult unless included" do
-        nsfw = create(:product, :recommendable, name: "NSFW Product", is_adult: true)
+        # Name deliberately avoids AdultKeywordDetector's list (e.g. "nsfw") so the product's
+        # own content validation doesn't fire; is_adult: true alone is enough to exercise the
+        # rating filter this test is about.
+        nsfw = create(:product, :recommendable, name: "Restricted Product", is_adult: true)
         Link.import(force: true, refresh: true)
         add_page_view(nsfw, 1.day.ago.iso8601, user_id: user.id)
         ProductPageView.__elasticsearch__.refresh_index!
@@ -62,7 +65,7 @@ describe Discover::RecentlyViewedPresenter do
         expect(presenter.props[:products].map { _1[:name] }).to eq(["Viewed Product"])
 
         including = described_class.new(user:, browser_guid:, request:, include_rated_as_adult: true)
-        expect(including.props[:products].map { _1[:name] }).to eq(["NSFW Product", "Viewed Product"])
+        expect(including.props[:products].map { _1[:name] }).to eq(["Restricted Product", "Viewed Product"])
       end
 
       it "excludes products that are no longer recommendable" do
