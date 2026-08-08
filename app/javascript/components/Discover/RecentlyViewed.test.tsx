@@ -108,4 +108,26 @@ describe("RecentlyViewed", () => {
     renderRow({ products: [oldProduct] }, asUser("user-b"));
     expect(screen.queryByText("Old Product")).not.toBeNull();
   });
+
+  it("does not carry a stale cutoff across an in-place identity change (no remount)", () => {
+    const product = productAt("p", "Product", "2026-01-01T00:00:00.000Z");
+    const { rerender } = renderRow({ products: [product] }, null);
+    screen.getByText("Clear").click();
+    rerender(
+      <LoggedInUserProvider value={null}>
+        <RecentlyViewed data={{ products: [product] }} />
+      </LoggedInUserProvider>,
+    );
+    expect(screen.queryByText("Product")).toBeNull();
+
+    // The anonymous visitor signs in without a full page reload (same mounted component,
+    // just a new context value) — the signed-in identity has never cleared anything, so
+    // its own history must render, not the anonymous cutoff carried over in state.
+    rerender(
+      <LoggedInUserProvider value={asUser("user-a")}>
+        <RecentlyViewed data={{ products: [product] }} />
+      </LoggedInUserProvider>,
+    );
+    expect(screen.queryByText("Product")).not.toBeNull();
+  });
 });

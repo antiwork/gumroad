@@ -32,7 +32,12 @@ const getClearedAt = (key: string): number | null => {
 
 export const RecentlyViewed = ({ data }: { data?: RecentlyViewedProps | null | undefined }) => {
   const storageKey = clearedAtKey(useLoggedInUser()?.id ?? null);
-  const [clearedAt, setClearedAt] = React.useState<number | null>(() => getClearedAt(storageKey));
+  const [state, setState] = React.useState(() => ({ key: storageKey, clearedAt: getClearedAt(storageKey) }));
+  // Re-derive during render (not in an effect) when the identity-derived key changes — e.g. an
+  // anonymous visitor signs in without a full page reload — so a stale cutoff from the
+  // previous identity can't outlive it.
+  const clearedAt = state.key === storageKey ? state.clearedAt : getClearedAt(storageKey);
+  if (state.key !== storageKey) setState({ key: storageKey, clearedAt });
 
   if (!data?.products.length) return null;
 
@@ -45,7 +50,7 @@ export const RecentlyViewed = ({ data }: { data?: RecentlyViewedProps | null | u
     try {
       localStorage.setItem(storageKey, new Date(now).toISOString());
     } catch {}
-    setClearedAt(now);
+    setState({ key: storageKey, clearedAt: now });
   };
 
   return (
