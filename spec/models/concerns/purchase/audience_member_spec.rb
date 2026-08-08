@@ -166,19 +166,22 @@ RSpec.describe Purchase::AudienceMember do
     let!(:purchase) { create(:purchase, link: create(:product, user: seller), seller:, can_contact: true) }
 
     it "retries once and updates the winner's row instead of raising" do
-      # Simulate losing the insert race: a concurrent process's insert lands between this
-      # process's find_or_initialize_by and its own save!, so the first save! raises
-      # RecordNotUnique. The retry's find_or_initialize_by is real, so it finds the row the
-      # "winner" (simulated here by creating it directly) has since inserted.
-      call_count = 0
-      allow(AudienceMember).to receive(:find_or_initialize_by).and_wrap_original do |original, *args|
-        call_count += 1
-        if call_count == 1
-          AudienceMember.create!(seller:, email: purchase.email,
-                                 details: { "follower" => { "id" => 1, "created_at" => Time.current.iso8601 } })
+      # Simulate losing the insert race: a concurrent process's insert (the "winner") lands
+      # between this process's find_or_initialize_by and its own save!, so the first save!
+      # raises RecordNotUnique. The winner row is inserted via `insert_all` (not `create!`) so
+      # it doesn't also trip the `save!` stub below. Stubbing save! rather than
+      # find_or_initialize_by exercises the real retry lookup, including the `.lock` it takes
+      # on the second pass.
+      save_count = 0
+      allow_any_instance_of(AudienceMember).to receive(:save!).and_wrap_original do |original|
+        save_count += 1
+        if save_count == 1
+          AudienceMember.insert_all([{ seller_id: seller.id, email: purchase.email,
+                                       details: { "follower" => { "id" => 1, "created_at" => Time.current.iso8601 } },
+                                       created_at: Time.current, updated_at: Time.current }])
           raise ActiveRecord::RecordNotUnique, "boom"
         end
-        original.call(*args)
+        original.call
       end
 
       expect { purchase.send(:add_to_audience_member_details) }.not_to raise_error
@@ -186,11 +189,11 @@ RSpec.describe Purchase::AudienceMember do
       member = audience_member_for(purchase)
       expect(member).to be_present
       expect(member.details["purchases"].map { _1["id"] }).to include(purchase.id)
-      expect(call_count).to eq(2)
+      expect(save_count).to eq(2)
     end
 
     it "raises if the race persists past the single retry" do
-      allow(AudienceMember).to receive(:find_or_initialize_by).and_raise(ActiveRecord::RecordNotUnique, "boom")
+      allow_any_instance_of(AudienceMember).to receive(:save!).and_raise(ActiveRecord::RecordNotUnique, "boom")
 
       expect { purchase.send(:add_to_audience_member_details) }.to raise_error(ActiveRecord::RecordNotUnique)
     end

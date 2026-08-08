@@ -23,12 +23,12 @@ module Follower::AudienceMember
       return remove_from_audience_member_details unless should_be_audience_member?
 
       retried ||= false
-      member = AudienceMember.find_or_initialize_by(email:, seller: user)
+      # See Purchase::AudienceMember#add_to_audience_member_details for the race, the `.lock`
+      # requirement on retry, and the `retried ||=` gotcha.
+      member = retried ? AudienceMember.lock.find_or_initialize_by(email:, seller: user) : AudienceMember.find_or_initialize_by(email:, seller: user)
       member.details["follower"] = audience_member_details
       member.save!
     rescue ActiveRecord::RecordNotUnique
-      # See Purchase::AudienceMember#add_to_audience_member_details for the race and the
-      # `retried ||=` gotcha.
       raise if retried
       retried = true
       retry
