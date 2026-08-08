@@ -139,6 +139,24 @@ describe SaveContentUpsellsService do
       end
     end
 
+    context "when an upsellCard node is malformed (missing attrs)" do
+      let(:old_content) { [{ "type" => "paragraph", "content" => "Old content" }] }
+      let(:content) do
+        [
+          { "type" => "upsellCard" },
+          {
+            "type" => "blockquote",
+            "content" => [{ "type" => "upsellCard" }]
+          }
+        ]
+      end
+
+      it "does not crash and does not create an upsell for the malformed nodes" do
+        expect { service.from_rich_content }.not_to raise_error
+        expect { service.from_rich_content }.not_to change(Upsell, :count)
+      end
+    end
+
     context "when removing an upsell" do
       let!(:upsell) { create(:upsell, seller:, product:, is_content_upsell: true) }
       let!(:offer_code) { create(:offer_code, user: seller, product_ids: [product.id]) }
