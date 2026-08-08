@@ -354,6 +354,20 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
   const removedFileEmbedIds = removedFileEmbedIdsForPage(selectedPage, richContentRemovedFileEmbedIds);
+  // The mounted TipTap doc is only swapped to the new page's content in a
+  // deferred microtask (useRichTextEditor's reset), so between a page/variant
+  // switch and that reset the editor still holds the PREVIOUS page's doc. An
+  // "update"/"blur" fired in that window (nodeview transactions do this) would
+  // serialize the old doc into the newly selected page — cross-variant content
+  // corruption (gumroad-private#1943). Track which page the mounted doc belongs
+  // to; the microtask here is queued after the reset's (hook order), so the flag
+  // only flips once the editor really holds the new page's doc.
+  const editorContentPageIdRef = React.useRef<string | undefined>(selectedPageId);
+  React.useEffect(() => {
+    queueMicrotask(() => {
+      editorContentPageIdRef.current = selectedPageId;
+    });
+  }, [selectedPageId]);
   React.useEffect(() => {
     if (editor) reconcileMountedEditorFileEmbedIds(editor, fileIdMappings);
   }, [editor, fileIdMappings]);
@@ -368,6 +382,11 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   }, [editor, removedFileEmbedIds]);
   const updateContentRef = useRefToLatest(() => {
     if (!editor) return;
+    // The editor still holds a previous page's doc until the deferred content
+    // reset runs; writing it into the currently selected page would cross
+    // page/variant content (gumroad-private#1943). Skip — the stale doc's
+    // content is already stored under its own page.
+    if (editorContentPageIdRef.current !== selectedPageId) return;
 
     // Correctly set the IDs of the file embeds copied from another product
     const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
