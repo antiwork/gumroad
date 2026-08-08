@@ -11,7 +11,8 @@ class ProductReviewVideos::StreamingUrlsController < ApplicationController
       streaming_urls: [
         product_review_video_stream_path(
           @product_review_video.external_id,
-          format: :smil
+          format: :smil,
+          purchase_email_digest: params[:purchase_email_digest]
         ),
         @product_review_video.video_file.signed_download_url
       ]
