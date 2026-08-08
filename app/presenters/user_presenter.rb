@@ -42,6 +42,7 @@ class UserPresenter
       is_buyer: user.is_buyer?,
       time_zone: { name: time_zone.tzinfo.name, offset: time_zone.tzinfo.utc_offset },
       has_published_products: user.products.alive.exists?,
+      can_publish_products: user.can_publish_products?,
       is_name_invalid_for_email_delivery: user.is_name_invalid_for_email_delivery?,
       profile_background_color: user.seller_profile.background_color,
       profile_highlight_color: user.seller_profile.highlight_color,

@@ -70,6 +70,7 @@ describe UserPresenter do
         is_buyer: seller.is_buyer?,
         time_zone: { name: time_zone.tzinfo.name, offset: time_zone.tzinfo.utc_offset },
         has_published_products: seller.products.alive.exists?,
+        can_publish_products: seller.can_publish_products?,
         is_name_invalid_for_email_delivery: seller.is_name_invalid_for_email_delivery?,
         profile_background_color: seller.seller_profile.background_color,
         profile_highlight_color: seller.seller_profile.highlight_color,

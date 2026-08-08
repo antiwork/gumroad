@@ -19,6 +19,7 @@ import { FirstProductIcon } from "$app/components/icons/getting-started/FirstPro
 import { FirstSaleIcon } from "$app/components/icons/getting-started/FirstSaleIcon";
 import { GettingStartedIconProps } from "$app/components/icons/getting-started/GettingStartedIconProps";
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
+import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PasskeySetupPrompt } from "$app/components/PasskeySetupPrompt";
@@ -317,6 +318,7 @@ export const DashboardPage = ({
   tax_center_enabled,
 }: DashboardPageProps) => {
   const loggedInUser = useLoggedInUser();
+  const currentSeller = useCurrentSeller();
   const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
   const [gettingStartedDismissed, setGettingStartedDismissed] = React.useState<boolean>(getting_started_dismissed);
   const [showDismissConfirmation, setShowDismissConfirmation] = React.useState<boolean>(false);
@@ -362,9 +364,19 @@ export const DashboardPage = ({
         className="border-b-0 sm:border-b"
       />
       <PasskeySetupPrompt />
-      {email_confirmation || stripe_verification_message || show_1099_download_notice ? (
+      {email_confirmation ||
+      stripe_verification_message ||
+      show_1099_download_notice ||
+      (currentSeller && !currentSeller.isBuyer && !currentSeller.can_publish_products) ? (
         <div className="grid gap-4 px-4 pt-4 md:px-8 md:pt-8">
           {email_confirmation ? <EmailConfirmationBanner {...email_confirmation} /> : null}
+          {currentSeller && !currentSeller.isBuyer && !currentSeller.can_publish_products ? (
+            <Alert variant="warning">
+              You haven't connected a payout method yet, so you won't be able to publish paid products until you do.{" "}
+              <a href={Routes.settings_payments_path()}>Connect a payout method</a> — it only takes a minute, and free
+              products can still be published in the meantime.
+            </Alert>
+          ) : null}
           {stripe_verification_message ? (
             <Alert variant="warning">
               {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>

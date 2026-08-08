@@ -255,6 +255,15 @@ export const Layout = ({
   return (
     <>
       <NotifyAboutProductUpdatesAlert />
+      {!currentSeller?.isBuyer && currentSeller && !currentSeller.can_publish_products && !product.is_published ? (
+        <div className="p-4 pb-0 md:p-8 md:pb-0">
+          <Alert variant="warning">
+            You haven't connected a payout method yet, so you won't be able to publish this product for sale.{" "}
+            <a href={Routes.settings_payments_path()}>Connect a payout method</a> — it only takes a minute. Free
+            products can still be published without one.
+          </Alert>
+        </div>
+      ) : null}
       {/* TODO: remove this legacy uploader stuff */}
       <form className="hidden" data-id={uniquePermalink} id="edit-link-basic-form" />
       <PageHeader

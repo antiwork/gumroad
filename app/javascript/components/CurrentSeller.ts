@@ -14,6 +14,7 @@ export type CurrentSeller = {
   isBuyer: boolean;
   timeZone: TimeZone;
   has_published_products: boolean;
+  can_publish_products: boolean;
   isNameInvalidForEmailDelivery: boolean;
   profileBackgroundColor: string;
   profileHighlightColor: string;
@@ -32,6 +33,7 @@ export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
     is_buyer: boolean;
     time_zone: TimeZone;
     has_published_products: boolean;
+    can_publish_products: boolean;
     is_name_invalid_for_email_delivery: boolean;
     profile_background_color: string;
     profile_highlight_color: string;
@@ -47,6 +49,7 @@ export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
     isBuyer: parsed.is_buyer,
     timeZone: parsed.time_zone,
     has_published_products: parsed.has_published_products,
+    can_publish_products: parsed.can_publish_products,
     isNameInvalidForEmailDelivery: parsed.is_name_invalid_for_email_delivery,
     profileBackgroundColor: parsed.profile_background_color,
     profileHighlightColor: parsed.profile_highlight_color,

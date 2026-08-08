@@ -91,6 +91,7 @@ const seller: CurrentSeller = {
   isBuyer: false,
   timeZone: { name: "UTC", offset: 0 },
   has_published_products: true,
+  can_publish_products: true,
   isNameInvalidForEmailDelivery: false,
   profileBackgroundColor: "#ffffff",
   profileHighlightColor: "#000000",

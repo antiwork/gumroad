@@ -19,6 +19,7 @@ type PageProps = {
     name: string;
     avatar_url: string;
     has_published_products: boolean;
+    can_publish_products: boolean;
     subdomain: string;
     is_buyer: boolean;
     time_zone: {
