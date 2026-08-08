@@ -166,6 +166,89 @@ describe DiscoverController, type: :controller, inertia: true do
         ensure
           Feature.deactivate(:discover_recently_viewed)
         end
+
+        it "reaches anonymous visitors through a browser-guid actor under a percentage gate" do
+          sign_out @buyer
+          Feature.activate_percentage(:discover_recently_viewed, 100)
+          browser_guid = SecureRandom.uuid
+          cookies[:_gumroad_guid] = browser_guid
+          product = create(:product, :recommendable, name: "Seen Anonymously")
+          Link.import(force: true, refresh: true)
+          add_page_view(product, 1.day.ago.iso8601, browser_guid:)
+          ProductPageView.__elasticsearch__.refresh_index!
+
+          get :index
+
+          expect(response).to be_successful
+          data = response.parsed_body.fetch("props").fetch("recently_viewed")
+          expect(data["products"].map { _1["name"] }).to eq(["Seen Anonymously"])
+        ensure
+          Feature.deactivate_percentage(:discover_recently_viewed)
+        end
+
+        it "hides the row for a control-arm visitor and logs their exposure" do
+          sign_out @buyer
+          Feature.activate_percentage(:discover_recently_viewed, 50)
+          control_guid = Array.new(200) { SecureRandom.uuid }.find do |guid|
+            !Flipper.enabled?(:discover_recently_viewed, Flipper::Actor.new("browser_guid:#{guid}"))
+          end
+          raise "no control guid found in 200 draws" if control_guid.nil?
+
+          cookies[:_gumroad_guid] = control_guid
+          product = create(:product, :recommendable)
+          Link.import(force: true, refresh: true)
+          add_page_view(product, 1.day.ago.iso8601, browser_guid: control_guid)
+          ProductPageView.__elasticsearch__.refresh_index!
+
+          logged_lines = []
+          allow(Rails.logger).to receive(:info).and_wrap_original do |original, *args, &block|
+            logged_lines << args.first if args.first.is_a?(String)
+            original.call(*args, &block)
+          end
+
+          get :index
+
+          expect(response).to be_successful
+          expect(response.parsed_body.fetch("props")["recently_viewed"]).to be_nil
+
+          exposure = logged_lines.filter_map { |line| JSON.parse(line) rescue nil }
+            .find { _1["event"] == "discover_recently_viewed_exposure" }
+          expect(exposure).to be_present
+          expect(exposure["arm"]).to eq("control")
+          expect(exposure["has_history"]).to eq(true)
+          expect(exposure["browser_guid_hash"]).to eq(Discover::RecentlyViewedPresenter.anonymous_key(control_guid))
+          expect(exposure.values.join).not_to include(control_guid)
+        ensure
+          Feature.deactivate_percentage(:discover_recently_viewed)
+        end
+
+        it "treats an actor-only enable as a plain flag: no lookup and no exposure log for other visitors" do
+          qa_user = create(:user)
+          Feature.activate_user(:discover_recently_viewed, qa_user)
+
+          expect(Discover::RecentlyViewedPresenter).not_to receive(:new)
+          expect(Rails.logger).not_to receive(:info).with(a_string_including("discover_recently_viewed_exposure"))
+
+          get :index
+
+          expect(response).to be_successful
+          expect(response.parsed_body.fetch("props")["recently_viewed"]).to be_nil
+        ensure
+          Feature.deactivate_user(:discover_recently_viewed, qa_user)
+        end
+
+        it "does not log exposure when the flag is fully on" do
+          Feature.activate(:discover_recently_viewed)
+          cookies[:_gumroad_guid] = SecureRandom.uuid
+
+          expect(Rails.logger).not_to receive(:info).with(a_string_including("discover_recently_viewed_exposure"))
+
+          get :index
+
+          expect(response).to be_successful
+        ensure
+          Feature.deactivate(:discover_recently_viewed)
+        end
       end
 
       context "autocomplete_results partial reload" do

@@ -4,6 +4,13 @@ class Discover::RecentlyViewedPresenter
   PRODUCT_COUNT = 8
   VIEW_WINDOW = 30.days
 
+  # One-way key for an anonymous identity: the raw guid is an httponly cookie that unlocks the
+  # visitor's view history, so it never leaves the server — not to JS and not to logs. Joins
+  # against purchases hash purchases.browser_guid the same way.
+  def self.anonymous_key(browser_guid)
+    Digest::SHA256.hexdigest(browser_guid)[0, 16]
+  end
+
   def initialize(user:, browser_guid:, request:, include_rated_as_adult: false)
     @user = user
     @browser_guid = browser_guid
@@ -43,7 +50,7 @@ class Discover::RecentlyViewedPresenter
     # localStorage key, so replacing the cookie (cleared, new profile) leaves the new
     # identity's history hidden behind the old identity's Clear cutoff. Hashed rather than
     # passed raw since the guid is otherwise never exposed to JS.
-    { products: cards, anonymous_key: user.present? ? nil : Digest::SHA256.hexdigest(browser_guid)[0, 16] }
+    { products: cards, anonymous_key: user.present? ? nil : self.class.anonymous_key(browser_guid) }
   end
 
   private
