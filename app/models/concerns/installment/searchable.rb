@@ -8,7 +8,7 @@ module Installment::Searchable
     include SearchIndexModelCommon
     include ElasticsearchModelAsyncCallbacks
 
-    index_name "installments"
+    index_name "installments#{ENV.fetch("ES_INDEX_SUFFIX", "")}"
 
     settings number_of_shards: 1, number_of_replicas: 0, index: {
       analysis: {

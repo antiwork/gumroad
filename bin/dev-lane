@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+usage() {
+  echo "Usage: bin/dev-lane <N> [--print-env] [-- <extra foreman args>]" >&2
+  echo "N must be an integer from 0 to 3." >&2
+  exit 64
+}
+
+if [[ $# -lt 1 || ! "$1" =~ ^[0-3]$ ]]; then
+  usage
+fi
+
+LANE="$1"
+shift
+
+print_env=false
+if [[ "${1:-}" == "--print-env" ]]; then
+  print_env=true
+  shift
+fi
+
+if [[ $# -gt 0 ]]; then
+  [[ "$1" == "--" ]] || usage
+  shift
+fi
+
+# DEV_LANE_PORT, not PORT: foreman injects its own PORT (base 5000) into every
+# Procfile process, so a bare ${PORT:-3000} in Procfile.dev would boot plain
+# `bin/dev` on 5000. PORT is still exported for direct `rails s` outside foreman.
+PORT=$((3000 + LANE))
+DEV_LANE_PORT="$PORT"
+# Step 2 per lane so no lane lands on 3037, the test-env vite port (config/vite.json).
+VITE_RUBY_PORT=$((3036 + LANE * 2))
+ANYCABLE_PORT=$((8080 + LANE))
+ANYCABLE_RPC_PORT=$((50051 + LANE))
+
+if [[ "$LANE" -eq 0 ]]; then
+  DATABASE_NAME="gumroad_development"
+  MONGO_DATABASE_NAME="gumroad_log_development"
+  ES_INDEX_SUFFIX=""
+else
+  DATABASE_NAME="gumroad_development_lane${LANE}"
+  MONGO_DATABASE_NAME="gumroad_log_development_lane${LANE}"
+  ES_INDEX_SUFFIX="_lane${LANE}"
+fi
+
+redis_base=$((LANE * 4))
+REDIS_HOST="localhost:6379/${redis_base}"
+SIDEKIQ_REDIS_HOST="localhost:6379/$((redis_base + 1))"
+RPUSH_REDIS_HOST="localhost:6379/$((redis_base + 2))"
+RACK_ATTACK_REDIS_HOST="localhost:6379/$((redis_base + 3))"
+
+export LANE PORT DEV_LANE_PORT VITE_RUBY_PORT DATABASE_NAME MONGO_DATABASE_NAME
+export REDIS_HOST SIDEKIQ_REDIS_HOST RPUSH_REDIS_HOST RACK_ATTACK_REDIS_HOST
+export ES_INDEX_SUFFIX ANYCABLE_PORT ANYCABLE_RPC_PORT
+
+if [[ "$print_env" == true ]]; then
+  printf '%s\n' \
+    "LANE=${LANE}" \
+    "PORT=${PORT}" \
+    "DEV_LANE_PORT=${DEV_LANE_PORT}" \
+    "VITE_RUBY_PORT=${VITE_RUBY_PORT}" \
+    "DATABASE_NAME=${DATABASE_NAME}" \
+    "MONGO_DATABASE_NAME=${MONGO_DATABASE_NAME}" \
+    "REDIS_HOST=${REDIS_HOST}" \
+    "SIDEKIQ_REDIS_HOST=${SIDEKIQ_REDIS_HOST}" \
+    "RPUSH_REDIS_HOST=${RPUSH_REDIS_HOST}" \
+    "RACK_ATTACK_REDIS_HOST=${RACK_ATTACK_REDIS_HOST}" \
+    "ES_INDEX_SUFFIX=${ES_INDEX_SUFFIX}" \
+    "ANYCABLE_PORT=${ANYCABLE_PORT}" \
+    "ANYCABLE_RPC_PORT=${ANYCABLE_RPC_PORT}"
+  exit 0
+fi
+
+exec bin/dev "$@"

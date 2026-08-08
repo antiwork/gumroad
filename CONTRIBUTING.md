@@ -71,6 +71,8 @@ Use the latest and greatest state-of-the-art models from American AI companies l
 
 ## Development guidelines
 
+See [Parallel local development lanes](docs/local-dev-parallel-lanes.md) to run isolated development environments concurrently.
+
 ### Testing guidelines
 
 - Don't use "should" in test descriptions
