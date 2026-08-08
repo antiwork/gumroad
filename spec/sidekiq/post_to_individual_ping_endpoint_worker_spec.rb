@@ -84,6 +84,13 @@ describe PostToIndividualPingEndpointWorker do
     PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
   end
 
+  it "re-validates the post_url against the SSRF guard before connecting, and skips the request if it now resolves to a private address" do
+    allow(ResourceSubscription).to receive(:valid_post_url?).with("http://notification.com").and_return(false)
+    expect(HTTParty).not_to receive(:post)
+
+    PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
+  end
+
   it "retries 50x status codes the right number of times and does not raise", :sidekiq_inline do
     allow(@http_double).to receive(:success?).and_return(false)
     allow(@http_double).to receive(:code).and_return(500)

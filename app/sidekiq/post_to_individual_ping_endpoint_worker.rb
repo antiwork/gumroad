@@ -10,6 +10,19 @@ class PostToIndividualPingEndpointWorker
   def perform(post_url, params, content_type = Mime[:url_encoded_form].to_s, user_id = nil)
     retry_count = params["retry_count"] || 0
 
+    # Re-validate right before connecting rather than trusting the caller's earlier check: this
+    # job can sit in the retry backoff queue for up to an hour (BACKOFF_STRATEGY), during which a
+    # seller-controlled hostname's DNS record can start pointing at a private/internal address.
+    # This still can't fully close the gap against a hostname that flips its answer BETWEEN this
+    # check and HTTParty's own independent resolution moments later (classic DNS-rebinding
+    # TOCTOU) — that requires binding the connection to the specific IP this check resolved,
+    # which needs a transport swap away from HTTParty; flagging that as a follow-up for review
+    # rather than doing it here.
+    unless ResourceSubscription.valid_post_url?(post_url)
+      Rails.logger.info("PostToIndividualPingEndpointWorker rejected post_url that failed SSRF re-validation content_type=#{content_type} user_id=#{user_id}")
+      return
+    end
+
     body = if content_type == Mime[:json]
       params.to_json
     elsif content_type == Mime[:url_encoded_form]
