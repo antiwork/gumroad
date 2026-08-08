@@ -21,6 +21,7 @@ RSpec.describe "bin/dev-lane" do
       "ANYCABLE_RPC_PORT" => "50051",
       "ANYCABLE_REDIS_URL" => "redis://localhost:6379/0",
       "ANYCABLE_WEBSOCKET_URL" => "ws://cable.localhost:8080/cable",
+      "ANYCABLE_REDIS_CHANNEL" => "__anycable__",
       "PIDFILE" => "tmp/pids/server-lane0.pid"
     },
     1 => {
@@ -38,6 +39,7 @@ RSpec.describe "bin/dev-lane" do
       "ANYCABLE_RPC_PORT" => "50052",
       "ANYCABLE_REDIS_URL" => "redis://localhost:6379/4",
       "ANYCABLE_WEBSOCKET_URL" => "ws://cable.localhost:8081/cable",
+      "ANYCABLE_REDIS_CHANNEL" => "__anycable___lane1",
       "PIDFILE" => "tmp/pids/server-lane1.pid"
     },
     2 => {
@@ -55,6 +57,7 @@ RSpec.describe "bin/dev-lane" do
       "ANYCABLE_RPC_PORT" => "50053",
       "ANYCABLE_REDIS_URL" => "redis://localhost:6379/6",
       "ANYCABLE_WEBSOCKET_URL" => "ws://cable.localhost:8082/cable",
+      "ANYCABLE_REDIS_CHANNEL" => "__anycable___lane2",
       "PIDFILE" => "tmp/pids/server-lane2.pid"
     },
     3 => {
@@ -72,6 +75,7 @@ RSpec.describe "bin/dev-lane" do
       "ANYCABLE_RPC_PORT" => "50054",
       "ANYCABLE_REDIS_URL" => "redis://localhost:6379/8",
       "ANYCABLE_WEBSOCKET_URL" => "ws://cable.localhost:8083/cable",
+      "ANYCABLE_REDIS_CHANNEL" => "__anycable___lane3",
       "PIDFILE" => "tmp/pids/server-lane3.pid"
     }
   }.freeze
@@ -133,7 +137,7 @@ RSpec.describe "bin/dev-lane" do
   it "derives disjoint service values across all lanes" do
     environments = EXPECTED_LANE_ENVIRONMENTS.values
 
-    %w[PORT VITE_RUBY_PORT ANYCABLE_PORT ANYCABLE_RPC_PORT DATABASE_NAME MONGO_DATABASE_NAME ANYCABLE_WEBSOCKET_URL PIDFILE].each do |key|
+    %w[PORT VITE_RUBY_PORT ANYCABLE_PORT ANYCABLE_RPC_PORT DATABASE_NAME MONGO_DATABASE_NAME ANYCABLE_WEBSOCKET_URL ANYCABLE_REDIS_CHANNEL PIDFILE].each do |key|
       values = environments.map { |environment| environment.fetch(key) }
       expect(values.uniq.length).to eq(4), "#{key} collides across lanes: #{values}"
     end

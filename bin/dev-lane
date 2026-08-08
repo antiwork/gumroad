@@ -44,6 +44,7 @@ if [[ "$LANE" -eq 0 ]]; then
   SIDEKIQ_REDIS_HOST="localhost:6379/1"
   RPUSH_REDIS_HOST="localhost:6379/2"
   RACK_ATTACK_REDIS_HOST="localhost:6379/3"
+  ANYCABLE_REDIS_CHANNEL="__anycable__"
 else
   DATABASE_NAME="gumroad_development_lane${LANE}"
   MONGO_DATABASE_NAME="gumroad_log_development_lane${LANE}"
@@ -58,12 +59,15 @@ else
   SIDEKIQ_REDIS_HOST="localhost:6379/$((redis_base + 1))"
   RPUSH_REDIS_HOST="localhost:6379/${redis_base}"
   RACK_ATTACK_REDIS_HOST="localhost:6379/$((redis_base + 1))"
+  ANYCABLE_REDIS_CHANNEL="__anycable___lane${LANE}"
 fi
 
 # AnyCable ignores the *_REDIS_HOST vars: pub/sub resolves via ANYCABLE_REDIS_URL
 # (else a shared default) and the browser dials the ANYCABLE_WEBSOCKET_URL that
 # .env.development pins to :8080 — both must be lane-scoped or every lane's
-# clients authenticate against lane 0.
+# clients authenticate against lane 0. The DB number in ANYCABLE_REDIS_URL does
+# NOT isolate pub/sub (Redis PUBLISH/SUBSCRIBE ignore SELECT) — ANYCABLE_REDIS_CHANNEL
+# is the actual isolation boundary and must differ per lane too.
 ANYCABLE_REDIS_URL="redis://${REDIS_HOST}"
 ANYCABLE_WEBSOCKET_URL="ws://cable.localhost:${ANYCABLE_PORT}/cable"
 
@@ -74,7 +78,7 @@ PIDFILE="tmp/pids/server-lane${LANE}.pid"
 
 export PORT DEV_LANE_PORT VITE_RUBY_PORT DATABASE_NAME MONGO_DATABASE_NAME
 export REDIS_HOST SIDEKIQ_REDIS_HOST RPUSH_REDIS_HOST RACK_ATTACK_REDIS_HOST
-export ES_INDEX_SUFFIX ANYCABLE_PORT ANYCABLE_RPC_PORT ANYCABLE_REDIS_URL ANYCABLE_WEBSOCKET_URL
+export ES_INDEX_SUFFIX ANYCABLE_PORT ANYCABLE_RPC_PORT ANYCABLE_REDIS_URL ANYCABLE_WEBSOCKET_URL ANYCABLE_REDIS_CHANNEL
 export PIDFILE
 
 if [[ "$print_env" == true ]]; then
@@ -93,6 +97,7 @@ if [[ "$print_env" == true ]]; then
     "ANYCABLE_RPC_PORT=${ANYCABLE_RPC_PORT}" \
     "ANYCABLE_REDIS_URL=${ANYCABLE_REDIS_URL}" \
     "ANYCABLE_WEBSOCKET_URL=${ANYCABLE_WEBSOCKET_URL}" \
+    "ANYCABLE_REDIS_CHANNEL=${ANYCABLE_REDIS_CHANNEL}" \
     "PIDFILE=${PIDFILE}"
   exit 0
 fi
