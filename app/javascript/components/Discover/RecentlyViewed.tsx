@@ -23,7 +23,7 @@ const getClearedAt = (): string | null => {
   }
 };
 
-export const RecentlyViewed = ({ data }: { data?: RecentlyViewedProps | null }) => {
+export const RecentlyViewed = ({ data }: { data?: RecentlyViewedProps | null | undefined }) => {
   const [clearedAt, setClearedAt] = React.useState<string | null>(getClearedAt);
 
   if (!data || !data.products.length) return null;
