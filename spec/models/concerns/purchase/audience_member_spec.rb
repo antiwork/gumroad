@@ -175,7 +175,7 @@ RSpec.describe Purchase::AudienceMember do
         call_count += 1
         if call_count == 1
           AudienceMember.create!(seller:, email: purchase.email,
-                                  details: { "follower" => { "id" => 1, "created_at" => Time.current.iso8601 } })
+                                 details: { "follower" => { "id" => 1, "created_at" => Time.current.iso8601 } })
           raise ActiveRecord::RecordNotUnique, "boom"
         end
         original.call(*args)
