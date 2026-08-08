@@ -170,7 +170,7 @@ describe Workflow::SaveInstallmentsService do
     end
 
     it "creates installments" do
-      expect_any_instance_of(Workflow).to_not receive(:schedule_installment)
+      expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
       process_and_perform_assertions_for_created_installments
     end
@@ -178,7 +178,7 @@ describe Workflow::SaveInstallmentsService do
     it "creates installments and publishes them if save_action_name is 'save_and_publish'" do
       params[:save_action_name] = Workflow::SAVE_AND_PUBLISH_ACTION
 
-      expect_any_instance_of(Workflow).to receive(:schedule_installment).with(kind_of(Installment))
+      expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_call_original
 
       expect do
         process_and_perform_assertions_for_created_installments
@@ -188,7 +188,7 @@ describe Workflow::SaveInstallmentsService do
     end
 
     it "updates installments" do
-      expect_any_instance_of(Workflow).to_not receive(:schedule_installment)
+      expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
       process_and_perform_assertions_for_updated_installments
     end
@@ -196,7 +196,7 @@ describe Workflow::SaveInstallmentsService do
     it "updates installments and publishes them if save_action_name is 'save_and_publish'" do
       params[:save_action_name] = Workflow::SAVE_AND_PUBLISH_ACTION
 
-      expect_any_instance_of(Workflow).to receive(:schedule_installment).with(kind_of(Installment))
+      expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_call_original
 
       expect do
         process_and_perform_assertions_for_updated_installments
@@ -211,7 +211,7 @@ describe Workflow::SaveInstallmentsService do
 
       params[:save_action_name] = Workflow::SAVE_AND_UNPUBLISH_ACTION
 
-      expect_any_instance_of(Workflow).to_not receive(:schedule_installment)
+      expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
       expect do
         expect do

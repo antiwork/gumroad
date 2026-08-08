@@ -115,6 +115,8 @@ class InstallmentRule < ApplicationRecord
         keys: [RedisKey.workflow_installment_rule_version(installment_id)],
         argv: [@pending_cached_version]
       )
+    rescue Redis::BaseError, RedisClient::Error => e
+      ErrorNotifier.notify(e, installment_rule_id: id)
     ensure
       @pending_cached_version = nil
     end

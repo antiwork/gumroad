@@ -51,6 +51,14 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       described_class.new.perform(@post.id, 1.day.ago.iso8601)
     end
 
+    it "keeps a repair scan without a cutoff on the primary connection" do
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).ordered.and_call_original
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).ordered.and_call_original
+      expect(Makara::Context).to receive(:release_all).ordered
+
+      described_class.new.perform(@post.id, nil, true)
+    end
+
     it "retries if the required rule version is not visible" do
       expect do
         described_class.new.perform(@post.id, nil, true, @post_rule.version + 1)
@@ -171,6 +179,27 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       ).at(@basic_follower.confirmed_at + @post_rule.delayed_delivery_time)
     end
 
+    it "does not replace a qualifying purchase with a follower outside the workflow dates" do
+      product = create(:product, user: @seller, price_cents: 0)
+      purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 30.minutes.ago)
+      purchase.add_to_audience_member_details
+      @post.update!(bought_products: [product.unique_permalink], created_after: 2.days.ago.to_date.iso8601)
+      @basic_follower.update_columns(created_at: 3.days.ago)
+      @basic_follower.update!(confirmed_at: 1.hour.ago)
+
+      described_class.new.perform(@post.id, 1.day.ago.iso8601, true)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        purchase.id,
+        nil,
+        nil,
+        nil,
+        purchase.created_at.iso8601
+      ).at(purchase.created_at + @post_rule.delayed_delivery_time)
+    end
+
     it "loads follower confirmation times in bounded queries" do
       second_follower = create(:active_follower, user: @seller, created_at: 1.day.ago, confirmed_at: 1.day.ago)
       third_follower = create(:active_follower, user: @seller, created_at: 1.day.ago, confirmed_at: 1.day.ago)
@@ -246,6 +275,28 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         nil,
         @affiliate.affiliate_user_id
       ).at(@product_affiliate.created_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "does not replace a qualifying purchase with an affiliate outside the workflow dates" do
+      purchase = create(:free_purchase, link: @product, email: @affiliate.affiliate_user.email, created_at: 1.hour.ago)
+      purchase.add_to_audience_member_details
+      @post.update!(
+        installment_type: Installment::AUDIENCE_TYPE,
+        affiliate_products: nil,
+        created_after: 3.days.ago.to_date.iso8601
+      )
+
+      described_class.new.perform(@post.id, 3.hours.ago.iso8601, true)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        purchase.id,
+        nil,
+        nil,
+        nil,
+        purchase.created_at.iso8601
+      ).at(purchase.created_at + @post_rule.delayed_delivery_time)
     end
 
     it "keeps user date filters on the affiliate creation time" do

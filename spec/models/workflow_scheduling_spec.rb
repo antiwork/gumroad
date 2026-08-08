@@ -27,14 +27,32 @@ describe Workflow do
       expect(installment.reload).to be_published
     end
 
-    it "defers recipient scheduling until publication commits" do
+    it "routes recipient scheduling through a visibility-retrying job" do
       workflow = create(:workflow)
       installment = create(:workflow_installment, workflow:, seller: workflow.seller)
       allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
-      expect(AfterCommitEverywhere).to receive(:after_commit).and_yield
-      expect(workflow).to receive(:schedule_installment).with(installment)
 
       workflow.publish!
+
+      expect(ScheduleWorkflowInstallmentJob).to have_enqueued_sidekiq_job(
+        installment.id,
+        installment.installment_rule.version,
+        nil,
+        workflow.published_at.iso8601,
+        workflow.published_at.iso8601
+      )
+    end
+
+    it "rolls back publication if scheduling cannot be enqueued" do
+      workflow = create(:workflow)
+      installment = create(:workflow_installment, workflow:, seller: workflow.seller)
+      allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
+      allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_raise("Redis is unavailable")
+
+      expect { workflow.publish! }.to raise_error("Redis is unavailable")
+
+      expect(workflow.reload.published_at).to be_nil
+      expect(installment.reload.published_at).to be_nil
     end
 
     it "locks the workflow before unpublishing installments" do

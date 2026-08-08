@@ -6,19 +6,28 @@ class ScheduleWorkflowInstallmentJob
   include Sidekiq::Job
   sidekiq_options retry: 10, queue: :low
 
-  def perform(installment_id, rule_version, old_delayed_delivery_time, cutoff_reference_time)
+  def perform(installment_id, rule_version, old_delayed_delivery_time, cutoff_reference_time, expected_published_at = nil)
     ActiveRecord::Base.connection.stick_to_primary!
     installment = Installment.find_by(id: installment_id)
     raise RuleNotCommittedError if installment.nil? || installment.installment_rule.nil?
 
     current_version = installment.installment_rule.version
     raise RuleNotCommittedError if current_version < rule_version
-    return unless installment.workflow.alive? && installment.alive? && installment.published?
+    workflow = installment.workflow
+    if expected_published_at.present?
+      expected_published_at = Time.zone.iso8601(expected_published_at)
+      workflow.with_lock do
+        installment.reload
+        return unless workflow.published_at&.change(usec: 0) == expected_published_at
+        return unless installment.published_at&.change(usec: 0) == expected_published_at
+      end
+    end
+    return unless workflow.alive? && installment.alive? && installment.published?
 
     # An older rule can own a wider recipient window. Preserve that window when a newer
     # rule commits first; SentPostEmail's unique key prevents duplicate delivery.
     cutoff_reference_time = Time.zone.iso8601(cutoff_reference_time)
-    installment.workflow.schedule_installment(
+    workflow.schedule_installment(
       installment,
       old_delayed_delivery_time:,
       cutoff_reference_time:,

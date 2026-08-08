@@ -71,13 +71,23 @@ class Workflow < ApplicationRecord
         raise ActiveRecord::RecordInvalid.new(self)
       end
 
-      self.published_at = DateTime.current
+      self.published_at = DateTime.current.change(usec: 0)
       self.first_published_at ||= published_at
+      installments_to_schedule = []
       installments.alive.find_each do |installment|
         installment.publish!(published_at:)
-        AfterCommitEverywhere.after_commit { schedule_installment(installment) }
+        installments_to_schedule << installment unless installment.abandoned_cart_type?
       end
       save!
+      installments_to_schedule.each do |installment|
+        ScheduleWorkflowInstallmentJob.perform_async(
+          installment.id,
+          installment.installment_rule.version,
+          nil,
+          published_at.iso8601,
+          published_at.iso8601
+        )
+      end
     end
   end
 

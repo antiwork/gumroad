@@ -10,7 +10,7 @@ class SendWorkflowPostEmailsJob
   AFFILIATE_LOOKUP_BATCH_SIZE = 1_000
 
   def perform(post_id, earliest_valid_time = nil, reschedule_on_stale = false, minimum_rule_version = nil)
-    primary_released = minimum_rule_version.blank? && earliest_valid_time.blank?
+    primary_released = minimum_rule_version.blank? && earliest_valid_time.blank? && !reschedule_on_stale
     ActiveRecord::Base.connection.stick_to_primary! unless primary_released
     @post = Installment.find(post_id)
     @workflow = @post.workflow
@@ -35,7 +35,7 @@ class SendWorkflowPostEmailsJob
     end
     apply_recipient_cutoff_to_filters
     @recovered_affiliate_member_ids = Set.new
-    if @recipient_cutoff_time.nil?
+    if @recipient_cutoff_time.nil? && !@reschedule_on_stale
       Makara::Context.release_all
       primary_released = true
     end
@@ -102,6 +102,9 @@ class SendWorkflowPostEmailsJob
         with_ids: true,
         ids: member_ids
       ).select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
+      if @post.audience_type?
+        members.select! { workflow_dates_include?(_1.details.dig("follower", "created_at")) }
+      end
       # A purchase filter can hide the follower JSON_TABLE row, but every member here matched the follower subquery.
       members.each { _1.follower_id = _1.details.dig("follower", "id") }
       members
@@ -140,6 +143,7 @@ class SendWorkflowPostEmailsJob
         with_ids: true,
         ids: affiliate_member_ids_after_cutoff
       ).select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
+        .select { scoped_affiliate_details(member: _1, id: nil).any? }
     end
 
     def merge_affiliates_after_cutoff(members)
@@ -254,7 +258,21 @@ class SendWorkflowPostEmailsJob
         allowed_product_ids = @original_filters[:affiliate_product_ids].map(&:to_i).to_set
         candidates = candidates.select { allowed_product_ids.include?(_1["product_id"].to_i) }
       end
+      candidates = candidates.select { workflow_dates_include?(_1["created_at"]) }
       candidates
+    end
+
+    def workflow_dates_include?(created_at)
+      return true if @original_filters[:created_after].blank? && @original_filters[:created_before].blank?
+      return false if created_at.blank?
+
+      created_at = Time.zone.parse(created_at.to_s)
+      created_after = Time.zone.parse(@original_filters[:created_after].to_s) if @original_filters[:created_after]
+      created_before = Time.zone.parse(@original_filters[:created_before].to_s) if @original_filters[:created_before]
+      return false if created_after && created_at <= created_after
+      return false if created_before && created_at >= created_before
+
+      true
     end
 
     # Skipping a member silently is how the follower/bought-product bug stayed invisible for

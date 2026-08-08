@@ -54,6 +54,16 @@ describe InstallmentRule do
       expect { @post_rule.send(:promote_cached_version) }.not_to raise_error
     end
 
+    it "does not fail database rollback cleanup if Redis is unavailable" do
+      error = Redis::CannotConnectError.new("unavailable")
+      @post_rule.instance_variable_set(:@pending_cached_version, @post_rule.version)
+      allow($redis).to receive(:eval).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: @post_rule.id)
+
+      expect { @post_rule.send(:clear_cached_version) }.not_to raise_error
+      expect(@post_rule.instance_variable_get(:@pending_cached_version)).to be_nil
+    end
+
     it "does not require Redis before committing a new rule" do
       post = create(:installment, link: @product, installment_type: "product")
       rule = build(:installment_rule, installment: post, to_be_published_at: 1.week.from_now)

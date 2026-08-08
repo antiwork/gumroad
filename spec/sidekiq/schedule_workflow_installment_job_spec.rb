@@ -44,6 +44,42 @@ describe ScheduleWorkflowInstallmentJob do
     end.to raise_error(ScheduleWorkflowInstallmentJob::RuleNotCommittedError)
   end
 
+  it "does not schedule after workflow publication rolls back" do
+    workflow = installment.workflow
+    workflow.update!(published_at: nil, first_published_at: cutoff_reference_time)
+    installment.update!(published_at: nil)
+    expect_any_instance_of(Workflow).not_to receive(:schedule_installment)
+
+    described_class.new.perform(
+      installment.id,
+      rule.version,
+      nil,
+      cutoff_reference_time.iso8601,
+      cutoff_reference_time.iso8601
+    )
+  end
+
+  it "schedules after workflow publication becomes visible" do
+    published_at = workflow.published_at.change(usec: 0)
+    installment.update!(published_at:)
+    expect_any_instance_of(Workflow).to receive(:with_lock).and_call_original
+    expect_any_instance_of(Workflow).to receive(:schedule_installment).with(
+      kind_of(Installment),
+      old_delayed_delivery_time: nil,
+      cutoff_reference_time: published_at,
+      reschedule_on_stale: true,
+      minimum_rule_version: rule.version
+    )
+
+    described_class.new.perform(
+      installment.id,
+      rule.version,
+      nil,
+      published_at.iso8601,
+      published_at.iso8601
+    )
+  end
+
   it "repairs a new installment after its transaction commits" do
     installment.update!(is_for_new_customers_of_workflow: true, published_at: Time.current)
 

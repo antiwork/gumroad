@@ -218,13 +218,31 @@ describe AffiliateRequest do
       installment2 = create(:installment, workflow: affiliate_workflow)
       create(:installment_rule, installment: installment2, delayed_delivery_time: 10.days)
 
-      expect_any_instance_of(DirectAffiliate).to receive(:schedule_workflow_jobs).and_call_original
       expect do
         expect do
           affiliate_request.approve!
         end.to change { affiliate_request.reload.approved? }.from(false).to(true)
       end.to change { DirectAffiliate.count }.by(1)
+
+      affiliate = creator.direct_affiliates.sole
+      product_affiliate = affiliate.product_affiliates.sole
+      expect(ScheduleAffiliateWorkflowJobsJob).to have_enqueued_sidekiq_job(affiliate.id, product_affiliate.id)
+      ScheduleAffiliateWorkflowJobsJob.new.perform(affiliate.id, product_affiliate.id)
       expect(SendWorkflowInstallmentWorker.jobs.size).to eq(2)
+    end
+
+    it "rolls back approval if workflow scheduling cannot be enqueued" do
+      creator = create(:user)
+      affiliate_user = create(:user)
+      product = create(:product, user: creator)
+      create(:self_service_affiliate_product, enabled: true, seller: creator, product:)
+      affiliate_request = create(:affiliate_request, seller: creator, email: affiliate_user.email)
+      allow(ScheduleAffiliateWorkflowJobsJob).to receive(:perform_async).and_raise("Redis is unavailable")
+
+      expect { affiliate_request.approve! }.to raise_error("Redis is unavailable")
+
+      expect(affiliate_request.reload).to be_created
+      expect(DirectAffiliate.where(seller: creator)).to be_empty
     end
   end
 
