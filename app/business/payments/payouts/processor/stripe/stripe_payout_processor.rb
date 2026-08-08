@@ -31,11 +31,8 @@ class StripePayoutProcessor
   def self.is_user_payable(user, amount_payable_usd_cents, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
-    # If a user's previous payment is still processing, don't allow for new payments.
-    # gp#1918: only a payment still within the settlement-lag margin blocks the next
-    # cycle — see Payment::STUCK_PROCESSING_AGE. A payment older than that has almost
-    # certainly settled but missed our completion webhook, not one genuinely in flight,
-    # so it should stop suppressing this seller's schedule.
+    # If a user's previous payment is still processing (and not stuck, see
+    # Payment::STUCK_PROCESSING_AGE), don't allow for new payments.
     processing_payment_ids = user.payments.blocking_next_payout.ids
     if processing_payment_ids.any?
       user.add_payout_note(content: "Payout on #{payout_date} was skipped because there was already a payout in processing.") if add_comment

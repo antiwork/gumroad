@@ -129,15 +129,9 @@ class Payment < ApplicationRecord
 
   validate :split_payment_validation
 
-  # gp#1918: the completion webhook (`payout.paid`) for some cross-border corridors
-  # (observed: MDL/Moldova) doesn't fire for 8-9 days even though the seller's bank
-  # shows funds landed in ~2. On a 7-day payout schedule the prior payment is still
-  # `processing` by our records at the next run, so the "block if processing"
-  # safeguard trips every cycle and the seller is de facto paid biweekly instead of
-  # weekly. 5 days covers observed real settlement (~2d) plus a safety margin for
-  # slower corridors while still being short enough that it clears before the next
-  # weekly cycle — a payment older than that has very likely already settled and is
-  # just waiting on a slow/missed webhook, not something a second transfer could race.
+  # A payment stuck in `processing` past this age is treated as settled-but-unconfirmed
+  # rather than still in flight, so it stops blocking the next payout run. See gp#1918
+  # for the corridor whose completion webhook lags this long.
   STUCK_PROCESSING_AGE = 5.days
 
   scope :processed_by,            ->(processor) { where(processor:) }
