@@ -372,9 +372,8 @@ export const DashboardPage = ({
           {email_confirmation ? <EmailConfirmationBanner {...email_confirmation} /> : null}
           {currentSeller && !currentSeller.isBuyer && !currentSeller.can_publish_products ? (
             <Alert variant="warning">
-              You haven't connected a payout method yet, so you won't be able to publish paid products until you do.{" "}
-              <a href={Routes.settings_payments_path()}>Connect a payout method</a> — it only takes a minute, and free
-              products can still be published in the meantime.
+              You haven't connected a payout method yet, so you won't be able to publish products until you do.{" "}
+              <a href={Routes.settings_payments_path()}>Connect a payout method</a> — it only takes a minute.
             </Alert>
           ) : null}
           {stripe_verification_message ? (
