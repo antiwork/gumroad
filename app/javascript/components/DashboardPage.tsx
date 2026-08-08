@@ -367,13 +367,31 @@ export const DashboardPage = ({
       {email_confirmation ||
       stripe_verification_message ||
       show_1099_download_notice ||
-      (currentSeller && !currentSeller.isBuyer && !currentSeller.can_publish_products) ? (
+      (currentSeller && !currentSeller.isBuyer && !currentSeller.can_publish_products) ||
+      (currentSeller && !currentSeller.isBuyer && !currentSeller.legalGuardianRequirementMet) ? (
         <div className="grid gap-4 px-4 pt-4 md:px-8 md:pt-8">
           {email_confirmation ? <EmailConfirmationBanner {...email_confirmation} /> : null}
           {currentSeller && !currentSeller.isBuyer && !currentSeller.can_publish_products ? (
             <Alert variant="warning">
-              You haven't connected a payout method yet, so you won't be able to publish products until you do.{" "}
-              <a href={Routes.settings_payments_path()}>Connect a payout method</a> — it only takes a minute.
+              {currentSeller.publishBlockedReason === "payout_setup_rejected" ? (
+                <>
+                  Your payout setup needs another look before you can publish products.{" "}
+                  <a href={Routes.settings_payments_path()}>Review your payout setup</a>
+                </>
+              ) : (
+                <>
+                  You haven't connected a payout method yet, so you won't be able to publish products until you do.
+                  {" "}
+                  <a href={Routes.settings_payments_path()}>Connect a payout method</a> — it only takes a minute.
+                </>
+              )}
+            </Alert>
+          ) : null}
+          {currentSeller && !currentSeller.isBuyer && currentSeller.can_publish_products &&
+          !currentSeller.legalGuardianRequirementMet ? (
+            <Alert variant="warning">
+              You're under 18, so a parent or guardian needs to be added to your account before your payouts can go
+              through. <a href={Routes.settings_payments_path()}>Add a guardian</a>
             </Alert>
           ) : null}
           {stripe_verification_message ? (

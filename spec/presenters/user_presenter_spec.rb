@@ -71,11 +71,33 @@ describe UserPresenter do
         time_zone: { name: time_zone.tzinfo.name, offset: time_zone.tzinfo.utc_offset },
         has_published_products: seller.products.alive.exists?,
         can_publish_products: seller.can_publish_products?,
+        publish_blocked_reason: seller.can_publish_products? ? nil : "no_payout_method",
+        no_payout_rail_in_compliance_country: seller.no_payout_rail_in_compliance_country?,
+        legal_guardian_requirement_met: seller.alive_user_compliance_info.nil? || seller.alive_user_compliance_info.legal_guardian_requirement_met?,
         is_name_invalid_for_email_delivery: seller.is_name_invalid_for_email_delivery?,
         profile_background_color: seller.seller_profile.background_color,
         profile_highlight_color: seller.seller_profile.highlight_color,
         profile_font: seller.seller_profile.font
       )
+    end
+
+    context "when the seller cannot publish products" do
+      let(:seller) { create(:user, payment_address: nil) }
+
+      it "sets publish_blocked_reason to no_payout_method" do
+        expect(presenter.as_current_seller[:can_publish_products]).to eq(false)
+        expect(presenter.as_current_seller[:publish_blocked_reason]).to eq("no_payout_method")
+      end
+
+      it "sets publish_blocked_reason to payout_setup_rejected when Stripe rejected the setup" do
+        seller.add_payout_note(
+          content: "Our payment partner couldn't accept the phone number you entered.",
+          seller_visible: true,
+          json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true }
+        )
+
+        expect(presenter.as_current_seller[:publish_blocked_reason]).to eq("payout_setup_rejected")
+      end
     end
   end
 

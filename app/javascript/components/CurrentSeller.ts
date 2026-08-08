@@ -15,6 +15,9 @@ export type CurrentSeller = {
   timeZone: TimeZone;
   has_published_products: boolean;
   can_publish_products: boolean;
+  publishBlockedReason: "no_payout_method" | "payout_setup_rejected" | null;
+  noPayoutRailInComplianceCountry: boolean;
+  legalGuardianRequirementMet: boolean;
   isNameInvalidForEmailDelivery: boolean;
   profileBackgroundColor: string;
   profileHighlightColor: string;
@@ -34,6 +37,9 @@ export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
     time_zone: TimeZone;
     has_published_products: boolean;
     can_publish_products: boolean;
+    publish_blocked_reason: "no_payout_method" | "payout_setup_rejected" | null;
+    no_payout_rail_in_compliance_country: boolean;
+    legal_guardian_requirement_met: boolean;
     is_name_invalid_for_email_delivery: boolean;
     profile_background_color: string;
     profile_highlight_color: string;
@@ -50,6 +56,9 @@ export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
     timeZone: parsed.time_zone,
     has_published_products: parsed.has_published_products,
     can_publish_products: parsed.can_publish_products,
+    publishBlockedReason: parsed.publish_blocked_reason,
+    noPayoutRailInComplianceCountry: parsed.no_payout_rail_in_compliance_country,
+    legalGuardianRequirementMet: parsed.legal_guardian_requirement_met,
     isNameInvalidForEmailDelivery: parsed.is_name_invalid_for_email_delivery,
     profileBackgroundColor: parsed.profile_background_color,
     profileHighlightColor: parsed.profile_highlight_color,
