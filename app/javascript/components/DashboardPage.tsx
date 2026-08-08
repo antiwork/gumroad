@@ -380,14 +380,15 @@ export const DashboardPage = ({
                 </>
               ) : (
                 <>
-                  You haven't connected a payout method yet, so you won't be able to publish products until you do.
-                  {" "}
+                  You haven't connected a payout method yet, so you won't be able to publish products until you do.{" "}
                   <a href={Routes.settings_payments_path()}>Connect a payout method</a> — it only takes a minute.
                 </>
               )}
             </Alert>
           ) : null}
-          {currentSeller && !currentSeller.isBuyer && currentSeller.can_publish_products &&
+          {currentSeller &&
+          !currentSeller.isBuyer &&
+          currentSeller.can_publish_products &&
           !currentSeller.legalGuardianRequirementMet ? (
             <Alert variant="warning">
               You're under 18, so a parent or guardian needs to be added to your account before your payouts can go
