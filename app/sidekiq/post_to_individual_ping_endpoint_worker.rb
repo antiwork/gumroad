@@ -18,7 +18,10 @@ class PostToIndividualPingEndpointWorker
       params
     end
 
-    response = HTTParty.post(post_url, body:, timeout: 5, headers: { "Content-Type" => content_type })
+    # no_follow: a redirect can point past the SSRF check that already ran (at subscription
+    # creation and again per-delivery in PostToPingEndpointsWorker) at an internal target the
+    # seller-supplied post_url itself never named.
+    response = HTTParty.post(post_url, body:, timeout: 5, headers: { "Content-Type" => content_type }, no_follow: true)
 
     Rails.logger.info("PostToIndividualPingEndpointWorker response=#{response.code} content_type=#{content_type} user_id=#{user_id}")
 

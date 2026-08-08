@@ -12,7 +12,7 @@ describe PostToIndividualPingEndpointWorker do
   describe "post to individual endpoint" do
     context "when the content_type is application/x-www-form-urlencoded" do
       it "posts to the right endpoint using the right params" do
-        expect(HTTParty).to receive(:post).with("http://notification.com", timeout: 5, body: { "a" => 1 }, headers: { "Content-Type" => "application/x-www-form-urlencoded" }).and_return(@http_double)
+        expect(HTTParty).to receive(:post).with("http://notification.com", timeout: 5, body: { "a" => 1 }, headers: { "Content-Type" => "application/x-www-form-urlencoded" }, no_follow: true).and_return(@http_double)
 
         expect do
           PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s)
@@ -29,7 +29,8 @@ describe PostToIndividualPingEndpointWorker do
               "name %5Bfor field%5D %5B%5B%5D%5D!@\#$%^&" => 1
             }
           },
-          headers: { "Content-Type" => "application/x-www-form-urlencoded" }
+          headers: { "Content-Type" => "application/x-www-form-urlencoded" },
+          no_follow: true
         ).and_return(@http_double)
 
         expect do
@@ -49,7 +50,7 @@ describe PostToIndividualPingEndpointWorker do
 
     context "when the content_type is application/json" do
       it "posts to the right endpoint using the right params" do
-        expect(HTTParty).to receive(:post).with("http://notification.com", timeout: 5, body: { "some [thing]" => 1 }.to_json, headers: { "Content-Type" => "application/json" }).and_return(@http_double)
+        expect(HTTParty).to receive(:post).with("http://notification.com", timeout: 5, body: { "some [thing]" => 1 }.to_json, headers: { "Content-Type" => "application/json" }, no_follow: true).and_return(@http_double)
 
         expect do
           PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "some [thing]" => 1 }, Mime[:json].to_s)
@@ -77,6 +78,12 @@ describe PostToIndividualPingEndpointWorker do
     end.to raise_error(StandardError)
   end
 
+  it "does not follow redirects" do
+    expect(HTTParty).to receive(:post).with("http://notification.com", hash_including(no_follow: true)).and_return(@http_double)
+
+    PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
+  end
+
   it "retries 50x status codes the right number of times and does not raise", :sidekiq_inline do
     allow(@http_double).to receive(:success?).and_return(false)
     allow(@http_double).to receive(:code).and_return(500)
@@ -95,7 +102,7 @@ describe PostToIndividualPingEndpointWorker do
 
   describe "logging" do
     it "does not log the endpoint URL or payload" do
-      expect(HTTParty).to receive(:post).with("https://notification.com", timeout: 5, body: { "a" => 1 }, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
+      expect(HTTParty).to receive(:post).with("https://notification.com", timeout: 5, body: { "a" => 1 }, headers: { "Content-Type" => Mime[:url_encoded_form] }, no_follow: true).and_return(@http_double)
       messages = []
       allow(Rails.logger).to receive(:info) { |message| messages << message }
 
@@ -107,7 +114,7 @@ describe PostToIndividualPingEndpointWorker do
     it "does not log license keys or webhook credentials" do
       endpoint = "https://notification.com/webhook?token=endpoint-secret"
       payload = { "license_key" => "license-secret", "email" => "buyer@example.com" }
-      expect(HTTParty).to receive(:post).with(endpoint, timeout: 5, body: payload, headers: { "Content-Type" => Mime[:url_encoded_form] }).and_return(@http_double)
+      expect(HTTParty).to receive(:post).with(endpoint, timeout: 5, body: payload, headers: { "Content-Type" => Mime[:url_encoded_form] }, no_follow: true).and_return(@http_double)
       messages = []
       allow(Rails.logger).to receive(:info) { |message| messages << message }
 

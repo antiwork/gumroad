@@ -470,7 +470,8 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(jobs.first["args"].first).to eq("http://notification.com")
     end
 
-    it "does not post to the app's post url if the post url is invalid" do
+    it "does not post to the app's post url if the post url is invalid", :skip_resource_subscription_dns_stub do
+      allow(ResourceSubscription).to receive(:resolve_addresses).with("localhost").and_return([IPAddr.new("127.0.0.1")])
       @resource_subscription.update!(post_url: "http://localhost/path")
       purchase = create(:purchase, link: @product)
 
