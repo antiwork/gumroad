@@ -19,17 +19,20 @@ Vite ports step by two so no lane collides with 3037, the test environment's Vit
 
 ## First-time setup
 
-Load a lane's environment before running setup commands:
+Run setup commands inside a subshell so the lane environment cannot leak into the rest of your session:
 
 ```shell
-set -a
-eval "$(bin/dev-lane 1 --print-env)"
-set +a
-bin/rails db:create db:migrate db:seed
-bin/rails console
+(
+  set -a
+  eval "$(bin/dev-lane 1 --print-env)"
+  set +a
+  bin/rails db:create db:migrate db:seed
+)
 ```
 
-Then create and populate that lane's Elasticsearch indices in the console:
+Never run the test suite from a shell holding lane environment: the exported `*_REDIS_HOST` / `MONGO_DATABASE_NAME` values outrank `.env.test` (dotenv does not override existing variables), so specs would flush the lane's Redis databases and write into its Mongo database.
+
+Then create and populate that lane's Elasticsearch indices in a lane console (`bin/dev-lane 1 --print-env` env + `bin/rails console`):
 
 ```ruby
 DevTools.delete_all_indices_and_reindex_all

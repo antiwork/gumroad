@@ -67,9 +67,15 @@ fi
 ANYCABLE_REDIS_URL="redis://${REDIS_HOST}"
 ANYCABLE_WEBSOCKET_URL="ws://cable.localhost:${ANYCABLE_PORT}/cable"
 
+# rails/puma check tmp/pids/server.pid and refuse to boot when it names a live
+# process — without a lane-scoped pidfile, a second lane in the same checkout
+# dies at startup and foreman tears the lane down.
+PIDFILE="tmp/pids/server-lane${LANE}.pid"
+
 export PORT DEV_LANE_PORT VITE_RUBY_PORT DATABASE_NAME MONGO_DATABASE_NAME
 export REDIS_HOST SIDEKIQ_REDIS_HOST RPUSH_REDIS_HOST RACK_ATTACK_REDIS_HOST
 export ES_INDEX_SUFFIX ANYCABLE_PORT ANYCABLE_RPC_PORT ANYCABLE_REDIS_URL ANYCABLE_WEBSOCKET_URL
+export PIDFILE
 
 if [[ "$print_env" == true ]]; then
   printf '%s\n' \
@@ -86,7 +92,8 @@ if [[ "$print_env" == true ]]; then
     "ANYCABLE_PORT=${ANYCABLE_PORT}" \
     "ANYCABLE_RPC_PORT=${ANYCABLE_RPC_PORT}" \
     "ANYCABLE_REDIS_URL=${ANYCABLE_REDIS_URL}" \
-    "ANYCABLE_WEBSOCKET_URL=${ANYCABLE_WEBSOCKET_URL}"
+    "ANYCABLE_WEBSOCKET_URL=${ANYCABLE_WEBSOCKET_URL}" \
+    "PIDFILE=${PIDFILE}"
   exit 0
 fi
 
