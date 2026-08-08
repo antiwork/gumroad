@@ -19,7 +19,9 @@ class Discover::RecentlyViewedPresenter
     views = recent_views
     return nil if views.blank?
 
-    product_ids = views.map { _1["_source"]["product_id"] }.uniq.first(PRODUCT_COUNT)
+    # First view per product wins because views are sorted desc, i.e. the most recent one.
+    viewed_at_by_product_id = views.each_with_object({}) { |v, h| h[v["_source"]["product_id"]] ||= v["_source"]["timestamp"] }
+    product_ids = viewed_at_by_product_id.keys.first(PRODUCT_COUNT)
     products_by_id = Link.search(
       Link.search_options(ids: product_ids, size: PRODUCT_COUNT, include_rated_as_adult:)
     ).records.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).index_by(&:id)
@@ -34,11 +36,11 @@ class Discover::RecentlyViewedPresenter
         recommended_by: RecommendationType::GUMROAD_RECENTLY_VIEWED_RECOMMENDATION,
         target: Product::Layout::DISCOVER,
         compute_description: false,
-      )
+      ).merge(viewed_at: viewed_at_by_product_id.fetch(id))
     end
     return nil if cards.blank?
 
-    { products: cards, latest_viewed_at: views.first["_source"]["timestamp"] }
+    { products: cards }
   end
 
   private

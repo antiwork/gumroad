@@ -5,16 +5,18 @@ import { CardProduct } from "$app/parsers/product";
 import { Card } from "$app/components/Product/Card";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 
+export type RecentlyViewedProduct = CardProduct & { viewed_at: string };
+
 export type RecentlyViewedProps = {
-  products: CardProduct[];
-  latest_viewed_at: string;
+  products: RecentlyViewedProduct[];
 };
 
 const CLEARED_AT_KEY = "gr_discover_recently_viewed_cleared_at";
 
 // The views live server-side (keyed by user or browser guid), so "Clear" only records a
-// client-side cutoff: anything viewed before it stays hidden, and the row reappears once
-// the visitor views another product.
+// client-side cutoff. Each product carries its own last-viewed timestamp so clearing hides
+// exactly the products viewed before the cutoff, not the whole row keyed off the newest view —
+// a re-view of any one product must not resurrect the others.
 const getClearedAt = (): string | null => {
   try {
     return localStorage.getItem(CLEARED_AT_KEY);
@@ -26,8 +28,10 @@ const getClearedAt = (): string | null => {
 export const RecentlyViewed = ({ data }: { data?: RecentlyViewedProps | null | undefined }) => {
   const [clearedAt, setClearedAt] = React.useState<string | null>(getClearedAt);
 
-  if (!data || !data.products.length) return null;
-  if (clearedAt && data.latest_viewed_at <= clearedAt) return null;
+  if (!data?.products.length) return null;
+
+  const products = clearedAt ? data.products.filter((product) => product.viewed_at > clearedAt) : data.products;
+  if (!products.length) return null;
 
   const clear = () => {
     const now = new Date().toISOString();
@@ -46,7 +50,7 @@ export const RecentlyViewed = ({ data }: { data?: RecentlyViewedProps | null | u
         </button>
       </header>
       <ProductCardGrid>
-        {data.products.map((product) => (
+        {products.map((product) => (
           <Card key={product.id} product={product} eager={false} />
         ))}
       </ProductCardGrid>

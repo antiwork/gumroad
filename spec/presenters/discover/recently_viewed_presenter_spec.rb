@@ -35,7 +35,7 @@ describe Discover::RecentlyViewedPresenter do
 
         expect(result[:products].map { _1[:name] }).to eq(["Viewed Product"])
         expect(result[:products].first[:url]).to include("recommended_by=recently_viewed")
-        expect(result[:latest_viewed_at]).to be_present
+        expect(result[:products].first[:viewed_at]).to be_present
       end
 
       it "ignores views older than 30 days" do
