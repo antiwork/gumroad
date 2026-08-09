@@ -312,14 +312,16 @@ describe CustomerMailer do
       context "when there are recommended products" do
         let(:recommended_seller) { create(:recommendable_user, name: "Recommended seller") }
         let(:recommendable_products) do
-          create_list(
+          products = create_list(
             :product,
             4,
-            :recommendable,
+            :with_films_taxonomy,
             user: recommended_seller,
             name: "Recommended product",
             price_cents: 9_99,
           )
+          products.each { create(:purchase, link: _1, created_at: 1.week.ago) }
+          products.each(&:reload)
         end
         let!(:affiliate) do
           create(
@@ -327,6 +329,16 @@ describe CustomerMailer do
             seller: recommended_seller,
             products: recommendable_products,
             affiliate_user: create(:user),
+          )
+        end
+        let!(:product_review_stat) do
+          create(
+            :product_review_stat,
+            link: recommendable_products.first,
+            reviews_count: 2,
+            average_rating: 4.5,
+            ratings_of_four_count: 1,
+            ratings_of_five_count: 1,
           )
         end
 
@@ -351,7 +363,8 @@ describe CustomerMailer do
           expect(mail.body.sanitized).to have_text("Customers who bought this item also bought")
           expect(mail.body.sanitized).to have_text("$9.99")
 
-          rows = Nokogiri::HTML(mail.body.decoded).css("table.two-product-card-table > tbody > tr")
+          html = Nokogiri::HTML(mail.body.decoded)
+          rows = html.css("table.two-product-card-table > tbody > tr")
           expect(rows.map { _1.xpath("./td").size }).to eq([2, 2])
           expect(rows.map { _1["class"].to_s.split }).to eq([["product-card-row-with-gap"], []])
           cell_classes = rows.flat_map { _1.xpath("./td") }.map { _1["class"].to_s.split }
@@ -362,6 +375,8 @@ describe CustomerMailer do
             [],
           ]
           expect(cell_classes).to eq(expected_cell_classes)
+          expect(html.css("table.product-card-table").map { _1["align"] }).to eq(["center"] * 4)
+          expect(html.css(".rating").map { _1.text.squish }).to eq(["★ 4.5 (2)"])
         end
       end
     end
