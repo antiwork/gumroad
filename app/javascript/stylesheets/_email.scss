@@ -258,10 +258,10 @@ $accent-color: map-get($colors, "pink"); // [1]
         // [5]
         & > tbody > tr > td {
           display: block;
+        }
 
-          &:first-child {
-            padding-bottom: spacer(4);
-          }
+        & > tbody > tr > td.product-card-cell-with-gap {
+          padding-bottom: spacer(4);
         }
 
         @include breakpoint-up(sm) {
@@ -269,15 +269,19 @@ $accent-color: map-get($colors, "pink"); // [1]
           & > tbody > tr > td {
             display: revert !important;
             width: 50% !important;
+            padding-bottom: 0 !important;
 
             &:first-child {
               padding-right: spacer(2) !important;
-              padding-bottom: 0 !important;
             }
 
             &:last-child {
               padding-left: spacer(2) !important;
             }
+          }
+
+          & > tbody > tr.product-card-row-with-gap > td {
+            padding-bottom: spacer(4) !important;
           }
         }
       }

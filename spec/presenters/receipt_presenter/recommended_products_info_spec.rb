@@ -43,7 +43,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
               purchaser: nil,
               receipt_product_ids: [purchase.link.id],
               recommender_model_name: "sales",
-              limit: ReceiptPresenter::RecommendedProductsInfo::RECOMMENDED_PRODUCTS_LIMIT,
+              limit: 4,
             ).and_call_original
             expect(RecommendedProductsService).to receive(:fetch).with(
               {
@@ -86,7 +86,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
                 purchaser: purchase.purchaser,
                 receipt_product_ids: [purchase.link.id],
                 recommender_model_name: "sales",
-                limit: ReceiptPresenter::RecommendedProductsInfo::RECOMMENDED_PRODUCTS_LIMIT,
+                limit: 4,
               ).and_call_original
               expect(RecommendedProductsService).to receive(:fetch).with(
                 {
@@ -121,7 +121,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
                 purchaser: purchase.purchaser,
                 receipt_product_ids: [purchase.link_id] + purchase.link.bundle_products.map(&:product_id),
                 recommender_model_name: "sales",
-                limit: ReceiptPresenter::RecommendedProductsInfo::RECOMMENDED_PRODUCTS_LIMIT,
+                limit: 4,
               ).and_call_original
               expect(recommended_products_info.products).to eq([])
               expect(recommended_products_info.present?).to eq(false)
@@ -176,7 +176,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
             purchaser: purchase.purchaser,
             receipt_product_ids: [purchase.link_id, another_purchase.link_id],
             recommender_model_name: "sales",
-            limit: ReceiptPresenter::RecommendedProductsInfo::RECOMMENDED_PRODUCTS_LIMIT,
+            limit: 4,
           ).and_call_original
           expect(recommended_products_info.products).to eq([])
           expect(recommended_products_info.present?).to eq(false)

@@ -310,14 +310,23 @@ describe CustomerMailer do
       end
 
       context "when there are recommended products" do
-        let(:recommendable_product) do
-          create(:product, :recommendable, name: "Recommended product", price_cents: 9_99)
+        let(:recommended_seller) { create(:recommendable_user, name: "Recommended seller") }
+        let(:recommendable_products) do
+          create_list(
+            :product,
+            4,
+            :recommendable,
+            user: recommended_seller,
+            name: "Recommended product",
+            price_cents: 9_99,
+          )
         end
         let!(:affiliate) do
           create(
             :direct_affiliate,
-            seller: recommendable_product.user,
-            products: [recommendable_product], affiliate_user: create(:user)
+            seller: recommended_seller,
+            products: recommendable_products,
+            affiliate_user: create(:user),
           )
         end
 
@@ -326,7 +335,7 @@ describe CustomerMailer do
           seller.update!(recommendation_type: User::RecommendationType::GUMROAD_AFFILIATES_PRODUCTS)
         end
 
-        it "includes recommended products section" do
+        it "includes four recommended products in two rows" do
           expect(RecommendedProductsService).to receive(:fetch).with(
             {
               model: "sales",
@@ -335,12 +344,24 @@ describe CustomerMailer do
               number_of_results: RecommendedProducts::BaseService::NUMBER_OF_RESULTS,
               user_ids: nil,
             }
-          ).and_return(Link.where(id: [recommendable_product.id]))
+          ).and_return(Link.where(id: recommendable_products.map(&:id)))
 
           mail = CustomerMailer.receipt(purchase.id)
 
           expect(mail.body.sanitized).to have_text("Customers who bought this item also bought")
           expect(mail.body.sanitized).to have_text("$9.99")
+
+          rows = Nokogiri::HTML(mail.body.decoded).css("table.two-product-card-table > tbody > tr")
+          expect(rows.map { _1.xpath("./td").size }).to eq([2, 2])
+          expect(rows.map { _1["class"].to_s.split }).to eq([["product-card-row-with-gap"], []])
+          cell_classes = rows.flat_map { _1.xpath("./td") }.map { _1["class"].to_s.split }
+          expected_cell_classes = [
+            ["product-card-cell-with-gap"],
+            ["product-card-cell-with-gap"],
+            ["product-card-cell-with-gap"],
+            [],
+          ]
+          expect(cell_classes).to eq(expected_cell_classes)
         end
       end
     end
