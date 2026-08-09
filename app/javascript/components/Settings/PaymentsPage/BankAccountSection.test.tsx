@@ -221,10 +221,10 @@ describe("BankAccountSection Bolivia bank code", () => {
     const field = screen.getByLabelText<HTMLInputElement>("Bank code");
     expect(field.maxLength).toBe(3);
     // The old placeholder was a specific-looking value sellers copied literally.
-    expect(/\d{3}/.test(field.placeholder)).toBe(false);
+    expect(/\d{3}/u.test(field.placeholder)).toBe(false);
     expect(field.placeholder.toLowerCase()).toContain("asfi");
 
-    expect(screen.getByText(/3-digit ASFI code/)).toBeTruthy();
+    expect(screen.getByText(/3-digit ASFI code/u)).toBeTruthy();
   });
 });
 
