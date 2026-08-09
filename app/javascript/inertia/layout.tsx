@@ -19,6 +19,10 @@ type PageProps = {
     name: string;
     avatar_url: string;
     has_published_products: boolean;
+    can_publish_products: boolean;
+    publish_blocked_reason: "no_payout_method" | "payout_setup_rejected" | null;
+    no_payout_rail_in_compliance_country: boolean;
+    legal_guardian_requirement_met: boolean;
     subdomain: string;
     is_buyer: boolean;
     time_zone: {
