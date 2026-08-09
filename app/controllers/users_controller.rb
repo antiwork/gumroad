@@ -298,10 +298,9 @@ class UsersController < ApplicationController
       avatar_url = user.avatar_url if user.avatar.attached?
       share_image = preview_url || avatar_url || ActionController::Base.helpers.image_url("opengraph_image.png")
       escaped_share_image = ERB::Util.h(share_image)
-      # This <head> is hand-built (bypasses PageMeta::Favicon), which meant custom-domain
-      # and custom-HTML profiles served the generic pink icon instead of the seller's own
-      # image (gp#1966). user.avatar_url always resolves — to the default avatar when none
-      # is uploaded — so this always emits a seller-scoped icon.
+      # This <head> is hand-built (bypasses PageMeta::Favicon). user.avatar_url
+      # always resolves — to the default avatar when none is uploaded — so
+      # this always emits a seller-scoped icon.
       favicon_url = ERB::Util.h(user.avatar_url)
       favicon_tags = <<~HTML.strip
         <link rel="shortcut icon" href="#{favicon_url}">

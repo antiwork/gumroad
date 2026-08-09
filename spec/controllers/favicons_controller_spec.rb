@@ -23,6 +23,17 @@ describe FaviconsController do
       end
     end
 
+    context "on a product-owned custom domain" do
+      it "redirects to the product seller's avatar" do
+        user = create(:named_user)
+        product = create(:product, user:)
+        create(:custom_domain, :with_product, product:, domain: "www.example-product.com")
+        @request.host = "www.example-product.com"
+        get :show
+        expect(response).to redirect_to(user.avatar_url)
+      end
+    end
+
     context "on the canonical gumroad host" do
       it "serves the generic static icon rather than redirecting" do
         @request.host = URI("#{PROTOCOL}://#{DOMAIN}").host

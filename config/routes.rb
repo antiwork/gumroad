@@ -33,10 +33,8 @@ Rails.application.routes.draw do
   get "/:key.txt" => "indexnow_keys#show", constraints: { key: /[a-zA-Z0-9-]{8,128}/ }, as: :indexnow_key
 
   # Unconstrained by host so every seller subdomain/custom domain resolves its
-  # OWN favicon (gp#1966) instead of nginx's static /public/favicon.ico, which
-  # has no concept of which seller is being requested. The nginx location for
-  # /favicon.ico (docker/nginx/nginx.conf) forwards here instead of serving
-  # the static file directly.
+  # own favicon. The nginx location for /favicon.ico (docker/nginx/nginx.conf)
+  # forwards here instead of serving the static file directly.
   get "/favicon.ico" => "favicons#show", as: :favicon
 
   use_doorkeeper do

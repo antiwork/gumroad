@@ -55,9 +55,8 @@ module PageMeta::Base
       set_meta_tag(property: "stripe:api_version", value: Stripe.api_version)
       set_meta_tag(property: "twitter:site", content: "@gumroad")
       set_meta_tag(tag_name: "link", rel: "search", href: "/opensearch.xml", type: "application/opensearchdescription+xml", title: "Gumroad")
-      # head_key is explicit (not the href-derived default) so PageMeta::Favicon's
-      # set_favicon_meta_tags overwrites this entry instead of adding a second
-      # <link rel="shortcut icon">  — both tags rendering was gp#1966.
+      # head_key is explicit (not the href-derived default) so set_favicon_meta_tags
+      # overwrites this entry instead of adding a second <link rel="shortcut icon">.
       set_meta_tag(tag_name: "link", rel: "shortcut icon", href: image_path("pink-icon.png"), head_key: "shortcut-icon")
       set_meta_tag(tag_name: "link", rel: "apple-touch-icon", href: image_path("pink-icon.png"), head_key: "apple-touch-icon")
     end

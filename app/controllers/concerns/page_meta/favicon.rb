@@ -6,10 +6,8 @@ module PageMeta::Favicon
   include PageMeta::Base
 
   private
-    # head_key matches the defaults set in set_default_meta_tags so this call
-    # replaces them instead of appending a second icon link — see that method
-    # for why the key must be explicit (gp#1966: two <link rel="shortcut icon">
-    # tags rendered when the keys didn't match).
+    # head_key matches set_default_meta_tags so this replaces the defaults
+    # instead of appending a second icon link.
     def set_favicon_meta_tags(user)
       return unless user.avatar_url.present?
 
