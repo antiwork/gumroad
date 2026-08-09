@@ -6,6 +6,20 @@ require "inertia_rails/rspec"
 describe Purchases::DisputeEvidenceController, type: :controller, inertia: true do
   let(:dispute_evidence) { create(:dispute_evidence) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
+  let(:evidence_token) do
+    purchase.secure_external_id(
+      scope: Purchases::DisputeEvidenceController::SECURE_ID_SCOPE,
+      expires_at: dispute_evidence.seller_response_due_at
+    )
+  end
+
+  # gp#1921: a valid scoped token is no longer sufficient on its own — the authenticated
+  # user must also be the seller who owns the sale. Sign in as the seller by default so the
+  # existing token-based scenarios below still exercise the window/status logic they intend
+  # to, and override sign_in explicitly in the specs that are testing authentication itself.
+  before do
+    sign_in(purchase.seller)
+  end
 
   describe "GET show" do
     context "when the seller hasn't been contacted" do
@@ -14,7 +28,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
 
       it "redirects" do
-        get :show, params: { purchase_id: purchase.external_id }
+        get :show, params: { purchase_id: evidence_token }
 
         expect(response).to redirect_to(dashboard_url)
         expect(flash[:alert]).to eq("You are not allowed to perform this action.")
@@ -29,7 +43,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
 
       it "renders the form again" do
-        get :show, params: { purchase_id: purchase.external_id }
+        get :show, params: { purchase_id: evidence_token }
 
         expect(response).to be_successful
         expect(flash[:alert]).to be_nil
@@ -42,7 +56,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
 
       it "redirects" do
-        get :show, params: { purchase_id: purchase.external_id }
+        get :show, params: { purchase_id: evidence_token }
 
         expect(response).to redirect_to(dashboard_url)
         expect(flash[:alert]).to eq("The deadline for submitting additional information for this dispute has passed.")
@@ -55,7 +69,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
 
       it "redirects" do
-        get :show, params: { purchase_id: purchase.external_id }
+        get :show, params: { purchase_id: evidence_token }
 
         expect(response).to redirect_to(dashboard_url)
         expect(flash[:alert]).to eq("Additional information can no longer be submitted for this dispute.")
@@ -64,12 +78,12 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
 
     RSpec.shared_examples "shows the dispute evidence page for the purchase" do
       it "shows the dispute evidence page for the purchase" do
-        get :show, params: { purchase_id: purchase.external_id }
+        get :show, params: { purchase_id: evidence_token }
 
         expect(response).to be_successful
         expect(inertia.component).to eq("Purchases/DisputeEvidence/Show")
 
-        expected_props = DisputeEvidencePagePresenter.new(dispute_evidence).props
+        expected_props = DisputeEvidencePagePresenter.new(dispute_evidence, purchase_route_id: evidence_token).props
         actual_props = inertia.props.slice(*expected_props.keys)
         expect(actual_props).to eq(expected_props)
       end
@@ -98,7 +112,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
     end
 
     it "adds X-Robots-Tag response header to avoid page indexing" do
-      get :show, params: { purchase_id: purchase.external_id }
+      get :show, params: { purchase_id: evidence_token }
 
       expect(response).to be_successful
       expect(response.headers["X-Robots-Tag"]).to eq("noindex")
@@ -107,14 +121,14 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
 
   describe "GET success" do
     it "renders the success page" do
-      get :success, params: { purchase_id: purchase.external_id }
+      get :success, params: { purchase_id: evidence_token }
 
       expect(response).to be_successful
       expect(inertia.component).to eq("Purchases/DisputeEvidence/Success")
     end
 
     it "adds X-Robots-Tag response header to avoid page indexing" do
-      get :success, params: { purchase_id: purchase.external_id }
+      get :success, params: { purchase_id: evidence_token }
 
       expect(response).to be_successful
       expect(response.headers["X-Robots-Tag"]).to eq("noindex")
@@ -124,7 +138,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
   describe "PUT update" do
     it "updates the dispute evidence and redirects to success page" do
       put :update, params: {
-        purchase_id: purchase.external_id,
+        purchase_id: evidence_token,
         dispute_evidence: {
           reason_for_winning: "Reason for winning",
           cancellation_rebuttal: "Cancellation rebuttal",
@@ -138,12 +152,12 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       expect(dispute_evidence.refund_refusal_explanation).to eq("Refusal explanation")
       expect(dispute_evidence.seller_submitted?).to be(true)
 
-      expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+      expect(response).to redirect_to(success_purchase_dispute_evidence_path(evidence_token))
     end
 
     it "saves without forwarding to the processor while the window is open" do
       put :update, params: {
-        purchase_id: purchase.external_id,
+        purchase_id: evidence_token,
         dispute_evidence: { reason_for_winning: "Reason for winning" }
       }
 
@@ -158,7 +172,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       dispute_evidence.update!(seller_contacted_at: DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours.ago)
 
       put :update, params: {
-        purchase_id: purchase.external_id,
+        purchase_id: evidence_token,
         dispute_evidence: { reason_for_winning: "Reason for winning" }
       }
 
@@ -172,7 +186,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
     # what "leave alone" looks like at this layer — only an explicit clear should blank the field.
     it "keeps fields the seller left blank on a later revision" do
       put :update, params: {
-        purchase_id: purchase.external_id,
+        purchase_id: evidence_token,
         dispute_evidence: {
           reason_for_winning: "First answer",
           cancellation_rebuttal: "First rebuttal",
@@ -181,7 +195,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       }
 
       put :update, params: {
-        purchase_id: purchase.external_id,
+        purchase_id: evidence_token,
         dispute_evidence: {
           reason_for_winning: "Revised answer",
           cancellation_rebuttal: "First rebuttal",
@@ -199,7 +213,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
     # and the deadline job must forward that retraction rather than the stale saved text.
     it "clears a field the seller explicitly blanked on a later revision" do
       put :update, params: {
-        purchase_id: purchase.external_id,
+        purchase_id: evidence_token,
         dispute_evidence: {
           reason_for_winning: "First answer",
           cancellation_rebuttal: "First rebuttal",
@@ -208,7 +222,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       }
 
       put :update, params: {
-        purchase_id: purchase.external_id,
+        purchase_id: evidence_token,
         dispute_evidence: {
           reason_for_winning: "Revised answer",
           cancellation_rebuttal: "",
@@ -230,14 +244,14 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       it "converts the file to JPG and attaches it to the dispute evidence" do
         # Purging in test ENV returns Aws::S3::Errors::AccessDenied
         allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
-        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_id: blob.signed_id } }
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: blob.signed_id } }
 
         dispute_evidence.reload
         expect(dispute_evidence.customer_communication_file.attached?).to be(true)
         expect(dispute_evidence.customer_communication_file.filename.to_s).to eq("receipt_image.jpg")
         expect(dispute_evidence.customer_communication_file.content_type).to eq("image/jpeg")
 
-        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(evidence_token))
       end
     end
 
@@ -247,14 +261,14 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
 
       it "attaches it to the dispute evidence" do
-        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_id: blob.signed_id } }
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: blob.signed_id } }
 
         dispute_evidence.reload
         expect(dispute_evidence.customer_communication_file.attached?).to be(true)
         expect(dispute_evidence.customer_communication_file.filename.to_s).to eq("test.pdf")
         expect(dispute_evidence.customer_communication_file.content_type).to eq("application/pdf")
 
-        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(evidence_token))
       end
     end
 
@@ -271,8 +285,8 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       it "merges the new file with the previously saved one instead of replacing it" do
         allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
 
-        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_id: first_blob.signed_id } }
-        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_id: second_blob.signed_id } }
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: first_blob.signed_id } }
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_id: second_blob.signed_id } }
 
         dispute_evidence.reload
         expect(dispute_evidence.customer_communication_file.filename.to_s).to eq("customer_communication.pdf")
@@ -289,14 +303,14 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       it "behaves like the singular param, including the PNG to JPG conversion" do
         # Purging in test ENV returns Aws::S3::Errors::AccessDenied
         allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
-        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: [blob.signed_id] } }
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_ids: [blob.signed_id] } }
 
         dispute_evidence.reload
         expect(dispute_evidence.customer_communication_file.attached?).to be(true)
         expect(dispute_evidence.customer_communication_file.filename.to_s).to eq("receipt_image.jpg")
         expect(dispute_evidence.customer_communication_file.content_type).to eq("image/jpeg")
 
-        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(evidence_token))
       end
     end
 
@@ -317,7 +331,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
 
       it "attaches a single merged PDF containing every file, in upload order" do
-        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
 
         dispute_evidence.reload
         expect(dispute_evidence.customer_communication_file.attached?).to be(true)
@@ -332,7 +346,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
 
         expect(dispute_evidence.seller_submitted?).to be(true)
         expect(FightDisputeJob.jobs.size).to eq(0)
-        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(evidence_token))
       end
 
       context "when the merged PDF cannot fit within the size limit" do
@@ -341,14 +355,14 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
         end
 
         it "fails loudly without submitting or truncating the evidence" do
-          put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
+          put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
 
           dispute_evidence.reload
           expect(dispute_evidence.customer_communication_file.attached?).to be(false)
           expect(dispute_evidence.seller_submitted?).to be(false)
           expect(FightDisputeJob.jobs.size).to eq(0)
 
-          expect(response).to redirect_to(purchase_dispute_evidence_path(purchase.external_id))
+          expect(response).to redirect_to(purchase_dispute_evidence_path(evidence_token))
           expect(flash[:alert]).to eq(DisputeEvidence::MergeCustomerCommunicationFilesService::FILE_TOO_LARGE_MESSAGE)
         end
       end
@@ -360,39 +374,39 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
         purged_keys = []
         allow_any_instance_of(ActiveStorage::Blob).to receive(:purge) { |blob| purged_keys << blob.key }
 
-        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id), cancellation_rebuttal: "a" * 3_001 } }
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id), cancellation_rebuttal: "a" * 3_001 } }
 
         expect(dispute_evidence.reload.seller_submitted?).to be(false)
         expect(FightDisputeJob.jobs.size).to eq(0)
         expect(purged_keys).not_to include(*blobs.map(&:key))
-        expect(response).to redirect_to(purchase_dispute_evidence_path(purchase.external_id))
+        expect(response).to redirect_to(purchase_dispute_evidence_path(evidence_token))
       end
 
       it "purges the uploaded files once the submission is persisted" do
         purged_keys = []
         allow_any_instance_of(ActiveStorage::Blob).to receive(:purge) { |blob| purged_keys << blob.key }
 
-        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
 
         expect(dispute_evidence.reload.seller_submitted?).to be(true)
         expect(purged_keys).to include(*blobs.map(&:key))
       end
 
       it "redirects with an alert when a signed id no longer resolves" do
-        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: [blobs.first.signed_id, "not-a-signed-id"] } }
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { customer_communication_file_signed_blob_ids: [blobs.first.signed_id, "not-a-signed-id"] } }
 
         expect(dispute_evidence.reload.seller_submitted?).to be(false)
         expect(FightDisputeJob.jobs.size).to eq(0)
-        expect(response).to redirect_to(purchase_dispute_evidence_path(purchase.external_id))
+        expect(response).to redirect_to(purchase_dispute_evidence_path(evidence_token))
         expect(flash[:alert]).to eq("We could not find your uploaded files. Please upload them again.")
       end
     end
 
     context "when the dispute evidence is invalid" do
       it "redirects with error message" do
-        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { cancellation_rebuttal: "a" * 3_001 } }
+        put :update, params: { purchase_id: evidence_token, dispute_evidence: { cancellation_rebuttal: "a" * 3_001 } }
 
-        expect(response).to redirect_to(purchase_dispute_evidence_path(purchase.external_id))
+        expect(response).to redirect_to(purchase_dispute_evidence_path(evidence_token))
         expect(flash[:alert]).to eq("Cancellation rebuttal is too long (maximum is 3000 characters)")
       end
     end
@@ -417,15 +431,96 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
 
       it "still accepts the evidence submission" do
         put :update, params: {
-          purchase_id: purchase.external_id,
+          purchase_id: evidence_token,
           dispute_evidence: { reason_for_winning: "The buyer downloaded and used the product." }
         }
 
         dispute_evidence.reload
         expect(dispute_evidence.reason_for_winning).to eq("The buyer downloaded and used the product.")
         expect(dispute_evidence.seller_submitted?).to be(true)
-        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(evidence_token))
       end
+    end
+  end
+
+  # gp#1921: purchase.external_id is buyer-visible via the library/download pages, so the disputing
+  # buyer must never be able to use it to read or overwrite the seller's chargeback response.
+  # Login is now required outright (Sahil's direction on gp#1921), so a signed-out request is
+  # redirected to log in rather than 404ing — but no signed-in identity other than the seller
+  # who owns the sale, including via a valid scoped token, can ever resolve the purchase.
+  describe "buyer access via the legacy buyer-visible external_id" do
+    before { sign_out(purchase.seller) }
+
+    it "redirects a signed-out show request to log in" do
+      get :show, params: { purchase_id: purchase.external_id }
+
+      expect(response).to redirect_to(login_path(next: purchase_dispute_evidence_path(purchase.external_id)))
+    end
+
+    it "redirects a signed-out update request to log in and does not save anything" do
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: { reason_for_winning: "Overwritten by the buyer" }
+      }
+
+      expect(response).to redirect_to(login_path(next: purchase_dispute_evidence_path(purchase.external_id)))
+      expect(dispute_evidence.reload.reason_for_winning).to be_nil
+    end
+
+    it "404s for the disputing buyer signed in as themselves" do
+      sign_in(purchase.purchaser || create(:user, email: purchase.email))
+
+      expect do
+        get :show, params: { purchase_id: purchase.external_id }
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    it "404s for an unrelated signed-in seller" do
+      sign_in(create(:user))
+
+      expect do
+        get :show, params: { purchase_id: purchase.external_id }
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    # The scoped token alone is exactly the surface gp#1921 reported: it was sufficient by
+    # itself before this fix, so an unrelated signed-in user must still 404 even holding it.
+    it "404s for an unrelated signed-in user holding a valid scoped token" do
+      sign_in(create(:user))
+
+      expect do
+        get :show, params: { purchase_id: evidence_token }
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    it "redirects a signed-out request holding a valid scoped token to log in" do
+      get :show, params: { purchase_id: evidence_token }
+
+      expect(response).to redirect_to(login_path(next: purchase_dispute_evidence_path(evidence_token)))
+    end
+  end
+
+  # The legacy external_id keeps resolving for the seller who actually owns the sale, so
+  # already-delivered emails predating the scoped token don't strand anyone.
+  describe "seller access via the legacy buyer-visible external_id" do
+    it "shows the page for the authenticated seller-owner" do
+      sign_in(purchase.seller)
+
+      get :show, params: { purchase_id: purchase.external_id }
+
+      expect(response).to be_successful
+    end
+
+    it "accepts an update from the authenticated seller-owner" do
+      sign_in(purchase.seller)
+
+      put :update, params: {
+        purchase_id: purchase.external_id,
+        dispute_evidence: { reason_for_winning: "Reason for winning" }
+      }
+
+      expect(dispute_evidence.reload.reason_for_winning).to eq("Reason for winning")
+      expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
     end
   end
 end

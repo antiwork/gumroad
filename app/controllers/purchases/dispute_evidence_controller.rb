@@ -3,6 +3,8 @@
 class Purchases::DisputeEvidenceController < ApplicationController
   layout "inertia"
 
+  SECURE_ID_SCOPE = "dispute_evidence"
+
   # Sellers reach this page from a one-off emailed link and have only 72 hours
   # (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS) to send us their
   # side of a chargeback before we forward whatever we have to the card network.
@@ -18,14 +20,25 @@ class Purchases::DisputeEvidenceController < ApplicationController
   # the contacted/not-yet-submitted/not-resolved window.
   skip_before_action :check_suspended
 
+  # Sahil's direction on gp#1921: "The seller should need to be logged in to provide this
+  # evidence." A signed, scoped, expiring token proves the emailed link was legitimate, but it
+  # does not prove the browser holding it is the seller — the link can be forwarded/leaked, and
+  # the token alone was the surface the original IDOR abused. Requiring login closes that gap
+  # even for the scoped-token path; a seller signed out on the device that received the email is
+  # redirected to log in first (see authenticate_user!), same UX as any other seller-only page.
+  before_action :authenticate_user!
   before_action :set_purchase, :set_dispute_evidence
   before_action :check_if_needs_redirect, except: [:success]
+
+  # external_id is buyer-visible (library/download data), so it must never resolve on its
+  # own. Both the scoped token AND the legacy external_id now additionally require the
+  # authenticated user to own the sale — a valid token is necessary but no longer sufficient.
 
   def show
     set_meta_tag(title: "Submit additional information")
     set_noindex_header
 
-    render inertia: "Purchases/DisputeEvidence/Show", props: DisputeEvidencePagePresenter.new(@dispute_evidence).props
+    render inertia: "Purchases/DisputeEvidence/Show", props: DisputeEvidencePagePresenter.new(@dispute_evidence, purchase_route_id: @purchase_route_id).props
   end
 
   def success
@@ -33,7 +46,7 @@ class Purchases::DisputeEvidenceController < ApplicationController
     set_noindex_header
 
     render inertia: "Purchases/DisputeEvidence/Success",
-           props: DisputeEvidencePagePresenter.new(@dispute_evidence).success_props
+           props: DisputeEvidencePagePresenter.new(@dispute_evidence, purchase_route_id: @purchase_route_id).success_props
   end
 
   def update
@@ -75,15 +88,24 @@ class Purchases::DisputeEvidenceController < ApplicationController
     # closes, which is what lets the seller keep revising. An already-elapsed window never reaches
     # this point: check_if_needs_redirect refuses the save, because a submission the job is already
     # forwarding cannot be added to.
-    redirect_to success_purchase_dispute_evidence_path(@purchase.external_id), status: :see_other
+    redirect_to success_purchase_dispute_evidence_path(@purchase_route_id), status: :see_other
   rescue ActiveRecord::RecordInvalid
     merged_blob&.purge
-    redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: @dispute_evidence.errors.full_messages.to_sentence
+    redirect_to purchase_dispute_evidence_path(@purchase_route_id), alert: @dispute_evidence.errors.full_messages.to_sentence
   rescue DisputeEvidence::MergeCustomerCommunicationFilesService::MergeError => e
-    redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: e.message
+    redirect_to purchase_dispute_evidence_path(@purchase_route_id), alert: e.message
   end
 
   private
+    def set_purchase
+      requested_id = params[:purchase_id] || params[:id]
+      scoped_purchase = Purchase.find_by_secure_external_id(requested_id, scope: SECURE_ID_SCOPE)
+      @purchase = scoped_purchase || Purchase.find_by_external_id(requested_id)
+      @purchase_route_id = scoped_purchase ? requested_id : @purchase&.external_id
+      @purchase = nil unless @purchase && logged_in_user.role_owner_for?(@purchase.seller)
+      @purchase || e404
+    end
+
     def dispute_evidence_params
       params.require(:dispute_evidence).permit(
         :reason_for_winning,

@@ -7,6 +7,18 @@ describe("Dispute evidence page", type: :system, js: true) do
   let(:dispute_evidence) { create(:dispute_evidence, dispute:) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
   let(:product) { purchase.link }
+  let(:evidence_token) do
+    purchase.secure_external_id(
+      scope: Purchases::DisputeEvidenceController::SECURE_ID_SCOPE,
+      expires_at: dispute_evidence.seller_response_due_at
+    )
+  end
+
+  # gp#1921: login is now required outright, so system specs must sign in as the seller-owner
+  # to reach a page that used to be reachable via the token alone.
+  before do
+    login_as(purchase.seller)
+  end
 
   # Saving no longer forwards to Stripe — we hold the response until the deadline — but the
   # confirmation modal stays, because after the deadline nothing more can be added.
@@ -18,7 +30,7 @@ describe("Dispute evidence page", type: :system, js: true) do
   end
 
   it "renders the page" do
-    visit purchase_dispute_evidence_path(purchase.external_id)
+    visit purchase_dispute_evidence_path(evidence_token)
 
     expect(page).to have_text("Submit additional information")
     expect(page).to have_text(/Any additional information you can provide by .+ \(72 hours left\) will help us win on your behalf\./)
@@ -32,7 +44,7 @@ describe("Dispute evidence page", type: :system, js: true) do
 
   describe "reason_for_winning field" do
     it "renders filtered options by fraudulent reason" do
-      visit purchase_dispute_evidence_path(purchase.external_id)
+      visit purchase_dispute_evidence_path(evidence_token)
 
       within_fieldset("Why should you win this dispute?") do
         expect(page).to have_text("The cardholder withdrew the dispute")
@@ -50,7 +62,7 @@ describe("Dispute evidence page", type: :system, js: true) do
     end
 
     it "requires a value when Other is selected" do
-      visit purchase_dispute_evidence_path(purchase.external_id)
+      visit purchase_dispute_evidence_path(evidence_token)
 
       within_fieldset("Why should you win this dispute?") do
         choose("Other")
@@ -61,7 +73,7 @@ describe("Dispute evidence page", type: :system, js: true) do
     end
 
     it "submits the form successfully" do
-      visit purchase_dispute_evidence_path(purchase.external_id)
+      visit purchase_dispute_evidence_path(evidence_token)
 
       within_fieldset("Why should you win this dispute?") do
         choose("The cardholder was refunded")
@@ -78,7 +90,7 @@ describe("Dispute evidence page", type: :system, js: true) do
   context "cancellation_rebuttal field" do
     context "when the purchase is not a subscription" do
       it "doesn't render the field" do
-        visit purchase_dispute_evidence_path(purchase.external_id)
+        visit purchase_dispute_evidence_path(evidence_token)
 
         expect(page).not_to have_radio_button("The customer did not request cancellation")
       end
@@ -95,13 +107,13 @@ describe("Dispute evidence page", type: :system, js: true) do
 
       context "when the dispute reason is subscription_canceled" do
         it "renders the field" do
-          visit purchase_dispute_evidence_path(purchase.external_id)
+          visit purchase_dispute_evidence_path(evidence_token)
 
           expect(page).to have_radio_button("The customer did not request cancellation")
         end
 
         it "requires a value when Other is selected" do
-          visit purchase_dispute_evidence_path(purchase.external_id)
+          visit purchase_dispute_evidence_path(evidence_token)
 
           within_fieldset("Why was the customer's subscription not canceled?") do
             choose("Other")
@@ -112,7 +124,7 @@ describe("Dispute evidence page", type: :system, js: true) do
         end
 
         it "submits the form successfully" do
-          visit purchase_dispute_evidence_path(purchase.external_id)
+          visit purchase_dispute_evidence_path(evidence_token)
 
           within_fieldset("Why was the customer's subscription not canceled?") do
             choose("Other")
@@ -133,7 +145,7 @@ describe("Dispute evidence page", type: :system, js: true) do
         end
 
         it "doesn't render the field" do
-          visit purchase_dispute_evidence_path(purchase.external_id)
+          visit purchase_dispute_evidence_path(evidence_token)
 
           expect(page).not_to have_radio_button("The customer did not request cancellation")
         end
@@ -147,7 +159,7 @@ describe("Dispute evidence page", type: :system, js: true) do
         let(:dispute) { create(:dispute_formalized, reason:) }
 
         it "renders the field" do
-          visit purchase_dispute_evidence_path(purchase.external_id)
+          visit purchase_dispute_evidence_path(evidence_token)
 
           fill_in("Why is the customer not entitled to a refund?", with: "Refund refusal explanation")
           submit_and_confirm
@@ -163,7 +175,7 @@ describe("Dispute evidence page", type: :system, js: true) do
 
   describe "validation errors" do
     it "shows validation error message when submission fails" do
-      visit purchase_dispute_evidence_path(purchase.external_id)
+      visit purchase_dispute_evidence_path(evidence_token)
 
       within_fieldset("Why should you win this dispute?") do
         choose("Other")
@@ -182,7 +194,7 @@ describe("Dispute evidence page", type: :system, js: true) do
     it "submits the form successfully" do
       # Purging in test ENV returns Aws::S3::Errors::AccessDenied
       allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
-      visit purchase_dispute_evidence_path(purchase.external_id)
+      visit purchase_dispute_evidence_path(evidence_token)
 
       page.attach_file(file_fixture("smilie.png")) do
         click_on "Upload customer communication"
@@ -201,7 +213,7 @@ describe("Dispute evidence page", type: :system, js: true) do
     it "merges multiple files into a single PDF, preserving the upload order" do
       # Purging in test ENV returns Aws::S3::Errors::AccessDenied
       allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
-      visit purchase_dispute_evidence_path(purchase.external_id)
+      visit purchase_dispute_evidence_path(evidence_token)
 
       page.attach_file([file_fixture("smilie.png"), file_fixture("test.pdf")]) do
         click_on "Upload customer communication"
@@ -227,7 +239,7 @@ describe("Dispute evidence page", type: :system, js: true) do
     end
 
     it "allows the user to delete an uploaded file" do
-      visit purchase_dispute_evidence_path(purchase.external_id)
+      visit purchase_dispute_evidence_path(evidence_token)
 
       page.attach_file(file_fixture("smilie.png")) do
         click_on "Upload customer communication"
@@ -245,7 +257,7 @@ describe("Dispute evidence page", type: :system, js: true) do
 
   describe "submit confirmation" do
     it "says the response is held until the deadline and does not save when the seller cancels" do
-      visit purchase_dispute_evidence_path(purchase.external_id)
+      visit purchase_dispute_evidence_path(evidence_token)
 
       expect(page).to have_text("You can keep adding to this until the deadline.")
 
