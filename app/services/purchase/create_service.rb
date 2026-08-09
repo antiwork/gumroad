@@ -150,7 +150,7 @@ class Purchase::CreateService < Purchase::BaseService
 
       validate_bundle_products
 
-      purchase.prepare_for_charge!
+      purchase.prepare_for_charge!(locked_rate: buyer_currency_quote_rate_hint(purchase))
 
       purchase.build_purchase_wallet_type(wallet_type: params[:wallet_type]) if params[:wallet_type].present?
 
@@ -206,6 +206,23 @@ class Purchase::CreateService < Purchase::BaseService
   end
 
   private
+    # A hint only — see Checkout::BuyerCurrencyQuote.listed_currency_rate_hint. This purchase's
+    # amount is still verified later at Charge::CreateService#locked_buyer_currency_quote! via
+    # the full `verify!` checks; this call cannot pass money through on a bad token, it can only
+    # affect which `rate_converted_to_usd` this purchase's canonical total lands on before that
+    # verification runs. Applies only when this seller's PaymentIntent charges on Stripe — a
+    # PayPal purchase carries a stale card-lane token with nothing to bind (gumroad-private#1958).
+    def buyer_currency_quote_rate_hint(purchase)
+      return if params[:buyer_currency_quote].blank?
+      return unless purchase.link.price_currency_type.to_s.downcase != Currency::USD
+
+      Checkout::BuyerCurrencyQuote.listed_currency_rate_hint(
+        token: params[:buyer_currency_quote],
+        seller_id: purchase.seller.id,
+        permalink: purchase.link.unique_permalink
+      )
+    end
+
     def is_gift?
       !!params[:is_gift]
     end

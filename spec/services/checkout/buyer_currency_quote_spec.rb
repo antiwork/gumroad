@@ -1198,4 +1198,64 @@ describe Checkout::BuyerCurrencyQuote do
       end
     end
   end
+
+  describe "listed_currency_rate binding (gumroad-private#1958)" do
+    let(:eur_product) { create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR) }
+
+    def eur_line_item(rate:)
+      purchase = build(:purchase, link: eur_product, seller:, purchase_state: "in_progress")
+      purchase.set_price_and_rate(locked_rate: rate)
+      posted_price_cents = purchase.total_transaction_cents
+
+      tax_result = double(price_cents: posted_price_cents, tax_cents: 0, zip_tax_rate: nil, used_taxjar: false, gumroad_is_mpf: false)
+      described_class::LineItem.from_surcharge(
+        permalink: eur_product.unique_permalink,
+        product: eur_product,
+        tax_result:,
+        tip_cents: 0,
+        shipping_usd_cents: 0,
+        listed_currency_rate: rate
+      )
+    end
+
+    it "binds the listed-currency rate used at quote time into the signed token" do
+      line_item = eur_line_item(rate: "0.9")
+
+      result = described_class.create(line_items: [line_item], canonical_total_cents: line_item.canonical_total_cents, ip: "24.48.0.1")
+
+      expect(result.charges.sole.listed_currency_rates).to eq(eur_product.unique_permalink => "0.9")
+    end
+
+    it "omits the rate for USD-listed lines" do
+      line_item = line_items_for(product).first
+
+      result = described_class.create(line_items: [line_item], canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result.charges.sole.listed_currency_rates).to eq({})
+    end
+
+    it "round-trips the rate through verify! so the charge path can read it back" do
+      line_item = eur_line_item(rate: "0.9")
+      created = described_class.create(line_items: [line_item], canonical_total_cents: line_item.canonical_total_cents, ip: "24.48.0.1")
+
+      verified = described_class.verify!(
+        token: created.token,
+        seller:,
+        merchant_account:,
+        currency: Currency::CAD,
+        canonical_total_cents: line_item.canonical_total_cents,
+        canonical_line_items: [{ permalink: eur_product.unique_permalink, total_cents: line_item.canonical_total_cents }]
+      )
+
+      expect(verified.listed_currency_rate_for(eur_product.unique_permalink)).to eq(BigDecimal("0.9"))
+    end
+
+    it "returns nil from listed_currency_rate_hint for a tampered token" do
+      expect(described_class.listed_currency_rate_hint(token: "garbage", seller_id: seller.id, permalink: "whatever")).to be_nil
+    end
+
+    it "returns nil from listed_currency_rate_hint when no token is present" do
+      expect(described_class.listed_currency_rate_hint(token: nil, seller_id: seller.id, permalink: "whatever")).to be_nil
+    end
+  end
 end

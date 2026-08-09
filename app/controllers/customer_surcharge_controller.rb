@@ -63,7 +63,13 @@ class CustomerSurchargeController < ApplicationController
         charge_shipping_usd_cents: charge_details[:surcharges] ? charge_details[:surcharges].fetch(:shipping_rate) : 0,
         charge_now: charge_details[:charge_now],
         later_charge_kind: charge_details[:kind],
-        later_charge_price_cents: charge_details[:later_price_cents]
+        later_charge_price_cents: charge_details[:later_price_cents],
+        # Read AT THE SAME MOMENT `calculate_surcharges` converted this line's price to
+        # canonical USD cents, so the quote token can bind the exact rate that produced
+        # today's total (gumroad-private#1958). `get_rate` is a cache read, not a fresh
+        # exchange-rate fetch, so this costs nothing beyond what the tax calculation above
+        # already paid for the same lookup.
+        listed_currency_rate: product.price_currency_type.to_s.downcase == Currency::USD ? nil : get_rate(product.price_currency_type)
       )
     end
 
