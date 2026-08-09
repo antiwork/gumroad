@@ -1,5 +1,0 @@
-desktop  AFTER FIX  host=816px/816px pmPosition=relative bar: width=816px border=4px solid rgb(255, 144, 232) anim=prosemirror-gapcursor-blink pageOverflow=1440/1440 tiptapTagStillInHead=true rev=null
-desktop  typing in the gap: children 3 -> 3, first node now "typed in the gap"
-mobile   AFTER FIX  host=343px/343px pmPosition=relative bar: width=343px border=4px solid rgb(255, 144, 232) anim=prosemirror-gapcursor-blink pageOverflow=375/375 tiptapTagStillInHead=true rev=null
-mobile   typing in the gap: children 3 -> 3, first node now "typed in the gap"
-empty-state  {"found":true,"pmPosition":"static","hitSwallowedByEditor":false}
