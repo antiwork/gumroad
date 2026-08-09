@@ -211,6 +211,23 @@ describe("BankAccountSection account-number hints", () => {
   );
 });
 
+describe("BankAccountSection Bolivia bank code", () => {
+  // gp#1967: the placeholder used to read as a real value ("060"), and 0/128 submissions
+  // ever linked a live Stripe account because sellers copied that literal placeholder
+  // instead of their bank's actual ASFI code. The placeholder must not look like a value.
+  it("advertises a real ASFI code is required without a copyable-looking placeholder", () => {
+    renderForCountry("BO");
+
+    const field = screen.getByLabelText<HTMLInputElement>("Bank code");
+    expect(field.maxLength).toBe(3);
+    // The old placeholder was a specific-looking value sellers copied literally.
+    expect(/\d{3}/.test(field.placeholder)).toBe(false);
+    expect(field.placeholder.toLowerCase()).toContain("asfi");
+
+    expect(screen.getByText(/3-digit ASFI code/)).toBeTruthy();
+  });
+});
+
 describe("BankAccountSection Indonesian bank code", () => {
   // Stripe resolves the ID bank from its 3-digit Sandi Bank directory. The old field advertised
   // maxLength 4 and no shape at all, so `BBSB` and `0140` typed cleanly and were only refused once

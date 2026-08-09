@@ -1839,13 +1839,16 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="060"
+                    placeholder="Enter your bank's 3-digit ASFI code"
                     maxLength={3}
                     required
                     disabled={isFormDisabled}
                     aria-invalid={errorFieldNames.has("bank_code")}
                     onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                   />
+                  <FieldsetDescription>
+                    Your bank's 3-digit ASFI code. Find it on your bank's statement or ask your bank.
+                  </FieldsetDescription>
                 </Fieldset>
               ) : user.country_code === "NG" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
