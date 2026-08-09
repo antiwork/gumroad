@@ -79,14 +79,10 @@ class Checkout::BuyerCurrencyQuote
     # 1520) and makes every non-USD-priced checkout fail quote verification. Covered by the
     # units-invariant example in the spec.
     #
-    # `listed_currency_rate` is the caller's `get_rate(product.price_currency_type)` read at
-    # the SAME instant it converted this line's price to canonical USD cents (whether via the
-    # browser's page-render rate or the surcharge endpoint's own lookup) — see
-    # gumroad-private#1958. Binding it here lets the charge path re-derive
-    # `rate_converted_to_usd` from the token instead of taking a fresh `get_rate` reading;
-    # `UpdateCurrenciesWorker` refreshes that cache hourly, so two independent reads separated
-    # by even a few minutes can disagree and fail `BuyerCurrencyQuote.verify!`'s exact-match
-    # check with `buyer_currency_quote_invalid`, even though the buyer's cart never changed.
+    # `listed_currency_rate` is the caller's rate reading for this product's listed currency,
+    # taken at the same moment it converted this line to canonical USD cents
+    # (gumroad-private#1958). Binding it here lets the charge path re-derive
+    # `rate_converted_to_usd` from the token instead of a second, possibly-drifted read.
     def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:,
                             charge_tax_result: nil, charge_tip_cents: nil, charge_shipping_usd_cents: nil,
                             later_charge_kind: nil, later_charge_price_cents: nil, charge_now: true,

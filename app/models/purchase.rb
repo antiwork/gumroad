@@ -2512,14 +2512,10 @@ class Purchase < ApplicationRecord
 
     self.displayed_price_cents = determine_customized_price_cents || calculate_price_range_cents || minimum_paid_price_cents
     self.displayed_price_currency_type = link.price_currency_type
-    # `locked_rate` is the exact rate the buyer-currency quote (Checkout::BuyerCurrencyQuote)
-    # bound at surcharge-calculation time for this listed currency, threaded through from the
-    # checkout submission when present (gumroad-private#1958). Reusing it here instead of a
-    # fresh `get_rate` call is what stops this purchase's canonical USD total from disagreeing
-    # with the total the quote token locked — `UpdateCurrenciesWorker` refreshes the cached
-    # rate hourly, and a refresh landing between the surcharge request and this purchase's
-    # creation was previously enough to fail `BuyerCurrencyQuote.verify!`'s exact-match check
-    # with `buyer_currency_quote_invalid`, even on an unchanged cart.
+    # Reusing the quote's bound rate here (rather than a fresh `get_rate`) keeps this
+    # purchase's total in agreement with what BuyerCurrencyQuote.verify! signed
+    # (gumroad-private#1958) — a cache refresh between quote and charge would otherwise
+    # disagree with the token by a few cents and fail closed as buyer_currency_quote_invalid.
     self.price_cents = locked_rate.present? ? get_usd_cents(displayed_price_currency_type, displayed_price_cents, rate: locked_rate) : displayed_price_usd_cents
     self.rate_converted_to_usd = locked_rate.present? ? locked_rate.to_s : get_rate(displayed_price_currency_type)
     self.total_transaction_cents = self.price_cents
