@@ -64,12 +64,11 @@ class CustomerSurchargeController < ApplicationController
         charge_now: charge_details[:charge_now],
         later_charge_kind: charge_details[:kind],
         later_charge_price_cents: charge_details[:later_price_cents],
-        # Read AT THE SAME MOMENT `calculate_surcharges` converted this line's price to
-        # canonical USD cents, so the quote token can bind the exact rate that produced
-        # today's total (gumroad-private#1958). `get_rate` is a cache read, not a fresh
-        # exchange-rate fetch, so this costs nothing beyond what the tax calculation above
-        # already paid for the same lookup.
-        listed_currency_rate: product.price_currency_type.to_s.downcase == Currency::USD ? nil : get_rate(product.price_currency_type)
+        # The rate `calculate_surcharges` used a moment earlier to convert this line's
+        # shipping to canonical USD cents — not a fresh `get_rate` call (gumroad-private#1958,
+        # Greptile review on #7149: a second independent read here can straddle a rate
+        # refresh and disagree with the first one even within a single request).
+        listed_currency_rate: surcharges[:rate]
       )
     end
 
@@ -174,7 +173,8 @@ class CustomerSurchargeController < ApplicationController
         item[:quantity],
         charge_base_price_cents + charge_tip_cents,
         subscription_id: item[:subscription_id],
-        recommended_by: item[:recommended_by]
+        recommended_by: item[:recommended_by],
+        rate: surcharges[:rate]
       )
       return if charge_surcharges.blank?
 
@@ -187,7 +187,7 @@ class CustomerSurchargeController < ApplicationController
       }
     end
 
-    def calculate_surcharges(product, quantity, price, subscription_id: nil, recommended_by: nil)
+    def calculate_surcharges(product, quantity, price, subscription_id: nil, recommended_by: nil, rate: :unset)
       if subscription_id.present?
         subscription = Subscription.find_by_external_id(subscription_id)
         return nil unless subscription&.original_purchase.present?
@@ -214,9 +214,18 @@ class CustomerSurchargeController < ApplicationController
       # Pass the product's listed currency so each rate term is converted the same way the
       # charge path does in Purchase#calculate_shipping. Calling this with the USD default and
       # converting the summed listed cents afterward is not equivalent under rounding.
+      #
+      # Captured once (unless the caller already has a reading from an earlier call in this
+      # same request — see the `rate:` param) so it can also be bound into a buyer-currency
+      # quote token (gumroad-private#1958, Greptile review on #7149): a second independent
+      # `get_rate` read for the same currency can straddle an `UpdateCurrenciesWorker` cache
+      # refresh and disagree with an earlier one even within a single request.
+      rate = get_rate(product.price_currency_type) if rate == :unset
+      rate = nil if product.price_currency_type.to_s.downcase == Currency::USD
       shipping_rate = shipping_destination&.calculate_shipping_rate(
         quantity:,
-        currency_type: product.price_currency_type
+        currency_type: product.price_currency_type,
+        rate:
       ) || 0
 
       sales_tax_result = SalesTaxCalculator.new(product:,
@@ -227,6 +236,6 @@ class CustomerSurchargeController < ApplicationController
                                                 buyer_vat_id:,
                                                 from_discover:).calculate
 
-      { sales_tax_result:, shipping_rate: }
+      { sales_tax_result:, shipping_rate:, rate: }
     end
 end

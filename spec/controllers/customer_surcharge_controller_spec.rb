@@ -181,6 +181,34 @@ describe CustomerSurchargeController, :vcr do
       )
     end
 
+    it "binds the SAME listed-currency rate the shipping conversion used, not a second independent read" do
+      # A physical non-USD-listed product's shipping conversion (inside calculate_surcharges,
+      # via ShippingDestination#calculate_shipping_rate -> get_usd_cents) and its quote-token
+      # binding used to be two INDEPENDENT `get_rate` calls in the same request. If
+      # `UpdateCurrenciesWorker` refreshed the cache between them, the shipping total baked
+      # into the canonical price and the rate signed into the token would disagree — the
+      # intra-request half of the drift `buyer_currency_quote_invalid` fires on
+      # (gumroad-private#1958, Greptile review on #7149).
+      eur_product = create(:physical_product, user: @user, price_currency_type: Currency::EUR, price_cents: 10_00)
+      eur_product.shipping_destinations.destroy_all
+      destination = create(:shipping_destination, country_code: Compliance::Countries::DEU.alpha2, one_item_rate_cents: 250, multiple_items_rate_cents: 200)
+      eur_product.shipping_destinations << destination
+
+      rates = ["0.9", "0.8"]
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR) { rates.shift || "0.8" }
+
+      post "calculate_all", params: {
+        products: [{ permalink: eur_product.unique_permalink, price: 10_00, quantity: 1 }],
+        postal_code: 10115, country: "DE",
+      }, as: :json
+
+      # Exactly one `get_rate(EUR)` call for this line: if the quote token's bound rate came
+      # from a second independent read, the second array element would also be consumed.
+      expect(rates).to eq(["0.8"])
+      quote_props = response.parsed_body["buyer_currency_quote"]
+      expect(quote_props).to be_present
+    end
+
     it "returns zero as the initial charge for a preorder agreement" do
       @product.update!(is_in_preorder_state: true)
 
