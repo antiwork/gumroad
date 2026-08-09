@@ -72,11 +72,22 @@ module Purchase::AudienceMember
   def add_to_audience_member_details
     return unless should_be_audience_member?
 
-    member = AudienceMember.find_or_initialize_by(email:, seller:)
+    retried ||= false
+    # `.lock` on retry forces InnoDB to take a fresh read of committed data instead of the
+    # transaction's original repeatable-read snapshot, which otherwise still can't see the
+    # winner's just-committed row and would raise the same RecordNotUnique again.
+    member = retried ? AudienceMember.lock.find_or_initialize_by(email:, seller:) : AudienceMember.find_or_initialize_by(email:, seller:)
     member.details["purchases"] ||= []
     member.details["purchases"].delete_if { _1["id"] == id }
     member.details["purchases"] << audience_member_details
     member.save!
+  rescue ActiveRecord::RecordNotUnique
+    # Two concurrent saves for the same buyer (e.g. a double-submitted checkout) can both
+    # find_or_initialize_by a fresh record and race to insert it. `retried ||=` (not `=`)
+    # because `retry` re-runs this whole method body, including the assignment above.
+    raise if retried
+    retried = true
+    retry
   end
 
   def remove_from_audience_member_details(email = attributes["email"])
