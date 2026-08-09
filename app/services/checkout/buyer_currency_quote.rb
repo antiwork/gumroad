@@ -281,16 +281,10 @@ class Checkout::BuyerCurrencyQuote
       raise(InvalidToken, "quote covers no charge for this seller")
   end
 
-  # A lightweight, non-authoritative read of the rate a submitted quote token bound for one
-  # product's listed currency (gumroad-private#1958). Used ONLY as a hint at purchase-build
-  # time, before the purchase's own totals exist to run the full `verify!` amount checks
-  # against — so this checks the signature (the token has not been tampered with) but does
-  # NOT check seller/merchant-account/total/expiry the way `verify!` does. The purchase built
-  # from this rate is still held to the real check later: if the token turns out to be stale,
-  # wrong-seller, or otherwise invalid, `Charge::CreateService#locked_buyer_currency_quote!`
-  # still fails the charge closed via `verify!` exactly as before. A bad hint here can only
-  # make `set_price_and_rate` recompute the SAME total the checkout already displayed to the
-  # buyer — it does not weaken the money check downstream.
+  # Signature-checked but non-authoritative (gumroad-private#1958): confirms the token wasn't
+  # tampered with, not seller/merchant-account/total/expiry — `verify!` still runs the full
+  # check later via `Charge::CreateService#locked_buyer_currency_quote!`, so a bad hint here
+  # can only make `set_price_and_rate` land on the same total already displayed to the buyer.
   def self.listed_currency_rate_hint(token:, seller_id:, permalink:)
     return if token.blank?
 
