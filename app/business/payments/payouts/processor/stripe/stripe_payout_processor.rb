@@ -22,12 +22,6 @@ class StripePayoutProcessor
   # immediately.
   CROSS_BORDER_PAYOUT_DELAY = 25.hours
 
-  # Public: Determines if it's possible for this processor to payout
-  # the user by checking that the user has provided us with the
-  # information we need to be able to payout with this processor.
-  #
-  # This payout processor can payout any user who has a Stripe managed account
-  # and has a bank account setup.
   def self.is_user_payable(user, amount_payable_usd_cents, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
