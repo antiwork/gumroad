@@ -2071,7 +2071,9 @@ describe("computeTipForListedLines", () => {
     const lines = [{ price: 4_990, permalink: "prod" }];
 
     expect(computeTipForListedLines(s, lines)).toBe(749);
-    expect(computeTipForListedLines(s, lines)).toBe(computeTipsForLines(s, lines).reduce(sumTips, 0));
+    expect(computeTipForListedLines(s, lines)).toBe(
+      computeTipsForLines(s, lines, { basis: "listed" }).reduce(sumTips, 0),
+    );
     // Converting the canonical figure back up instead lands two centavos low.
     expect(computeTip(s)).toBe(137);
   });
@@ -2192,9 +2194,64 @@ describe("computeTipsForLines", () => {
     expect(tips.reduce((sum: number, tip) => sum + (tip ?? 0), 0)).toBe(137);
   });
 
-  it("matches computeTipForPrice's per-line rounding for percentage tips", () => {
-    const s = state({ products: tippableProducts([999, 1_001]), tip: { type: "percentage", percentage: 10 } });
-    expect(computeTipsForLines(s, linesFor(s))).toEqual([100, 100]);
+  // Independent Math.round(pct * line) over [999, 1999, 2999] @ 20% yields 200+400+600 = 1200,
+  // while TipSelector / Subtotal / confirm show computeTip = Math.round(0.2 * 5997) = 1199.
+  // Allocation must make the charged line tips sum to that displayed cart tip.
+  it("never charges more percentage tip than computeTip shows (999/1999/2999 @ 20%)", () => {
+    const s = state({
+      products: tippableProducts([999, 1_999, 2_999]),
+      tip: { type: "percentage", percentage: 20 },
+    });
+    expect(computeTip(s)).toBe(1_199);
+    const tips = computeTipsForLines(s, linesFor(s));
+    expect(tips.reduce((sum: number, tip) => sum + (tip ?? 0), 0)).toBe(computeTip(s));
+    // Independent per-line rounding is the stale path this guards against.
+    expect([999, 1_999, 2_999].map((price) => Math.round(0.2 * price)).reduce((a, b) => a + b, 0)).toBe(1_200);
+  });
+
+  it("sums percentage line tips exactly to computeTip across uneven lines and rates", () => {
+    const cases: { prices: number[]; percentage: number }[] = [
+      { prices: [999, 1_001], percentage: 10 },
+      { prices: [1, 1, 1], percentage: 10 },
+      { prices: [199, 1_050, 333, 2_499, 61], percentage: 15 },
+      { prices: [333, 333, 334], percentage: 33 },
+      { prices: [50, 50], percentage: 1 },
+    ];
+    for (const { prices, percentage } of cases) {
+      const s = state({ products: tippableProducts(prices), tip: { type: "percentage", percentage } });
+      const tips = computeTipsForLines(s, linesFor(s));
+      expect(tips.reduce((sum: number, tip) => sum + (tip ?? 0), 0)).toBe(computeTip(s));
+    }
+  });
+
+  // The canonical lane's callers (Show.tsx order lines) pass prices in the product's OWN minor
+  // units, while state.products holds unrounded USD — a KRW ₩5,000 product reads 500_000 in the
+  // lines and ~521 in state. Percentage tips must be derived from the lines themselves; reading
+  // the cart total from state.products misprices every non-USD tip (tipping_spec.rb "computes
+  // the correct tip", KRW).
+  it("computes canonical-lane percentage tips in the caller's line units for non-USD products", () => {
+    const s = state({
+      products: tippableProducts([521]),
+      tip: { type: "percentage", percentage: 20 },
+    });
+    const lines = [{ price: 500_000, permalink: "product-0" }];
+    expect(computeTipsForLines(s, lines)).toEqual([100_000]);
+  });
+
+  it("keeps listed-basis percentage tips summing to round(pct * listedTotal)", () => {
+    const s = state({
+      products: tippableProducts([916, 916]),
+      tip: { type: "percentage", percentage: 20 },
+    });
+    const lines = [
+      { price: 4_990, permalink: "product-0" },
+      { price: 4_990, permalink: "product-1" },
+    ];
+    const listedTotal = 9_980;
+    const expectedTip = Math.round(0.2 * listedTotal);
+    const tips = computeTipsForLines(s, lines, { basis: "listed" });
+    expect(tips.reduce((sum: number, tip) => sum + (tip ?? 0), 0)).toBe(expectedTip);
+    expect(computeTipForListedLines(s, lines)).toBe(expectedTip);
   });
 
   // isTippingEnabled requires a positive cart total, so a free cart yields no tips here —
