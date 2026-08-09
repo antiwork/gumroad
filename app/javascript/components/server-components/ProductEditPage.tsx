@@ -19,6 +19,7 @@ import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import { RatingsWithPercentages } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
+import { dedupeInFlight } from "$app/utils/dedupeInFlight";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request } from "$app/utils/request";
@@ -44,6 +45,7 @@ import {
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { useRefToLatest } from "$app/components/useRefToLatest";
 
 const routes: RouteObject[] = [
   {
@@ -519,7 +521,12 @@ const ProductEditPage = (props: Props) => {
     setSaving(false);
     return saved;
   };
-  const save = async (): Promise<boolean> => {
+  // Concurrent save() calls (e.g. a burst of Preview clicks before `saving` re-renders the
+  // button disabled) share one request instead of each firing its own — otherwise two saves of a
+  // still-`newlyAdded` version each POST with id: null and each get back a fresh server id,
+  // duplicating the version (gumroad-private#1962). `runSaveRef` holds the latest closure so the
+  // deduped wrapper (created once) never saves against a stale `product`/`performSave`.
+  const runSaveRef = useRefToLatest((): Promise<boolean> => {
     // A save that deletes existing versions/tiers or content pages gets one
     // final summary confirmation before the request goes out. Each deletion
     // already had its own modal when the seller clicked delete, but this is
@@ -533,7 +540,8 @@ const ProductEditPage = (props: Props) => {
       });
     }
     return performSave();
-  };
+  });
+  const save = React.useRef(dedupeInFlight(() => runSaveRef.current())).current;
   const confirmDeletionsAndSave = async () => {
     setPendingDeletions(null);
     const saved = await performSave();
