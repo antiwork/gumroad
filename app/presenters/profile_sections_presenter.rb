@@ -177,10 +177,16 @@ class ProfileSectionsPresenter
         end
       when "SellerProfileFeaturedProductSection"
         unless editing
+          featured_product_id = cached_props.delete(:featured_product_id)
+          # Link#delete! clears this reference going forward (gumroad#5248), but that
+          # only runs for products deleted after that fix shipped — records orphaned
+          # before then (or by any other path that hard-deletes/never calls delete!)
+          # have no backfill and would otherwise 500 the whole profile page forever.
+          featured_product = featured_product_id.present? ? seller.products.alive.find_by_external_id(featured_product_id) : nil
           cached_props.merge!(
             {
-              props: cached_props[:featured_product_id].present? ?
-                       ProductPresenter.new(product: seller.products.find_by_external_id(cached_props.delete(:featured_product_id)), pundit_user:, request:).product_props(seller_custom_domain_url:) :
+              props: featured_product.present? ?
+                       ProductPresenter.new(product: featured_product, pundit_user:, request:).product_props(seller_custom_domain_url:) :
                        nil,
             }
           )
