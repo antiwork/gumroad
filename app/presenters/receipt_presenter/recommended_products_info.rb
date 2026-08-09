@@ -4,9 +4,10 @@ class ReceiptPresenter::RecommendedProductsInfo
   # It should match the value from ApplicationController#set_recommender_model_name
   MODEL = RecommendedProductsService::MODELS.sample
 
-  def initialize(chargeable)
+  def initialize(chargeable, recommendations: true)
     @chargeable = chargeable
     @purchaser = chargeable.purchaser
+    @recommendations = recommendations
   end
 
   def title
@@ -14,18 +15,16 @@ class ReceiptPresenter::RecommendedProductsInfo
   end
 
   def products
-    @_products ||= begin
-      return [] if purchaser.blank?
+    return [] unless recommendations
 
-      recommended_product_infos.map do |product_info|
-        ProductPresenter.card_for_web(
-          product: product_info.product,
-          recommended_by: product_info.recommended_by,
-          target: product_info.target,
-          recommender_model_name: product_info.recommender_model_name,
-          affiliate_id: product_info.affiliate_id,
-          )
-      end
+    @_products ||= recommended_product_infos.map do |product_info|
+      ProductPresenter.card_for_web(
+        product: product_info.product,
+        recommended_by: product_info.recommended_by,
+        target: product_info.target,
+        recommender_model_name: product_info.recommender_model_name,
+        affiliate_id: product_info.affiliate_id,
+        )
     end
   end
 
@@ -34,9 +33,9 @@ class ReceiptPresenter::RecommendedProductsInfo
   end
 
   private
-    RECOMMENDED_PRODUCTS_LIMIT = 2
+    RECOMMENDED_PRODUCTS_LIMIT = 4
 
-    attr_reader :chargeable, :purchaser
+    attr_reader :chargeable, :purchaser, :recommendations
 
     def receipt_product_ids
       @_receipt_product_ids ||= (bundle_purchases + chargeable.unbundled_purchases).map(&:link_id).uniq
