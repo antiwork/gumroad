@@ -521,11 +521,11 @@ const ProductEditPage = (props: Props) => {
     setSaving(false);
     return saved;
   };
-  // Concurrent save() calls (e.g. a burst of Preview clicks before `saving` re-renders the
-  // button disabled) share one request instead of each firing its own — otherwise two saves of a
-  // still-`newlyAdded` version each POST with id: null and each get back a fresh server id,
-  // duplicating the version (gumroad-private#1962). `runSaveRef` holds the latest closure so the
-  // deduped wrapper (created once) never saves against a stale `product`/`performSave`.
+  // A burst of clicks before `saving` re-renders the button disabled can fire several concurrent
+  // save() calls; for a still-`newlyAdded` version each one POSTs with id: null and gets back its
+  // own server id, duplicating the version. `save` below dedupes them into one shared request.
+  // `runSaveRef` holds the latest closure so the wrapper (created once) never saves against a
+  // stale `product`/`performSave`.
   const runSaveRef = useRefToLatest((): Promise<boolean> => {
     // A save that deletes existing versions/tiers or content pages gets one
     // final summary confirmation before the request goes out. Each deletion
