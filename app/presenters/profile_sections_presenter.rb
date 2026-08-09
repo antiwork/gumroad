@@ -178,10 +178,8 @@ class ProfileSectionsPresenter
       when "SellerProfileFeaturedProductSection"
         unless editing
           featured_product_id = cached_props.delete(:featured_product_id)
-          # Link#delete! clears this reference going forward (gumroad#5248), but that
-          # only runs for products deleted after that fix shipped — records orphaned
-          # before then (or by any other path that hard-deletes/never calls delete!)
-          # have no backfill and would otherwise 500 the whole profile page forever.
+          # Scope to alive products: an orphaned reference (deleted/soft-deleted/banned
+          # product) is treated as "no featured product" instead of crashing on nil.
           featured_product = featured_product_id.present? ? seller.products.alive.find_by_external_id(featured_product_id) : nil
           cached_props.merge!(
             {
