@@ -3,13 +3,12 @@
 require "spec_helper"
 
 describe FaviconsController do
-  render_views false
-
   describe "GET show" do
     context "on a seller's subdomain" do
       it "redirects to the seller's own avatar" do
         user = create(:named_user)
-        get :show, params: {}, env: { "HTTP_HOST" => "#{user.username}.gumroad.com" }
+        @request.host = Subdomain.from_username(user.username)
+        get :show
         expect(response).to redirect_to(user.avatar_url)
       end
     end
@@ -18,14 +17,16 @@ describe FaviconsController do
       it "redirects to the seller's own avatar" do
         user = create(:named_user)
         create(:custom_domain, user:, domain: "www.example-seller.com")
-        get :show, params: {}, env: { "HTTP_HOST" => "www.example-seller.com" }
+        @request.host = "www.example-seller.com"
+        get :show
         expect(response).to redirect_to(user.avatar_url)
       end
     end
 
-    context "on the canonical gumroad.com host" do
+    context "on the canonical gumroad host" do
       it "serves the generic static icon rather than redirecting" do
-        get :show, params: {}, env: { "HTTP_HOST" => "gumroad.com" }
+        @request.host = URI("#{PROTOCOL}://#{DOMAIN}").host
+        get :show
         expect(response).to have_http_status(:ok)
         expect(response.content_type).to eq("image/x-icon")
       end
@@ -33,7 +34,8 @@ describe FaviconsController do
 
     context "when no seller resolves for the host" do
       it "falls back to the generic static icon" do
-        get :show, params: {}, env: { "HTTP_HOST" => "no-such-seller.gumroad.com" }
+        @request.host = Subdomain.from_username("no-such-seller")
+        get :show
         expect(response).to have_http_status(:ok)
         expect(response.content_type).to eq("image/x-icon")
       end

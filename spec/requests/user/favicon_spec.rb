@@ -34,7 +34,7 @@ describe "User favicons", type: :system, js: true do
     end
 
     it "does display on the subscribe page (gp#1966)" do
-      visit custom_domain_subscribe_path(host: URI.parse(@user.subdomain_with_protocol).host)
+      visit custom_domain_subscribe_url(host: @user.subdomain_with_protocol)
       expect(page).to have_xpath("/html/head/link[@href='#{@user.avatar_url}']", visible: false)
     end
   end
