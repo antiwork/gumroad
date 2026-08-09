@@ -19,11 +19,15 @@
         </div>
       </div>
     <% end %>
-    <% if product[:ratings].present? && product[:ratings][:count].positive? %>
+    <% if product[:ratings].present? %>
       <div class="rating">
         ★
-        <span class="rating-average"><%= product[:ratings][:average] %></span>
-        <%= "(#{number_to_si(product[:ratings][:count])})" %>
+        <% if product[:ratings][:count].positive? %>
+          <span class="rating-average"><%= product[:ratings][:average] %></span>
+          <%= "(#{number_to_si(product[:ratings][:count])})" %>
+        <% else %>
+          No ratings
+        <% end %>
       </div>
     <% end %>
   </div>

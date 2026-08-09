@@ -23,42 +23,16 @@ describe ReceiptPresenter::RecommendedProductsInfo do
     end
 
     describe "#products" do
-      context "when the purchase doesn't have a purchaser (guest checkout)" do
-        context "when the feature is active" do
-          let(:recommendable_product) { create(:product, :recommendable, name: "Recommended product") }
-          let!(:affiliate) do
-            create(
-              :direct_affiliate,
-              seller: recommendable_product.user,
-              products: [recommendable_product], affiliate_user: create(:user)
-            )
-          end
-
-          before do
-            seller.update!(recommendation_type: User::RecommendationType::GUMROAD_AFFILIATES_PRODUCTS)
-          end
-
-          it "still recommends products, using the receipt's own products as the basis" do
-            expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_receipt).with(
-              purchaser: nil,
-              receipt_product_ids: [purchase.link.id],
-              recommender_model_name: "sales",
-              limit: 4,
-            ).and_call_original
-            expect(RecommendedProductsService).to receive(:fetch).with(
-              {
-                model: "sales",
-                ids: [purchase.link.id],
-                exclude_ids: [purchase.link.id],
-                number_of_results: RecommendedProducts::BaseService::NUMBER_OF_RESULTS,
-                user_ids: nil,
-              }
-            ).and_return(Link.where(id: [recommendable_product.id]))
-
-            expect(recommended_products_info.products.size).to eq(1)
-            expect(recommended_products_info.present?).to eq(true)
-          end
+      RSpec.shared_examples "doesn't return products" do
+        it "doesn't return products" do
+          expect(RecommendedProductsService).not_to receive(:for_checkout)
+          expect(recommended_products_info.products).to eq([])
+          expect(recommended_products_info.present?).to eq(false)
         end
+      end
+
+      context "when the purchase doesn't have a purchaser" do
+        it_behaves_like "doesn't return products"
       end
 
       context "when the purchase has a purchaser" do
@@ -86,7 +60,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
                 purchaser: purchase.purchaser,
                 receipt_product_ids: [purchase.link.id],
                 recommender_model_name: "sales",
-                limit: 4,
+                limit: ReceiptPresenter::RecommendedProductsInfo::RECOMMENDED_PRODUCTS_LIMIT,
               ).and_call_original
               expect(RecommendedProductsService).to receive(:fetch).with(
                 {
@@ -121,7 +95,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
                 purchaser: purchase.purchaser,
                 receipt_product_ids: [purchase.link_id] + purchase.link.bundle_products.map(&:product_id),
                 recommender_model_name: "sales",
-                limit: 4,
+                limit: ReceiptPresenter::RecommendedProductsInfo::RECOMMENDED_PRODUCTS_LIMIT,
               ).and_call_original
               expect(recommended_products_info.products).to eq([])
               expect(recommended_products_info.present?).to eq(false)
@@ -176,7 +150,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
             purchaser: purchase.purchaser,
             receipt_product_ids: [purchase.link_id, another_purchase.link_id],
             recommender_model_name: "sales",
-            limit: 4,
+            limit: ReceiptPresenter::RecommendedProductsInfo::RECOMMENDED_PRODUCTS_LIMIT,
           ).and_call_original
           expect(recommended_products_info.products).to eq([])
           expect(recommended_products_info.present?).to eq(false)
