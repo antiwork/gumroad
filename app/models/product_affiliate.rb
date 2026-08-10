@@ -12,7 +12,9 @@ class ProductAffiliate < ApplicationRecord
   belongs_to :affiliate
   belongs_to :product, class_name: "Link", foreign_key: :link_id
 
-  validates :affiliate, uniqueness: { scope: :product }
+  before_validation :lock_affiliate_for_assignment
+  before_destroy :lock_affiliate_for_assignment
+  validate :affiliate_is_unique_for_product
   validates :affiliate_basis_points, presence: true, if: -> { affiliate.is_a?(Collaborator) && !affiliate.apply_to_all_products? }
   validates :affiliate_basis_points, numericality: { greater_than_or_equal_to: Collaborator::MIN_PERCENT_COMMISSION * 100,
                                                      less_than_or_equal_to: Collaborator::MAX_PERCENT_COMMISSION * 100,
@@ -92,10 +94,24 @@ class ProductAffiliate < ApplicationRecord
       self.workflow_schedule_token = self.class.workflow_schedule_token
     end
 
+    def lock_affiliate_for_assignment
+      return if affiliate_id.nil? || link_id.nil?
+
+      Affiliate.where(id: affiliate_id).lock.load
+    end
+
+    def affiliate_is_unique_for_product
+      return if affiliate_id.nil? || link_id.nil?
+
+      matching_assignments = ProductAffiliate.where(affiliate_id:, link_id:)
+      matching_assignments = matching_assignments.where.not(id:) if persisted?
+      errors.add(:affiliate, :taken) if matching_assignments.lock.exists?
+    end
+
     def enable_product_collaborator_flag_and_disable_affiliates
       product.update!(is_collab: true)
       product.self_service_affiliate_products.map { _1.update!(enabled: false) }
-      product.product_affiliates.where.not(id:).joins(:affiliate).merge(Affiliate.direct_affiliates).map { _1.destroy! }
+      product.product_affiliates.where.not(id:).joins(:affiliate).merge(Affiliate.direct_affiliates).order(:affiliate_id, :id).map { _1.destroy! }
     end
 
     def disable_product_collaborator_flag

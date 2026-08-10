@@ -175,7 +175,8 @@ class SendWorkflowInstallmentWorker
         Follower.active.where(id: follower_id, followed_id: installment.seller_id).pick(:confirmed_at)
       elsif affiliate_user_id.present?
         email = User.where(id: affiliate_user_id).pick(:email)
-        audience = current_audience_member_and_match(installment:, email:)
+        filters = installment.audience_members_filter_params
+        audience = current_audience_member_and_match(installment:, email:, filters: filters.except(:created_after, :created_before))
         if audience
           member, current_match = audience
           affiliate_reference_times(installment:, member:, current_match:, affiliate_user_id:).max
@@ -216,7 +217,7 @@ class SendWorkflowInstallmentWorker
       end
       if subscription_id.present?
         subscription = Subscription.find_by(id: subscription_id)
-        return false if subscription.nil? || subscription.alive?
+        return false if subscription.nil? || !subscription.cancelled?
 
         purchase = subscription.original_purchase
         return false if purchase.nil? || subscription.deactivated_at.nil?
@@ -232,7 +233,11 @@ class SendWorkflowInstallmentWorker
         return false if SentPostEmail.exists?(post: installment, email: follower.email)
 
         filters = installment.audience_members_filter_params
-        audience = current_audience_member_and_match(installment:, email: follower.email, filters:)
+        audience = current_audience_member_and_match(
+          installment:,
+          email: follower.email,
+          filters: filters.except(:created_after, :created_before)
+        )
         return false if audience.nil?
 
         member, current_match = audience
@@ -247,7 +252,8 @@ class SendWorkflowInstallmentWorker
         email = User.where(id: affiliate_user_id).pick(:email)
         return false if email.nil? || SentPostEmail.exists?(post: installment, email:)
 
-        audience = current_audience_member_and_match(installment:, email:)
+        filters = installment.audience_members_filter_params
+        audience = current_audience_member_and_match(installment:, email:, filters: filters.except(:created_after, :created_before))
         return false if audience.nil?
 
         member, current_match = audience
