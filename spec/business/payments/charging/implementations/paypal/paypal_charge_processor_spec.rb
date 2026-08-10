@@ -2569,12 +2569,12 @@ describe PaypalChargeProcessor, :vcr do
   end
 
   describe ".update_order_from_product_info" do
-    it "updates the paypal order with the given product info and returns true" do
+    it "updates the paypal order when the requested total is not lower than the current total" do
       creator = create(:user)
       product = create(:product, user: creator)
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
                                                                  user: creator, country: "US", currency: "usd")
-
+      paypal_order_id = "27B71908FM8616631"
       purchase_unit_info = {
         external_id: product.external_id,
         currency_code: paypal_merchant_account.currency,
@@ -2586,22 +2586,26 @@ describe PaypalChargeProcessor, :vcr do
         quantity: 2,
       }
 
-      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(purchase_unit_info)
-      expect(paypal_order_id).to be_present
+      allow(PaypalChargeProcessor).to receive(:fetch_order).with(order_id: paypal_order_id).and_return(
+        "purchase_units" => [{ "amount" => { "value" => "13.50", "currency_code" => "USD" } }]
+      )
 
-      order_details = PaypalChargeProcessor.fetch_order(order_id: paypal_order_id)
-      purchase_unit = order_details["purchase_units"][0]
-      expect(purchase_unit["amount"]["value"]).to eq("13.50")
-      expect(purchase_unit["amount"]["breakdown"]["item_total"]["value"]).to eq("10.00")
-      expect(purchase_unit["amount"]["breakdown"]["shipping"]["value"]).to eq("1.50")
-      expect(purchase_unit["amount"]["breakdown"]["tax_total"]["value"]).to eq("2.00")
-      expect(purchase_unit["payee"]["merchant_id"]).to eq("MN7CSWD6RCNJ8")
-      expect(purchase_unit["items"][0]["quantity"]).to eq("2")
-      expect(purchase_unit["items"][0]["unit_amount"]["value"]).to eq("5.00")
-      expect(purchase_unit["payment_instruction"]["platform_fees"].size).to eq(1)
-      expect(purchase_unit["payment_instruction"]["platform_fees"][0]["amount"]["value"]).to eq("0.70")
+      expect(PaypalChargeProcessor).to receive(:update_order).with(
+        paypal_order_id,
+        hash_including(currency: "usd", total: BigDecimal("13.50"))
+      ).and_return(true)
 
-      updated_purchase_unit_info = {
+      success = PaypalChargeProcessor.update_order_from_product_info(paypal_order_id, purchase_unit_info)
+      expect(success).to be(true)
+    end
+
+    it "rejects updates that would lower the PayPal order total" do
+      creator = create(:user)
+      product = create(:product, user: creator)
+      paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                                                 user: creator, country: "US", currency: "usd")
+      original_order_id = "27B71908FM8616631"
+      lowered_purchase_unit_info = {
         external_id: product.external_id,
         currency_code: paypal_merchant_account.currency,
         price_cents: 5_00,
@@ -2612,21 +2616,70 @@ describe PaypalChargeProcessor, :vcr do
         quantity: 2,
       }
 
-      expect(PaypalChargeProcessor).to receive(:update_order).and_call_original
-      success = PaypalChargeProcessor.update_order_from_product_info(paypal_order_id, updated_purchase_unit_info)
-      expect(success).to be (true)
+      allow(PaypalChargeProcessor).to receive(:fetch_order).with(order_id: original_order_id).and_return(
+        "purchase_units" => [{ "amount" => { "value" => "13.50", "currency_code" => "USD" } }]
+      )
 
-      order_details = PaypalChargeProcessor.fetch_order(order_id: paypal_order_id)
-      purchase_unit = order_details["purchase_units"][0]
-      expect(purchase_unit["amount"]["value"]).to eq("6.75")
-      expect(purchase_unit["amount"]["breakdown"]["item_total"]["value"]).to eq("5.00")
-      expect(purchase_unit["amount"]["breakdown"]["shipping"]["value"]).to eq("0.75")
-      expect(purchase_unit["amount"]["breakdown"]["tax_total"]["value"]).to eq("1.00")
-      expect(purchase_unit["payee"]["email_address"]).to eq("sb-c7jpx2385730@business.example.com")
-      expect(purchase_unit["items"][0]["quantity"]).to eq("2")
-      expect(purchase_unit["items"][0]["unit_amount"]["value"]).to eq("2.50")
-      expect(purchase_unit["payment_instruction"]["platform_fees"].size).to eq(1)
-      expect(purchase_unit["payment_instruction"]["platform_fees"][0]["amount"]["value"]).to eq("0.35")
+      expect(PaypalChargeProcessor).not_to receive(:update_order)
+      expect do
+        PaypalChargeProcessor.update_order_from_product_info(original_order_id, lowered_purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /cannot lower/)
+    end
+
+    it "rejects updates when PayPal's current order total is not numeric" do
+      creator = create(:user)
+      product = create(:product, user: creator)
+      paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                                                 user: creator, country: "US", currency: "usd")
+      order_id = "27B71908FM8616631"
+      purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: paypal_merchant_account.currency,
+        price_cents: 10_00,
+        shipping_cents: 1_50,
+        tax_cents: 2_00,
+        exclusive_tax_cents: 2_00,
+        total_cents: 13_50,
+        quantity: 2,
+      }
+
+      allow(PaypalChargeProcessor).to receive(:fetch_order).with(order_id: order_id).and_return(
+        "purchase_units" => [{ "amount" => { "value" => "not-a-number", "currency_code" => "USD" } }]
+      )
+
+      expect(PaypalChargeProcessor).not_to receive(:update_order)
+      expect do
+        PaypalChargeProcessor.update_order_from_product_info(order_id, purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /not numeric/)
+    end
+
+    it "rejects updates when PayPal's current order total is NaN" do
+      creator = create(:user)
+      product = create(:product, user: creator)
+      paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                                                 user: creator, country: "US", currency: "usd")
+      order_id = "27B71908FM8616631"
+      lowered_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: paypal_merchant_account.currency,
+        price_cents: 5_00,
+        shipping_cents: 75,
+        tax_cents: 1_00,
+        exclusive_tax_cents: 1_00,
+        total_cents: 6_75,
+        quantity: 2,
+      }
+
+      # BigDecimal("NaN") parses without raising, so this must be caught by the
+      # explicit finite? check, not by the numeric-parse rescue above it.
+      allow(PaypalChargeProcessor).to receive(:fetch_order).with(order_id: order_id).and_return(
+        "purchase_units" => [{ "amount" => { "value" => "NaN", "currency_code" => "USD" } }]
+      )
+
+      expect(PaypalChargeProcessor).not_to receive(:update_order)
+      expect do
+        PaypalChargeProcessor.update_order_from_product_info(order_id, lowered_purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /not numeric/)
     end
 
     it "raises error if paypal order id is not present" do
