@@ -19,7 +19,9 @@ class DominicanRepublicBankAccount < BankAccount
   # Only on write: branch_code was optional before this fix, so an existing row saved without one
   # would otherwise fail validation on any unrelated future save (e.g. switching payout method).
   validate :validate_branch_code, if: -> { new_record? || will_save_change_to_branch_code? }
-  validate :validate_routing_number, if: -> { new_record? || will_save_change_to_branch_code? }
+  # routing_number combines bank_code and branch_code, so a bank-code-only edit (bank_code is
+  # aliased to bank_number) must re-check it too, not just branch_code changes.
+  validate :validate_routing_number, if: -> { new_record? || will_save_change_to_branch_code? || will_save_change_to_bank_number? }
   validate :validate_account_number
 
   validates :bank_code, presence: true

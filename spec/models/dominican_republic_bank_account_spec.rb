@@ -72,6 +72,14 @@ describe DominicanRepublicBankAccount do
       long = build(:dominican_republic_bank_account, bank_code: "123", branch_code: "12345", account_number: "1")
       expect(long).to be_valid
     end
+
+    it "re-checks the combined length when only bank_code changes on an existing account" do
+      account = create(:dominican_republic_bank_account, bank_code: "999", branch_code: "94232")
+      account.bank_code = "1"
+
+      expect(account).not_to be_valid
+      expect(account.errors[:base]).to include("The bank code and branch code together must be 8 digits.")
+    end
   end
 
   describe "#validate_account_number" do
