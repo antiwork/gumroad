@@ -133,17 +133,9 @@ class StripePayoutProcessor
     balances_held_by_gumroad = balances_by_holder_of_funds[HolderOfFunds::GUMROAD] || []
     balances_held_by_stripe = balances_by_holder_of_funds[HolderOfFunds::STRIPE] || []
 
-    # If user has a Stripe standard account connected and there are no balances_held_by_stripe, we issue payout to the
-    # connected Stripe standard account.
-    #
-    # If there is no Stripe Connect account or if there is balances_held_by_stripe,
-    # that means the custom Stripe connect account (which is managed by gumroad) is still in use and there's some amount
-    # in the custom Stripe connect account that needs to be paid out.
-    # We issue payout via the custom Stripe connect account in that case.
-    #
-    # Once a standard Stripe account is connected, balances_held_by_stripe will eventually come down to zero as
-    # new sales will go directly to the connected Stripe account and no new balance will be generated
-    # against the custom Stripe connect account.
+    # Prefer the connected Stripe standard account once there's nothing left on the custom
+    # connect account; balances_held_by_stripe drains to zero over time as new sales route
+    # directly to the standard account.
     merchant_account = if user.has_stripe_account_connected? && balances_held_by_stripe.blank?
       user.stripe_connect_account
     else
