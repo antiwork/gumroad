@@ -48,6 +48,11 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
     release_dispatch(token:, dispatch_token:) if job_id.blank?
     job_id
   rescue => e
+    begin
+      release_dispatch(token:, dispatch_token:) if claimed.to_i.positive?
+    rescue => release_error
+      Rails.logger.error("[#{name}] could not release token=#{token}: #{release_error.class}: #{release_error.message}")
+    end
     Rails.logger.error("[#{name}] could not enqueue token=#{token}: #{e.class}: #{e.message}")
     nil
   end
