@@ -69,6 +69,67 @@ describe ProductAffiliate do
   end
 
   describe "lifecycle hooks" do
+    describe "workflow scheduling" do
+      let(:affiliate) { create(:direct_affiliate) }
+      let(:product) { create(:product, user: affiliate.seller) }
+
+      it "enqueues one scheduler for assignments created in one transaction" do
+        second_product = create(:product, user: affiliate.seller)
+        product_affiliates = []
+
+        expect do
+          ProductAffiliate.transaction do
+            product_affiliates << create(:product_affiliate, affiliate:, product:)
+            product_affiliates << create(:product_affiliate, affiliate:, product: second_product)
+          end
+        end.to change { ScheduleAffiliateWorkflowJobsJob.jobs.size }.by(1)
+
+        product_affiliates.each(&:reload)
+        workflow_schedule_token = product_affiliates.first.workflow_schedule_token
+        expect(product_affiliates.map(&:workflow_schedule_token).uniq).to eq([workflow_schedule_token])
+        expect(ScheduleAffiliateWorkflowJobsJob).to have_enqueued_sidekiq_job(workflow_schedule_token)
+      end
+
+      it "does not enqueue a rolled-back assignment group" do
+        expect do
+          ProductAffiliate.transaction(requires_new: true) do
+            create(:product_affiliate, affiliate:, product:)
+            raise ActiveRecord::Rollback
+          end
+        end.not_to change { ScheduleAffiliateWorkflowJobsJob.jobs.size }
+
+        expect(ProductAffiliate.exists?(affiliate_id: affiliate.id, link_id: product.id)).to be(false)
+      end
+
+      it "keeps the assignment pending when Sidekiq returns no job id" do
+        allow(ScheduleAffiliateWorkflowJobsJob).to receive(:perform_async).and_return(nil)
+        expect(Rails.logger).to receive(:error).with(/Sidekiq did not enqueue/)
+
+        product_affiliate = create(:product_affiliate, affiliate:, product:)
+
+        expect(product_affiliate.reload.workflow_schedule_token).to be_present
+      end
+
+      it "keeps the assignment pending when Sidekiq raises an error" do
+        allow(ScheduleAffiliateWorkflowJobsJob).to receive(:perform_async).and_raise("Redis is unavailable")
+        expect(Rails.logger).to receive(:error).with(/Redis is unavailable/)
+
+        product_affiliate = create(:product_affiliate, affiliate:, product:)
+
+        expect(product_affiliate.reload.workflow_schedule_token).to be_present
+      end
+
+      it "does not enqueue assignments for other affiliate types" do
+        global_affiliate = create(:user).global_affiliate
+        collaborator = create(:collaborator, seller: product.user)
+
+        expect do
+          create(:product_affiliate, affiliate: global_affiliate, product:)
+          create(:product_affiliate, affiliate: collaborator, product:)
+        end.not_to change { ScheduleAffiliateWorkflowJobsJob.jobs.size }
+      end
+    end
+
     describe "toggling product is_collab flag" do
       context "for a collaborator" do
         let!(:affiliate) { create(:collaborator) }

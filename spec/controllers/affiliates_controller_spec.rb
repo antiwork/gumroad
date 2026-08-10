@@ -93,11 +93,16 @@ describe AffiliatesController, type: :controller, inertia: true do
       end
 
       it "creates an affiliate and redirects" do
-        post :create, params: { affiliate: { email: affiliate_user.email, fee_percent: 10, apply_to_all_products: true, products: [{ id: product.external_id_numeric, enabled: true }] } }
+        expect do
+          post :create, params: { affiliate: { email: affiliate_user.email, fee_percent: 10, apply_to_all_products: true, products: [{ id: product.external_id_numeric, enabled: true }] } }
+        end.to change { ScheduleAffiliateWorkflowJobsJob.jobs.size }.by(1)
 
         expect(response).to redirect_to(affiliates_path)
         expect(flash[:notice]).to eq("Affiliate created successfully")
         expect(seller.direct_affiliates.count).to eq(1)
+        affiliate = seller.direct_affiliates.sole
+        product_affiliate = affiliate.product_affiliates.sole
+        expect(ScheduleAffiliateWorkflowJobsJob).to have_enqueued_sidekiq_job(product_affiliate.workflow_schedule_token)
       end
 
       it "redirects back with errors on invalid params" do
@@ -136,6 +141,40 @@ describe AffiliatesController, type: :controller, inertia: true do
 
         expect(response).to redirect_to(affiliates_path)
         expect(flash[:notice]).to eq("Affiliate updated successfully")
+      end
+
+      it "enqueues a new product assignment for an existing affiliate" do
+        expect do
+          patch :update, params: {
+            id: affiliate.external_id,
+            affiliate: {
+              email: affiliate_user.email,
+              fee_percent: 15,
+              apply_to_all_products: true,
+              products: [{ id: product.external_id_numeric, enabled: true }]
+            }
+          }
+        end.to change { ScheduleAffiliateWorkflowJobsJob.jobs.size }.by(1)
+
+        product_affiliate = affiliate.product_affiliates.find_by!(link_id: product.id)
+        expect(ScheduleAffiliateWorkflowJobsJob).to have_enqueued_sidekiq_job(product_affiliate.workflow_schedule_token)
+      end
+
+      it "does not enqueue an existing product assignment" do
+        create(:product_affiliate, affiliate:, product:)
+        ScheduleAffiliateWorkflowJobsJob.jobs.clear
+
+        expect do
+          patch :update, params: {
+            id: affiliate.external_id,
+            affiliate: {
+              email: affiliate_user.email,
+              fee_percent: 15,
+              apply_to_all_products: true,
+              products: [{ id: product.external_id_numeric, enabled: true }]
+            }
+          }
+        end.not_to change { ScheduleAffiliateWorkflowJobsJob.jobs.size }
       end
 
       it "updates per-product commissions when apply_to_all_products is false" do

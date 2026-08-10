@@ -316,6 +316,101 @@ describe SendWorkflowInstallmentWorker do
     end
   end
 
+  describe "affiliate_installment" do
+    before do
+      @seller = create(:user)
+      @product = create(:product, user: @seller, price_cents: 0)
+      @affiliate = create(:direct_affiliate, seller: @seller, send_posts: true, created_at: 1.day.ago)
+      @reference_time = 1.hour.ago.change(usec: 0)
+      @product_affiliate = create(
+        :product_affiliate,
+        affiliate: @affiliate,
+        product: @product,
+        created_at: @reference_time
+      )
+      @workflow = create(
+        :workflow,
+        seller: @seller,
+        link: nil,
+        workflow_type: Workflow::AFFILIATE_TYPE,
+        published_at: 2.days.ago
+      )
+      @installment = create(
+        :installment,
+        seller: @seller,
+        workflow: @workflow,
+        installment_type: Installment::AFFILIATE_TYPE,
+        affiliate_products: [@product.unique_permalink],
+        published_at: @workflow.published_at
+      )
+      @installment_rule = create(:installment_rule, installment: @installment, delayed_delivery_time: 1.day)
+    end
+
+    it "sends for the current product assignment" do
+      expect_any_instance_of(Installment).to receive(:send_installment_from_workflow_for_affiliate_user).with(@affiliate.affiliate_user_id)
+
+      perform_affiliate_job
+    end
+
+    it "does not send after the product assignment is removed" do
+      @product_affiliate.destroy!
+      expect_any_instance_of(Installment).not_to receive(:send_installment_from_workflow_for_affiliate_user)
+
+      perform_affiliate_job
+    end
+
+    it "sends when an equivalent product assignment remains" do
+      other_product = create(:product, user: @seller)
+      create(:product_affiliate, affiliate: @affiliate, product: other_product, created_at: @reference_time)
+      @installment.update!(affiliate_products: [])
+      @product_affiliate.destroy!
+      expect_any_instance_of(Installment).to receive(:send_installment_from_workflow_for_affiliate_user).with(@affiliate.affiliate_user_id)
+
+      perform_affiliate_job
+    end
+
+    it "does not send after the affiliate is deleted" do
+      @affiliate.mark_deleted!
+      expect_any_instance_of(Installment).not_to receive(:send_installment_from_workflow_for_affiliate_user)
+
+      perform_affiliate_job
+    end
+
+    it "does not send after the affiliate opts out" do
+      @affiliate.update_posts_subscription(send_posts: false)
+      expect_any_instance_of(Installment).not_to receive(:send_installment_from_workflow_for_affiliate_user)
+
+      perform_affiliate_job
+    end
+
+    it "does not send after the assignment time changes" do
+      @product_affiliate.update_columns(created_at: 30.minutes.ago)
+      expect_any_instance_of(Installment).not_to receive(:send_installment_from_workflow_for_affiliate_user)
+
+      perform_affiliate_job
+    end
+
+    it "does not send outside the workflow product scope" do
+      other_product = create(:product, user: @seller)
+      @installment.update!(affiliate_products: [other_product.unique_permalink])
+      expect_any_instance_of(Installment).not_to receive(:send_installment_from_workflow_for_affiliate_user)
+
+      perform_affiliate_job
+    end
+
+    def perform_affiliate_job
+      described_class.new.perform(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        nil,
+        @affiliate.affiliate_user_id,
+        nil,
+        @reference_time.iso8601
+      )
+    end
+  end
+
   describe "member_cancellation_installment" do
     before do
       @creator = create(:user)

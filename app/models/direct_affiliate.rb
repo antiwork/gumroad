@@ -10,7 +10,12 @@ class DirectAffiliate < Affiliate
   attr_accessor :prevent_sending_invitation_email, :prevent_sending_invitation_email_to_seller
 
   belongs_to :seller, class_name: "User"
-  has_and_belongs_to_many :products, class_name: "Link", join_table: "affiliates_links", foreign_key: "affiliate_id", after_add: :update_audience_member_with_added_product, after_remove: :update_audience_member_with_removed_product
+  has_and_belongs_to_many :products,
+                          class_name: "Link",
+                          join_table: "affiliates_links",
+                          foreign_key: "affiliate_id",
+                          after_add: [:update_audience_member_with_added_product, :enqueue_workflow_jobs_for_added_product],
+                          after_remove: :update_audience_member_with_removed_product
 
   validates :affiliate_basis_points, presence: true
   validate :destination_url_or_username_required
@@ -93,15 +98,35 @@ class DirectAffiliate < Affiliate
       .sum(:price_cents)
   end
 
-  def schedule_workflow_jobs
+  def schedule_workflow_jobs(triggering_product_affiliates: product_affiliates)
     workflows = seller.workflows.alive.affiliate_or_audience_type
+    triggering_product_affiliate_ids = triggering_product_affiliates.filter_map(&:id).to_set
+    product_affiliates = ProductAffiliate.where(affiliate_id: id).includes(:product).to_a
     workflows.each do |workflow|
       next unless workflow.new_customer_trigger?
       workflow.installments.alive.each do |installment|
+        next unless identity_matches_workflow_dates?(installment)
+
         installment_rule = installment.installment_rule
         next if installment_rule.nil?
-        SendWorkflowInstallmentWorker.perform_in(installment_rule.delayed_delivery_time,
-                                                 installment.id, installment_rule.version, nil, nil, affiliate_user.id)
+        workflow_triggers(
+          installment:,
+          product_affiliates:,
+          triggering_product_affiliate_ids:
+        ).each do |product_affiliate|
+          reference_time = product_affiliate.created_at.change(usec: 0)
+          job_id = SendWorkflowInstallmentWorker.perform_at(
+            reference_time + installment_rule.delayed_delivery_time,
+            installment.id,
+            installment_rule.version,
+            nil,
+            nil,
+            affiliate_user.id,
+            nil,
+            reference_time.iso8601
+          )
+          raise ProductAffiliate::WorkflowJobNotEnqueuedError, "Sidekiq did not enqueue the affiliate workflow email" if job_id.blank?
+        end
       end
     end
   end
@@ -128,6 +153,38 @@ class DirectAffiliate < Affiliate
   end
 
   private
+    def enqueue_workflow_jobs_for_added_product(product)
+      return unless persisted?
+
+      product_affiliate = ProductAffiliate.find_by!(affiliate_id: id, link_id: product.id)
+      product_affiliate.update_columns(workflow_schedule_token: ProductAffiliate.workflow_schedule_token)
+      product_affiliate.enqueue_workflow_jobs
+    end
+
+    def workflow_triggers(installment:, product_affiliates:, triggering_product_affiliate_ids:)
+      if installment.affiliate_products.present?
+        product_permalinks = installment.affiliate_products.to_set
+        product_affiliates = product_affiliates.select { product_permalinks.include?(_1.product.unique_permalink) }
+      end
+      product_affiliates
+        .group_by { _1.created_at&.change(usec: 0) }
+        .except(nil)
+        .filter_map do |_reference_time, equivalent_assignments|
+          trigger = equivalent_assignments.min_by(&:id)
+          trigger if triggering_product_affiliate_ids.include?(trigger.id)
+        end
+    end
+
+    def identity_matches_workflow_dates?(installment)
+      filters = installment.audience_members_filter_params
+      created_after = Time.zone.parse(filters[:created_after].to_s) if filters[:created_after]
+      created_before = Time.zone.parse(filters[:created_before].to_s) if filters[:created_before]
+      return false if created_after && created_at <= created_after
+      return false if created_before && created_at >= created_before
+
+      true
+    end
+
     def destination_url_or_username_required
       return if destination_url.present? || seller&.username.present?
 
