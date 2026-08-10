@@ -27,6 +27,40 @@ describe Link do
       expect(product.reload).to be_published
       expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_nil
     end
+
+    it "accepts an assignment created by a concurrent writer" do
+      seller = create(:user)
+      affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
+      product = create(:product, user: seller, draft: true)
+      allow(ProductAffiliate).to receive(:create!).and_wrap_original do |method, **attributes|
+        method.call(**attributes)
+        method.call(**attributes)
+      end
+
+      expect do
+        product.publish!
+      end.not_to have_enqueued_mail(AffiliateMailer, :notify_direct_affiliate_of_new_product)
+
+      expect(ProductAffiliate.where(affiliate:, product:).count).to eq(1)
+    end
+
+    it "notifies an assigned affiliate before a later assignment fails" do
+      seller = create(:user)
+      create_list(:direct_affiliate, 2, seller:, apply_to_all_products: true)
+      product = create(:product, user: seller, draft: true)
+      assignment_count = 0
+      allow(ProductAffiliate).to receive(:create!).and_wrap_original do |method, **attributes|
+        assignment_count += 1
+        raise ActiveRecord::Deadlocked if assignment_count == 2
+
+        method.call(**attributes)
+      end
+      expect(AffiliateMailer).to receive(:notify_direct_affiliate_of_new_product)
+        .with(instance_of(Integer), product.id)
+        .and_call_original
+
+      expect { product.publish! }.to raise_error(ActiveRecord::Deadlocked)
+    end
   end
 
   describe "default offer code validation" do
