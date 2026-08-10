@@ -19,6 +19,7 @@ class CustomerSurchargeController < ApplicationController
     tax_included_rate = 0
     subtotal = 0
     quote_line_items = []
+    rates_by_listed_currency = {}
     # A buyer-currency quote needs a canonical money breakdown for every line the browser
     # will display; if any request line can't produce one (unknown product, missing
     # subscription), the quote is withheld and the cart falls back to canonical USD.
@@ -29,11 +30,20 @@ class CustomerSurchargeController < ApplicationController
         all_lines_quotable = false
         next
       end
-      surcharges = calculate_surcharges(product, item[:quantity], item[:price].to_d.to_i, subscription_id: item[:subscription_id], recommended_by: item[:recommended_by])
+      listed_currency = product.price_currency_type.to_s.downcase
+      surcharges = calculate_surcharges(
+        product,
+        item[:quantity],
+        item[:price].to_d.to_i,
+        subscription_id: item[:subscription_id],
+        recommended_by: item[:recommended_by],
+        rate: rates_by_listed_currency.fetch(listed_currency, :unset)
+      )
       unless surcharges
         all_lines_quotable = false
         next
       end
+      rates_by_listed_currency[listed_currency] = surcharges[:rate]
       tax_result = surcharges[:sales_tax_result]
       vat_id_valid = tax_result.business_vat_status == :valid
       has_vat_id_input ||= tax_result.to_hash[:has_vat_id_input]

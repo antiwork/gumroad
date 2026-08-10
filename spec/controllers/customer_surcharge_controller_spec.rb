@@ -209,6 +209,35 @@ describe CustomerSurchargeController, :vcr do
       expect(quote_props).to be_present
     end
 
+    it "reuses one listed-currency rate across repeated rows for the same product" do
+      eur_product = create(:physical_product, user: @user, price_currency_type: Currency::EUR, price_cents: 10_00)
+      eur_product.shipping_destinations.destroy_all
+      eur_product.shipping_destinations << create(
+        :shipping_destination,
+        country_code: Compliance::Countries::DEU.alpha2,
+        one_item_rate_cents: 250,
+        multiple_items_rate_cents: 200
+      )
+      rates = ["0.9", "0.8"]
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR) { rates.shift || "0.8" }
+
+      post "calculate_all", params: {
+        products: [
+          { permalink: eur_product.unique_permalink, price: 10_00, quantity: 1 },
+          { permalink: eur_product.unique_permalink, price: 10_00, quantity: 1 },
+        ],
+        postal_code: 10115,
+        country: Compliance::Countries::DEU.alpha2,
+      }, as: :json
+
+      expect(rates).to eq(["0.8"])
+      token = response.parsed_body.dig("buyer_currency_quote", "token")
+      payload = Rails.application.message_verifier(Checkout::BuyerCurrencyQuote::TOKEN_PURPOSE).verify(token)
+      charge_payload = payload.fetch("charges").sole
+      expect(charge_payload.fetch("listed_currency_rates")).to eq(eur_product.unique_permalink => "0.9")
+      expect(charge_payload.fetch("canonical_line_items").map(&:last).uniq).to contain_exactly(1278)
+    end
+
     it "returns zero as the initial charge for a preorder agreement" do
       @product.update!(is_in_preorder_state: true)
 
