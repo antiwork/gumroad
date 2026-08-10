@@ -432,6 +432,30 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     $redis.del("#{RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)}:#{fingerprint_for(row.id)}:0:72850")
   end
 
+  it "escalates distinctly when Redis persist fails after an ambiguous Stripe error, instead of leaving the claim on its 7-day TTL" do
+    row = residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+    transfer_key = "#{dedupe_key}:#{fingerprint_for(row.id)}:0:72850"
+
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_raise(Stripe::APIConnectionError.new("connection dropped"))
+    allow($redis).to receive(:persist).with(transfer_key).and_raise(Redis::BaseConnectionError.new("blip")).at_least(:once)
+    described_class.new.perform
+
+    expect($redis.get(transfer_key)).not_to be_nil # held, not released
+    expect($redis.ttl(transfer_key)).to be_within(2).of(604_800) # persist never landed — still on the original 7-day TTL, not confirmed persisted
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include("ESCALATE")
+      expect(message).to include("could not be confirmed in Redis")
+    end
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+    $redis.del("#{RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)}:#{fingerprint_for(row.id)}:0:72850")
+  end
+
   it "releases the dedupe claim on a validation-style Stripe error, so the candidate is retryable" do
     row = residue_row(-728_50)
     make_payable

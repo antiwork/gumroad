@@ -283,7 +283,15 @@ class AutoTopUpNegativeDestinationBalancesJob
       # exists to avoid — only a human clearing the key (once they've confirmed with Stripe
       # what actually happened) may retry. unresolved_key was already set before the Stripe call
       # (so an expired-lock race can't slip past it); nothing more to do here.
-      $redis.persist(transfer_key) if transfer_key
+      #
+      # Retry like the accepted-transfer path above: a bare persist that raises here used to
+      # leave transfer_key on its original 7-day TTL, so once that TTL (and Stripe's 24h
+      # idempotency window) lapsed, clearing unresolved_key alone would let a later run resend
+      # the same ambiguous transfer. unresolved_key stays set either way, but say so distinctly
+      # when persistence itself couldn't be confirmed.
+      if transfer_key && !persist_with_retries(transfer_key)
+        return { entry:, verdict: :escalate, reason: "Stripe's outcome for #{to_transfer_cents} cents to this account is ambiguous (#{e.class}: #{e.message}) and the durable hold on #{transfer_key} could not be confirmed in Redis — a human must verify with Stripe and clear #{unresolved_key} before this account tops up again" }
+      end
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     ensure
       $redis.eval(LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [lock_token]) if lock_token
