@@ -46,7 +46,7 @@ describe ElSalvadorBankAccount do
 
   describe "#validate_account_number" do
     it "accepts plain account numbers (1-20 digits)" do
-      expect(build(:el_salvador_bank_account, account_number: "1234567890")).to be_valid
+      expect(build(:el_salvador_bank_account, account_number: "1")).to be_valid
       expect(build(:el_salvador_bank_account, account_number: "12345678901234567890")).to be_valid
     end
 
