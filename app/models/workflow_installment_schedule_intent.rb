@@ -35,24 +35,45 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
   end
 
   def self.enqueue(token)
+    dispatch_token = claim_dispatch(token)
+    return if dispatch_token.nil?
+
+    job_id = ScheduleWorkflowInstallmentJob.perform_async(token, dispatch_token)
+    raise EnqueueError, "The scheduler job was not enqueued" if job_id.blank?
+
+    job_id
+  rescue => e
+    Rails.logger.error("[#{name}] could not enqueue token=#{token}: #{e.class}: #{e.message}")
+    begin
+      release_dispatch(token, dispatch_token) if dispatch_token.present?
+    rescue => release_error
+      Rails.logger.error("[#{name}] could not release token=#{token}: #{release_error.class}: #{release_error.message}")
+    end
+    nil
+  end
+
+  def self.claim_dispatch(token)
     now = Time.current
     transaction do
       intent = dispatchable(now).lock.find_by(token:)
       next if intent.nil?
 
       dispatch_token = SecureRandom.uuid
-      job_id = ScheduleWorkflowInstallmentJob.perform_async(token, dispatch_token)
-      raise EnqueueError, "The scheduler job was not enqueued" if job_id.blank?
-
       intent.update!(
         dispatch_token:,
         dispatch_expires_at: now + DISPATCH_LEASE
       )
-      job_id
+      dispatch_token
     end
-  rescue => e
-    Rails.logger.error("[#{name}] could not enqueue token=#{token}: #{e.class}: #{e.message}")
-    nil
+  end
+
+  def self.release_dispatch(token, dispatch_token)
+    now = Time.current
+    pending.where(token:, dispatch_token:).update_all(
+      dispatch_token: nil,
+      dispatch_expires_at: nil,
+      updated_at: now
+    )
   end
 
   def self.mark_processed(token, fanout_token:)
