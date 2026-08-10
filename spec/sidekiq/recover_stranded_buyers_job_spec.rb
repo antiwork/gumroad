@@ -358,4 +358,26 @@ describe RecoverStrandedBuyersJob do
 
     expect(mail.to).to be_present
   end
+
+  # Greptile's hash-subpage-exceeds-run-cap P1: SUBPAGES_PER_BUCKET is sized for the population at
+  # write time, but a hash split gives no size guarantee, so a skewed distribution can still put
+  # more than MAX_RECOVERIES_PER_RUN buyers in one selected subpage. `perform` must cap the actual
+  # candidates it recovers, not just report a documented limit.
+  it "caps recoveries at MAX_RECOVERIES_PER_RUN even when a hash subpage is oversized" do
+    oversized = (described_class::MAX_RECOVERIES_PER_RUN + 10).times.map { |i| candidate.merge(email: "skewed#{i.to_s.rjust(2, '0')}@example.com") }
+    job = described_class.new
+    allow(job).to receive(:bucket).and_return(0)
+    allow(job).to receive(:subpage).and_return(0)
+    allow(Risk::StrandedBuyerScanService).to receive(:call).and_return(stranded: oversized, truncated: false)
+    calls = 0
+    allow(Risk::StrandedBuyerRecoveryService).to receive(:call) do
+      calls += 1
+      recovery_result(:skip, :no_clean_payment_history)
+    end
+    allow(described_class).to receive(:new).and_return(job)
+
+    travel_to(described_class::ROTATION_EPOCH) { job.perform }
+
+    expect(calls).to eq(described_class::MAX_RECOVERIES_PER_RUN)
+  end
 end

@@ -111,7 +111,12 @@ class RecoverStrandedBuyersJob
       return [nil, []] if page.empty?
 
       page_key = [bucket_id, subpage_id]
-      [page_key, rotate_page(page_key, page)]
+      # SUBPAGES_PER_BUCKET is sized for the CURRENT population (see its comment); a hash split
+      # gives no guarantee on subpage size, so a big enough or skewed-enough bucket can still put
+      # more than MAX_RECOVERIES_PER_RUN buyers in one subpage (Greptile P1). Cap it explicitly —
+      # `rotate_page`'s cursor still advances by the modulo of the FULL page, so capping here only
+      # slows eventual coverage of an oversized subpage, it doesn't skip anyone.
+      [page_key, rotate_page(page_key, page).first(MAX_RECOVERIES_PER_RUN)]
     end
 
     # A page's own composition and order are deterministic, so a run that hits RUN_BUDGET partway
