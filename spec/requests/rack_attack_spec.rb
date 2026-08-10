@@ -633,4 +633,57 @@ describe "Rack::Attack throttle", type: :request do
       reset_rack_attack!
     end
   end
+
+  describe "POST /paypal order-flow throttles" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "shares one bucket across /paypal order-lifecycle endpoints and format variants" do
+      travel_to(Time.current) do
+        paths = %w[
+          /paypal/billing_agreement_token
+          /paypal/billing_agreement
+          /paypal/order
+          /paypal/update_order
+          /paypal/fetch_order
+          /paypal/order.json
+        ]
+
+        20.times do |i|
+          path = paths[i % paths.length]
+          method = path.start_with?("/paypal/fetch_order") ? "GET" : "POST"
+          request = Rack::Attack::Request.new(
+            Rack::MockRequest.env_for(path, method:, input: "", "HTTP_CF_CONNECTING_IP" => "203.0.113.60")
+          )
+
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        request = Rack::Attack::Request.new(
+          Rack::MockRequest.env_for("/paypal/update_order.xml", method: "POST", input: "", "HTTP_CF_CONNECTING_IP" => "203.0.113.60")
+        )
+
+        expect(Rack::Attack.configuration.throttled?(request)).to be(true)
+      end
+    end
+
+    it "does not throttle auth-only or non-order-lifecycle paths" do
+      travel_to(Time.current) do
+        # /paypal/connect + /paypal/disconnect are auth-gated, not part of the
+        # order lifecycle the throttle protects — they must not match. A near-miss
+        # path (extra segment after /order) must not match either, so a stray
+        # suffix can't consume the budget. (Intentionally excluding /paypal_charge_data
+        # here: that receipt-lookup path is throttled by its OWN separate grouped-receipt
+        # rule, so it can't probe this one.)
+        %w[/paypal/connect /paypal/disconnect /paypal/order/extra].each do |path|
+          5.times do
+            request = Rack::Attack::Request.new(
+              Rack::MockRequest.env_for(path, method: "POST", input: "", "HTTP_CF_CONNECTING_IP" => "203.0.113.61")
+            )
+            expect(Rack::Attack.configuration.throttled?(request)).to be(false), "unexpectedly throttled #{path}"
+          end
+        end
+      end
+    end
+  end
 end

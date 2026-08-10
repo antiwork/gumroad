@@ -242,6 +242,19 @@ class Rack::Attack
     end
   end
 
+  # The unauthenticated /paypal/* order-lifecycle endpoints each make a real
+  # PayPal Orders API round-trip and, on a rejected attempt, call
+  # ErrorNotifier.notify — without a limit a single IP can burn PayPal API quota
+  # and amplify Sentry noise (gumroad-private#2008 item 4). A real checkout
+  # issues a handful of these (billing_agreement_token → billing_agreement →
+  # order → fetch_order, plus update_order retries), so 20/min per IP is
+  # generous for any client while capping a botnet at the source. Key on the IP
+  # alone (not path) so all /paypal endpoints share one counter instead of each
+  # getting its own budget; match by regex so format suffixes don't bypass it.
+  throttle_with_exponential_backoff(name: "paypal_order_flow/ip", requests: 20, period: 60.seconds) do |req|
+    req.remote_ip if req.path.match?(%r{\A/paypal/(?:order|update_order|fetch_order|billing_agreement|billing_agreement_token)(?:\.[^/]+)?\z})
+  end
+
   throttle_with_exponential_backoff(name: "oauth_device_code/ip", requests: 20, period: 60.seconds) do |req|
     req.remote_ip if req.path.match?(%r{\A/oauth/device/code(?:\.[^/]+)?\z}) && req.post?
   end
