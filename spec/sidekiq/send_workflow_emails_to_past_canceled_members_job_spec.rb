@@ -10,8 +10,10 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
     @installment = create(:published_installment, link: @product, workflow: @workflow, workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER)
     @rule = create(:installment_rule, installment: @installment, delayed_delivery_time: 14.days)
 
-    @canceled_subscription = create(:subscription, link: @product, cancelled_at: 30.days.ago, deactivated_at: 30.days.ago)
-    create(:purchase, is_original_subscription_purchase: true, link: @product, subscription: @canceled_subscription, created_at: 60.days.ago)
+    unless RSpec.current_example.metadata[:rule_version_only]
+      @canceled_subscription = create(:subscription, link: @product, cancelled_at: 30.days.ago, deactivated_at: 30.days.ago)
+      create(:purchase, is_original_subscription_purchase: true, link: @product, subscription: @canceled_subscription, created_at: 60.days.ago)
+    end
   end
 
   it "schedules a worker immediately for past cancellations whose deactivated_at + delay is in the past" do
@@ -28,6 +30,26 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
     described_class.new.perform(@installment.id)
 
     expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@installment.id, @rule.version, nil, nil, nil, recent.id).at(recent.deactivated_at + @rule.delayed_delivery_time)
+  end
+
+  it "retries if the required rule version is not visible", :rule_version_only do
+    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+
+    expect do
+      described_class.new.perform(@installment.id, nil, nil, @rule.version + 1)
+    end.to raise_error(described_class::RuleNotCommittedError)
+  end
+
+  it "continues when the version cache is unavailable", :rule_version_only do
+    subscription = create(:subscription, link: @product, cancelled_at: 30.days.ago, deactivated_at: 30.days.ago)
+    create(:free_purchase, is_original_subscription_purchase: true, link: @product, subscription:, created_at: 60.days.ago)
+    error = RedisClient::Error.new("cache unavailable")
+    allow_any_instance_of(InstallmentRule).to receive(:cache_version!).and_raise(error)
+    expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: @rule.id)
+
+    described_class.new.perform(@installment.id)
+
+    expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@installment.id, @rule.version, nil, nil, nil, subscription.id)
   end
 
   it "does nothing when the workflow has been deleted" do

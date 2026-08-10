@@ -1,4 +1,8 @@
 # Every minute
+dispatch_pending_workflow_installment_schedule_intents:
+  cron: "* * * * *" # Every minute
+  class: DispatchPendingWorkflowInstallmentScheduleIntentsJob
+  description: Re-enqueues durable workflow schedule intents whose fast-path push was lost
 find_expired_subscriptions_to_set_as_deactivated_worker:
   cron: "* * * * *" # Every minute
   class: FindExpiredSubscriptionsToSetAsDeactivatedWorker
@@ -52,6 +56,10 @@ delete_expired_oauth_device_authorizations:
   description: Deletes expired OAuth device authorizations
 
 # Daily in format: [minute] [hour] * * *
+delete_processed_workflow_installment_schedule_intents:
+  cron: "15 3 * * *" # UTC 03:15
+  class: DeleteProcessedWorkflowInstallmentScheduleIntentsJob
+  description: Deletes processed workflow schedule intents after the Sidekiq retry window
 sync_radar_value_lists:
   cron: "0 3 * * *" # UTC 03:00
   class: Radar::SyncValueListsJob
