@@ -40,11 +40,12 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
       intent = dispatchable(now).lock.find_by(token:)
       next if intent.nil?
 
-      job_id = ScheduleWorkflowInstallmentJob.perform_async(token)
+      dispatch_token = SecureRandom.uuid
+      job_id = ScheduleWorkflowInstallmentJob.perform_async(token, dispatch_token)
       raise EnqueueError, "The scheduler job was not enqueued" if job_id.blank?
 
       intent.update!(
-        dispatch_token: SecureRandom.uuid,
+        dispatch_token:,
         dispatch_expires_at: now + DISPATCH_LEASE
       )
       job_id

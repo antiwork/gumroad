@@ -7,13 +7,14 @@ class ScheduleWorkflowInstallmentJob
   include Sidekiq::Job
   sidekiq_options retry: 10, queue: :low
 
-  def perform(intent_token)
+  def perform(intent_token, dispatch_token = nil)
     ActiveRecord::Base.connection.stick_to_primary!
     intent = WorkflowInstallmentScheduleIntent.find_by(token: intent_token)
     return if intent.nil?
 
     intent.with_lock do
       next if intent.processed_at.present?
+      next if dispatch_token.present? && intent.dispatch_token != dispatch_token
 
       installment = Installment.find_by(id: intent.installment_id)
       if installment.nil? || installment.installment_rule.nil?
