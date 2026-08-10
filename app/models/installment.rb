@@ -423,7 +423,7 @@ class Installment < ApplicationRecord
     end
   end
 
-  def send_installment_from_workflow_for_purchase(purchase_id)
+  def send_installment_from_workflow_for_purchase(purchase_id, reschedule_reference_time: nil)
     sale = Purchase.find(purchase_id)
     return if sale.is_recurring_subscription_charge
     # Cancellation posts are delivered on the subscription path, which rechecks the membership
@@ -448,7 +448,10 @@ class Installment < ApplicationRecord
     if Time.current < expected_delivery_time_for_sale
       # reschedule for later if it's too soon to send (only applicable for subscriptions
       # that have been terminated and later restarted)
-      SendWorkflowInstallmentWorker.perform_at(expected_delivery_time_for_sale + 1.minute, id, installment_rule.version, sale.id, nil)
+      args = [id, installment_rule.version, sale.id, nil]
+      args.push(nil, nil, reschedule_reference_time) if reschedule_reference_time.present?
+      worker = reschedule_reference_time.present? ? SendWorkflowInstallmentRescheduleJob : SendWorkflowInstallmentWorker
+      worker.perform_at(expected_delivery_time_for_sale + 1.minute, *args)
     else
       SentPostEmail.ensure_uniqueness(post: self, email: sale.email) do
         recipient = { email: sale.email, purchase: sale }
@@ -1072,6 +1075,13 @@ class Installment < ApplicationRecord
     Time.current >= expected_delivery_time(purchase)
   end
 
+  def workflow_delivery_reference_time(purchase)
+    subscription = purchase.subscription
+    return purchase.created_at unless workflow.present? && subscription.present? && subscription.resubscribed?
+
+    purchase.created_at + (subscription.last_resubscribed_at - subscription.last_deactivated_at)
+  end
+
   class InstallmentInvalid < StandardError
   end
 
@@ -1102,12 +1112,7 @@ class Installment < ApplicationRecord
     def expected_delivery_time(sale)
       return sale.created_at unless installment_rule.present?
 
-      original_delivery_time = sale.created_at + installment_rule.delayed_delivery_time
-      subscription = sale.subscription
-      return original_delivery_time unless workflow.present? && subscription.present? && subscription.resubscribed?
-
-      send_delay = subscription.last_resubscribed_at - subscription.last_deactivated_at
-      original_delivery_time + send_delay
+      workflow_delivery_reference_time(sale) + installment_rule.delayed_delivery_time
     end
 
     def validate_sending_limit_for_sellers
