@@ -1,17 +1,18 @@
 // @vitest-environment happy-dom
 import { cleanup, render, act } from "@testing-library/react";
-import { Editor } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
+import type { Editor } from "@tiptap/core";
 import * as React from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { ContentTabContent } from "$app/components/ProductEdit/ContentTab";
 import { Product } from "$app/components/ProductEdit/state";
 
-// The mounted TipTap editor is provided by the mocked hook so this test can fire an
-// update/blur handler synchronously, inside the deferred page-switch window that
-// editorContentPageIdRef guards (gumroad-private#1943).
+// Capture the real mounted TipTap editor so the test can fire an update inside
+// the deferred page-switch window that editorContentPageIdRef guards (gp#1943).
 let mountedEditor: Editor | null = null;
+
+// vite.config.ts replaces the bare `SSR` identifier at build time.
+Object.assign(globalThis, { SSR: false });
 
 const context = vi.hoisted(() => ({
   id: "product-id",
@@ -39,7 +40,11 @@ vi.mock("$app/components/RichTextEditor", async (importOriginal) => {
   const mod = await importOriginal<typeof import("$app/components/RichTextEditor")>();
   return {
     ...mod,
-    useRichTextEditor: () => mountedEditor,
+    useRichTextEditor: (options: Parameters<typeof mod.useRichTextEditor>[0]) => {
+      const editor = mod.useRichTextEditor(options);
+      mountedEditor = editor;
+      return editor;
+    },
     RichTextEditorToolbar: () => null,
     useImageUploadSettings: () => ({ isUploading: false, onUpload: () => {}, allowedExtensions: [] }),
   };
@@ -74,10 +79,14 @@ vi.mock("react-sortablejs", () => ({
 }));
 
 afterEach(() => {
-  mountedEditor?.destroy();
-  mountedEditor = null;
   cleanup();
+  mountedEditor = null;
 });
+
+const getMountedEditor = () => {
+  if (!mountedEditor) throw new Error("Editor did not mount");
+  return mountedEditor;
+};
 
 const makePage = (id: string, text: string) => ({
   id,
@@ -103,7 +112,7 @@ const buildProduct = (variants: VariantFixture[]): Product =>
     files: [],
   }) as unknown as Product;
 
-it("does not write the previous variant's mounted doc into the newly selected variant during the page-switch window", async () => {
+it("rejects a stale variant write, resets the real editor, and persists the next edit", async () => {
   const paidPage = makePage("page-paid-1", "PAID PAGE");
   const freePage = makePage("page-free-1", "FREE PAGE");
   const paidVariant: VariantFixture = { id: "variant-paid", name: "Paid", rich_content: [paidPage] };
@@ -117,21 +126,24 @@ it("does not write the previous variant's mounted doc into the newly selected va
     else Object.assign(product, update);
   };
 
-  mountedEditor = new Editor({
-    extensions: [StarterKit],
-    content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "PAID PAGE" }] }] },
-  });
-
   const { rerender } = render(<ContentTabContent selectedVariantId="variant-paid" />);
   await act(async () => {});
+  expect(getMountedEditor().getText()).toBe("PAID PAGE");
 
-  // Switch to the free variant; the mounted ProseMirror doc is only swapped in a
-  // deferred microtask. An update/blur firing synchronously here must not be
-  // serialized into the free variant's page.
+  // The real hook still holds the paid doc until its reset microtask runs.
   rerender(<ContentTabContent selectedVariantId="variant-free" />);
+  expect(getMountedEditor().getText()).toBe("PAID PAGE");
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the update handler ignores its args
-  mountedEditor.emit("update", { editor: mountedEditor, transaction: null } as never);
+  getMountedEditor().emit("update", { editor: getMountedEditor(), transaction: null } as never);
+  expect(freeVariant.rich_content[0]?.description).toEqual(freePage.description);
 
   await act(async () => {});
-  expect(freeVariant.rich_content[0]?.description).toEqual(freePage.description);
+  expect(getMountedEditor().getText()).toBe("FREE PAGE");
+
+  act(() => {
+    getMountedEditor().chain().focus("end").insertContent(" EDITED").run();
+  });
+  expect(getMountedEditor().getText()).toBe("FREE PAGE EDITED");
+  expect(freeVariant.rich_content[0]?.description).toEqual(getMountedEditor().getJSON());
+  expect(paidVariant.rich_content[0]?.description).toEqual(paidPage.description);
 });
