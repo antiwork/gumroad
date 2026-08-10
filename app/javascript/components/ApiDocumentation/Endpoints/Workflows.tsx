@@ -3,8 +3,9 @@ import React from "react";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
+import { ApiParameter, ApiParameters } from "../ApiParameters";
 import { ApiResponseFields, renderFields } from "../ApiResponseFields";
-import { WORKFLOW_DETAIL_FIELDS, WORKFLOW_FIELDS } from "../responseFieldDefinitions";
+import { WORKFLOW_DETAIL_FIELDS, WORKFLOW_EMAIL_WRITE_FIELDS, WORKFLOW_FIELDS } from "../responseFieldDefinitions";
 
 const WorkflowsResponseFields = () => (
   <ApiResponseFields>
@@ -29,6 +30,20 @@ const WorkflowResponseFields = () => (
         type: "object",
         description: "The workflow object with its email steps",
         children: WORKFLOW_DETAIL_FIELDS,
+      },
+    ])}
+  </ApiResponseFields>
+);
+
+const WorkflowEmailResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      {
+        name: "email",
+        type: "object",
+        description: "The created or updated workflow email",
+        children: WORKFLOW_EMAIL_WRITE_FIELDS,
       },
     ])}
   </ApiResponseFields>
@@ -125,6 +140,108 @@ export const GetWorkflow = () => (
       "created_at": "2026-07-10T11:50:00.000Z",
       "updated_at": "2026-07-10T12:00:00.000Z"
     }]
+  }
+}`}
+    </CodeSnippet>
+  </ApiEndpoint>
+);
+
+export const CreateWorkflowEmail = () => (
+  <ApiEndpoint
+    method="post"
+    path="/workflows/:workflow_id/emails"
+    description="Add one email step without changing the workflow publication state. The new step inherits the workflow state. A published workflow schedules eligible past recipients when send_to_past_customers is true. Abandoned cart workflows do not support added steps. Requires the edit_emails or account scope."
+  >
+    <ApiParameters>
+      <ApiParameter name="subject" description="Non-empty email subject line" />
+      <ApiParameter name="body" description="HTML email body" />
+      <ApiParameter
+        name="delay_amount"
+        description="Non-negative integer delay. The total delay cannot exceed 2,147,483,647 seconds."
+      />
+      <ApiParameter name="delay_unit" description='One of "hour", "day", "week", or "month"' />
+    </ApiParameters>
+    <WorkflowEmailResponseFields />
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/workflows/0ssD7B0cF6B5XQd3J7lY2A==/emails \\
+  -d "access_token=ACCESS_TOKEN" \\
+  -d "subject=Week four" \\
+  -d "body=<p>Keep going.</p>" \\
+  -d "delay_amount=4" \\
+  -d "delay_unit=week" \\
+  -X POST`}
+    </CodeSnippet>
+    <CodeSnippet caption="Example response:">
+      {`{
+  "success": true,
+  "email": {
+    "id": "bfi_30HLgGWL8H2wo_Gzlg==",
+    "subject": "Week four",
+    "message": "<p>Keep going.</p>",
+    "audience_type": "product",
+    "product_id": "A-m3CDDC5dlrSdKZp0RFhA==",
+    "state": "published",
+    "published_at": "2026-08-06T12:00:00.000Z",
+    "send_emails": true,
+    "delay": { "amount": 4, "unit": "week" },
+    "sent_count": 0,
+    "open_count": null,
+    "open_rate": null,
+    "click_count": null,
+    "click_rate": null,
+    "created_at": "2026-08-06T12:00:00.000Z",
+    "updated_at": "2026-08-06T12:00:00.000Z"
+  }
+}`}
+    </CodeSnippet>
+  </ApiEndpoint>
+);
+
+export const UpdateWorkflowEmail = () => (
+  <ApiEndpoint
+    method="put"
+    path="/workflows/:workflow_id/emails/:email_id"
+    description="Update one email step without changing the workflow publication state. Omitted fields stay unchanged. Supply at least one write parameter. Supply delay_amount and delay_unit together. A delay change can reschedule recipients. Abandoned cart workflows allow subject and body changes, but not delay changes. Requires the edit_emails or account scope."
+  >
+    <ApiParameters>
+      <ApiParameter name="subject" description="(optional) Non-empty email subject line" />
+      <ApiParameter name="body" description="(optional) HTML email body" />
+      <ApiParameter
+        name="delay_amount"
+        description="(optional) Non-negative integer delay; requires delay_unit. The total delay cannot exceed 2,147,483,647 seconds."
+      />
+      <ApiParameter
+        name="delay_unit"
+        description='(optional) One of "hour", "day", "week", or "month"; requires delay_amount'
+      />
+    </ApiParameters>
+    <WorkflowEmailResponseFields />
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/workflows/0ssD7B0cF6B5XQd3J7lY2A==/emails/bfi_30HLgGWL8H2wo_Gzlg== \\
+  -d "access_token=ACCESS_TOKEN" \\
+  -d "body=<p>Updated copy.</p>" \\
+  -X PUT`}
+    </CodeSnippet>
+    <CodeSnippet caption="Example response:">
+      {`{
+  "success": true,
+  "email": {
+    "id": "bfi_30HLgGWL8H2wo_Gzlg==",
+    "subject": "Week four",
+    "message": "<p>Updated copy.</p>",
+    "audience_type": "product",
+    "product_id": "A-m3CDDC5dlrSdKZp0RFhA==",
+    "state": "published",
+    "published_at": "2026-08-06T12:00:00.000Z",
+    "send_emails": true,
+    "delay": { "amount": 4, "unit": "week" },
+    "sent_count": 24,
+    "open_count": null,
+    "open_rate": null,
+    "click_count": null,
+    "click_rate": null,
+    "created_at": "2026-08-06T12:00:00.000Z",
+    "updated_at": "2026-08-07T12:00:00.000Z"
   }
 }`}
     </CodeSnippet>
