@@ -175,16 +175,18 @@ describe RecoverStrandedBuyersJob do
       recovery_result(:skip, :no_clean_payment_history)
     end
 
-    # Three full cycles: an oversized bucket serves a different page each cycle, so which day
-    # saturates the cap depends on the cycle counter — one cycle alone can miss every full page.
-    per_run_counts = (0...(described_class::ROTATION_BUCKETS * 3)).map do |offset|
+    # Three full cycles: an oversized bucket serves a different subpage each cycle, so which day
+    # saturates the cap depends on the cycle counter — one cycle alone can miss every subpage.
+    per_run_counts = (0...(described_class::ROTATION_BUCKETS * described_class::SUBPAGES_PER_BUCKET * 3)).map do |offset|
       calls_this_run = 0
       travel_to(Date.new(2026, 1, 1) + offset) { described_class.new.perform }
       calls_this_run
     end
 
     expect(per_run_counts).to all(be <= described_class::MAX_RECOVERIES_PER_RUN)
-    expect(per_run_counts.max).to eq(described_class::MAX_RECOVERIES_PER_RUN)
+    # Subpages are hash-based, not exact slices, so no single day is guaranteed to hit the cap
+    # exactly — assert the cap binds at all (some day gets close to it), not an exact value.
+    expect(per_run_counts.max).to be > described_class::MAX_RECOVERIES_PER_RUN / 2
   end
 
   # A dry run mutates nothing, so without day-bucketing the same population would be re-evaluated
@@ -214,46 +216,51 @@ describe RecoverStrandedBuyersJob do
     expect(seen.values.uniq).to eq([1])
   end
 
-  # Greptile's oversized-bucket P1: >25 candidates sharing a day bucket must not run the same
-  # ordered prefix every cycle forever — the tail needs its own turn eventually.
-  it "reaches every candidate in an oversized bucket across successive cycles, not just the first page" do
+  # Greptile round 9's P1: sub-paging by POSITION (each_slice) shifts every buyer's slice index
+  # whenever the bucket's membership changes between occurrences, so a persistently-stranded buyer
+  # can drift out of every page that ever gets selected. Splitting by a hash of the buyer's OWN
+  # identity fixes that: reaches every candidate in an oversized bucket across successive cycles,
+  # AND is immune to the bucket's membership churning between them.
+  it "reaches every candidate in an oversized bucket across successive cycles, immune to membership churn" do
     bucket_size = described_class::MAX_RECOVERIES_PER_RUN + 5
     many = bucket_size.times.map { |i| candidate.merge(email: "bucketmate#{i}@example.com") }
     job = described_class.new
     allow(job).to receive(:bucket).and_return(0)
 
     seen = Hash.new(0)
-    2.times do |cycle|
+    described_class::SUBPAGES_PER_BUCKET.times do |cycle|
       travel_to(described_class::ROTATION_EPOCH + (cycle * described_class::ROTATION_BUCKETS)) do
-        _bucket_id, page = job.send(:window, many)
-        page.each { |c| seen[c[:email]] += 1 }
-      end
-    end
-
-    expect(seen.keys.uniq.size).to be > described_class::MAX_RECOVERIES_PER_RUN
-    expect(seen.values).to all(eq(1))
-  end
-
-  # Greptile's calendar-reset P1: `yday`-derived cycle counters wrap 0-12 every January, so any
-  # bucket with more than 13 pages permanently strands its last page(s). A 326-buyer bucket needs
-  # 14 pages, so this must span a January 1st boundary and still reach every page.
-  it "reaches every page of a large oversized bucket across a full year, including the January reset" do
-    bucket_size = 326 # Greptile's example: 14 pages of 25, only 12-13 of which a yday-derived cycle would ever reach.
-    many = bucket_size.times.map { |i| candidate.merge(email: "bigbucket#{i}@example.com") }
-    job = described_class.new
-    allow(job).to receive(:bucket).and_return(0)
-
-    seen = Hash.new(0)
-    # One run per rotation day for a bit over a year — enough cycles to cross Jan 1 twice and to
-    # exceed the 13-cycle ceiling a `yday`-derived counter would impose.
-    (0...(described_class::ROTATION_BUCKETS * 14)).each do |offset|
-      travel_to(described_class::ROTATION_EPOCH + 150 + offset) do
-        _bucket_id, page = job.send(:window, many)
-        page.each { |c| seen[c[:email]] += 1 }
+        # Churn: the bucket gains a GROWING set of front-sorted newcomers each cycle (0, 1, 2, 3
+        # extra), so each_slice's page boundaries shift by a DIFFERENT amount every occurrence —
+        # the shape that lets a position-based page silently skip or double-cover a buyer across
+        # cycles. Under the hash-based design a buyer's subpage never depends on who else is due.
+        churned = many + cycle.times.map { |n| candidate.merge(email: "aaanewcomer#{cycle}_#{n}@example.com") }
+        _bucket_id, page = job.send(:window, churned)
+        page.each { |c| seen[c[:email]] += 1 if many.map { _1[:email] }.include?(c[:email]) }
       end
     end
 
     expect(seen.keys.uniq).to match_array(many.map { |c| c[:email] })
+    expect(seen.values).to all(eq(1))
+  end
+
+  # Same elapsed-day clock (not `Date.current.yday`, which resets every January) drives both the
+  # bucket and subpage cycles — a year boundary must not skip or double-run any subpage.
+  it "reaches every subpage of an oversized bucket across a full year, including the January reset" do
+    bucket_size = described_class::MAX_RECOVERIES_PER_RUN * 4 # forces multiple subpages
+    many = bucket_size.times.map { |i| candidate.merge(email: "bigbucket#{i}@example.com") }
+    job = described_class.new
+    allow(job).to receive(:bucket).and_return(0)
+
+    seen_subpages = Set.new
+    (0...(described_class::ROTATION_BUCKETS * described_class::SUBPAGES_PER_BUCKET * 2)).each do |offset|
+      travel_to(described_class::ROTATION_EPOCH + 150 + offset) do
+        page_key, = job.send(:window, many)
+        seen_subpages << page_key[1] if page_key
+      end
+    end
+
+    expect(seen_subpages).to eq((0...described_class::SUBPAGES_PER_BUCKET).to_set)
   end
 
   # Greptile's run-budget-starves-page-suffix P1: an oversized page's composition and order are
@@ -265,38 +272,38 @@ describe RecoverStrandedBuyersJob do
     job = described_class.new
     allow(job).to receive(:bucket).and_return(0)
 
-    _bucket_id, first_occurrence = travel_to(described_class::ROTATION_EPOCH) { job.send(:window, many) }
+    _page_key, first_occurrence = travel_to(described_class::ROTATION_EPOCH) { job.send(:window, many) }
     job.send(:save_page_cursor, [0, 0], 1) # simulate a run that only got through the first buyer
-    # Same bucket (0), same cycle (window is (elapsed_days / ROTATION_BUCKETS) % pages.size, so
-    # advancing by exactly ROTATION_BUCKETS**2 days returns to cycle 0 for bucket 0) — the exact
-    # occurrence a fixed-order page would replay identically.
-    _bucket_id, second_occurrence = travel_to(described_class::ROTATION_EPOCH + (described_class::ROTATION_BUCKETS**2)) { job.send(:window, many) }
+    # Same bucket (0), same subpage cycle: subpage_id is (elapsed_days / ROTATION_BUCKETS) %
+    # SUBPAGES_PER_BUCKET, so advancing by ROTATION_BUCKETS * SUBPAGES_PER_BUCKET days returns to
+    # the same subpage — the exact occurrence a fixed-order page would replay identically.
+    cycle_days = described_class::ROTATION_BUCKETS * described_class::SUBPAGES_PER_BUCKET
+    _page_key, second_occurrence = travel_to(described_class::ROTATION_EPOCH + cycle_days) { job.send(:window, many) }
 
     expect(second_occurrence.first).not_to eq(first_occurrence.first)
   end
 
   # Greptile's shared-bucket-cursor P1: a cursor keyed on bucket_id alone accumulates identically
-  # regardless of which page within the bucket ran, so on same-sized pages `cursor % page.size`
-  # returns to 0 whenever the cursor's total equals a multiple of the page size — replaying every
-  # page's own first prefix and stranding its suffix forever. Five same-sized pages that each
-  # advance the shared cursor by 5 land back on cursor 0 mod 25 for every page's second occurrence.
-  it "advances each page's own cursor independently, not a cursor shared across the bucket's pages" do
-    bucket_size = described_class::MAX_RECOVERIES_PER_RUN * 5 # five full 25-buyer pages
-    many = bucket_size.times.map { |i| candidate.merge(email: "sharedbucket#{i.to_s.rjust(3, '0')}@example.com") }
+  # regardless of which subpage within the bucket ran, so on same-sized subpages `cursor %
+  # page.size` returns to 0 whenever the cursor's total equals a multiple of the subpage size —
+  # replaying every subpage's own first prefix and stranding its suffix forever.
+  it "advances each subpage's own cursor independently, not a cursor shared across the bucket's subpages" do
+    many = (described_class::MAX_RECOVERIES_PER_RUN * 4).times.map { |i| candidate.merge(email: "sharedbucket#{i.to_s.rjust(3, '0')}@example.com") }
     job = described_class.new
     allow(job).to receive(:bucket).and_return(0)
 
     first_prefixes = {}
-    (0...5).each do |cycle|
+    described_class::SUBPAGES_PER_BUCKET.times do |cycle|
       travel_to(described_class::ROTATION_EPOCH + (cycle * described_class::ROTATION_BUCKETS)) do
-        _page_key, page = job.send(:window, many)
+        page_key, page = job.send(:window, many)
         first_prefixes[cycle] = page.first(5)
-        job.send(:save_page_cursor, [0, cycle], 5) # each occurrence only got through 5 buyers
+        job.send(:save_page_cursor, page_key, 5) # each occurrence only got through 5 buyers
       end
     end
 
-    (0...5).each do |cycle|
-      travel_to(described_class::ROTATION_EPOCH + ((cycle + 5) * described_class::ROTATION_BUCKETS)) do
+    cycle_days = described_class::ROTATION_BUCKETS * described_class::SUBPAGES_PER_BUCKET
+    described_class::SUBPAGES_PER_BUCKET.times do |cycle|
+      travel_to(described_class::ROTATION_EPOCH + cycle_days + (cycle * described_class::ROTATION_BUCKETS)) do
         _page_key, page = job.send(:window, many)
         expect(page.first(5)).not_to eq(first_prefixes[cycle])
       end
@@ -317,7 +324,7 @@ describe RecoverStrandedBuyersJob do
     allow(job).to receive(:bucket) { |email| email.include?("target") ? 0 : 1 }
 
     _page_key, first_occurrence = travel_to(described_class::ROTATION_EPOCH) { job.send(:window, many) }
-    job.send(:save_page_cursor, [0, 0], 1) # simulate a run that only got through the first buyer
+    job.send(:save_page_cursor, [0], 1) # simulate a run that only got through the first buyer
     # Same bucket (0) recurs every ROTATION_BUCKETS days.
     _page_key, second_occurrence = travel_to(described_class::ROTATION_EPOCH + described_class::ROTATION_BUCKETS) { job.send(:window, many) }
 

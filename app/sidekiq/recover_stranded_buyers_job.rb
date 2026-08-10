@@ -39,6 +39,11 @@ class RecoverStrandedBuyersJob
   # (which resets every January and starves any oversized-bucket page past index 12 — Greptile P1).
   ROTATION_EPOCH = Date.new(2020, 1, 1)
 
+  # Oversized-bucket sub-paging, sized so a ~24-candidate bucket's subpages stay comfortably under
+  # MAX_RECOVERIES_PER_RUN even as the population grows (see `subpage` below for why this must be
+  # fixed rather than derived from the bucket's current size).
+  SUBPAGES_PER_BUCKET = 4
+
   def perform
     scan = Risk::StrandedBuyerScanService.call
     return if scan[:stranded].empty?
@@ -90,21 +95,23 @@ class RecoverStrandedBuyersJob
       bucket_id = elapsed_days % ROTATION_BUCKETS
       due_today = candidates.select { |c| bucket(c[:email]) == bucket_id }.sort_by { _1[:email].to_s }
       return [nil, due_today] if due_today.empty?
+      return [[bucket_id], rotate_page([bucket_id], due_today)] if due_today.size <= MAX_RECOVERIES_PER_RUN
 
-      # A bucket bigger than MAX_RECOVERIES_PER_RUN needs its own sub-rotation, or the same ordered
-      # prefix would run every 30-day cycle and the tail would never be reached (Greptile P1). Page
-      # through it by cycle count (sorted by email so the page assignment is independent of scan
-      # order/size) so every page — and eventually every buyer in the bucket — gets a turn. `cycle`
-      # MUST derive from the same elapsed-day clock as `due_today` above, not `Date.current.yday`:
-      # yday resets every January while elapsed_days doesn't, so a `yday`-derived cycle drifts out
-      # of phase with the (correctly monotonic) due-day check across a year boundary, silently
-      # dropping one page and double-running another (Greptile P1). A non-oversized bucket has
-      # exactly one page, so cycle is always 0 and page_key is stable across every occurrence of
-      # that bucket — the same accumulating-cursor mechanism the oversized case uses.
-      pages = due_today.each_slice(MAX_RECOVERIES_PER_RUN).to_a
-      cycle = (elapsed_days / ROTATION_BUCKETS) % pages.size
-      page_key = [bucket_id, cycle]
-      [page_key, rotate_page(page_key, pages[cycle])]
+      # An oversized bucket needs its own sub-rotation, or the same ordered prefix would run every
+      # cycle forever and the tail would never be reached (Greptile P1). Slicing by POSITION
+      # (each_slice) doesn't survive membership churn: if the bucket gains or loses a member
+      # between occurrences, everyone's slice index shifts and a persistently-stranded buyer can
+      # drift out of every page that ever gets selected (Greptile P1, round 9). `subpage` hashes
+      # each buyer's OWN identity against a FIXED modulus instead — the same technique as `bucket`
+      # above — so a buyer's subpage assignment depends only on who they are, never on who else is
+      # in the bucket or how many. `cycle` rotates through that fixed set (not `pages.size`, which
+      # is exactly the churn-sensitive quantity being replaced) so every subpage gets a turn.
+      subpage_id = (elapsed_days / ROTATION_BUCKETS) % SUBPAGES_PER_BUCKET
+      page = due_today.select { |c| subpage(c[:email]) == subpage_id }
+      return [nil, []] if page.empty?
+
+      page_key = [bucket_id, subpage_id]
+      [page_key, rotate_page(page_key, page)]
     end
 
     # A page's own composition and order are deterministic, so a run that hits RUN_BUDGET partway
@@ -136,6 +143,12 @@ class RecoverStrandedBuyersJob
       # to_s: a scan candidate with a blank email must land in a bucket (and later fail loudly
       # as that recovery's ERROR line) rather than raise here and take down the whole run.
       Digest::MD5.hexdigest(email.to_s.downcase).to_i(16) % ROTATION_BUCKETS
+    end
+
+    # Same technique as `bucket`, against a second, independent hash so an email isn't pinned to
+    # the same relative rank in both — a different fixed modulus for the sub-split within a bucket.
+    def subpage(email)
+      Digest::MD5.hexdigest("subpage:#{email.to_s.downcase}").to_i(16) % SUBPAGES_PER_BUCKET
     end
 
     def recover(candidate, live:)
