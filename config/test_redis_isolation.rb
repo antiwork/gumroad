@@ -44,7 +44,8 @@ module TestRedisIsolation
 
   # Databases 0..3 belong to .env.development. Never hand them to a test run — a test
   # flushing one would wipe the developer's own Redis data. This is only the floor;
-  # `reserved_databases` raises it above whatever .env.test pins.
+  # `reserved_databases` raises it above whatever .env.test pins — which is also what
+  # keeps bin/dev-lane's databases (4..9) out of reach, since .env.test pins 10..13.
   RESERVED_DATABASES = 4
 
   LEASE_KEY_PREFIX = "gumroad:test-redis-slot:"

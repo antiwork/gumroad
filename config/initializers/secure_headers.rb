@@ -216,13 +216,18 @@ SecureHeaders::Configuration.default do |config|
     config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}:8080" # Required by AnyCable
   elsif Rails.env.development?
     config.csp[:default_src] = ["'self'"]
+    # bin/dev-lane exports VITE_RUBY_PORT/ANYCABLE_PORT per lane; without reading
+    # them here the CSP only ever allows lane 0's ports, blocking every other
+    # lane's Vite HMR and AnyCable websockets (http: covers plain requests but
+    # CSP scheme matching does not extend http: to ws:).
+    vite_port = ENV["VITE_RUBY_PORT"].presence || 3036
     %w[localhost app.localhost].each do |host|
-      config.csp[:script_src] << "#{host}:3036" # Vite dev server
-      config.csp[:connect_src] << "#{host}:3036" # Vite dev server
-      config.csp[:connect_src] << "ws://#{host}:3036" # Vite HMR websocket
+      config.csp[:script_src] << "#{host}:#{vite_port}" # Vite dev server
+      config.csp[:connect_src] << "#{host}:#{vite_port}" # Vite dev server
+      config.csp[:connect_src] << "ws://#{host}:#{vite_port}" # Vite HMR websocket
     end
     cable_scheme = PROTOCOL == "https" ? "wss" : "ws"
-    cable_port = PROTOCOL == "https" ? 8081 : 8080
+    cable_port = ENV["ANYCABLE_PORT"].presence || (PROTOCOL == "https" ? 8081 : 8080)
     config.csp[:connect_src] << "#{cable_scheme}://#{ANYCABLE_HOST}:#{cable_port}" # Required by AnyCable
     config.csp[:connect_src] << "http:"
     config.csp[:script_src] << "http:"

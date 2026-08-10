@@ -1,5 +1,12 @@
 # frozen_string_literal: true
 
+# bin/dev-lane exports DEV_LANE_PORT per lane; without it every absolute URL a
+# nonzero lane generates (mailer links, *_url helpers, cross-subdomain redirects)
+# would point at lane 0's :3000. Port-less entries (valid_discover_host, the bare
+# valid_request_hosts) must stay port-less — they are compared against
+# request.host, which never carries a port.
+dev_lane_port = ENV.fetch("DEV_LANE_PORT", "3000")
+
 configuration_by_env = {
   production: {
     protocol: "https",
@@ -54,15 +61,15 @@ configuration_by_env = {
   },
   development: {
     protocol: "http",
-    domain: "localhost:3000",
-    asset_domain: "app.localhost:3000",
-    root_domain: "localhost:3000",
-    short_domain: "s.localhost:3000",
-    discover_domain: "localhost:3000",
-    api_domain: "api.localhost:3000",
-    third_party_analytics_domain: "analytics.localhost:3000",
-    valid_request_hosts: ["app.localhost", "localhost", "app.localhost:3000", "localhost:3000"],
-    valid_api_request_hosts: ["api.localhost", "api.localhost:3000"],
+    domain: "localhost:#{dev_lane_port}",
+    asset_domain: "app.localhost:#{dev_lane_port}",
+    root_domain: "localhost:#{dev_lane_port}",
+    short_domain: "s.localhost:#{dev_lane_port}",
+    discover_domain: "localhost:#{dev_lane_port}",
+    api_domain: "api.localhost:#{dev_lane_port}",
+    third_party_analytics_domain: "analytics.localhost:#{dev_lane_port}",
+    valid_request_hosts: ["app.localhost", "localhost", "app.localhost:#{dev_lane_port}", "localhost:#{dev_lane_port}"],
+    valid_api_request_hosts: ["api.localhost", "api.localhost:#{dev_lane_port}"],
     valid_discover_host: "localhost",
     valid_cors_origins: [],
     internal_gumroad_domain: "internal.localhost",

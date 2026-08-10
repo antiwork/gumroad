@@ -2,7 +2,7 @@
 
 class ConfirmedFollowerEvent
   include Elasticsearch::Model
-  index_name "confirmed_follower_events"
+  index_name "confirmed_follower_events#{ENV.fetch("ES_INDEX_SUFFIX", "")}"
 
   settings(
     number_of_shards: 1,

@@ -9,7 +9,7 @@ module Purchase::Searchable
     include SearchIndexModelCommon
     include RelatedPurchaseCallbacks
 
-    index_name "purchases"
+    index_name "purchases#{ENV.fetch("ES_INDEX_SUFFIX", "")}"
 
     settings number_of_shards: 1, number_of_replicas: 0, index: {
       analysis: {

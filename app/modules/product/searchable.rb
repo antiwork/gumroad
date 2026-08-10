@@ -74,7 +74,7 @@ module Product::Searchable
     include Elasticsearch::Model
     include AfterCommitEverywhere
 
-    index_name "products"
+    index_name "products#{ENV.fetch("ES_INDEX_SUFFIX", "")}"
 
     # These settings only apply outside production: local dev, CI, branch apps,
     # and staging, which create the index from this block (see

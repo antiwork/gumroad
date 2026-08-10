@@ -3,7 +3,7 @@
 class ProductPageView
   include Elasticsearch::Model
 
-  index_name "product_page_views"
+  index_name "product_page_views#{ENV.fetch("ES_INDEX_SUFFIX", "")}"
 
   def self.index_name_from_body(body)
     USE_ES_ALIASES ? "#{index_name}-#{body["timestamp"].first(7)}" : index_name
