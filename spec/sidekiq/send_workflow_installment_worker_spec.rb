@@ -24,7 +24,9 @@ describe SendWorkflowInstallmentWorker do
 
     it "does not call mailer if different version" do
       expect(PostSendgridApi).not_to receive(:process)
-      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version + 1, @purchase.id, nil, nil)
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version + 1, @purchase.id, nil, nil)
+      end.to raise_error(SendWorkflowInstallmentWorker::RuleNotCommittedError)
     end
 
     it "does not call mailer if deleted installment" do
@@ -104,9 +106,123 @@ describe SendWorkflowInstallmentWorker do
       )
     end
 
+    it "fills an expired cache from the locked primary" do
+      $redis.del(
+        RedisKey.workflow_installment_rule_version(@installment.id),
+        RedisKey.workflow_installment_rule_pending_token(@installment.id)
+      )
+      allow(PostSendgridApi).to receive(:process)
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      expect(InstallmentRule).to receive(:lock).once.and_call_original
+
+      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
+
+      expect(PostSendgridApi).to have_received(:process)
+      expect(InstallmentRule.cached_version(@installment.id)).to eq(@installment_rule.version)
+    end
+
+    it "uses the locked primary version if the Redis read fails" do
+      allow(PostSendgridApi).to receive(:process)
+      expect(InstallmentRule).to receive(:cached_version_state).with(@installment.id).once.and_raise(Redis::BaseError.new("read failed"))
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      expect(InstallmentRule).to receive(:lock).once.and_call_original
+      expect_any_instance_of(InstallmentRule).not_to receive(:cache_version!)
+      expect(Makara::Context).to receive(:release_all).once.and_call_original
+
+      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
+
+      expect(PostSendgridApi).to have_received(:process)
+    end
+
+    it "uses the locked primary version if the Redis cache fill fails" do
+      $redis.del(
+        RedisKey.workflow_installment_rule_version(@installment.id),
+        RedisKey.workflow_installment_rule_pending_token(@installment.id)
+      )
+      allow(PostSendgridApi).to receive(:process)
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      expect(InstallmentRule).to receive(:lock).once.and_call_original
+      expect_any_instance_of(InstallmentRule).to receive(:cache_version!).once.and_raise(RedisClient::Error.new("fill failed"))
+      expect(Makara::Context).to receive(:release_all).once.and_call_original
+
+      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
+
+      expect(PostSendgridApi).to have_received(:process)
+    end
+
+    it "retries an old job while a publication transition is pending" do
+      InstallmentRule.cache_pending_version!(
+        installment_id: @installment.id,
+        version: @installment_rule.version + 1,
+        token: SecureRandom.uuid
+      )
+      expect(PostSendgridApi).not_to receive(:process)
+
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
+      end.to raise_error(SendWorkflowInstallmentWorker::RuleNotCommittedError)
+    end
+
+    it "drops an old job after a newer version commits" do
+      stale_version = @installment_rule.version
+      @installment_rule.update!(delayed_delivery_time: 2.days)
+      expect(PostSendgridApi).not_to receive(:process)
+
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(@installment.id, stale_version, nil, @follower.id, nil)
+      end.not_to raise_error
+    end
+
+    it "honors a newer pending version that appears during a cache fill" do
+      version_key = RedisKey.workflow_installment_rule_version(@installment.id)
+      owner_key = RedisKey.workflow_installment_rule_pending_token(@installment.id)
+      newer_version = @installment_rule.version + 1
+      $redis.del(version_key, owner_key)
+      allow_any_instance_of(InstallmentRule).to receive(:cache_version!).and_wrap_original do |method, *args, **kwargs|
+        InstallmentRule.cache_pending_version!(
+          installment_id: @installment.id,
+          version: newer_version,
+          token: SecureRandom.uuid
+        )
+        method.call(*args, **kwargs)
+      end
+      expect(PostSendgridApi).not_to receive(:process)
+
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
+      end.to raise_error(SendWorkflowInstallmentWorker::RuleNotCommittedError)
+      expect(InstallmentRule.cached_version(@installment.id)).to eq(newer_version)
+    end
+
+    it "retries while a pending version outlives its owner" do
+      version_key = RedisKey.workflow_installment_rule_version(@installment.id)
+      owner_key = RedisKey.workflow_installment_rule_pending_token(@installment.id)
+      $redis.set(version_key, @installment_rule.version + 1)
+      $redis.del(owner_key)
+      expect(PostSendgridApi).not_to receive(:process)
+
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
+      end.to raise_error(SendWorkflowInstallmentWorker::RuleNotCommittedError)
+    end
+
+    it "retries while only pending ownership remains" do
+      version_key = RedisKey.workflow_installment_rule_version(@installment.id)
+      owner_key = RedisKey.workflow_installment_rule_pending_token(@installment.id)
+      $redis.del(version_key)
+      $redis.set(owner_key, SecureRandom.uuid)
+      expect(PostSendgridApi).not_to receive(:process)
+
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
+      end.to raise_error(SendWorkflowInstallmentWorker::RuleNotCommittedError)
+    end
+
     it "does not call mailer if different version" do
       expect(PostSendgridApi).not_to receive(:process)
-      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version + 1, nil, @follower.id, nil)
+      expect do
+        SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version + 1, nil, @follower.id, nil)
+      end.to raise_error(SendWorkflowInstallmentWorker::RuleNotCommittedError)
     end
 
     it "does not call mailer if deleted installment" do
