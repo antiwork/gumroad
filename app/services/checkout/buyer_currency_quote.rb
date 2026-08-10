@@ -281,17 +281,25 @@ class Checkout::BuyerCurrencyQuote
       raise(InvalidToken, "quote covers no charge for this seller")
   end
 
-  # Signature-checked but non-authoritative (gumroad-private#1958): confirms the token wasn't
-  # tampered with, not seller/merchant-account/total/expiry — `verify!` still runs the full
-  # check later via `Charge::CreateService#locked_buyer_currency_quote!`, so a bad hint here
-  # can only make `set_price_and_rate` land on the same total already displayed to the buyer.
+  # Signature- and expiry-checked but non-authoritative (gumroad-private#1958): confirms the
+  # token wasn't tampered with and is still inside its quote window, not
+  # seller/merchant-account/totals — `verify!` still runs the full check later via
+  # `Charge::CreateService#locked_buyer_currency_quote!` on Stripe charges. The expiry check is
+  # load-bearing on its own, though: non-Stripe charges (PayPal) never reach `verify!` — the
+  # charge service discards the token there — yet the rate bound here has already priced the
+  # purchase. Signatures do not age, so without this a buyer could replay a months-old token on
+  # a PayPal checkout and buy at a stale rate; with it, a replay is bounded by the quote window
+  # like every other consumer of the token.
   def self.listed_currency_rate_hint(token:, seller_id:, permalink:)
     return if token.blank?
 
     payload = verifier.verify(token)
     charge_payloads = payload["charges"].presence || [payload]
     charge_payload = charge_payloads.find { |cp| cp["seller_id"] == seller_id }
-    charge_payload&.dig("listed_currency_rates", permalink.to_s)&.to_d
+    return if charge_payload.blank?
+    return if Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
+
+    charge_payload.dig("listed_currency_rates", permalink.to_s)&.to_d
   rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, TypeError, ArgumentError
     nil
   end

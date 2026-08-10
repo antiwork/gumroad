@@ -1250,6 +1250,26 @@ describe Checkout::BuyerCurrencyQuote do
       expect(verified.listed_currency_rate_for(eur_product.unique_permalink)).to eq(BigDecimal("0.9"))
     end
 
+    it "returns the bound rate from listed_currency_rate_hint while the quote window is open" do
+      line_item = eur_line_item(rate: "0.9")
+      created = described_class.create(line_items: [line_item], canonical_total_cents: line_item.canonical_total_cents, ip: "24.48.0.1")
+
+      expect(described_class.listed_currency_rate_hint(token: created.token, seller_id: seller.id, permalink: eur_product.unique_permalink))
+        .to eq(BigDecimal("0.9"))
+    end
+
+    it "returns nil from listed_currency_rate_hint once the quote window has passed" do
+      # Load-bearing on non-Stripe charges: PayPal never reaches verify!, so this expiry check
+      # is the only thing stopping a replayed old token from pricing a purchase at a stale rate.
+      line_item = eur_line_item(rate: "0.9")
+      created = described_class.create(line_items: [line_item], canonical_total_cents: line_item.canonical_total_cents, ip: "24.48.0.1")
+
+      travel_to(created.charges.sole.stripe_fx_quote_expires_at + 1.second) do
+        expect(described_class.listed_currency_rate_hint(token: created.token, seller_id: seller.id, permalink: eur_product.unique_permalink))
+          .to be_nil
+      end
+    end
+
     it "returns nil from listed_currency_rate_hint for a tampered token" do
       expect(described_class.listed_currency_rate_hint(token: "garbage", seller_id: seller.id, permalink: "whatever")).to be_nil
     end
