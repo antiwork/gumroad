@@ -70,19 +70,26 @@ class RecoverStrandedBuyersJob
     # against a FIXED modulus is immune to both: a buyer's day assignment depends only on who they
     # are, never on the scan's order, size, or who else is in it this run.
     #
-    # Returns [page_key, selected] — page_key is nil unless an oversized bucket's page needed its
-    # own rotation cursor (see save_page_cursor). page_key identifies THIS PAGE specifically
-    # (bucket_id + which page within it), not just the bucket: a bucket's pages are all reached in
-    # turn (see the cycle index below), and a cursor shared across pages accumulates identically on
+    # Returns [page_key, selected]. Every branch below runs through a persisted rotation cursor
+    # keyed on page_key — not just the oversized-bucket sub-paging case — because ANY window whose
+    # composition/order is deterministic per occurrence will restart at the same buyer on every
+    # future occurrence once RUN_BUDGET truncates it mid-run, starving that buyer's neighbors
+    # regardless of whether the window came from bucketing at all (nyomanjyotisa review). page_key
+    # identifies THIS PAGE specifically (bucket_id + which page within it, or :total when the whole
+    # population fits in one run), not just the bucket: a bucket's pages are all reached in turn
+    # (see the cycle index below), and a cursor shared across pages would accumulate identically on
     # every occurrence regardless of which page ran — so on same-sized pages `cursor % page.size` is
     # always 0 and every page replays its own first prefix forever (Greptile P1).
     def window(candidates)
-      return [nil, candidates] if candidates.size <= MAX_RECOVERIES_PER_RUN
+      if candidates.size <= MAX_RECOVERIES_PER_RUN
+        page_key = [:total]
+        return [page_key, rotate_page(page_key, candidates.sort_by { _1[:email].to_s })]
+      end
 
       elapsed_days = (Date.current - ROTATION_EPOCH).to_i
       bucket_id = elapsed_days % ROTATION_BUCKETS
       due_today = candidates.select { |c| bucket(c[:email]) == bucket_id }.sort_by { _1[:email].to_s }
-      return [nil, due_today] if due_today.size <= MAX_RECOVERIES_PER_RUN
+      return [nil, due_today] if due_today.empty?
 
       # A bucket bigger than MAX_RECOVERIES_PER_RUN needs its own sub-rotation, or the same ordered
       # prefix would run every 30-day cycle and the tail would never be reached (Greptile P1). Page
@@ -91,18 +98,22 @@ class RecoverStrandedBuyersJob
       # MUST derive from the same elapsed-day clock as `due_today` above, not `Date.current.yday`:
       # yday resets every January while elapsed_days doesn't, so a `yday`-derived cycle drifts out
       # of phase with the (correctly monotonic) due-day check across a year boundary, silently
-      # dropping one page and double-running another (Greptile P1).
+      # dropping one page and double-running another (Greptile P1). A non-oversized bucket has
+      # exactly one page, so cycle is always 0 and page_key is stable across every occurrence of
+      # that bucket — the same accumulating-cursor mechanism the oversized case uses.
       pages = due_today.each_slice(MAX_RECOVERIES_PER_RUN).to_a
       cycle = (elapsed_days / ROTATION_BUCKETS) % pages.size
-      page = pages[cycle]
       page_key = [bucket_id, cycle]
+      [page_key, rotate_page(page_key, pages[cycle])]
+    end
 
-      # A page's own composition and order are deterministic, so a run that hits RUN_BUDGET partway
-      # through always stops at the same buyer, on every future occurrence of this exact page — the
-      # suffix after them never gets a turn (Greptile P1). Rotating the page by a cursor that
-      # advances every time THIS PAGE runs moves a different buyer to the front each occurrence, so
-      # a persistently slow buyer no longer blocks the same suffix forever.
-      [page_key, page.rotate(page_cursor(page_key) % page.size)]
+    # A page's own composition and order are deterministic, so a run that hits RUN_BUDGET partway
+    # through always stops at the same buyer, on every future occurrence of this exact page — the
+    # suffix after them never gets a turn (Greptile P1). Rotating the page by a cursor that
+    # advances every time THIS PAGE runs moves a different buyer to the front each occurrence, so
+    # a persistently slow buyer no longer blocks the same suffix forever.
+    def rotate_page(page_key, page)
+      page.rotate(page_cursor(page_key) % page.size)
     end
 
     def page_cursor(page_key)
