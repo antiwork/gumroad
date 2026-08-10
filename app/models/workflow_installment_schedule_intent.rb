@@ -35,32 +35,23 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
   end
 
   def self.enqueue(token)
-    dispatch_token = claim_dispatch(token)
-    return if dispatch_token.nil?
+    now = Time.current
+    transaction do
+      intent = dispatchable(now).lock.find_by(token:)
+      next if intent.nil?
 
-    enqueue_scheduler(token:, dispatch_token:)
+      job_id = ScheduleWorkflowInstallmentJob.perform_async(token)
+      raise EnqueueError, "The scheduler job was not enqueued" if job_id.blank?
+
+      intent.update!(
+        dispatch_token: SecureRandom.uuid,
+        dispatch_expires_at: now + DISPATCH_LEASE
+      )
+      job_id
+    end
   rescue => e
     Rails.logger.error("[#{name}] could not enqueue token=#{token}: #{e.class}: #{e.message}")
     nil
-  end
-
-  def self.claim_dispatch(token)
-    dispatch_token = SecureRandom.uuid
-    now = Time.current
-    claimed = dispatchable(now).where(token:).update_all(
-      dispatch_token:,
-      dispatch_expires_at: now + DISPATCH_LEASE,
-      updated_at: now
-    )
-
-    dispatch_token if claimed.positive?
-  end
-
-  def self.enqueue_scheduler(token:, dispatch_token:)
-    job_id = ScheduleWorkflowInstallmentJob.perform_async(token)
-    job_id
-  ensure
-    release_dispatch_safely(token:, dispatch_token:) if job_id.blank?
   end
 
   def self.mark_processed(token, fanout_token:)
@@ -129,24 +120,4 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
       updated_at: now
     ).positive?
   end
-
-  def self.release_dispatch(token:, dispatch_token:)
-    pending.where(token:, dispatch_token:).update_all(
-      dispatch_token: nil,
-      dispatch_expires_at: nil,
-      updated_at: Time.current
-    )
-  end
-
-  def self.release_dispatch_safely(token:, dispatch_token:)
-    release_dispatch(token:, dispatch_token:)
-  rescue
-    begin
-      release_dispatch(token:, dispatch_token:)
-    rescue => e
-      Rails.logger.error("[#{name}] could not release token=#{token}: #{e.class}: #{e.message}")
-    end
-  end
-
-  private_class_method :claim_dispatch, :enqueue_scheduler, :release_dispatch, :release_dispatch_safely
 end

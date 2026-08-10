@@ -26,7 +26,7 @@ describe WorkflowInstallmentScheduleIntent do
     end.to raise_error(described_class::EnqueueError, "A database transaction is required")
   end
 
-  it "releases dispatch failures for the pending intent job" do
+  it "does not persist a claim when the scheduler enqueue raises" do
     intent = create_intent
     allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_raise("Redis is unavailable")
     expect(Rails.logger).to receive(:error).with(/Redis is unavailable/)
@@ -37,44 +37,26 @@ describe WorkflowInstallmentScheduleIntent do
     expect(described_class.dispatchable).to include(intent)
   end
 
-  it "does not release a dispatch claim that failed to persist" do
+  it "contains a dispatch query failure" do
     intent = create_intent
     allow(described_class).to receive(:dispatchable).and_raise("database is unavailable")
-    expect(described_class).not_to receive(:release_dispatch)
     expect(Rails.logger).to receive(:error).with(/database is unavailable/)
 
     expect(described_class.enqueue(intent.token)).to be_nil
   end
 
-  it "contains a failure while releasing a dispatch claim" do
+  it "does not persist a claim when middleware cancels the enqueue" do
     intent = create_intent
-    allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_raise("Redis is unavailable")
-    allow(described_class).to receive(:release_dispatch).and_raise("database is unavailable")
-    expect(Rails.logger).to receive(:error).with(/could not release.*database is unavailable/)
-    expect(Rails.logger).to receive(:error).with(/could not enqueue.*Redis is unavailable/)
+    allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_return(nil)
+    expect(Rails.logger).to receive(:error).with(/scheduler job was not enqueued/i)
 
     expect(described_class.enqueue(intent.token)).to be_nil
-  end
-
-  it "retries a transient failure while releasing a dispatch claim" do
-    intent = create_intent
-    allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_raise("Redis is unavailable")
-    expect(Rails.logger).to receive(:error).with(/could not enqueue.*Redis is unavailable/)
-    attempts = 0
-    allow(described_class).to receive(:release_dispatch).and_wrap_original do |method, **kwargs|
-      attempts += 1
-      raise "database is unavailable" if attempts == 1
-
-      method.call(**kwargs)
-    end
-
-    expect(described_class.enqueue(intent.token)).to be_nil
-    expect(attempts).to eq(2)
     expect(intent.reload.dispatch_token).to be_nil
     expect(intent.dispatch_expires_at).to be_nil
+    expect(described_class.dispatchable).to include(intent)
   end
 
-  it "claims an intent before enqueueing its scheduler" do
+  it "records a claim after enqueueing its scheduler" do
     intent = create_intent
     expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(intent.token).once.and_return("jid")
 
@@ -83,17 +65,6 @@ describe WorkflowInstallmentScheduleIntent do
 
     expect(intent.reload.dispatch_token).to be_present
     expect(intent.dispatch_expires_at).to be > Time.current
-  end
-
-  it "releases its claim when middleware cancels the enqueue" do
-    intent = create_intent
-    allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_return(nil)
-
-    expect(described_class.enqueue(intent.token)).to be_nil
-
-    expect(intent.reload.dispatch_token).to be_nil
-    expect(intent.dispatch_expires_at).to be_nil
-    expect(described_class.dispatchable).to include(intent)
   end
 
   it "reclaims an expired dispatch lease" do
