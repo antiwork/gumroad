@@ -716,4 +716,54 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     $redis.del("#{dedupe_key}:unresolved")
     $redis.del("#{dedupe_key}:lock")
   end
+
+  it "noops when a refund/credit nets the window's USD ledger negative between scan and the live re-read" do
+    row = residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    # After the scan already flagged this candidate, a refund lands: amount_cents (the USD ledger)
+    # goes negative for the same row while holding_amount_cents stays negative too. resolve_entry's
+    # own `next if set.sum(:amount_cents).negative?` guard caught this at scan time; a refund arriving
+    # after the scan but before this account's turn must trip the same guard on the live re-read.
+    allow(AlertOnNegativeDestinationBalancesJob).to receive(:scan).and_wrap_original do |original|
+      result = original.call
+      row.update!(amount_cents: -100_00)
+      result
+    end
+
+    expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to start_with("Topped up 0 of 1 candidates")
+    end
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
+  it "escalates instead of resending when Stripe accepts the transfer but Redis persist keeps failing" do
+    residue_row(-100_00)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account)
+    # Simulates a Redis outage that outlives the accepted transfer: every `persist` call after
+    # Stripe already accepted the money fails, so the durable dedupe write can never land.
+    allow($redis).to receive(:persist).and_call_original
+    allow($redis).to receive(:persist).with(a_string_matching(/:0:10000\z/)).and_raise(Redis::BaseConnectionError)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("durable dedupe claim could not be confirmed")).once
+    # The claim must still be held on its original TTL, not lost — a human has to confirm with
+    # Stripe before either key can be cleared, so a later run doesn't resend the accepted transfer.
+    expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(dedupe_key)
+    $redis.del("#{dedupe_key}:unresolved")
+  end
 end

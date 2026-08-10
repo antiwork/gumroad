@@ -131,9 +131,10 @@ class AutoTopUpNegativeDestinationBalancesJob
       current_balance_pairs = Balance.unpaid
                                      .where(user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id)
                                      .order(:id)
-                                     .pluck(:id, :holding_amount_cents, :date)
+                                     .pluck(:id, :holding_amount_cents, :date, :amount_cents)
       current_balance_ids = current_balance_pairs.map(&:first)
-      current_balance_amounts = current_balance_pairs.to_h { |id, cents, _date| [id, cents] }
+      current_balance_amounts = current_balance_pairs.to_h { |id, cents, _date, _usd| [id, cents] }
+      current_balance_usd_cents = current_balance_pairs.to_h { |id, _cents, _date, usd| [id, usd] }
       whole_ledger_cents = current_balance_amounts.values.sum
       # Mirrors resolve_entry's own full_total window instead of always summing the whole ledger:
       # an in-cycle candidate (entry[:post_cutoff] false) can carry a post-cutoff credit that
@@ -153,8 +154,8 @@ class AutoTopUpNegativeDestinationBalancesJob
           [current_balance_ids, whole_ledger_cents]
         else
           cutoff = AlertOnNegativeDestinationBalancesJob.payout_cutoff_date
-          in_cycle_pairs = current_balance_pairs.select { |_id, _cents, date| date <= cutoff }
-          in_cycle_cents = in_cycle_pairs.sum { |_id, cents, _date| cents }
+          in_cycle_pairs = current_balance_pairs.select { |_id, _cents, date, _usd| date <= cutoff }
+          in_cycle_cents = in_cycle_pairs.sum { |_id, cents, _date, _usd| cents }
           if in_cycle_cents <= whole_ledger_cents
             [in_cycle_pairs.map(&:first), in_cycle_cents]
           else
@@ -162,6 +163,13 @@ class AutoTopUpNegativeDestinationBalancesJob
           end
         end
       return { entry:, verdict: :noop, reason: "reconciled since scan — nothing left to transfer" } unless current_total_cents.negative?
+      # Mirrors resolve_entry's own refund-netting guard (`next if set.sum(:amount_cents).negative?`):
+      # a negative destination total matched by a negative USD ledger over the SAME window pays out
+      # coherently and was never a real gap. The scan-time check doesn't survive a refund/credit that
+      # lands between scan and here, so it has to be re-applied against the live window, not just
+      # holding_amount_cents.
+      current_window_usd_cents = current_window_ids.sum { |id| current_balance_usd_cents.fetch(id, 0) }
+      return { entry:, verdict: :noop, reason: "reconciled since scan — refund netting cleared the gap" } if current_window_usd_cents.negative?
 
       _funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)
       funded_ids = funded_ids_str.to_s.split("-").map(&:to_i)
@@ -241,7 +249,17 @@ class AutoTopUpNegativeDestinationBalancesJob
       # or a later scan would create a genuinely new transfer for the same accepted delta. It is
       # only safe to drop because a human clears it explicitly as part of the leg-two reconciliation
       # pass (same convention as the ambiguous-error rescue below).
-      $redis.persist(transfer_key)
+      #
+      # Retry a few times before giving up: a bare `persist` that raises once (Redis blip right
+      # after Stripe accepted) used to fall into the generic rescue below, which repeated the exact
+      # same failing call and then returned :error with the claim still on its original 7-day TTL —
+      # a human who later clears unresolved_key (believing the transfer is simply unconfirmed) would
+      # then let the claim expire and a subsequent run resend the same accepted transfer. Until the
+      # persist is confirmed, unresolved_key stays SET (not deleted) so the account keeps escalating
+      # instead of silently falling back to time-based expiry.
+      unless persist_with_retries(transfer_key)
+        return { entry:, verdict: :escalate, reason: "Stripe accepted #{to_transfer_cents} cents for this account but the durable dedupe claim could not be confirmed in Redis — a human must verify the transfer with Stripe before clearing #{transfer_key} or #{unresolved_key}" }
+      end
       # Store the WINDOW's row ids, not the whole current_balance_ids set: a post-cutoff row
       # excluded from an in-cycle window's total must not become "funded" credit either, or a
       # later run intersecting funded_ids against a different window could count it and resend
@@ -269,6 +287,20 @@ class AutoTopUpNegativeDestinationBalancesJob
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     ensure
       $redis.eval(LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [lock_token]) if lock_token
+    end
+
+    # Bare `$redis.persist` raising once used to fall straight into the generic rescue, which
+    # repeated the identical failing call and returned :error with the transfer_key still on its
+    # original TTL — see the call site's comment for why that's unsafe once Stripe's own
+    # accepted the transfer. A few retries absorb a transient blip; giving up returns false so the
+    # caller can escalate instead of silently trusting an unconfirmed persist.
+    def persist_with_retries(key, attempts: 3)
+      attempts.times do
+        return true if $redis.persist(key)
+      rescue
+        sleep(0.1)
+      end
+      false
     end
 
     def message_for(outcomes, live:, total:)
