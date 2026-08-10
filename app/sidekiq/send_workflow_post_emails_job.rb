@@ -70,12 +70,16 @@ class SendWorkflowPostEmailsJob
     audience_timeout = audience_load_timeout_seconds
     return unless renew_fanout_lease(force: true)
     @members = WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) do
-      members = AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).
+      AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).
         select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
-      members = merge_confirmed_followers_after_cutoff(members)
-      @follower_confirmation_times_by_id = follower_confirmation_times_by_id(members)
-      members
     end
+    return unless renew_fanout_lease(force: true)
+    if confirmed_follower_recovery?
+      return unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_confirmed_followers_after_cutoff(@members) }
+      return unless renew_fanout_lease(force: true)
+    end
+    @follower_confirmation_times_by_id = follower_confirmation_times_by_id(@members)
+    return if @follower_confirmation_times_by_id.nil?
     return unless renew_fanout_lease(force: true)
     if @keep_primary_for_cutoff_scan
       @keep_primary_for_cutoff_scan = false
@@ -201,10 +205,7 @@ class SendWorkflowPostEmailsJob
       raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"
     end
 
-    def confirmed_follower_members_after_cutoff
-      return [] if @recipient_cutoff_time.nil?
-      return [] unless @post.follower_type? || @post.audience_type?
-
+    def confirmed_follower_member_ids_after_cutoff
       follower_emails = Follower.active
         .where(followed_id: @post.seller_id)
         .where("confirmed_at > ?", @recipient_filter_cutoff_time)
@@ -213,23 +214,43 @@ class SendWorkflowPostEmailsJob
         .where(seller_id: @post.seller_id, email: follower_emails)
         .select(:id)
 
-      members = AudienceMember.filter(
+      AudienceMember.filter(
         seller_id: @post.seller_id,
         params: @original_filters,
-        with_ids: true,
+        with_ids: false,
         ids: member_ids
-      ).select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
-      members.select! { workflow_dates_include?(_1.details.dig("follower", "created_at")) }
-      members.each { _1.follower_id = _1.details.dig("follower", "id") }
-      members
+      ).select(:id)
+    end
+
+    def confirmed_follower_recovery?
+      @recipient_cutoff_time.present? && (@post.follower_type? || @post.audience_type?)
     end
 
     def merge_confirmed_followers_after_cutoff(members)
+      return true if @recipient_cutoff_time.nil?
+      return true unless @post.follower_type? || @post.audience_type?
+
       existing_member_ids = members.to_set(&:id)
-      confirmed_follower_members_after_cutoff.each do |follower_member|
-        members << follower_member unless existing_member_ids.include?(follower_member.id)
+      confirmed_follower_member_ids_after_cutoff.find_in_batches(batch_size: FOLLOWER_LOOKUP_BATCH_SIZE) do |batch|
+        return false unless renew_fanout_lease
+
+        missing_ids = batch.filter_map { _1.id unless existing_member_ids.include?(_1.id) }
+        next if missing_ids.empty?
+
+        follower_members = AudienceMember.filter(
+          seller_id: @post.seller_id,
+          params: @original_filters,
+          with_ids: true,
+          ids: missing_ids
+        ).select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
+        follower_members.select! { workflow_dates_include?(_1.details.dig("follower", "created_at")) }
+        follower_members.each do |follower_member|
+          follower_member.follower_id = follower_member.details.dig("follower", "id")
+          members << follower_member
+          existing_member_ids << follower_member.id
+        end
       end
-      members
+      true
     end
 
     def follower_confirmation_times_by_id(members)
@@ -241,6 +262,8 @@ class SendWorkflowPostEmailsJob
         members.filter_map(&:follower_id)
       end
       follower_ids.uniq.each_slice(FOLLOWER_LOOKUP_BATCH_SIZE).each_with_object({}) do |ids, confirmation_times|
+        return unless renew_fanout_lease
+
         Follower.where(id: ids, followed_id: @post.seller_id).active.pluck(:id, :confirmed_at).each do |id, confirmed_at|
           confirmation_times[id] = confirmed_at.change(usec: 0)
         end

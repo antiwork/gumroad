@@ -137,7 +137,7 @@ describe "workflow installment schedule intent completion", :freeze_time do
 
       described_class.new.perform(post.id, nil, false, rule.version, intent.token, fanout_token)
 
-      expect(events).to eq([:release, :renew, :release, :query, :query_complete, :renew, :release])
+      expect(events).to eq([:release, :renew, :release, :query, :query_complete, :renew, :release, :renew, :release])
       expect(intent.reload.processed_at).to be_present
     end
 

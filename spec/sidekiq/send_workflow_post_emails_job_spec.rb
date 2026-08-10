@@ -45,7 +45,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
     it "keeps a cutoff scan on the primary database until the audience loads" do
       expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).ordered.and_call_original
-      expect(WithMaxExecutionTime).to receive(:timeout_queries).ordered.and_call_original
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).twice.ordered.and_call_original
       expect(Makara::Context).to receive(:release_all).ordered
 
       described_class.new.perform(@post.id, 1.day.ago.iso8601)
@@ -122,6 +122,27 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         nil,
         @basic_follower.confirmed_at.iso8601
       ).at(@basic_follower.confirmed_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "does not rematerialize a follower already selected by the cutoff" do
+      allow(AudienceMember).to receive(:filter).and_call_original
+      expect(AudienceMember).not_to receive(:filter).with(
+        seller_id: @seller.id,
+        params: anything,
+        with_ids: true,
+        ids: anything
+      )
+
+      described_class.new.perform(@post.id, 3.days.ago.iso8601)
+    end
+
+    it "checks fanout ownership between cutoff scans" do
+      @basic_follower.update_columns(created_at: 3.days.ago)
+      @basic_follower.update!(confirmed_at: 1.hour.ago.change(usec: 0))
+      job = described_class.new
+      expect(job).to receive(:renew_fanout_lease).at_least(6).times.and_call_original
+
+      job.perform(@post.id, 1.day.ago.iso8601)
     end
 
     it "recovers a follower confirmed in the publication second" do
