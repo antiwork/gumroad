@@ -44,6 +44,11 @@ class PostToIndividualPingEndpointWorker
       end
     end
 
+  # no_follow makes HTTParty raise instead of returning the 3xx; a redirect is deterministic,
+  # so log and drop the delivery rather than retry or send the job to the dead set.
+  rescue HTTParty::RedirectionTooDeep => e
+    Rails.logger.info("PostToIndividualPingEndpointWorker refused redirect response=#{e.response&.code} content_type=#{content_type} user_id=#{user_id}")
+
   # rescue clause to handle connection errors. Without this, the job
   # would fail if the user inputted post_url is invalid.
   rescue *INTERNET_EXCEPTIONS => e

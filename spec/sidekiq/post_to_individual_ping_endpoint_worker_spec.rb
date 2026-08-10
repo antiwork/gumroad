@@ -84,6 +84,20 @@ describe PostToIndividualPingEndpointWorker do
     PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
   end
 
+  it "logs and drops the delivery without raising or retrying when the endpoint responds with a redirect" do
+    redirect_response = Net::HTTPFound.new("1.1", "302", "Found")
+    allow(HTTParty).to receive(:post).and_raise(HTTParty::RedirectionTooDeep.new(redirect_response))
+    messages = []
+    allow(Rails.logger).to receive(:info) { |message| messages << message }
+
+    expect do
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
+    end.to_not raise_error
+
+    expect(messages).to include("PostToIndividualPingEndpointWorker refused redirect response=302 content_type=#{Mime[:url_encoded_form]} user_id=")
+    expect(PostToIndividualPingEndpointWorker.jobs.size).to eq(0)
+  end
+
   it "re-validates the post_url against the SSRF guard before connecting, and skips the request if it now resolves to a private address" do
     allow(ResourceSubscription).to receive(:valid_post_url?).with("http://notification.com").and_return(false)
     expect(HTTParty).not_to receive(:post)
