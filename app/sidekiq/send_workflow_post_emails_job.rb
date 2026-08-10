@@ -10,11 +10,11 @@ class SendWorkflowPostEmailsJob
   FOLLOWER_LOOKUP_BATCH_SIZE = 1_000
   AFFILIATE_LOOKUP_BATCH_SIZE = 1_000
 
-  def perform(post_id, earliest_valid_time = nil, _reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
+  def perform(post_id, earliest_valid_time = nil, reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
     @schedule_intent_token = schedule_intent_token
     @schedule_intent_fanout_token = schedule_intent_fanout_token
     primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? ||
-                     schedule_intent_fanout_token.present? || earliest_valid_time.present?
+                     schedule_intent_fanout_token.present? || earliest_valid_time.present? || reschedule_on_stale
     ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
     return unless WorkflowInstallmentScheduleIntent.begin_fanout(
       intent_token: schedule_intent_token,
@@ -30,6 +30,7 @@ class SendWorkflowPostEmailsJob
       return
     end
     @workflow = @post.workflow
+    @reschedule_on_stale = reschedule_on_stale
     unless @workflow&.alive? && @post.alive? && @post.published?
       WorkflowInstallmentScheduleIntent.mark_processed(
         schedule_intent_token,
@@ -60,7 +61,7 @@ class SendWorkflowPostEmailsJob
       @recipient_cutoff_time
     end
     apply_recipient_cutoff_to_filters
-    @keep_primary_for_cutoff_scan = @recipient_cutoff_time.present?
+    @keep_primary_for_cutoff_scan = @recipient_cutoff_time.present? || @reschedule_on_stale
     unless @keep_primary_for_cutoff_scan
       Makara::Context.release_all
       primary_pinned = false
@@ -181,43 +182,33 @@ class SendWorkflowPostEmailsJob
         purchase = member.details["purchases"].find { _1["id"] == id }
         return log_unresolvable_recipient(member:, type:) if purchase.nil?
         created_at = Time.zone.parse(purchase["created_at"])
-        enqueue_installment_worker(created_at + @rule_delay, @post.id, @rule_version, id, nil, nil)
+        enqueue_installment_worker(created_at:, purchase_id: id)
       elsif type == :follower
         id ||= member.details.dig("follower", "id")
         return log_unresolvable_recipient(member:, type:) if id.nil?
         confirmed_at = @follower_confirmation_times_by_id[id]
         return log_unresolvable_recipient(member:, type:) if confirmed_at.nil?
-        enqueue_installment_worker(
-          confirmed_at + @rule_delay,
-          @post.id,
-          @rule_version,
-          nil,
-          id,
-          nil,
-          nil,
-          confirmed_at.iso8601
-        )
+        enqueue_installment_worker(created_at: confirmed_at, follower_id: id, preserve_reference_time: true)
       elsif type == :affiliate
         affiliate_triggers = resolve_affiliate_triggers(member:, id:)
         return log_unresolvable_recipient(member:, type:) if affiliate_triggers.empty?
 
         affiliate_triggers.each do |affiliate|
           enqueue_installment_worker(
-            affiliate[:created_at] + @rule_delay,
-            @post.id,
-            @rule_version,
-            nil,
-            nil,
-            affiliate[:affiliate_user_id],
-            nil,
-            affiliate[:created_at].iso8601
+            created_at: affiliate[:created_at],
+            affiliate_user_id: affiliate[:affiliate_user_id],
+            preserve_reference_time: true
           )
         end
       end
     end
 
-    def enqueue_installment_worker(deliver_at, *args)
-      job_id = SendWorkflowInstallmentWorker.perform_at(deliver_at, *args)
+    def enqueue_installment_worker(created_at:, purchase_id: nil, follower_id: nil, affiliate_user_id: nil, preserve_reference_time: false)
+      args = [@post.id, @rule_version, purchase_id, follower_id, affiliate_user_id]
+      reschedule_recipient = @reschedule_on_stale && [purchase_id, follower_id, affiliate_user_id].one?(&:present?)
+      args.push(nil, created_at.iso8601) if reschedule_recipient || preserve_reference_time
+      worker = reschedule_recipient ? SendWorkflowInstallmentRescheduleJob : SendWorkflowInstallmentWorker
+      job_id = worker.perform_at(created_at + @rule_delay, *args)
       return job_id if job_id.present?
 
       raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"

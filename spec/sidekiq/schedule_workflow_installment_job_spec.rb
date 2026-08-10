@@ -8,7 +8,9 @@ describe ScheduleWorkflowInstallmentJob do
   let(:rule) { installment.installment_rule }
   let(:cutoff_reference_time) { Time.current.change(usec: 0) }
 
-  def create_intent(**attributes)
+  def create_intent(installment: nil, rule: nil, **attributes)
+    installment ||= self.installment
+    rule ||= installment.installment_rule
     WorkflowInstallmentScheduleIntent.create!(
       {
         token: SecureRandom.uuid,
@@ -26,6 +28,7 @@ describe ScheduleWorkflowInstallmentJob do
       kind_of(Installment),
       old_delayed_delivery_time: 1.hour.to_i,
       cutoff_reference_time:,
+      reschedule_on_stale: true,
       minimum_rule_version: rule.version,
       schedule_intent_token: intent.token,
       schedule_intent_fanout_token: kind_of(String)
@@ -120,6 +123,7 @@ describe ScheduleWorkflowInstallmentJob do
       kind_of(Installment),
       old_delayed_delivery_time: 1.hour.to_i,
       cutoff_reference_time:,
+      reschedule_on_stale: true,
       minimum_rule_version: rule.version,
       schedule_intent_token: intent.token,
       schedule_intent_fanout_token: kind_of(String)
@@ -153,12 +157,15 @@ describe ScheduleWorkflowInstallmentJob do
       kind_of(Installment),
       old_delayed_delivery_time: nil,
       cutoff_reference_time: published_at,
+      reschedule_on_stale: false,
       minimum_rule_version: rule.version,
       schedule_intent_token: intent.token,
       schedule_intent_fanout_token: kind_of(String)
     ).and_return(:enqueued)
+    job = described_class.new
+    expect(job).not_to receive(:reschedule_pending_resubscribed_memberships)
 
-    described_class.new.perform(intent.token)
+    job.perform(intent.token)
   end
 
   it "discards an intent after the installment becomes unpublished" do
@@ -194,6 +201,17 @@ describe ScheduleWorkflowInstallmentJob do
     expect(intent.fanout_expires_at).to be_nil
   end
 
+  it "keeps the intent pending if resubscription scheduling fails" do
+    intent = create_intent
+    job = described_class.new
+    expect(job).to receive(:reschedule_pending_resubscribed_memberships).and_raise("Redis is unavailable")
+    expect_any_instance_of(Workflow).not_to receive(:schedule_installment)
+
+    expect { job.perform(intent.token) }.to raise_error("Redis is unavailable")
+
+    expect(intent.reload.processed_at).to be_nil
+  end
+
   it "keeps the intent pending when middleware cancels the fanout" do
     intent = create_intent
     expect_any_instance_of(Workflow).to receive(:schedule_installment).and_return(:not_enqueued)
@@ -227,6 +245,198 @@ describe ScheduleWorkflowInstallmentJob do
     described_class.new.perform(intent.token)
 
     expect(intent.reload.processed_at).to be_present
+  end
+
+  it "reschedules a pending email for a resubscribed membership outside the purchase cutoff" do
+    product = create(:subscription_product)
+    subscription = create(:subscription, link: product)
+    purchase = create(
+      :free_purchase,
+      link: product,
+      subscription:,
+      is_original_subscription_purchase: true,
+      created_at: 10.days.ago
+    )
+    create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
+    create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
+    workflow = create(:workflow, seller: product.user, link: product, published_at: 3.days.ago)
+    installment = create(
+      :workflow_installment,
+      workflow:,
+      seller: product.user,
+      link: product,
+      published_at: workflow.published_at,
+      is_for_new_customers_of_workflow: true
+    )
+    rule = installment.installment_rule
+    rule.update!(delayed_delivery_time: 7.days)
+    old_delayed_delivery_time = 3.days.to_i
+    reference_time = installment.workflow_delivery_reference_time(purchase).change(usec: 0)
+    expect_any_instance_of(Subscription).not_to receive(:last_resubscribed_at)
+    expect_any_instance_of(Subscription).not_to receive(:last_deactivated_at)
+    intent = create_intent(
+      installment:,
+      rule:,
+      old_delayed_delivery_time:,
+      cutoff_reference_time:
+    )
+
+    described_class.new.perform(intent.token)
+
+    expect(purchase.created_at + old_delayed_delivery_time).to be < cutoff_reference_time
+    expect(reference_time + old_delayed_delivery_time).to be > cutoff_reference_time
+    expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+      installment.id,
+      rule.version,
+      purchase.id,
+      nil,
+      nil,
+      nil,
+      reference_time.iso8601
+    ).at(reference_time + rule.delayed_delivery_time)
+  end
+
+  it "does not reschedule a restart before publication" do
+    product = create(:subscription_product)
+    subscription = create(:subscription, link: product)
+    purchase = create(
+      :free_purchase,
+      link: product,
+      subscription:,
+      is_original_subscription_purchase: true,
+      created_at: 10.days.ago
+    )
+    create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
+    create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
+    workflow = create(:workflow, seller: product.user, link: product, published_at: 1.day.ago)
+    installment = create(
+      :workflow_installment,
+      workflow:,
+      seller: product.user,
+      link: product,
+      published_at: workflow.published_at,
+      is_for_new_customers_of_workflow: true
+    )
+    rule = installment.installment_rule
+    rule.update!(delayed_delivery_time: 7.days)
+    intent = create_intent(
+      installment:,
+      rule:,
+      old_delayed_delivery_time: 3.days.to_i,
+      cutoff_reference_time:
+    )
+
+    described_class.new.perform(intent.token)
+
+    expect(installment.workflow_delivery_reference_time(purchase)).to be < installment.published_at
+    expect(SendWorkflowInstallmentRescheduleJob.jobs).to be_empty
+  end
+
+  it "limits the resubscription scan to the recipient window" do
+    seller = create(:user)
+    product = create(:subscription_product, user: seller)
+    recent_subscription = create(:subscription, link: product)
+    old_subscription = create(:subscription, link: product)
+    recent_restart = create(:subscription_event, subscription: recent_subscription, event_type: :restarted, occurred_at: 1.day.ago)
+    recent_restart.update_columns(seller_id: nil)
+    create(:subscription_event, subscription: old_subscription, event_type: :restarted, occurred_at: 10.days.ago)
+    workflow = build(:seller_workflow, seller:)
+
+    candidates = described_class.new.send(
+      :candidate_subscriptions,
+      workflow,
+      restarted_after: 3.days.ago
+    )
+
+    expect(candidates).to include(recent_subscription)
+    expect(candidates).not_to include(old_subscription)
+  end
+
+  it "batches exclusion filters across resubscribed memberships" do
+    seller = create(:user)
+    product = create(:subscription_product, user: seller)
+    excluded_product = create(:product, user: seller)
+    variant_product = create(:product, user: seller)
+    excluded_variant = create(:variant, variant_category: create(:variant_category, link: variant_product))
+    workflow = create(
+      :workflow,
+      seller:,
+      link: product,
+      published_at: 3.days.ago,
+      not_bought_products: [excluded_product.unique_permalink],
+      not_bought_variants: [excluded_variant.external_id]
+    )
+    installment = create(
+      :workflow_installment,
+      workflow:,
+      seller:,
+      link: product,
+      published_at: workflow.published_at,
+      is_for_new_customers_of_workflow: true
+    )
+    installment.installment_rule.update!(delayed_delivery_time: 7.days)
+    email_sequence = 0
+    add_resubscribed_membership = lambda do |excluded_by: nil|
+      email_sequence += 1
+      subscription = create(:subscription, link: product)
+      purchase = create(
+        :free_purchase,
+        link: product,
+        subscription:,
+        is_original_subscription_purchase: true,
+        email: "resubscribed-member-#{email_sequence}@example.com",
+        created_at: 10.days.ago
+      )
+      create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
+      create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
+      if excluded_by == :product
+        create(:free_purchase, link: excluded_product, email: purchase.email)
+      elsif excluded_by == :variant
+        excluded_purchase = create(:free_purchase, link: variant_product, email: purchase.email)
+        excluded_purchase.variant_attributes << excluded_variant
+      end
+      purchase
+    end
+    included_purchase = add_resubscribed_membership.call
+    product_excluded_purchase = add_resubscribed_membership.call(excluded_by: :product)
+    variant_excluded_purchase = add_resubscribed_membership.call(excluded_by: :variant)
+
+    count_queries = lambda do
+      fresh_installment = Installment.find(installment.id)
+      fresh_installment.workflow
+      fresh_installment.installment_rule
+      count = 0
+      subscriber = lambda do |*, payload|
+        count += 1 unless payload[:name] == "SCHEMA" || payload[:cached]
+      end
+      ActiveRecord::Base.uncached do
+        ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+          described_class.new.send(
+            :reschedule_pending_resubscribed_memberships,
+            fresh_installment,
+            3.days.to_i,
+            cutoff_reference_time
+          )
+        end
+      end
+      count
+    end
+
+    baseline = count_queries.call
+    expect(SendWorkflowInstallmentRescheduleJob.jobs.map { _1["args"][2] }).to contain_exactly(included_purchase.id)
+
+    SendWorkflowInstallmentRescheduleJob.jobs.clear
+    additional_purchases = 3.times.map { add_resubscribed_membership.call }
+
+    expect(count_queries.call).to eq(baseline)
+    expect(SendWorkflowInstallmentRescheduleJob.jobs.map { _1["args"][2] }).to contain_exactly(
+      included_purchase.id,
+      *additional_purchases.map(&:id)
+    )
+    expect(SendWorkflowInstallmentRescheduleJob.jobs.map { _1["args"][2] }).not_to include(
+      product_excluded_purchase.id,
+      variant_excluded_purchase.id
+    )
   end
 
   it "releases the primary connection after execution" do
