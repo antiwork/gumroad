@@ -619,8 +619,50 @@ class PaypalChargeProcessor
                                                    total_cents_usd: get_usd_cents(currency, product_info[:total_cents].to_i),
                                                    quantity: product_info[:quantity].to_i)
 
+    ensure_order_update_does_not_lower_total!(paypal_order_id, purchase_unit_info)
+
     update_order(paypal_order_id, purchase_unit_info)
   end
+
+  def self.ensure_order_update_does_not_lower_total!(paypal_order_id, purchase_unit_info)
+    order_details = fetch_order(order_id: paypal_order_id)
+    current_amount = order_details.dig("purchase_units", 0, "amount")
+    current_total = current_amount&.fetch("value", nil)
+    current_currency = current_amount&.fetch("currency_code", nil)
+
+    if current_total.blank? || current_currency.blank?
+      ErrorNotifier.notify("PayPal order total missing when updating order")
+      raise ChargeProcessorError, "PayPal order total missing when updating order"
+    end
+
+    requested_currency = purchase_unit_info[:currency].to_s
+    unless current_currency.casecmp?(requested_currency)
+      ErrorNotifier.notify("PayPal order currency changed when updating order")
+      raise ChargeProcessorError, "PayPal order currency changed when updating order"
+    end
+
+    begin
+      current_total_decimal = BigDecimal(current_total.to_s)
+      requested_total_decimal = BigDecimal(purchase_unit_info[:total].to_s)
+    rescue ArgumentError, TypeError
+      ErrorNotifier.notify("PayPal order total is not numeric when updating order")
+      raise ChargeProcessorError, "PayPal order total is not numeric when updating order"
+    end
+
+    # BigDecimal("NaN")/Infinity parse without raising, and any comparison against
+    # NaN is false, so a non-finite total would silently skip the lower-total check below.
+    if !current_total_decimal.finite? || !requested_total_decimal.finite?
+      ErrorNotifier.notify("PayPal order total is not numeric when updating order")
+      raise ChargeProcessorError, "PayPal order total is not numeric when updating order"
+    end
+
+    if requested_total_decimal < current_total_decimal
+      ErrorNotifier.notify("PayPal order update attempted to lower order total")
+      raise ChargeProcessorError, "PayPal order update cannot lower the order total"
+    end
+  end
+
+  private_class_method :ensure_order_update_does_not_lower_total!
 
   def self.create_order(purchase_unit_info)
     if purchase_unit_info.blank?
