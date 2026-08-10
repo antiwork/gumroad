@@ -40,7 +40,7 @@ class Follower < ApplicationRecord
   def confirm!(schedule_workflow: true)
     return if confirmed?
 
-    self.confirmed_at = Time.current
+    self.confirmed_at = Time.current.change(usec: 0)
     self.deleted_at = nil
     save!
     schedule_workflow_jobs if schedule_workflow && user.workflows.alive.follower_or_audience_type.present?
@@ -78,8 +78,17 @@ class Follower < ApplicationRecord
       workflow.installments.alive.each do |installment|
         installment_rule = installment.installment_rule
         next if installment_rule.nil?
-        SendWorkflowInstallmentWorker.perform_in(installment_rule.delayed_delivery_time,
-                                                 installment.id, installment_rule.version, nil, id, nil)
+        reference_time = confirmed_at.change(usec: 0)
+        SendWorkflowInstallmentWorker.perform_at(
+          reference_time + installment_rule.delayed_delivery_time,
+          installment.id,
+          installment_rule.version,
+          nil,
+          id,
+          nil,
+          nil,
+          reference_time.iso8601
+        )
       end
     end
   end

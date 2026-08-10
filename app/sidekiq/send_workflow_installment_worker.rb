@@ -6,12 +6,12 @@ class SendWorkflowInstallmentWorker
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
-  def perform(installment_id, version, purchase_id, follower_id, affiliate_user_id = nil, subscription_id = nil)
+  def perform(installment_id, version, purchase_id, follower_id, affiliate_user_id = nil, subscription_id = nil, recipient_reference_time = nil)
     primary_pinned = false
     expected_rule_version = current_rule_version(installment_id)
     return if expected_rule_version.nil?
 
-    if expected_rule_version != version
+    if expected_rule_version != version || recipient_reference_time.present?
       ActiveRecord::Base.connection.stick_to_primary!
       primary_pinned = true
     end
@@ -40,6 +40,14 @@ class SendWorkflowInstallmentWorker
 
     return if installment_rule.version != version
 
+    if follower_id.present? && purchase_id.nil? && affiliate_user_id.nil? && subscription_id.nil? && recipient_reference_time.present?
+      return unless follower_matches_current_audience?(
+        installment:,
+        follower_id:,
+        recipient_reference_time:
+      )
+    end
+
     if purchase_id.present? && follower_id.nil? && affiliate_user_id.nil? && subscription_id.nil?
       installment.send_installment_from_workflow_for_purchase(purchase_id)
     elsif follower_id.present? && purchase_id.nil? && affiliate_user_id.nil? && subscription_id.nil?
@@ -59,6 +67,44 @@ class SendWorkflowInstallmentWorker
   end
 
   private
+    def follower_matches_current_audience?(installment:, follower_id:, recipient_reference_time:)
+      reference_time = Time.zone.iso8601(recipient_reference_time)
+      if installment.is_for_new_customers_of_workflow && reference_time < installment.published_at
+        return false
+      end
+
+      follower = Follower.active.find_by(id: follower_id, followed_id: installment.seller_id)
+      return false if follower.nil? || follower.confirmed_at.nil?
+      return false if SentPostEmail.exists?(post: installment, email: follower.email)
+
+      filters = installment.audience_members_filter_params
+      member = AudienceMember.find_by(seller_id: installment.seller_id, email: follower.email.downcase)
+      return false if member.nil?
+
+      current_match = AudienceMember.filter(
+        seller_id: installment.seller_id,
+        params: filters.except(:created_after, :created_before),
+        with_ids: true,
+        ids: [member.id]
+      ).first
+      return false if current_match.nil?
+
+      current_follower_id = current_match.follower_id || member.details.dig("follower", "id")
+      return false unless current_follower_id == follower.id
+      return false unless follower_identity_matches_workflow_dates?(filters:, follower:)
+
+      follower.confirmed_at.change(usec: 0) == reference_time
+    end
+
+    def follower_identity_matches_workflow_dates?(filters:, follower:)
+      created_after = Time.zone.parse(filters[:created_after].to_s) if filters[:created_after]
+      created_before = Time.zone.parse(filters[:created_before].to_s) if filters[:created_before]
+      return false if created_after && follower.created_at <= created_after
+      return false if created_before && follower.created_at >= created_before
+
+      true
+    end
+
     def current_rule_version(installment_id)
       cache_read_failed = false
       pending = false

@@ -106,6 +106,78 @@ describe SendWorkflowInstallmentWorker do
       )
     end
 
+    it "calls the follower mailer for the matching confirmation" do
+      allow(PostSendgridApi).to receive(:process)
+
+      described_class.new.perform(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        @follower.id,
+        nil,
+        nil,
+        @follower.confirmed_at.change(usec: 0).iso8601
+      )
+
+      expect(PostSendgridApi).to have_received(:process)
+    end
+
+    it "does not attach a same-version job to a later confirmation" do
+      old_reference_time = @follower.confirmed_at.change(usec: 0)
+      @follower.update!(confirmed_at: 1.hour.from_now)
+      expect(PostSendgridApi).not_to receive(:process)
+
+      described_class.new.perform(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        @follower.id,
+        nil,
+        nil,
+        old_reference_time.iso8601
+      )
+    end
+
+    it "does not let a purchase mask a follower outside the workflow dates" do
+      product = create(:product, user: @user, price_cents: 0)
+      purchase = create(:free_purchase, link: product, email: @follower.email, created_at: 1.day.ago)
+      purchase.add_to_audience_member_details
+      @installment.update!(created_after: 2.days.ago)
+      @follower.update_columns(created_at: 3.days.ago, confirmed_at: 1.hour.ago.change(usec: 0))
+      expect(PostSendgridApi).not_to receive(:process)
+
+      described_class.new.perform(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        @follower.id,
+        nil,
+        nil,
+        @follower.confirmed_at.iso8601
+      )
+    end
+
+    it "matches a follower in range when the required purchase predates the range" do
+      product = create(:product, user: @user, price_cents: 0)
+      purchase = create(:free_purchase, link: product, email: @follower.email, created_at: 3.days.ago)
+      purchase.add_to_audience_member_details
+      @installment.update!(created_after: 2.days.ago, bought_products: [product.unique_permalink])
+      @follower.update_columns(created_at: 1.day.ago, confirmed_at: 1.hour.ago.change(usec: 0))
+      allow(PostSendgridApi).to receive(:process)
+
+      described_class.new.perform(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        @follower.id,
+        nil,
+        nil,
+        @follower.confirmed_at.iso8601
+      )
+
+      expect(PostSendgridApi).to have_received(:process)
+    end
+
     it "fills an expired cache from the locked primary" do
       $redis.del(
         RedisKey.workflow_installment_rule_version(@installment.id),

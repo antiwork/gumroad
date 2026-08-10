@@ -100,7 +100,7 @@ RSpec.describe Follower do
 
       unconfirmed_follower = create(:follower, id: 99, user:)
       unconfirmed_follower.confirm!
-      expect(unconfirmed_follower.confirmed_at.to_s).to eq(time.utc.to_s)
+      expect(unconfirmed_follower.confirmed_at).to eq(time.change(usec: 0))
     end
 
     it "removes deleted_at" do
@@ -198,9 +198,36 @@ RSpec.describe Follower do
 
     it "enqueues 2 installment jobs when follower confirms" do
       follower = Follower.create!(user: @seller, email: "email@test.com")
+      confirmation_time = Time.current.change(usec: 600_000)
+      allow(Time).to receive(:current).and_return(confirmation_time)
       follower.confirm!
 
       expect(SendWorkflowInstallmentWorker.jobs.size).to eq(2)
+      reference_time = confirmation_time.change(usec: 0)
+      expect(follower.reload.confirmed_at).to eq(reference_time)
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @installment1.id,
+        @installment_rule1.version,
+        nil,
+        follower.id,
+        nil,
+        nil,
+        reference_time.iso8601
+      ).at(reference_time + @installment_rule1.delayed_delivery_time)
+
+      queued_args = SendWorkflowInstallmentWorker.jobs.find { _1["args"].first == @installment1.id }.fetch("args")
+      expected_args = [
+        @installment1.id,
+        @installment_rule1.version,
+        nil,
+        follower.id,
+        nil,
+        nil,
+        reference_time.iso8601
+      ]
+      expect(queued_args).to eq(expected_args)
+      allow(PostSendgridApi).to receive(:process)
+      expect { SendWorkflowInstallmentWorker.new.perform(*queued_args) }.not_to raise_error
     end
 
     it "doesn't enqueue installment jobs when follower doesn't confirm" do
