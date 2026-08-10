@@ -16,21 +16,37 @@ describe ProductAffiliate do
         expect(product_affiliate).not_to be_valid
       end
 
-      it "locks the affiliate before checking for an existing assignment" do
+      it "locks the affiliate before the final duplicate check and insert" do
         affiliate = create(:direct_affiliate)
         product = create(:product, user: affiliate.seller)
-        product_affiliate = build(:product_affiliate, affiliate:, product:)
-        lock_queries = []
+        queries = []
         subscriber = lambda do |_name, _start, _finish, _id, payload|
-          lock_queries << payload[:sql] if payload[:sql].include?("FOR UPDATE")
+          sql = payload[:sql]
+          queries << sql if sql.include?("FROM `affiliates`") || sql.include?("FROM `affiliates_links`") || sql.include?("INSERT INTO `affiliates_links`")
         end
 
         ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
-          product_affiliate.valid?
+          create(:product_affiliate, affiliate:, product:)
         end
 
-        expect(lock_queries.first).to include("FROM `affiliates`")
-        expect(lock_queries.second).to include("FROM `affiliates_links`")
+        lock_index = queries.index { _1.include?("FROM `affiliates`") && _1.include?("FOR UPDATE") }
+        duplicate_check_index = queries.rindex { _1.include?("FROM `affiliates_links`") }
+        insert_index = queries.index { _1.include?("INSERT INTO `affiliates_links`") }
+
+        expect(lock_index).to be < duplicate_check_index
+        expect(duplicate_check_index).to be < insert_index
+      end
+
+      it "copies a late duplicate error to an autosave owner" do
+        collaborator = create(:collaborator)
+        product = create(:product, user: collaborator.seller)
+        product_affiliate = collaborator.product_affiliates.build(product:, affiliate_basis_points: 10_00)
+        allow(product_affiliate).to receive(:affiliate_is_unique_for_product) do |lock: false|
+          product_affiliate.errors.add(:affiliate, :taken) if lock
+        end
+
+        expect(collaborator.save).to eq(false)
+        expect(collaborator.errors[:base]).to include("Affiliate has already been taken")
       end
     end
 
