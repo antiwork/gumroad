@@ -104,6 +104,8 @@ class Workflow::SaveInstallmentsService
 
     def save_installment_rule_and_reschedule_installment(installment, installment_params)
       rule = installment.installment_rule || installment.build_installment_rule
+      # Hold the row lock before Redis marks the new version. Cache expiry then falls back to a blocked primary read.
+      rule.lock! if rule.persisted?
       rule.time_period = installment_params[:time_period]
       new_delayed_delivery_time = convert_to_seconds(installment_params[:time_duration], installment_params[:time_period])
       old_delayed_delivery_time = rule.delayed_delivery_time

@@ -271,6 +271,25 @@ describe Workflow::SaveInstallmentsService do
           installment.update!(published_at: workflow.published_at)
         end
 
+        it "locks the rule before publishing its pending cache version" do
+          params[:installments] = [default_installment_params.merge(id: installment.external_id, time_duration: 2, time_period: "day")]
+          service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
+          events = []
+          allow_any_instance_of(InstallmentRule).to receive(:lock!).and_wrap_original do |method, *args|
+            events << :lock
+            method.call(*args)
+          end
+          allow(InstallmentRule).to receive(:cache_pending_version!).and_wrap_original do |method, **kwargs|
+            events << :cache
+            method.call(**kwargs)
+          end
+
+          service.process
+
+          expect(events).to include(:lock, :cache)
+          expect(events.index(:lock)).to be < events.index(:cache)
+        end
+
         it "reschedules that installment" do
           expect(SendWorkflowPostEmailsJob).to receive(:perform_async).with(installment.id, installment.published_at.iso8601)
 
