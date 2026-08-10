@@ -178,7 +178,7 @@ describe Workflow::SaveInstallmentsService do
     end
 
     it "creates installments" do
-      expect_any_instance_of(Workflow).to_not receive(:schedule_installment)
+      expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
       process_and_perform_assertions_for_created_installments
     end
@@ -186,7 +186,7 @@ describe Workflow::SaveInstallmentsService do
     it "creates installments and publishes them if save_action_name is 'save_and_publish'" do
       params[:save_action_name] = Workflow::SAVE_AND_PUBLISH_ACTION
 
-      expect_any_instance_of(Workflow).to receive(:schedule_installment).with(kind_of(Installment))
+      expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_call_original
 
       expect do
         process_and_perform_assertions_for_created_installments
@@ -196,7 +196,7 @@ describe Workflow::SaveInstallmentsService do
     end
 
     it "updates installments" do
-      expect_any_instance_of(Workflow).to_not receive(:schedule_installment)
+      expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
       process_and_perform_assertions_for_updated_installments
     end
@@ -204,7 +204,7 @@ describe Workflow::SaveInstallmentsService do
     it "updates installments and publishes them if save_action_name is 'save_and_publish'" do
       params[:save_action_name] = Workflow::SAVE_AND_PUBLISH_ACTION
 
-      expect_any_instance_of(Workflow).to receive(:schedule_installment).with(kind_of(Installment))
+      expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_call_original
 
       expect do
         process_and_perform_assertions_for_updated_installments
@@ -219,7 +219,7 @@ describe Workflow::SaveInstallmentsService do
 
       params[:save_action_name] = Workflow::SAVE_AND_UNPUBLISH_ACTION
 
-      expect_any_instance_of(Workflow).to_not receive(:schedule_installment)
+      expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
       expect do
         expect do
@@ -291,7 +291,7 @@ describe Workflow::SaveInstallmentsService do
         end
 
         it "reschedules that installment" do
-          expect(SendWorkflowPostEmailsJob).to receive(:perform_async).with(installment.id, installment.published_at.iso8601)
+          expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(kind_of(String), kind_of(String)).and_call_original
 
           params[:installments] = [default_installment_params.merge(id: installment.external_id, time_duration: 2, time_period: "day")]
           service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
@@ -300,11 +300,53 @@ describe Workflow::SaveInstallmentsService do
             service.process
           end.to change { installment.reload.installment_rule.delayed_delivery_time }.from(1.hour.to_i).to(2.days.to_i)
              .and change { installment.reload.installment_rule.time_period }.from("hour").to("day")
+
+          expect(WorkflowInstallmentScheduleIntent.sole).to have_attributes(
+            installment_id: installment.id,
+            rule_version: installment_rule.reload.version,
+            old_delayed_delivery_time: 1.hour.to_i
+          )
+        end
+
+        it "rolls back the schedule intent when a later preview fails" do
+          params[:installments] = [
+            default_installment_params.merge(
+              id: installment.external_id,
+              time_duration: 2,
+              time_period: "day",
+              send_preview_email: true,
+            )
+          ]
+          service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
+          allow_any_instance_of(Installment).to receive(:send_preview_email).and_raise(Installment::PreviewEmailError, "Preview failed")
+
+          success, = service.process
+
+          expect(success).to be(false)
+          expect(installment_rule.reload).to have_attributes(
+            delayed_delivery_time: 1.hour.to_i,
+            time_period: "hour",
+          )
+          expect(WorkflowInstallmentScheduleIntent.count).to eq(0)
+          expect(ScheduleWorkflowInstallmentJob.jobs).to be_empty
+        end
+
+        it "keeps a pending intent when the fast path returns no job ID" do
+          params[:installments] = [default_installment_params.merge(id: installment.external_id, time_duration: 2, time_period: "day")]
+          service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
+          allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_return(nil)
+
+          expect(service.process).to eq([true, nil])
+
+          expect(installment_rule.reload).to have_attributes(
+            delayed_delivery_time: 2.days.to_i,
+            time_period: "day"
+          )
+          expect(WorkflowInstallmentScheduleIntent.pending.sole.installment_id).to eq(installment.id)
         end
 
         it "does not reschedule that installment if save_action_name is other than 'save'" do
-          expect(SendWorkflowPostEmailsJob).not_to receive(:perform_async)
-          expect_any_instance_of(Workflow).to_not receive(:schedule_installment)
+          expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
           params[:installments] = [default_installment_params.merge(id: installment.external_id, time_duration: 2, time_period: "day", send_preview_email: true)]
           params[:save_action_name] = Workflow::SAVE_AND_PUBLISH_ACTION
@@ -320,7 +362,7 @@ describe Workflow::SaveInstallmentsService do
 
       context "when installment has not been published" do
         it "does not reschedule that installment" do
-          expect(SendWorkflowPostEmailsJob).not_to receive(:perform_async)
+          expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
           params[:installments] = [default_installment_params.merge(id: installment.external_id, time_duration: 2, time_period: "day")]
           service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
@@ -336,7 +378,7 @@ describe Workflow::SaveInstallmentsService do
     it "reschedules a newly added installment if the workflow is already published" do
       workflow.publish!
 
-      expect_any_instance_of(Workflow).to receive(:schedule_installment).with(kind_of(Installment), old_delayed_delivery_time: nil)
+      expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(kind_of(String), kind_of(String)).and_call_original
 
       params[:installments] = [default_installment_params.merge(id: SecureRandom.uuid, time_duration: 1, time_period: "hour")]
       service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
@@ -349,10 +391,15 @@ describe Workflow::SaveInstallmentsService do
       expect(installment.installment_rule.delayed_delivery_time).to eq(1.hour.to_i)
       expect(installment.installment_rule.time_period).to eq("hour")
       expect(installment.published_at).to eq(workflow.published_at)
+      expect(WorkflowInstallmentScheduleIntent.order(:id).last).to have_attributes(
+        installment_id: installment.id,
+        rule_version: installment.installment_rule.version,
+        old_delayed_delivery_time: nil
+      )
     end
 
     it "does not reschedule an installment if the delayed_delivery_time does not change" do
-      expect(SendWorkflowPostEmailsJob).not_to receive(:perform_async)
+      expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
       installment = create(:installment, workflow:)
       create(:installment_rule, installment:, delayed_delivery_time: 1.hour.to_i, time_period: "hour")

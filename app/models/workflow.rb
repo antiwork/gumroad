@@ -73,14 +73,26 @@ class Workflow < ApplicationRecord
         raise ActiveRecord::RecordInvalid.new(self)
       end
 
-      self.published_at = DateTime.current
+      self.published_at = DateTime.current.change(usec: 0)
       self.first_published_at ||= published_at
+      installments_to_schedule = []
       installments.alive.find_each do |installment|
-        installment.installment_rule&.advance_version!
+        rule = installment.installment_rule
+        rule&.advance_version!
         installment.publish!(published_at:)
-        schedule_installment(installment)
+        installments_to_schedule << [installment, rule.version] if rule.present? && !installment.abandoned_cart_type?
       end
       save!
+      installments_to_schedule.each do |installment, rule_version|
+        WorkflowInstallmentScheduleIntent.enqueue!(
+          installment:,
+          rule_version:,
+          old_delayed_delivery_time: nil,
+          cutoff_reference_time: published_at,
+          expected_published_at: published_at
+        )
+      end
+      true
     end
   end
 
@@ -101,19 +113,26 @@ class Workflow < ApplicationRecord
     first_published_at.nil?
   end
 
-  def schedule_installment(installment, old_delayed_delivery_time: nil)
-    return if installment.abandoned_cart_type?
-    return unless alive?
-    return unless installment.published?
+  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, minimum_rule_version: nil, schedule_intent_token: nil, schedule_intent_fanout_token: nil)
+    return :not_applicable if installment.abandoned_cart_type?
+    return :not_applicable unless alive?
+    return :not_applicable unless installment.published?
 
     if member_cancellation_trigger?
-      SendWorkflowEmailsToPastCanceledMembersJob.perform_async(installment.id) if send_to_past_customers?
-      return
+      if send_to_past_customers?
+        args = [installment.id]
+        with_intent = schedule_intent_token.present? || schedule_intent_fanout_token.present?
+        args.concat([nil, nil, minimum_rule_version]) if minimum_rule_version.present? || with_intent
+        args.concat([schedule_intent_token, schedule_intent_fanout_token]) if with_intent
+        job_id = SendWorkflowEmailsToPastCanceledMembersJob.perform_async(*args)
+        return job_id.present? ? :enqueued : :not_enqueued
+      end
+      return :not_applicable
     end
 
-    return unless new_customer_trigger?
+    return :not_applicable unless new_customer_trigger?
     # don't schedule the installment if it is only for new customers/followers and it hasn't been scheduled before (old_delayed_delivery_time is nil)
-    return if old_delayed_delivery_time.nil? && installment.is_for_new_customers_of_workflow
+    return :not_applicable if old_delayed_delivery_time.nil? && installment.is_for_new_customers_of_workflow
 
     # earliest_valid_time is:
     #   `installment.published_at` if the installment is for new customers only
@@ -123,13 +142,17 @@ class Workflow < ApplicationRecord
     # installment has not been delivered to them and needs to be (re-)scheduled.
     earliest_valid_time = if old_delayed_delivery_time.nil?
       nil
-    elsif installment.is_for_new_customers_of_workflow && installment.published_at >= old_delayed_delivery_time.seconds.ago
+    elsif installment.is_for_new_customers_of_workflow && installment.published_at >= cutoff_reference_time - old_delayed_delivery_time.seconds
       installment.published_at
     else
-      old_delayed_delivery_time.seconds.ago
+      cutoff_reference_time - old_delayed_delivery_time.seconds
     end
 
-    SendWorkflowPostEmailsJob.perform_async(installment.id, earliest_valid_time&.iso8601)
+    args = [installment.id, earliest_valid_time&.iso8601]
+    with_intent = schedule_intent_token.present? || schedule_intent_fanout_token.present?
+    args.concat([false, minimum_rule_version]) if minimum_rule_version.present? || with_intent
+    args.concat([schedule_intent_token, schedule_intent_fanout_token]) if with_intent
+    SendWorkflowPostEmailsJob.perform_async(*args).present? ? :enqueued : :not_enqueued
   end
 
   private

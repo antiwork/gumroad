@@ -1,64 +1,145 @@
 # frozen_string_literal: true
 
 class SendWorkflowPostEmailsJob
+  class FanoutNotEnqueuedError < StandardError; end
+  class RuleNotCommittedError < StandardError; end
+
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
-  def perform(post_id, earliest_valid_time = nil)
-    @post = Installment.find(post_id)
+  def perform(post_id, earliest_valid_time = nil, _reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
+    @schedule_intent_token = schedule_intent_token
+    @schedule_intent_fanout_token = schedule_intent_fanout_token
+    primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? || schedule_intent_fanout_token.present?
+    ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
+    return unless WorkflowInstallmentScheduleIntent.begin_fanout(
+      intent_token: schedule_intent_token,
+      fanout_token: schedule_intent_fanout_token
+    )
+    @next_fanout_heartbeat_at = fanout_heartbeat_time + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f
+    @post = Installment.find_by(id: post_id)
+    if @post.nil?
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
+      )
+      return
+    end
     @workflow = @post.workflow
-    return unless @workflow.alive? && @post.alive? && @post.published?
+    unless @workflow&.alive? && @post.alive? && @post.published?
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
+      )
+      return
+    end
 
-    @rule_version = @post.installment_rule.version
-    @rule_delay = @post.installment_rule.delayed_delivery_time
+    rule = @post.installment_rule
+    if rule.nil?
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
+      )
+      return
+    end
+    raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
+    cache_rule_version(rule)
+    @rule_version = rule.version
+    @rule_delay = rule.delayed_delivery_time
 
     @filters = @post.audience_members_filter_params
     @filters[:created_after] = Time.zone.parse(earliest_valid_time) if earliest_valid_time
     Makara::Context.release_all
+    primary_pinned = false
     # Same protection as SendPostBlastEmailsJob: for sellers with very large audiences the
     # filter query can exceed the database's default 5-minute statement cap, so raise it for
     # this one query.
-    @members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+    audience_timeout = audience_load_timeout_seconds
+    return unless renew_fanout_lease(force: true)
+    @members = WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) do
       AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).
         select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
     end
+    return unless renew_fanout_lease(force: true)
 
-    @members.each do |member|
-      if @post.seller_or_product_or_variant_type?
-        enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
-      elsif @post.follower_type?
-        enqueue_email_job(member:, type: :follower, id: member.follower_id)
-      elsif @post.affiliate_type?
-        enqueue_email_job(member:, type: :affiliate, id: member.affiliate_id)
-      elsif @post.audience_type?
-        if member.follower_id
-          enqueue_email_job(member:, type: :follower, id: member.follower_id)
-        elsif member.affiliate_id
-          enqueue_email_job(member:, type: :affiliate, id: member.affiliate_id)
-        else
-          enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
-        end
-      end
+    case enqueue_all_member_jobs
+    when :complete
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
+      )
+    when :ownership_lost
+      nil
+    else
+      raise FanoutNotEnqueuedError, "Unexpected fanout result"
     end
+  ensure
+    Makara::Context.release_all if primary_pinned
   end
 
   private
+    def cache_rule_version(rule)
+      rule.cache_version!
+    rescue Redis::BaseError, RedisClient::Error => e
+      ErrorNotifier.notify(e, installment_rule_id: rule.id)
+    end
+
+    def enqueue_all_member_jobs
+      @members.each do |member|
+        return :ownership_lost unless renew_fanout_lease
+
+        if @post.seller_or_product_or_variant_type?
+          enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
+        elsif @post.follower_type?
+          enqueue_email_job(member:, type: :follower, id: member.follower_id)
+        elsif @post.affiliate_type?
+          enqueue_email_job(member:, type: :affiliate, id: member.affiliate_id)
+        elsif @post.audience_type?
+          if member.follower_id
+            enqueue_email_job(member:, type: :follower, id: member.follower_id)
+          elsif member.affiliate_id
+            enqueue_email_job(member:, type: :affiliate, id: member.affiliate_id)
+          else
+            enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
+          end
+        end
+      end
+      :complete
+    end
+
+    def renew_fanout_lease(force: false)
+      return true if @schedule_intent_token.blank? && @schedule_intent_fanout_token.blank?
+
+      now = fanout_heartbeat_time
+      return true unless force || now >= @next_fanout_heartbeat_at
+
+      renewed = WorkflowInstallmentScheduleIntent.renew_fanout(
+        intent_token: @schedule_intent_token,
+        fanout_token: @schedule_intent_fanout_token
+      )
+      Makara::Context.release_all
+      @next_fanout_heartbeat_at = now + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f if renewed
+      renewed
+    end
+
+    def fanout_heartbeat_time
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
     def enqueue_email_job(member:, type:, id:)
-      # The id columns come from an aggregate over a JSON_TABLE join, and a row can be
-      # filtered out of that join even though the member still qualifies (see the comment
-      # on the `with_ids` select in AudienceMember.filter). If that happens the id arrives
-      # nil and the worker below would have nothing to send to, so fall back to reading it
-      # out of the same `details` JSON the timestamps are already read from.
       if type == :purchase
+        # `with_ids` supplies the matching purchase. Another embedded purchase can bypass the workflow filters.
+        return log_unresolvable_recipient(member:, type:) if id.nil?
+
         purchase = member.details["purchases"].find { _1["id"] == id }
         return log_unresolvable_recipient(member:, type:) if purchase.nil?
         created_at = Time.zone.parse(purchase["created_at"])
-        SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, id, nil, nil)
+        enqueue_installment_worker(created_at + @rule_delay, @post.id, @rule_version, id, nil, nil)
       elsif type == :follower
         id ||= member.details.dig("follower", "id")
         return log_unresolvable_recipient(member:, type:) if id.nil?
         created_at = Time.zone.parse(member.details.dig("follower", "created_at"))
-        SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, id, nil)
+        enqueue_installment_worker(created_at + @rule_delay, @post.id, @rule_version, nil, id, nil)
       elsif type == :affiliate
         affiliate = resolve_affiliate(member:, id:)
         return log_unresolvable_recipient(member:, type:) if affiliate.nil?
@@ -71,8 +152,15 @@ class SendWorkflowPostEmailsJob
         affiliate_user_id = Affiliate.where(id: affiliate["id"]).pick(:affiliate_user_id)
         return log_unresolvable_recipient(member:, type:) if affiliate_user_id.nil?
         created_at = Time.zone.parse(affiliate["created_at"])
-        SendWorkflowInstallmentWorker.perform_at(created_at + @rule_delay, @post.id, @rule_version, nil, nil, affiliate_user_id)
+        enqueue_installment_worker(created_at + @rule_delay, @post.id, @rule_version, nil, nil, affiliate_user_id)
       end
+    end
+
+    def enqueue_installment_worker(deliver_at, *args)
+      job_id = SendWorkflowInstallmentWorker.perform_at(deliver_at, *args)
+      return job_id if job_id.present?
+
+      raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"
     end
 
     # A person can be an affiliate for several of the seller's products, and `details["affiliates"]`

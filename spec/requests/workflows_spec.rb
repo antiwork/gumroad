@@ -1206,7 +1206,10 @@ describe("Workflows", js: true, type: :system) do
         visit workflows_path
         installment = create(:workflow_installment, workflow:)
 
-        expect_any_instance_of(Workflow).to receive(:schedule_installment).with(installment)
+        expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(
+          kind_of(String),
+          kind_of(String)
+        ).and_call_original
 
         within_section "Product workflow", section_element: :section do
           click_on "Edit workflow"
@@ -1295,7 +1298,7 @@ describe("Workflows", js: true, type: :system) do
       visit workflows_path
       create(:workflow_installment, workflow:)
 
-      expect_any_instance_of(Workflow).to_not receive(:schedule_installment)
+      expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE - 1)
 
       within_section "Product workflow", section_element: :section do
@@ -1575,7 +1578,7 @@ describe("Workflows", js: true, type: :system) do
     end
 
     it "allows saving and publishing workflow emails" do
-      expect_any_instance_of(Workflow).to receive(:schedule_installment).with(kind_of(Installment))
+      expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_call_original
 
       visit workflows_path
 

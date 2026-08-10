@@ -247,7 +247,7 @@ describe Workflow::ManageService do
       let(:params) { { name: "Updated workflow name", permalink: product.unique_permalink, workflow_type: Workflow::AFFILIATE_TYPE, affiliate_products: [product.unique_permalink], send_to_past_customers: false } }
 
       it "updates the workflow and its installments" do
-        expect_any_instance_of(Workflow).to_not receive(:schedule_installment)
+        expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
         expect do
           expect(described_class.new(seller:, params:, product:, workflow:).process).to eq([true, nil])
@@ -367,7 +367,10 @@ describe Workflow::ManageService do
       it "updates the workflow and publishes it if the save action is 'save_and_publish'" do
         params[:save_action_name] = Workflow::SAVE_AND_PUBLISH_ACTION
         create(:payment_completed, user: seller)
-        expect_any_instance_of(Workflow).to receive(:schedule_installment).with(installment1)
+        expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(
+          kind_of(String),
+          kind_of(String)
+        ).and_call_original
 
         expect do
           expect(described_class.new(seller:, params:, product:, workflow:).process).to eq([true, nil])
@@ -396,7 +399,7 @@ describe Workflow::ManageService do
         params[:save_action_name] = Workflow::SAVE_AND_UNPUBLISH_ACTION
         params[:paid_less_than] = "50"
 
-        expect_any_instance_of(Workflow).to_not receive(:schedule_installment)
+        expect(ScheduleWorkflowInstallmentJob).not_to receive(:perform_async)
 
         expect do
           expect do
