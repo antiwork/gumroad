@@ -40,7 +40,7 @@ class Follower < ApplicationRecord
   def confirm!(schedule_workflow: true)
     return if confirmed?
 
-    self.confirmed_at = Time.current
+    self.confirmed_at = Time.current.change(usec: 0)
     self.deleted_at = nil
     save!
     schedule_workflow_jobs if schedule_workflow && user.workflows.alive.follower_or_audience_type.present?
