@@ -216,7 +216,7 @@ class SendWorkflowPostEmailsJob
 
       AudienceMember.filter(
         seller_id: @post.seller_id,
-        params: @original_filters,
+        params: follower_filter_params,
         with_ids: false,
         ids: member_ids
       ).select(:id)
@@ -239,7 +239,7 @@ class SendWorkflowPostEmailsJob
 
         follower_members = AudienceMember.filter(
           seller_id: @post.seller_id,
-          params: @original_filters,
+          params: follower_filter_params,
           with_ids: true,
           ids: missing_ids
         ).select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
@@ -305,6 +305,10 @@ class SendWorkflowPostEmailsJob
       return false if created_before && created_at >= created_before
 
       true
+    end
+
+    def follower_filter_params
+      @original_filters.except(:created_after, :created_before)
     end
 
     # Skipping a member silently is how the follower/bought-product bug stayed invisible for

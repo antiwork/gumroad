@@ -188,6 +188,26 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       ).at(@basic_follower.confirmed_at + @post_rule.delayed_delivery_time)
     end
 
+    it "recovers a follower in range when the required purchase predates the range" do
+      product = create(:product, user: @seller, price_cents: 0)
+      purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 3.days.ago)
+      purchase.add_to_audience_member_details
+      @post.update!(created_after: 2.days.ago, bought_products: [product.unique_permalink])
+      @basic_follower.update_columns(created_at: 1.day.ago, confirmed_at: 1.hour.ago.change(usec: 0))
+
+      described_class.new.perform(@post.id, 1.day.ago.iso8601)
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      ).at(@basic_follower.confirmed_at + @post_rule.delayed_delivery_time)
+    end
+
     it "preserves a qualifying purchase for an audience workflow" do
       product = create(:product, user: @seller, price_cents: 0)
       purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 30.minutes.ago)

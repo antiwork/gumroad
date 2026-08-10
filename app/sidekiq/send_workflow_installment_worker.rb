@@ -83,7 +83,7 @@ class SendWorkflowInstallmentWorker
 
       current_match = AudienceMember.filter(
         seller_id: installment.seller_id,
-        params: filters,
+        params: filters.except(:created_after, :created_before),
         with_ids: true,
         ids: [member.id]
       ).first
