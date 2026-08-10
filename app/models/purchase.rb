@@ -2104,8 +2104,9 @@ class Purchase < ApplicationRecord
   end
 
   def create_product_affiliate
-    return unless affiliate.present? && affiliate.global? && link.product_affiliates.where(affiliate_id: affiliate.id).none?
-    link.affiliates << affiliate
+    return unless affiliate.present? && affiliate.global?
+
+    ProductAffiliate.create_if_missing!(affiliate:, product: link)
   end
 
   def create_url_redirect_for_failed_purchase

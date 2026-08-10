@@ -502,37 +502,40 @@ class Link < ApplicationRecord
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
+    if auto_transcode_videos?
+      transcode_videos!
+    else
+      self.transcode_videos_on_purchase = true
+    end
+
     self.purchase_disabled_at = nil
     self.deleted_at = nil
     self.draft = false
     self.publishing = true
-    deadlock_retries = 0
+    caller_has_transaction = Link.connection.transaction_open?
+    lock_retries = 0
     begin
-      if auto_transcode_videos?
-        transcode_videos!
-      else
-        enable_transcode_videos_on_purchase!
+      Link.transaction do
+        save!
+
+        unless is_collab?
+          user.direct_affiliates.alive.apply_to_all_products.order(:id).each do |affiliate|
+            next unless ProductAffiliate.create_if_missing!(affiliate:, product: self)
+
+            affiliate_id = affiliate.id
+            product_id = id
+            AfterCommitEverywhere.after_commit do
+              AffiliateMailer.notify_direct_affiliate_of_new_product(affiliate_id, product_id).deliver_later
+            end
+          end
+        end
       end
-      save!
-    rescue ActiveRecord::Deadlocked
-      deadlock_retries += 1
-      retry if deadlock_retries <= 2
+    rescue ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout
+      lock_retries += 1
+      retry if lock_retries <= 2 && !caller_has_transaction
       raise
     ensure
       self.publishing = false
-    end
-
-    user.direct_affiliates.alive.apply_to_all_products.each do |affiliate|
-      next if is_collab? || ProductAffiliate.exists?(affiliate:, product: self)
-
-      begin
-        ProductAffiliate.create!(affiliate:, product: self)
-      rescue ActiveRecord::RecordInvalid => error
-        raise unless error.record.errors.of_kind?(:affiliate, :taken)
-        next
-      end
-
-      AffiliateMailer.notify_direct_affiliate_of_new_product(affiliate.id, id).deliver_later
     end
   end
 

@@ -24,13 +24,38 @@ class ProductAffiliate < ApplicationRecord
 
   has_flags 1 => :dont_show_as_co_creator
 
+  def self.create_if_missing!(affiliate:, product:)
+    assignments = where(affiliate:, product:)
+    assignment_id = assignments.pick(:id)
+    if assignment_id
+      current_assignment = where(id: assignment_id, affiliate_id: affiliate.id, link_id: product.id)
+      return false if current_assignment.lock("LOCK IN SHARE MODE").exists?
+    end
+
+    affiliate.with_lock do
+      return false if assignments.lock.exists?
+
+      assignment = new(affiliate:, product:)
+      assignment.send(:save_with_assignment_lock!)
+      true
+    end
+  end
+
   def affiliate_percentage
     return unless affiliate_basis_points.present?
     affiliate_basis_points / 100
   end
 
   private
+    def save_with_assignment_lock!
+      @assignment_lock_held = true
+      save!
+    ensure
+      @assignment_lock_held = false
+    end
+
     def serialize_assignment
+      return yield if @assignment_lock_held
       return yield if affiliate_id.nil? || link_id.nil?
 
       # The row lock must surround the final duplicate check and the insert.
@@ -52,6 +77,7 @@ class ProductAffiliate < ApplicationRecord
 
     def affiliate_is_unique_for_product(lock: false)
       return if affiliate_id.nil? || link_id.nil?
+      return if @assignment_lock_held && !lock
 
       matching_assignments = ProductAffiliate.where(affiliate_id:, link_id:)
       matching_assignments = matching_assignments.where.not(id:) if persisted?

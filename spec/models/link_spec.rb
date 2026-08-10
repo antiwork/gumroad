@@ -8,7 +8,7 @@ describe Link do
       seller = create(:user)
       affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
       product = create(:product, user: seller, draft: true)
-      expect(ProductAffiliate).to receive(:create!).with(affiliate:, product:).and_call_original
+      expect(ProductAffiliate).to receive(:create_if_missing!).with(affiliate:, product:).and_call_original
 
       expect do
         product.publish!
@@ -28,14 +28,11 @@ describe Link do
       expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_nil
     end
 
-    it "accepts an assignment created by a concurrent writer" do
+    it "does not notify an affiliate when the assignment exists" do
       seller = create(:user)
       affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
       product = create(:product, user: seller, draft: true)
-      allow(ProductAffiliate).to receive(:create!).and_wrap_original do |method, **attributes|
-        method.call(**attributes)
-        method.call(**attributes)
-      end
+      create(:product_affiliate, affiliate:, product:)
 
       expect do
         product.publish!
@@ -44,22 +41,26 @@ describe Link do
       expect(ProductAffiliate.where(affiliate:, product:).count).to eq(1)
     end
 
-    it "notifies an assigned affiliate before a later assignment fails" do
+    it "lets an assignment deadlock roll back the caller transaction" do
       seller = create(:user)
-      create_list(:direct_affiliate, 2, seller:, apply_to_all_products: true)
+      affiliates = create_list(:direct_affiliate, 2, seller:, apply_to_all_products: true)
       product = create(:product, user: seller, draft: true)
       assignment_count = 0
-      allow(ProductAffiliate).to receive(:create!).and_wrap_original do |method, **attributes|
+      allow(ProductAffiliate).to receive(:create_if_missing!).and_wrap_original do |method, **attributes|
         assignment_count += 1
         raise ActiveRecord::Deadlocked if assignment_count == 2
 
         method.call(**attributes)
       end
-      expect(AffiliateMailer).to receive(:notify_direct_affiliate_of_new_product)
-        .with(instance_of(Integer), product.id)
-        .and_call_original
+      expect(AffiliateMailer).not_to receive(:notify_direct_affiliate_of_new_product)
 
-      expect { product.publish! }.to raise_error(ActiveRecord::Deadlocked)
+      expect do
+        ActiveRecord::Base.transaction { product.publish! }
+      end.to raise_error(ActiveRecord::Deadlocked)
+
+      expect(product.reload).not_to be_published
+      expect(ProductAffiliate.where(affiliate: affiliates, product:)).to be_empty
+      expect(assignment_count).to eq(2)
     end
   end
 

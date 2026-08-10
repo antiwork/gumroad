@@ -8,6 +8,33 @@ describe ProductAffiliate do
     it { is_expected.to belong_to(:product).class_name("Link") }
   end
 
+  describe ".create_if_missing!" do
+    it "creates one assignment and reports whether it created the row" do
+      affiliate = create(:direct_affiliate)
+      product = create(:product, user: affiliate.seller)
+
+      expect(described_class.create_if_missing!(affiliate:, product:)).to eq(true)
+      expect(described_class.create_if_missing!(affiliate:, product:)).to eq(false)
+      expect(described_class.where(affiliate:, product:).count).to eq(1)
+    end
+
+    it "locks only the current assignment when the row exists" do
+      assignment = create(:product_affiliate)
+      lock_queries = []
+      subscriber = lambda do |_name, _start, _finish, _id, payload|
+        sql = payload[:sql]
+        lock_queries << sql if sql.include?("LOCK IN SHARE MODE") || sql.include?("FOR UPDATE")
+      end
+
+      result = ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+        described_class.create_if_missing!(affiliate: assignment.affiliate, product: assignment.product)
+      end
+
+      expect(result).to eq(false)
+      expect(lock_queries).to contain_exactly(include("FROM `affiliates_links`", "`affiliates_links`.`id` = #{assignment.id}", "LOCK IN SHARE MODE"))
+    end
+  end
+
   describe "validations" do
     context "when another record exists" do
       it "validates uniqueness of affiliate scoped to product" do
