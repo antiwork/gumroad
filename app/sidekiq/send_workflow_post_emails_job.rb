@@ -208,7 +208,7 @@ class SendWorkflowPostEmailsJob
     def confirmed_follower_member_ids_after_cutoff
       follower_emails = Follower.active
         .where(followed_id: @post.seller_id)
-        .where("confirmed_at > ?", @recipient_filter_cutoff_time)
+        .where("confirmed_at >= ?", @recipient_cutoff_time.change(usec: 0))
         .select("LOWER(followers.email)")
       member_ids = AudienceMember
         .where(seller_id: @post.seller_id, email: follower_emails)

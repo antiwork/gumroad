@@ -167,6 +167,24 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       ).at(published_at + @post_rule.delayed_delivery_time)
     end
 
+    it "recovers a follower confirmed in the cutoff second" do
+      cutoff = Time.current.change(usec: 500_000)
+      confirmed_at = cutoff.change(usec: 0)
+      @basic_follower.update_columns(created_at: 1.day.ago, confirmed_at:)
+
+      described_class.new.perform(@post.id, cutoff.iso8601(6))
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        confirmed_at.iso8601
+      ).at(confirmed_at + @post_rule.delayed_delivery_time)
+    end
+
     it "recovers a follower id hidden by purchase filters" do
       product = create(:product, user: @seller, price_cents: 0)
       purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 3.days.ago)
