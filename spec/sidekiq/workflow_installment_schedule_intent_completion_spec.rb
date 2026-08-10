@@ -11,6 +11,10 @@ describe "workflow installment schedule intent completion", :freeze_time do
     )
   end
 
+  def claim_fanout(intent)
+    intent.with_lock { intent.claim_fanout! }
+  end
+
   describe SendWorkflowPostEmailsJob do
     let(:seller) { create(:named_user) }
     let(:workflow) { create(:audience_workflow, seller:) }
@@ -18,21 +22,70 @@ describe "workflow installment schedule intent completion", :freeze_time do
     let(:rule) { create(:post_rule, installment: post, delayed_delivery_time: 1.day) }
     let!(:follower) { create(:active_follower, user: seller, created_at: 2.days.ago) }
 
-    it "marks an intent processed when the fanout starts" do
+    it "marks an intent processed after the fanout completes" do
       intent = create_intent(installment: post, rule:)
+      fanout_token = claim_fanout(intent)
 
-      described_class.new.perform(post.id, nil, false, rule.version, intent.token)
+      described_class.new.perform(post.id, nil, false, rule.version, intent.token, fanout_token)
 
       expect(intent.reload.processed_at).to be_present
       expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(post.id, rule.version, nil, follower.id, nil)
     end
 
-    it "continues a retry after the intent is processed" do
+    it "keeps a partial fanout recoverable" do
+      create(:active_follower, user: seller, created_at: 1.day.ago)
+      intent = create_intent(installment: post, rule:)
+      fanout_token = claim_fanout(intent)
+      attempts = 0
+      allow(SendWorkflowInstallmentWorker).to receive(:perform_at) do
+        attempts += 1
+        raise "Redis is unavailable" if attempts == 2
+
+        "jid"
+      end
+
+      expect do
+        described_class.new.perform(post.id, nil, false, rule.version, intent.token, fanout_token)
+      end.to raise_error("Redis is unavailable")
+
+      expect(attempts).to eq(2)
+      expect(intent.reload.processed_at).to be_nil
+
+      allow(SendWorkflowInstallmentWorker).to receive(:perform_at).and_return("jid")
+      described_class.new.perform(post.id, nil, false, rule.version, intent.token, fanout_token)
+
+      expect(intent.reload.processed_at).to be_present
+    end
+
+    it "keeps the intent pending when client middleware cancels a recipient enqueue" do
+      intent = create_intent(installment: post, rule:)
+      fanout_token = claim_fanout(intent)
+      allow(SendWorkflowInstallmentWorker).to receive(:perform_at).and_return(nil)
+
+      expect do
+        described_class.new.perform(post.id, nil, false, rule.version, intent.token, fanout_token)
+      end.to raise_error(SendWorkflowPostEmailsJob::FanoutNotEnqueuedError)
+
+      expect(intent.reload.processed_at).to be_nil
+    end
+
+    it "does not rerun a completed fanout" do
       intent = create_intent(installment: post, rule:, processed_at: 1.minute.ago)
 
-      described_class.new.perform(post.id, nil, false, rule.version, intent.token)
+      described_class.new.perform(post.id, nil, false, rule.version, intent.token, SecureRandom.uuid)
 
-      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(post.id, rule.version, nil, follower.id, nil)
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+    end
+
+    it "does not run a stale copy while another fanout owns the intent" do
+      intent = create_intent(installment: post, rule:)
+      current_token = claim_fanout(intent)
+
+      described_class.new.perform(post.id, nil, false, rule.version, intent.token, SecureRandom.uuid)
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+      expect(intent.reload.processed_at).to be_nil
+      expect(intent.fanout_token).to eq(current_token)
     end
   end
 
@@ -68,21 +121,71 @@ describe "workflow installment schedule intent completion", :freeze_time do
       )
     end
 
-    it "marks an intent processed when the fanout starts" do
+    it "marks an intent processed after the fanout completes" do
       intent = create_intent(installment:, rule:)
+      fanout_token = claim_fanout(intent)
 
-      described_class.new.perform(installment.id, nil, nil, rule.version, intent.token)
+      described_class.new.perform(installment.id, nil, nil, rule.version, intent.token, fanout_token)
 
       expect(intent.reload.processed_at).to be_present
       expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(installment.id, rule.version, nil, nil, nil, subscription.id)
     end
 
-    it "continues a retry after the intent is processed" do
+    it "keeps a partial fanout recoverable" do
+      second_subscription = create(
+        :subscription,
+        link: product,
+        cancelled_at: 20.days.ago,
+        deactivated_at: 20.days.ago
+      )
+      create(
+        :free_purchase,
+        is_original_subscription_purchase: true,
+        link: product,
+        subscription: second_subscription,
+        created_at: 50.days.ago
+      )
+      intent = create_intent(installment:, rule:)
+      fanout_token = claim_fanout(intent)
+      attempts = 0
+      allow(SendWorkflowInstallmentWorker).to receive(:perform_at) do
+        attempts += 1
+        raise "Redis is unavailable" if attempts == 2
+
+        "jid"
+      end
+
+      expect do
+        described_class.new.perform(installment.id, nil, nil, rule.version, intent.token, fanout_token)
+      end.to raise_error("Redis is unavailable")
+
+      expect(attempts).to eq(2)
+      expect(intent.reload.processed_at).to be_nil
+
+      allow(SendWorkflowInstallmentWorker).to receive(:perform_at).and_return("jid")
+      described_class.new.perform(installment.id, nil, nil, rule.version, intent.token, fanout_token)
+
+      expect(intent.reload.processed_at).to be_present
+    end
+
+    it "keeps the intent pending when client middleware cancels a recipient enqueue" do
+      intent = create_intent(installment:, rule:)
+      fanout_token = claim_fanout(intent)
+      allow(SendWorkflowInstallmentWorker).to receive(:perform_at).and_return(nil)
+
+      expect do
+        described_class.new.perform(installment.id, nil, nil, rule.version, intent.token, fanout_token)
+      end.to raise_error(SendWorkflowEmailsToPastCanceledMembersJob::FanoutNotEnqueuedError)
+
+      expect(intent.reload.processed_at).to be_nil
+    end
+
+    it "does not rerun a completed fanout" do
       intent = create_intent(installment:, rule:, processed_at: 1.minute.ago)
 
-      described_class.new.perform(installment.id, nil, nil, rule.version, intent.token)
+      described_class.new.perform(installment.id, nil, nil, rule.version, intent.token, SecureRandom.uuid)
 
-      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(installment.id, rule.version, nil, nil, nil, subscription.id)
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
     end
   end
 end

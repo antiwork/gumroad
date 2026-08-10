@@ -1,24 +1,39 @@
 # frozen_string_literal: true
 
 class SendWorkflowEmailsToPastCanceledMembersJob
+  class FanoutNotEnqueuedError < StandardError; end
   class RuleNotCommittedError < StandardError; end
 
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
-  def perform(installment_id, _old_delayed_delivery_time = nil, _cutoff_reference_time = nil, minimum_rule_version = nil, schedule_intent_token = nil)
-    WorkflowInstallmentScheduleIntent.mark_processed(schedule_intent_token)
-    primary_pinned = minimum_rule_version.present?
+  def perform(installment_id, _old_delayed_delivery_time = nil, _cutoff_reference_time = nil, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
+    primary_pinned = minimum_rule_version.present? || schedule_intent_token.present?
     ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
+    return unless WorkflowInstallmentScheduleIntent.begin_fanout(
+      intent_token: schedule_intent_token,
+      fanout_token: schedule_intent_fanout_token
+    )
     installment = Installment.find(installment_id)
     workflow = installment.workflow
-    return unless workflow&.alive? && installment.alive? && installment.published?
-    return unless workflow.member_cancellation_trigger?
-    return unless workflow.send_to_past_customers?
-    return unless workflow.seller_or_product_or_variant_type?
+    unless workflow&.alive? && installment.alive? && installment.published? &&
+           workflow.member_cancellation_trigger? && workflow.send_to_past_customers? &&
+           workflow.seller_or_product_or_variant_type?
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
+      )
+      return
+    end
 
     rule = installment.installment_rule
-    return if rule.nil?
+    if rule.nil?
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
+      )
+      return
+    end
     raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
     rule.cache_version!
 
@@ -33,11 +48,18 @@ class SendWorkflowEmailsToPastCanceledMembersJob
       next if original_purchase.nil?
       next unless workflow.applies_to_purchase?(original_purchase)
 
-      SendWorkflowInstallmentWorker.perform_at(
+      job_id = SendWorkflowInstallmentWorker.perform_at(
         subscription.deactivated_at + delay,
         installment.id, rule_version, nil, nil, nil, subscription.id
       )
+      if job_id.blank?
+        raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"
+      end
     end
+    WorkflowInstallmentScheduleIntent.mark_processed(
+      schedule_intent_token,
+      fanout_token: schedule_intent_fanout_token
+    )
   ensure
     Makara::Context.release_all if primary_pinned
   end

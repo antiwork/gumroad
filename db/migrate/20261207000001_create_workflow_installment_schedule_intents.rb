@@ -11,12 +11,14 @@ class CreateWorkflowInstallmentScheduleIntents < ActiveRecord::Migration[7.1]
       t.datetime :expected_published_at
       t.string :dispatch_token
       t.datetime :dispatch_expires_at
+      t.string :fanout_token
+      t.datetime :fanout_expires_at
       t.datetime :processed_at
       t.timestamps
 
       t.index :token, unique: true
       t.index :installment_id
-      t.index [:processed_at, :dispatch_expires_at], name: "index_workflow_intent_on_processed_and_dispatch_expiry"
+      t.index [:processed_at, :dispatch_expires_at, :fanout_expires_at], name: "index_workflow_intent_on_pending_dispatch"
     end
   end
 end

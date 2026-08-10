@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_07_000000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_07_000001) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -3198,11 +3198,13 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_07_000000) do
     t.datetime "expected_published_at"
     t.string "dispatch_token"
     t.datetime "dispatch_expires_at"
+    t.string "fanout_token"
+    t.datetime "fanout_expires_at"
     t.datetime "processed_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["installment_id"], name: "index_workflow_installment_schedule_intents_on_installment_id"
-    t.index ["processed_at", "dispatch_expires_at"], name: "index_workflow_intent_on_processed_and_dispatch_expiry"
+    t.index ["processed_at", "dispatch_expires_at", "fanout_expires_at"], name: "index_workflow_intent_on_pending_dispatch"
     t.index ["token"], name: "index_workflow_installment_schedule_intents_on_token", unique: true
   end
 

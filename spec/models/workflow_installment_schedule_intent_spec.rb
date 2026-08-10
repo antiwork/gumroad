@@ -68,12 +68,78 @@ describe WorkflowInstallmentScheduleIntent do
   end
 
   it "marks only a pending matching token as processed" do
-    intent = create_intent(dispatch_token: SecureRandom.uuid, dispatch_expires_at: 1.minute.from_now)
+    fanout_token = SecureRandom.uuid
+    intent = create_intent(
+      dispatch_token: SecureRandom.uuid,
+      dispatch_expires_at: 1.minute.from_now,
+      fanout_token:,
+      fanout_expires_at: 1.minute.from_now
+    )
 
-    described_class.mark_processed(intent.token)
+    described_class.mark_processed(intent.token, fanout_token:)
 
     expect(intent.reload.processed_at).to be_present
     expect(intent.dispatch_token).to be_nil
     expect(intent.dispatch_expires_at).to be_nil
+    expect(intent.fanout_token).to be_nil
+    expect(intent.fanout_expires_at).to be_nil
+  end
+
+  it "does not let a stale fanout complete another owner" do
+    intent = create_intent(fanout_token: SecureRandom.uuid, fanout_expires_at: 1.minute.from_now)
+
+    described_class.mark_processed(intent.token, fanout_token: SecureRandom.uuid)
+
+    expect(intent.reload.processed_at).to be_nil
+  end
+
+  it "claims one fanout until its lease expires" do
+    intent = create_intent
+
+    first_token = intent.claim_fanout!
+    expect(first_token).to be_present
+    expect(intent.claim_fanout!).to be_nil
+
+    intent.update!(fanout_expires_at: 1.minute.ago)
+    second_token = intent.claim_fanout!
+    expect(second_token).to be_present
+    expect(second_token).not_to eq(first_token)
+  end
+
+  it "renews a matching fanout lease" do
+    intent = create_intent
+    fanout_token = intent.claim_fanout!
+
+    expect(described_class.begin_fanout(intent_token: intent.token, fanout_token:)).to be(true)
+
+    expect(intent.reload.fanout_expires_at).to be > 119.minutes.from_now
+  end
+
+  it "rejects a stale fanout while another owner is active" do
+    intent = create_intent
+    current_token = intent.claim_fanout!
+
+    expect(
+      described_class.begin_fanout(intent_token: intent.token, fanout_token: SecureRandom.uuid)
+    ).to be(false)
+    expect(intent.reload.fanout_token).to eq(current_token)
+  end
+
+  it "lets a fetched fanout claim an expired lease" do
+    intent = create_intent(fanout_token: SecureRandom.uuid, fanout_expires_at: 1.minute.ago)
+    fetched_token = SecureRandom.uuid
+
+    expect(described_class.begin_fanout(intent_token: intent.token, fanout_token: fetched_token)).to be(true)
+
+    expect(intent.reload.fanout_token).to eq(fetched_token)
+    expect(intent.fanout_expires_at).to be > 119.minutes.from_now
+  end
+
+  it "does not start a fanout for a processed intent" do
+    intent = create_intent(processed_at: Time.current)
+
+    expect(
+      described_class.begin_fanout(intent_token: intent.token, fanout_token: SecureRandom.uuid)
+    ).to be(false)
   end
 end

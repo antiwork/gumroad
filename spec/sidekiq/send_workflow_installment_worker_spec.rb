@@ -138,6 +138,32 @@ describe SendWorkflowInstallmentWorker do
       )
     end
 
+    it "uses the locked primary version if the Redis read fails" do
+      allow(PostSendgridApi).to receive(:process)
+      expect(InstallmentRule).to receive(:cached_version_state).with(@installment.id).once.and_raise(Redis::BaseError.new("read failed"))
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      expect(InstallmentRule).to receive(:lock).once.and_call_original
+      expect_any_instance_of(InstallmentRule).not_to receive(:cache_version!)
+      expect(Makara::Context).to receive(:release_all).once.and_call_original
+
+      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
+
+      expect(PostSendgridApi).to have_received(:process)
+    end
+
+    it "uses the locked primary version if the Redis cache fill fails" do
+      $redis.del(RedisKey.workflow_installment_rule_version(@installment.id))
+      allow(PostSendgridApi).to receive(:process)
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      expect(InstallmentRule).to receive(:lock).once.and_call_original
+      expect_any_instance_of(InstallmentRule).to receive(:cache_version!).once.and_raise(RedisClient::Error.new("fill failed"))
+      expect(Makara::Context).to receive(:release_all).once.and_call_original
+
+      SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, @follower.id, nil)
+
+      expect(PostSendgridApi).to have_received(:process)
+    end
+
     it "retries if the queued version is not visible" do
       expect(PostSendgridApi).not_to receive(:process)
       expect do

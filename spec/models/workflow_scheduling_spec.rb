@@ -167,13 +167,15 @@ describe Workflow do
       cutoff_reference_time = Time.current.change(usec: 0)
       minimum_rule_version = installment.installment_rule.version
       schedule_intent_token = SecureRandom.uuid
+      schedule_intent_fanout_token = SecureRandom.uuid
 
       result = workflow.schedule_installment(
         installment,
         old_delayed_delivery_time: 6.hours.to_i,
         cutoff_reference_time:,
         minimum_rule_version:,
-        schedule_intent_token:
+        schedule_intent_token:,
+        schedule_intent_fanout_token:
       )
 
       expect(result).to eq(:enqueued)
@@ -182,7 +184,8 @@ describe Workflow do
         (cutoff_reference_time - 6.hours).iso8601,
         false,
         minimum_rule_version,
-        schedule_intent_token
+        schedule_intent_token,
+        schedule_intent_fanout_token
       )
     end
 
@@ -196,8 +199,14 @@ describe Workflow do
       installment = create(:workflow_installment, workflow:, seller: workflow.seller, published_at: workflow.published_at)
       minimum_rule_version = installment.installment_rule.version
       schedule_intent_token = SecureRandom.uuid
+      schedule_intent_fanout_token = SecureRandom.uuid
 
-      result = workflow.schedule_installment(installment, minimum_rule_version:, schedule_intent_token:)
+      result = workflow.schedule_installment(
+        installment,
+        minimum_rule_version:,
+        schedule_intent_token:,
+        schedule_intent_fanout_token:
+      )
 
       expect(result).to eq(:enqueued)
       expect(SendWorkflowEmailsToPastCanceledMembersJob).to have_enqueued_sidekiq_job(
@@ -205,7 +214,8 @@ describe Workflow do
         nil,
         nil,
         minimum_rule_version,
-        schedule_intent_token
+        schedule_intent_token,
+        schedule_intent_fanout_token
       )
     end
   end

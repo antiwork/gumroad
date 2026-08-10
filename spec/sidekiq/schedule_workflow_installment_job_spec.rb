@@ -20,19 +20,22 @@ describe ScheduleWorkflowInstallmentJob do
     )
   end
 
-  it "marks the intent processed after handing off the recipient fanout" do
+  it "keeps the intent pending until the recipient fanout completes" do
     intent = create_intent
     expect_any_instance_of(Workflow).to receive(:schedule_installment).with(
       kind_of(Installment),
       old_delayed_delivery_time: 1.hour.to_i,
       cutoff_reference_time:,
       minimum_rule_version: rule.version,
-      schedule_intent_token: intent.token
+      schedule_intent_token: intent.token,
+      schedule_intent_fanout_token: kind_of(String)
     ).and_return(:enqueued)
 
     described_class.new.perform(intent.token)
 
-    expect(intent.reload.processed_at).to be_present
+    expect(intent.reload.processed_at).to be_nil
+    expect(intent.fanout_token).to be_present
+    expect(intent.fanout_expires_at).to be > Time.current
   end
 
   it "ignores an intent that has already been cleaned up" do
@@ -56,7 +59,8 @@ describe ScheduleWorkflowInstallmentJob do
       old_delayed_delivery_time: 1.hour.to_i,
       cutoff_reference_time:,
       minimum_rule_version: rule.version,
-      schedule_intent_token: intent.token
+      schedule_intent_token: intent.token,
+      schedule_intent_fanout_token: kind_of(String)
     ).and_return(:enqueued)
 
     described_class.new.perform(intent.token)
@@ -88,7 +92,8 @@ describe ScheduleWorkflowInstallmentJob do
       old_delayed_delivery_time: nil,
       cutoff_reference_time: published_at,
       minimum_rule_version: rule.version,
-      schedule_intent_token: intent.token
+      schedule_intent_token: intent.token,
+      schedule_intent_fanout_token: kind_of(String)
     ).and_return(:enqueued)
 
     described_class.new.perform(intent.token)
@@ -121,7 +126,9 @@ describe ScheduleWorkflowInstallmentJob do
     described_class.new.perform(intent.token)
     described_class.new.perform(intent.token)
 
-    expect(intent.reload.processed_at).to be_present
+    expect(intent.reload.processed_at).to be_nil
+    expect(intent.fanout_token).to be_present
+    expect(intent.fanout_expires_at).to be > Time.current
   end
 
   it "keeps the intent pending if recipient scheduling fails" do
@@ -131,6 +138,8 @@ describe ScheduleWorkflowInstallmentJob do
     expect { described_class.new.perform(intent.token) }.to raise_error("Redis is unavailable")
 
     expect(intent.reload.processed_at).to be_nil
+    expect(intent.fanout_token).to be_nil
+    expect(intent.fanout_expires_at).to be_nil
   end
 
   it "retries when client middleware cancels the recipient fanout" do
@@ -142,6 +151,8 @@ describe ScheduleWorkflowInstallmentJob do
     end.to raise_error(ScheduleWorkflowInstallmentJob::FanoutNotEnqueuedError)
 
     expect(intent.reload.processed_at).to be_nil
+    expect(intent.fanout_token).to be_nil
+    expect(intent.fanout_expires_at).to be_nil
   end
 
   it "retries an unexpected recipient scheduling result" do
@@ -153,6 +164,8 @@ describe ScheduleWorkflowInstallmentJob do
     end.to raise_error(ScheduleWorkflowInstallmentJob::FanoutNotEnqueuedError, "Unexpected schedule result: nil")
 
     expect(intent.reload.processed_at).to be_nil
+    expect(intent.fanout_token).to be_nil
+    expect(intent.fanout_expires_at).to be_nil
   end
 
   it "marks the intent processed when no recipient fanout applies" do
