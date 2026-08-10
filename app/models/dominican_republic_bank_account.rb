@@ -9,7 +9,7 @@ class DominicanRepublicBankAccount < BankAccount
   # Stripe requires the concatenated bank + branch code to be exactly 8 digits (format xxxxxxxx);
   # the individual bank/branch regexes above are looser, so this catches valid-looking segments
   # that combine to the wrong length.
-  ROUTING_NUMBER_FORMAT_REGEX = /^\d{8}$/
+  ROUTING_NUMBER_FORMAT_REGEX = /\A\d{8}\z/
   private_constant :BANK_CODE_FORMAT_REGEX, :BRANCH_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX,
                    :ROUTING_NUMBER_FORMAT_REGEX
 
