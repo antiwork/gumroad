@@ -1,23 +1,49 @@
 # frozen_string_literal: true
 
 class SendWorkflowEmailsToPastCanceledMembersJob
+  class FanoutNotEnqueuedError < StandardError; end
   class RuleNotCommittedError < StandardError; end
 
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
-  def perform(installment_id, _old_delayed_delivery_time = nil, _cutoff_reference_time = nil, minimum_rule_version = nil)
-    primary_pinned = minimum_rule_version.present?
+  def perform(installment_id, _old_delayed_delivery_time = nil, _cutoff_reference_time = nil, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
+    @schedule_intent_token = schedule_intent_token
+    @schedule_intent_fanout_token = schedule_intent_fanout_token
+    primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? || schedule_intent_fanout_token.present?
     ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
-    installment = Installment.find(installment_id)
+    return unless WorkflowInstallmentScheduleIntent.begin_fanout(
+      intent_token: schedule_intent_token,
+      fanout_token: schedule_intent_fanout_token
+    )
+    @next_fanout_heartbeat_at = fanout_heartbeat_time + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f
+    installment = Installment.find_by(id: installment_id)
+    if installment.nil?
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
+      )
+      return
+    end
     workflow = installment.workflow
-    return unless workflow&.alive? && installment.alive? && installment.published?
-    return unless workflow.member_cancellation_trigger?
-    return unless workflow.send_to_past_customers?
-    return unless workflow.seller_or_product_or_variant_type?
+    unless workflow&.alive? && installment.alive? && installment.published? &&
+           workflow.member_cancellation_trigger? && workflow.send_to_past_customers? &&
+           workflow.seller_or_product_or_variant_type?
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
+      )
+      return
+    end
 
     rule = installment.installment_rule
-    return if rule.nil?
+    if rule.nil?
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
+      )
+      return
+    end
     raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
     cache_rule_version(rule)
 
@@ -26,16 +52,16 @@ class SendWorkflowEmailsToPastCanceledMembersJob
     Makara::Context.release_all
     primary_pinned = false
 
-    candidate_subscriptions(workflow).includes(:original_purchase).find_each do |subscription|
-      next unless subscription.cancelled?
-      original_purchase = subscription.original_purchase
-      next if original_purchase.nil?
-      next unless workflow.applies_to_purchase?(original_purchase)
-
-      SendWorkflowInstallmentWorker.perform_at(
-        subscription.deactivated_at + delay,
-        installment.id, rule_version, nil, nil, nil, subscription.id
+    case enqueue_all_member_jobs(workflow:, installment:, delay:, rule_version:)
+    when :complete
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
       )
+    when :ownership_lost
+      nil
+    else
+      raise FanoutNotEnqueuedError, "Unexpected fanout result"
     end
   ensure
     Makara::Context.release_all if primary_pinned
@@ -46,6 +72,45 @@ class SendWorkflowEmailsToPastCanceledMembersJob
       rule.cache_version!
     rescue Redis::BaseError, RedisClient::Error => e
       ErrorNotifier.notify(e, installment_rule_id: rule.id)
+    end
+
+    def enqueue_all_member_jobs(workflow:, installment:, delay:, rule_version:)
+      candidate_subscriptions(workflow).includes(:original_purchase).find_each do |subscription|
+        return :ownership_lost unless renew_fanout_lease
+
+        next unless subscription.cancelled?
+        original_purchase = subscription.original_purchase
+        next if original_purchase.nil?
+        next unless workflow.applies_to_purchase?(original_purchase)
+
+        job_id = SendWorkflowInstallmentWorker.perform_at(
+          subscription.deactivated_at + delay,
+          installment.id, rule_version, nil, nil, nil, subscription.id
+        )
+        if job_id.blank?
+          raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"
+        end
+      end
+      :complete
+    end
+
+    def renew_fanout_lease
+      return true if @schedule_intent_token.blank? && @schedule_intent_fanout_token.blank?
+
+      now = fanout_heartbeat_time
+      return true if now < @next_fanout_heartbeat_at
+
+      renewed = WorkflowInstallmentScheduleIntent.renew_fanout(
+        intent_token: @schedule_intent_token,
+        fanout_token: @schedule_intent_fanout_token
+      )
+      Makara::Context.release_all
+      @next_fanout_heartbeat_at = now + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f if renewed
+      renewed
+    end
+
+    def fanout_heartbeat_time
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
     def candidate_subscriptions(workflow)

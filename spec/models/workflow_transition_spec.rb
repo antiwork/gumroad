@@ -60,12 +60,16 @@ describe Workflow do
     workflow.update!(published_at:)
     installment.update!(published_at:)
     cutoff_reference_time = Time.current.change(usec: 0)
+    schedule_intent_token = SecureRandom.uuid
+    schedule_intent_fanout_token = SecureRandom.uuid
 
     result = workflow.schedule_installment(
       installment,
       old_delayed_delivery_time: 6.hours.to_i,
       cutoff_reference_time:,
-      minimum_rule_version: rule.version
+      minimum_rule_version: rule.version,
+      schedule_intent_token:,
+      schedule_intent_fanout_token:
     )
 
     expect(result).to eq(:enqueued)
@@ -73,7 +77,9 @@ describe Workflow do
       installment.id,
       (cutoff_reference_time - 6.hours).iso8601,
       false,
-      rule.version
+      rule.version,
+      schedule_intent_token,
+      schedule_intent_fanout_token
     )
   end
 
@@ -94,15 +100,24 @@ describe Workflow do
       send_to_past_customers: true
     )
     installment.update!(published_at:)
+    schedule_intent_token = SecureRandom.uuid
+    schedule_intent_fanout_token = SecureRandom.uuid
 
-    result = workflow.schedule_installment(installment, minimum_rule_version: rule.version)
+    result = workflow.schedule_installment(
+      installment,
+      minimum_rule_version: rule.version,
+      schedule_intent_token:,
+      schedule_intent_fanout_token:
+    )
 
     expect(result).to eq(:enqueued)
     expect(SendWorkflowEmailsToPastCanceledMembersJob).to have_enqueued_sidekiq_job(
       installment.id,
       nil,
       nil,
-      rule.version
+      rule.version,
+      schedule_intent_token,
+      schedule_intent_fanout_token
     )
   end
 

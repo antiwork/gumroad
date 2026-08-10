@@ -3198,11 +3198,13 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_07_122600) do
     t.datetime "expected_published_at"
     t.string "dispatch_token"
     t.datetime "dispatch_expires_at"
+    t.string "fanout_token"
+    t.datetime "fanout_expires_at"
     t.datetime "processed_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["installment_id"], name: "index_workflow_installment_schedule_intents_on_installment_id"
-    t.index ["processed_at", "dispatch_expires_at"], name: "index_workflow_intent_on_processed_and_dispatch_expiry"
+    t.index ["processed_at", "dispatch_expires_at", "fanout_expires_at"], name: "index_workflow_intent_on_pending_dispatch"
     t.index ["token"], name: "index_workflow_installment_schedule_intents_on_token", unique: true
   end
 
