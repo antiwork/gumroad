@@ -188,6 +188,48 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     _ = [in_cycle_row, post_cutoff_credit]
   end
 
+  it "does not resend the original shortfall when a later post-cutoff debit lands beside the funded row (two runs)" do
+    in_cycle_row = residue_row(-728_50)
+    post_cutoff_credit = create(:balance, user: seller, merchant_account:,
+                                          date: User::PayoutSchedule.next_scheduled_payout_end_date + 1,
+                                          amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: 728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    # Run 1: whole ledger nets to 0 (post-cutoff credit offsets it), so the cycle window
+    # (-728_50, the more negative of the two) is what's funded — same setup as the
+    # window-selection spec above. The funded credit this stores must be scoped to the WINDOW
+    # (in_cycle_row only), not the whole current row set (which also includes the post-cutoff
+    # credit row) — that's the bug this spec pins.
+    call_count = 0
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account) { call_count += 1 }
+
+    described_class.new.perform
+    expect(call_count).to eq(1)
+
+    # Run 2: in_cycle_row is still unreconciled (leg two hasn't happened) and a brand-new
+    # post-cutoff debit lands. Whole ledger becomes -100_00 (less negative than the in-cycle
+    # window's -728_50), so the window is still in-cycle — current_total_cents is unchanged at
+    # -728_50, i.e. still the SAME shortfall this account was already funded for. If the stored
+    # funded credit wrongly included the post-cutoff credit row, its signed sum would net to 0
+    # against the unrelated new debit and the comparison below would see "no credit," resending
+    # the full 728_50 that was already transferred in run 1.
+    create(:balance, user: seller, merchant_account:,
+                     date: User::PayoutSchedule.next_scheduled_payout_end_date + 1,
+                     amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -100_00)
+
+    described_class.new.perform
+    expect(call_count).to eq(1)
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("ESCALATE", "already topped up 728")).once
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(dedupe_key) if dedupe_key
+    $redis.del("#{dedupe_key}:#{fingerprint_for(in_cycle_row.id)}:0:72850") if dedupe_key
+    _ = post_cutoff_credit
+  end
+
   it "escalates a RETIRED merchant account instead of attempting a transfer" do
     residue_row(-728_50)
     make_payable

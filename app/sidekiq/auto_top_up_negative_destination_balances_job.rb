@@ -141,13 +141,25 @@ class AutoTopUpNegativeDestinationBalancesJob
       # is still negative — re-reading the whole ledger here would silently skip or underfund
       # exactly the gap the scan flagged. A post-cutoff-only candidate never reaches here (the
       # branch above escalates it), so only the in-cycle window needs the live re-read at all.
-      current_total_cents =
+      # current_window_ids is the row set that current_total_cents was actually summed over —
+      # whole ledger for a post-cutoff-only trip, otherwise whichever of whole-ledger/in-cycle
+      # was more negative. Credit below must be tracked against this SAME set: storing (and later
+      # re-summing) funded rows from the whole ledger while current_total_cents is windowed to the
+      # cycle let a post-cutoff credit row inflate funded_signed beyond what the window's total
+      # ever accounted for, so an unrelated later change (e.g. a masking row clearing) computed a
+      # bogus delta and resent part of the original shortfall.
+      current_window_ids, current_total_cents =
         if entry[:post_cutoff]
-          whole_ledger_cents
+          [current_balance_ids, whole_ledger_cents]
         else
           cutoff = AlertOnNegativeDestinationBalancesJob.payout_cutoff_date
-          in_cycle_cents = current_balance_pairs.sum { |_id, cents, date| date <= cutoff ? cents : 0 }
-          [whole_ledger_cents, in_cycle_cents].min
+          in_cycle_pairs = current_balance_pairs.select { |_id, _cents, date| date <= cutoff }
+          in_cycle_cents = in_cycle_pairs.sum { |_id, cents, _date| cents }
+          if in_cycle_cents <= whole_ledger_cents
+            [in_cycle_pairs.map(&:first), in_cycle_cents]
+          else
+            [current_balance_ids, whole_ledger_cents]
+          end
         end
       return { entry:, verdict: :noop, reason: "reconciled since scan — nothing left to transfer" } unless current_total_cents.negative?
 
@@ -157,14 +169,15 @@ class AutoTopUpNegativeDestinationBalancesJob
       # reconciled set (some funded rows gone, others still outstanding, maybe a brand-new row
       # added) would otherwise either re-transfer already-funded rows (crediting nothing) or, worse,
       # suppress a genuinely new shortfall because the stale aggregate still "covered" the current
-      # total. Only the funded rows still present in the current unpaid set count as credit.
+      # total. Only the funded rows still present in the current WINDOW count as credit — not just
+      # still-unpaid, but still inside the same window current_total_cents was computed from.
       #
       # Summed SIGNED (not per-row abs): full_total is a signed net, and a funded set can mix
       # signs (a positive residue row alongside a larger negative one). Summing magnitudes
       # overstates credit whenever that happens — it double-counts what full_total already nets
       # out — so credit must live on the same signed basis as full_total for the comparison below
       # to mean anything.
-      surviving_funded_ids = funded_ids & current_balance_ids
+      surviving_funded_ids = funded_ids & current_window_ids
       funded_signed = surviving_funded_ids.any? ? surviving_funded_ids.sum { |id| current_balance_amounts.fetch(id, 0) } : nil
 
       # An earlier ambiguous Stripe outcome for this account (below) means we don't know whether
@@ -229,7 +242,11 @@ class AutoTopUpNegativeDestinationBalancesJob
       # only safe to drop because a human clears it explicitly as part of the leg-two reconciliation
       # pass (same convention as the ambiguous-error rescue below).
       $redis.persist(transfer_key)
-      $redis.set(dedupe_key, "#{current_total_cents.abs}:#{current_balance_ids.join("-")}", ex: DEDUPE_TTL)
+      # Store the WINDOW's row ids, not the whole current_balance_ids set: a post-cutoff row
+      # excluded from an in-cycle window's total must not become "funded" credit either, or a
+      # later run intersecting funded_ids against a different window could count it and resend
+      # part of the original shortfall (the bug this window/credit split exists to close).
+      $redis.set(dedupe_key, "#{current_total_cents.abs}:#{current_window_ids.join("-")}", ex: DEDUPE_TTL)
       $redis.del(unresolved_key)
       { entry:, verdict: :topped_up, reason: nil, amount_cents: to_transfer_cents, currency: entry[:merchant_account].currency }
     rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
