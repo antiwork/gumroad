@@ -13,7 +13,18 @@ class ScheduleWorkflowInstallmentJob
       intent = WorkflowInstallmentScheduleIntent.lock.find_by(token: intent_token)
       next if intent.nil?
       next if intent.processed_at.present?
-      next if dispatch_token.present? && intent.dispatch_token != dispatch_token
+      if dispatch_token.present? && intent.dispatch_token != dispatch_token
+        now = Time.current
+        another_dispatch_active = intent.dispatch_token.present? &&
+                                  intent.dispatch_expires_at.present? &&
+                                  intent.dispatch_expires_at > now
+        fanout_active = intent.fanout_token.present? &&
+                        intent.fanout_expires_at.present? &&
+                        intent.fanout_expires_at > now
+        raise IntentNotCommittedError unless another_dispatch_active || fanout_active
+
+        next
+      end
 
       installment = Installment.find_by(id: intent.installment_id)
       if installment.nil? || installment.installment_rule.nil?
