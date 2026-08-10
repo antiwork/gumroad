@@ -64,7 +64,15 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
       described_class.new.perform(@post.id)
 
-      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @basic_follower.id, nil)
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      )
     end
 
     it "only considers confirmations after the earliest valid time" do
