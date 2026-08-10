@@ -36,6 +36,28 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(SendWorkflowInstallmentWorker.jobs).to be_empty
     end
 
+    it "reads the primary database for a required rule version" do
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+
+      described_class.new.perform(@post.id, nil, false, @post_rule.version)
+    end
+
+    it "retries if the required rule version is not visible" do
+      expect do
+        described_class.new.perform(@post.id, nil, false, @post_rule.version + 1)
+      end.to raise_error(described_class::RuleNotCommittedError)
+    end
+
+    it "continues when the version cache is unavailable" do
+      error = Redis::BaseError.new("cache unavailable")
+      allow_any_instance_of(InstallmentRule).to receive(:cache_version!).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: @post_rule.id)
+
+      described_class.new.perform(@post.id)
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @basic_follower.id, nil)
+    end
+
     it "only considers audience members created after the earliest_valid_time" do
       described_class.new.perform(@post.id, 1.day.ago.iso8601)
       expect(SendWorkflowInstallmentWorker.jobs).to be_empty

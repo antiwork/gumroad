@@ -288,9 +288,12 @@ describe Workflow do
 
     it "publishes and schedules all alive installments" do
       installment1 = create(:installment, workflow: @workflow)
+      create(:installment_rule, installment: installment1)
       installment2 = create(:installment, workflow: @workflow, deleted_at: 1.day.ago)
 
-      expect(@workflow).to receive(:schedule_installment).with(an_instance_of(Installment)).twice
+      expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(
+        kind_of(String)
+      ).twice.and_call_original
 
       expect do
         expect do

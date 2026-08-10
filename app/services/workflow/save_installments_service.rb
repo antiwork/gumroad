@@ -120,7 +120,12 @@ class Workflow::SaveInstallmentsService
       rule.save!
 
       if installment.published_at.present? && params[:save_action_name] == Workflow::SAVE_ACTION
-        installment.workflow.schedule_installment(installment, old_delayed_delivery_time:)
+        WorkflowInstallmentScheduleIntent.enqueue!(
+          installment:,
+          rule_version: rule.version,
+          old_delayed_delivery_time:,
+          cutoff_reference_time: Time.current
+        )
       end
     end
 end
