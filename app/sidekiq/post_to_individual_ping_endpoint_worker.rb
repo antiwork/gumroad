@@ -6,22 +6,10 @@ class PostToIndividualPingEndpointWorker
 
   ERROR_CODES_TO_RETRY = [499, 500, 502, 503, 504].freeze
   BACKOFF_STRATEGY = [60, 180, 600, 3600].freeze
+  REQUEST_TIMEOUT_SECONDS = 5
 
   def perform(post_url, params, content_type = Mime[:url_encoded_form].to_s, user_id = nil)
     retry_count = params["retry_count"] || 0
-
-    # Re-validate right before connecting rather than trusting the caller's earlier check: this
-    # job can sit in the retry backoff queue for up to an hour (BACKOFF_STRATEGY), during which a
-    # seller-controlled hostname's DNS record can start pointing at a private/internal address.
-    # This still can't fully close the gap against a hostname that flips its answer BETWEEN this
-    # check and HTTParty's own independent resolution moments later (classic DNS-rebinding
-    # TOCTOU) — that requires binding the connection to the specific IP this check resolved,
-    # which needs a transport swap away from HTTParty; flagging that as a follow-up for review
-    # rather than doing it here.
-    unless ResourceSubscription.valid_post_url?(post_url)
-      Rails.logger.info("PostToIndividualPingEndpointWorker rejected post_url that failed SSRF re-validation content_type=#{content_type} user_id=#{user_id}")
-      return
-    end
 
     body = if content_type == Mime[:json]
       params.to_json
@@ -30,24 +18,40 @@ class PostToIndividualPingEndpointWorker
     else
       params
     end
+    # HTTParty's serializer keeps the form-encoded wire format identical to what it used to send.
+    body = HTTParty::HashConversions.to_params(body) if body.is_a?(Hash)
 
-    # no_follow: a redirect can point past the SSRF check that already ran (at subscription
-    # creation and again per-delivery in PostToPingEndpointsWorker) at an internal target the
-    # seller-supplied post_url itself never named.
-    response = HTTParty.post(post_url, body:, timeout: 5, headers: { "Content-Type" => content_type }, no_follow: true)
+    options = {
+      body:,
+      headers: { "Content-Type" => content_type },
+      # Refuse redirects, but get the 3xx back (instead of a raise) so it can be logged.
+      max_redirects: 0,
+      allow_unfollowed_redirects: true,
+      http_options: { open_timeout: REQUEST_TIMEOUT_SECONDS, read_timeout: REQUEST_TIMEOUT_SECONDS }
+    }
+    uri = URI.parse(post_url)
+    if uri.userinfo.present?
+      # Net::HTTP doesn't send URL userinfo as basic auth on its own; HTTParty did.
+      user, pass = uri.userinfo.split(":", 2)
+      options[:request_proc] = ->(request) { request.basic_auth(user, pass) }
+    end
+
+    # SsrfFilter validates the resolved IPs and connects to the exact IP it validated,
+    # closing the DNS-rebinding TOCTOU a separate validate-then-connect leaves open.
+    response = SsrfFilter.post(post_url, options)
+
+    if response.is_a?(Net::HTTPRedirection)
+      Rails.logger.info("PostToIndividualPingEndpointWorker refused redirect response=#{response.code} content_type=#{content_type} user_id=#{user_id}")
+      return
+    end
 
     Rails.logger.info("PostToIndividualPingEndpointWorker response=#{response.code} content_type=#{content_type} user_id=#{user_id}")
 
-    unless response.success?
-      if ERROR_CODES_TO_RETRY.include?(response.code) && retry_count < (BACKOFF_STRATEGY.length - 1)
+    unless response.is_a?(Net::HTTPSuccess)
+      if ERROR_CODES_TO_RETRY.include?(response.code.to_i) && retry_count < (BACKOFF_STRATEGY.length - 1)
         PostToIndividualPingEndpointWorker.perform_in(BACKOFF_STRATEGY[retry_count].seconds, post_url, params.merge("retry_count" => retry_count + 1), content_type, user_id)
       end
     end
-
-  # no_follow makes HTTParty raise instead of returning the 3xx; a redirect is deterministic,
-  # so log and drop the delivery rather than retry or send the job to the dead set.
-  rescue HTTParty::RedirectionTooDeep => e
-    Rails.logger.info("PostToIndividualPingEndpointWorker refused redirect response=#{e.response&.code} content_type=#{content_type} user_id=#{user_id}")
 
   # rescue clause to handle connection errors. Without this, the job
   # would fail if the user inputted post_url is invalid.
