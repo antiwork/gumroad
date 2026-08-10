@@ -10,17 +10,22 @@ module StripeTransferInternallyToCreator
   # Public: Creates a Stripe transfer that may or may not be attached to a charge.
   # Logs the transfer to the #payments chat room.
   # Returns the Stripe::Transfer object that was created.
-  def self.transfer_funds_to_account(message_why:, stripe_account_id:, currency:, amount_cents:, related_charge_id: nil, metadata: nil)
+  def self.transfer_funds_to_account(message_why:, stripe_account_id:, currency:, amount_cents:, related_charge_id: nil, metadata: nil, idempotency_key: nil)
     description = message_why
     description += " Related Charge ID: #{related_charge_id}." if related_charge_id
 
-    transfer = Stripe::Transfer.create(
+    params = {
       destination: stripe_account_id,
       currency:,
       description:,
       amount: amount_cents,
       metadata:,
-      expand: %w[balance_transaction])
+      expand: %w[balance_transaction],
+    }
+    # Keep the kwargs call shape when there is no idempotency key: the payout processor's
+    # doubles capture positionally, so moving every caller's params into the first positional
+    # hash changes what they observe.
+    transfer = idempotency_key ? Stripe::Transfer.create(params, { idempotency_key: }) : Stripe::Transfer.create(**params)
 
     transfer
   end

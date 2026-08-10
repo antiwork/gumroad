@@ -34,6 +34,19 @@ class AlertOnNegativeDestinationBalancesJob
     InternalNotificationWorker.perform_async("payouts", "Negative destination balances", message_for(scan))
   end
 
+  # Reused by AutoTopUpNegativeDestinationBalancesJob (gumroad-private#1903) so the top-up leg
+  # scans the SAME candidate set this report describes, rather than re-deriving it and drifting.
+  def self.scan
+    new.send(:scan_for_negative_destinations)
+  end
+
+  # Reused by AutoTopUpNegativeDestinationBalancesJob so its live re-read applies the same
+  # in-cycle-vs-whole-ledger window `resolve_entry`'s full_total used, instead of always summing
+  # the whole ledger and drifting from the scan's own payability verdict.
+  def self.payout_cutoff_date
+    new.send(:payout_cutoff_date)
+  end
+
   private
     # Sellers whose Stripe-held balance set nets negative AND who are payable now, so the next payout
     # run reaches them. `truncated` means the candidate window was cut short, so the counts are floors.
@@ -44,6 +57,11 @@ class AlertOnNegativeDestinationBalancesJob
 
       payable = []
       not_payable = 0
+      # Balance-id fingerprints for tripped-but-below-minimum accounts, so a consumer tracking
+      # funded credit against specific rows (AutoTopUpNegativeDestinationBalancesJob) can still
+      # refresh that credit's TTL while an account is temporarily unpayable — otherwise credit for
+      # a still-unreconciled row silently expires off-scan and a later top-up double-funds it.
+      unreconciled_not_payable = []
 
       candidates.each do |user_id, merchant_account_id|
         merchant_account = MerchantAccount.find_by(id: merchant_account_id)
@@ -67,11 +85,19 @@ class AlertOnNegativeDestinationBalancesJob
         if entry
           payable << entry
         else
-          not_payable += 1 if tripped_window(full_set)
+          tripped = tripped_window(full_set)
+          if tripped
+            not_payable += 1
+            # The funded-TTL refresher intersects stored funded IDs against this list. It must
+            # carry the account's FULL unpaid set, not the tripped window's: when the cycle
+            # window trips, a funded row past the cutoff would be absent, its credit would
+            # expire, and a later payable scan would transfer the full shortfall again.
+            unreconciled_not_payable << { merchant_account:, balance_ids: full_set.order(:id).pluck(:id) }
+          end
         end
       end
 
-      { payable: report_order(payable), not_payable:, truncated: }
+      { payable: report_order(payable), not_payable:, unreconciled_not_payable:, truncated: }
     end
 
     # One entry per (seller, merchant account) whose Stripe-held set nets negative on EITHER window —
@@ -165,12 +191,23 @@ class AlertOnNegativeDestinationBalancesJob
         # cycle total stays the honest figure — that credit is not available to the tripping run.
         full_total = in_cycle ? [full_set.sum(:holding_amount_cents), set_total].min : set_total
 
+        # One pluck for both id ordering and per-row amounts — the auto top-up job needs the
+        # per-row breakdown (not just the aggregate) to credit only the rows that actually
+        # survive between runs, rather than treating a partially-reconciled set as all-or-nothing.
+        row_pairs = full_set.order(:id).pluck(:id, :holding_amount_cents)
+
         return {
           user:,
           merchant_account:,
           set_total:,
           full_total:,
           row_count: set.count,
+          # Fingerprints the specific rows behind full_total, so a consumer (the auto top-up job)
+          # can tell "this candidate's underlying balances are unchanged" from "leg two reconciled
+          # the old rows and a new, independent shortfall landed on the same account" — the two
+          # look identical if you only compare amounts.
+          balance_ids: row_pairs.map(&:first),
+          balance_amounts: row_pairs.to_h,
           retired: !merchant_account.alive?,
           unpaid_usd_cents:,
           post_cutoff: !in_cycle,

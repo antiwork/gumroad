@@ -200,6 +200,11 @@ alert_on_negative_destination_balances:
   class: AlertOnNegativeDestinationBalancesJob
   queue: low
   description: Reports payable sellers whose Gumroad-managed Stripe account carries a negative destination ledger from FX residue
+auto_topup_negative_destination_balances:
+  cron: "30 11 * * *" # UTC 11:30, after the report above so the two runs describe the same day's candidates
+  class: AutoTopUpNegativeDestinationBalancesJob
+  queue: low
+  description: Dry-run (flag-gated) top-up of the Stripe-side gap for negative destination balances; zeroing the internal ledger row stays a human decision
 alert_on_stalled_post_email_blasts:
   cron: "40 11 * * *" # UTC 11:40
   class: AlertOnStalledPostEmailBlastsJob
