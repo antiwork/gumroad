@@ -68,7 +68,7 @@ class Purchase::CreateService < Purchase::BaseService
 
       # build pre-order if purchase is for pre-order product & return
       if purchase.is_preorder_authorization
-        build_preorder
+        build_preorder(locked_rate: buyer_currency_quote_rate_hint(purchase))
         return purchase, nil
       elsif product.is_in_preorder_state?
         # This should never happen unless the request is tampered with:
@@ -509,14 +509,14 @@ class Purchase::CreateService < Purchase::BaseService
       giftee_purchaser&.email || gift_params[:giftee_email]
     end
 
-    def build_preorder
+    def build_preorder(locked_rate: nil)
       raise Purchase::PurchaseInvalid, "The product was just released. Refresh the page to purchase it." unless product.is_in_preorder_state?
 
       self.preorder = product.preorder_link.build_preorder(purchase)
       if purchase.is_part_of_combined_charge?
-        purchase.prepare_for_charge!
+        purchase.prepare_for_charge!(locked_rate:)
       else
-        preorder.authorize!
+        preorder.authorize!(locked_rate:)
         error_message = preorder.errors.full_messages[0]
         if purchase.is_test_purchase?
           preorder.mark_test_authorization_successful!

@@ -2369,8 +2369,8 @@ class Purchase < ApplicationRecord
   #
   #                    if set to `false`, it means we have a user in session and if charge requires further authentication,
   #                    the method should succeed and attach a `charge_intent` with `requires_action? == true`.
-  def process!(off_session: true)
-    prepare_for_charge!
+  def process!(off_session: true, locked_rate: nil)
+    prepare_for_charge!(locked_rate:)
     charge!(off_session:)
   end
 

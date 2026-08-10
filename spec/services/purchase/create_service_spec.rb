@@ -1289,6 +1289,25 @@ describe Purchase::CreateService, :vcr do
     let(:product_in_preorder) { create(:product, user:, price_cents: price, is_in_preorder_state: true) }
     let!(:preorder_product) { create(:preorder_link, link: product_in_preorder) }
 
+    it "uses the quote-bound rate for the later charge amount" do
+      product_in_preorder.update!(price_currency_type: Currency::EUR, price_cents: price)
+      quote_params = base_preorder_params.deep_dup
+      quote_params[:is_part_of_combined_charge] = true
+      quote_params[:buyer_currency_quote] = signed_buyer_currency_quote(
+        seller: user,
+        product: product_in_preorder,
+        rate: "0.9"
+      )
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(:eur).and_return("0.8")
+
+      purchase, _ = Purchase::CreateService.new(product: product_in_preorder, params: quote_params).perform
+
+      expect(purchase.errors).to be_empty
+      expect(purchase.rate_converted_to_usd.to_d).to eq(BigDecimal("0.9"))
+      expected_line_items = [{ permalink: product_in_preorder.unique_permalink, canonical_price_cents: 667 }]
+      expect(Purchase::FixLaterChargePresentmentService.canonical_line_items_for([purchase])).to eq(expected_line_items)
+    end
+
     it "creates the preorder and its auth charge, with successful states" do
       purchase, _ = Purchase::CreateService.new(
         product: product_in_preorder,
