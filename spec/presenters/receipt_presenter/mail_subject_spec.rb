@@ -139,6 +139,14 @@ describe ReceiptPresenter::MailSubject, :vcr do
       it "returns subject for two purchases" do
         expect(mail_subject).to eq("You bought Product One and Product Two")
       end
+
+      context "when both purchases are the same product" do
+        let(:purchase_two) { create(:purchase, link: product_one) }
+
+        it "dedupes the repeated product name in the subject" do
+          expect(mail_subject).to eq("You bought Product One!")
+        end
+      end
     end
 
     describe "with more than two purchases" do

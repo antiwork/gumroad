@@ -41,7 +41,12 @@ class ReceiptPresenter::MailSubject
     end
 
     def build_for_two_purchases
-      "You bought #{purchases.first.link_name.truncate(PRODUCT_NAME_CHARACTER_LIMIT)} and #{purchases.last.link_name.truncate(PRODUCT_NAME_CHARACTER_LIMIT)}"
+      first_name = purchases.first.link_name.truncate(PRODUCT_NAME_CHARACTER_LIMIT)
+      last_name = purchases.last.link_name.truncate(PRODUCT_NAME_CHARACTER_LIMIT)
+
+      return "You bought #{first_name}!" if first_name == last_name
+
+      "You bought #{first_name} and #{last_name}"
     end
 
     def build_for_more_than_two_purchases
