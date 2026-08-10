@@ -50,25 +50,9 @@ class SendWorkflowPostEmailsJob
     end
     return unless renew_fanout_lease(force: true)
 
-    @members.each do |member|
-      return unless renew_fanout_lease
+    return unless enqueue_all_member_jobs
 
-      if @post.seller_or_product_or_variant_type?
-        enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
-      elsif @post.follower_type?
-        enqueue_email_job(member:, type: :follower, id: member.follower_id)
-      elsif @post.affiliate_type?
-        enqueue_email_job(member:, type: :affiliate, id: member.affiliate_id)
-      elsif @post.audience_type?
-        if member.follower_id
-          enqueue_email_job(member:, type: :follower, id: member.follower_id)
-        elsif member.affiliate_id
-          enqueue_email_job(member:, type: :affiliate, id: member.affiliate_id)
-        else
-          enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
-        end
-      end
-    end
+    # Keep completion after the full fanout; exceptions and lost ownership leave the intent pending.
     WorkflowInstallmentScheduleIntent.mark_processed(
       schedule_intent_token,
       fanout_token: schedule_intent_fanout_token
@@ -78,6 +62,29 @@ class SendWorkflowPostEmailsJob
   end
 
   private
+    def enqueue_all_member_jobs
+      @members.each do |member|
+        return false unless renew_fanout_lease
+
+        if @post.seller_or_product_or_variant_type?
+          enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
+        elsif @post.follower_type?
+          enqueue_email_job(member:, type: :follower, id: member.follower_id)
+        elsif @post.affiliate_type?
+          enqueue_email_job(member:, type: :affiliate, id: member.affiliate_id)
+        elsif @post.audience_type?
+          if member.follower_id
+            enqueue_email_job(member:, type: :follower, id: member.follower_id)
+          elsif member.affiliate_id
+            enqueue_email_job(member:, type: :affiliate, id: member.affiliate_id)
+          else
+            enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
+          end
+        end
+      end
+      true
+    end
+
     def renew_fanout_lease(force: false)
       return true if @schedule_intent_token.blank? && @schedule_intent_fanout_token.blank?
 

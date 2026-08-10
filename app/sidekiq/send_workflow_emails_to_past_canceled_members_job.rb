@@ -45,22 +45,8 @@ class SendWorkflowEmailsToPastCanceledMembersJob
     Makara::Context.release_all
     primary_pinned = false
 
-    candidate_subscriptions(workflow).includes(:original_purchase).find_each do |subscription|
-      return unless renew_fanout_lease
+    return unless enqueue_all_member_jobs(workflow:, installment:, delay:, rule_version:)
 
-      next unless subscription.cancelled?
-      original_purchase = subscription.original_purchase
-      next if original_purchase.nil?
-      next unless workflow.applies_to_purchase?(original_purchase)
-
-      job_id = SendWorkflowInstallmentWorker.perform_at(
-        subscription.deactivated_at + delay,
-        installment.id, rule_version, nil, nil, nil, subscription.id
-      )
-      if job_id.blank?
-        raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"
-      end
-    end
     WorkflowInstallmentScheduleIntent.mark_processed(
       schedule_intent_token,
       fanout_token: schedule_intent_fanout_token
@@ -70,6 +56,26 @@ class SendWorkflowEmailsToPastCanceledMembersJob
   end
 
   private
+    def enqueue_all_member_jobs(workflow:, installment:, delay:, rule_version:)
+      candidate_subscriptions(workflow).includes(:original_purchase).find_each do |subscription|
+        return false unless renew_fanout_lease
+
+        next unless subscription.cancelled?
+        original_purchase = subscription.original_purchase
+        next if original_purchase.nil?
+        next unless workflow.applies_to_purchase?(original_purchase)
+
+        job_id = SendWorkflowInstallmentWorker.perform_at(
+          subscription.deactivated_at + delay,
+          installment.id, rule_version, nil, nil, nil, subscription.id
+        )
+        if job_id.blank?
+          raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"
+        end
+      end
+      true
+    end
+
     def renew_fanout_lease
       return true if @schedule_intent_token.blank? && @schedule_intent_fanout_token.blank?
 
