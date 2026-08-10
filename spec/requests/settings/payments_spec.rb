@@ -4592,6 +4592,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("Pay to the order of", with: "Dominican Republic Creator")
         fill_in("Bank code", with: "999")
+        fill_in("Branch code", with: "94232")
         fill_in("Account #", with: "000123456789")
         fill_in("Confirm account #", with: "000123456789")
         fill_in("Cédula de identidad y electoral (CIE)", with: "123-1234567-1")
@@ -4611,7 +4612,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.zip_code).to eq("10101")
         expect(compliance_info.phone).to eq("+18091234567")
         expect(compliance_info.birthday).to eq(Date.new(1901, 1, 1))
-        expect(@user.reload.active_bank_account.routing_number).to eq("999")
+        expect(@user.reload.active_bank_account.routing_number).to eq("99994232")
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
       end
     end
