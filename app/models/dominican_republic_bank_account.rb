@@ -11,7 +11,7 @@ class DominicanRepublicBankAccount < BankAccount
   # that combine to the wrong length.
   ROUTING_NUMBER_FORMAT_REGEX = /^\d{8}$/
   private_constant :BANK_CODE_FORMAT_REGEX, :BRANCH_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX,
-                    :ROUTING_NUMBER_FORMAT_REGEX
+                   :ROUTING_NUMBER_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
 
