@@ -19,7 +19,7 @@ import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import { RatingsWithPercentages } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
-import { dedupeInFlight } from "$app/utils/dedupeInFlight";
+import { useDedupeInFlight } from "$app/utils/dedupeInFlight";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request } from "$app/utils/request";
@@ -45,7 +45,6 @@ import {
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { useRefToLatest } from "$app/components/useRefToLatest";
 
 const routes: RouteObject[] = [
   {
@@ -521,12 +520,7 @@ const ProductEditPage = (props: Props) => {
     setSaving(false);
     return saved;
   };
-  // A burst of clicks before `saving` re-renders the button disabled can fire several concurrent
-  // save() calls; for a still-`newlyAdded` version each one POSTs with id: null and gets back its
-  // own server id, duplicating the version. `save` below dedupes them into one shared request.
-  // `runSaveRef` holds the latest closure so the wrapper (created once) never saves against a
-  // stale `product`/`performSave`.
-  const runSaveRef = useRefToLatest((): Promise<boolean> => {
+  const runSave = (): Promise<boolean> => {
     // A save that deletes existing versions/tiers or content pages gets one
     // final summary confirmation before the request goes out. Each deletion
     // already had its own modal when the seller clicked delete, but this is
@@ -540,8 +534,9 @@ const ProductEditPage = (props: Props) => {
       });
     }
     return performSave();
-  });
-  const save = React.useRef(dedupeInFlight(() => runSaveRef.current())).current;
+  };
+  const saveKey = React.useMemo(() => ({ product, currencyType }), [product, currencyType]);
+  const save = useDedupeInFlight(saveKey, runSave, (saved) => saved);
   const confirmDeletionsAndSave = async () => {
     setPendingDeletions(null);
     const saved = await performSave();
