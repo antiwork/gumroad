@@ -87,6 +87,80 @@ describe "workflow installment schedule intent completion", :freeze_time do
       expect(intent.reload.processed_at).to be_nil
       expect(intent.fanout_token).to eq(current_token)
     end
+
+    it "renews its lease before and after the audience query" do
+      intent = create_intent(installment: post, rule:)
+      fanout_token = claim_fanout(intent)
+      events = []
+      allow(WorkflowInstallmentScheduleIntent).to receive(:renew_fanout).and_wrap_original do |method, **kwargs|
+        events << :renew
+        method.call(**kwargs)
+      end
+      allow(WithMaxExecutionTime).to receive(:timeout_queries).and_wrap_original do |method, *args, **kwargs, &block|
+        events << :query
+        result = method.call(*args, **kwargs, &block)
+        events << :query_complete
+        result
+      end
+
+      described_class.new.perform(post.id, nil, false, rule.version, intent.token, fanout_token)
+
+      expect(events).to eq([:renew, :query, :query_complete, :renew])
+      expect(intent.reload.processed_at).to be_present
+    end
+
+    it "stops after the audience query if another fanout takes ownership" do
+      intent = create_intent(installment: post, rule:)
+      fanout_token = claim_fanout(intent)
+      replacement_token = nil
+      allow(WithMaxExecutionTime).to receive(:timeout_queries).and_wrap_original do |method, *args, **kwargs, &block|
+        members = method.call(*args, **kwargs, &block)
+        travel WorkflowInstallmentScheduleIntent::FANOUT_LEASE + 1.second
+        replacement_token = claim_fanout(intent)
+        members
+      end
+
+      described_class.new.perform(post.id, nil, false, rule.version, intent.token, fanout_token)
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+      expect(intent.reload.processed_at).to be_nil
+      expect(intent.fanout_token).to eq(replacement_token)
+    end
+
+    it "stops its recipient loop when a later owner takes over" do
+      create(:active_follower, user: seller, created_at: 1.day.ago)
+      intent = create_intent(installment: post, rule:)
+      fanout_token = claim_fanout(intent)
+      replacement_token = nil
+      heartbeat_time = 0.0
+      attempts = 0
+      job = described_class.new
+      allow(job).to receive(:fanout_heartbeat_time) { heartbeat_time }
+      allow(SendWorkflowInstallmentWorker).to receive(:perform_at) do
+        attempts += 1
+        if attempts == 1
+          travel WorkflowInstallmentScheduleIntent::FANOUT_LEASE + 1.second
+          replacement_token = claim_fanout(intent)
+          heartbeat_time += WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f + 1
+        end
+        "jid"
+      end
+
+      job.perform(post.id, nil, false, rule.version, intent.token, fanout_token)
+
+      expect(attempts).to eq(1)
+      expect(intent.reload.processed_at).to be_nil
+      expect(intent.fanout_token).to eq(replacement_token)
+    end
+
+    it "runs a direct fanout without an intent lease" do
+      rule
+      expect(WorkflowInstallmentScheduleIntent).not_to receive(:renew_fanout)
+
+      described_class.new.perform(post.id)
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(post.id, rule.version, nil, follower.id, nil)
+    end
   end
 
   describe SendWorkflowEmailsToPastCanceledMembersJob do
@@ -186,6 +260,60 @@ describe "workflow installment schedule intent completion", :freeze_time do
       described_class.new.perform(installment.id, nil, nil, rule.version, intent.token, SecureRandom.uuid)
 
       expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+    end
+
+    it "stops its recipient loop when a later owner takes over" do
+      second_subscription = create(
+        :subscription,
+        link: product,
+        cancelled_at: 20.days.ago,
+        deactivated_at: 20.days.ago
+      )
+      create(
+        :free_purchase,
+        is_original_subscription_purchase: true,
+        link: product,
+        subscription: second_subscription,
+        created_at: 50.days.ago
+      )
+      intent = create_intent(installment:, rule:)
+      fanout_token = claim_fanout(intent)
+      replacement_token = nil
+      heartbeat_time = 0.0
+      attempts = 0
+      job = described_class.new
+      allow(job).to receive(:fanout_heartbeat_time) { heartbeat_time }
+      allow(SendWorkflowInstallmentWorker).to receive(:perform_at) do
+        attempts += 1
+        if attempts == 1
+          travel WorkflowInstallmentScheduleIntent::FANOUT_LEASE + 1.second
+          replacement_token = claim_fanout(intent)
+          heartbeat_time += WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f + 1
+        end
+        "jid"
+      end
+
+      job.perform(installment.id, nil, nil, rule.version, intent.token, fanout_token)
+
+      expect(attempts).to eq(1)
+      expect(intent.reload.processed_at).to be_nil
+      expect(intent.fanout_token).to eq(replacement_token)
+    end
+
+    it "runs a direct fanout without an intent lease" do
+      rule
+      expect(WorkflowInstallmentScheduleIntent).not_to receive(:renew_fanout)
+
+      described_class.new.perform(installment.id)
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        installment.id,
+        rule.version,
+        nil,
+        nil,
+        nil,
+        subscription.id
+      )
     end
   end
 end

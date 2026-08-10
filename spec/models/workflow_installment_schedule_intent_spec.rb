@@ -115,6 +115,52 @@ describe WorkflowInstallmentScheduleIntent do
     expect(intent.reload.fanout_expires_at).to be > 119.minutes.from_now
   end
 
+  it "renews only the matching fanout owner" do
+    intent = create_intent
+    fanout_token = intent.claim_fanout!
+    original_expiry = intent.fanout_expires_at
+
+    travel 10.minutes do
+      expect(
+        described_class.renew_fanout(intent_token: intent.token, fanout_token: SecureRandom.uuid)
+      ).to be(false)
+      expect(intent.reload.fanout_expires_at).to eq(original_expiry)
+
+      expect(described_class.renew_fanout(intent_token: intent.token, fanout_token:)).to be(true)
+      expect(intent.reload.fanout_token).to eq(fanout_token)
+      expect(intent.fanout_expires_at).to be > original_expiry
+    end
+  end
+
+  it "keeps direct fanouts independent of intent leases" do
+    expect(described_class.renew_fanout(intent_token: nil, fanout_token: nil)).to be(true)
+  end
+
+  it "lets an expired owner renew until another owner takes over" do
+    intent = create_intent
+    first_token = intent.claim_fanout!
+    intent.update!(fanout_expires_at: 1.minute.ago)
+
+    expect(described_class.renew_fanout(intent_token: intent.token, fanout_token: first_token)).to be(true)
+    expect(intent.with_lock { intent.claim_fanout! }).to be_nil
+
+    intent.update!(fanout_expires_at: 1.minute.ago)
+    second_token = intent.claim_fanout!
+    second_expiry = intent.fanout_expires_at
+
+    expect(described_class.renew_fanout(intent_token: intent.token, fanout_token: first_token)).to be(false)
+    expect(intent.reload.fanout_token).to eq(second_token)
+    expect(intent.fanout_expires_at).to eq(second_expiry)
+  end
+
+  it "does not renew a processed intent" do
+    intent = create_intent(processed_at: Time.current, fanout_token: SecureRandom.uuid)
+
+    expect(
+      described_class.renew_fanout(intent_token: intent.token, fanout_token: intent.fanout_token)
+    ).to be(false)
+  end
+
   it "rejects a stale fanout while another owner is active" do
     intent = create_intent
     current_token = intent.claim_fanout!

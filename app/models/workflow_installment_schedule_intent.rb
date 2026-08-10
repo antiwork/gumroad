@@ -5,6 +5,7 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
 
   DISPATCH_LEASE = 15.minutes
   FANOUT_LEASE = 2.hours
+  FANOUT_HEARTBEAT_INTERVAL = 5.minutes
 
   scope :pending, -> { where(processed_at: nil) }
   scope :dispatchable, ->(at = Time.current) do
@@ -106,6 +107,17 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
       intent.update!(fanout_token:, fanout_expires_at: now + FANOUT_LEASE)
       true
     end
+  end
+
+  def self.renew_fanout(intent_token:, fanout_token:)
+    return true if intent_token.blank? && fanout_token.blank?
+    return false if intent_token.blank? || fanout_token.blank?
+
+    now = Time.current
+    pending.where(token: intent_token, fanout_token:).update_all(
+      fanout_expires_at: now + FANOUT_LEASE,
+      updated_at: now
+    ).positive?
   end
 
   def self.release_dispatch(token:, dispatch_token:)

@@ -8,12 +8,15 @@ class SendWorkflowEmailsToPastCanceledMembersJob
   sidekiq_options retry: 5, queue: :low
 
   def perform(installment_id, _old_delayed_delivery_time = nil, _cutoff_reference_time = nil, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
+    @schedule_intent_token = schedule_intent_token
+    @schedule_intent_fanout_token = schedule_intent_fanout_token
     primary_pinned = minimum_rule_version.present? || schedule_intent_token.present?
     ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
     return unless WorkflowInstallmentScheduleIntent.begin_fanout(
       intent_token: schedule_intent_token,
       fanout_token: schedule_intent_fanout_token
     )
+    @next_fanout_heartbeat_at = fanout_heartbeat_time + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f
     installment = Installment.find(installment_id)
     workflow = installment.workflow
     unless workflow&.alive? && installment.alive? && installment.published? &&
@@ -43,6 +46,8 @@ class SendWorkflowEmailsToPastCanceledMembersJob
     primary_pinned = false
 
     candidate_subscriptions(workflow).includes(:original_purchase).find_each do |subscription|
+      return unless renew_fanout_lease
+
       next unless subscription.cancelled?
       original_purchase = subscription.original_purchase
       next if original_purchase.nil?
@@ -65,6 +70,24 @@ class SendWorkflowEmailsToPastCanceledMembersJob
   end
 
   private
+    def renew_fanout_lease
+      return true if @schedule_intent_token.blank? && @schedule_intent_fanout_token.blank?
+
+      now = fanout_heartbeat_time
+      return true if now < @next_fanout_heartbeat_at
+
+      renewed = WorkflowInstallmentScheduleIntent.renew_fanout(
+        intent_token: @schedule_intent_token,
+        fanout_token: @schedule_intent_fanout_token
+      )
+      @next_fanout_heartbeat_at = now + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f if renewed
+      renewed
+    end
+
+    def fanout_heartbeat_time
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
     def candidate_subscriptions(workflow)
       scope = Subscription.where.not(deactivated_at: nil).where.not(cancelled_at: nil)
       if workflow.product_or_variant_type?

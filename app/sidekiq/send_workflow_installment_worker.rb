@@ -60,28 +60,14 @@ class SendWorkflowInstallmentWorker
 
   private
     def current_rule_version(installment_id)
-      cache_read_failed = false
-      pending = false
-      begin
-        cached_version, pending = InstallmentRule.cached_version_state(installment_id)
-        return cached_version if cached_version.present? && !pending
-      rescue Redis::BaseError, RedisClient::Error
-        cache_read_failed = true
-      end
+      cached_version, pending = InstallmentRule.cached_version_state(installment_id)
+      return cached_version if cached_version.present? && !pending
 
       primary_pinned = true
       ActiveRecord::Base.connection.stick_to_primary!
       effective_version = InstallmentRule.transaction do
         rule = InstallmentRule.lock.find_by(installment_id:)
-        if cache_read_failed
-          rule&.version
-        else
-          begin
-            rule&.cache_version!
-          rescue Redis::BaseError, RedisClient::Error
-            rule&.version
-          end
-        end
+        rule&.cache_version!
       end
       raise RuleNotCommittedError if effective_version.nil? && pending
 

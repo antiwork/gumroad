@@ -8,12 +8,15 @@ class SendWorkflowPostEmailsJob
   sidekiq_options retry: 5, queue: :low
 
   def perform(post_id, earliest_valid_time = nil, _reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
+    @schedule_intent_token = schedule_intent_token
+    @schedule_intent_fanout_token = schedule_intent_fanout_token
     primary_pinned = minimum_rule_version.present? || schedule_intent_token.present?
     ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
     return unless WorkflowInstallmentScheduleIntent.begin_fanout(
       intent_token: schedule_intent_token,
       fanout_token: schedule_intent_fanout_token
     )
+    @next_fanout_heartbeat_at = fanout_heartbeat_time + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f
     @post = Installment.find(post_id)
     @workflow = @post.workflow
     unless @workflow.alive? && @post.alive? && @post.published?
@@ -39,12 +42,17 @@ class SendWorkflowPostEmailsJob
     # Same protection as SendPostBlastEmailsJob: for sellers with very large audiences the
     # filter query can exceed the database's default 5-minute statement cap, so raise it for
     # this one query.
-    @members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+    audience_timeout = audience_load_timeout_seconds
+    return unless renew_fanout_lease(force: true)
+    @members = WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) do
       AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).
         select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
     end
+    return unless renew_fanout_lease(force: true)
 
     @members.each do |member|
+      return unless renew_fanout_lease
+
       if @post.seller_or_product_or_variant_type?
         enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
       elsif @post.follower_type?
@@ -70,6 +78,24 @@ class SendWorkflowPostEmailsJob
   end
 
   private
+    def renew_fanout_lease(force: false)
+      return true if @schedule_intent_token.blank? && @schedule_intent_fanout_token.blank?
+
+      now = fanout_heartbeat_time
+      return true unless force || now >= @next_fanout_heartbeat_at
+
+      renewed = WorkflowInstallmentScheduleIntent.renew_fanout(
+        intent_token: @schedule_intent_token,
+        fanout_token: @schedule_intent_fanout_token
+      )
+      @next_fanout_heartbeat_at = now + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f if renewed
+      renewed
+    end
+
+    def fanout_heartbeat_time
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
     def enqueue_email_job(member:, type:, id:)
       # The id columns come from an aggregate over a JSON_TABLE join, and a row can be
       # filtered out of that join even though the member still qualifies (see the comment
