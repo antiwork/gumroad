@@ -4300,7 +4300,7 @@ class Purchase < ApplicationRecord
 
       create_sales_tax_info!
 
-      calculate_shipping
+      calculate_shipping(locked_rate:)
       save
 
       if free_purchase?
@@ -5020,7 +5020,7 @@ class Purchase < ApplicationRecord
       self.was_tax_excluded_from_price = true
     end
 
-    def calculate_shipping
+    def calculate_shipping(locked_rate: nil)
       return unless link.is_physical
       return if country.blank?
 
@@ -5030,7 +5030,7 @@ class Purchase < ApplicationRecord
         preorder.authorization_purchase.shipping_cents
       else
         shipping_rate = ShippingDestination.for_product_and_country_code(product: link, country_code: Compliance::Countries.find_by_name(country)&.alpha2)
-        shipping_rate.calculate_shipping_rate(quantity:, currency_type: link.price_currency_type)
+        shipping_rate.calculate_shipping_rate(quantity:, currency_type: link.price_currency_type, rate: locked_rate)
       end
     end
 
