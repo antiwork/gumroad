@@ -131,10 +131,24 @@ class AutoTopUpNegativeDestinationBalancesJob
       current_balance_pairs = Balance.unpaid
                                      .where(user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id)
                                      .order(:id)
-                                     .pluck(:id, :holding_amount_cents)
-      current_balance_amounts = current_balance_pairs.to_h
-      current_balance_ids = current_balance_amounts.keys
-      current_total_cents = current_balance_amounts.values.sum
+                                     .pluck(:id, :holding_amount_cents, :date)
+      current_balance_ids = current_balance_pairs.map(&:first)
+      current_balance_amounts = current_balance_pairs.to_h { |id, cents, _date| [id, cents] }
+      whole_ledger_cents = current_balance_amounts.values.sum
+      # Mirrors resolve_entry's own full_total window instead of always summing the whole ledger:
+      # an in-cycle candidate (entry[:post_cutoff] false) can carry a post-cutoff credit that
+      # clears the whole-ledger total while the cycle-window slice the weekly run actually pays
+      # is still negative — re-reading the whole ledger here would silently skip or underfund
+      # exactly the gap the scan flagged. A post-cutoff-only candidate never reaches here (the
+      # branch above escalates it), so only the in-cycle window needs the live re-read at all.
+      current_total_cents =
+        if entry[:post_cutoff]
+          whole_ledger_cents
+        else
+          cutoff = AlertOnNegativeDestinationBalancesJob.payout_cutoff_date
+          in_cycle_cents = current_balance_pairs.sum { |_id, cents, date| date <= cutoff ? cents : 0 }
+          [whole_ledger_cents, in_cycle_cents].min
+        end
       return { entry:, verdict: :noop, reason: "reconciled since scan — nothing left to transfer" } unless current_total_cents.negative?
 
       _funded_amount, funded_ids_str = $redis.get(dedupe_key)&.split(":", 2)

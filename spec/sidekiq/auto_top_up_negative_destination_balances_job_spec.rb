@@ -162,6 +162,32 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.deactivate(:auto_topup_negative_destination_balances)
   end
 
+  it "re-reads on the cycle window, not the whole ledger, when a post-cutoff credit would otherwise mask an in-cycle shortfall" do
+    in_cycle_row = residue_row(-728_50)
+    post_cutoff_credit = create(:balance, user: seller, merchant_account:,
+                                          date: User::PayoutSchedule.next_scheduled_payout_end_date + 1,
+                                          amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: 728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    # Whole ledger nets to 0 (the post-cutoff credit offsets the in-cycle shortfall), but the
+    # cycle window the weekly run actually pays is still -728_50 — the window resolve_entry's
+    # full_total used and the one this re-read must preserve.
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
+      hash_including(amount_cents: 728_50)
+    )
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to start_with("Topped up 1 of 1 candidates")
+    end
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+    $redis.del(RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id))
+    _ = [in_cycle_row, post_cutoff_credit]
+  end
+
   it "escalates a RETIRED merchant account instead of attempting a transfer" do
     residue_row(-728_50)
     make_payable

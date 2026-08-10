@@ -40,6 +40,13 @@ class AlertOnNegativeDestinationBalancesJob
     new.send(:scan_for_negative_destinations)
   end
 
+  # Reused by AutoTopUpNegativeDestinationBalancesJob so its live re-read applies the same
+  # in-cycle-vs-whole-ledger window `resolve_entry`'s full_total used, instead of always summing
+  # the whole ledger and drifting from the scan's own payability verdict.
+  def self.payout_cutoff_date
+    new.send(:payout_cutoff_date)
+  end
+
   private
     # Sellers whose Stripe-held balance set nets negative AND who are payable now, so the next payout
     # run reaches them. `truncated` means the candidate window was cut short, so the counts are floors.
