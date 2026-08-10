@@ -5,7 +5,7 @@ FactoryBot.define do
     user
     account_number { "000123456789" }
     bank_code { "999" }
-    branch_code { "4232" }
+    branch_code { "94232" }
     account_number_last_four { "6789" }
     account_holder_full_name { "Chuck Bartowski" }
   end
