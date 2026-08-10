@@ -303,6 +303,41 @@ describe RecoverStrandedBuyersJob do
     end
   end
 
+  # nyomanjyotisa's review: the run-budget cursor previously only covered the oversized-bucket
+  # sub-paging branch. A normal (<=25) bucket window returned [nil, due_today] and skipped
+  # save_page_cursor entirely, so a RUN_BUDGET-truncated run on an ordinary day always restarted
+  # at the same email-sorted first buyer — starving everyone after them in that bucket forever.
+  it "advances a normal (non-oversized) bucket's starting point across successive occurrences" do
+    # Total pool must exceed MAX_RECOVERIES_PER_RUN so `window` takes the bucketing path at all;
+    # only the "target" half is due in bucket 0, keeping that bucket itself non-oversized.
+    target = (described_class::MAX_RECOVERIES_PER_RUN - 5).times.map { |i| candidate.merge(email: "target#{i.to_s.rjust(2, '0')}@example.com") }
+    other = described_class::MAX_RECOVERIES_PER_RUN.times.map { |i| candidate.merge(email: "other#{i.to_s.rjust(2, '0')}@example.com") }
+    many = target + other
+    job = described_class.new
+    allow(job).to receive(:bucket) { |email| email.include?("target") ? 0 : 1 }
+
+    _page_key, first_occurrence = travel_to(described_class::ROTATION_EPOCH) { job.send(:window, many) }
+    job.send(:save_page_cursor, [0, 0], 1) # simulate a run that only got through the first buyer
+    # Same bucket (0) recurs every ROTATION_BUCKETS days.
+    _page_key, second_occurrence = travel_to(described_class::ROTATION_EPOCH + described_class::ROTATION_BUCKETS) { job.send(:window, many) }
+
+    expect(second_occurrence.first).not_to eq(first_occurrence.first)
+  end
+
+  # Same starvation shape when the whole population fits in one run (no bucketing at all): the
+  # window is still a deterministic sort every time, so it needs the same persisted cursor.
+  it "advances the starting point across successive runs when the whole population fits in one window" do
+    many = (described_class::MAX_RECOVERIES_PER_RUN - 5).times.map { |i| candidate.merge(email: "total#{i.to_s.rjust(2, '0')}@example.com") }
+    job = described_class.new
+
+    _page_key, first_run = job.send(:window, many)
+    job.send(:save_page_cursor, [:total], 1) # simulate a run that only got through the first buyer
+
+    _page_key, second_run = job.send(:window, many)
+
+    expect(second_run.first).not_to eq(first_run.first)
+  end
+
   it "is registered on the schedule so it actually runs" do
     schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
 
