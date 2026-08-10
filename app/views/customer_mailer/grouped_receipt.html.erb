@@ -1,6 +1,3 @@
 <% @chargeables.each do |chargeable| %>
-  <%# A grouped receipt is a synthetic digest (license-key lookup, purchase reassignment) built from raw purchase
-      ids, not a genuine guest checkout. Showing co-purchase recommendations there would leak unrelated
-      purchases the buyer also owns into the "Customers who bought this item also bought" section. %>
-  <%= render("customer_mailer/receipt", receipt_presenter: ReceiptPresenter.new(chargeable, for_email: true, recommendations: false), chargeable: chargeable) %>
+  <%= render("customer_mailer/receipt", receipt_presenter: ReceiptPresenter.new(chargeable, for_email: true, recommendations: @recommendations), chargeable: chargeable) %>
 <% end %>

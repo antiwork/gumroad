@@ -1391,6 +1391,25 @@ describe CustomerMailer do
       expect(mail.subject).to eq("Receipts for Purchases")
     end
 
+    it "keeps recommendations enabled by default" do
+      purchase = purchases.first
+      expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_receipt).with(
+        purchaser: nil,
+        receipt_product_ids: [product.id],
+        recommender_model_name: kind_of(String),
+        limit: 4,
+      ).and_return([])
+
+      CustomerMailer.grouped_receipt([purchase.id]).body.decoded
+    end
+
+    it "can disable recommendations for a narrowed lookup" do
+      purchase = purchases.first
+      expect(RecommendedProducts::CheckoutService).not_to receive(:fetch_for_receipt)
+
+      CustomerMailer.grouped_receipt([purchase.id], recommendations: false).body.decoded
+    end
+
     it "skips failed purchases whose charge has no successful purchases" do
       failed_purchase = create(:failed_purchase, link: product, seller:)
       charge = create(:charge, seller:)
