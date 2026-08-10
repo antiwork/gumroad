@@ -523,12 +523,16 @@ class Link < ApplicationRecord
     end
 
     user.direct_affiliates.alive.apply_to_all_products.each do |affiliate|
-      next if is_collab?
+      next if is_collab? || ProductAffiliate.exists?(affiliate:, product: self)
 
-      unless affiliate.products.include?(self)
+      begin
         ProductAffiliate.create!(affiliate:, product: self)
-        AffiliateMailer.notify_direct_affiliate_of_new_product(affiliate.id, id).deliver_later
+      rescue ActiveRecord::RecordInvalid => error
+        raise unless error.record.errors.of_kind?(:affiliate, :taken)
+        next
       end
+
+      AffiliateMailer.notify_direct_affiliate_of_new_product(affiliate.id, id).deliver_later
     end
   end
 

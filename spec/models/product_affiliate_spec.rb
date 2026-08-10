@@ -15,6 +15,23 @@ describe ProductAffiliate do
         product_affiliate = build(:product_affiliate, affiliate: existing.affiliate, product: existing.product)
         expect(product_affiliate).not_to be_valid
       end
+
+      it "locks the affiliate before checking for an existing assignment" do
+        affiliate = create(:direct_affiliate)
+        product = create(:product, user: affiliate.seller)
+        product_affiliate = build(:product_affiliate, affiliate:, product:)
+        lock_queries = []
+        subscriber = lambda do |_name, _start, _finish, _id, payload|
+          lock_queries << payload[:sql] if payload[:sql].include?("FOR UPDATE")
+        end
+
+        ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+          product_affiliate.valid?
+        end
+
+        expect(lock_queries.first).to include("FROM `affiliates`")
+        expect(lock_queries.second).to include("FROM `affiliates_links`")
+      end
     end
 
     context "for a collaborator" do
@@ -69,6 +86,20 @@ describe ProductAffiliate do
   end
 
   describe "lifecycle hooks" do
+    it "locks the affiliate before deleting an assignment" do
+      product_affiliate = create(:product_affiliate)
+      lock_queries = []
+      subscriber = lambda do |_name, _start, _finish, _id, payload|
+        lock_queries << payload[:sql] if payload[:sql].include?("FOR UPDATE")
+      end
+
+      ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+        product_affiliate.destroy!
+      end
+
+      expect(lock_queries.first).to include("FROM `affiliates`")
+    end
+
     describe "toggling product is_collab flag" do
       context "for a collaborator" do
         let!(:affiliate) { create(:collaborator) }
@@ -83,6 +114,25 @@ describe ProductAffiliate do
           end.to change { product.reload.is_collab }.from(false).to(true)
              .and change { self_service_affiliate_product.reload.enabled }.from(true).to(false)
              .and change { direct_affiliate.product_affiliates.count }.from(1).to(0)
+        end
+
+        it "deletes direct affiliate assignments in affiliate order" do
+          product = create(:product, is_collab: false)
+          first_affiliate = create(:direct_affiliate, seller: product.user)
+          second_affiliate = create(:direct_affiliate, seller: product.user)
+          create(:product_affiliate, affiliate: second_affiliate, product:)
+          create(:product_affiliate, affiliate: first_affiliate, product:)
+          assignment_query = nil
+          subscriber = lambda do |_name, _start, _finish, _id, payload|
+            sql = payload[:sql]
+            assignment_query = sql if sql.include?("FROM `affiliates_links`") && sql.include?("ORDER BY")
+          end
+
+          ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+            create(:product_affiliate, affiliate:, product:)
+          end
+
+          expect(assignment_query).to include("`affiliates_links`.`affiliate_id` ASC, `affiliates_links`.`id` ASC")
         end
 
         it "disables the is_collab flag when a product affiliate is deleted" do
