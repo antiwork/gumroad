@@ -48,11 +48,8 @@ class CustomerMailer < ApplicationMailer
     )
   end
 
-  # Note that the first argument is purchase_id, while the 2nd is charge_id
-  # charge_id needs to be passed to the mailer only when the initial customer order is placed (via SendChargeReceiptJob)
-  # For duplicate receipts (post-purchase), the purchase_id is passed, and the mailer will determine if it should use the
-  # purchase, or the charge associated (via Charge::Chargeable.find_by_purchase_or_charge!)
-  #
+  # charge_id is only passed for the initial order (SendChargeReceiptJob); duplicate/post-purchase
+  # receipts pass purchase_id alone and let find_by_purchase_or_charge! resolve the charge.
   def receipt(purchase_id = nil, charge_id = nil, for_email: true)
     @chargeable = Charge::Chargeable.find_by_purchase_or_charge!(
       purchase: Purchase.find_by(id: purchase_id),
