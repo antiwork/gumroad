@@ -7,6 +7,8 @@ class SendWorkflowPostEmailsJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
+  FOLLOWER_LOOKUP_BATCH_SIZE = 1_000
+
   def perform(post_id, earliest_valid_time = nil, _reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
     @schedule_intent_token = schedule_intent_token
     @schedule_intent_fanout_token = schedule_intent_fanout_token
@@ -48,7 +50,9 @@ class SendWorkflowPostEmailsJob
     @rule_delay = rule.delayed_delivery_time
 
     @filters = @post.audience_members_filter_params
-    @filters[:created_after] = Time.zone.parse(earliest_valid_time) if earliest_valid_time
+    @original_filters = @filters.dup
+    @recipient_cutoff_time = Time.zone.parse(earliest_valid_time) if earliest_valid_time
+    @filters[:created_after] = @recipient_cutoff_time if @recipient_cutoff_time
     Makara::Context.release_all
     primary_pinned = false
     # Same protection as SendPostBlastEmailsJob: for sellers with very large audiences the
@@ -57,8 +61,11 @@ class SendWorkflowPostEmailsJob
     audience_timeout = audience_load_timeout_seconds
     return unless renew_fanout_lease(force: true)
     @members = WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) do
-      AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).
+      members = AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).
         select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
+      members = merge_confirmed_followers_after_cutoff(members)
+      @follower_confirmation_times_by_id = follower_confirmation_times_by_id(members)
+      members
     end
     return unless renew_fanout_lease(force: true)
 
@@ -138,8 +145,18 @@ class SendWorkflowPostEmailsJob
       elsif type == :follower
         id ||= member.details.dig("follower", "id")
         return log_unresolvable_recipient(member:, type:) if id.nil?
-        created_at = Time.zone.parse(member.details.dig("follower", "created_at"))
-        enqueue_installment_worker(created_at + @rule_delay, @post.id, @rule_version, nil, id, nil)
+        confirmed_at = @follower_confirmation_times_by_id[id]
+        return log_unresolvable_recipient(member:, type:) if confirmed_at.nil?
+        enqueue_installment_worker(
+          confirmed_at + @rule_delay,
+          @post.id,
+          @rule_version,
+          nil,
+          id,
+          nil,
+          nil,
+          confirmed_at.iso8601
+        )
       elsif type == :affiliate
         affiliate = resolve_affiliate(member:, id:)
         return log_unresolvable_recipient(member:, type:) if affiliate.nil?
@@ -161,6 +178,52 @@ class SendWorkflowPostEmailsJob
       return job_id if job_id.present?
 
       raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"
+    end
+
+    def confirmed_follower_members_after_cutoff
+      return [] if @recipient_cutoff_time.nil?
+      return [] unless @post.follower_type? || @post.audience_type?
+
+      follower_emails = Follower.active
+        .where(followed_id: @post.seller_id)
+        .where("confirmed_at > ?", @recipient_cutoff_time)
+        .select("LOWER(followers.email)")
+      member_ids = AudienceMember
+        .where(seller_id: @post.seller_id, email: follower_emails)
+        .select(:id)
+
+      members = AudienceMember.filter(
+        seller_id: @post.seller_id,
+        params: @original_filters,
+        with_ids: true,
+        ids: member_ids
+      ).select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
+      members.select! { workflow_dates_include?(_1.details.dig("follower", "created_at")) }
+      members.each { _1.follower_id = _1.details.dig("follower", "id") }
+      members
+    end
+
+    def merge_confirmed_followers_after_cutoff(members)
+      existing_member_ids = members.to_set(&:id)
+      confirmed_follower_members_after_cutoff.each do |follower_member|
+        members << follower_member unless existing_member_ids.include?(follower_member.id)
+      end
+      members
+    end
+
+    def follower_confirmation_times_by_id(members)
+      return {} unless @post.follower_type? || @post.audience_type?
+
+      follower_ids = if @post.follower_type?
+        members.filter_map { _1.follower_id || _1.details.dig("follower", "id") }
+      else
+        members.filter_map(&:follower_id)
+      end
+      follower_ids.uniq.each_slice(FOLLOWER_LOOKUP_BATCH_SIZE).each_with_object({}) do |ids, confirmation_times|
+        Follower.where(id: ids, followed_id: @post.seller_id).active.pluck(:id, :confirmed_at).each do |id, confirmed_at|
+          confirmation_times[id] = confirmed_at.change(usec: 0)
+        end
+      end
     end
 
     # A person can be an affiliate for several of the seller's products, and `details["affiliates"]`
@@ -185,6 +248,19 @@ class SendWorkflowPostEmailsJob
         affiliates
       end
       candidates.select { _1["id"].present? }.max_by { _1["id"] }
+    end
+
+    def workflow_dates_include?(created_at)
+      return true if @original_filters[:created_after].blank? && @original_filters[:created_before].blank?
+      return false if created_at.blank?
+
+      created_at = Time.zone.parse(created_at.to_s)
+      created_after = Time.zone.parse(@original_filters[:created_after].to_s) if @original_filters[:created_after]
+      created_before = Time.zone.parse(@original_filters[:created_before].to_s) if @original_filters[:created_before]
+      return false if created_after && created_at <= created_after
+      return false if created_before && created_at >= created_before
+
+      true
     end
 
     # Skipping a member silently is how the follower/bought-product bug stayed invisible for

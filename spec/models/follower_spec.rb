@@ -201,6 +201,30 @@ RSpec.describe Follower do
       follower.confirm!
 
       expect(SendWorkflowInstallmentWorker.jobs.size).to eq(2)
+      reference_time = follower.confirmed_at.change(usec: 0)
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @installment1.id,
+        @installment_rule1.version,
+        nil,
+        follower.id,
+        nil,
+        nil,
+        reference_time.iso8601
+      ).at(reference_time + @installment_rule1.delayed_delivery_time)
+
+      queued_args = SendWorkflowInstallmentWorker.jobs.find { _1["args"].first == @installment1.id }.fetch("args")
+      expected_args = [
+        @installment1.id,
+        @installment_rule1.version,
+        nil,
+        follower.id,
+        nil,
+        nil,
+        reference_time.iso8601
+      ]
+      expect(queued_args).to eq(expected_args)
+      allow(PostSendgridApi).to receive(:process)
+      expect { SendWorkflowInstallmentWorker.new.perform(*queued_args) }.not_to raise_error
     end
 
     it "doesn't enqueue installment jobs when follower doesn't confirm" do

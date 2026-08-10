@@ -29,7 +29,15 @@ describe "workflow installment schedule intent completion", :freeze_time do
       described_class.new.perform(post.id, nil, false, rule.version, intent.token, fanout_token)
 
       expect(intent.reload.processed_at).to be_present
-      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(post.id, rule.version, nil, follower.id, nil)
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        post.id,
+        rule.version,
+        nil,
+        follower.id,
+        nil,
+        nil,
+        follower.confirmed_at.change(usec: 0).iso8601
+      )
     end
 
     it "keeps a partial fanout recoverable" do
@@ -183,7 +191,15 @@ describe "workflow installment schedule intent completion", :freeze_time do
 
       described_class.new.perform(post.id)
 
-      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(post.id, rule.version, nil, follower.id, nil)
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        post.id,
+        rule.version,
+        nil,
+        follower.id,
+        nil,
+        nil,
+        follower.confirmed_at.change(usec: 0).iso8601
+      )
     end
 
     it "does not replace a missing matching purchase with another embedded purchase" do
