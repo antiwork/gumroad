@@ -147,6 +147,17 @@ describe ReceiptPresenter::MailSubject, :vcr do
           expect(mail_subject).to eq("You bought Product One!")
         end
       end
+
+      context "when two distinct products share the same truncated prefix" do
+        let(:product_one) { create(:product, name: "Advanced Marketing Course Bundle A") }
+        let(:product_two) { create(:product, name: "Advanced Marketing Course Bundle B") }
+
+        it "does not collapse them into a single-product subject" do
+          expect(mail_subject).to eq(
+            "You bought Advanced Marketing Cours... and Advanced Marketing Cours..."
+          )
+        end
+      end
     end
 
     describe "with more than two purchases" do
