@@ -523,8 +523,10 @@ class Link < ApplicationRecord
     end
 
     user.direct_affiliates.alive.apply_to_all_products.each do |affiliate|
+      next if is_collab?
+
       unless affiliate.products.include?(self)
-        affiliate.products << self
+        ProductAffiliate.create!(affiliate:, product: self)
         AffiliateMailer.notify_direct_affiliate_of_new_product(affiliate.id, id).deliver_later
       end
     end
