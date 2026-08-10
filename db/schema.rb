@@ -3189,6 +3189,23 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_07_000000) do
     t.index ["user_id"], name: "index_wishlists_on_user_id"
   end
 
+  create_table "workflow_installment_schedule_intents", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "token", null: false
+    t.integer "installment_id", null: false
+    t.integer "rule_version", null: false
+    t.integer "old_delayed_delivery_time"
+    t.datetime "cutoff_reference_time", null: false
+    t.datetime "expected_published_at"
+    t.string "dispatch_token"
+    t.datetime "dispatch_expires_at"
+    t.datetime "processed_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["installment_id"], name: "index_workflow_installment_schedule_intents_on_installment_id"
+    t.index ["processed_at", "dispatch_expires_at"], name: "index_workflow_intent_on_processed_and_dispatch_expiry"
+    t.index ["token"], name: "index_workflow_installment_schedule_intents_on_token", unique: true
+  end
+
   create_table "workflows", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 1024
     t.integer "seller_id"

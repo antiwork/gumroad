@@ -30,6 +30,14 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
     expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@installment.id, @rule.version, nil, nil, nil, recent.id).at(recent.deactivated_at + @rule.delayed_delivery_time)
   end
 
+  it "retries if the required rule version is not visible" do
+    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+
+    expect do
+      described_class.new.perform(@installment.id, nil, nil, @rule.version + 1)
+    end.to raise_error(SendWorkflowEmailsToPastCanceledMembersJob::RuleNotCommittedError)
+  end
+
   it "does nothing when the workflow has been deleted" do
     @workflow.mark_deleted!
     described_class.new.perform(@installment.id)

@@ -36,6 +36,18 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(SendWorkflowInstallmentWorker.jobs).to be_empty
     end
 
+    it "reads the primary database for a required rule version" do
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+
+      described_class.new.perform(@post.id, nil, false, @post_rule.version)
+    end
+
+    it "retries if the required rule version is not visible" do
+      expect do
+        described_class.new.perform(@post.id, nil, false, @post_rule.version + 1)
+      end.to raise_error(SendWorkflowPostEmailsJob::RuleNotCommittedError)
+    end
+
     it "only considers audience members created after the earliest_valid_time" do
       described_class.new.perform(@post.id, 1.day.ago.iso8601)
       expect(SendWorkflowInstallmentWorker.jobs).to be_empty

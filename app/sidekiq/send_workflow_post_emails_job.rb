@@ -1,20 +1,31 @@
 # frozen_string_literal: true
 
 class SendWorkflowPostEmailsJob
+  class RuleNotCommittedError < StandardError; end
+
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
-  def perform(post_id, earliest_valid_time = nil)
+  def perform(post_id, earliest_valid_time = nil, _reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil)
+    WorkflowInstallmentScheduleIntent.mark_processed(schedule_intent_token)
+    primary_pinned = minimum_rule_version.present?
+    ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
     @post = Installment.find(post_id)
     @workflow = @post.workflow
     return unless @workflow.alive? && @post.alive? && @post.published?
 
-    @rule_version = @post.installment_rule.version
-    @rule_delay = @post.installment_rule.delayed_delivery_time
+    rule = @post.installment_rule
+    if minimum_rule_version.present? && (rule.nil? || rule.version < minimum_rule_version)
+      raise RuleNotCommittedError
+    end
+    rule.cache_version!
+    @rule_version = rule.version
+    @rule_delay = rule.delayed_delivery_time
 
     @filters = @post.audience_members_filter_params
     @filters[:created_after] = Time.zone.parse(earliest_valid_time) if earliest_valid_time
     Makara::Context.release_all
+    primary_pinned = false
     # Same protection as SendPostBlastEmailsJob: for sellers with very large audiences the
     # filter query can exceed the database's default 5-minute statement cap, so raise it for
     # this one query.
@@ -40,6 +51,8 @@ class SendWorkflowPostEmailsJob
         end
       end
     end
+  ensure
+    Makara::Context.release_all if primary_pinned
   end
 
   private

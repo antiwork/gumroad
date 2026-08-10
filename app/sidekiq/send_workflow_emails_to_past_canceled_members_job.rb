@@ -1,10 +1,15 @@
 # frozen_string_literal: true
 
 class SendWorkflowEmailsToPastCanceledMembersJob
+  class RuleNotCommittedError < StandardError; end
+
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
-  def perform(installment_id)
+  def perform(installment_id, _old_delayed_delivery_time = nil, _cutoff_reference_time = nil, minimum_rule_version = nil, schedule_intent_token = nil)
+    WorkflowInstallmentScheduleIntent.mark_processed(schedule_intent_token)
+    primary_pinned = minimum_rule_version.present?
+    ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
     installment = Installment.find(installment_id)
     workflow = installment.workflow
     return unless workflow&.alive? && installment.alive? && installment.published?
@@ -14,9 +19,13 @@ class SendWorkflowEmailsToPastCanceledMembersJob
 
     rule = installment.installment_rule
     return if rule.nil?
+    raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
+    rule.cache_version!
 
     delay = rule.delayed_delivery_time
     rule_version = rule.version
+    Makara::Context.release_all
+    primary_pinned = false
 
     candidate_subscriptions(workflow).includes(:original_purchase).find_each do |subscription|
       next unless subscription.cancelled?
@@ -29,6 +38,8 @@ class SendWorkflowEmailsToPastCanceledMembersJob
         installment.id, rule_version, nil, nil, nil, subscription.id
       )
     end
+  ensure
+    Makara::Context.release_all if primary_pinned
   end
 
   private

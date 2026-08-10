@@ -21,14 +21,21 @@ class Workflow::SaveInstallmentsService
       return [false, errors]
     end
 
-    if workflow.abandoned_cart_type? && params[:installments].size != 1
-      workflow.errors.add(:base, "An abandoned cart workflow can only have one email.")
-      @errors = workflow.errors
-      return [false, errors]
-    end
-
     begin
       ActiveRecord::Base.transaction do
+        workflow.lock!
+        unless workflow.alive?
+          workflow.errors.add(:base, "The workflow was not found.")
+          @errors = workflow.errors
+          raise ActiveRecord::Rollback
+        end
+
+        if workflow.abandoned_cart_type? && params[:installments].size != 1
+          workflow.errors.add(:base, "An abandoned cart workflow can only have one email.")
+          @errors = workflow.errors
+          raise ActiveRecord::Rollback
+        end
+
         if @workflow.has_never_been_published?
           @workflow.update!(send_to_past_customers: params[:send_to_past_customers])
         end
@@ -75,6 +82,7 @@ class Workflow::SaveInstallmentsService
     def delete_removed_installments
       deleted_external_ids = workflow.installments.alive.map(&:external_id) - params[:installments].pluck(:id)
       workflow.installments.by_external_ids(deleted_external_ids).find_each do |installment|
+        installment.installment_rule&.advance_version!
         installment.mark_deleted!
         installment.installment_rule&.mark_deleted!
       end
@@ -110,7 +118,12 @@ class Workflow::SaveInstallmentsService
       rule.save!
 
       if installment.published_at.present? && params[:save_action_name] == Workflow::SAVE_ACTION
-        installment.workflow.schedule_installment(installment, old_delayed_delivery_time:)
+        WorkflowInstallmentScheduleIntent.enqueue!(
+          installment:,
+          rule_version: rule.version,
+          old_delayed_delivery_time:,
+          cutoff_reference_time: Time.current
+        )
       end
     end
 end

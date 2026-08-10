@@ -51,56 +51,86 @@ class Workflow < ApplicationRecord
   end
 
   def mark_deleted!
-    self.deleted_at = Time.current
-    installments.each do |installment|
-      installment.mark_deleted!
-      installment.installment_rule.mark_deleted!
+    self.class.transaction do
+      lock!
+      self.deleted_at = Time.current
+      installments.each do |installment|
+        rule = installment.installment_rule
+        rule&.advance_version!
+        installment.mark_deleted!
+        rule&.mark_deleted!
+      end
+      save!
     end
-    save!
   end
 
   def publish!
-    return true if published_at.present?
+    with_transition_lock do
+      next true if published_at.present?
 
-    if !abandoned_cart_type? && !seller.eligible_to_send_emails?
-      errors.add(:base, "You cannot publish a workflow until you have made at least #{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in total earnings and received a payout")
-      raise ActiveRecord::RecordInvalid.new(self)
-    end
+      if !abandoned_cart_type? && !seller.eligible_to_send_emails?
+        errors.add(:base, "You cannot publish a workflow until you have made at least #{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in total earnings and received a payout")
+        raise ActiveRecord::RecordInvalid.new(self)
+      end
 
-    self.published_at = DateTime.current
-    self.first_published_at ||= published_at
-    installments.alive.find_each do |installment|
-      installment.publish!(published_at:)
-      schedule_installment(installment)
+      self.published_at = DateTime.current.change(usec: 0)
+      self.first_published_at ||= published_at
+      installments_to_schedule = []
+      installments.alive.find_each do |installment|
+        rule = installment.installment_rule
+        rule&.advance_version!
+        installment.publish!(published_at:)
+        installments_to_schedule << [installment, rule.version] if rule.present? && !installment.abandoned_cart_type?
+      end
+      save!
+      installments_to_schedule.each do |installment, rule_version|
+        WorkflowInstallmentScheduleIntent.enqueue!(
+          installment:,
+          rule_version:,
+          old_delayed_delivery_time: nil,
+          cutoff_reference_time: published_at,
+          expected_published_at: published_at
+        )
+      end
     end
-    save!
   end
 
   def unpublish!
-    return true if published_at.nil?
+    with_transition_lock do
+      next true if published_at.nil?
 
-    self.published_at = nil
-    installments.alive.find_each(&:unpublish!)
-    save!
+      self.published_at = nil
+      installments.alive.find_each do |installment|
+        installment.installment_rule&.advance_version!
+        installment.unpublish!
+      end
+      save!
+    end
   end
 
   def has_never_been_published?
     first_published_at.nil?
   end
 
-  def schedule_installment(installment, old_delayed_delivery_time: nil)
-    return if installment.abandoned_cart_type?
-    return unless alive?
-    return unless installment.published?
+  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, minimum_rule_version: nil, schedule_intent_token: nil)
+    return :not_applicable if installment.abandoned_cart_type?
+    return :not_applicable unless alive?
+    return :not_applicable unless installment.published?
 
     if member_cancellation_trigger?
-      SendWorkflowEmailsToPastCanceledMembersJob.perform_async(installment.id) if send_to_past_customers?
-      return
+      if send_to_past_customers?
+        args = [installment.id]
+        args.concat([nil, nil, minimum_rule_version]) if minimum_rule_version.present? || schedule_intent_token.present?
+        args << schedule_intent_token if schedule_intent_token.present?
+        job_id = SendWorkflowEmailsToPastCanceledMembersJob.perform_async(*args)
+        return job_id.present? ? :enqueued : :not_enqueued
+      end
+      return :not_applicable
     end
 
-    return unless new_customer_trigger?
+    return :not_applicable unless new_customer_trigger?
     # don't schedule the installment if it is only for new customers/followers and it hasn't been scheduled before (old_delayed_delivery_time is nil)
-    return if old_delayed_delivery_time.nil? && installment.is_for_new_customers_of_workflow
+    return :not_applicable if old_delayed_delivery_time.nil? && installment.is_for_new_customers_of_workflow
 
     # earliest_valid_time is:
     #   `installment.published_at` if the installment is for new customers only
@@ -110,12 +140,25 @@ class Workflow < ApplicationRecord
     # installment has not been delivered to them and needs to be (re-)scheduled.
     earliest_valid_time = if old_delayed_delivery_time.nil?
       nil
-    elsif installment.is_for_new_customers_of_workflow && installment.published_at >= old_delayed_delivery_time.seconds.ago
+    elsif installment.is_for_new_customers_of_workflow && installment.published_at >= cutoff_reference_time - old_delayed_delivery_time.seconds
       installment.published_at
     else
-      old_delayed_delivery_time.seconds.ago
+      cutoff_reference_time - old_delayed_delivery_time.seconds
     end
 
-    SendWorkflowPostEmailsJob.perform_async(installment.id, earliest_valid_time&.iso8601)
+    args = [installment.id, earliest_valid_time&.iso8601]
+    args.concat([false, minimum_rule_version]) if minimum_rule_version.present? || schedule_intent_token.present?
+    args << schedule_intent_token if schedule_intent_token.present?
+    SendWorkflowPostEmailsJob.perform_async(*args).present? ? :enqueued : :not_enqueued
   end
+
+  private
+    def with_transition_lock
+      self.class.transaction do
+        # An update acquires the same row lock when a callback leaves the workflow dirty.
+        save! if has_changes_to_save?
+        lock!
+        yield
+      end
+    end
 end
