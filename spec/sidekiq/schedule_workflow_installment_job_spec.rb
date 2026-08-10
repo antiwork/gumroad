@@ -55,6 +55,7 @@ describe ScheduleWorkflowInstallmentJob do
   it "accepts the scheduler job whose dispatch token committed" do
     dispatch_token = SecureRandom.uuid
     intent = create_intent(dispatch_token:)
+    expect(WorkflowInstallmentScheduleIntent).to receive(:lock).and_call_original
     expect_any_instance_of(Workflow).to receive(:schedule_installment).and_return(:enqueued)
 
     described_class.new.perform(intent.token, dispatch_token)

@@ -9,10 +9,9 @@ class ScheduleWorkflowInstallmentJob
 
   def perform(intent_token, dispatch_token = nil)
     ActiveRecord::Base.connection.stick_to_primary!
-    intent = WorkflowInstallmentScheduleIntent.find_by(token: intent_token)
-    return if intent.nil?
-
-    intent.with_lock do
+    WorkflowInstallmentScheduleIntent.transaction do
+      intent = WorkflowInstallmentScheduleIntent.lock.find_by(token: intent_token)
+      next if intent.nil?
       next if intent.processed_at.present?
       next if dispatch_token.present? && intent.dispatch_token != dispatch_token
 
