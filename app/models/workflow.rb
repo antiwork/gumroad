@@ -113,7 +113,7 @@ class Workflow < ApplicationRecord
     first_published_at.nil?
   end
 
-  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, minimum_rule_version: nil)
+  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, minimum_rule_version: nil, schedule_intent_token: nil, schedule_intent_fanout_token: nil)
     return :not_applicable if installment.abandoned_cart_type?
     return :not_applicable unless alive?
     return :not_applicable unless installment.published?
@@ -121,7 +121,9 @@ class Workflow < ApplicationRecord
     if member_cancellation_trigger?
       if send_to_past_customers?
         args = [installment.id]
-        args.concat([nil, nil, minimum_rule_version]) if minimum_rule_version.present?
+        with_intent = schedule_intent_token.present? || schedule_intent_fanout_token.present?
+        args.concat([nil, nil, minimum_rule_version]) if minimum_rule_version.present? || with_intent
+        args.concat([schedule_intent_token, schedule_intent_fanout_token]) if with_intent
         job_id = SendWorkflowEmailsToPastCanceledMembersJob.perform_async(*args)
         return job_id.present? ? :enqueued : :not_enqueued
       end
@@ -147,7 +149,9 @@ class Workflow < ApplicationRecord
     end
 
     args = [installment.id, earliest_valid_time&.iso8601]
-    args.concat([false, minimum_rule_version]) if minimum_rule_version.present?
+    with_intent = schedule_intent_token.present? || schedule_intent_fanout_token.present?
+    args.concat([false, minimum_rule_version]) if minimum_rule_version.present? || with_intent
+    args.concat([schedule_intent_token, schedule_intent_fanout_token]) if with_intent
     SendWorkflowPostEmailsJob.perform_async(*args).present? ? :enqueued : :not_enqueued
   end
 

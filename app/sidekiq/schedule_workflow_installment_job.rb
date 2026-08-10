@@ -47,14 +47,21 @@ class ScheduleWorkflowInstallmentJob
         next
       end
 
+      fanout_token = intent.claim_fanout!
+      next if fanout_token.nil?
+
       result = workflow.schedule_installment(
         installment,
         old_delayed_delivery_time: intent.old_delayed_delivery_time,
         cutoff_reference_time: intent.cutoff_reference_time,
-        minimum_rule_version: current_version
+        minimum_rule_version: current_version,
+        schedule_intent_token: intent.token,
+        schedule_intent_fanout_token: fanout_token
       )
       case result
-      when :enqueued, :not_applicable
+      when :enqueued
+        next
+      when :not_applicable
         intent.mark_processed!
       when :not_enqueued
         raise FanoutNotEnqueuedError, "Recipient fanout was not enqueued"
