@@ -121,6 +121,17 @@ describe ShippingDestination do
       expect(@shipping_destination.calculate_shipping_rate(quantity: 3)).to eq(40)
       expect(@shipping_destination.calculate_shipping_rate(quantity: 6)).to eq(70)
     end
+
+    it "converts each listed rate term when the product currency is not USD" do
+      allow(@shipping_destination).to receive(:get_rate).with("eur").and_return("0.879624")
+      @shipping_destination.one_item_rate_cents = 250
+      @shipping_destination.multiple_items_rate_cents = 200
+
+      # sum(convert): round(250/r) + round(200/r) = 284 + 227 = 511
+      # convert(sum): round(450/r) = 512 — the surcharge bug that used to disagree with purchase.
+      expect(@shipping_destination.calculate_shipping_rate(quantity: 2, currency_type: "eur")).to eq(511)
+      expect(@shipping_destination.send(:get_usd_cents, "eur", 450)).to eq(512)
+    end
   end
 
   describe "#for_product_and_country_code" do

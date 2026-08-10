@@ -26,14 +26,11 @@ module StripeMerchantAccountManager
   BANK_DETAILS_FORMAT_REJECTION_MESSAGE = /Invalid (routing|account) number/i
   BANK_DETAILS_DIRECTORY_MISS_MESSAGE = /couldn't find (the bank|that)/i
 
-  # Stripe refuses a specific external account outright when it is on the connected account's
-  # block list: "You cannot use this external account because it is on your block list."
-  # This is neither a format problem nor a directory miss. The details the seller typed are
-  # perfectly valid and re-entering them changes nothing — Stripe will refuse the same account
-  # every time, forever. Sellers have re-saved a correct account monthly for months against
-  # this refusal because we swallowed it and then told them to wait for a weekly re-check
-  # (gumroad-private#1476). The only fix is a DIFFERENT bank account, so it needs its own
-  # classification: no automated retries, and an email that says so.
+  # Stripe refuses a specific external account outright when it's on the connected account's
+  # block list ("...because it is on your block list"). Unlike a format or directory-miss
+  # rejection, re-entering the same details never helps — only a DIFFERENT bank account will
+  # (gumroad-private#1476), so this gets its own classification: no automated retries, and an
+  # email that says so.
   BANK_ACCOUNT_BLOCKED_MESSAGE = /because it is on your block list/i
 
   # Terminal rejections are the ones where the account itself is refused rather than the way it
@@ -64,6 +61,10 @@ module StripeMerchantAccountManager
   # Marks the seller-facing half of an account-rejection breadcrumb, so the publish block can point
   # at that specific note rather than whatever seller-visible payout note happens to be newest.
   PAYOUT_SETUP_REJECTION_NOTE_FLAG = "payout_setup_rejection"
+
+  # The Stripe field name the note's rejection named (see stripe_rejected_field below), so a later
+  # update can tell whether IT resolved this note rather than some unrelated field.
+  PAYOUT_SETUP_REJECTED_FIELD_KEY = "payout_setup_rejected_field"
 
   # Prefix for the breadcrumb left when Stripe refuses the service agreement we derived from the
   # seller's legal-entity country. See update_account_attributes below.
@@ -103,25 +104,18 @@ module StripeMerchantAccountManager
   end
   private_class_method :stripe_payouts_pause_email_type
 
-  # Claims (at most one of each) pause email per Stripe-disabled episode,
-  # surviving admin/payout-method resumes. The marker is cleared when Stripe
-  # re-enables payouts, and also by StripePayoutsPausedEmailJob when it declines
-  # to send (see its nothing_at_stake?) so a later webhook can re-claim — an
-  # episode can therefore claim more than once. Action-required is claimed on first notice or on
-  # escalation from under-review; under-review is claimed as the first notice or
-  # on de-escalation from action-required (the seller satisfied the outstanding
-  # requirements but payouts stay paused pending Stripe's review). Updates the
-  # marker (called inside the user lock) and returns the email type to schedule
-  # after the lock commits, or nil.
+  # Claims at most one pause email per Stripe-disabled episode, surviving admin/payout-method
+  # resumes. Marker clears when Stripe re-enables payouts, or when StripePayoutsPausedEmailJob
+  # declines to send (see nothing_at_stake?) — so an episode can re-claim after that. Claims
+  # action_required on first notice or on escalation from under_review; claims under_review on
+  # first notice or de-escalation from action_required (requirements met, payouts still paused
+  # pending Stripe's review). Called inside the user lock; returns the email type to schedule
+  # after commit, or nil.
   #
-  # Each successful claim also rotates stripe_payouts_pause_email_claim_token,
-  # and a transition to a state that must never email (rejected.*,
-  # platform_paused) drops the claim entirely. The scheduled
-  # StripePayoutsPausedEmailJob carries the token it was created with and only
-  # sends if it still matches, so the token changes whenever the desired
-  # notification changes — a job left over from an earlier pause, or from a
-  # notice whose type has since escalated, de-escalated, or become
-  # a never-email state, can never send a stale or contradictory email.
+  # Each claim rotates stripe_payouts_pause_email_claim_token, and a transition to a never-email
+  # state (rejected.*, platform_paused) drops the claim entirely. The scheduled job carries the
+  # token it was created with and only sends if it still matches — so a job left over from an
+  # earlier or since-changed notice can never send a stale email.
   def self.claim_stripe_payouts_pause_email(merchant_account, pause_email_type)
     already_claimed = merchant_account.stripe_payouts_pause_email_sent
     case pause_email_type
@@ -239,14 +233,13 @@ module StripeMerchantAccountManager
       Stripe::Account.create_person(stripe_account.id, force_utf8_encoding(person_params))
     end
 
-    # An under-18 seller cannot be verified alone, so the guardian goes on the account as a second
-    # Person. Failing to sync them must not fail account creation: the account and the merchant
-    # record above are already live, and the guardian is re-synced by every later update_account.
-    # Without a guardian the account simply sits on Stripe's legal-guardian requirement, which is
-    # the same place it would be if we had never tried.
-    # StandardError, not Stripe::StripeError: the sync also writes locally, and a deadlock or
-    # lock-wait timeout there would escape a Stripe-only rescue and abort creation before the
-    # merchant account is marked alive — wedging it. A missed sync self-heals on the next update.
+    # An under-18 seller can't be verified alone, so the guardian goes on as a second Person.
+    # Sync failure must not fail account creation — the merchant account is already live and the
+    # guardian is re-synced on every later update_account, so a miss just leaves Stripe's
+    # legal-guardian requirement unmet, same as if we'd never tried.
+    # Rescue StandardError, not Stripe::StripeError: the sync also writes locally, and a deadlock
+    # or lock-wait timeout there must not escape and abort creation before the account is marked
+    # alive.
     begin
       StripeGuardianManager.sync(user, stripe_account, passphrase:)
     rescue => e
@@ -281,22 +274,17 @@ module StripeMerchantAccountManager
 
     clear_stale_postal_code_failure_notes(user)
     clear_stale_bank_sync_failure_notes(user)
+    clear_stale_payout_setup_rejection_notes(user)
 
     merchant_account
   rescue => e
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
-      # Bank-account rejections (unknown bank/routing code, invalid account number,
-      # "Stripe is unable to support this bank"), tax-ID rejections (placeholder values
-      # like 123456789 that Stripe disallows), phone-number rejections, Japanese
-      # address/kanji rejections (validated against Stripe's JP postal directory), and
-      # postal-code rejections are expected seller-input errors: the seller sees Stripe's
-      # message inline on the payments settings page and can correct the input themselves
-      # (a payout note breadcrumb is also recorded below for bank and postal-code
-      # rejections, and rejected postal codes are auto-retried weekly by
-      # RetryStripeRejectedPayoutSetupsJob), and the sync path (update_bank_account)
-      # already treats bank rejections as expected without alerting. Don't page Sentry
-      # for them — only unexpected failures should alert.
+      # Bank-account, tax-ID, phone-number, JP address/kanji, and postal-code rejections are
+      # expected seller-input errors — Stripe's message shows inline on the settings page and the
+      # seller can just fix it (bank/postal-code rejections also get a payout-note breadcrumb
+      # below, and postal codes are auto-retried weekly by RetryStripeRejectedPayoutSetupsJob).
+      # Don't page Sentry for them; only unexpected failures should alert.
       ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e) || phone_number_invalid_error?(e) || jp_address_invalid_error?(e) || postal_code_invalid_error?(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
@@ -311,17 +299,13 @@ module StripeMerchantAccountManager
   end
 
   # True for Stripe rejections that would otherwise leave no trace. Postal-code and bank-account
-  # rejections are excluded because they each already record a more specific note (and the
-  # postal-code one drives the weekly automatic retry), so adding a second note for them would
-  # only duplicate what support already sees.
+  # rejections are excluded — each already records its own more specific note.
   #
-  # Only InvalidRequestError counts, matching the update path in UpdateUserComplianceInfo. That is
-  # the class Stripe uses when it actually objected to something the seller submitted, which is the
-  # only case where "Stripe rejected your payout setup" is a true statement. The other StripeError
-  # subclasses are our problem, not the seller's: APIConnectionError, RateLimitError and
-  # AuthenticationError mean the request never got a verdict, so recording a rejection note for
-  # them would tell support a transient outage was the seller's data being refused and send them
-  # looking for a bad field that does not exist.
+  # Only InvalidRequestError counts (matching UpdateUserComplianceInfo's update path): that's the
+  # class Stripe uses when it actually objected to something the seller submitted. Other
+  # StripeError subclasses (APIConnectionError, RateLimitError, AuthenticationError) mean the
+  # request never got a verdict — recording a rejection note for those would blame the seller's
+  # data for what was really a transient outage.
   private_class_method
   def self.undiagnosed_stripe_rejection?(error)
     return false unless error.is_a?(Stripe::InvalidRequestError)
@@ -476,19 +460,17 @@ module StripeMerchantAccountManager
     entity_key = user_compliance_info.is_business? ? :company : :individual
     switching_to_business = user_compliance_info.is_business? && last_user_compliance_info&.is_individual?
 
-    # A switch that failed partway leaves the account as a company that Stripe still holds on
-    # company.owners_provided. The metadata marker read above has already moved forward by then, so
-    # switching_to_business is false on every later attempt and nothing repairs the account again.
-    # Detect the shape from Stripe's live state instead, so the seller's next payout-settings save
-    # heals it.
+    # A switch that failed partway leaves the account a company still blocked on
+    # company.owners_provided, but the metadata marker has already moved forward, so
+    # switching_to_business is false on later attempts and nothing repairs it again. Detect the
+    # shape from Stripe's live state instead, so the next payout-settings save heals it.
     #
-    # An empty owner list on its own is a legitimate resting state for an account created as a
-    # business — the seller never filled the beneficial-owners form, or no individual holds a
-    # reportable share — and seeding a 100% owner there would invent an ownership claim the seller
-    # never made. Requiring the record IMMEDIATELY BEFORE the live one to be an individual is what
-    # separates an interrupted migration from an ordinary business account. A seller who switched
-    # years ago and has since saved payout settings again has a business record in that slot, so a
-    # legitimate company that later cleared its ownership is not mistaken for a stuck switch.
+    # An empty owner list alone is a legitimate resting state for an ordinary business account
+    # (nobody filled the beneficial-owners form, or no one holds a reportable share) — seeding a
+    # 100% owner there would invent a claim the seller never made. Requiring the record
+    # IMMEDIATELY BEFORE the live one to be an individual is what distinguishes an interrupted
+    # migration from that: a seller who switched years ago and saved again has a business record
+    # in that slot, so a legitimate company isn't mistaken for a stuck switch.
     owners_provided_blocking = user_compliance_info.is_business? && !switching_to_business &&
                                owners_provided_blocking_payouts?(stripe_account) &&
                                switched_from_individual_immediately_before?(user, user_compliance_info)
@@ -506,14 +488,13 @@ module StripeMerchantAccountManager
     seed_representative_ownership = switching_to_business || stuck_mid_migration
 
     # The other half of the stuck population: a representative who already holds a share, on an
-    # account still blocked because nothing ever attested the list. Seeding would be wrong there and
-    # the attestation is the whole fix, so the two conditions cannot share one flag.
+    # account still blocked only because nothing ever attested the list. Seeding would be wrong
+    # here — attestation is the whole fix — so the two conditions can't share one flag.
     #
-    # A positive share is not the same as a COMPLETE list: a company whose representative holds 25%
-    # still has 75% sitting with beneficial owners nobody has entered, and attesting there tells
-    # Stripe a list is finished when three quarters of the company is missing from it. Only a list
-    # that accounts for the whole company can be called complete, and no UI asks the seller to
-    # affirm completeness, so the accounting is the only evidence available.
+    # A positive share isn't a COMPLETE list: a rep holding 25% still leaves 75% with owners
+    # nobody entered, and attesting there would falsely tell Stripe the list is finished. Only the
+    # ownership total says a list accounts for the whole company — no UI asks the seller to
+    # affirm completeness directly.
     owner_list_complete = seed_representative_ownership || fully_accounted_ownership?(recorded_ownership_percent)
 
     # Read the ownership Stripe already has on file BEFORE the account update below, because that
@@ -535,14 +516,13 @@ module StripeMerchantAccountManager
     # and on that save the identifier must go back on the payload for the note to ever be retired.
     force_identity_into_diff!(diff_attributes, current_attributes, user)
 
-    # update_person is the only path that retires a representative-scoped note, and it is skipped
-    # once the seller is no longer a business — so a rejection recorded while they were a company
-    # would outlive the entity it describes. Scoped to the transition itself rather than to every
-    # individual save, because the two scopes are deliberately independent namespaces: an ordinary
-    # individual save must not delete a representative note (see the isolation spec).
-    # Snapshot the ids BEFORE the update for the same reason clear_identity_rejection_notes takes
-    # ids rather than re-querying — a note written by an overlapping resync is a diagnostic this
-    # save has no result for.
+    # update_person is the only path that retires a representative-scoped note, and it's skipped
+    # once the seller isn't a business — so a note from when they were a company would outlive it.
+    # Scoped to the transition itself, not every individual save: the two note scopes are
+    # deliberately independent (an ordinary individual save must not delete a representative
+    # note — see the isolation spec). Ids are snapshotted BEFORE the update for the same reason
+    # clear_identity_rejection_notes takes ids rather than re-querying: a note from an overlapping
+    # resync is a diagnostic this save has no result for.
     switching_to_individual = !user_compliance_info.is_business? && last_user_compliance_info&.is_business?
     obsolete_representative_note_ids = switching_to_individual ? identity_rejection_note_ids(user, scope: :representative) : []
 
@@ -579,6 +559,12 @@ module StripeMerchantAccountManager
     if person_address_submitted || address_submitted?(account_update.sent_attributes, entity_key)
       clear_stale_postal_code_failure_notes(user)
     end
+
+    # Only the specific field a prior rejection named is what that rejection's note describes —
+    # an unrelated accepted field (e.g. only the city changed) resolves nothing about it, and
+    # clearing on any success reverts to a seller-visible note vanishing for a still-unfixed
+    # rejection (Greptile finding on this PR).
+    clear_stale_payout_setup_rejection_notes(user, resolved_fields: submitted_field_names(account_update.sent_attributes))
   rescue Stripe::InvalidRequestError => e
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     raise
@@ -1249,6 +1235,20 @@ module StripeMerchantAccountManager
     ADDRESS_SUBHASH_KEYS.any? { |address_key| entity[address_key].present? }
   end
 
+  # Key names actually sent to Stripe, at every nesting depth — used to tell whether a rejection
+  # note's specific field (see stripe_rejected_field below) was part of THIS submission.
+  # stripe_rejected_field records the LAST bracket segment of Stripe's param, which for a
+  # compound field like "individual[dob]" is the parent key "dob", not one of its day/month/year
+  # leaves — so parent keys must be included here too, not just leaves (Greptile finding).
+  private_class_method
+  def self.submitted_field_names(sent_attributes)
+    return [] unless sent_attributes.is_a?(Hash)
+
+    sent_attributes.flat_map do |key, value|
+      value.is_a?(Hash) ? [key.to_s] + submitted_field_names(value) : key.to_s
+    end
+  end
+
   def self.get_diff_attributes(current_attributes, last_attributes)
     # Stripe will error if we send unchanged data for locked fields of a verified user.
     # To work around this, we send only attributes that are not in last_attributes or are different in current_attributes.
@@ -1712,10 +1712,20 @@ module StripeMerchantAccountManager
       content: "#{ACCOUNT_REJECTION_NOTE_PREFIX}: #{details.join(' ')} — #{error.message.to_s.truncate(300)}",
       seller_visible: false
     )
+
+    # payout_setup_rejection_seller_message returns nil for bank-account rejections, which have
+    # their own dedicated seller messaging elsewhere — writing a note with nil content would fail
+    # Comment's presence validation and reach ErrorNotifier on every one of them.
+    seller_message = payout_setup_rejection_seller_message(error, user)
+    return if seller_message.blank?
+
     user.add_payout_note(
-      content: payout_setup_rejection_seller_message(error, user),
+      content: seller_message,
       seller_visible: true,
-      json_data: { PAYOUT_SETUP_REJECTION_NOTE_FLAG => true }
+      json_data: {
+        PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+        PAYOUT_SETUP_REJECTED_FIELD_KEY => stripe_rejected_field(error),
+      }
     )
   rescue => e
     # A missing breadcrumb must never turn into a second failure on top of the original
@@ -1734,6 +1744,37 @@ module StripeMerchantAccountManager
         .update_all(deleted_at: Time.current)
   rescue => e
     Rails.logger.error "Failed to clear stale postal-code failure notes for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  # Deletes the marked seller-visible rejection note once the payout setup it describes has gone
+  # through, so `Link#publish_blocked_message` and `User#latest_payout_setup_rejection_note` stop
+  # finding it. json_data is a serialized text column MySQL cannot filter on directly (same
+  # constraint as the LIKE prefilter above), so the flag is narrowed with a LIKE on its serialized
+  # form before the in-memory check that actually reads it.
+  #
+  # `resolved_fields: :all` clears every marked note regardless of which field it named — correct
+  # only at account creation, where there is no prior submission to have been partial. Other
+  # callers pass the fields they actually sent, so a note whose rejection named a specific field
+  # stays until that field is resubmitted and accepted, rather than being wiped by an unrelated
+  # accepted field. A note with no recorded field (undiagnosed rejections with no Stripe `param`,
+  # and notes written before this field was tracked) has nothing to scope to, so any success still
+  # clears it — that was the only behavior before this fix.
+  private_class_method
+  def self.clear_stale_payout_setup_rejection_notes(user, resolved_fields: :all)
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("json_data LIKE ?", "%#{PAYOUT_SETUP_REJECTION_NOTE_FLAG}%")
+        .select { |note| note.json_data[PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
+        .select do |note|
+          rejected_field = note.json_data[PAYOUT_SETUP_REJECTED_FIELD_KEY]
+          resolved_fields == :all || rejected_field.nil? || resolved_fields.include?(rejected_field)
+        end
+        .each { |note| note.update!(deleted_at: Time.current) }
+  rescue => e
+    Rails.logger.error "Failed to clear stale payout-setup-rejection notes for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
   end
 

@@ -163,6 +163,8 @@ export const getCheckoutListedCurrencyDisplay = (
   if (checkoutPayment.integration !== "payment_element_client_confirm") return null;
   const listedCurrency = checkoutPayment.elements_options.listed_currency_display;
   if (!listedCurrency) return null;
+  // Keep tip and shipping aligned with payment.ts `directListedCardActive`: the Element
+  // still mounts product price only, so shipping carts must not claim listed-currency display.
   if (checkoutPayment.elements_options.direct_listed_card && (hasTip || hasShipping)) return null;
   if (usingSavedCard || paymentMethod !== "card") return null;
   if (cartItems.length !== 1) return null;

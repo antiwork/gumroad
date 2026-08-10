@@ -4,7 +4,7 @@
     <td>
       <h4>Discount</h4>
     </td>
-    <td><%= @offer_code.name %> (<%= display_offer_code.displayed_amount_off(@product.price_currency_type, with_symbol: true) %> off)</td>
+    <td><%= @offer_code.name %> <span style="white-space: nowrap;">(<%= display_offer_code.displayed_amount_off(@product.price_currency_type, with_symbol: true) %> off)</span></td>
   </tr>
 <% end %>
 <% if @offer_code&.upsell.present? %>
@@ -12,7 +12,7 @@
     <td>
       <h4>Upsell</h4>
     </td>
-    <td><%= @offer_code.upsell.name %> (<%= display_offer_code.displayed_amount_off(@product.price_currency_type, with_symbol: true) %> off)</td>
+    <td><%= @offer_code.upsell.name %> <span style="white-space: nowrap;">(<%= display_offer_code.displayed_amount_off(@product.price_currency_type, with_symbol: true) %> off)</span></td>
   </tr>
 <% elsif @purchase.upsell_purchase.present? %>
   <tr>

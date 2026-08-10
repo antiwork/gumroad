@@ -52,6 +52,7 @@ class ProductDuplicatorService
       duplicate_third_party_analytics
       duplicate_shipping_destinations
       duplicate_refund_policy
+      duplicate_profile_sections
     end
 
     # Post process Asset Previews if product was persisted from outside the transaction
@@ -316,6 +317,23 @@ class ProductDuplicatorService
       new_refund_policy = product.product_refund_policy.dup
       new_refund_policy.product = duplicated_product
       new_refund_policy.save!
+    end
+
+    # `duplicated_product.dup` copies the `sections` json array verbatim, but the ids in it
+    # point at the source product's own SellerProfileSection rows (scoped via product_id), so
+    # they never match anything scoped to the duplicate and the section silently renders empty.
+    def duplicate_profile_sections
+      return if product.sections.blank?
+
+      section_id_mapping = product.seller_profile_sections.each_with_object({}) do |section, mapping|
+        new_section = section.dup
+        new_section.product = duplicated_product
+        new_section.save!
+        mapping[section.id] = new_section.id
+      end
+
+      duplicated_product.sections = product.sections.filter_map { |id| section_id_mapping[id] }
+      duplicated_product.save!(validate: false)
     end
 
     def duplicate_rich_content(original_entity:, duplicate_entity:)

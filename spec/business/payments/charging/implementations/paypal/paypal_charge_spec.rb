@@ -450,6 +450,18 @@ describe PaypalCharge do
                                        card_visual: "paypal-gr-integspecs@gumroad.com")
       end
 
+      it "keeps a decimal PayPal fee in exact minor units" do
+        order_details["purchase_units"][0]["payments"]["captures"][0]["seller_receivable_breakdown"]["paypal_fee"]["value"] = "1.15"
+
+        expect(subject.fee).to eq(115)
+      end
+
+      it "leaves an unsupported precision fee unset" do
+        order_details["purchase_units"][0]["payments"]["captures"][0]["seller_receivable_breakdown"]["paypal_fee"] = { "value" => "1.151", "currency_code" => "TND" }
+
+        expect(subject.fee).to be_nil
+      end
+
       it "does not throw error if paypal_fee value is absent" do
         payment_details = order_details.tap { |order| order["purchase_units"][0]["payments"]["captures"][0]["seller_receivable_breakdown"].delete("paypal_fee") }
 
@@ -527,6 +539,19 @@ describe PaypalCharge do
         expect(paypal_charge.card_fingerprint).to eq("paypal_sample-fingerprint-source")
         expect(paypal_charge.card_type).to eq(CardType::PAYPAL)
         expect(paypal_charge.card_country).to eq(Compliance::Countries::USA.alpha2)
+      end
+
+      it "keeps an exact decimal fee from Express Checkout" do
+        paypal_payment_info.FeeAmount.value = "1.15"
+
+        paypal_charge = PaypalCharge.new(paypal_transaction_id: "5SP884803B810025T",
+                                         order_api_used: false,
+                                         payment_details: {
+                                           paypal_payment_info:,
+                                           paypal_payer_info:
+                                         })
+
+        expect(paypal_charge.fee).to eq(115)
       end
 
       it "populates the required payment and does not set payer fields if payload is not passed in" do

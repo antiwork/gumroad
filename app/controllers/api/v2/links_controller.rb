@@ -27,7 +27,10 @@ class Api::V2::LinksController < Api::V2::BaseController
     { variant_categories_alive: [{ alive_variants: :alive_rich_contents }] },
   ]).freeze
 
-  before_action(only: [:show, :index, :custom_html]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
+  COMPS_EXAMPLES_COUNT = 5
+  COMPS_PRICE_PERCENTS = [25, 50, 75].freeze
+
+  before_action(only: [:show, :index, :custom_html, :comps]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html, :edit_custom_html]) { doorkeeper_authorize! :edit_products }
   before_action :reject_unsupported_upload_fields, only: [:update, :create]
   before_action :resolve_category_param, only: [:update, :create]
@@ -212,6 +215,71 @@ class Api::V2::LinksController < Api::V2::BaseController
   def show
     ActiveRecord::Associations::Preloader.new(records: [@product], associations: SHOW_PRODUCT_ASSOCIATIONS).call
     success_with_product(@product)
+  end
+
+  def comps
+    if params[:query].present? && !params[:query].is_a?(String)
+      return render_response(false, message: "query must be a string.")
+    end
+
+    if params[:taxonomy].blank? && params[:query].blank?
+      return render_response(false, message: "A taxonomy or query parameter is required.")
+    end
+
+    # Percentiles over raw price_cents are only comparable within one currency — a $10 and a
+    # €10 listing both contribute "1000" otherwise. Pin the aggregation to one currency rather
+    # than converting at query time, matching how #create/#update already gate currency.
+    currency = params.key?(:price_currency_type) ? normalize_price_currency_type(params[:price_currency_type]) : Currency::USD
+    return render_response(false, message: "'#{params[:price_currency_type]}' is not a supported currency.") unless CURRENCY_CHOICES.key?(currency)
+
+    taxonomy = nil
+    if params[:taxonomy].present?
+      taxonomy = if params[:taxonomy].to_s.match?(/\A\d+\z/)
+        Taxonomy.find_by(id: params[:taxonomy])
+      else
+        Taxonomy.find_by_path(params[:taxonomy].to_s.split("/"))
+      end
+      return render_response(false, message: "The taxonomy was not found.") if taxonomy.nil?
+    end
+
+    search_params = {
+      size: COMPS_EXAMPLES_COUNT,
+      sort: ProductSortKey::REVENUE_DESCENDING,
+      track_total_hits: true,
+    }
+    search_params[:query] = params[:query] if params[:query].present?
+    if taxonomy
+      search_params[:taxonomy_id] = taxonomy.id
+      search_params[:include_taxonomy_descendants] = true
+    end
+
+    options = Link.search_options(search_params)
+    # available_price_cents carries the purchasable amounts for every product shape (tiered
+    # memberships index price_cents as 0), and excluding zeros keeps free listings from
+    # dragging the percentiles toward nothing buyers actually pay. The currency term keeps
+    # every contributing document (and the percentiles they feed) denominated the same way.
+    (options[:query][:bool][:filter] ||= []) << { range: { available_price_cents: { gt: 0 } } } << { term: { price_currency_type: currency } }
+    options[:aggregations] = {
+      price_percentiles: { percentiles: { field: "available_price_cents", percents: COMPS_PRICE_PERCENTS } },
+    }
+
+    response = Link.search(options)
+    percentile_values = response.aggregations.dig("price_percentiles", "values") || {}
+
+    examples = response.records.map do |product|
+      {
+        name: product.name,
+        price: product.price_formatted_including_rental_verbose,
+        url: product.long_url,
+      }
+    end
+
+    render_response(true, comps: {
+                      count: response.results.total,
+                      currency:,
+                      price_cents: COMPS_PRICE_PERCENTS.index_with { |p| percentile_values["#{p}.0"]&.round }.transform_keys { |p| "p#{p}" },
+                      examples:,
+                    })
   end
 
   def update

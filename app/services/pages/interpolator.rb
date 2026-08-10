@@ -4,6 +4,28 @@
 # product values, not placeholders. Unknown markers pass through unchanged
 # so the agent's fallback text renders instead of breaking the page.
 class Pages::Interpolator
+  # Values under these keys are already-sanitized HTML fragments, not plain text — the
+  # interpolate loop below must write them raw instead of through ERB::Util.h, or the
+  # allowlisted tags would render as literal text instead of markup.
+  RAW_HTML_FIELDS = %w[description].freeze
+
+  # HTML5 forbids block content (p/h1-h3/ul) inside these phrasing-content elements — a browser
+  # auto-closes the marker on the first nested block tag, so a seller's <p data-gumroad-field=
+  # "description"> would silently lose its own wrapper (and any CSS scoped to it) the moment the
+  # description has more than one paragraph. Unwrap the marker instead of nesting into it when
+  # both conditions hold; see the block-tag check below.
+  PHRASING_ONLY_MARKER_TAGS = %w[p span a em strong b i small label].freeze
+
+  # Kept narrow: enough to preserve a description's paragraph/heading/list structure and
+  # inline emphasis without turning this marker into a second copy of Ai::PageSanitizer's
+  # much larger custom-HTML allowlist.
+  DESCRIPTION_SANITIZE_OPTIONS = { tags: %w[p br h1 h2 h3 strong em ul li a], attributes: %w[href] }.freeze
+
+  # The block-level subset of DESCRIPTION_SANITIZE_OPTIONS' tags — what triggers the
+  # PHRASING_ONLY_MARKER_TAGS unwrap above. br/strong/em/li/a are inline or only ever nested,
+  # so they can't invalidate a phrasing-only marker on their own.
+  DESCRIPTION_BLOCK_TAGS = /<(?:p|h1|h2|h3|ul)[\s>]/
+
   FIELDS = {
     "name" => ->(product) { product.name.to_s },
     # The price a first-time buyer is charged: default offer code applied and, for memberships,
@@ -11,7 +33,10 @@ class Pages::Interpolator
     # (BestOfferCodeService, ProductPresenter::Card), so the plain set price here would disagree
     # with the page this markup replaces.
     "price" => ->(product) { product.price_formatted_verbose(for_default_duration: true, discounted: true).to_s },
-    "description" => ->(product) { ActionView::Base.full_sanitizer.sanitize(product.description.to_s) },
+    # full_sanitizer strips every tag with no inserted breaks, collapsing a multi-paragraph
+    # description into one run-on sentence — sanitize with an allowlist instead so paragraph/
+    # heading/list structure survives.
+    "description" => ->(product) { ActionController::Base.helpers.sanitize(product.description.to_s, **DESCRIPTION_SANITIZE_OPTIONS) },
   }.freeze
 
   # Both fields read the summary that interpolate computes at most once per render.
@@ -107,8 +132,20 @@ class Pages::Interpolator
 
       # nil means "leave the author's own copy in place" (reviews hidden, or none yet), matching
       # interpolate_profile. An empty STRING still writes, so a blank description keeps clearing
-      # its placeholder as before.
-      node.inner_html = ERB::Util.h(value) unless value.nil?
+      # its placeholder as before. RAW_HTML_FIELDS values are pre-sanitized fragments (see
+      # DESCRIPTION_SANITIZE_OPTIONS) and must not go through ERB::Util.h, which would escape
+      # their tags into literal text.
+      next if value.nil?
+
+      if RAW_HTML_FIELDS.include?(field) && PHRASING_ONLY_MARKER_TAGS.include?(node.name) && value.match?(DESCRIPTION_BLOCK_TAGS)
+        # Replacing the marker node itself, rather than writing into it, means the seller's own
+        # id/class/data attributes on the marker are lost for this element — acceptable here since
+        # nothing in the allowlisted output is meant to inherit marker-specific styling, and the
+        # alternative (nesting block content into a phrasing element) is the bug being fixed.
+        node.replace(Loofah.fragment(value).children)
+      else
+        node.inner_html = RAW_HTML_FIELDS.include?(field) ? value : ERB::Util.h(value)
+      end
     end
 
     # The selection params (variant/quantity/PWYW price/recurrence) are

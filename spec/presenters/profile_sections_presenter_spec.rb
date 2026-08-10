@@ -135,6 +135,20 @@ describe ProfileSectionsPresenter do
       expect(featured_section_props[:props]).to be_nil
       expect(featured_section_props[:featured_product_id]).to be_nil
     end
+
+    it "does not raise when featured_product_id references a product that no longer exists (stale reference, e.g. predating Link#delete!'s cleanup)" do
+      featured_section = sections.find { _1.is_a?(SellerProfileFeaturedProductSection) }
+      # Simulate a stale reference left behind before gumroad#5248's cleanup existed —
+      # e.g. hard deletion, or any path other than Link#delete! removing the product.
+      featured_section.update_column(:json_data, featured_section.json_data.merge("featured_product_id" => products.first.id))
+      products.first.update_column(:deleted_at, 1.day.ago)
+
+      result = nil
+      expect { result = subject.props(request:, pundit_user:, seller_custom_domain_url: nil) }.not_to raise_error
+
+      featured_section_props = result[:sections].find { _1[:type] == "SellerProfileFeaturedProductSection" }
+      expect(featured_section_props[:props]).to be_nil
+    end
   end
 
   describe "show_ratings_filter" do

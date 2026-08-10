@@ -129,8 +129,14 @@ class Payment < ApplicationRecord
 
   validate :split_payment_validation
 
+  # A payment stuck in `processing` past this age is treated as settled-but-unconfirmed
+  # rather than still in flight, so it stops blocking the next payout run. See gp#1918
+  # for the corridor whose completion webhook lags this long.
+  STUCK_PROCESSING_AGE = 5.days
+
   scope :processed_by,            ->(processor) { where(processor:) }
   scope :processing,              -> { where(state: "processing") }
+  scope :blocking_next_payout,    -> { where(state: "processing").where("created_at > ?", STUCK_PROCESSING_AGE.ago) }
   scope :completed,               -> { where(state: "completed") }
   scope :completed_or_processing, -> { where("state = 'completed' or state = 'processing'") }
   scope :failed,                  -> { where(state: "failed").order(id: :desc) }

@@ -139,11 +139,31 @@ class PaypalChargeProcessor
     purchase = Purchase.successful.find_by(stripe_transaction_id: event_info["resource"]["id"])
     return unless purchase
 
+    fee_cents = paypal_fee_cents(paypal_fee["value"], paypal_fee["currency_code"])
+    unless fee_cents
+      ErrorNotifier.notify(
+        "PayPal capture completed webhook: fee has unsupported precision; skipping fee update",
+        capture_id: event_info.dig("resource", "id"),
+        fee_currency: paypal_fee["currency_code"],
+        fee_value: paypal_fee["value"],
+        webhook_event_id: event_info["id"]
+      )
+      return
+    end
+
     purchase.processor_fee_cents_currency = paypal_fee["currency_code"]
-    purchase.processor_fee_cents = paypal_fee["value"].to_f * unit_scaling_factor(purchase.processor_fee_cents_currency)
+    purchase.processor_fee_cents = fee_cents
     purchase.save!
   end
   private_class_method :handle_payment_capture_completed_event
+
+  def self.paypal_fee_cents(value, currency)
+    scaled_fee = BigDecimal(value) * unit_scaling_factor(currency)
+    scaled_fee.to_i if scaled_fee.finite? && scaled_fee == scaled_fee.to_i
+  rescue ArgumentError, TypeError, FloatDomainError
+    nil
+  end
+  private_class_method :paypal_fee_cents
 
   def self.handle_payment_capture_denied_event(event_info)
     refund_purchase(capture_id: event_info["resource"]["id"])
@@ -347,15 +367,6 @@ class PaypalChargeProcessor
     ChargeProcessor.handle_event(event)
   end
 
-  # Dispute Outcome Types
-  # RESOLVED_BUYER_FAVOUR - The dispute was resolved in the customer's favor.
-  # RESOLVED_SELLER_FAVOUR - The dispute was resolved in the merchant's favor.
-  # RESOLVED_WITH_PAYOUT - PayPal provided the merchant or customer with protection and the case is resolved.
-  # CANCELED_BY_BUYER - The customer canceled the dispute.
-  # ACCEPTED - The dispute was accepted.
-  # DENIED - The dispute was denied.
-  # NONE - The dispute was closed without a decision.
-  # Empty - The dispute was not resolved.
   def self.determine_resolved_dispute_event_type(dispute_outcome)
     if DISPUTE_OUTCOME_SELLER_FAVOUR.include? dispute_outcome.upcase
       ChargeEvent::TYPE_DISPUTE_WON
@@ -872,29 +883,6 @@ class PaypalChargeProcessor
                        payment_details: order_details)
     end
 
-    # Types of error which could be raised while refunding using the Orders API:
-    #
-    # INTERNAL_ERROR (An internal service error occurred)
-    #
-    # MISSING_ARGS (Missing Required Arguments)
-    #
-    # INVALID_RESOURCE_ID (Requested resource ID was not found)
-    #
-    # PERMISSION_DENIED (Permission denied)
-    #
-    # TRANSACTION_REFUSED (Request was refused)
-    #
-    # INVALID_PAYER_ID (Payer ID is invalid)
-    #
-    # INSTRUMENT_DECLINED (Processor or bank declined funding instrument or it cannot be used for this payment)
-    #
-    # RISK_CONTROL_MAX_AMOUNT (Request was refused)
-    #
-    # REFUND_ALREADY_INITIATED (Refund refused. Refund was already issued for transaction)
-    #
-    # REFUND_FAILED_INSUFFICIENT_FUNDS (Refund failed due to insufficient funds in your PayPal account)
-    #
-    # EXTDISPUTE_REFUND_FAILED_INSUFFICIENT_FUNDS (Refund failed due to insufficient funds in seller's PayPal account)
     def refund_order_purchase_unit!(capture_id, merchant_account, amount_cents, purchase: nil)
       paypal_rest_api = PaypalRestApi.new
       refund_amount_cents = refund_amount_in_merchant_currency_cents(paypal_rest_api, capture_id, amount_cents, merchant_account, purchase)

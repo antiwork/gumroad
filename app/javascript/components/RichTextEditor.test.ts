@@ -180,4 +180,36 @@ describe("useRichTextEditor", () => {
 
     expect(getEditor().getText()).toBe("before\n\nafter");
   });
+
+  // The window ContentTab's editorContentPageIdRef guard exists for (gumroad-private#1943):
+  // after initialValue changes, the mounted doc is only swapped in a queueMicrotask, so an
+  // update/blur handler firing synchronously in that window still reads the PREVIOUS page's
+  // doc. Serializing it into the newly selected page crosses page/variant content.
+  it("still holds the previous doc between an initialValue change and the deferred reset", async () => {
+    let editor: Editor | null = null;
+    const Harness = ({ initialValue }: { initialValue: object }) => {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- exercising the hook's public Content type
+      editor = useRichTextEditor({ initialValue: initialValue as never });
+      return null;
+    };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
+
+    const pageA = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "PAGE A" }] }] };
+    const pageB = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "PAGE B" }] }] };
+    const { rerender } = render(React.createElement(Harness, { initialValue: pageA }));
+    expect(getEditor().getText()).toBe("PAGE A");
+
+    // Synchronously after the switch — before microtasks flush — the editor still serializes
+    // page A. Anything persisting editor state here must not attribute it to page B.
+    rerender(React.createElement(Harness, { initialValue: pageB }));
+    expect(getEditor().getText()).toBe("PAGE A");
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getEditor().getText()).toBe("PAGE B");
+  });
 });

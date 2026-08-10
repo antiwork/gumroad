@@ -20,7 +20,8 @@ class CustomerMailer < ApplicationMailer
   # because every caller of this mailer is a self-serve flow the buyer can re-trigger.
   GROUPED_RECEIPT_SEND_CLAIM_TTL = 24.hours
 
-  def grouped_receipt(purchase_ids)
+  def grouped_receipt(purchase_ids, recommendations: true)
+    @recommendations = recommendations
     # Callers can pass ids of purchases in any state (e.g. the email-reassignment flow
     # moves failed purchases too). A failed purchase that belongs to a Charge resolves
     # to a Charge with no successful purchases, and the receipt template crashes with

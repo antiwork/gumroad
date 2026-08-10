@@ -60,7 +60,9 @@ class SaveContentUpsellsService
       Array(nodes).flat_map do |node|
         next [] unless node.is_a?(Hash) || node.is_a?(ActionController::Parameters)
         nested = collect_upsell_nodes(node["content"])
-        node["type"] == "upsellCard" ? [node, *nested] : nested
+        is_well_formed_upsell_card = node["type"] == "upsellCard" &&
+          (node["attrs"].is_a?(Hash) || node["attrs"].is_a?(ActionController::Parameters))
+        is_well_formed_upsell_card ? [node, *nested] : nested
       end
     end
 

@@ -457,6 +457,10 @@ class Rack::Attack
   # Initial: 10rpm, Max: 50 requests/9 hours
   throttle_by_ip path: /\A\/(api\/)?v2\/products(\.\w+)?\z/, method: :post, requests: 10, period: 60.seconds
 
+  # A comps call aggregates over the whole public index, so it is pricier than a product read.
+  # Initial: 30rpm, Max: 150 requests/9 hours
+  throttle_by_ip path: /\A\/(api\/)?v2\/products\/comps(\.\w+)?\z/, method: :get, requests: 30, period: 60.seconds
+
   # Initial: 30rpm, Max: 150 requests/9 hours
   throttle_by_ip path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :put, requests: 30, period: 60.seconds
   throttle_by_ip path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :patch, requests: 30, period: 60.seconds
@@ -468,6 +472,7 @@ class Rack::Attack
   end
   throttle_by_params path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :put, requests: 30, period: 60.seconds, throttle_params: v2_product_token
   throttle_by_params path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :patch, requests: 30, period: 60.seconds, throttle_params: v2_product_token
+  throttle_by_params path: /\A\/(api\/)?v2\/products\/comps(\.\w+)?\z/, method: :get, requests: 30, period: 60.seconds, throttle_params: v2_product_token
 
   # Preview is a non-mutating dry run intended for iteration, so it gets a
   # higher ceiling than PUT/PATCH. Same per-IP + per-token layering.

@@ -22,17 +22,12 @@ class StripePayoutProcessor
   # immediately.
   CROSS_BORDER_PAYOUT_DELAY = 25.hours
 
-  # Public: Determines if it's possible for this processor to payout
-  # the user by checking that the user has provided us with the
-  # information we need to be able to payout with this processor.
-  #
-  # This payout processor can payout any user who has a Stripe managed account
-  # and has a bank account setup.
   def self.is_user_payable(user, amount_payable_usd_cents, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
-    # If a user's previous payment is still processing, don't allow for new payments.
-    processing_payment_ids = user.payments.processing.ids
+    # If a user's previous payment is still processing (and not stuck, see
+    # Payment::STUCK_PROCESSING_AGE), don't allow for new payments.
+    processing_payment_ids = user.payments.blocking_next_payout.ids
     if processing_payment_ids.any?
       user.add_payout_note(content: "Payout on #{payout_date} was skipped because there was already a payout in processing.") if add_comment
       return false

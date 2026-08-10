@@ -19,6 +19,7 @@ import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import { RatingsWithPercentages } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
+import { useDedupeInFlight } from "$app/utils/dedupeInFlight";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request } from "$app/utils/request";
@@ -519,7 +520,7 @@ const ProductEditPage = (props: Props) => {
     setSaving(false);
     return saved;
   };
-  const save = async (): Promise<boolean> => {
+  const runSave = (): Promise<boolean> => {
     // A save that deletes existing versions/tiers or content pages gets one
     // final summary confirmation before the request goes out. Each deletion
     // already had its own modal when the seller clicked delete, but this is
@@ -534,6 +535,8 @@ const ProductEditPage = (props: Props) => {
     }
     return performSave();
   };
+  const saveKey = React.useMemo(() => ({ product, currencyType }), [product, currencyType]);
+  const save = useDedupeInFlight(saveKey, runSave, (saved) => saved);
   const confirmDeletionsAndSave = async () => {
     setPendingDeletions(null);
     const saved = await performSave();

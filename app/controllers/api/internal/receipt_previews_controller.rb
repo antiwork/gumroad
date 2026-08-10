@@ -18,7 +18,9 @@ class Api::Internal::ReceiptPreviewsController < Api::Internal::BaseController
       return render json: { error: error_message }, status: :unprocessable_entity
     end
 
-    receipt_presenter = ReceiptPresenter.new(purchase_preview, for_email: false)
+    # The synthetic preview purchase has no real product id for the recommendation
+    # lookup to key off — disable recommendations rather than let it crash.
+    receipt_presenter = ReceiptPresenter.new(purchase_preview, for_email: false, recommendations: false)
 
     rendered_html = ApplicationController.renderer.render(
       template: "customer_mailer/receipt",

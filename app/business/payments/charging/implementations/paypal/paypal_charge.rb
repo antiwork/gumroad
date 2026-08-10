@@ -59,7 +59,10 @@ class PaypalCharge < BaseProcessorCharge
     end
 
     def fee_cents(fee_amount, currency)
-      fee_amount.to_f * unit_scaling_factor(currency)
+      scaled_fee = BigDecimal(fee_amount) * unit_scaling_factor(currency)
+      scaled_fee.to_i if scaled_fee.finite? && scaled_fee == scaled_fee.to_i
+    rescue ArgumentError, TypeError, FloatDomainError
+      nil
     end
 
     def fetch_capture_details(capture_id, order_details)

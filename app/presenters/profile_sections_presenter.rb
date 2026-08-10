@@ -177,10 +177,14 @@ class ProfileSectionsPresenter
         end
       when "SellerProfileFeaturedProductSection"
         unless editing
+          featured_product_id = cached_props.delete(:featured_product_id)
+          # Scope to alive products: an orphaned reference (deleted/soft-deleted/banned
+          # product) is treated as "no featured product" instead of crashing on nil.
+          featured_product = featured_product_id.present? ? seller.products.alive.find_by_external_id(featured_product_id) : nil
           cached_props.merge!(
             {
-              props: cached_props[:featured_product_id].present? ?
-                       ProductPresenter.new(product: seller.products.find_by_external_id(cached_props.delete(:featured_product_id)), pundit_user:, request:).product_props(seller_custom_domain_url:) :
+              props: featured_product.present? ?
+                       ProductPresenter.new(product: featured_product, pundit_user:, request:).product_props(seller_custom_domain_url:) :
                        nil,
             }
           )

@@ -8,7 +8,7 @@ import { ResponseError, request } from "$app/utils/request";
 import { PaginationProps } from "$app/components/Pagination";
 import { Sort } from "$app/components/useSortingTableDriver";
 
-export type SortKey = "created_at" | "price_cents";
+export type SortKey = "created_at" | "price_cents" | "product_name";
 
 export type Discount = ({ type: "fixed"; cents: number } | { type: "percent"; percents: number }) & {
   code: string | null;

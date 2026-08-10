@@ -429,6 +429,11 @@ module RendersCustomHtmlPages
         if (window.parent === window) return;
         var pendingRequests = {};
         var nextRequestId = 0;
+        // Minted once per document (this script re-runs on every navigation), so a reply meant
+        // for whatever document previously occupied the frame — the wrapper's WindowProxy check
+        // can't tell them apart, since it's navigation-stable — can't resolve this document's
+        // promises even if the request id was reused.
+        var documentToken = Math.random().toString(36).slice(2) + Date.now().toString(36);
         function request(options) {
           options = options || {};
           nextRequestId += 1;
@@ -440,7 +445,8 @@ module RendersCustomHtmlPages
             type: "gumroad:products",
             offset: options.offset,
             limit: options.limit,
-            requestId: requestId
+            requestId: requestId,
+            documentToken: documentToken
           }, "*");
           return promise;
         }
@@ -451,6 +457,7 @@ module RendersCustomHtmlPages
           if (e.source !== window.parent) return;
           var d = e.data;
           if (!d || typeof d !== "object" || d.type !== "gumroad:products:result") return;
+          if (d.documentToken !== documentToken) return;
           var requestId = typeof d.requestId === "string" ? d.requestId : null;
           var resolve = requestId && pendingRequests[requestId] ? pendingRequests[requestId] : null;
           if (requestId) delete pendingRequests[requestId];

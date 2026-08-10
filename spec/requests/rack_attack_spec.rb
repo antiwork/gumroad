@@ -447,6 +447,30 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "GET /api/v2/products/comps per-token throttle" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "throttles past 30 GETs/min per token even when the source IP rotates" do
+      request_for = lambda do |ip|
+        env = Rack::MockRequest.env_for(
+          "/api/v2/products/comps?taxonomy=design&access_token=token-comps-1",
+          method: "GET", input: "", "HTTP_CF_CONNECTING_IP" => ip
+        )
+        Rack::Attack::Request.new(env)
+      end
+
+      travel_to(Time.current) do
+        30.times do |i|
+          expect(Rack::Attack.configuration.throttled?(request_for.call("10.0.0.#{i + 1}")))
+            .to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(Rack::Attack.configuration.throttled?(request_for.call("10.0.0.99"))).to be(true)
+      end
+    end
+  end
+
   describe "POST /api/v2/products/:id/preview_custom_html per-token throttle" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }

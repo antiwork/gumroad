@@ -402,12 +402,15 @@ class Checkout::BuyerCurrencyEligibility
       # needs a fixing written from `rate_converted_to_usd`.
       return fallback(:listed_currency_is_buyer_currency) if purchases.any? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? }
 
-      # Same divergence that makes BuyerCurrencyQuote refuse to quote a non-USD listing
-      # carrying a tip or shipping: the surcharge request the buyer's summary was rendered
-      # from and the order builder this lane charges convert those components at different
-      # points and disagree. The quote lane can afford to merely withhold the token because
-      # `verify!` would catch the mismatch; here there is no token and no verification, so an
-      # unexcluded cart would charge the divergent total silently.
+      # Tip on a non-USD listing still diverges between the surcharge request and the order
+      # builder (USD tip split vs listed tip run through get_usd_cents). Shipping conversion
+      # now matches Purchase#calculate_shipping, but the direct-listed Element still mounts
+      # product price only (`listed_element_amount_cents`) and `directListedCardActive` still
+      # excludes shipping carts. Keep shipping gated here until presentment and the Element
+      # amount can carry it together; otherwise eligibility would claim listed CAD while the
+      # card remounts USD. The quote lane can withhold a tip-bearing token because `verify!`
+      # would catch the mismatch; here there is no token and no verification, so an unexcluded
+      # tipped cart would charge the divergent total silently.
       return fallback(:listed_currency_is_buyer_currency) if purchases.any? { _1.tip&.value_cents.to_i.positive? || _1.shipping_cents.to_i.positive? }
 
       # No settlement gate applies: the marker only predicts FX quote failures, and this

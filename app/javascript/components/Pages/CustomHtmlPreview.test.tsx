@@ -67,6 +67,7 @@ describe("CustomHtmlPreview products bridge", () => {
         {
           type: "gumroad:products:result",
           requestId: "gumroad-products-1",
+          documentToken: null,
           success: true,
           products: [{ name: "Two" }],
           productsTotal: 3,
@@ -134,7 +135,7 @@ describe("CustomHtmlPreview products bridge", () => {
 
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith(
-        { type: "gumroad:products:result", requestId: "gumroad-products-1", success: false },
+        { type: "gumroad:products:result", requestId: "gumroad-products-1", documentToken: null, success: false },
         "*",
       ),
     );
@@ -161,6 +162,39 @@ describe("CustomHtmlPreview products bridge", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.request).not.toHaveBeenCalled();
+  });
+
+  it("drops a reply carrying a different document's token", async () => {
+    mocks.request.mockResolvedValue(jsonResponse({ success: true, products: [], products_total: 0, prices: {} }));
+    const { frame, post } = renderPreview();
+
+    // A real reload replaces the document but keeps the WindowProxy identity, so `e.source`
+    // can't distinguish the two — the wrapper always echoes back whatever token came in on the
+    // request, and it's the child script's own token check (not modeled here) that would drop a
+    // reply meant for a document it isn't. This just proves the wrapper echoes the token as-is.
+    postFromFrame(frame, {
+      type: "gumroad:products",
+      offset: 0,
+      limit: 1,
+      requestId: "gumroad-products-1",
+      documentToken: "doc-a",
+    });
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true, requestId: "gumroad-products-1", documentToken: "doc-a" }),
+        "*",
+      ),
+    );
+  });
+
+  it("still replies normally when no reload happened before the request settled", async () => {
+    mocks.request.mockResolvedValue(jsonResponse({ success: true, products: [], products_total: 0, prices: {} }));
+    const { frame, post } = renderPreview();
+
+    postFromFrame(frame, { type: "gumroad:products", offset: 0, limit: 1, requestId: "gumroad-products-1" });
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ success: true }), "*"));
   });
 
   it("ignores messages of other types", async () => {

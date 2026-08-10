@@ -3,6 +3,7 @@ import * as React from "react";
 import { CardProduct } from "$app/parsers/product";
 import { formatPriceCentsWithCurrencySymbol, CurrencyCode } from "$app/utils/currency";
 
+import { computeStandalonePrice } from "$app/components/BundleEdit/utils";
 import { NavigationButton } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
@@ -22,12 +23,6 @@ type BundleProduct = CardProduct & {
     }[];
   } | null;
 };
-
-const computeStandalonePrice = (bundleProduct: BundleProduct) =>
-  (bundleProduct.price_cents +
-    (bundleProduct.variants?.list.find(({ id }) => id === bundleProduct.variants?.selected_id)?.price_difference ??
-      0)) *
-  bundleProduct.quantity;
 
 type MarketingEmailStatusProps = {
   id: string;
