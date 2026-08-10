@@ -117,6 +117,7 @@ class UsersController < ApplicationController
 
   def subscribe
     set_user_page_meta(@user)
+    set_favicon_meta_tags(@user)
     set_meta_tag(title: "Subscribe to #{@user.name.presence || @user.username}")
     render inertia: "Users/Subscribe", props: {
       creator_profile: ProfilePresenter.new(pundit_user:, seller: @user).creator_profile
@@ -297,6 +298,14 @@ class UsersController < ApplicationController
       avatar_url = user.avatar_url if user.avatar.attached?
       share_image = preview_url || avatar_url || ActionController::Base.helpers.image_url("opengraph_image.png")
       escaped_share_image = ERB::Util.h(share_image)
+      # This <head> is hand-built (bypasses PageMeta::Favicon). user.avatar_url
+      # always resolves — to the default avatar when none is uploaded — so
+      # this always emits a seller-scoped icon.
+      favicon_url = ERB::Util.h(user.avatar_url)
+      favicon_tags = <<~HTML.strip
+        <link rel="shortcut icon" href="#{favicon_url}">
+        <link rel="apple-touch-icon" href="#{favicon_url}">
+      HTML
       alt = if preview_url
         title
       elsif avatar_url
@@ -337,6 +346,7 @@ class UsersController < ApplicationController
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>#{title}</title>
             <link rel="canonical" href="#{canonical}">
+            #{favicon_tags}
             <meta property="og:title" content="#{title}">
             <meta property="og:type" content="profile">
             <meta property="og:url" content="#{canonical}">

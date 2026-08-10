@@ -18,6 +18,11 @@ describe "User favicons", type: :system, js: true do
       expect(page).to have_xpath("/html/head/link[@href='#{@user.avatar_url}']", visible: false)
     end
 
+    it "does not duplicate the shortcut icon link (gp#1966)" do
+      visit("/#{@user.username}")
+      expect(page).to have_xpath("/html/head/link[@rel='shortcut icon']", count: 1, visible: false)
+    end
+
     it "does display on a post's page" do
       visit(view_post_path(username: @user.username, slug: @post.slug, purchase_id: @purchase.external_id))
       expect(page).to have_xpath("/html/head/link[@href='#{@user.avatar_url}']", visible: false)
@@ -25,6 +30,11 @@ describe "User favicons", type: :system, js: true do
 
     it "does display on a product page" do
       visit short_link_path(@product)
+      expect(page).to have_xpath("/html/head/link[@href='#{@user.avatar_url}']", visible: false)
+    end
+
+    it "does display on the subscribe page (gp#1966)" do
+      visit custom_domain_subscribe_url(host: @user.subdomain_with_protocol)
       expect(page).to have_xpath("/html/head/link[@href='#{@user.avatar_url}']", visible: false)
     end
   end

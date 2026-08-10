@@ -122,7 +122,10 @@ describe "Profile custom HTML rendering", type: :request do
       get "http://seller.example.com/"
 
       expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(seller.subscribe_preview_url)}">))
-      expect(response.body).not_to include(ERB::Util.h(seller.avatar_url))
+      # avatar_url legitimately appears elsewhere in <head> now (favicon links,
+      # gp#1966) — scope the "avatar lost the og:image race" assertion to the
+      # og:image tag itself instead of the whole document.
+      expect(response.body).not_to include(%(<meta property="og:image" content="#{ERB::Util.h(seller.avatar_url)}">))
       expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe">))
     end
 
@@ -134,7 +137,9 @@ describe "Profile custom HTML rendering", type: :request do
 
       expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(ActionController::Base.helpers.image_url("opengraph_image.png"))}">))
       expect(response.body).to include(%(<meta property="og:image:alt" content="Gumroad">))
-      expect(response.body).not_to include("gumroad-default-avatar")
+      # The favicon links (gp#1966) legitimately point at the default avatar
+      # asset when none is uploaded — only the og:image tag itself must avoid it.
+      expect(response.body).not_to include(%(<meta property="og:image" content="#{ERB::Util.h(ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"))}">))
       expect(response.body).not_to include(%(property="twitter:image"))
     end
   end
