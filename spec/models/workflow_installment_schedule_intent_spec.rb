@@ -56,6 +56,24 @@ describe WorkflowInstallmentScheduleIntent do
     expect(described_class.enqueue(intent.token)).to be_nil
   end
 
+  it "retries a transient failure while releasing a dispatch claim" do
+    intent = create_intent
+    allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_raise("Redis is unavailable")
+    expect(Rails.logger).to receive(:error).with(/could not enqueue.*Redis is unavailable/)
+    attempts = 0
+    allow(described_class).to receive(:release_dispatch).and_wrap_original do |method, **kwargs|
+      attempts += 1
+      raise "database is unavailable" if attempts == 1
+
+      method.call(**kwargs)
+    end
+
+    expect(described_class.enqueue(intent.token)).to be_nil
+    expect(attempts).to eq(2)
+    expect(intent.reload.dispatch_token).to be_nil
+    expect(intent.dispatch_expires_at).to be_nil
+  end
+
   it "claims an intent before enqueueing its scheduler" do
     intent = create_intent
     expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(intent.token).once.and_return("jid")

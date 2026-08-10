@@ -58,11 +58,9 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
 
   def self.enqueue_scheduler(token:, dispatch_token:)
     job_id = ScheduleWorkflowInstallmentJob.perform_async(token)
-    release_dispatch(token:, dispatch_token:) if job_id.blank?
     job_id
-  rescue
-    release_dispatch_safely(token:, dispatch_token:)
-    raise
+  ensure
+    release_dispatch_safely(token:, dispatch_token:) if job_id.blank?
   end
 
   def self.mark_processed(token, fanout_token:)
@@ -142,8 +140,12 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
 
   def self.release_dispatch_safely(token:, dispatch_token:)
     release_dispatch(token:, dispatch_token:)
-  rescue => e
-    Rails.logger.error("[#{name}] could not release token=#{token}: #{e.class}: #{e.message}")
+  rescue
+    begin
+      release_dispatch(token:, dispatch_token:)
+    rescue => e
+      Rails.logger.error("[#{name}] could not release token=#{token}: #{e.class}: #{e.message}")
+    end
   end
 
   private_class_method :claim_dispatch, :enqueue_scheduler, :release_dispatch, :release_dispatch_safely
