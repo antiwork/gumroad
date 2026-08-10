@@ -14,12 +14,8 @@ describe Purchase::CreateService, :vcr do
         {
           "seller_id" => seller.id,
           "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
-          "listed_currency_rates" => {
-            product.unique_permalink => {
-              "currency" => product.price_currency_type.to_s.downcase,
-              "rate" => rate,
-            }
-          },
+          "listed_currency_rates" => { product.unique_permalink => rate },
+          "listed_currency_codes" => { product.unique_permalink => product.price_currency_type.to_s.downcase },
         }
       ]
     }

@@ -1223,9 +1223,8 @@ describe Checkout::BuyerCurrencyQuote do
 
       result = described_class.create(line_items: [line_item], canonical_total_cents: line_item.canonical_total_cents, ip: "24.48.0.1")
 
-      expect(result.charges.sole.listed_currency_rates).to eq(
-        eur_product.unique_permalink => { "currency" => Currency::EUR, "rate" => "0.9" }
-      )
+      expect(result.charges.sole.listed_currency_rates).to eq(eur_product.unique_permalink => "0.9")
+      expect(result.charges.sole.listed_currency_codes).to eq(eur_product.unique_permalink => Currency::EUR)
     end
 
     it "omits the rate for USD-listed lines" do
@@ -1234,6 +1233,16 @@ describe Checkout::BuyerCurrencyQuote do
       result = described_class.create(line_items: [line_item], canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       expect(result.charges.sole.listed_currency_rates).to eq({})
+      expect(result.charges.sole.listed_currency_codes).to eq({})
+    end
+
+    it "keeps the signed rate scalar for older app instances" do
+      line_item = eur_line_item(rate: "0.9")
+      created = described_class.create(line_items: [line_item], canonical_total_cents: line_item.canonical_total_cents, ip: "24.48.0.1")
+      payload = Rails.application.message_verifier(described_class::TOKEN_PURPOSE).verify(created.token)
+
+      expect(payload.dig("listed_currency_rates", eur_product.unique_permalink).to_d).to eq(BigDecimal("0.9"))
+      expect(payload.dig("listed_currency_codes", eur_product.unique_permalink)).to eq(Currency::EUR)
     end
 
     it "round-trips the rate through verify! so the charge path can read it back" do

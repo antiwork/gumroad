@@ -28,6 +28,7 @@ class Checkout::BuyerCurrencyQuote
                       :line_allocations,
                       :later_charge_presentments,
                       :listed_currency_rates,
+                      :listed_currency_codes,
                       keyword_init: true) do
     def id
       stripe_fx_quote_id
@@ -46,11 +47,9 @@ class Checkout::BuyerCurrencyQuote
     # (gumroad-private#1958). nil for USD-listed lines and for tokens signed before this
     # field shipped — both fall back to `set_price_and_rate`'s live `get_rate` read.
     def listed_currency_rate_for(permalink, currency:)
-      entry = listed_currency_rates&.[](permalink.to_s)
-      return unless entry.is_a?(Hash)
-      return unless entry["currency"].to_s.casecmp?(currency.to_s)
+      return unless listed_currency_codes&.[](permalink.to_s).to_s.casecmp?(currency.to_s)
 
-      entry["rate"]&.to_d
+      listed_currency_rates&.[](permalink.to_s)&.to_d
     end
   end
 
@@ -200,6 +199,7 @@ class Checkout::BuyerCurrencyQuote
                            :future_installments_presentment_total_cents,
                            :later_charge_presentments,
                            :listed_currency_rates,
+                           :listed_currency_codes,
                            keyword_init: true)
 
   TOKEN_PURPOSE = :buyer_currency_quote
@@ -266,7 +266,8 @@ class Checkout::BuyerCurrencyQuote
       stripe_fx_quote_id: charge_payload.fetch("stripe_fx_quote_id"),
       stripe_fx_quote_expires_at: Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")),
       later_charge_presentments: charge_payload["later_charge_presentments"] || [],
-      listed_currency_rates: charge_payload["listed_currency_rates"] || {}
+      listed_currency_rates: charge_payload["listed_currency_rates"] || {},
+      listed_currency_codes: charge_payload["listed_currency_codes"] || {}
     )
   rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, TypeError, ArgumentError => e
     raise InvalidToken, e.message
@@ -303,11 +304,9 @@ class Checkout::BuyerCurrencyQuote
     return if charge_payload.blank?
     return if Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
 
-    entry = charge_payload.dig("listed_currency_rates", permalink.to_s)
-    return unless entry.is_a?(Hash)
-    return unless entry["currency"].to_s.casecmp?(currency.to_s)
+    return unless charge_payload.dig("listed_currency_codes", permalink.to_s).to_s.casecmp?(currency.to_s)
 
-    entry["rate"]&.to_d
+    charge_payload.dig("listed_currency_rates", permalink.to_s)&.to_d
   rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, TypeError, ArgumentError
     nil
   end
@@ -688,19 +687,17 @@ class Checkout::BuyerCurrencyQuote
         line_allocations:,
         future_installments_presentment_total_cents:,
         later_charge_presentments:,
-        # Permalink → the listed currency and rate bound in each non-USD LineItem.
-        # Keeping the denomination beside the rate prevents a product currency edit from
-        # applying an old currency's rate to the new currency (gumroad-private#1958).
+        # Keep the existing scalar rate shape so older app instances can read tokens minted
+        # during a rolling deploy. The additive code map binds each rate to its denomination.
         listed_currency_rates: charge_line_items.filter_map do |line_item|
           next if line_item.listed_currency_rate.blank?
 
-          [
-            line_item.permalink.to_s,
-            {
-              "currency" => line_item.product.price_currency_type.to_s.downcase,
-              "rate" => line_item.listed_currency_rate.to_s,
-            }
-          ]
+          [line_item.permalink.to_s, line_item.listed_currency_rate.to_s]
+        end.to_h,
+        listed_currency_codes: charge_line_items.filter_map do |line_item|
+          next if line_item.listed_currency_rate.blank?
+
+          [line_item.permalink.to_s, line_item.product.price_currency_type.to_s.downcase]
         end.to_h
       )
     end
@@ -837,6 +834,7 @@ class Checkout::BuyerCurrencyQuote
           stripe_fx_quote_expires_at: charge_quote.stripe_fx_quote_expires_at.iso8601,
           fx_rate: charge_quote.fx_rate.to_s("F"),
           listed_currency_rates: charge_quote.listed_currency_rates,
+          listed_currency_codes: charge_quote.listed_currency_codes,
         }
       end
 
