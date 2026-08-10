@@ -12,7 +12,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
   describe "#perform with a follower" do
     before do
-      @basic_follower = create(:active_follower, user: @seller, created_at: 2.day.ago)
+      followed_at = 2.days.ago.change(usec: 0)
+      @basic_follower = create(:active_follower, user: @seller, created_at: followed_at, confirmed_at: followed_at)
     end
 
     it "ignores deleted workflows" do
@@ -48,17 +49,122 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       end.to raise_error(SendWorkflowPostEmailsJob::RuleNotCommittedError)
     end
 
-    it "only considers audience members created after the earliest_valid_time" do
+    it "only considers confirmations after the earliest valid time" do
       described_class.new.perform(@post.id, 1.day.ago.iso8601)
       expect(SendWorkflowInstallmentWorker.jobs).to be_empty
 
       described_class.new.perform(@post.id, 3.days.ago.iso8601)
-      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @basic_follower.id, nil)
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      )
 
       # does not limit when earliest_valid_time is nil
       SendWorkflowInstallmentWorker.jobs.clear
       described_class.new.perform(@post.id, nil)
-      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @basic_follower.id, nil)
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      )
+    end
+
+    it "recovers a follower who confirmed after the cutoff" do
+      @basic_follower.update_columns(created_at: 3.days.ago)
+      @basic_follower.update!(confirmed_at: 1.hour.ago.change(usec: 0))
+      cutoff = 1.day.ago
+
+      described_class.new.perform(@post.id, cutoff.iso8601)
+
+      expect(@basic_follower.created_at).to be < cutoff
+      expect(@basic_follower.confirmed_at).to be > cutoff
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      ).at(@basic_follower.confirmed_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "recovers a follower id hidden by purchase filters" do
+      product = create(:product, user: @seller, price_cents: 0)
+      purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 3.days.ago)
+      purchase.add_to_audience_member_details
+      @post.update!(installment_type: Installment::FOLLOWER_TYPE, bought_products: [product.unique_permalink])
+      @basic_follower.update_columns(created_at: 3.days.ago)
+      @basic_follower.update!(confirmed_at: 1.hour.ago.change(usec: 0))
+
+      described_class.new.perform(@post.id, 1.day.ago.iso8601)
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      ).at(@basic_follower.confirmed_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "preserves a qualifying purchase for an audience workflow" do
+      product = create(:product, user: @seller, price_cents: 0)
+      purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 30.minutes.ago)
+      purchase.add_to_audience_member_details
+      @basic_follower.update_columns(created_at: 3.days.ago)
+      @basic_follower.update!(confirmed_at: 1.hour.ago.change(usec: 0))
+
+      described_class.new.perform(@post.id, 1.day.ago.iso8601)
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        purchase.id,
+        nil,
+        nil
+      ).at(purchase.created_at + @post_rule.delayed_delivery_time)
+      expect(SendWorkflowInstallmentWorker.jobs.none? { _1["args"][3] == @basic_follower.id }).to be(true)
+    end
+
+    it "keeps workflow date filters on the follower identity" do
+      product = create(:product, user: @seller, price_cents: 0)
+      purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 36.hours.ago)
+      purchase.add_to_audience_member_details
+      @post.update!(created_after: 2.days.ago)
+      @basic_follower.update_columns(created_at: 3.days.ago)
+      @basic_follower.update!(confirmed_at: 1.hour.ago.change(usec: 0))
+
+      described_class.new.perform(@post.id, 1.day.ago.iso8601)
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+    end
+
+    it "loads follower confirmation times in bounded queries" do
+      second_follower = create(:active_follower, user: @seller, created_at: 1.day.ago, confirmed_at: 1.day.ago)
+      third_follower = create(:active_follower, user: @seller, created_at: 1.day.ago, confirmed_at: 1.day.ago)
+      stub_const("#{described_class}::FOLLOWER_LOOKUP_BATCH_SIZE", 2)
+      queried_ids = []
+      allow(Follower).to receive(:where).and_wrap_original do |method, id:, followed_id:|
+        queried_ids << id
+        method.call(id:, followed_id:)
+      end
+
+      described_class.new.perform(@post.id)
+
+      expect(queried_ids.map(&:size)).to eq([2, 1])
+      expect(queried_ids.flatten).to contain_exactly(@basic_follower.id, second_follower.id, third_follower.id)
     end
   end
 
@@ -81,8 +187,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         @sales << create(:membership_purchase, link: @products[2], created_at: 6.hours.ago)
 
         @followers = []
-        @followers << create(:active_follower, user: @seller, created_at: 5.days.ago)
-        @followers << create(:active_follower, user: @seller, email: @sales[0].email, created_at: 5.hours.ago)
+        @followers << create(:active_follower, user: @seller, created_at: 5.days.ago, confirmed_at: 5.days.ago)
+        @followers << create(:active_follower, user: @seller, email: @sales[0].email, created_at: 5.hours.ago, confirmed_at: 5.hours.ago)
 
         @affiliates = []
         @affiliates << create(:direct_affiliate, seller: @seller, send_posts: true, created_at: 4.hours.ago)
@@ -137,8 +243,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         described_class.new.perform(@post.id)
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(2)
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil).immediately
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil, nil, @followers[0].confirmed_at.iso8601).immediately
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil, nil, @followers[1].confirmed_at.iso8601).at(19.hours.from_now)
       end
 
       it "when follower_type? is true and a bought-product filter is set, it still sends to the matching follower" do
@@ -146,7 +252,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         described_class.new.perform(@post.id)
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil, nil, @followers[1].confirmed_at.iso8601).at(19.hours.from_now)
       end
 
       it "when affiliate_type? is true, it sends the expected emails at the right times" do
@@ -233,8 +339,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(7)
 
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil).immediately
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil).at(19.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil, nil, @followers[0].confirmed_at.iso8601).immediately
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil, nil, @followers[1].confirmed_at.iso8601).at(19.hours.from_now)
 
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
 

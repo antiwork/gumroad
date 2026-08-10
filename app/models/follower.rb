@@ -78,8 +78,17 @@ class Follower < ApplicationRecord
       workflow.installments.alive.each do |installment|
         installment_rule = installment.installment_rule
         next if installment_rule.nil?
-        SendWorkflowInstallmentWorker.perform_in(installment_rule.delayed_delivery_time,
-                                                 installment.id, installment_rule.version, nil, id, nil)
+        reference_time = confirmed_at.change(usec: 0)
+        SendWorkflowInstallmentWorker.perform_at(
+          reference_time + installment_rule.delayed_delivery_time,
+          installment.id,
+          installment_rule.version,
+          nil,
+          id,
+          nil,
+          nil,
+          reference_time.iso8601
+        )
       end
     end
   end
