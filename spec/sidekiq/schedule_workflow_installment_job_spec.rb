@@ -350,6 +350,8 @@ describe ScheduleWorkflowInstallmentJob do
 
     expect(candidates).to include(recent_subscription)
     expect(candidates).not_to include(old_subscription)
+    expect(candidates.to_sql).to include("`subscription_events`.`seller_id` = #{seller.id}")
+    expect(candidates.to_sql).to include("`subscription_events`.`seller_id` IS NULL")
   end
 
   it "batches exclusion filters across resubscribed memberships" do

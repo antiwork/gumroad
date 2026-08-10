@@ -185,15 +185,16 @@ class ScheduleWorkflowInstallmentJob
     end
 
     def candidate_subscriptions(workflow, restarted_after:)
-      scope = Subscription.joins(:subscription_events)
-                          .where(subscriptions: { seller_id: workflow.seller_id })
-                          .where(subscription_events: { event_type: SubscriptionEvent.event_types[:restarted] })
-                          .where("subscription_events.occurred_at > ?", restarted_after)
-                          .distinct
+      restart_subscription_ids = SubscriptionEvent
+                                 .where(seller_id: [workflow.seller_id, nil])
+                                 .where(event_type: SubscriptionEvent.event_types[:restarted])
+                                 .where("occurred_at > ?", restarted_after)
+                                 .select(:subscription_id)
+      scope = Subscription.where(id: restart_subscription_ids, seller_id: workflow.seller_id)
       if workflow.product_or_variant_type?
         scope.where(link_id: workflow.link_id)
       else
-        scope.where(seller_id: workflow.seller_id)
+        scope
       end
     end
 end
