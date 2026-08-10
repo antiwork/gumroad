@@ -43,6 +43,14 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       described_class.new.perform(@post.id, nil, false, @post_rule.version)
     end
 
+    it "keeps a cutoff scan on the primary database until the audience loads" do
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).ordered.and_call_original
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).ordered.and_call_original
+      expect(Makara::Context).to receive(:release_all).ordered
+
+      described_class.new.perform(@post.id, 1.day.ago.iso8601)
+    end
+
     it "retries if the required rule version is not visible" do
       expect do
         described_class.new.perform(@post.id, nil, false, @post_rule.version + 1)
@@ -106,6 +114,28 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         nil,
         @basic_follower.confirmed_at.iso8601
       ).at(@basic_follower.confirmed_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "recovers a follower confirmed in the publication second" do
+      published_at = Time.current.change(usec: 0)
+      @post.update!(
+        installment_type: Installment::FOLLOWER_TYPE,
+        published_at:,
+        is_for_new_customers_of_workflow: true
+      )
+      @basic_follower.update_columns(created_at: 1.day.ago, confirmed_at: published_at)
+
+      described_class.new.perform(@post.id, published_at.iso8601)
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        published_at.iso8601
+      ).at(published_at + @post_rule.delayed_delivery_time)
     end
 
     it "recovers a follower id hidden by purchase filters" do

@@ -12,7 +12,8 @@ class SendWorkflowPostEmailsJob
   def perform(post_id, earliest_valid_time = nil, _reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
     @schedule_intent_token = schedule_intent_token
     @schedule_intent_fanout_token = schedule_intent_fanout_token
-    primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? || schedule_intent_fanout_token.present?
+    primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? ||
+                     schedule_intent_fanout_token.present? || earliest_valid_time.present?
     ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
     return unless WorkflowInstallmentScheduleIntent.begin_fanout(
       intent_token: schedule_intent_token,
@@ -52,9 +53,17 @@ class SendWorkflowPostEmailsJob
     @filters = @post.audience_members_filter_params
     @original_filters = @filters.dup
     @recipient_cutoff_time = Time.zone.parse(earliest_valid_time) if earliest_valid_time
-    @filters[:created_after] = @recipient_cutoff_time if @recipient_cutoff_time
-    Makara::Context.release_all
-    primary_pinned = false
+    @recipient_filter_cutoff_time = if @recipient_cutoff_time == @post.published_at
+      @recipient_cutoff_time - 1.second
+    else
+      @recipient_cutoff_time
+    end
+    apply_recipient_cutoff_to_filters
+    @keep_primary_for_cutoff_scan = @recipient_cutoff_time.present?
+    unless @keep_primary_for_cutoff_scan
+      Makara::Context.release_all
+      primary_pinned = false
+    end
     # Same protection as SendPostBlastEmailsJob: for sellers with very large audiences the
     # filter query can exceed the database's default 5-minute statement cap, so raise it for
     # this one query.
@@ -68,6 +77,11 @@ class SendWorkflowPostEmailsJob
       members
     end
     return unless renew_fanout_lease(force: true)
+    if @keep_primary_for_cutoff_scan
+      @keep_primary_for_cutoff_scan = false
+      Makara::Context.release_all
+      primary_pinned = false
+    end
 
     case enqueue_all_member_jobs
     when :complete
@@ -124,13 +138,20 @@ class SendWorkflowPostEmailsJob
         intent_token: @schedule_intent_token,
         fanout_token: @schedule_intent_fanout_token
       )
-      Makara::Context.release_all
+      Makara::Context.release_all unless @keep_primary_for_cutoff_scan
       @next_fanout_heartbeat_at = now + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f if renewed
       renewed
     end
 
     def fanout_heartbeat_time
       Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
+    def apply_recipient_cutoff_to_filters
+      return if @recipient_cutoff_time.nil?
+
+      configured_cutoff = Time.zone.parse(@filters[:created_after].to_s) if @filters[:created_after]
+      @filters[:created_after] = [configured_cutoff, @recipient_filter_cutoff_time].compact.max
     end
 
     def enqueue_email_job(member:, type:, id:)
@@ -186,7 +207,7 @@ class SendWorkflowPostEmailsJob
 
       follower_emails = Follower.active
         .where(followed_id: @post.seller_id)
-        .where("confirmed_at > ?", @recipient_cutoff_time)
+        .where("confirmed_at > ?", @recipient_filter_cutoff_time)
         .select("LOWER(followers.email)")
       member_ids = AudienceMember
         .where(seller_id: @post.seller_id, email: follower_emails)
