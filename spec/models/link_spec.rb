@@ -3,6 +3,32 @@
 require "spec_helper"
 
 describe Link do
+  describe "#publish! with an apply-to-all affiliate" do
+    it "creates the assignment through ProductAffiliate" do
+      seller = create(:user)
+      affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
+      product = create(:product, user: seller, draft: true)
+      expect(ProductAffiliate).to receive(:create!).with(affiliate:, product:).and_call_original
+
+      expect do
+        product.publish!
+      end.to have_enqueued_mail(AffiliateMailer, :notify_direct_affiliate_of_new_product).with(affiliate.id, product.id)
+
+      expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_present
+    end
+
+    it "does not add apply-to-all affiliates to a collab product" do
+      seller = create(:user)
+      affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
+      product = create(:product, user: seller, draft: true, is_collab: true)
+
+      product.publish!
+
+      expect(product.reload).to be_published
+      expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_nil
+    end
+  end
+
   describe "default offer code validation" do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller, price_cents: 2000) }
