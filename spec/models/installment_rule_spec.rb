@@ -29,6 +29,233 @@ describe InstallmentRule do
       expect(@post_rule.reload.version).to eq(2)
     end
 
+    it "publishes the new version to the shared delivery cache" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      rule.update!(delayed_delivery_time: 100)
+
+      expect(described_class.cached_version(post.id)).to eq(rule.version)
+    end
+
+    it "publishes the pending version before updating the database row" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      observed_state = nil
+      observer = lambda do |*, payload|
+        next unless payload[:name] == "InstallmentRule Update"
+
+        observed_state = described_class.cached_version_state(post.id)
+      end
+
+      ActiveSupport::Notifications.subscribed(observer, "sql.active_record") do
+        rule.update!(delayed_delivery_time: 2.days)
+      end
+
+      expect(observed_state).to eq([rule.version, true])
+      expect(described_class.cached_version_state(post.id)).to eq([rule.version, false])
+    end
+
+    it "clears its pending version when the transaction rolls back" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+
+      described_class.transaction do
+        rule.update!(delayed_delivery_time: 2.days)
+        expect(described_class.cached_version_state(post.id)).to eq([rule.version, true])
+        raise ActiveRecord::Rollback
+      end
+
+      expect(described_class.cached_version_state(post.id)).to eq([nil, false])
+    end
+
+    it "expires an orphaned pending version after its owner" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      version_key = RedisKey.workflow_installment_rule_version(post.id)
+      owner_key = RedisKey.workflow_installment_rule_pending_token(post.id)
+
+      described_class.transaction do
+        rule.update!(delayed_delivery_time: 2.days)
+
+        expect($redis.ttl(owner_key)).to be_between(1, described_class::PENDING_OWNER_CACHE_TTL)
+        expect($redis.ttl(version_key)).to be > $redis.ttl(owner_key)
+        raise ActiveRecord::Rollback
+      end
+    end
+
+    it "cleans pending ownership when an earlier instance only changes metadata" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      first_instance = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      owner_key = RedisKey.workflow_installment_rule_pending_token(post.id)
+
+      described_class.transaction do
+        first_instance.update!(time_period: "week")
+        described_class.find(first_instance.id).update!(delayed_delivery_time: 2.days)
+      end
+
+      expect($redis.get(owner_key)).to be_nil
+      expect(described_class.cached_version(post.id)).to eq(first_instance.reload.version)
+    end
+
+    it "promotes the highest version saved through separate instances" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      first_instance = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+
+      described_class.transaction do
+        first_instance.update!(delayed_delivery_time: 2.days)
+        described_class.find(first_instance.id).update!(delayed_delivery_time: 3.days)
+      end
+
+      expect(described_class.cached_version_state(post.id)).to eq([first_instance.reload.version, false])
+    end
+
+    it "keeps a same-version marker owned by a newer transaction" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      pending_version = rule.version + 1
+      old_token = SecureRandom.uuid
+      new_token = SecureRandom.uuid
+      version_key = RedisKey.workflow_installment_rule_version(post.id)
+      owner_key = RedisKey.workflow_installment_rule_pending_token(post.id)
+      $redis.set(version_key, pending_version)
+      $redis.set(owner_key, new_token)
+
+      described_class.clear_pending_version(
+        installment_id: post.id,
+        installment_rule_id: rule.id,
+        token: old_token
+      )
+
+      expect(described_class.cached_version(post.id)).to eq(pending_version)
+      expect($redis.get(owner_key)).to eq(new_token)
+    end
+
+    it "does not promote over a same-version marker owned by a newer transaction" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      pending_version = rule.version + 1
+      old_token = SecureRandom.uuid
+      new_token = SecureRandom.uuid
+      version_key = RedisKey.workflow_installment_rule_version(post.id)
+      owner_key = RedisKey.workflow_installment_rule_pending_token(post.id)
+      $redis.set(version_key, pending_version, ex: described_class::PENDING_VERSION_CACHE_TTL)
+      $redis.set(owner_key, new_token, ex: described_class::PENDING_OWNER_CACHE_TTL)
+
+      described_class.promote_pending_version(
+        installment_id: post.id,
+        installment_rule_id: rule.id,
+        version: pending_version,
+        token: old_token
+      )
+
+      expect(described_class.cached_version(post.id)).to eq(pending_version)
+      expect($redis.get(owner_key)).to eq(new_token)
+      expect($redis.ttl(version_key)).to be <= described_class::PENDING_VERSION_CACHE_TTL
+    end
+
+    it "does not let a normal cache fill clear pending ownership" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      token = SecureRandom.uuid
+      version_key = RedisKey.workflow_installment_rule_version(post.id)
+      owner_key = RedisKey.workflow_installment_rule_pending_token(post.id)
+      $redis.set(version_key, rule.version, ex: described_class::PENDING_VERSION_CACHE_TTL)
+      $redis.set(owner_key, token, ex: described_class::PENDING_OWNER_CACHE_TTL)
+
+      rule.cache_version!
+
+      expect($redis.get(owner_key)).to eq(token)
+      expect($redis.ttl(version_key)).to be <= described_class::PENDING_VERSION_CACHE_TTL
+    end
+
+    it "returns the newer effective version when its cache write loses" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      newer_version = rule.version + 1
+      $redis.set(RedisKey.workflow_installment_rule_version(post.id), newer_version)
+
+      expect(rule.cache_version!).to eq(newer_version)
+      expect(described_class.cached_version(post.id)).to eq(newer_version)
+    end
+
+    it "advances from the committed version when the instance is stale" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      stale_rule = described_class.find(rule.id)
+      rule.update!(delayed_delivery_time: 2.days)
+
+      stale_rule.advance_version!
+
+      expect(stale_rule.version).to eq(rule.version + 1)
+      expect(described_class.cached_version(post.id)).to eq(stale_rule.version)
+    end
+
+    it "reports a Redis failure after the database commit" do
+      error = Redis::CannotConnectError.new("unavailable")
+      allow(@post_rule).to receive(:cache_version!).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: @post_rule.id)
+
+      expect { @post_rule.send(:cache_committed_version) }.not_to raise_error
+    end
+
+    it "reports a RedisClient failure after the database commit" do
+      error = RedisClient::Error.new("unavailable")
+      allow(@post_rule).to receive(:cache_version!).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: @post_rule.id)
+
+      expect { @post_rule.send(:cache_committed_version) }.not_to raise_error
+    end
+
+    it "reports a Redis failure during rollback cleanup" do
+      error = Redis::CannotConnectError.new("unavailable")
+      allow($redis).to receive(:eval).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: @post_rule.id)
+
+      expect do
+        described_class.clear_pending_version(
+          installment_id: @post_rule.installment_id,
+          installment_rule_id: @post_rule.id,
+          token: SecureRandom.uuid
+        )
+      end.not_to raise_error
+    end
+
+    it "does not require Redis before committing a new rule" do
+      post = create(:installment, link: @product, installment_type: "product")
+      rule = build(:installment_rule, installment: post, to_be_published_at: 1.week.from_now)
+      expect(rule).not_to receive(:cache_version!)
+
+      expect { rule.save! }.not_to raise_error
+    end
+
+    it "reports a cache failure after a change that keeps the version" do
+      workflow = create(:workflow, seller: @product.user, link: @product)
+      post = create(:installment, link: @product, workflow:)
+      rule = create(:installment_rule, installment: post, delayed_delivery_time: 1.day)
+      error = RedisClient::Error.new("unavailable")
+      allow(rule).to receive(:cache_version!).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, installment_rule_id: rule.id)
+
+      expect { rule.update!(time_period: "week") }.not_to raise_error
+    end
+
+    it "does not cache versions for scheduled post rules" do
+      expect(@post_rule).not_to receive(:cache_version!)
+
+      @post_rule.update!(to_be_published_at: 1.month.from_now)
+    end
+
     it "does not increment the version if period is changed" do
       expect do
         @post_rule.time_period = "DAY"

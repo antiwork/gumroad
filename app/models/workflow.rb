@@ -51,37 +51,50 @@ class Workflow < ApplicationRecord
   end
 
   def mark_deleted!
-    self.deleted_at = Time.current
-    installments.each do |installment|
-      installment.mark_deleted!
-      installment.installment_rule.mark_deleted!
+    self.class.transaction do
+      lock!
+      self.deleted_at = Time.current
+      installments.each do |installment|
+        rule = installment.installment_rule
+        rule&.advance_version!
+        installment.mark_deleted!
+        rule&.mark_deleted!
+      end
+      save!
     end
-    save!
   end
 
   def publish!
-    return true if published_at.present?
+    with_transition_lock do
+      next true if published_at.present?
 
-    if !abandoned_cart_type? && !seller.eligible_to_send_emails?
-      errors.add(:base, "You cannot publish a workflow until you have made at least #{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in total earnings and received a payout")
-      raise ActiveRecord::RecordInvalid.new(self)
-    end
+      if !abandoned_cart_type? && !seller.eligible_to_send_emails?
+        errors.add(:base, "You cannot publish a workflow until you have made at least #{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in total earnings and received a payout")
+        raise ActiveRecord::RecordInvalid.new(self)
+      end
 
-    self.published_at = DateTime.current
-    self.first_published_at ||= published_at
-    installments.alive.find_each do |installment|
-      installment.publish!(published_at:)
-      schedule_installment(installment)
+      self.published_at = DateTime.current
+      self.first_published_at ||= published_at
+      installments.alive.find_each do |installment|
+        installment.installment_rule&.advance_version!
+        installment.publish!(published_at:)
+        schedule_installment(installment)
+      end
+      save!
     end
-    save!
   end
 
   def unpublish!
-    return true if published_at.nil?
+    with_transition_lock do
+      next true if published_at.nil?
 
-    self.published_at = nil
-    installments.alive.find_each(&:unpublish!)
-    save!
+      self.published_at = nil
+      installments.alive.find_each do |installment|
+        installment.installment_rule&.advance_version!
+        installment.unpublish!
+      end
+      save!
+    end
   end
 
   def has_never_been_published?
@@ -118,4 +131,14 @@ class Workflow < ApplicationRecord
 
     SendWorkflowPostEmailsJob.perform_async(installment.id, earliest_valid_time&.iso8601)
   end
+
+  private
+    def with_transition_lock
+      self.class.transaction do
+        # An update acquires the same row lock when a callback leaves the workflow dirty.
+        save! if has_changes_to_save?
+        lock!
+        yield
+      end
+    end
 end

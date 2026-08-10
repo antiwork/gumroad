@@ -101,6 +101,27 @@ describe Workflow::SaveInstallmentsService do
       expect(audio.reload.alive?).to be(false)
     end
 
+    it "locks the workflow before checking that it is alive" do
+      service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
+      expect(workflow).to receive(:lock!).ordered.and_call_original
+      expect(workflow).to receive(:alive?).ordered.and_call_original
+
+      expect(service.process).to eq([true, nil])
+    end
+
+    it "does not add an installment after the workflow is deleted" do
+      Workflow.where(id: workflow.id).update_all(deleted_at: Time.current)
+      params[:installments] = [default_installment_params.merge(id: SecureRandom.uuid)]
+      service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
+
+      expect do
+        success, errors = service.process
+
+        expect(success).to be(false)
+        expect(errors.full_messages.first).to eq("The workflow was not found.")
+      end.not_to change { workflow.installments.count }
+    end
+
     describe "for an abandoned cart workflow" do
       let!(:workflow) { create(:workflow, seller:, link: product, workflow_type: Workflow::ABANDONED_CART_TYPE) }
 
@@ -326,10 +347,14 @@ describe Workflow::SaveInstallmentsService do
 
     it "deletes installments that are missing from the params" do
       installment = create(:installment, workflow:)
+      installment_rule = create(:installment_rule, installment:, delayed_delivery_time: 1.hour)
+      previous_rule_version = installment_rule.version
       attached_file = create(:product_file, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/doc.pdf", link: nil)
       service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
       expect { service.process }.to change { workflow.installments.alive.count }.by(-1)
       expect(installment.reload.deleted_at).to be_present
+      expect(installment_rule.reload.version).to eq(previous_rule_version + 1)
+      expect(InstallmentRule.cached_version(installment.id)).to eq(previous_rule_version + 1)
 
       # But keeps the attached file alive
       expect(attached_file.reload.alive?).to be(true)
