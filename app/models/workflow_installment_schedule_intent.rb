@@ -35,6 +35,16 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
   end
 
   def self.enqueue(token)
+    dispatch_token = claim_dispatch(token)
+    return if dispatch_token.nil?
+
+    enqueue_scheduler(token:, dispatch_token:)
+  rescue => e
+    Rails.logger.error("[#{name}] could not enqueue token=#{token}: #{e.class}: #{e.message}")
+    nil
+  end
+
+  def self.claim_dispatch(token)
     dispatch_token = SecureRandom.uuid
     now = Time.current
     claimed = dispatchable(now).where(token:).update_all(
@@ -42,19 +52,17 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
       dispatch_expires_at: now + DISPATCH_LEASE,
       updated_at: now
     )
-    return if claimed.zero?
 
+    dispatch_token if claimed.positive?
+  end
+
+  def self.enqueue_scheduler(token:, dispatch_token:)
     job_id = ScheduleWorkflowInstallmentJob.perform_async(token)
     release_dispatch(token:, dispatch_token:) if job_id.blank?
     job_id
-  rescue => e
-    begin
-      release_dispatch(token:, dispatch_token:) if claimed.to_i.positive?
-    rescue => release_error
-      Rails.logger.error("[#{name}] could not release token=#{token}: #{release_error.class}: #{release_error.message}")
-    end
-    Rails.logger.error("[#{name}] could not enqueue token=#{token}: #{e.class}: #{e.message}")
-    nil
+  rescue
+    release_dispatch_safely(token:, dispatch_token:)
+    raise
   end
 
   def self.mark_processed(token, fanout_token:)
@@ -131,5 +139,12 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
       updated_at: Time.current
     )
   end
-  private_class_method :release_dispatch
+
+  def self.release_dispatch_safely(token:, dispatch_token:)
+    release_dispatch(token:, dispatch_token:)
+  rescue => e
+    Rails.logger.error("[#{name}] could not release token=#{token}: #{e.class}: #{e.message}")
+  end
+
+  private_class_method :claim_dispatch, :enqueue_scheduler, :release_dispatch, :release_dispatch_safely
 end
