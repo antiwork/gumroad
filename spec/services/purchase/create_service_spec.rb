@@ -14,7 +14,12 @@ describe Purchase::CreateService, :vcr do
         {
           "seller_id" => seller.id,
           "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
-          "listed_currency_rates" => { product.unique_permalink => rate },
+          "listed_currency_rates" => {
+            product.unique_permalink => {
+              "currency" => product.price_currency_type.to_s.downcase,
+              "rate" => rate,
+            }
+          },
         }
       ]
     }
@@ -946,6 +951,22 @@ describe Purchase::CreateService, :vcr do
 
       expect(purchase.errors).to be_empty
       expect(purchase.shipping_cents).to eq(278)
+    end
+
+    it "ignores a quote-bound rate after the product's listed currency changes" do
+      product.update!(price_currency_type: Currency::EUR, price_cents: price)
+      quote = signed_buyer_currency_quote(seller: user, product:, rate: "0.9")
+      product.update!(price_currency_type: Currency::GBP, price_cents: price)
+      quote_params = base_params.deep_dup
+      quote_params[:is_part_of_combined_charge] = true
+      quote_params[:buyer_currency_quote] = quote
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(:gbp).and_return("0.8")
+
+      purchase, _ = Purchase::CreateService.new(product:, params: quote_params).perform
+
+      expect(purchase.errors).to be_empty
+      expect(purchase.rate_converted_to_usd.to_d).to eq(BigDecimal("0.8"))
+      expect(purchase.price_cents).to eq(750)
     end
 
     describe "english pound" do

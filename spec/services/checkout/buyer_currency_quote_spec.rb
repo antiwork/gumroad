@@ -1223,7 +1223,9 @@ describe Checkout::BuyerCurrencyQuote do
 
       result = described_class.create(line_items: [line_item], canonical_total_cents: line_item.canonical_total_cents, ip: "24.48.0.1")
 
-      expect(result.charges.sole.listed_currency_rates).to eq(eur_product.unique_permalink => "0.9")
+      expect(result.charges.sole.listed_currency_rates).to eq(
+        eur_product.unique_permalink => { "currency" => Currency::EUR, "rate" => "0.9" }
+      )
     end
 
     it "omits the rate for USD-listed lines" do
@@ -1247,15 +1249,23 @@ describe Checkout::BuyerCurrencyQuote do
         canonical_line_items: [{ permalink: eur_product.unique_permalink, total_cents: line_item.canonical_total_cents }]
       )
 
-      expect(verified.listed_currency_rate_for(eur_product.unique_permalink)).to eq(BigDecimal("0.9"))
+      expect(verified.listed_currency_rate_for(eur_product.unique_permalink, currency: Currency::EUR)).to eq(BigDecimal("0.9"))
     end
 
     it "returns the bound rate from listed_currency_rate_hint while the quote window is open" do
       line_item = eur_line_item(rate: "0.9")
       created = described_class.create(line_items: [line_item], canonical_total_cents: line_item.canonical_total_cents, ip: "24.48.0.1")
 
-      expect(described_class.listed_currency_rate_hint(token: created.token, seller_id: seller.id, permalink: eur_product.unique_permalink))
+      expect(described_class.listed_currency_rate_hint(token: created.token, seller_id: seller.id, permalink: eur_product.unique_permalink, currency: Currency::EUR))
         .to eq(BigDecimal("0.9"))
+    end
+
+    it "returns nil from listed_currency_rate_hint when the product currency changed" do
+      line_item = eur_line_item(rate: "0.9")
+      created = described_class.create(line_items: [line_item], canonical_total_cents: line_item.canonical_total_cents, ip: "24.48.0.1")
+
+      expect(described_class.listed_currency_rate_hint(token: created.token, seller_id: seller.id, permalink: eur_product.unique_permalink, currency: Currency::GBP))
+        .to be_nil
     end
 
     it "returns nil from listed_currency_rate_hint once the quote window has passed" do
@@ -1265,17 +1275,17 @@ describe Checkout::BuyerCurrencyQuote do
       created = described_class.create(line_items: [line_item], canonical_total_cents: line_item.canonical_total_cents, ip: "24.48.0.1")
 
       travel_to(created.charges.sole.stripe_fx_quote_expires_at + 1.second) do
-        expect(described_class.listed_currency_rate_hint(token: created.token, seller_id: seller.id, permalink: eur_product.unique_permalink))
+        expect(described_class.listed_currency_rate_hint(token: created.token, seller_id: seller.id, permalink: eur_product.unique_permalink, currency: Currency::EUR))
           .to be_nil
       end
     end
 
     it "returns nil from listed_currency_rate_hint for a tampered token" do
-      expect(described_class.listed_currency_rate_hint(token: "garbage", seller_id: seller.id, permalink: "whatever")).to be_nil
+      expect(described_class.listed_currency_rate_hint(token: "garbage", seller_id: seller.id, permalink: "whatever", currency: Currency::EUR)).to be_nil
     end
 
     it "returns nil from listed_currency_rate_hint when no token is present" do
-      expect(described_class.listed_currency_rate_hint(token: nil, seller_id: seller.id, permalink: "whatever")).to be_nil
+      expect(described_class.listed_currency_rate_hint(token: nil, seller_id: seller.id, permalink: "whatever", currency: Currency::EUR)).to be_nil
     end
   end
 end

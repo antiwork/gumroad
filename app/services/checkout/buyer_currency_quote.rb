@@ -45,8 +45,12 @@ class Checkout::BuyerCurrencyQuote
     # `permalink`'s listed currency, bound at the same moment the quote was minted
     # (gumroad-private#1958). nil for USD-listed lines and for tokens signed before this
     # field shipped — both fall back to `set_price_and_rate`'s live `get_rate` read.
-    def listed_currency_rate_for(permalink)
-      listed_currency_rates&.[](permalink.to_s)&.to_d
+    def listed_currency_rate_for(permalink, currency:)
+      entry = listed_currency_rates&.[](permalink.to_s)
+      return unless entry.is_a?(Hash)
+      return unless entry["currency"].to_s.casecmp?(currency.to_s)
+
+      entry["rate"]&.to_d
     end
   end
 
@@ -290,7 +294,7 @@ class Checkout::BuyerCurrencyQuote
   # purchase. Signatures do not age, so without this a buyer could replay a months-old token on
   # a PayPal checkout and buy at a stale rate; with it, a replay is bounded by the quote window
   # like every other consumer of the token.
-  def self.listed_currency_rate_hint(token:, seller_id:, permalink:)
+  def self.listed_currency_rate_hint(token:, seller_id:, permalink:, currency:)
     return if token.blank?
 
     payload = verifier.verify(token)
@@ -299,7 +303,11 @@ class Checkout::BuyerCurrencyQuote
     return if charge_payload.blank?
     return if Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
 
-    charge_payload.dig("listed_currency_rates", permalink.to_s)&.to_d
+    entry = charge_payload.dig("listed_currency_rates", permalink.to_s)
+    return unless entry.is_a?(Hash)
+    return unless entry["currency"].to_s.casecmp?(currency.to_s)
+
+    entry["rate"]&.to_d
   rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, TypeError, ArgumentError
     nil
   end
@@ -680,15 +688,19 @@ class Checkout::BuyerCurrencyQuote
         line_allocations:,
         future_installments_presentment_total_cents:,
         later_charge_presentments:,
-        # Permalink → the rate bound in the LineItem for this seller's lines (nil for
-        # USD-listed lines, which never need one). Signed into the token so
-        # Purchase#set_price_and_rate can reuse the EXACT rate the quote was built from,
-        # rather than a fresh `get_rate` call that can disagree after the hourly refresh
-        # (gumroad-private#1958).
+        # Permalink → the listed currency and rate bound in each non-USD LineItem.
+        # Keeping the denomination beside the rate prevents a product currency edit from
+        # applying an old currency's rate to the new currency (gumroad-private#1958).
         listed_currency_rates: charge_line_items.filter_map do |line_item|
           next if line_item.listed_currency_rate.blank?
 
-          [line_item.permalink.to_s, line_item.listed_currency_rate.to_s]
+          [
+            line_item.permalink.to_s,
+            {
+              "currency" => line_item.product.price_currency_type.to_s.downcase,
+              "rate" => line_item.listed_currency_rate.to_s,
+            }
+          ]
         end.to_h
       )
     end

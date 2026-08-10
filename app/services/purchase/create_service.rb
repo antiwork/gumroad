@@ -216,7 +216,8 @@ class Purchase::CreateService < Purchase::BaseService
       Checkout::BuyerCurrencyQuote.listed_currency_rate_hint(
         token: params[:buyer_currency_quote],
         seller_id: purchase.seller.id,
-        permalink: purchase.link.unique_permalink
+        permalink: purchase.link.unique_permalink,
+        currency: purchase.link.price_currency_type
       )
     end
 

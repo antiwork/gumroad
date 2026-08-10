@@ -234,7 +234,9 @@ describe CustomerSurchargeController, :vcr do
       token = response.parsed_body.dig("buyer_currency_quote", "token")
       payload = Rails.application.message_verifier(Checkout::BuyerCurrencyQuote::TOKEN_PURPOSE).verify(token)
       charge_payload = payload.fetch("charges").sole
-      expect(charge_payload.fetch("listed_currency_rates")).to eq(eur_product.unique_permalink => "0.9")
+      expect(charge_payload.fetch("listed_currency_rates")).to eq(
+        eur_product.unique_permalink => { "currency" => Currency::EUR, "rate" => "0.9" }
+      )
       expect(charge_payload.fetch("canonical_line_items").map(&:last).uniq).to contain_exactly(1278)
     end
 
