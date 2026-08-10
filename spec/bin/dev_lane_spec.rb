@@ -42,7 +42,8 @@ RSpec.describe "bin/dev-lane" do
       "ANYCABLE_WEBSOCKET_URL" => "ws://cable.localhost:8081/cable",
       "ANYCABLE_REDIS_CHANNEL" => "__anycable___lane1",
       "PIDFILE" => "tmp/pids/server-lane1.pid",
-      "DISABLE_SPRING" => "1"
+      "DISABLE_SPRING" => "1",
+      "CUSTOM_DOMAIN" => "localhost:3001"
     },
     2 => {
       "PORT" => "3002",
@@ -61,7 +62,8 @@ RSpec.describe "bin/dev-lane" do
       "ANYCABLE_WEBSOCKET_URL" => "ws://cable.localhost:8082/cable",
       "ANYCABLE_REDIS_CHANNEL" => "__anycable___lane2",
       "PIDFILE" => "tmp/pids/server-lane2.pid",
-      "DISABLE_SPRING" => "1"
+      "DISABLE_SPRING" => "1",
+      "CUSTOM_DOMAIN" => "localhost:3002"
     },
     3 => {
       "PORT" => "3003",
@@ -80,7 +82,8 @@ RSpec.describe "bin/dev-lane" do
       "ANYCABLE_WEBSOCKET_URL" => "ws://cable.localhost:8083/cable",
       "ANYCABLE_REDIS_CHANNEL" => "__anycable___lane3",
       "PIDFILE" => "tmp/pids/server-lane3.pid",
-      "DISABLE_SPRING" => "1"
+      "DISABLE_SPRING" => "1",
+      "CUSTOM_DOMAIN" => "localhost:3003"
     }
   }.freeze
 

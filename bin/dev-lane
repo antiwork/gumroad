@@ -49,6 +49,12 @@ else
   DATABASE_NAME="gumroad_development_lane${LANE}"
   MONGO_DATABASE_NAME="gumroad_log_development_lane${LANE}"
   ES_INDEX_SUFFIX="_lane${LANE}"
+  # config/domain.rb otherwise pins DOMAIN/ROOT_DOMAIN/DISCOVER_DOMAIN to lane
+  # 0's localhost:3000, so mailer links and js-routes *_url helpers would
+  # always point back at lane 0 regardless of which lane generated them.
+  # API_DOMAIN itself stays fixed (config/domain.rb never reads CUSTOM_DOMAIN
+  # for it) — only VALID_API_REQUEST_HOSTS gains this lane's host.
+  CUSTOM_DOMAIN="localhost:${PORT}"
   # Two Redis databases per extra lane, not four: databases 10-13 are the test
   # suite's fallback block and its leases start at 14 (config/test_redis_isolation.rb),
   # both flushed before every example — 4-9 is the only band safe from test runs,
@@ -85,6 +91,7 @@ export PORT DEV_LANE_PORT VITE_RUBY_PORT DATABASE_NAME MONGO_DATABASE_NAME
 export REDIS_HOST SIDEKIQ_REDIS_HOST RPUSH_REDIS_HOST RACK_ATTACK_REDIS_HOST
 export ES_INDEX_SUFFIX ANYCABLE_PORT ANYCABLE_RPC_PORT ANYCABLE_REDIS_URL ANYCABLE_WEBSOCKET_URL ANYCABLE_REDIS_CHANNEL
 export PIDFILE DISABLE_SPRING
+[[ "$LANE" -eq 0 ]] || export CUSTOM_DOMAIN
 
 if [[ "$print_env" == true ]]; then
   printf '%s\n' \
@@ -105,6 +112,7 @@ if [[ "$print_env" == true ]]; then
     "ANYCABLE_REDIS_CHANNEL=${ANYCABLE_REDIS_CHANNEL}" \
     "PIDFILE=${PIDFILE}" \
     "DISABLE_SPRING=${DISABLE_SPRING}"
+  [[ "$LANE" -eq 0 ]] || printf 'CUSTOM_DOMAIN=%s\n' "${CUSTOM_DOMAIN}"
   exit 0
 fi
 

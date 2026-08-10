@@ -17,6 +17,8 @@ Lane 0 preserves the existing `bin/dev` values. Lanes 1–3 derive isolated valu
 
 Vite ports step by two so no lane collides with 3037, the test environment's Vite port. Extra lanes get two Redis databases (app+rpush, sidekiq+rack-attack — the namespaced stores share) because databases 10 and above belong to the test suite: 10–13 are `.env.test`'s fallback block and `config/test_redis_isolation.rb` leases from 14 up, both flushed before every example. That test-suite boundary is also why lanes stop at 3.
 
+Lanes 1–3 also export `CUSTOM_DOMAIN=localhost:<port>`, so `config/domain.rb` derives `DOMAIN`/`ROOT_DOMAIN`/`DISCOVER_DOMAIN` (and mailer links, js-routes `*_url` helpers) from the lane's own port instead of lane 0's `localhost:3000`. `API_DOMAIN` itself is unaffected — `config/domain.rb` never overrides it from `CUSTOM_DOMAIN` — only `VALID_API_REQUEST_HOSTS` gains the lane's host.
+
 ## First-time setup
 
 Run setup commands inside a subshell so the lane environment cannot leak into the rest of your session (`bin/dev-lane` also exports `DISABLE_SPRING=1`, so a warm Spring server preloaded with another lane's database can never serve these commands):
