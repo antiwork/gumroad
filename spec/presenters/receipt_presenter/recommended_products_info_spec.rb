@@ -23,16 +23,42 @@ describe ReceiptPresenter::RecommendedProductsInfo do
     end
 
     describe "#products" do
-      RSpec.shared_examples "doesn't return products" do
-        it "doesn't return products" do
-          expect(RecommendedProductsService).not_to receive(:for_checkout)
-          expect(recommended_products_info.products).to eq([])
-          expect(recommended_products_info.present?).to eq(false)
-        end
-      end
+      context "when the purchase doesn't have a purchaser (guest checkout)" do
+        context "when the feature is active" do
+          let(:recommendable_product) { create(:product, :recommendable, name: "Recommended product") }
+          let!(:affiliate) do
+            create(
+              :direct_affiliate,
+              seller: recommendable_product.user,
+              products: [recommendable_product], affiliate_user: create(:user)
+            )
+          end
 
-      context "when the purchase doesn't have a purchaser" do
-        it_behaves_like "doesn't return products"
+          before do
+            seller.update!(recommendation_type: User::RecommendationType::GUMROAD_AFFILIATES_PRODUCTS)
+          end
+
+          it "still recommends products, using the receipt's own products as the basis" do
+            expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_receipt).with(
+              purchaser: nil,
+              receipt_product_ids: [purchase.link.id],
+              recommender_model_name: "sales",
+              limit: 4,
+            ).and_call_original
+            expect(RecommendedProductsService).to receive(:fetch).with(
+              {
+                model: "sales",
+                ids: [purchase.link.id],
+                exclude_ids: [purchase.link.id],
+                number_of_results: RecommendedProducts::BaseService::NUMBER_OF_RESULTS,
+                user_ids: nil,
+              }
+            ).and_return(Link.where(id: [recommendable_product.id]))
+
+            expect(recommended_products_info.products.size).to eq(1)
+            expect(recommended_products_info.present?).to eq(true)
+          end
+        end
       end
 
       context "when the purchase has a purchaser" do
@@ -60,7 +86,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
                 purchaser: purchase.purchaser,
                 receipt_product_ids: [purchase.link.id],
                 recommender_model_name: "sales",
-                limit: ReceiptPresenter::RecommendedProductsInfo::RECOMMENDED_PRODUCTS_LIMIT,
+                limit: 4,
               ).and_call_original
               expect(RecommendedProductsService).to receive(:fetch).with(
                 {
@@ -95,7 +121,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
                 purchaser: purchase.purchaser,
                 receipt_product_ids: [purchase.link_id] + purchase.link.bundle_products.map(&:product_id),
                 recommender_model_name: "sales",
-                limit: ReceiptPresenter::RecommendedProductsInfo::RECOMMENDED_PRODUCTS_LIMIT,
+                limit: 4,
               ).and_call_original
               expect(recommended_products_info.products).to eq([])
               expect(recommended_products_info.present?).to eq(false)
@@ -110,6 +136,25 @@ describe ReceiptPresenter::RecommendedProductsInfo do
     let(:chargeable) { purchase }
 
     it_behaves_like "chargeable"
+
+    describe "#products with recommendations disabled (grouped/lookup receipt digest)" do
+      let(:recommended_products_info) { described_class.new(chargeable, recommendations: false) }
+
+      before do
+        purchase.update!(purchaser:)
+      end
+
+      it "returns no products and never queries the recommendation engine" do
+        expect(RecommendedProducts::CheckoutService).not_to receive(:fetch_for_receipt)
+
+        expect(recommended_products_info.products).to eq([])
+        expect(recommended_products_info.present?).to eq(false)
+      end
+
+      it "still returns the correct title" do
+        expect(recommended_products_info.title).to eq("Customers who bought this item also bought")
+      end
+    end
   end
 
   describe "for Charge", :vcr do
@@ -150,7 +195,7 @@ describe ReceiptPresenter::RecommendedProductsInfo do
             purchaser: purchase.purchaser,
             receipt_product_ids: [purchase.link_id, another_purchase.link_id],
             recommender_model_name: "sales",
-            limit: ReceiptPresenter::RecommendedProductsInfo::RECOMMENDED_PRODUCTS_LIMIT,
+            limit: 4,
           ).and_call_original
           expect(recommended_products_info.products).to eq([])
           expect(recommended_products_info.present?).to eq(false)

@@ -256,30 +256,57 @@ $accent-color: map-get($colors, "pink"); // [1]
         width: 100%;
 
         // [5]
+        & > tbody,
+        & > tbody > tr {
+          display: block;
+          width: 100%;
+        }
+
+        & > tbody > tr {
+          margin-bottom: 0;
+        }
+
         & > tbody > tr > td {
           display: block;
+          width: 100%;
+        }
 
-          &:first-child {
-            padding-bottom: spacer(4);
-          }
+        & > tbody > tr > td.product-card-cell-with-gap {
+          padding-bottom: spacer(4);
         }
 
         @include breakpoint-up(sm) {
+          & > tbody,
+          & > tbody > tr {
+            display: revert !important;
+          }
+
           // [2]
           & > tbody > tr > td {
             display: revert !important;
             width: 50% !important;
+            padding-bottom: 0 !important;
 
             &:first-child {
               padding-right: spacer(2) !important;
-              padding-bottom: 0 !important;
             }
 
             &:last-child {
               padding-left: spacer(2) !important;
             }
           }
+
+          & > tbody > tr.product-card-row-with-gap > td {
+            padding-bottom: spacer(4) !important;
+          }
         }
+      }
+
+      .product-card-table {
+        width: 100%;
+        max-width: size(12);
+        margin-right: auto !important;
+        margin-left: auto !important;
       }
     }
 

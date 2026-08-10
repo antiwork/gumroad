@@ -6,9 +6,10 @@ class ReceiptPresenter
   attr_reader :for_email
 
   # chargeable is either a Purchase or a Charge
-  def initialize(chargeable, for_email:)
+  def initialize(chargeable, for_email:, recommendations: true)
     @for_email = for_email
     @chargeable = chargeable
+    @recommendations = recommendations
   end
 
   def charge_info
@@ -35,7 +36,7 @@ class ReceiptPresenter
   end
 
   def recommended_products_info
-    @_recommended_products_info ||= ReceiptPresenter::RecommendedProductsInfo.new(chargeable)
+    @_recommended_products_info ||= ReceiptPresenter::RecommendedProductsInfo.new(chargeable, recommendations: @recommendations)
   end
 
   def mail_subject
