@@ -83,8 +83,11 @@ class UserPagesController < ApplicationController
     def page_meta_head
       title = ERB::Util.h(@page.title.to_s)
       canonical = ERB::Util.h(page_url)
+      favicon_url = ERB::Util.h(@user.avatar_url)
       <<~HTML
         <link rel="canonical" href="#{canonical}">
+        <link rel="shortcut icon" href="#{favicon_url}">
+        <link rel="apple-touch-icon" href="#{favicon_url}">
         <meta property="og:title" content="#{title}">
         <meta property="og:type" content="website">
         <meta property="og:url" content="#{canonical}">

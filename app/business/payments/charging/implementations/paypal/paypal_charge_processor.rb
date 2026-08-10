@@ -139,11 +139,31 @@ class PaypalChargeProcessor
     purchase = Purchase.successful.find_by(stripe_transaction_id: event_info["resource"]["id"])
     return unless purchase
 
+    fee_cents = paypal_fee_cents(paypal_fee["value"], paypal_fee["currency_code"])
+    unless fee_cents
+      ErrorNotifier.notify(
+        "PayPal capture completed webhook: fee has unsupported precision; skipping fee update",
+        capture_id: event_info.dig("resource", "id"),
+        fee_currency: paypal_fee["currency_code"],
+        fee_value: paypal_fee["value"],
+        webhook_event_id: event_info["id"]
+      )
+      return
+    end
+
     purchase.processor_fee_cents_currency = paypal_fee["currency_code"]
-    purchase.processor_fee_cents = paypal_fee["value"].to_f * unit_scaling_factor(purchase.processor_fee_cents_currency)
+    purchase.processor_fee_cents = fee_cents
     purchase.save!
   end
   private_class_method :handle_payment_capture_completed_event
+
+  def self.paypal_fee_cents(value, currency)
+    scaled_fee = BigDecimal(value) * unit_scaling_factor(currency)
+    scaled_fee.to_i if scaled_fee.finite? && scaled_fee == scaled_fee.to_i
+  rescue ArgumentError, TypeError, FloatDomainError
+    nil
+  end
+  private_class_method :paypal_fee_cents
 
   def self.handle_payment_capture_denied_event(event_info)
     refund_purchase(capture_id: event_info["resource"]["id"])
@@ -347,15 +367,6 @@ class PaypalChargeProcessor
     ChargeProcessor.handle_event(event)
   end
 
-  # Dispute Outcome Types
-  # RESOLVED_BUYER_FAVOUR - The dispute was resolved in the customer's favor.
-  # RESOLVED_SELLER_FAVOUR - The dispute was resolved in the merchant's favor.
-  # RESOLVED_WITH_PAYOUT - PayPal provided the merchant or customer with protection and the case is resolved.
-  # CANCELED_BY_BUYER - The customer canceled the dispute.
-  # ACCEPTED - The dispute was accepted.
-  # DENIED - The dispute was denied.
-  # NONE - The dispute was closed without a decision.
-  # Empty - The dispute was not resolved.
   def self.determine_resolved_dispute_event_type(dispute_outcome)
     if DISPUTE_OUTCOME_SELLER_FAVOUR.include? dispute_outcome.upcase
       ChargeEvent::TYPE_DISPUTE_WON
@@ -689,13 +700,15 @@ class PaypalChargeProcessor
                            Charge.find_by_external_id(reference.sub(Charge::COMBINED_CHARGE_PREFIX, "")) :
                            Purchase.find_by_external_id(reference)
 
+    expected_purchase_unit_info = charge_or_purchase.is_a?(Charge) ?
+                                    self.class.paypal_order_info_from_charge(charge_or_purchase) :
+                                    self.class.paypal_order_info(charge_or_purchase)
+
     if chargeable.instance_of?(PaypalApprovedOrderChargeable)
       update_invoice_id(order_id: charge_or_purchase.paypal_order_id, invoice_id: reference)
-      capture_order(order_id: charge_or_purchase.paypal_order_id)
+      capture_order(order_id: charge_or_purchase.paypal_order_id, expected_purchase_unit_info:)
     else
-      paypal_order_id = charge_or_purchase.is_a?(Charge) ?
-                          self.class.create_order_from_charge(charge_or_purchase) :
-                          self.class.create_order_from_purchase(charge_or_purchase)
+      paypal_order_id = self.class.create_order(expected_purchase_unit_info)
       charge_or_purchase.update!(paypal_order_id:)
       charge_or_purchase.purchases.each { |purchase| purchase.update!(paypal_order_id:) } if charge_or_purchase.is_a?(Charge)
       capture_order(order_id: paypal_order_id, billing_agreement_id: chargeable.fingerprint)
@@ -713,13 +726,21 @@ class PaypalChargeProcessor
     end
   end
 
-  def capture_order(order_id:, billing_agreement_id: nil)
+  def capture_order(order_id:, billing_agreement_id: nil, expected_purchase_unit_info: nil)
     paypal_transaction = self.class.capture(order_id:, billing_agreement_id:)
     capture = paypal_transaction.purchase_units[0].payments.captures[0]
 
     if capture.status.downcase == PaypalApiPaymentStatus::COMPLETED.downcase ||
         (capture.status.downcase == PaypalApiPaymentStatus::PENDING.downcase &&
             capture.status_details.reason.upcase == "PENDING_REVIEW")
+      if expected_purchase_unit_info.present?
+        begin
+          ensure_captured_amount_matches!(capture, expected_purchase_unit_info)
+        rescue ChargeProcessorError => e
+          refund_mismatched_capture!(paypal_transaction, capture)
+          raise e
+        end
+      end
       charge = PaypalCharge.new(paypal_transaction_id: capture.id,
                                 order_api_used: true,
                                 payment_details: paypal_transaction)
@@ -736,6 +757,41 @@ class PaypalChargeProcessor
                                          "PayPal transaction failed with status #{capture.status}",
                                          charge_id: capture.id)
     end
+  end
+
+  def ensure_captured_amount_matches!(capture, expected_purchase_unit_info)
+    captured_amount = capture.amount
+    captured_currency = captured_amount&.currency_code
+    captured_value = captured_amount&.value
+    expected_currency = expected_purchase_unit_info[:currency].to_s.upcase
+
+    if captured_currency.blank? || captured_value.blank? || !captured_currency.casecmp?(expected_currency)
+      raise ChargeProcessorError, "PayPal captured amount does not match Gumroad order amount"
+    end
+
+    begin
+      captured_total = BigDecimal(captured_value.to_s)
+      expected_total = BigDecimal(expected_purchase_unit_info[:total].to_s)
+    rescue ArgumentError, TypeError
+      raise ChargeProcessorError, "PayPal captured amount does not match Gumroad order amount"
+    end
+
+    if captured_total != expected_total
+      raise ChargeProcessorError, "PayPal captured amount does not match Gumroad order amount"
+    end
+  end
+
+  # Reverses a capture that already settled with the wrong amount so the underpayment
+  # doesn't sit unreconciled — a mismatch here means real money moved before the check
+  # in ensure_captured_amount_matches! ran. Swallows refund failures so the original
+  # amount-mismatch error still surfaces to the caller; Sentry has the refund failure for follow-up.
+  def refund_mismatched_capture!(paypal_transaction, capture)
+    merchant_id = paypal_transaction.purchase_units[0].payee.merchant_id
+    refund!(capture.id,
+            merchant_account: MerchantAccount.find_by(charge_processor_merchant_id: merchant_id),
+            paypal_order_purchase_unit_refund: true)
+  rescue StandardError => e
+    ErrorNotifier.notify(e, capture_id: capture.id, reason: "mismatched_capture_refund_failed")
   end
 
   def refund!(charge_id, amount_cents: nil, merchant_account: nil, paypal_order_purchase_unit_refund: nil, purchase: nil, **_args)
@@ -872,29 +928,6 @@ class PaypalChargeProcessor
                        payment_details: order_details)
     end
 
-    # Types of error which could be raised while refunding using the Orders API:
-    #
-    # INTERNAL_ERROR (An internal service error occurred)
-    #
-    # MISSING_ARGS (Missing Required Arguments)
-    #
-    # INVALID_RESOURCE_ID (Requested resource ID was not found)
-    #
-    # PERMISSION_DENIED (Permission denied)
-    #
-    # TRANSACTION_REFUSED (Request was refused)
-    #
-    # INVALID_PAYER_ID (Payer ID is invalid)
-    #
-    # INSTRUMENT_DECLINED (Processor or bank declined funding instrument or it cannot be used for this payment)
-    #
-    # RISK_CONTROL_MAX_AMOUNT (Request was refused)
-    #
-    # REFUND_ALREADY_INITIATED (Refund refused. Refund was already issued for transaction)
-    #
-    # REFUND_FAILED_INSUFFICIENT_FUNDS (Refund failed due to insufficient funds in your PayPal account)
-    #
-    # EXTDISPUTE_REFUND_FAILED_INSUFFICIENT_FUNDS (Refund failed due to insufficient funds in seller's PayPal account)
     def refund_order_purchase_unit!(capture_id, merchant_account, amount_cents, purchase: nil)
       paypal_rest_api = PaypalRestApi.new
       refund_amount_cents = refund_amount_in_merchant_currency_cents(paypal_rest_api, capture_id, amount_cents, merchant_account, purchase)

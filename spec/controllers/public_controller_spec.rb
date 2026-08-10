@@ -154,7 +154,7 @@ describe PublicController, type: :controller, inertia: true do
       mail_double = double
       allow(mail_double).to receive(:deliver_later)
 
-      expect(CustomerMailer).to receive(:grouped_receipt).with([wanted_purchase.id]).and_return(mail_double)
+      expect(CustomerMailer).to receive(:grouped_receipt).with([wanted_purchase.id], recommendations: false).and_return(mail_double)
       get :license_key_lookup_data, params: { email:, product_query: "Photo Editor" }
       expect(response.parsed_body["success"]).to be(true)
     end
@@ -163,7 +163,7 @@ describe PublicController, type: :controller, inertia: true do
       mail_double = double
       allow(mail_double).to receive(:deliver_later)
 
-      expect(CustomerMailer).to receive(:grouped_receipt).with([wanted_purchase.id]).and_return(mail_double)
+      expect(CustomerMailer).to receive(:grouped_receipt).with([wanted_purchase.id], recommendations: false).and_return(mail_double)
       get :license_key_lookup_data, params: { email:, product_query: "photoed" }
       expect(response.parsed_body["success"]).to be(true)
     end
@@ -172,7 +172,7 @@ describe PublicController, type: :controller, inertia: true do
       mail_double = double
       allow(mail_double).to receive(:deliver_later)
 
-      expect(CustomerMailer).to receive(:grouped_receipt).with([wanted_purchase.id]).and_return(mail_double)
+      expect(CustomerMailer).to receive(:grouped_receipt).with([wanted_purchase.id], recommendations: false).and_return(mail_double)
       get :license_key_lookup_data, params: { email:, product_query: wanted_product.long_url }
       expect(response.parsed_body["success"]).to be(true)
     end
@@ -183,7 +183,7 @@ describe PublicController, type: :controller, inertia: true do
       mail_double = double
       allow(mail_double).to receive(:deliver_later)
 
-      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([other_purchase.id, wanted_purchase.id])).and_return(mail_double)
+      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([other_purchase.id, wanted_purchase.id]), recommendations: true).and_return(mail_double)
       get :license_key_lookup_data, params: { email:, product_query: "some product I never bought" }
       expect(response.parsed_body["success"]).to be(true)
     end
@@ -192,7 +192,7 @@ describe PublicController, type: :controller, inertia: true do
       mail_double = double
       allow(mail_double).to receive(:deliver_later)
 
-      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([other_purchase.id, wanted_purchase.id])).and_return(mail_double)
+      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([other_purchase.id, wanted_purchase.id]), recommendations: true).and_return(mail_double)
       get :license_key_lookup_data, params: { email: }
       expect(response.parsed_body["success"]).to be(true)
     end
@@ -205,7 +205,7 @@ describe PublicController, type: :controller, inertia: true do
       other_purchase.update!(created_at: Time.utc(2023, 5, 1))
       wanted_purchase.update!(created_at: Time.utc(2023, 6, 1))
 
-      expect(CustomerMailer).to receive(:grouped_receipt).with([in_year.id]).and_return(mail_double)
+      expect(CustomerMailer).to receive(:grouped_receipt).with([in_year.id], recommendations: true).and_return(mail_double)
       get :license_key_lookup_data, params: { email:, product_query: "some product I never bought", year: "2024" }
       expect(response.parsed_body["success"]).to be(true)
     end
@@ -223,7 +223,7 @@ describe PublicController, type: :controller, inertia: true do
       mail_double = double
       allow(mail_double).to receive(:deliver_later)
 
-      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([other_purchase.id, wanted_purchase.id])).and_return(mail_double)
+      expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([other_purchase.id, wanted_purchase.id]), recommendations: true).and_return(mail_double)
       get :license_key_lookup_data, params: { email:, product_query: "%" }
       expect(response.parsed_body["success"]).to be(true)
     end

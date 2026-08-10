@@ -32,7 +32,12 @@ module Product::CreationLimit
     def validate_daily_product_creation_limit
       return if skip_daily_product_creation_limit?
 
-      last_24h_links_count = user.links.where(created_at: 1.day.ago..).count
+      # Deleting a product frees up quota (Sahil, 2026-08-08: accepted the delete-and-recreate
+      # abuse-risk tradeoff explicitly -- the anti-spam property this limit had is intentionally
+      # weakened in exchange for not permanently losing a seller's work when they delete a product
+      # thinking it was a "test" or duplicate). Still counts real accounts creating >daily_creation_limit
+      # products currently alive in the rolling 24h window.
+      last_24h_links_count = user.links.where(created_at: 1.day.ago.., deleted_at: nil).count
       return if last_24h_links_count < daily_creation_limit
 
       errors.add(:base, "Sorry, you can only create #{daily_creation_limit} products per day.")

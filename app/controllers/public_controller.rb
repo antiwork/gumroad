@@ -41,6 +41,7 @@ class PublicController < ApplicationController
     all_purchases = Purchase.successful_gift_or_nongift.where("email = ?", params[:email])
     all_purchases = scope_by_year_and_month(all_purchases, params[:year], params[:month])
     purchases = all_purchases
+    recommendations = true
     if params[:product_query].present?
       query = extract_permalink_from_query(params[:product_query].strip)
       scoped = all_purchases.joins(:link).where(
@@ -50,12 +51,15 @@ class PublicController < ApplicationController
       # Fall back to the full set rather than reporting `false` on no match: an unauthenticated
       # caller who already knows the email must not learn whether it purchased ANY specific
       # product from the response alone.
-      purchases = scoped if scoped.exists?
+      if scoped.exists?
+        purchases = scoped
+        recommendations = false
+      end
     end
     if purchases.none?
       render json: { success: false }
     else
-      CustomerMailer.grouped_receipt(purchases.ids).deliver_later(queue: "critical")
+      CustomerMailer.grouped_receipt(purchases.ids, recommendations:).deliver_later(queue: "critical")
       render json: { success: true }
     end
   end

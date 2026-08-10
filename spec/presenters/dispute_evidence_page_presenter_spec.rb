@@ -4,8 +4,9 @@ require "spec_helper"
 
 describe DisputeEvidencePagePresenter do
   let(:dispute_evidence) { create(:dispute_evidence, seller_contacted_at: 1.hour.ago) }
-  let(:presenter) { described_class.new(dispute_evidence) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
+  let(:purchase_route_id) { purchase.external_id }
+  let(:presenter) { described_class.new(dispute_evidence, purchase_route_id:) }
   let(:purchase_product_presenter) { PurchaseProductPresenter.new(purchase) }
 
   describe "#props" do
@@ -56,7 +57,7 @@ describe DisputeEvidencePagePresenter do
 
       expect(presenter.props[:disputable]).to eq(
         {
-          purchase_for_dispute_evidence_id: purchase.external_id,
+          purchase_for_dispute_evidence_id: purchase_route_id,
           formatted_display_price: purchase.formatted_disputed_amount,
           is_subscription: purchase.subscription.present?
         }

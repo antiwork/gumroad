@@ -40,5 +40,13 @@ describe Api::Internal::ReceiptPreviewsController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body).to have_key("error")
     end
+
+    it "renders successfully without invoking recommendation lookup for the synthetic preview purchase" do
+      expect(RecommendedProducts::CheckoutService).not_to receive(:fetch_for_receipt)
+
+      get :show, params: { product_id: product.unique_permalink }
+
+      expect(response).to be_successful
+    end
   end
 end

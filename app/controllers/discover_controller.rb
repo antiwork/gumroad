@@ -69,10 +69,57 @@ class DiscoverController < ApplicationController
       black_friday_stats: -> { black_friday_feature_active? ? BlackFridayStatsService.fetch_stats : nil },
       recommended_products: InertiaRails.defer { recommendations },
       recommended_wishlists: InertiaRails.defer { recommended_wishlists_data },
+      recently_viewed: InertiaRails.defer { recently_viewed_data },
     }
   end
 
   private
+    def recently_viewed_data
+      return nil if params[:offer_code].present?
+      return nil if logged_in_user.blank? && cookies[:_gumroad_guid].blank?
+
+      # Experiment mode is keyed on the percentage-of-actors gate specifically, not on Flipper's
+      # broader :conditional state — an actor-only QA enable or a group gate must behave like a
+      # plain flag (row for enabled actors, zero lookup/log cost for everyone else). During a
+      # partial ramp BOTH arms run the view lookup, because "has view history" must mean the
+      # same thing in each arm for the exposure log to give a fair denominator; only the
+      # treatment arm renders the row. At 0% and 100% there is no control arm to log.
+      ramp_percentage = Flipper[:discover_recently_viewed].percentage_of_actors_value
+      treatment = Feature.active?(:discover_recently_viewed, recently_viewed_actor)
+      mid_ramp = ramp_percentage > 0 && ramp_percentage < 100
+      return nil if !treatment && !mid_ramp
+
+      props = Discover::RecentlyViewedPresenter.new(
+        user: logged_in_user,
+        browser_guid: cookies[:_gumroad_guid],
+        request:,
+        include_rated_as_adult: logged_in_user&.show_nsfw_products? || false
+      ).props
+
+      log_recently_viewed_exposure(treatment:, has_history: props.present?) if mid_ramp
+
+      treatment ? props : nil
+    end
+
+    # Logged-out visitors need an actor too: Flipper's percentage-of-actors gate never enables
+    # for a nil actor, which would leave anonymous traffic (most of Discover) permanently in
+    # control and unmeasurable.
+    def recently_viewed_actor
+      logged_in_user || Flipper::Actor.new("browser_guid:#{cookies[:_gumroad_guid]}")
+    end
+
+    def log_recently_viewed_exposure(treatment:, has_history:)
+      Rails.logger.info(
+        {
+          event: "discover_recently_viewed_exposure",
+          arm: treatment ? "treatment" : "control",
+          has_history:,
+          user_id: logged_in_user&.id,
+          browser_guid_hash: logged_in_user ? nil : Discover::RecentlyViewedPresenter.anonymous_key(cookies[:_gumroad_guid]),
+        }.to_json,
+      )
+    end
+
     def recommendations
       # Don't show any recommended/featured products when offer codes are present
       return [] if params[:offer_code].present?

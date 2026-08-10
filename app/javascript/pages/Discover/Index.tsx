@@ -13,6 +13,7 @@ import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/cur
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 
 import { Layout } from "$app/components/Discover/Layout";
+import { RecentlyViewed, RecentlyViewedProps } from "$app/components/Discover/RecentlyViewed";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
 import { HomeFooter } from "$app/components/Home/Shared/Footer";
 import { HorizontalCard } from "$app/components/Product/Card";
@@ -37,6 +38,7 @@ type Props = {
   taxonomies_for_nav: Taxonomy[];
   recommended_products?: CardProduct[];
   recommended_wishlists?: CardWishlist[];
+  recently_viewed?: RecentlyViewedProps | null;
   curated_product_ids: string[];
   show_black_friday_hero?: boolean;
   is_black_friday_page: boolean;
@@ -441,6 +443,11 @@ function DiscoverIndex() {
                   title={isCuratedProducts ? "Recommended" : "Featured products"}
                 />
               ) : null}
+            </Deferred>
+          ) : null}
+          {showRecommendationSections ? (
+            <Deferred data={["recently_viewed"]} fallback={null}>
+              <RecentlyViewed data={props.recently_viewed} />
             </Deferred>
           ) : null}
           <section ref={resultsRef} className="flex flex-col gap-4">

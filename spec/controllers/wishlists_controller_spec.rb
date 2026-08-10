@@ -97,7 +97,9 @@ describe WishlistsController, type: :controller, inertia: true do
 
       html = Nokogiri::HTML.parse(response.body)
       expect(html.xpath("//link[@rel='shortcut icon']/@href").text).to include(user.avatar_url)
-      expect(html.xpath("//link[@rel='apple-touch-icon']/@href").text).to be_blank
+      # apple-touch-icon now mirrors the shortcut icon (gp#1966: it previously stayed blank
+      # here while the seller's own product/subscribe pages already set it consistently).
+      expect(html.xpath("//link[@rel='apple-touch-icon']/@href").text).to include(user.avatar_url)
     end
 
     context "when layout is profile" do

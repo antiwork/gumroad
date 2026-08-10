@@ -473,6 +473,98 @@ describe PaypalChargeProcessor, :vcr do
         expect(purchase.processor_fee_cents_currency).to eq("GBP")
       end
 
+      it "keeps a decimal PayPal fee in exact minor units" do
+        purchase = instance_double(Purchase)
+        successful_purchases = instance_double(ActiveRecord::Relation)
+        allow(Purchase).to receive(:successful).and_return(successful_purchases)
+        allow(successful_purchases).to receive(:find_by).with(stripe_transaction_id: "capture-id").and_return(purchase)
+        expect(purchase).to receive(:processor_fee_cents_currency=).with("USD")
+        allow(purchase).to receive(:processor_fee_cents_currency).and_return("USD")
+        expect(purchase).to receive(:processor_fee_cents=).with(115)
+        expect(purchase).to receive(:save!)
+
+        described_class.handle_order_events(
+          "event_type" => PaypalEventType::PAYMENT_CAPTURE_COMPLETED,
+          "resource" => {
+            "id" => "capture-id",
+            "seller_receivable_breakdown" => { "paypal_fee" => { "value" => "1.15", "currency_code" => "USD" } }
+          }
+        )
+      end
+
+      it "persists an exact decimal PayPal fee" do
+        purchase = build(:purchase, purchase_state: "successful", stripe_transaction_id: "capture-id", processor_fee_cents: nil, processor_fee_cents_currency: nil)
+        purchase.save!(validate: false)
+        allow(purchase).to receive(:save!).and_wrap_original { |original| original.call(validate: false) }
+        successful_purchases = instance_double(ActiveRecord::Relation)
+        allow(Purchase).to receive(:successful).and_return(successful_purchases)
+        allow(successful_purchases).to receive(:find_by).with(stripe_transaction_id: "capture-id").and_return(purchase)
+
+        described_class.handle_order_events(
+          "event_type" => PaypalEventType::PAYMENT_CAPTURE_COMPLETED,
+          "resource" => {
+            "id" => "capture-id",
+            "seller_receivable_breakdown" => { "paypal_fee" => { "value" => "1.15", "currency_code" => "USD" } }
+          }
+        )
+
+        expect(purchase.reload).to have_attributes(processor_fee_cents: 115, processor_fee_cents_currency: "USD")
+      end
+
+      it "skips and reports a PayPal fee with unsupported precision" do
+        create(:purchase, stripe_transaction_id: "capture-id", processor_fee_cents: nil, processor_fee_cents_currency: nil)
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.handle_order_events(
+          "id" => "event-id",
+          "event_type" => PaypalEventType::PAYMENT_CAPTURE_COMPLETED,
+          "resource" => {
+            "id" => "capture-id",
+            "seller_receivable_breakdown" => { "paypal_fee" => { "value" => "1.151", "currency_code" => "TND" } }
+          }
+        )
+
+        expect(ErrorNotifier).to have_received(:notify).with(
+          "PayPal capture completed webhook: fee has unsupported precision; skipping fee update",
+          capture_id: "capture-id",
+          fee_currency: "TND",
+          fee_value: "1.151",
+          webhook_event_id: "event-id"
+        )
+      end
+
+      it "does not report an unsupported precision fee when no successful purchase matches the capture" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.handle_order_events(
+          "id" => "event-id",
+          "event_type" => PaypalEventType::PAYMENT_CAPTURE_COMPLETED,
+          "resource" => {
+            "id" => "unmatched-capture-id",
+            "seller_receivable_breakdown" => { "paypal_fee" => { "value" => "1.151", "currency_code" => "TND" } }
+          }
+        )
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      it "does not report an unsupported precision fee when the matching purchase is not successful" do
+        create(:purchase, purchase_state: "failed", stripe_transaction_id: "capture-id",
+                          processor_fee_cents: nil, processor_fee_cents_currency: nil)
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.handle_order_events(
+          "id" => "event-id",
+          "event_type" => PaypalEventType::PAYMENT_CAPTURE_COMPLETED,
+          "resource" => {
+            "id" => "capture-id",
+            "seller_receivable_breakdown" => { "paypal_fee" => { "value" => "1.151", "currency_code" => "TND" } }
+          }
+        )
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
       it "does nothing if seller_receivable_breakdown is absent" do
         purchase = create(:purchase, stripe_transaction_id: "5B223658W54364539",
                                      processor_fee_cents: nil, processor_fee_cents_currency: nil)
@@ -1264,14 +1356,16 @@ describe PaypalChargeProcessor, :vcr do
 
     context "when paypal order id is present in chargeable" do
       it "charges already approved order without creating a new order and returns PaypalCharge" do
-        purchase = create(:purchase, paypal_order_id: "5AF67588T4374172W")
+        purchase = create(:purchase, paypal_order_id: "5AF67588T4374172W", price_cents: 10_00)
         chargeable = PaypalApprovedOrderChargeable.new(purchase.paypal_order_id, "paypal-gr-integspecs@gumroad.com",
                                                        "US")
 
         expect_any_instance_of(PaypalChargeProcessor).not_to receive(:create_order)
         expect_any_instance_of(PaypalChargeProcessor).to receive(:update_invoice_id).and_call_original
         expect_any_instance_of(PaypalChargeProcessor).to receive(:capture_order)
-                                                           .with(order_id: purchase.paypal_order_id).and_call_original
+                                                           .with(order_id: purchase.paypal_order_id,
+                                                                 expected_purchase_unit_info: hash_including(currency: "usd"))
+                                                           .and_call_original
 
         charge = subject.create_payment_intent_or_charge!(create(:merchant_account_paypal, user: purchase.seller),
                                                           chargeable, 0, 0, purchase.external_id, "")
@@ -1311,7 +1405,7 @@ describe PaypalChargeProcessor, :vcr do
 
         it "creates new paypal order and charges it and returns PaypalChargeIntent" do
           expect(PaypalChargeProcessor).to receive(:paypal_order_info_from_charge).and_call_original
-          expect(PaypalChargeProcessor).to receive(:create_order_from_charge).and_call_original
+          expect(PaypalChargeProcessor).to receive(:create_order).and_call_original
           expect_any_instance_of(PaypalChargeProcessor).to receive(:capture_order)
                                                              .with(order_id: an_instance_of(String),
                                                                    billing_agreement_id: "B-38D505255T217912K")
@@ -1336,6 +1430,68 @@ describe PaypalChargeProcessor, :vcr do
           end.to raise_error(ChargeProcessorInvalidRequestError)
         end
       end
+    end
+  end
+
+  describe "#capture_order" do
+    def paypal_capture_response(total: "13.50", currency: "USD", status: PaypalApiPaymentStatus::COMPLETED, merchant_id: "MN7CSWD6RCNJ8")
+      capture = OpenStruct.new(
+        id: "79740133TG6557546",
+        status:,
+        amount: OpenStruct.new(currency_code: currency, value: total),
+        status_details: OpenStruct.new(reason: nil)
+      )
+      OpenStruct.new(
+        purchase_units: [OpenStruct.new(
+          payments: OpenStruct.new(captures: [capture]),
+          payee: OpenStruct.new(merchant_id:)
+        )]
+      )
+    end
+
+    let(:expected_purchase_unit_info) { { currency: "usd", total: BigDecimal("13.50") } }
+
+    it "returns a charge intent when the captured amount matches Gumroad's expected order total" do
+      allow(PaypalChargeProcessor).to receive(:capture).and_return(paypal_capture_response(total: "13.50"))
+      allow(PaypalCharge).to receive(:new).and_return(OpenStruct.new(processor_transaction_id: "79740133TG6557546"))
+
+      charge_intent = subject.capture_order(order_id: "80T882348N361143U", expected_purchase_unit_info:)
+
+      expect(charge_intent).to be_a(PaypalChargeIntent)
+      expect(charge_intent.charge.processor_transaction_id).to eq("79740133TG6557546")
+    end
+
+    it "rejects a completed PayPal capture below Gumroad's expected order total" do
+      allow(PaypalChargeProcessor).to receive(:capture).and_return(paypal_capture_response(total: "6.75"))
+
+      expect do
+        subject.capture_order(order_id: "80T882348N361143U", expected_purchase_unit_info:)
+      end.to raise_error(ChargeProcessorError, /captured amount does not match/)
+    end
+
+    it "refunds a mismatched capture instead of leaving the underpayment settled" do
+      merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8")
+      allow(PaypalChargeProcessor).to receive(:capture).and_return(paypal_capture_response(total: "6.75"))
+      expect(subject).to receive(:refund!).with(
+        "79740133TG6557546",
+        merchant_account:,
+        paypal_order_purchase_unit_refund: true
+      )
+
+      expect do
+        subject.capture_order(order_id: "80T882348N361143U", expected_purchase_unit_info:)
+      end.to raise_error(ChargeProcessorError, /captured amount does not match/)
+    end
+
+    it "still raises the amount-mismatch error even if reversing the capture fails" do
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8")
+      allow(PaypalChargeProcessor).to receive(:capture).and_return(paypal_capture_response(total: "6.75"))
+      allow(subject).to receive(:refund!).and_raise(ChargeProcessorInvalidRequestError, "boom")
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ChargeProcessorInvalidRequestError), hash_including(reason: "mismatched_capture_refund_failed"))
+
+      expect do
+        subject.capture_order(order_id: "80T882348N361143U", expected_purchase_unit_info:)
+      end.to raise_error(ChargeProcessorError, /captured amount does not match/)
     end
   end
 

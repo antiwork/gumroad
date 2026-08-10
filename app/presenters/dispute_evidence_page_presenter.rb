@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 class DisputeEvidencePagePresenter
-  def initialize(dispute_evidence)
+  def initialize(dispute_evidence, purchase_route_id:)
     @dispute_evidence = dispute_evidence
     @purchase = @dispute_evidence.disputable.purchase_for_dispute_evidence
+    @purchase_route_id = purchase_route_id
     @purchase_product_presenter = PurchaseProductPresenter.new(@purchase)
   end
 
@@ -20,12 +21,12 @@ class DisputeEvidencePagePresenter
   def success_props
     {
       seller_response_due_at_formatted: dispute_evidence.seller_response_due_at&.strftime("%B %-d, %Y at %-l:%M %p %Z"),
-      purchase_for_dispute_evidence_id: purchase.external_id,
+      purchase_for_dispute_evidence_id: purchase_route_id,
     }
   end
 
   private
-    attr_reader :dispute_evidence, :purchase, :purchase_product_presenter
+    attr_reader :dispute_evidence, :purchase, :purchase_route_id, :purchase_product_presenter
 
     def dispute_evidence_props
       {
@@ -49,7 +50,7 @@ class DisputeEvidencePagePresenter
 
     def disputable_props
       {
-        purchase_for_dispute_evidence_id: purchase.external_id,
+        purchase_for_dispute_evidence_id: purchase_route_id,
         formatted_display_price: dispute_evidence.disputable.formatted_disputed_amount,
         is_subscription: purchase.subscription.present?
       }

@@ -110,7 +110,9 @@ module Purchase::Searchable
       indexes :affiliate_credit_fee_partially_refunded_cents, type: :long
       indexes :product_id, type: :long
       indexes :product_unique_permalink, type: :keyword
-      indexes :product_name, type: :text, analyzer: :product_name, search_analyzer: :search_product_name
+      indexes :product_name, type: :text, analyzer: :product_name, search_analyzer: :search_product_name do
+        indexes :raw, type: :keyword
+      end
       indexes :product_description, type: :text
       indexes :seller_id, type: :long
       indexes :seller_name, type: :text, analyzer: :full_name, search_analyzer: :search_full_name
