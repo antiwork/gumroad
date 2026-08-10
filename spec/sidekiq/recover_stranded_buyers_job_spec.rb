@@ -273,7 +273,7 @@ describe RecoverStrandedBuyersJob do
     allow(job).to receive(:bucket).and_return(0)
 
     _page_key, first_occurrence = travel_to(described_class::ROTATION_EPOCH) { job.send(:window, many) }
-    job.send(:save_page_cursor, [0, 0], 1) # simulate a run that only got through the first buyer
+    job.send(:save_page_cursor, [0, 0], first_occurrence.first[:email]) # simulate a run that only got through the first buyer
     # Same bucket (0), same subpage cycle: subpage_id is (elapsed_days / ROTATION_BUCKETS) %
     # SUBPAGES_PER_BUCKET, so advancing by ROTATION_BUCKETS * SUBPAGES_PER_BUCKET days returns to
     # the same subpage — the exact occurrence a fixed-order page would replay identically.
@@ -297,7 +297,7 @@ describe RecoverStrandedBuyersJob do
       travel_to(described_class::ROTATION_EPOCH + (cycle * described_class::ROTATION_BUCKETS)) do
         page_key, page = job.send(:window, many)
         first_prefixes[cycle] = page.first(5)
-        job.send(:save_page_cursor, page_key, 5) # each occurrence only got through 5 buyers
+        job.send(:save_page_cursor, page_key, page.first(5).last[:email]) # each occurrence only got through 5 buyers
       end
     end
 
@@ -324,7 +324,7 @@ describe RecoverStrandedBuyersJob do
     allow(job).to receive(:bucket) { |email| email.include?("target") ? 0 : 1 }
 
     _page_key, first_occurrence = travel_to(described_class::ROTATION_EPOCH) { job.send(:window, many) }
-    job.send(:save_page_cursor, [0], 1) # simulate a run that only got through the first buyer
+    job.send(:save_page_cursor, [0], first_occurrence.first[:email]) # simulate a run that only got through the first buyer
     # Same bucket (0) recurs every ROTATION_BUCKETS days.
     _page_key, second_occurrence = travel_to(described_class::ROTATION_EPOCH + described_class::ROTATION_BUCKETS) { job.send(:window, many) }
 
@@ -338,11 +338,28 @@ describe RecoverStrandedBuyersJob do
     job = described_class.new
 
     _page_key, first_run = job.send(:window, many)
-    job.send(:save_page_cursor, [:total], 1) # simulate a run that only got through the first buyer
+    job.send(:save_page_cursor, [:total], first_run.first[:email]) # simulate a run that only got through the first buyer
 
     _page_key, second_run = job.send(:window, many)
 
     expect(second_run.first).not_to eq(first_run.first)
+  end
+
+  # Greptile's capped-page-rotation P1: the cursor previously stored a NUMERIC OFFSET into the
+  # current sorted/capped subpage, so alternating peers joining on either side of it (a 50-member
+  # subpage capped at 25, cursor bouncing between 0 and 25) could keep one buyer permanently outside
+  # the capped prefix even though their bucket/subpage runs every cycle. An EMAIL identity boundary
+  # (resume just after this buyer) is immune to how many peers sit on either side of it.
+  it "resumes right after the last-processed buyer's identity, not a numeric offset into the page" do
+    job = described_class.new
+    persistent = candidate.merge(email: "buyer040@example.com")
+    page = 60.times.map { |i| candidate.merge(email: "buyer#{i.to_s.rjust(3, '0')}@example.com") }
+
+    job.send(:save_page_cursor, [:test], "buyer039@example.com") # last run stopped right before persistent
+
+    rotated = job.send(:rotate_page, [:test], page)
+
+    expect(rotated.first(25)).to include(a_hash_including(email: persistent[:email]))
   end
 
   it "is registered on the schedule so it actually runs" do

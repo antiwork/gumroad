@@ -57,7 +57,7 @@ class RecoverStrandedBuyersJob
 
       outcomes << recover(candidate, live:)
     end
-    save_page_cursor(page_key, outcomes.size) if page_key
+    save_page_cursor(page_key, selected[outcomes.size - 1][:email]) if page_key && outcomes.any?
 
     InternalNotificationWorker.perform_async(
       "risk", "Stranded buyer recovery",
@@ -121,25 +121,32 @@ class RecoverStrandedBuyersJob
 
     # A page's own composition and order are deterministic, so a run that hits RUN_BUDGET partway
     # through always stops at the same buyer, on every future occurrence of this exact page — the
-    # suffix after them never gets a turn (Greptile P1). Rotating the page by a cursor that
-    # advances every time THIS PAGE runs moves a different buyer to the front each occurrence, so
-    # a persistently slow buyer no longer blocks the same suffix forever.
+    # suffix after them never gets a turn (Greptile P1). Rotating to start just after the last
+    # processed buyer's own EMAIL (not a numeric offset into the current array) moves a different
+    # buyer to the front each occurrence and survives peers joining/leaving on either side of the
+    # cursor between occurrences (Greptile round 11 P1): an offset drifts with the array, an
+    # identity boundary does not.
     def rotate_page(page_key, page)
-      page.rotate(page_cursor(page_key) % page.size)
+      cursor = page_cursor(page_key)
+      return page if cursor.nil?
+
+      start = page.index { |c| c[:email].to_s > cursor } || 0
+      page.rotate(start)
     end
 
     def page_cursor(page_key)
-      $redis.get(RedisKey.recover_stranded_buyers_page_cursor(page_key)).to_i
+      $redis.get(RedisKey.recover_stranded_buyers_page_cursor(page_key))
     rescue => e
       ErrorNotifier.notify(e)
-      0
+      nil
     end
 
-    # Persisted even when the run finished the whole page (outcomes.size == page.size): incrementing
-    # past the page length is harmless since the next rotate is modulo the (possibly different-sized)
-    # page this key returns next time, and it keeps the starting point moving instead of resetting.
-    def save_page_cursor(page_key, outcomes_count)
-      $redis.incrby(RedisKey.recover_stranded_buyers_page_cursor(page_key), outcomes_count)
+    # Stores the LAST PROCESSED BUYER'S EMAIL, not a count — a count is a position in whichever
+    # array `window` happens to rebuild next time, which drifts under membership churn exactly like
+    # the array-index bucket/subpage selection this replaced. An identity boundary means "resume
+    # just after this buyer" regardless of who joined or left on either side of them.
+    def save_page_cursor(page_key, last_processed_email)
+      $redis.set(RedisKey.recover_stranded_buyers_page_cursor(page_key), last_processed_email)
     rescue => e
       ErrorNotifier.notify(e)
     end
