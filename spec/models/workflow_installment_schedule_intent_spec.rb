@@ -26,7 +26,7 @@ describe WorkflowInstallmentScheduleIntent do
     end.to raise_error(described_class::EnqueueError, "A database transaction is required")
   end
 
-  it "does not persist a claim when the scheduler enqueue raises" do
+  it "releases the claim when the scheduler enqueue raises" do
     intent = create_intent
     allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_raise("Redis is unavailable")
     expect(Rails.logger).to receive(:error).with(/Redis is unavailable/)
@@ -37,6 +37,16 @@ describe WorkflowInstallmentScheduleIntent do
     expect(described_class.dispatchable).to include(intent)
   end
 
+  it "contains a claim release failure after the scheduler enqueue raises" do
+    intent = create_intent
+    allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_raise("Redis is unavailable")
+    allow(described_class).to receive(:release_dispatch).and_raise("database is unavailable")
+    expect(Rails.logger).to receive(:error).with(/Redis is unavailable/)
+    expect(Rails.logger).to receive(:error).with(/database is unavailable/)
+
+    expect(described_class.enqueue(intent.token)).to be_nil
+  end
+
   it "contains a dispatch query failure" do
     intent = create_intent
     allow(described_class).to receive(:dispatchable).and_raise("database is unavailable")
@@ -45,7 +55,7 @@ describe WorkflowInstallmentScheduleIntent do
     expect(described_class.enqueue(intent.token)).to be_nil
   end
 
-  it "does not persist a claim when middleware cancels the enqueue" do
+  it "releases the claim when middleware cancels the enqueue" do
     intent = create_intent
     allow(ScheduleWorkflowInstallmentJob).to receive(:perform_async).and_return(nil)
     expect(Rails.logger).to receive(:error).with(/scheduler job was not enqueued/i)
@@ -56,11 +66,13 @@ describe WorkflowInstallmentScheduleIntent do
     expect(described_class.dispatchable).to include(intent)
   end
 
-  it "records a claim after enqueueing its scheduler" do
+  it "commits the claim before enqueueing its scheduler" do
     intent = create_intent
     enqueued_dispatch_token = nil
     expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(intent.token, kind_of(String)).once do |_, dispatch_token|
       enqueued_dispatch_token = dispatch_token
+      expect(intent.reload.dispatch_token).to eq(dispatch_token)
+      expect(intent.dispatch_expires_at).to be > Time.current
       "jid"
     end
 
