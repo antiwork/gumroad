@@ -24,8 +24,8 @@ describe DominicanRepublicBankAccount do
   end
 
   describe "#routing_number" do
-    it "returns the bank code" do
-      expect(bank_account.routing_number).to eq(bank_account.bank_code)
+    it "returns the bank code and branch code concatenated" do
+      expect(bank_account.routing_number).to eq("#{bank_account.bank_code}#{bank_account.branch_code}")
     end
   end
 
@@ -42,6 +42,17 @@ describe DominicanRepublicBankAccount do
       expect(build(:dominican_republic_bank_account, bank_code: "123")).to be_valid
       expect(build(:dominican_republic_bank_account, bank_code: "1234")).not_to be_valid
       expect(build(:dominican_republic_bank_account, bank_code: "a12")).not_to be_valid
+    end
+  end
+
+  describe "#validate_branch_code" do
+    it "requires 1 to 5 digits" do
+      expect(build(:dominican_republic_bank_account, branch_code: "1")).to be_valid
+      expect(build(:dominican_republic_bank_account, branch_code: "12345")).to be_valid
+      expect(build(:dominican_republic_bank_account, branch_code: "123456")).not_to be_valid
+      expect(build(:dominican_republic_bank_account, branch_code: "a123")).not_to be_valid
+      expect(build(:dominican_republic_bank_account, branch_code: nil)).not_to be_valid
+      expect(build(:dominican_republic_bank_account, branch_code: "")).not_to be_valid
     end
   end
 
