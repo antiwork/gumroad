@@ -88,12 +88,12 @@ class RecoverStrandedBuyersJob
     def window(candidates)
       if candidates.size <= MAX_RECOVERIES_PER_RUN
         page_key = [:total]
-        return [page_key, rotate_page(page_key, candidates.sort_by { _1[:email].to_s })]
+        return [page_key, rotate_page(page_key, candidates.sort_by { identity(_1[:email]) })]
       end
 
       elapsed_days = (Date.current - ROTATION_EPOCH).to_i
       bucket_id = elapsed_days % ROTATION_BUCKETS
-      due_today = candidates.select { |c| bucket(c[:email]) == bucket_id }.sort_by { _1[:email].to_s }
+      due_today = candidates.select { |c| bucket(c[:email]) == bucket_id }.sort_by { identity(_1[:email]) }
       return [nil, due_today] if due_today.empty?
       return [[bucket_id], rotate_page([bucket_id], due_today)] if due_today.size <= MAX_RECOVERIES_PER_RUN
 
@@ -122,15 +122,17 @@ class RecoverStrandedBuyersJob
     # A page's own composition and order are deterministic, so a run that hits RUN_BUDGET partway
     # through always stops at the same buyer, on every future occurrence of this exact page — the
     # suffix after them never gets a turn (Greptile P1). Rotating to start just after the last
-    # processed buyer's own EMAIL (not a numeric offset into the current array) moves a different
+    # buyer's own EMAIL (not a numeric offset into the current array) moves a different
     # buyer to the front each occurrence and survives peers joining/leaving on either side of the
     # cursor between occurrences (Greptile round 11 P1): an offset drifts with the array, an
-    # identity boundary does not.
+    # identity boundary does not. Compared and stored via `identity` (matching `bucket`/`subpage`'s
+    # downcasing) so a scan returning a different casing of the same email across occurrences can't
+    # desync the cursor from bucket/subpage membership (Greptile P1).
     def rotate_page(page_key, page)
       cursor = page_cursor(page_key)
       return page if cursor.nil?
 
-      start = page.index { |c| c[:email].to_s > cursor } || 0
+      start = page.index { |c| identity(c[:email]) > cursor } || 0
       page.rotate(start)
     end
 
@@ -146,21 +148,28 @@ class RecoverStrandedBuyersJob
     # the array-index bucket/subpage selection this replaced. An identity boundary means "resume
     # just after this buyer" regardless of who joined or left on either side of them.
     def save_page_cursor(page_key, last_processed_email)
-      $redis.set(RedisKey.recover_stranded_buyers_page_cursor(page_key), last_processed_email)
+      $redis.set(RedisKey.recover_stranded_buyers_page_cursor(page_key), identity(last_processed_email))
     rescue => e
       ErrorNotifier.notify(e)
+    end
+
+    # Single canonical form for sorting, cursor comparison, and cursor storage — must match what
+    # `bucket`/`subpage` hash on, or a scan returning a different casing of the same email across
+    # occurrences desyncs the cursor from bucket/subpage membership (Greptile P1).
+    def identity(email)
+      email.to_s.downcase
     end
 
     def bucket(email)
       # to_s: a scan candidate with a blank email must land in a bucket (and later fail loudly
       # as that recovery's ERROR line) rather than raise here and take down the whole run.
-      Digest::MD5.hexdigest(email.to_s.downcase).to_i(16) % ROTATION_BUCKETS
+      Digest::MD5.hexdigest(identity(email)).to_i(16) % ROTATION_BUCKETS
     end
 
     # Same technique as `bucket`, against a second, independent hash so an email isn't pinned to
     # the same relative rank in both — a different fixed modulus for the sub-split within a bucket.
     def subpage(email)
-      Digest::MD5.hexdigest("subpage:#{email.to_s.downcase}").to_i(16) % SUBPAGES_PER_BUCKET
+      Digest::MD5.hexdigest("subpage:#{identity(email)}").to_i(16) % SUBPAGES_PER_BUCKET
     end
 
     def recover(candidate, live:)

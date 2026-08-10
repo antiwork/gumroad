@@ -362,6 +362,27 @@ describe RecoverStrandedBuyersJob do
     expect(rotated.first(25)).to include(a_hash_including(email: persistent[:email]))
   end
 
+  # Greptile's case-sensitive-cursor P1: `bucket`/`subpage` hash on the downcased email, but the
+  # sort/comparison/storage previously used the raw string. If a run's saved cursor happens to be
+  # a different casing than the NEXT run's scan (e.g. an uppercase representation persisted, then
+  # a scan returning normal lowercase addresses), raw ASCII comparison sorts every lowercase
+  # candidate after an uppercase cursor regardless of alphabetical position — the rotation never
+  # advances and the page replays from the very start on every occurrence.
+  it "resumes past the cursor's identity even when the scan's returned casing differs across occurrences" do
+    job = described_class.new
+    page = [
+      candidate.merge(email: "aaa-first@example.com"),
+      candidate.merge(email: "persistent@example.com"),
+      candidate.merge(email: "zzz-last@example.com"),
+    ]
+
+    job.send(:save_page_cursor, [:test], "PERSISTENT@EXAMPLE.COM") # an earlier occurrence's scan returned this casing
+
+    rotated = job.send(:rotate_page, [:test], page)
+
+    expect(rotated.first[:email]).to eq("zzz-last@example.com")
+  end
+
   it "is registered on the schedule so it actually runs" do
     schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
 
