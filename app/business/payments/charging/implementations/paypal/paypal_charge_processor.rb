@@ -649,6 +649,13 @@ class PaypalChargeProcessor
       raise ChargeProcessorError, "PayPal order total is not numeric when updating order"
     end
 
+    # BigDecimal("NaN")/Infinity parse without raising, and any comparison against
+    # NaN is false, so a non-finite total would silently skip the lower-total check below.
+    if !current_total_decimal.finite? || !requested_total_decimal.finite?
+      ErrorNotifier.notify("PayPal order total is not numeric when updating order")
+      raise ChargeProcessorError, "PayPal order total is not numeric when updating order"
+    end
+
     if requested_total_decimal < current_total_decimal
       ErrorNotifier.notify("PayPal order update attempted to lower order total")
       raise ChargeProcessorError, "PayPal order update cannot lower the order total"

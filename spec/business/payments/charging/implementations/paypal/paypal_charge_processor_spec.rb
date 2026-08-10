@@ -2653,6 +2653,35 @@ describe PaypalChargeProcessor, :vcr do
       end.to raise_error(ChargeProcessorError, /not numeric/)
     end
 
+    it "rejects updates when PayPal's current order total is NaN" do
+      creator = create(:user)
+      product = create(:product, user: creator)
+      paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                                                 user: creator, country: "US", currency: "usd")
+      order_id = "27B71908FM8616631"
+      lowered_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: paypal_merchant_account.currency,
+        price_cents: 5_00,
+        shipping_cents: 75,
+        tax_cents: 1_00,
+        exclusive_tax_cents: 1_00,
+        total_cents: 6_75,
+        quantity: 2,
+      }
+
+      # BigDecimal("NaN") parses without raising, so this must be caught by the
+      # explicit finite? check, not by the numeric-parse rescue above it.
+      allow(PaypalChargeProcessor).to receive(:fetch_order).with(order_id: order_id).and_return(
+        "purchase_units" => [{ "amount" => { "value" => "NaN", "currency_code" => "USD" } }]
+      )
+
+      expect(PaypalChargeProcessor).not_to receive(:update_order)
+      expect do
+        PaypalChargeProcessor.update_order_from_product_info(order_id, lowered_purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /not numeric/)
+    end
+
     it "raises error if paypal order id is not present" do
       updated_purchase_unit_info = {
         external_id: "JrkmJ574Xk5Nqz1Bv9cLOA==",
