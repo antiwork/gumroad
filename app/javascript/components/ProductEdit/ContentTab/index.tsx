@@ -175,7 +175,7 @@ const FileUploadMenu = ({
   </Menu>
 );
 
-const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
+export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
   const {
     id,
     product,
@@ -354,6 +354,15 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
   const removedFileEmbedIds = removedFileEmbedIdsForPage(selectedPage, richContentRemovedFileEmbedIds);
+  // Tracks which page the mounted doc actually belongs to. Queued after
+  // useRichTextEditor's own reset microtask (hook order), so it only flips
+  // once the editor really holds the new page's doc — see updateContentRef.
+  const editorContentPageIdRef = React.useRef<string | undefined>(selectedPageId);
+  React.useEffect(() => {
+    queueMicrotask(() => {
+      editorContentPageIdRef.current = selectedPageId;
+    });
+  }, [selectedPageId]);
   React.useEffect(() => {
     if (editor) reconcileMountedEditorFileEmbedIds(editor, fileIdMappings);
   }, [editor, fileIdMappings]);
@@ -368,6 +377,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   }, [editor, removedFileEmbedIds]);
   const updateContentRef = useRefToLatest(() => {
     if (!editor) return;
+    // Mounted doc still belongs to the previous page during the switch window
+    // (gp#1943); skip rather than misfile it under the newly selected page.
+    if (editorContentPageIdRef.current !== selectedPageId) return;
 
     // Correctly set the IDs of the file embeds copied from another product
     const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
