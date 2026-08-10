@@ -42,14 +42,55 @@ describe ScheduleWorkflowInstallmentJob do
     expect { described_class.new.perform(SecureRandom.uuid) }.not_to raise_error
   end
 
-  it "ignores a scheduler job whose dispatch token did not commit" do
+  it "retries a scheduler job whose dispatch token is not visible" do
     intent = create_intent
+    expect_any_instance_of(Workflow).not_to receive(:schedule_installment)
+
+    expect do
+      described_class.new.perform(intent.token, SecureRandom.uuid)
+    end.to raise_error(described_class::IntentNotCommittedError)
+
+    expect(intent.reload.processed_at).to be_nil
+    expect(intent.fanout_token).to be_nil
+  end
+
+  it "ignores a scheduler job whose dispatch lease was replaced" do
+    intent = create_intent(dispatch_token: SecureRandom.uuid, dispatch_expires_at: 1.minute.from_now)
     expect_any_instance_of(Workflow).not_to receive(:schedule_installment)
 
     described_class.new.perform(intent.token, SecureRandom.uuid)
 
     expect(intent.reload.processed_at).to be_nil
     expect(intent.fanout_token).to be_nil
+  end
+
+  it "retries a scheduler job after the previous dispatch lease expires" do
+    intent = create_intent(dispatch_token: SecureRandom.uuid, dispatch_expires_at: 1.minute.ago)
+    expect_any_instance_of(Workflow).not_to receive(:schedule_installment)
+
+    expect do
+      described_class.new.perform(intent.token, SecureRandom.uuid)
+    end.to raise_error(described_class::IntentNotCommittedError)
+
+    expect(intent.reload.processed_at).to be_nil
+    expect(intent.fanout_token).to be_nil
+  end
+
+  it "ignores a stale scheduler job while a fanout owns the intent" do
+    intent = create_intent(
+      dispatch_token: SecureRandom.uuid,
+      dispatch_expires_at: 1.minute.ago,
+      fanout_token: SecureRandom.uuid,
+      fanout_expires_at: 1.minute.from_now
+    )
+    expect_any_instance_of(Workflow).not_to receive(:schedule_installment)
+
+    expect do
+      described_class.new.perform(intent.token, SecureRandom.uuid)
+    end.not_to raise_error
+
+    expect(intent.reload.processed_at).to be_nil
+    expect(intent.fanout_token).to be_present
   end
 
   it "accepts the scheduler job whose dispatch token committed" do
