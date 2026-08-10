@@ -58,18 +58,22 @@ describe WorkflowInstallmentScheduleIntent do
 
   it "records a claim after enqueueing its scheduler" do
     intent = create_intent
-    expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(intent.token).once.and_return("jid")
+    enqueued_dispatch_token = nil
+    expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(intent.token, kind_of(String)).once do |_, dispatch_token|
+      enqueued_dispatch_token = dispatch_token
+      "jid"
+    end
 
     expect(described_class.enqueue(intent.token)).to eq("jid")
     expect(described_class.enqueue(intent.token)).to be_nil
 
-    expect(intent.reload.dispatch_token).to be_present
+    expect(intent.reload.dispatch_token).to eq(enqueued_dispatch_token)
     expect(intent.dispatch_expires_at).to be > Time.current
   end
 
   it "reclaims an expired dispatch lease" do
     intent = create_intent(dispatch_token: SecureRandom.uuid, dispatch_expires_at: 1.minute.ago)
-    expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(intent.token).and_return("jid")
+    expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(intent.token, kind_of(String)).and_return("jid")
 
     expect(described_class.enqueue(intent.token)).to eq("jid")
 

@@ -23,11 +23,12 @@ describe Workflow do
 
     expect(installment.reload).to be_published
     expect(rule.reload.version).to eq(previous_version + 1)
-    token = ScheduleWorkflowInstallmentJob.jobs.sole.fetch("args").sole
+    token, dispatch_token = ScheduleWorkflowInstallmentJob.jobs.sole.fetch("args")
     expect(WorkflowInstallmentScheduleIntent.find_by!(token:)).to have_attributes(
       installment_id: installment.id,
       rule_version: rule.version,
       cutoff_reference_time: workflow.published_at,
+      dispatch_token:,
       expected_published_at: workflow.published_at
     )
     expect(SendWorkflowPostEmailsJob.jobs).to be_empty

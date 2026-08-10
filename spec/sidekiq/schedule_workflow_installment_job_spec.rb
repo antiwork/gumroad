@@ -42,6 +42,27 @@ describe ScheduleWorkflowInstallmentJob do
     expect { described_class.new.perform(SecureRandom.uuid) }.not_to raise_error
   end
 
+  it "ignores a scheduler job whose dispatch token did not commit" do
+    intent = create_intent
+    expect_any_instance_of(Workflow).not_to receive(:schedule_installment)
+
+    described_class.new.perform(intent.token, SecureRandom.uuid)
+
+    expect(intent.reload.processed_at).to be_nil
+    expect(intent.fanout_token).to be_nil
+  end
+
+  it "accepts the scheduler job whose dispatch token committed" do
+    dispatch_token = SecureRandom.uuid
+    intent = create_intent(dispatch_token:)
+    expect(WorkflowInstallmentScheduleIntent).to receive(:lock).and_call_original
+    expect_any_instance_of(Workflow).to receive(:schedule_installment).and_return(:enqueued)
+
+    described_class.new.perform(intent.token, dispatch_token)
+
+    expect(intent.reload.fanout_token).to be_present
+  end
+
   it "retries while the required rule version is not visible" do
     intent = create_intent(rule_version: rule.version + 1)
 

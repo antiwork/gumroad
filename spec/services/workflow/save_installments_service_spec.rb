@@ -291,7 +291,7 @@ describe Workflow::SaveInstallmentsService do
         end
 
         it "reschedules that installment" do
-          expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(kind_of(String)).and_call_original
+          expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(kind_of(String), kind_of(String)).and_call_original
 
           params[:installments] = [default_installment_params.merge(id: installment.external_id, time_duration: 2, time_period: "day")]
           service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
@@ -378,7 +378,7 @@ describe Workflow::SaveInstallmentsService do
     it "reschedules a newly added installment if the workflow is already published" do
       workflow.publish!
 
-      expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(kind_of(String)).and_call_original
+      expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(kind_of(String), kind_of(String)).and_call_original
 
       params[:installments] = [default_installment_params.merge(id: SecureRandom.uuid, time_duration: 1, time_period: "hour")]
       service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)

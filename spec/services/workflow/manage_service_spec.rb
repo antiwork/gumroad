@@ -368,6 +368,7 @@ describe Workflow::ManageService do
         params[:save_action_name] = Workflow::SAVE_AND_PUBLISH_ACTION
         create(:payment_completed, user: seller)
         expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(
+          kind_of(String),
           kind_of(String)
         ).and_call_original
 

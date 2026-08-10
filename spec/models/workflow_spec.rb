@@ -292,6 +292,7 @@ describe Workflow do
       installment2 = create(:installment, workflow: @workflow, deleted_at: 1.day.ago)
 
       expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(
+        kind_of(String),
         kind_of(String)
       ).twice.and_call_original
 

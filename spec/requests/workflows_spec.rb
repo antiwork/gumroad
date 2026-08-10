@@ -1207,6 +1207,7 @@ describe("Workflows", js: true, type: :system) do
         installment = create(:workflow_installment, workflow:)
 
         expect(ScheduleWorkflowInstallmentJob).to receive(:perform_async).with(
+          kind_of(String),
           kind_of(String)
         ).and_call_original
 
