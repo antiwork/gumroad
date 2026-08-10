@@ -10,7 +10,7 @@ class ForeignWebhooksController < ApplicationController
   ].freeze
 
   skip_before_action :verify_authenticity_token
-  before_action :validate_sns_webhook, only: [:mediaconvert]
+  before_action :validate_sns_webhook, only: [:sns, :mediaconvert, :sns_aws_config]
 
   before_action only: [:stripe] do
     endpoint_secret = GlobalConfig.dig(:stripe, :endpoint_secret)
@@ -85,12 +85,14 @@ class ForeignWebhooksController < ApplicationController
   end
 
   def sns
-    # The SNS post has json body but the content-type is set to plain text.
-    notification_message = request.body.read
+    # The SNS post has json body but the content-type is set to plain text. Read via raw_post
+    # (not request.body.read) — validate_sns_webhook already consumed the body stream to EOF, and
+    # raw_post is what caches and replays that read.
+    notification_message = request.raw_post
 
     Rails.logger.info("Incoming SNS (Transcoder): #{notification_message}")
 
-    notification_message.gsub!("#012", "")
+    notification_message = notification_message.gsub("#012", "")
     HandleSnsTranscoderEventWorker.perform_in(5.seconds, JSON.parse(notification_message))
 
     head :ok
@@ -105,7 +107,7 @@ class ForeignWebhooksController < ApplicationController
   end
 
   def sns_aws_config
-    notification = request.body.read
+    notification = request.raw_post
     Rails.logger.info("Incoming SNS (AWS Config): #{notification}")
     HandleSnsAwsConfigEventWorker.perform_async(JSON.parse(notification))
     head :ok

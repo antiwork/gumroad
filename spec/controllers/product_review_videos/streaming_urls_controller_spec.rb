@@ -11,8 +11,11 @@ RSpec.describe ProductReviewVideos::StreamingUrlsController, type: :controller d
 
   let(:product_review) { create(:product_review, purchase:) }
   let(:product_review_video) { create(:product_review_video, product_review:) }
+  let(:signed_download_url) { "https://cdn.example.com/review-video.mp4" }
 
   describe "GET #index" do
+    before { allow_any_instance_of(VideoFile).to receive(:signed_download_url).and_return(signed_download_url) }
+
     context "when the product review video is approved" do
       before { product_review_video.approved! }
 
@@ -29,7 +32,7 @@ RSpec.describe ProductReviewVideos::StreamingUrlsController, type: :controller d
                 product_review_video.external_id,
                 format: :smil
               ),
-              product_review_video.video_file.signed_download_url
+              signed_download_url
             ]
           )
         end
@@ -50,13 +53,20 @@ RSpec.describe ProductReviewVideos::StreamingUrlsController, type: :controller d
       end
 
       context "when a valid purchase email digest is provided" do
-        it "returns a successful response" do
+        it "returns a successful response and carries the digest into the SMIL stream URL" do
           get :index, params: {
             product_review_video_id: product_review_video.external_id,
             purchase_email_digest: purchase.email_digest
           }, format: :json
 
           expect(response).to have_http_status(:ok)
+          expect(response.parsed_body[:streaming_urls].first).to eq(
+            product_review_video_stream_path(
+              product_review_video.external_id,
+              format: :smil,
+              purchase_email_digest: purchase.email_digest
+            )
+          )
         end
       end
 

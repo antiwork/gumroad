@@ -44,9 +44,17 @@ describe PostToPingEndpointsWorker, :vcr do
     end
 
 
-    @http_double = double
-    allow(@http_double).to receive(:success?).and_return(true)
-    allow(@http_double).to receive(:code).and_return(200)
+    @http_response = Net::HTTPOK.new("1.1", "200", "OK")
+  end
+
+  def ping_post_options(params, content_type)
+    {
+      body: HTTParty::HashConversions.to_params(params.deep_stringify_keys),
+      headers: { "Content-Type" => content_type },
+      max_redirects: 0,
+      allow_unfollowed_redirects: true,
+      http_options: { open_timeout: 5, read_timeout: 5 }
+    }
   end
 
   it "enqueues job PostToIndividualPingEndpointWorker with the correct parameters" do
@@ -350,7 +358,7 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(params[:refunded]).to be(true)
 
       expect(params[:refunded]).to be(true)
-      expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params)
+      expect(SsrfFilter).not_to receive(:post).with(@user.notification_endpoint, anything)
 
       PostToPingEndpointsWorker.new.perform(purchase.id, nil, ResourceSubscription::REFUNDED_RESOURCE_NAME)
     end
@@ -364,7 +372,7 @@ describe PostToPingEndpointsWorker, :vcr do
       params = subscription.payload_for_ping_notification(resource_name: ResourceSubscription::CANCELLED_RESOURCE_NAME)
 
       expect(params[:cancelled]).to be(true)
-      expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params)
+      expect(SsrfFilter).not_to receive(:post).with(@user.notification_endpoint, anything)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::CANCELLED_RESOURCE_NAME, subscription.id)
     end
@@ -470,7 +478,9 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(jobs.first["args"].first).to eq("http://notification.com")
     end
 
-    it "does not post to the app's post url if the post url is invalid" do
+    it "does not post to the app's post url if the post url is invalid", :skip_resource_subscription_dns_stub do
+      allow(ResourceSubscription).to receive(:resolve_addresses).and_return([IPAddr.new("93.184.216.34")])
+      allow(ResourceSubscription).to receive(:resolve_addresses).with("localhost").and_return([IPAddr.new("127.0.0.1")])
       @resource_subscription.update!(post_url: "http://localhost/path")
       purchase = create(:purchase, link: @product)
 
@@ -552,11 +562,9 @@ describe PostToPingEndpointsWorker, :vcr do
       params = purchase.payload_for_ping_notification(resource_name: ResourceSubscription::REFUNDED_RESOURCE_NAME)
 
       expect(params[:refunded]).to be(true)
-      expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params.deep_stringify_keys)
-      expect(HTTParty).to receive(:post).with(@refunded_resource_subscription.post_url,
-                                              timeout: 5,
-                                              body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => @refunded_resource_subscription.content_type }).and_return(@http_double)
+      expect(SsrfFilter).not_to receive(:post).with(@user.notification_endpoint, anything)
+      expect(SsrfFilter).to receive(:post).with(@refunded_resource_subscription.post_url,
+                                                ping_post_options(params, @refunded_resource_subscription.content_type)).and_return(@http_response)
 
       PostToPingEndpointsWorker.new.perform(purchase.id, nil, ResourceSubscription::REFUNDED_RESOURCE_NAME)
     end
@@ -568,11 +576,9 @@ describe PostToPingEndpointsWorker, :vcr do
       params = subscription.payload_for_ping_notification(resource_name: ResourceSubscription::CANCELLED_RESOURCE_NAME)
 
       expect(params[:cancelled]).to be(true)
-      expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params.deep_stringify_keys)
-      expect(HTTParty).to receive(:post).with(@cancelled_resource_subscription.post_url,
-                                              timeout: 5,
-                                              body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => @cancelled_resource_subscription.content_type }).and_return(@http_double)
+      expect(SsrfFilter).not_to receive(:post).with(@user.notification_endpoint, anything)
+      expect(SsrfFilter).to receive(:post).with(@cancelled_resource_subscription.post_url,
+                                                ping_post_options(params, @cancelled_resource_subscription.content_type)).and_return(@http_response)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::CANCELLED_RESOURCE_NAME, subscription.id)
     end
@@ -583,11 +589,9 @@ describe PostToPingEndpointsWorker, :vcr do
       params = subscription.payload_for_ping_notification(resource_name: ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME)
 
       expect(params[:ended_reason]).to be_present
-      expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params.deep_stringify_keys)
-      expect(HTTParty).to receive(:post).with(@subscription_ended_resource_subscription.post_url,
-                                              timeout: 5,
-                                              body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => @subscription_ended_resource_subscription.content_type }).and_return(@http_double)
+      expect(SsrfFilter).not_to receive(:post).with(@user.notification_endpoint, anything)
+      expect(SsrfFilter).to receive(:post).with(@subscription_ended_resource_subscription.post_url,
+                                                ping_post_options(params, @subscription_ended_resource_subscription.content_type)).and_return(@http_response)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME, subscription.id)
     end
@@ -595,13 +599,8 @@ describe PostToPingEndpointsWorker, :vcr do
     it "does not post subscription ended ping to the 'subscription_ended' resource's post_url if the subscription has not ended", :sidekiq_inline do
       subscription = create(:subscription, link: @product, cancelled_at: 1.week.from_now)
       create(:membership_purchase, subscription:, link: @product)
-      params = subscription.payload_for_ping_notification(resource_name: ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME)
 
-      expect(HTTParty).not_to receive(:post).with(@subscription_ended_resource_subscription.post_url,
-                                                  timeout: 5,
-                                                  body: params.deep_stringify_keys,
-                                                  headers: { "Content-Type" => @subscription_ended_resource_subscription.content_type }
-                                                  )
+      expect(SsrfFilter).not_to receive(:post).with(@subscription_ended_resource_subscription.post_url, anything)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME, subscription.id)
     end
@@ -611,11 +610,9 @@ describe PostToPingEndpointsWorker, :vcr do
       create(:membership_purchase, subscription:, link: @product)
       params = subscription.payload_for_ping_notification(resource_name: ResourceSubscription::SUBSCRIPTION_RESTARTED_RESOURCE_NAME)
 
-      expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params.deep_stringify_keys)
-      expect(HTTParty).to receive(:post).with(@subscription_restarted_resource_subscription.post_url,
-                                              timeout: 5,
-                                              body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => @subscription_restarted_resource_subscription.content_type }).and_return(@http_double)
+      expect(SsrfFilter).not_to receive(:post).with(@user.notification_endpoint, anything)
+      expect(SsrfFilter).to receive(:post).with(@subscription_restarted_resource_subscription.post_url,
+                                                ping_post_options(params, @subscription_restarted_resource_subscription.content_type)).and_return(@http_response)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::SUBSCRIPTION_RESTARTED_RESOURCE_NAME, subscription.id)
     end
@@ -624,7 +621,7 @@ describe PostToPingEndpointsWorker, :vcr do
       subscription = create(:subscription, link: @product, cancelled_at: Time.current)
       create(:membership_purchase, subscription:, link: @product)
 
-      expect(HTTParty).not_to receive(:post)
+      expect(SsrfFilter).not_to receive(:post)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::SUBSCRIPTION_RESTARTED_RESOURCE_NAME, subscription.id)
     end
@@ -634,11 +631,9 @@ describe PostToPingEndpointsWorker, :vcr do
       create(:membership_purchase, subscription:, link: @product)
       params = subscription.payload_for_ping_notification(resource_name: ResourceSubscription::SUBSCRIPTION_UPDATED_RESOURCE_NAME, additional_params: { "foo" => "bar" })
 
-      expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint, timeout: 5, body: params.deep_stringify_keys)
-      expect(HTTParty).to receive(:post).with(@subscription_updated_resource_subscription.post_url,
-                                              timeout: 5,
-                                              body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => @subscription_updated_resource_subscription.content_type }).and_return(@http_double)
+      expect(SsrfFilter).not_to receive(:post).with(@user.notification_endpoint, anything)
+      expect(SsrfFilter).to receive(:post).with(@subscription_updated_resource_subscription.post_url,
+                                                ping_post_options(params, @subscription_updated_resource_subscription.content_type)).and_return(@http_response)
 
       PostToPingEndpointsWorker.new.perform(nil, nil, ResourceSubscription::SUBSCRIPTION_UPDATED_RESOURCE_NAME, subscription.id, { "foo" => "bar" })
     end
@@ -650,14 +645,9 @@ describe PostToPingEndpointsWorker, :vcr do
                                                                      resource_name: ResourceSubscription::DISPUTE_RESOURCE_NAME)
 
       expect(params[:disputed]).to be(true)
-      expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint,
-                                                  timeout: 5,
-                                                  body: params.deep_stringify_keys,
-                                                  headers: { "Content-Type" => @user.notification_content_type })
-      expect(HTTParty).to receive(:post).with(dispute_resource_subscription.post_url,
-                                              timeout: 5,
-                                              body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => dispute_resource_subscription.content_type }).and_return(@http_double)
+      expect(SsrfFilter).not_to receive(:post).with(@user.notification_endpoint, anything)
+      expect(SsrfFilter).to receive(:post).with(dispute_resource_subscription.post_url,
+                                                ping_post_options(params, dispute_resource_subscription.content_type)).and_return(@http_response)
 
       PostToPingEndpointsWorker.new.perform(purchase.id, nil, ResourceSubscription::DISPUTE_RESOURCE_NAME)
     end
@@ -669,14 +659,9 @@ describe PostToPingEndpointsWorker, :vcr do
                                                                          resource_name: ResourceSubscription::DISPUTE_WON_RESOURCE_NAME)
 
       expect(params[:dispute_won]).to be(true)
-      expect(HTTParty).not_to receive(:post).with(@user.notification_endpoint,
-                                                  timeout: 5,
-                                                  body: params.deep_stringify_keys,
-                                                  headers: { "Content-Type" => @user.notification_content_type })
-      expect(HTTParty).to receive(:post).with(dispute_won_resource_subscription.post_url,
-                                              timeout: 5,
-                                              body: params.deep_stringify_keys,
-                                              headers: { "Content-Type" => dispute_won_resource_subscription.content_type }).and_return(@http_double)
+      expect(SsrfFilter).not_to receive(:post).with(@user.notification_endpoint, anything)
+      expect(SsrfFilter).to receive(:post).with(dispute_won_resource_subscription.post_url,
+                                                ping_post_options(params, dispute_won_resource_subscription.content_type)).and_return(@http_response)
 
       PostToPingEndpointsWorker.new.perform(purchase.id, nil, ResourceSubscription::DISPUTE_WON_RESOURCE_NAME)
     end

@@ -92,6 +92,7 @@ describe Api::V2::ResourceSubscriptionsController do
     end
 
     it "allows the subscription if the app has a post url which has localhost as part of its legitimate domain name" do
+      allow(ResourceSubscription).to receive(:resolve_addresses).with("learnaboutlocalhost.com").and_return([IPAddr.new("93.184.216.34")])
       put :create, params: @params.merge(resource_name: "sale", post_url: "http://learnaboutlocalhost.com")
 
       expect(response.parsed_body["success"]).to be(true)
@@ -225,7 +226,7 @@ describe Api::V2::ResourceSubscriptionsController do
       expect(response.parsed_body["message"]).to include("Invalid post URL")
     end
 
-    it "responds with an error JSON message for a localhost post URL" do
+    it "responds with an error JSON message for a localhost post URL", :skip_resource_subscription_dns_stub do
       ["http://127.0.0.1/path", "http://0.0.0.0/path", "http://localhost/path"].each do |post_url|
         put :create, params: @params.merge(resource_name: "sale", post_url:)
 

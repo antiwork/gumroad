@@ -292,6 +292,19 @@ RSpec.configure do |config|
     RSpec::Mocks.space.proxy_for(SsrfFilter).reset if example.metadata[:skip_ssrf_stub]
   end
 
+  # ResourceSubscription.valid_post_url? now does a real DNS lookup so it can reject a hostname
+  # that RESOLVES to a private/loopback/link-local address (DNS rebinding), not just one whose
+  # literal string matches "localhost". Existing specs construct post_urls from placeholder
+  # domains that either don't resolve or (in at least one case) resolve to 127.0.0.1 as a parked
+  # domain — neither is the thing under test in those specs. Stub resolution to a fixed public
+  # address by default; specs actually exercising the SSRF guard opt out with
+  # `skip_resource_subscription_dns_stub: true` and stub `.resolve_addresses` themselves per hostname.
+  config.before(:each) do |example|
+    unless example.metadata[:skip_resource_subscription_dns_stub]
+      allow(ResourceSubscription).to receive(:resolve_addresses).and_return([IPAddr.new("93.184.216.34")])
+    end
+  end
+
   # Top up the shared Stripe test account only for the examples that actually
   # spend it, and only once per process. This deliberately runs per example
   # rather than in `before(:suite)`: in CI the suite runs through knapsack_pro's

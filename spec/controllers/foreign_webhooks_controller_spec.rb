@@ -421,26 +421,45 @@ describe ForeignWebhooksController do
   end
 
   describe "POST sns" do
-    it "enqueues a HandleSnsTranscoderEventWorker job with correct params" do
-      notification = { abc: "123" }
-      post :sns, body: notification.to_json, as: :json
+    context "when SNS notification is valid" do
+      before do
+        allow_any_instance_of(Aws::SNS::MessageVerifier).to receive(:authentic?).and_return(true)
+      end
 
-      expect(HandleSnsTranscoderEventWorker).to have_enqueued_sidekiq_job(notification)
+      it "enqueues a HandleSnsTranscoderEventWorker job with correct params" do
+        notification = { abc: "123" }
+        post :sns, body: notification.to_json, as: :json
+
+        expect(HandleSnsTranscoderEventWorker).to have_enqueued_sidekiq_job(notification)
+      end
+
+      context "body contains invalid chars" do
+        controller(ForeignWebhooksController) do
+          skip_before_action :set_signup_referrer
+        end
+
+        before do
+          routes.draw { post "sns" => "foreign_webhooks#sns" }
+        end
+
+        it "enqueues a HandleSnsTranscoderEventWorker job after removing invalid chars" do
+          post :sns, body: '{ "abc"#012: "xyz" }', as: :json
+
+          expect(HandleSnsTranscoderEventWorker).to have_enqueued_sidekiq_job({ abc: "xyz" })
+        end
+      end
     end
 
-    context "body contains invalid chars" do
-      controller(ForeignWebhooksController) do
-        skip_before_action :set_signup_referrer
-      end
-
+    context "when SNS notification is invalid" do
       before do
-        routes.draw { post "sns" => "foreign_webhooks#sns" }
+        allow_any_instance_of(Aws::SNS::MessageVerifier).to receive(:authentic?).and_return(false)
       end
 
-      it "enqueues a HandleSnsTranscoderEventWorker job after removing invalid chars" do
-        post :sns, body: '{ "abc"#012: "xyz" }', as: :json
+      it "renders bad request response and does not enqueue a job" do
+        post :sns, body: { abc: "123" }.to_json, as: :json
 
-        expect(HandleSnsTranscoderEventWorker).to have_enqueued_sidekiq_job({ abc: "xyz" })
+        expect(response).to be_a_bad_request
+        expect(HandleSnsTranscoderEventWorker.jobs.size).to eq(0)
       end
     end
   end
@@ -485,6 +504,35 @@ describe ForeignWebhooksController do
 
         expect(response).to be_a_bad_request
         expect(HandleSnsMediaconvertEventWorker.jobs.size).to eq(0)
+      end
+    end
+  end
+
+  describe "POST sns_aws_config" do
+    let(:notification) { { "configurationItemDiff" => { "changeType" => "UPDATE" } } }
+
+    context "when SNS notification is valid" do
+      before do
+        allow_any_instance_of(Aws::SNS::MessageVerifier).to receive(:authentic?).and_return(true)
+      end
+
+      it "enqueues a HandleSnsAwsConfigEventWorker job with the notification" do
+        post :sns_aws_config, body: notification.to_json, as: :json
+
+        expect(HandleSnsAwsConfigEventWorker).to have_enqueued_sidekiq_job(notification)
+      end
+    end
+
+    context "when SNS notification is invalid" do
+      before do
+        allow_any_instance_of(Aws::SNS::MessageVerifier).to receive(:authentic?).and_return(false)
+      end
+
+      it "renders bad request response and does not enqueue a job" do
+        post :sns_aws_config, body: notification.to_json, as: :json
+
+        expect(response).to be_a_bad_request
+        expect(HandleSnsAwsConfigEventWorker.jobs.size).to eq(0)
       end
     end
   end
