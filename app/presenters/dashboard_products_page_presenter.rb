@@ -8,6 +8,14 @@ class DashboardProductsPagePresenter
   include Rails.application.routes.url_helpers
 
   PER_PAGE = 50
+  # Deep ActiveStorage chain for rendering each row's thumbnail. Kept OUT of the
+  # paginated relation: `includes` turns it into ~11 LEFT JOINs on the literal,
+  # so pagy's DISTINCT/ORDER BY over a seller's full catalogue fans out and can
+  # take tens of seconds (GUMROAD-1AS). Preload it only for the returned page.
+  THUMBNAIL_INCLUDES = [
+    thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+    thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+  ].freeze
 
   attr_reader :products_sort, :memberships_sort, :query
 
@@ -121,18 +129,11 @@ class DashboardProductsPagePresenter
     end
 
     def paginated_products
-      products = seller
-        .products
-        .includes([
-                    thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
-                    thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
-                  ])
-        .non_membership
-        .visible
+      products = seller.products.non_membership.visible
       products = archived? ? products.archived : products.not_archived
       products = products.where("links.name like ?", "%#{query}%") if query.present?
 
-      sort_and_paginate_products(
+      pagination, products = sort_and_paginate_products(
         key: products_sort&.dig(:key),
         direction: products_sort&.dig(:direction),
         page: products_page,
@@ -140,6 +141,9 @@ class DashboardProductsPagePresenter
         per_page: PER_PAGE,
         user_id: seller.id
       )
+      # Paginate lean (no thumbnail JOINs), then load thumbnails only for the page rows.
+      ActiveRecord::Associations::Preloader.new(records: products, associations: THUMBNAIL_INCLUDES).call
+      [pagination, products]
     end
 
     def memberships_data(memberships)
