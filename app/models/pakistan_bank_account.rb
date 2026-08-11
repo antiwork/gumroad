@@ -12,7 +12,8 @@ class PakistanBankAccount < BankAccount
   validate :validate_account_number
 
   def routing_number
-    "#{bank_code}"
+    # Stripe's Pakistan directory rejects branch-specific 11-character BICs.
+    bank_code.first(8)
   end
 
   def bank_account_type
