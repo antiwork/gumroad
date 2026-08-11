@@ -45,9 +45,9 @@ describe DominicanRepublicBankAccount do
   end
 
   describe "#validate_bank_code" do
-    it "allows 1 to 3 digits only" do
-      expect(build(:dominican_republic_bank_account, bank_code: "1")).to be_valid
-      expect(build(:dominican_republic_bank_account, bank_code: "12")).to be_valid
+    it "allows exactly 3 digits" do
+      expect(build(:dominican_republic_bank_account, bank_code: "1")).not_to be_valid
+      expect(build(:dominican_republic_bank_account, bank_code: "12")).not_to be_valid
       expect(build(:dominican_republic_bank_account, bank_code: "123")).to be_valid
       expect(build(:dominican_republic_bank_account, bank_code: "1234")).not_to be_valid
       expect(build(:dominican_republic_bank_account, bank_code: "a12")).not_to be_valid

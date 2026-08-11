@@ -1789,6 +1789,7 @@ const BankAccountSection = ({
                       placeholder="4232"
                       maxLength={5}
                       disabled={isFormDisabled}
+                      aria-invalid={errorFieldNames.has("branch_code")}
                       onChange={(evt) => updateBankAccount({ branch_code: evt.target.value })}
                     />
                   </Fieldset>

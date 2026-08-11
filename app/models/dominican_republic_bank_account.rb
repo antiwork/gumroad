@@ -3,7 +3,11 @@
 class DominicanRepublicBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "DO"
 
-  BANK_CODE_FORMAT_REGEX = /\A\d{1,3}\z/
+  # Exactly 3 digits, not 1-3: gp#2050's Stripe test only confirmed 3-digit codes (003/007/021)
+  # as valid routing numbers. #7171 loosened this to 1-3 digits as a side effect of its own
+  # (unrelated, since-reverted) branch_code work; restoring the exact-3 constraint Nyoman set in
+  # 1301ff656 rather than reintroducing that unverified laxity.
+  BANK_CODE_FORMAT_REGEX = /\A\d{3}\z/
   BRANCH_CODE_FORMAT_REGEX = /\A\d{1,5}\z/
   ACCOUNT_NUMBER_FORMAT_REGEX = /\A\d{1,28}\z/
   private_constant :BANK_CODE_FORMAT_REGEX, :BRANCH_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX
