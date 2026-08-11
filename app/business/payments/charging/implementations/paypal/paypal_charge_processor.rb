@@ -623,11 +623,11 @@ class PaypalChargeProcessor
   private_class_method :ensure_tax_does_not_dwarf_price!
 
   def self.raise_tax_price_mismatch!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
-    ErrorNotifier.notify(
-      "PayPal order tax/VAT is implausibly large relative to taxable base",
-      submitted_price_cents_usd: price_cents_usd,
-      submitted_shipping_cents_usd: shipping_cents_usd,
-      submitted_tax_cents_usd: tax_cents_usd
+    # Buyer-triggerable on an unauthenticated (rate-limited) endpoint, so log for forensics
+    # instead of paging Sentry per rejected attempt (gp#2008 amplification/griefing vector).
+    Rails.logger.warn(
+      "PayPal order rejected: tax/VAT implausibly large relative to taxable base " \
+      "(price_cents_usd=#{price_cents_usd}, shipping_cents_usd=#{shipping_cents_usd}, tax_cents_usd=#{tax_cents_usd})"
     )
     raise ChargeProcessorError, "PayPal order tax/VAT is implausibly large relative to taxable base"
   end
@@ -667,13 +667,11 @@ class PaypalChargeProcessor
   private_class_method :ensure_shipping_matches_product!
 
   def self.raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:, valid_shipping_rates_usd: [])
-    ErrorNotifier.notify(
-      "PayPal order shipping does not match Gumroad product shipping",
-      product_id: product.id,
-      is_physical: product.is_physical,
-      submitted_shipping_cents_usd: shipping_cents_usd,
-      quantity:,
-      valid_shipping_rates_usd:
+    # Buyer-triggerable rejection: log, don't page Sentry (see raise_tax_price_mismatch!).
+    Rails.logger.warn(
+      "PayPal order rejected: shipping does not match Gumroad product shipping " \
+      "(product_id=#{product.id}, is_physical=#{product.is_physical}, shipping_cents_usd=#{shipping_cents_usd}, " \
+      "quantity=#{quantity}, valid_shipping_rates_usd=#{valid_shipping_rates_usd})"
     )
     raise ChargeProcessorError, "PayPal order shipping does not match Gumroad product shipping"
   end

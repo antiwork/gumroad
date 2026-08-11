@@ -2600,6 +2600,30 @@ describe PaypalChargeProcessor, :vcr do
       end.to raise_error(ChargeProcessorError, /implausibly large/)
     end
 
+    it "logs a rejection instead of paging Sentry so the unauthenticated endpoint can't amplify Sentry" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 17_50)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      attack_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 1,
+        shipping_cents: 0,
+        tax_cents: 17_49,
+        exclusive_tax_cents: 17_49,
+        total_cents: 17_50,
+        quantity: 1,
+      }
+
+      expect(ErrorNotifier).not_to receive(:notify)
+      expect(Rails.logger).to receive(:warn).with(/tax\/VAT implausibly large relative to taxable base/)
+      expect do
+        PaypalChargeProcessor.create_order_from_product_info(attack_purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /implausibly large/)
+    end
+
     it "computes the platform fee on non-VAT tax so an in-ratio tax shift cannot reduce it" do
       creator = create(:user)
       product = create(:product, user: creator, price_cents: 17_50)
