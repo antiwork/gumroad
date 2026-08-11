@@ -312,13 +312,14 @@ describe AffiliatedProductsPresenter do
 
       it "keeps the pagination total in sync with the grouped rows when duplicate product-affiliate pairs exist" do
         # Existing duplicate rows remain until a later cleanup adds the unique index.
-        ProductAffiliate.insert!(
+        duplicate_attributes = {
           affiliate_id: direct_affiliate_one.id,
           link_id: creator_one_product_one.id,
           affiliate_basis_points: 25_00,
           created_at: Time.current,
           updated_at: Time.current
-        )
+        }
+        ProductAffiliate.insert!(duplicate_attributes)
 
         grouped_row_count = described_class.new(affiliate_user).send(:affiliated_products).length
 
