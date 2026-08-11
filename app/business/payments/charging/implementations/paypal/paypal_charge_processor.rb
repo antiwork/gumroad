@@ -644,20 +644,21 @@ class PaypalChargeProcessor
   private_class_method :paypal_fee_basis_cents
 
   def self.ensure_shipping_matches_product!(product:, quantity:, shipping_cents_usd:)
-    return if shipping_cents_usd <= 0
-
     quantity = 1 if quantity <= 0
-    return raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:) unless product.is_physical
 
-    tolerance = quantity
+    unless product.is_physical
+      # Non-physical products carry no shipping, so only zero is valid.
+      return if shipping_cents_usd <= 0
+
+      return raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:)
+    end
+
+    # A published physical product always has an alive destination, so submitted shipping —
+    # including zero — must match a configured rate (zero only when a free rate exists). USD
+    # converts nothing so match exactly; non-USD rounds per rate term, allow a cent of drift per unit.
+    tolerance = product.price_currency_type.to_s.casecmp?("usd") ? 0 : quantity
     valid_shipping_rates_usd = product.shipping_destinations.alive.map do |shipping_destination|
-      # ShippingDestination#calculate_shipping_rate returns USD cents after converting each
-      # product-currency rate term with CurrencyHelper#get_usd_cents, so this compares USD cents
-      # to USD cents even for non-USD physical products.
-      shipping_destination.calculate_shipping_rate(
-        quantity:,
-        currency_type: product.price_currency_type
-      )
+      shipping_destination.calculate_shipping_rate(quantity:, currency_type: product.price_currency_type)
     end.compact
 
     return if valid_shipping_rates_usd.any? { |rate| (shipping_cents_usd - rate).abs <= tolerance }
