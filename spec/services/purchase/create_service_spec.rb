@@ -8,6 +8,20 @@ describe Purchase::CreateService, :vcr do
   let(:buyer) { create(:user, email:) }
   let(:zip_code) { "12345" }
 
+  def signed_buyer_currency_quote(seller:, product:, rate:)
+    payload = {
+      "charges" => [
+        {
+          "seller_id" => seller.id,
+          "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
+          "listed_currency_rates" => { product.unique_permalink => rate },
+          "listed_currency_codes" => { product.unique_permalink => product.price_currency_type.to_s.downcase },
+        }
+      ]
+    }
+    Rails.application.message_verifier(Checkout::BuyerCurrencyQuote::TOKEN_PURPOSE).generate(payload)
+  end
+
   let(:price) { 600 }
   let(:max_purchase_count) { nil }
   let(:product) { create(:product, user:, price_cents: price, max_purchase_count:) }
@@ -897,6 +911,60 @@ describe Purchase::CreateService, :vcr do
   end
 
   context "when the user has a different currency" do
+    it "uses the quote-bound rate for physical shipping" do
+      physical_product = create(
+        :physical_product,
+        user:,
+        price_currency_type: Currency::EUR,
+        price_cents: 10_00
+      )
+      physical_product.shipping_destinations.destroy_all
+      physical_product.shipping_destinations << create(
+        :shipping_destination,
+        country_code: Compliance::Countries::DEU.alpha2,
+        one_item_rate_cents: 250,
+        multiple_items_rate_cents: 200
+      )
+      quote_params = base_params.deep_dup
+      quote_params[:purchase].merge!(
+        perceived_price_cents: 10_00,
+        full_name: "Buyer Example",
+        street_address: "123 Example Street",
+        city: "Berlin",
+        country: Compliance::Countries::DEU.alpha2,
+        state: "BE",
+        zip_code: "10115"
+      )
+      quote_params[:is_part_of_combined_charge] = true
+      quote_params[:buyer_currency_quote] = signed_buyer_currency_quote(
+        seller: user,
+        product: physical_product,
+        rate: "0.9"
+      )
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR).and_return("0.8")
+
+      purchase, _ = Purchase::CreateService.new(product: physical_product, params: quote_params).perform
+
+      expect(purchase.errors).to be_empty
+      expect(purchase.shipping_cents).to eq(278)
+    end
+
+    it "ignores a quote-bound rate after the product's listed currency changes" do
+      product.update!(price_currency_type: Currency::EUR, price_cents: price)
+      quote = signed_buyer_currency_quote(seller: user, product:, rate: "0.9")
+      product.update!(price_currency_type: Currency::GBP, price_cents: price)
+      quote_params = base_params.deep_dup
+      quote_params[:is_part_of_combined_charge] = true
+      quote_params[:buyer_currency_quote] = quote
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(:gbp).and_return("0.8")
+
+      purchase, _ = Purchase::CreateService.new(product:, params: quote_params).perform
+
+      expect(purchase.errors).to be_empty
+      expect(purchase.rate_converted_to_usd.to_d).to eq(BigDecimal("0.8"))
+      expect(purchase.price_cents).to eq(750)
+    end
+
     describe "english pound" do
       it "sets the displayed price on the purchase" do
         product.update!(price_currency_type: :gbp, price_cents: 600)
@@ -1237,6 +1305,25 @@ describe Purchase::CreateService, :vcr do
   context "for a preorder purchase" do
     let(:product_in_preorder) { create(:product, user:, price_cents: price, is_in_preorder_state: true) }
     let!(:preorder_product) { create(:preorder_link, link: product_in_preorder) }
+
+    it "uses the quote-bound rate for the later charge amount" do
+      product_in_preorder.update!(price_currency_type: Currency::EUR, price_cents: price)
+      quote_params = base_preorder_params.deep_dup
+      quote_params[:is_part_of_combined_charge] = true
+      quote_params[:buyer_currency_quote] = signed_buyer_currency_quote(
+        seller: user,
+        product: product_in_preorder,
+        rate: "0.9"
+      )
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(:eur).and_return("0.8")
+
+      purchase, _ = Purchase::CreateService.new(product: product_in_preorder, params: quote_params).perform
+
+      expect(purchase.errors).to be_empty
+      expect(purchase.rate_converted_to_usd.to_d).to eq(BigDecimal("0.9"))
+      expected_line_items = [{ permalink: product_in_preorder.unique_permalink, canonical_price_cents: 667 }]
+      expect(Purchase::FixLaterChargePresentmentService.canonical_line_items_for([purchase])).to eq(expected_line_items)
+    end
 
     it "creates the preorder and its auth charge, with successful states" do
       purchase, _ = Purchase::CreateService.new(

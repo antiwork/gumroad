@@ -188,11 +188,11 @@ $ nomad run sidekiq_worker.nomad
 
 ## Deploying to a preview app
 
-Add the `preview` label to a pull request to deploy its branch to a preview app. This works for any branch except `main` and `comp-assets-*`.
+Every branch build deploys a preview app automatically — no label and no open pull request required. This works for any branch except `main` and `comp-assets-*`. Do not add a `preview` label; the label workflow is gone (see `.buildkite/scripts/preview_gate.sh`). Each subsequent push to the branch redeploys automatically, and running 50+ preview apps in parallel is a supported state.
 
-Adding the label triggers a Buildkite build that deploys the branch. Each subsequent push to a labeled branch redeploys automatically.
+The preview app URL is `https://<app>.apps.staging.gumroad.org`, where `<app>` is the branch name lowercased with non-alphanumerics replaced by `-`, any `deploy-` prefix stripped, and truncated to 32 characters (`get_app_name` in the deployment repo's `nomad/staging/deploy_branch/deploy_branch_common.sh`).
 
-The preview app URL is posted on the pull request as a GitHub deployment: look for the "View deployment" button (and the Deployments section), which shows the deploy in progress and links to the running app once it is ready.
+When the branch has an open pull request, the URL is also posted there as a GitHub deployment: look for the "View deployment" button (and the Deployments section), which shows the deploy in progress and links to the running app once it is ready. The deployment environment is named `preview/<app>`; deployments are created against the commit SHA, so query the Deployments API by environment rather than by ref.
 
 Deployments are removed automatically when the associated branch is deleted in the repository.
 

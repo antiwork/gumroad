@@ -32,13 +32,16 @@ class ShippingDestination < ApplicationRecord
   #
   # Quantity - Quantity of items being purchased, determines the shipping rate (one/multiple) used
   # Currency Type - The three-character string (code) representing the currency the product/shipping rate was configured in
+  # Rate - optional. Reuses this FX rate instead of a fresh `get_rate` lookup, so a caller that
+  #   also needs the rate elsewhere (e.g. binding a buyer-currency quote) gets the same reading
+  #   this conversion used rather than a second cache read that can straddle a rate refresh.
   #
   # Returns nil if the quantity is less than 1. Returns a numeric value otherwise.
-  def calculate_shipping_rate(quantity: 0, currency_type: "usd")
+  def calculate_shipping_rate(quantity: 0, currency_type: "usd", rate: nil)
     return nil if quantity < 1
 
-    shipping_rate  = get_usd_cents(currency_type, one_item_rate_cents)
-    shipping_rate += get_usd_cents(currency_type, multiple_items_rate_cents * (quantity - 1))
+    shipping_rate  = get_usd_cents(currency_type, one_item_rate_cents, rate:)
+    shipping_rate += get_usd_cents(currency_type, multiple_items_rate_cents * (quantity - 1), rate:)
 
     shipping_rate
   end

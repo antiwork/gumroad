@@ -2370,8 +2370,8 @@ class Purchase < ApplicationRecord
   #
   #                    if set to `false`, it means we have a user in session and if charge requires further authentication,
   #                    the method should succeed and attach a `charge_intent` with `requires_action? == true`.
-  def process!(off_session: true)
-    prepare_for_charge!
+  def process!(off_session: true, locked_rate: nil)
+    prepare_for_charge!(locked_rate:)
     charge!(off_session:)
   end
 
@@ -2475,7 +2475,7 @@ class Purchase < ApplicationRecord
     Purchase::MarkFailedService.new(self).perform
   end
 
-  def set_price_and_rate
+  def set_price_and_rate(locked_rate: nil)
     if once_per_cart_discount_allocation.present? && !has_cached_offer_code?
       allocated_offer_code = OfferCode.find_by(id: once_per_cart_discount_allocation[:offer_code_id])
       if allocated_offer_code&.is_cents? && allocated_offer_code.once_per_cart?
@@ -2513,8 +2513,12 @@ class Purchase < ApplicationRecord
 
     self.displayed_price_cents = determine_customized_price_cents || calculate_price_range_cents || minimum_paid_price_cents
     self.displayed_price_currency_type = link.price_currency_type
-    self.price_cents = displayed_price_usd_cents
-    self.rate_converted_to_usd = get_rate(displayed_price_currency_type)
+    # Reusing the quote's bound rate here (rather than a fresh `get_rate`) keeps this
+    # purchase's total in agreement with what BuyerCurrencyQuote.verify! signed
+    # (gumroad-private#1958) — a cache refresh between quote and charge would otherwise
+    # disagree with the token by a few cents and fail closed as buyer_currency_quote_invalid.
+    self.price_cents = locked_rate.present? ? get_usd_cents(displayed_price_currency_type, displayed_price_cents, rate: locked_rate) : displayed_price_usd_cents
+    self.rate_converted_to_usd = locked_rate.present? ? locked_rate.to_s : get_rate(displayed_price_currency_type)
     self.total_transaction_cents = self.price_cents
     self.affiliate_credit_cents = determine_affiliate_balance_cents
     self.tax_cents = 0
@@ -2540,12 +2544,12 @@ class Purchase < ApplicationRecord
     )
   end
 
-  def prepare_for_charge!
+  def prepare_for_charge!(locked_rate: nil)
     reservable_offer_code = offer_code if offer_code&.is_cents? && offer_code.once_per_cart? &&
       offer_code.max_purchase_count.present? &&
       !does_not_count_towards_max_purchases && !is_test_purchase?
 
-    self.chargeable = process_without_charging!(reservable_offer_code:)
+    self.chargeable = process_without_charging!(reservable_offer_code:, locked_rate:)
   end
 
   def update_balance_and_mark_successful!
@@ -4281,8 +4285,8 @@ class Purchase < ApplicationRecord
       link.save!
     end
 
-    def process_without_charging!(reservable_offer_code: nil)
-      set_price_and_rate
+    def process_without_charging!(reservable_offer_code: nil, locked_rate: nil)
+      set_price_and_rate(locked_rate:)
       calculate_fees
       if reservable_offer_code
         # Serialize the final availability check with the reservation write.
@@ -4297,7 +4301,7 @@ class Purchase < ApplicationRecord
 
       create_sales_tax_info!
 
-      calculate_shipping
+      calculate_shipping(locked_rate:)
       save
 
       if free_purchase?
@@ -5017,7 +5021,7 @@ class Purchase < ApplicationRecord
       self.was_tax_excluded_from_price = true
     end
 
-    def calculate_shipping
+    def calculate_shipping(locked_rate: nil)
       return unless link.is_physical
       return if country.blank?
 
@@ -5027,7 +5031,7 @@ class Purchase < ApplicationRecord
         preorder.authorization_purchase.shipping_cents
       else
         shipping_rate = ShippingDestination.for_product_and_country_code(product: link, country_code: Compliance::Countries.find_by_name(country)&.alpha2)
-        shipping_rate.calculate_shipping_rate(quantity:, currency_type: link.price_currency_type)
+        shipping_rate.calculate_shipping_rate(quantity:, currency_type: link.price_currency_type, rate: locked_rate)
       end
     end
 

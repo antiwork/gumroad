@@ -192,13 +192,15 @@ describe RequeueTransientlyFailedPayoutsJob do
       expect(seller.reload.unpaid_balance_cents).to eq(0)
     end
 
-    context "when a monthly seller's next cycle is weeks away" do
+    context "when the seller's cadence pushes their cycle weeks past this batch" do
+      # `around`, not `travel_to` inside the example, so the shared `before` hook (which seeds
+      # a balance from `payout_period_end_date`) and this example's own period computation read
+      # the same frozen clock.
       around do |example|
-        # The parent setup creates the balance, so the time freeze must wrap the setup too.
         travel_to(Time.utc(2026, 8, 4, 14, 0, 0)) { example.run }
       end
 
-      it "creates a new payout" do
+      it "creates a new payout for a monthly-cadence seller whose next cycle is weeks away" do
         # The incident shape: a monthly seller's next cadence Friday is a month out, so the
         # payout-cycle gate would reject them and their balance would sit unpaid until then.
         period = User::PayoutSchedule.manual_payout_end_date
