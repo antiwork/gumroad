@@ -467,3 +467,39 @@ describe "InstallmentSendInstallment"  do
     end
   end
 end
+
+describe Installment, "workflow reschedule references", :freeze_time do
+  it "preserves the reschedule reference when it defers the email" do
+    seller = create(:user)
+    product = create(:subscription_product, user: seller)
+    subscription = create(:subscription, link: product)
+    purchase = create(
+      :free_purchase,
+      link: product,
+      subscription:,
+      is_original_subscription_purchase: true,
+      created_at: 1.week.ago
+    )
+    create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 6.days.ago)
+    create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
+    workflow = create(:workflow, seller:, link: product)
+    installment = create(:published_installment, seller:, link: product, workflow:)
+    rule = create(:installment_rule, installment:, delayed_delivery_time: 3.days)
+    reference_time = installment.workflow_delivery_reference_time(purchase).change(usec: 0).iso8601
+
+    installment.send_installment_from_workflow_for_purchase(
+      purchase.id,
+      reschedule_reference_time: reference_time
+    )
+
+    expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+      installment.id,
+      rule.version,
+      purchase.id,
+      nil,
+      nil,
+      nil,
+      reference_time
+    )
+  end
+end
