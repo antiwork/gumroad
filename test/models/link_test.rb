@@ -349,10 +349,16 @@ class LinkTest < ActiveSupport::TestCase
   test "publish succeeds when the content moderation check passes" do
     product = create_product(purchase_disabled_at: Time.current)
     stub_publish_enforcements(product)
-    ContentModeration::ModerateRecordService.stub(:check, moderation_result(passed: true)) do
+    check_count = 0
+    check = lambda do |*|
+      check_count += 1
+      moderation_result(passed: true)
+    end
+    ContentModeration::ModerateRecordService.stub(:check, check) do
       product.publish!
     end
     assert_nil product.reload.purchase_disabled_at
+    assert_equal 1, check_count
   end
 
   test "publish clears the publishing flag after it completes" do

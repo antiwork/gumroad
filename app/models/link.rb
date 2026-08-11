@@ -241,7 +241,9 @@ class Link < ApplicationRecord
   validate :one_coffee_per_user, if: -> { native_type == Link::NATIVE_TYPE_COFFEE && (new_record? || (archived_changed? && !archived?)) }
   validate :quantity_enabled_state_is_allowed
   validate :default_offer_code_must_be_valid
-  validate :content_moderation_check, if: -> { publishing? || (persisted? && published? && (name_changed? || description_changed?)) }
+  validate :content_moderation_check, if: -> {
+    !@content_moderation_checked_for_publish && (publishing? || (persisted? && published? && (name_changed? || description_changed?)))
+  }
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
@@ -513,6 +515,11 @@ class Link < ApplicationRecord
     transaction_committed = false
     lock_retries = 0
     begin
+      errors.clear
+      content_moderation_check
+      raise ActiveRecord::RecordInvalid, self if errors.any?
+
+      @content_moderation_checked_for_publish = true
       Link.transaction do
         AfterCommitEverywhere.after_commit { transaction_committed = true } unless caller_has_transaction
         current_flags = Link.where(id:).lock.pick(:flags).to_i
@@ -555,6 +562,7 @@ class Link < ApplicationRecord
       retry if lock_retries <= 2 && !caller_has_transaction && !transaction_committed
       raise
     ensure
+      @content_moderation_checked_for_publish = false
       self.publishing = false
     end
   end
