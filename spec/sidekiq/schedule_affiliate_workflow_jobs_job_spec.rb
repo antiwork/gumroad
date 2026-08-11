@@ -96,6 +96,55 @@ describe ScheduleAffiliateWorkflowJobsJob do
     expect(product_affiliate.reload.workflow_schedule_token).to be_nil
   end
 
+  it "retries only the affiliates that did not complete" do
+    second_affiliate = create(:direct_affiliate, seller: affiliate.seller, send_posts: true)
+    second_product = create(:product, user: affiliate.seller)
+    assignments = []
+    ProductAffiliate.transaction do
+      assignments << product_affiliate
+      assignments << create(:product_affiliate, affiliate: second_affiliate, product: second_product)
+    end
+    token = assignments.first.reload.workflow_schedule_token
+
+    calls = Hash.new(0)
+    failed_affiliate_id = nil
+    allow_any_instance_of(DirectAffiliate).to receive(:schedule_workflow_jobs) do |scheduled_affiliate|
+      calls[scheduled_affiliate.id] += 1
+      if failed_affiliate_id.nil? && calls.size == 2
+        failed_affiliate_id = scheduled_affiliate.id
+        raise ProductAffiliate::WorkflowJobNotEnqueuedError
+      end
+    end
+
+    expect do
+      described_class.new.perform(token)
+    end.to raise_error(ProductAffiliate::WorkflowJobNotEnqueuedError)
+
+    completed_affiliate_id = calls.keys.find { _1 != failed_affiliate_id }
+    completed_assignment = assignments.find { _1.affiliate_id == completed_affiliate_id }
+    failed_assignment = assignments.find { _1.affiliate_id == failed_affiliate_id }
+    expect(completed_assignment.reload.workflow_schedule_token).to be_nil
+    expect(failed_assignment.reload.workflow_schedule_token).to eq(token)
+
+    described_class.new.perform(token)
+
+    expect(calls[completed_affiliate_id]).to eq(1)
+    expect(calls[failed_affiliate_id]).to eq(2)
+    expect(failed_assignment.reload.workflow_schedule_token).to be_nil
+  end
+
+  it "does not clear a claim that replaced an expired lease" do
+    product_affiliate
+    replacement_token = "#{Time.current.to_i}:#{SecureRandom.uuid}"
+    allow_any_instance_of(DirectAffiliate).to receive(:schedule_workflow_jobs) do
+      ProductAffiliate.where(id: product_affiliate.id).update_all(workflow_schedule_token: replacement_token)
+    end
+
+    described_class.new.perform(workflow_schedule_token)
+
+    expect(product_affiliate.reload.workflow_schedule_token).to eq(replacement_token)
+  end
+
   it "keeps the assignment group pending when delivery scheduling fails" do
     product_affiliate
     allow_any_instance_of(DirectAffiliate).to receive(:schedule_workflow_jobs).and_raise(ProductAffiliate::WorkflowJobNotEnqueuedError)

@@ -311,13 +311,15 @@ describe AffiliatedProductsPresenter do
       end
 
       it "keeps the pagination total in sync with the grouped rows when duplicate product-affiliate pairs exist" do
-        # The (link, affiliate) uniqueness is enforced only by a model
-        # validation — there is no unique database index — so duplicate rows
-        # for the same pair (e.g. from concurrent writes) can exist in
-        # production. The precomputed pagination count uses the same grouping
-        # keys as the record query, so both must agree even in that state.
-        duplicate = build(:product_affiliate, affiliate: direct_affiliate_one, product: creator_one_product_one, affiliate_basis_points: 25_00)
-        duplicate.save!(validate: false)
+        # Existing duplicate rows remain until a later cleanup adds the unique index.
+        duplicate_attributes = {
+          affiliate_id: direct_affiliate_one.id,
+          link_id: creator_one_product_one.id,
+          affiliate_basis_points: 25_00,
+          created_at: Time.current,
+          updated_at: Time.current
+        }
+        ProductAffiliate.insert!(duplicate_attributes)
 
         grouped_row_count = described_class.new(affiliate_user).send(:affiliated_products).length
 

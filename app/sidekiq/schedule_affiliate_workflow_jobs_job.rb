@@ -15,11 +15,13 @@ class ScheduleAffiliateWorkflowJobsJob
     return if product_affiliates.empty?
 
     product_affiliates.group_by(&:affiliate).each do |affiliate, assignments|
-      next if !affiliate.is_a?(DirectAffiliate) || affiliate.deleted? || !affiliate.send_posts
-
-      affiliate.schedule_workflow_jobs(triggering_product_affiliates: assignments)
+      if affiliate.is_a?(DirectAffiliate) && !affiliate.deleted? && affiliate.send_posts
+        affiliate.schedule_workflow_jobs(triggering_product_affiliates: assignments)
+      end
+      # Clear per affiliate so a retry after a mid-batch failure does not re-send completed affiliates' emails.
+      # Token scope keeps a stale worker from erasing a claim made after this job's lease expired.
+      ProductAffiliate.where(id: assignments.map(&:id), workflow_schedule_token:).update_all(workflow_schedule_token: nil)
     end
-    ProductAffiliate.where(workflow_schedule_token:).update_all(workflow_schedule_token: nil)
   ensure
     Makara::Context.release_all
   end
