@@ -310,8 +310,7 @@ describe AffiliatedProductsPresenter do
         expect(counting_queries_with_credits_join.grep(/OVER \(\)/)).to be_empty
       end
 
-      it "keeps the pagination total in sync with the grouped rows when duplicate product-affiliate pairs exist" do
-        # Existing duplicate rows remain until a later cleanup adds the unique index.
+      it "can no longer be given duplicate product-affiliate pairs to paginate" do
         duplicate_attributes = {
           affiliate_id: direct_affiliate_one.id,
           link_id: creator_one_product_one.id,
@@ -319,17 +318,10 @@ describe AffiliatedProductsPresenter do
           created_at: Time.current,
           updated_at: Time.current
         }
-        ProductAffiliate.insert!(duplicate_attributes)
 
-        grouped_row_count = described_class.new(affiliate_user).send(:affiliated_products).length
-
-        props = described_class.new(affiliate_user).affiliated_products_page_props
-        expected_pages = (grouped_row_count.to_f / AffiliatedProductsPresenter::PER_PAGE).ceil
-        expect(props[:pagination][:pages]).to eq(expected_pages)
-
-        last_page_props = described_class.new(affiliate_user, page: expected_pages).affiliated_products_page_props
-        expected_last_page_size = grouped_row_count - (expected_pages - 1) * AffiliatedProductsPresenter::PER_PAGE
-        expect(last_page_props[:affiliated_products].count).to eq(expected_last_page_size)
+        expect do
+          ProductAffiliate.insert!(duplicate_attributes)
+        end.to raise_error(ActiveRecord::RecordNotUnique)
       end
 
       it "counts pairs whose basis-points grouping key is NULL" do
