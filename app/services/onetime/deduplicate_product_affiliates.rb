@@ -85,13 +85,10 @@ module Onetime
       deleted
     end
 
-    # Pass 2b of the cleanup: the pairs left after passes 1 and 2a diverge on
-    # commission terms (affiliate_basis_points, flags). A human keep-rule
-    # (gumroad-private#2067) chose "keep the row the app resolves": readers resolve
-    # a pair through unordered LIMIT 1 lookups, so this pass keeps that row and
-    # deletes the rest, leaving the commission rate the app serves today unchanged.
-    # Recency was rejected as a ranking — in 61/95 pairs the newest row did not
-    # carry the highest rate, and unrelated persisted changes advance updated_at.
+    # Collapses pairs that still diverge on commission terms, keeping the row
+    # unordered LIMIT 1 lookups already resolve so the rate the app serves does
+    # not change. Recency is not a safe ranking here: updated_at advances on
+    # unrelated writes.
     def process_commission_divergent(dry_run: true)
       stick_to_primary unless dry_run
       eligible, untouched = divergent_pairs.partition { |pair| commission_divergent?(*pair) }
