@@ -239,17 +239,9 @@ const findPendingDeletions = (product: Product, lastSavedProduct: Product): Pend
 // server's Product::RichContentDeletionGuard).
 type ScopedPage = { page: Page; scope: string | null };
 
-// A page's client-generated id is unique WITHIN a scope, not across the whole
-// payload — a product-level page and a variant page (or two variants') can
-// legitimately carry the same id mid-move (gumroad-private#2023: the toggle
-// between shared and per-tier content passes pages through both scopes in
-// one save). Keying the lookup on id alone let the second scope's entry
-// silently clobber the first in the Map, so reconciliation read the WRONG
-// scope's sent snapshot for a page — corrupting its move_source_scope/
-// source_id bookkeeping and making the next save reference the same
-// underlying row from two scopes at once (the "references the same content
-// page more than once" guard). Scope-qualify the key so same-id pages in
-// different scopes stay distinct entries.
+// A page's client-generated id is only unique WITHIN a scope, not across the
+// whole payload (gumroad-private#2023). Key the lookup on scope+id so pages
+// sharing a raw id in different scopes don't clobber each other in the Map.
 const scopedPageKey = (scope: string | null, id: string) => `${scope ?? ""}\u0000${id}`;
 
 const allScopedRichContentPages = (product: Product): ScopedPage[] => [
