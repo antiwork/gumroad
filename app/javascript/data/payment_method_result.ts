@@ -164,16 +164,6 @@ export async function getPaymentMethodResult(
       };
     }
     case "paypal-native": {
-      if (selected.info.kind === "oneTime") {
-        return {
-          type: "new",
-          cardParamsResult: {
-            type: "paypal",
-            cardParams: preparePaypalPaymentMethodData(selected.info),
-            keepOnFile: selected.keepOnFile,
-          },
-        };
-      }
       return {
         type: "new",
         cardParamsResult: {

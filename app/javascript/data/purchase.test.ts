@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type CardPaymentMethodParams,
   type PaymentRequestPaymentMethodParams,
-  type PayPalNativePaymentMethodParams,
+  type ReusablePayPalNativePaymentMethodParams,
   type StripeErrorParams,
 } from "$app/data/payment_method_params";
 import {
@@ -34,11 +34,12 @@ const paymentRequestParams: PaymentRequestPaymentMethodParams = {
   wallet_type: "apple_pay",
 };
 
-const paypalParams: PayPalNativePaymentMethodParams = {
+const paypalParams: ReusablePayPalNativePaymentMethodParams = {
   status: "success",
   type: "paypal-native",
-  reusable: false,
-  paypal_order_id: "PAY-123",
+  reusable: true,
+  billingToken: "BA-TOKEN",
+  billing_agreement_id: "BA-123",
   visual: "buyer@example.com",
   card_country: "US",
 };
