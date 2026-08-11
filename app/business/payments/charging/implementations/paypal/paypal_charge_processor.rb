@@ -575,7 +575,7 @@ class PaypalChargeProcessor
     vat_cents_usd = get_usd_cents(currency, product_info[:vat_cents].to_i)
     ensure_shipping_matches_product!(product:, quantity: product_info[:quantity].to_i, shipping_cents_usd:)
     ensure_tax_does_not_dwarf_price!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
-    fee_basis_cents_usd = paypal_fee_basis_cents(price_cents_usd:, tax_cents_usd:, vat_cents_usd:)
+    fee_basis_cents_usd = paypal_fee_basis_cents(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:, vat_cents_usd:)
 
     purchase_unit_info = create_purchase_unit_info(permalink: product.unique_permalink,
                                                    item_name:,
@@ -617,7 +617,7 @@ class PaypalChargeProcessor
     vat_cents_usd = get_usd_cents(currency, product_info[:vat_cents].to_i)
     ensure_shipping_matches_product!(product:, quantity: product_info[:quantity].to_i, shipping_cents_usd:)
     ensure_tax_does_not_dwarf_price!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
-    fee_basis_cents_usd = paypal_fee_basis_cents(price_cents_usd:, tax_cents_usd:, vat_cents_usd:)
+    fee_basis_cents_usd = paypal_fee_basis_cents(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:, vat_cents_usd:)
 
     purchase_unit_info = create_purchase_unit_info(permalink: product.unique_permalink,
                                                    item_name:,
@@ -645,8 +645,8 @@ class PaypalChargeProcessor
   # Gumroad's percentage fee if the fee basis stayed on buyer-supplied `price_cents` alone. A
   # hard price floor can't tell that apart from a legitimate discount (offer code, PPP, rental),
   # so this bounds tax/VAT against price+validated shipping and computes the fee on price plus
-  # non-VAT tax. VAT stays separate because `gumroad_amount_for_paypal_order` already adds it
-  # through the `vat_cents` argument.
+  # validated shipping plus non-VAT tax. VAT stays separate because `gumroad_amount_for_paypal_order`
+  # already adds it through the `vat_cents` argument.
   MAX_TAX_TO_PRICE_RATIO = 0.35
   private_constant :MAX_TAX_TO_PRICE_RATIO
 
@@ -677,11 +677,13 @@ class PaypalChargeProcessor
   end
   private_class_method :raise_tax_price_mismatch!
 
-  def self.paypal_fee_basis_cents(price_cents_usd:, tax_cents_usd:, vat_cents_usd:)
-    # Buyer-submitted non-VAT tax cannot reduce the PayPal partner fee by moving cents out of
-    # price_cents. VAT is already collected by gumroad_amount_for_paypal_order(vat_cents:), so
-    # do not include that passthrough in the percentage-fee basis as well.
-    price_cents_usd + [tax_cents_usd - vat_cents_usd, 0].max
+  def self.paypal_fee_basis_cents(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:, vat_cents_usd:)
+    # Buyer-submitted shipping and non-VAT tax cannot reduce the PayPal partner fee by moving
+    # cents out of price_cents. Shipping has already been validated against the product's
+    # configured rates before this method runs. VAT is already collected by
+    # gumroad_amount_for_paypal_order(vat_cents:), so do not include that passthrough in the
+    # percentage-fee basis as well.
+    price_cents_usd + shipping_cents_usd + [tax_cents_usd - vat_cents_usd, 0].max
   end
   private_class_method :paypal_fee_basis_cents
 

@@ -247,7 +247,7 @@ describe PaypalController, :vcr do
     context "for affiliate sales" do
       let(:purchase_info) do
         {
-          amount_cents: product_info[:price_cents].to_i + product_info[:exclusive_tax_cents].to_i,
+          amount_cents: product_info[:price_cents].to_i + product_info[:shipping_cents].to_i + product_info[:exclusive_tax_cents].to_i,
           vat_cents: 0,
           affiliate_id: nil,
           was_recommended: false,

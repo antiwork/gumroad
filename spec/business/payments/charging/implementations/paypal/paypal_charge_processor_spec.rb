@@ -2418,7 +2418,7 @@ describe PaypalChargeProcessor, :vcr do
                         price_cents_usd: 15_00,
                         shipping_cents_usd: 1_50,
                         tax_cents_usd: 2_00,
-                        fee_cents_usd: 170,
+                        fee_cents_usd: 185,
                         total_cents_usd: 18_50,
                         quantity: 2 }
 
@@ -2453,7 +2453,7 @@ describe PaypalChargeProcessor, :vcr do
                         price_cents_usd: 15_47,
                         shipping_cents_usd: 1_55,
                         tax_cents_usd: 2_06,
-                        fee_cents_usd: 175,
+                        fee_cents_usd: 190,
                         total_cents_usd: 19_08,
                         quantity: 2 }
 
@@ -2488,7 +2488,7 @@ describe PaypalChargeProcessor, :vcr do
                         price_cents_usd: 15_47,
                         shipping_cents_usd: 1_55,
                         tax_cents_usd: 2_06,
-                        fee_cents_usd: 175,
+                        fee_cents_usd: 190,
                         total_cents_usd: 19_08,
                         quantity: 2 }
 
@@ -2526,7 +2526,7 @@ describe PaypalChargeProcessor, :vcr do
                         price_cents_usd: 15_47,
                         shipping_cents_usd: 1_55,
                         tax_cents_usd: 2_06,
-                        fee_cents_usd: 175,
+                        fee_cents_usd: 190,
                         total_cents_usd: 19_08,
                         quantity: 2 }
 
@@ -2565,7 +2565,7 @@ describe PaypalChargeProcessor, :vcr do
           price_cents_usd: 15_47,
           shipping_cents_usd: 1_55,
           tax_cents_usd: 2_06,
-          fee_cents_usd: 175,
+          fee_cents_usd: 190,
           total_cents_usd: 19_08,
           quantity: 2 }).and_call_original
 
@@ -2748,7 +2748,11 @@ describe PaypalChargeProcessor, :vcr do
         quantity: 1,
       }
 
+      expect(PaypalChargeProcessor).to receive(:create_purchase_unit_info).with(
+        hash_including(fee_cents_usd: 2_72)
+      ).and_call_original
       expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
+
       paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(physical_purchase_unit_info)
       expect(paypal_order_id).to eq("FAKE_ORDER_ID")
     end
