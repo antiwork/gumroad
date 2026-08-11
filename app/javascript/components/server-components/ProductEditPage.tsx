@@ -279,6 +279,11 @@ const applyCanonicalIds = (
     return canonicalId ? { ...file, id: canonicalId } : file;
   });
   for (const variant of product.variants) {
+    // sentPagesById is keyed by the id this variant was SENT under, which for
+    // a variant created by this very save is the local id, not the canonical
+    // one assigned below — capture it before the remap or every page lookup
+    // for a newly-created variant misses (gumroad-private#2023 follow-up).
+    const sentVariantId = variant.id;
     const canonicalId = variantMappings[variant.id];
     if (canonicalId) {
       variant.id = canonicalId;
@@ -297,7 +302,7 @@ const applyCanonicalIds = (
     const variantBaseline = variantBaselines[variant.id];
     if (variantBaseline) variant.loaded_integrations = variantBaseline;
     for (const page of variant.rich_content) {
-      const sent = sentPagesById.get(scopedPageKey(variant.id, page.id));
+      const sent = sentPagesById.get(scopedPageKey(sentVariantId, page.id));
       applyRichContentPageSaveResponse(
         page,
         response,
