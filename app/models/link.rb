@@ -510,9 +510,11 @@ class Link < ApplicationRecord
     self.draft = false
     self.publishing = true
     caller_has_transaction = Link.connection.transaction_open?
+    transaction_committed = false
     lock_retries = 0
     begin
       Link.transaction do
+        AfterCommitEverywhere.after_commit { transaction_committed = true } unless caller_has_transaction
         current_flags = Link.where(id:).lock.pick(:flags).to_i
         if caller_flags_change
           # Merge only the caller's changed bits because all Link flags share one column.
@@ -550,7 +552,7 @@ class Link < ApplicationRecord
       end
     rescue ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout
       lock_retries += 1
-      retry if lock_retries <= 2 && !caller_has_transaction
+      retry if lock_retries <= 2 && !caller_has_transaction && !transaction_committed
       raise
     ensure
       self.publishing = false

@@ -682,6 +682,29 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal 1, call_count
   end
 
+  test "publish! does not retry a deadlock raised after its transaction commits" do
+    _user, product = publish_context
+    product.stubs(:auto_transcode_videos?).returns(false)
+    commit_callbacks = []
+    transaction_calls = 0
+    transaction = lambda do |&block|
+      transaction_calls += 1
+      block.call
+      commit_callbacks.first.call
+      raise ActiveRecord::Deadlocked
+    end
+
+    AfterCommitEverywhere.stub(:after_commit, ->(&callback) { commit_callbacks << callback }) do
+      Link.stub(:transaction, transaction) do
+        Link.connection.stub(:transaction_open?, false) do
+          assert_raises(ActiveRecord::Deadlocked) { product.publish! }
+        end
+      end
+    end
+
+    assert_equal 1, transaction_calls
+  end
+
   test "publish! raises when the user has not confirmed their email address" do
     user, product = publish_context
     user.update!(confirmed_at: nil)
