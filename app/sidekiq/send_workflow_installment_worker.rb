@@ -47,6 +47,13 @@ class SendWorkflowInstallmentWorker
         recipient_reference_time:
       )
     end
+    if affiliate_user_id.present? && purchase_id.nil? && follower_id.nil? && subscription_id.nil? && recipient_reference_time.present?
+      return unless affiliate_matches_current_audience?(
+        installment:,
+        affiliate_user_id:,
+        recipient_reference_time:
+      )
+    end
 
     if purchase_id.present? && follower_id.nil? && affiliate_user_id.nil? && subscription_id.nil?
       installment.send_installment_from_workflow_for_purchase(purchase_id)
@@ -101,6 +108,52 @@ class SendWorkflowInstallmentWorker
       created_before = Time.zone.parse(filters[:created_before].to_s) if filters[:created_before]
       return false if created_after && follower.created_at <= created_after
       return false if created_before && follower.created_at >= created_before
+
+      true
+    end
+
+    def affiliate_matches_current_audience?(installment:, affiliate_user_id:, recipient_reference_time:)
+      reference_time = Time.zone.iso8601(recipient_reference_time)
+      if installment.is_for_new_customers_of_workflow && reference_time < installment.published_at
+        return false
+      end
+
+      affiliate = DirectAffiliate.alive.send_posts.find_by(
+        seller_id: installment.seller_id,
+        affiliate_user_id:
+      )
+      return false if affiliate.nil?
+      return false if SentPostEmail.exists?(post: installment, email: affiliate.affiliate_user.email)
+
+      member = AudienceMember.find_by(
+        seller_id: installment.seller_id,
+        email: affiliate.affiliate_user.email.downcase
+      )
+      return false if member.nil?
+
+      filters = installment.audience_members_filter_params
+      current_match = AudienceMember.filter(
+        seller_id: installment.seller_id,
+        params: filters.except(:created_after, :created_before),
+        with_ids: true,
+        ids: [member.id]
+      ).first
+      return false if current_match.nil?
+      return false unless affiliate_identity_matches_workflow_dates?(filters:, affiliate:)
+
+      product_affiliates = affiliate.product_affiliates.where(created_at: reference_time)
+      if installment.affiliate_products.present?
+        product_affiliates = product_affiliates.joins(:product).where(links: { unique_permalink: installment.affiliate_products })
+      end
+
+      product_affiliates.exists?
+    end
+
+    def affiliate_identity_matches_workflow_dates?(filters:, affiliate:)
+      created_after = Time.zone.parse(filters[:created_after].to_s) if filters[:created_after]
+      created_before = Time.zone.parse(filters[:created_before].to_s) if filters[:created_before]
+      return false if created_after && affiliate.created_at <= created_after
+      return false if created_before && affiliate.created_at >= created_before
 
       true
     end

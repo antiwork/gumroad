@@ -216,10 +216,6 @@ class AffiliatesController < Sellers::BaseController
         AffiliateMailer.notify_direct_affiliate_of_updated_products(affiliate.id).deliver_later
       end
 
-      unless is_editing_affiliate
-        affiliate.schedule_workflow_jobs
-      end
-
       { success: true }
     end
 

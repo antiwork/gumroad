@@ -3,6 +3,10 @@ dispatch_pending_workflow_installment_schedule_intents:
   cron: "* * * * *" # Every minute
   class: DispatchPendingWorkflowInstallmentScheduleIntentsJob
   description: Re-enqueues durable workflow schedule intents whose fast-path push was lost
+schedule_pending_affiliate_workflows:
+  cron: "* * * * *" # Every minute
+  class: ScheduleAffiliateWorkflowJobsJob
+  description: Re-enqueues affiliate workflow schedules whose fast-path push was lost
 find_expired_subscriptions_to_set_as_deactivated_worker:
   cron: "* * * * *" # Every minute
   class: FindExpiredSubscriptionsToSetAsDeactivatedWorker

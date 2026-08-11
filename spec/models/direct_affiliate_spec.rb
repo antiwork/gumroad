@@ -267,10 +267,103 @@ describe DirectAffiliate do
       workflow
     end
 
-    it "enqueues 2 installment jobs when an affiliate is created" do
+    it "preserves the product assignment time" do
+      reference_time = 2.hours.ago.change(usec: 0)
+      product_affiliate = direct_affiliate.product_affiliates.find_by!(link_id: product.id)
+      product_affiliate.update_columns(created_at: reference_time)
+      installment = affiliate_workflow.installments.first
+      rule = installment.installment_rule
+
       direct_affiliate.schedule_workflow_jobs
 
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        installment.id,
+        rule.version,
+        nil,
+        nil,
+        affiliate_user.id,
+        nil,
+        reference_time.iso8601
+      ).at(reference_time + rule.delayed_delivery_time)
+    end
+
+    it "does not schedule a product-scoped workflow for another product assignment" do
+      other_product = create(:product, user: seller)
+      other_product_affiliate = create(:product_affiliate, affiliate: direct_affiliate, product: other_product)
+      affiliate_workflow.installments.each do |installment|
+        installment.update!(affiliate_products: [product.unique_permalink])
+      end
+
+      direct_affiliate.schedule_workflow_jobs(triggering_product_affiliates: [other_product_affiliate])
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+    end
+
+    it "enqueues one delivery per installment for equivalent assignments" do
+      reference_time = 2.hours.ago.change(usec: 0)
+      first_assignment = direct_affiliate.product_affiliates.find_by!(link_id: product.id)
+      first_assignment.update_columns(created_at: reference_time)
+      second_product = create(:product, user: seller)
+      second_assignment = create(:product_affiliate, affiliate: direct_affiliate, product: second_product, created_at: reference_time)
+
+      direct_affiliate.schedule_workflow_jobs(triggering_product_affiliates: [first_assignment])
+      direct_affiliate.schedule_workflow_jobs(triggering_product_affiliates: [second_assignment])
+
       expect(SendWorkflowInstallmentWorker.jobs.size).to eq(2)
+    end
+
+    it "keeps assignments from separate times as separate triggers" do
+      first_assignment = direct_affiliate.product_affiliates.find_by!(link_id: product.id)
+      first_assignment.update_columns(created_at: 2.hours.ago.change(usec: 0))
+      second_product = create(:product, user: seller)
+      second_assignment = create(:product_affiliate, affiliate: direct_affiliate, product: second_product, created_at: 1.hour.ago.change(usec: 0))
+
+      direct_affiliate.schedule_workflow_jobs(triggering_product_affiliates: [first_assignment])
+      direct_affiliate.schedule_workflow_jobs(triggering_product_affiliates: [second_assignment])
+
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(4)
+    end
+
+    it "keeps separate workflow product scopes independent" do
+      first_assignment = direct_affiliate.product_affiliates.find_by!(link_id: product.id)
+      first_assignment.update_columns(created_at: 2.hours.ago.change(usec: 0))
+      second_product = create(:product, user: seller)
+      second_assignment = create(:product_affiliate, affiliate: direct_affiliate, product: second_product, created_at: 1.hour.ago.change(usec: 0))
+      first_installment, second_installment = affiliate_workflow.installments.order(:id).to_a
+      first_installment.update!(affiliate_products: [product.unique_permalink])
+      second_installment.update!(affiliate_products: [second_product.unique_permalink])
+
+      direct_affiliate.schedule_workflow_jobs(triggering_product_affiliates: [first_assignment])
+      direct_affiliate.schedule_workflow_jobs(triggering_product_affiliates: [second_assignment])
+
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(2)
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        first_installment.id,
+        first_installment.installment_rule.version,
+        nil,
+        nil,
+        affiliate_user.id,
+        nil,
+        first_assignment.created_at.iso8601
+      )
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        second_installment.id,
+        second_installment.installment_rule.version,
+        nil,
+        nil,
+        affiliate_user.id,
+        nil,
+        second_assignment.created_at.iso8601
+      )
+    end
+
+    it "keeps workflow date filters on the affiliate identity" do
+      direct_affiliate.update_columns(created_at: 3.days.ago)
+      affiliate_workflow.installments.each { _1.update!(created_after: 2.days.ago) }
+
+      direct_affiliate.schedule_workflow_jobs
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
     end
 
     it "does not enqueue installment jobs when the workflow is marked as member_cancellation and an affiliate is created" do
@@ -279,6 +372,41 @@ describe DirectAffiliate do
       direct_affiliate.schedule_workflow_jobs
 
       expect(SendWorkflowInstallmentWorker.jobs.size).to eq(0)
+    end
+
+    it "fails when Sidekiq does not accept a workflow email" do
+      allow(SendWorkflowInstallmentWorker).to receive(:perform_at).and_return(nil)
+
+      expect do
+        direct_affiliate.schedule_workflow_jobs
+      end.to raise_error(ProductAffiliate::WorkflowJobNotEnqueuedError, "Sidekiq did not enqueue the affiliate workflow email")
+    end
+  end
+
+  describe "product publication" do
+    let(:seller) { create(:user) }
+    let!(:direct_affiliate) do
+      create(:direct_affiliate, seller:, affiliate_user: create(:affiliate_user), apply_to_all_products: true)
+    end
+    let(:product) { create(:product, user: seller, draft: true, purchase_disabled_at: Time.current) }
+
+    it "enqueues the assignment for an apply-to-all affiliate" do
+      expect do
+        product.publish!
+      end.to change { ScheduleAffiliateWorkflowJobsJob.jobs.size }.by(1)
+
+      product_affiliate = direct_affiliate.product_affiliates.find_by!(link_id: product.id)
+      expect(ScheduleAffiliateWorkflowJobsJob).to have_enqueued_sidekiq_job(product_affiliate.workflow_schedule_token)
+    end
+
+    it "keeps the assignment pending when Sidekiq returns no job id" do
+      allow(ScheduleAffiliateWorkflowJobsJob).to receive(:perform_async).and_return(nil)
+      expect(Rails.logger).to receive(:error).with(/Sidekiq did not enqueue/)
+
+      product.publish!
+
+      expect(product.reload).to be_published
+      expect(direct_affiliate.product_affiliates.find_by!(link_id: product.id).workflow_schedule_token).to be_present
     end
   end
 
