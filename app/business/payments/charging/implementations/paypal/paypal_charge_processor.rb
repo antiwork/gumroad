@@ -649,7 +649,10 @@ class PaypalChargeProcessor
     quantity = 1 if quantity <= 0
     return raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:) unless product.is_physical
 
-    tolerance = quantity
+    # get_usd_cents rounds each converted rate term, so a non-USD product's rate can drift up to
+    # a cent per unit — allow that. A USD product converts nothing, so any drift is a fee-shift
+    # attempt, not rounding: require an exact match there (gp#2008 residual, Greptile P1).
+    tolerance = product.price_currency_type.to_s.casecmp?("usd") ? 0 : quantity
     valid_shipping_rates_usd = product.shipping_destinations.alive.map do |shipping_destination|
       # ShippingDestination#calculate_shipping_rate returns USD cents after converting each
       # product-currency rate term with CurrencyHelper#get_usd_cents, so this compares USD cents
