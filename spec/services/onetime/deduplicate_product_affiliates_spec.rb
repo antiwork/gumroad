@@ -300,6 +300,19 @@ describe Onetime::DeduplicateProductAffiliates do
       end.not_to change { ProductAffiliate.exists?(identical_pair_surplus.id) }
     end
 
+    it "resolves a pair that mixes url and commission divergence to the row the app serves" do
+      mixed_row_one = create(:product_affiliate, affiliate_basis_points: 1000, destination_url: "https://example.com/one")
+      create_duplicate_of(mixed_row_one, affiliate_basis_points: 2500, destination_url: "https://example.com/two")
+      resolved_id = ProductAffiliate.where(affiliate_id: mixed_row_one.affiliate_id,
+                                           link_id: mixed_row_one.link_id).take.id
+
+      described_class.process_commission_divergent(dry_run: false)
+
+      remaining_ids = ProductAffiliate.where(affiliate_id: mixed_row_one.affiliate_id,
+                                             link_id: mixed_row_one.link_id).pluck(:id)
+      expect(remaining_ids).to eq([resolved_id])
+    end
+
     it "leaves a destination_url-only pair for the second pass" do
       url_pair = create(:product_affiliate, destination_url: "https://example.com/one")
       create_duplicate_of(url_pair, destination_url: "https://example.com/two")
