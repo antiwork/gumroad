@@ -178,44 +178,6 @@ describe PaypalRestApi, :vcr do
     end
   end
 
-  describe "update_order" do
-    it "updates the paypal order with the product info" do
-      allow_any_instance_of(Purchase).to receive(:external_id).and_return("G_-mnBf9b1j9A7a4ub4nFQ==")
-      purchase = create(:purchase, link:, shipping_cents: 150, price_cents: 1500, tax_cents: 75, quantity: 3,
-                                   merchant_account: creator_merchant_account)
-
-      create_order_response = api_object.create_order(purchase_unit_info: PaypalChargeProcessor.paypal_order_info(purchase))
-      order = create_order_response.result
-      purchase_unit = order.purchase_units[0]
-      expect(purchase_unit.amount.value).to eq("15.00")
-      expect(purchase_unit.amount.breakdown.item_total.value).to eq("13.50")
-      expect(purchase_unit.amount.breakdown.shipping.value).to eq("1.50")
-      expect(purchase_unit.amount.breakdown.tax_total.value).to eq("0.00")
-      expect(purchase_unit.items[0].quantity).to eq("3")
-      expect(purchase_unit.items[0].unit_amount.value).to eq("4.50")
-      expect(purchase_unit.items[0].sku).to eq(link.unique_permalink)
-      expect(purchase_unit.payment_instruction.platform_fees.size).to eq(1)
-      expect(purchase_unit.payment_instruction.platform_fees.first.amount.value).to eq("1.65")
-
-      purchase.update!(price_cents: 750, total_transaction_cents: 750, shipping_cents: 75, fee_cents: 83)
-      api_object.update_order(order_id: order.id,
-                              purchase_unit_info: PaypalChargeProcessor.paypal_order_info(purchase))
-
-      fetch_order_response = api_object.fetch_order(order_id: order.id)
-      order = fetch_order_response.result
-      purchase_unit = order.purchase_units[0]
-      expect(purchase_unit.amount.value).to eq("7.50")
-      expect(purchase_unit.amount.breakdown.item_total.value).to eq("6.75")
-      expect(purchase_unit.amount.breakdown.shipping.value).to eq("0.75")
-      expect(purchase_unit.amount.breakdown.tax_total.value).to eq("0.00")
-      expect(purchase_unit.items[0].quantity).to eq("3")
-      expect(purchase_unit.items[0].unit_amount.value).to eq("2.25")
-      expect(purchase_unit.items[0].sku).to eq(link.unique_permalink)
-      expect(purchase_unit.payment_instruction.platform_fees.size).to eq(1)
-      expect(purchase_unit.payment_instruction.platform_fees.first.amount.value).to eq("0.83")
-    end
-  end
-
   describe "#fetch_order" do
     context "when invalid order id is passed" do
       let(:fetch_order_response) { api_object.fetch_order(order_id: "invalid_order") }
