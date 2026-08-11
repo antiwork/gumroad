@@ -21,6 +21,8 @@ class DirectAffiliate < Affiliate
 
   validates_uniqueness_of :affiliate_user_id, scope: :seller_id, conditions: -> { alive }, if: :alive?
 
+  before_validation :lock_products_for_assignment_changes, prepend: true
+
   def self.cookie_lifetime
     AFFILIATE_COOKIE_LIFETIME_DAYS.days
   end
@@ -128,6 +130,16 @@ class DirectAffiliate < Affiliate
   end
 
   private
+    def lock_products_for_assignment_changes
+      return unless self.class.connection.transaction_open?
+
+      changed_assignments = product_affiliates.target.select(&:changed_for_autosave?)
+      return if changed_assignments.empty?
+
+      # ProductAffiliate locks its affiliate after its product, so parent autosaves must use the same order.
+      changed_assignments.uniq(&:link_id).sort_by(&:link_id).each { _1.product.lock! }
+    end
+
     def destination_url_or_username_required
       return if destination_url.present? || seller&.username.present?
 

@@ -43,24 +43,26 @@ describe ProductAffiliate do
         expect(product_affiliate).not_to be_valid
       end
 
-      it "locks the affiliate before the final duplicate check and insert" do
+      it "locks the product and affiliate before the final duplicate check and insert" do
         affiliate = create(:direct_affiliate)
         product = create(:product, user: affiliate.seller)
         queries = []
         subscriber = lambda do |_name, _start, _finish, _id, payload|
           sql = payload[:sql]
-          queries << sql if sql.include?("FROM `affiliates`") || sql.include?("FROM `affiliates_links`") || sql.include?("INSERT INTO `affiliates_links`")
+          queries << sql if sql.include?("FROM `links`") || sql.include?("FROM `affiliates`") || sql.include?("FROM `affiliates_links`") || sql.include?("INSERT INTO `affiliates_links`")
         end
 
         ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
           create(:product_affiliate, affiliate:, product:)
         end
 
-        lock_index = queries.index { _1.include?("FROM `affiliates`") && _1.include?("FOR UPDATE") }
+        product_lock_index = queries.index { _1.include?("FROM `links`") && _1.include?("FOR UPDATE") }
+        affiliate_lock_index = queries.index { _1.include?("FROM `affiliates`") && _1.include?("FOR UPDATE") }
         duplicate_check_index = queries.rindex { _1.include?("FROM `affiliates_links`") }
         insert_index = queries.index { _1.include?("INSERT INTO `affiliates_links`") }
 
-        expect(lock_index).to be < duplicate_check_index
+        expect(product_lock_index).to be < affiliate_lock_index
+        expect(affiliate_lock_index).to be < duplicate_check_index
         expect(duplicate_check_index).to be < insert_index
       end
 
@@ -129,7 +131,7 @@ describe ProductAffiliate do
   end
 
   describe "lifecycle hooks" do
-    it "locks the affiliate before deleting an assignment" do
+    it "locks the product before the affiliate when deleting an assignment" do
       product_affiliate = create(:product_affiliate)
       lock_queries = []
       subscriber = lambda do |_name, _start, _finish, _id, payload|
@@ -140,7 +142,8 @@ describe ProductAffiliate do
         product_affiliate.destroy!
       end
 
-      expect(lock_queries.first).to include("FROM `affiliates`")
+      expect(lock_queries.first).to include("FROM `links`")
+      expect(lock_queries.second).to include("FROM `affiliates`")
     end
 
     describe "toggling product is_collab flag" do
