@@ -4238,7 +4238,7 @@ describe StripeMerchantAccountManager, :vcr do
             country: "DO",
             currency: "dop",
             account_number: "000123456789",
-            routing_number: "99994232",
+            routing_number: "999",
           },
           settings: {
             payouts: {
