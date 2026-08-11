@@ -125,14 +125,10 @@ describe Onetime::DeduplicateProductAffiliates do
   end
 
   describe ".process_url_divergent" do
-    let!(:url_pair_older) do
-      create(:product_affiliate, affiliate_basis_points: 1000, destination_url: "https://example.com/old")
-        .tap { _1.update_columns(updated_at: 3.days.ago) }
+    let!(:url_pair_resolved) do
+      create(:product_affiliate, affiliate_basis_points: 1000, destination_url: "https://example.com/current")
     end
-    let!(:url_pair_newest) do
-      create_duplicate_of(url_pair_older, destination_url: "https://example.com/new")
-        .tap { _1.update_columns(updated_at: 1.day.ago) }
-    end
+    let!(:url_pair_surplus) { create_duplicate_of(url_pair_resolved, destination_url: "https://example.com/unreachable") }
 
     it "does not delete anything on a dry run" do
       expect do
@@ -148,37 +144,37 @@ describe Onetime::DeduplicateProductAffiliates do
       expect(locking_queries_during { described_class.process_url_divergent(dry_run: false) }).not_to be_empty
     end
 
-    it "keeps the most recently updated row of a destination_url-only pair" do
+    it "keeps the lowest id row of a destination_url-only pair" do
       expect do
         described_class.process_url_divergent(dry_run: false)
       end.to change { ProductAffiliate.count }.by(-1)
 
-      expect(ProductAffiliate.exists?(url_pair_newest.id)).to be(true)
-      expect(ProductAffiliate.exists?(url_pair_older.id)).to be(false)
+      expect(ProductAffiliate.exists?(url_pair_resolved.id)).to be(true)
+      expect(ProductAffiliate.exists?(url_pair_surplus.id)).to be(false)
     end
 
-    it "treats a nil updated_at as oldest instead of aborting" do
-      nil_stamp_row = create(:product_affiliate, destination_url: "https://example.com/stale")
+    it "keeps the row the app resolves even when a surplus row has a newer timestamp" do
+      resolved_row = create(:product_affiliate, destination_url: "https://example.com/current")
+                       .tap { _1.update_columns(updated_at: 3.days.ago) }
+      surplus_row = create_duplicate_of(resolved_row, destination_url: "https://example.com/unreachable")
+
+      described_class.process_url_divergent(dry_run: false)
+
+      expect(ProductAffiliate.exists?(resolved_row.id)).to be(true)
+      expect(ProductAffiliate.exists?(surplus_row.id)).to be(false)
+      expect(resolved_row.affiliate.reload.final_destination_url(product: resolved_row.product))
+        .to eq("https://example.com/current")
+    end
+
+    it "keeps a nil updated_at row when it is the one the app resolves" do
+      nil_stamp_row = create(:product_affiliate, destination_url: "https://example.com/current")
                         .tap { _1.update_columns(updated_at: nil) }
-      stamped_row = create_duplicate_of(nil_stamp_row, destination_url: "https://example.com/current")
+      stamped_row = create_duplicate_of(nil_stamp_row, destination_url: "https://example.com/unreachable")
 
       described_class.process_url_divergent(dry_run: false)
 
-      expect(ProductAffiliate.exists?(stamped_row.id)).to be(true)
-      expect(ProductAffiliate.exists?(nil_stamp_row.id)).to be(false)
-    end
-
-    it "keeps the highest id when updated_at ties" do
-      tied_at = 2.days.ago.change(usec: 0)
-      tied_row_one = create(:product_affiliate, destination_url: "https://example.com/a")
-                       .tap { _1.update_columns(updated_at: tied_at) }
-      tied_row_two = create_duplicate_of(tied_row_one, destination_url: "https://example.com/b")
-                       .tap { _1.update_columns(updated_at: tied_at) }
-
-      described_class.process_url_divergent(dry_run: false)
-
-      expect(ProductAffiliate.exists?(tied_row_two.id)).to be(true)
-      expect(ProductAffiliate.exists?(tied_row_one.id)).to be(false)
+      expect(ProductAffiliate.exists?(nil_stamp_row.id)).to be(true)
+      expect(ProductAffiliate.exists?(stamped_row.id)).to be(false)
     end
 
     it "leaves pairs with commission divergence untouched" do

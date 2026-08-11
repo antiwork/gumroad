@@ -50,10 +50,13 @@ module Onetime
 
     # Pass 2a of the cleanup. Pairs whose rows agree on commission terms
     # (affiliate_basis_points, flags) and differ only on destination_url collapse to
-    # the row the seller edited last: the redirect target is the only difference, so
-    # the newest edit carries the current intent. Pairs with commission divergence
-    # stay untouched; they need a reviewed keep-rule, since the newest row does not
-    # reliably carry the intended rate.
+    # the lowest id, the same keeper as the identical pass. The application resolves
+    # a pair through unordered LIMIT 1 lookups (`product_affiliates.find_by(link_id:)`),
+    # which the affiliate_id index serves lowest id first, and seller edits land on
+    # that same row — so the lowest id row carries every edit made since the duplicate
+    # appeared and the other rows are unreachable through the app. updated_at cannot
+    # rank URLs: any unrelated persisted change advances it. Pairs with commission
+    # divergence stay untouched; they need a reviewed keep-rule.
     def process_url_divergent(dry_run: true)
       eligible, held_for_review = divergent_pairs.partition { |pair| url_only_divergent?(*pair) }
       puts "Found #{divergent_pairs.size} divergent pair(s): #{eligible.size} differ only on destination_url, #{held_for_review.size} held for review"
@@ -117,11 +120,10 @@ module Onetime
           rows = ProductAffiliate.where(affiliate_id:, link_id:).order(:id).lock(!dry_run).to_a
           next 0 if rows.size < 2 || !url_only_divergent_content?(rows)
 
-          # updated_at is nullable on affiliates_links; treat a missing timestamp as oldest.
           # The URL stays out of the log: it is seller-controlled and can carry tokens.
-          keeper = rows.max_by { |row| [row.updated_at || Time.zone.at(0), row.id] }
-          surplus_ids = (rows - [keeper]).map(&:id)
-          puts "Keeping ProductAffiliate #{keeper.id} (updated_at #{keeper.updated_at&.iso8601 || "nil"}); deleting #{surplus_ids.join(', ')}"
+          keeper = rows.first
+          surplus_ids = rows.drop(1).map(&:id)
+          puts "Keeping ProductAffiliate #{keeper.id}; deleting #{surplus_ids.join(', ')}"
           next 0 if dry_run
 
           ProductAffiliate.where(id: surplus_ids).delete_all
