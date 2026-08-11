@@ -3,19 +3,6 @@
 require "spec_helper"
 
 describe Onetime::DeduplicateProductAffiliates do
-  # The task exists to clean up rows that predate the unique index, a state the
-  # index now makes unrepresentable. Drop it for this file so the fixtures can
-  # recreate that state, and restore it afterwards.
-  unique_index_name = :index_affiliates_links_on_affiliate_id_and_link_id
-
-  before(:all) do
-    ActiveRecord::Base.connection.remove_index(:affiliates_links, name: unique_index_name)
-  end
-
-  after(:all) do
-    ActiveRecord::Base.connection.add_index(:affiliates_links, [:affiliate_id, :link_id], unique: true, name: unique_index_name)
-  end
-
   # The races that created these duplicates bypassed the model callbacks, and
   # serialize_assignment now blocks even validate: false saves — so insert raw.
   def create_duplicate_of(product_affiliate, **overrides)

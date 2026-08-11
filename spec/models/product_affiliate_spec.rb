@@ -43,18 +43,6 @@ describe ProductAffiliate do
         expect(product_affiliate).not_to be_valid
       end
 
-      it "enforces uniqueness of (affiliate_id, link_id) at the database level" do
-        # Callbacks are bypassed on purpose: serialize_assignment blocks even
-        # validate: false saves, so a raw insert is the only way to reach the
-        # index — the same path the write race used to create duplicates.
-        existing = create(:product_affiliate)
-        now = Time.current
-
-        expect do
-          ProductAffiliate.insert_all!([existing.attributes.except("id").merge("created_at" => now, "updated_at" => now)])
-        end.to raise_error(ActiveRecord::RecordNotUnique)
-      end
-
       it "locks the product and affiliate before the final duplicate check and insert" do
         affiliate = create(:direct_affiliate)
         product = create(:product, user: affiliate.seller)

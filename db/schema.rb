@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_07_160000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_07_122700) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -182,7 +182,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_07_160000) do
     t.string "destination_url"
     t.bigint "flags", default: 0, null: false
     t.string "workflow_schedule_token"
-    t.index ["affiliate_id", "link_id"], name: "index_affiliates_links_on_affiliate_id_and_link_id", unique: true
     t.index ["affiliate_id"], name: "index_affiliates_links_on_affiliate_id"
     t.index ["link_id"], name: "index_affiliates_links_on_link_id"
     t.index ["workflow_schedule_token"], name: "index_affiliates_links_on_workflow_schedule_token"
