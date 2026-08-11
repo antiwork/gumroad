@@ -193,12 +193,9 @@ describe RequeueTransientlyFailedPayoutsJob do
     end
 
     context "when the seller's cadence pushes their cycle weeks past this batch" do
-      # Freezing via `around` (not `travel_to` inside the example) so the clock is fixed before
-      # the outer `before` hook runs too — that hook seeds a balance from the same
-      # `payout_period_end_date` let this example reads, and the two must agree on "today" or the
-      # balance lands outside the payout window the job actually pays out. `travel_to` scoped to
-      # just the example body left the `before` hook reading the real wall clock, so the seeded
-      # balance and the payout period disagreed on every run date except 2026-08-04 itself.
+      # `around`, not `travel_to` inside the example, so the shared `before` hook (which seeds
+      # a balance from `payout_period_end_date`) and this example's own period computation read
+      # the same frozen clock.
       around do |example|
         travel_to(Time.utc(2026, 8, 4, 14, 0, 0)) { example.run }
       end
