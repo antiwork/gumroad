@@ -30,41 +30,6 @@ class PaypalController < ApplicationController
     render json: response
   end
 
-  def order
-    begin
-      product = Link.find_by_external_id(params[:product][:external_id])
-      affiliate = fetch_affiliate(product)
-      if affiliate&.eligible_for_purchase_credit?(product:, was_recommended: !!params[:product][:was_recommended])
-        params[:product][:affiliate_id] = affiliate.id
-      end
-      order_id = PaypalChargeProcessor.create_order_from_product_info(params[:product])
-    rescue ChargeProcessorError => e
-      Rails.logger.error("PAYPAL BUYER UX AFFECTING ERROR-in #{__method__}-#{e.message}")
-    end
-
-    render json: { order_id: }
-  end
-
-  def fetch_order
-    begin
-      api_response = PaypalChargeProcessor.fetch_order(order_id: params[:order_id])
-    rescue ChargeProcessorError => e
-      Rails.logger.error("PAYPAL BUYER UX AFFECTING ERROR-in #{__method__}-#{e.message}")
-    end
-
-    render json: api_response || {}
-  end
-
-  def update_order
-    begin
-      success = PaypalChargeProcessor.update_order_from_product_info(params[:order_id], params[:product])
-    rescue ChargeProcessorError => e
-      Rails.logger.error("PAYPAL BUYER UX AFFECTING ERROR-in #{__method__}-#{e.message}")
-    end
-
-    render json: { success: !!success }
-  end
-
   def connect
     authorize [:settings, :payments, current_seller], :paypal_connect?
 
