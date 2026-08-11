@@ -192,10 +192,15 @@ describe RequeueTransientlyFailedPayoutsJob do
       expect(seller.reload.unpaid_balance_cents).to eq(0)
     end
 
-    it "creates a new payout for a monthly-cadence seller whose next cycle is weeks away" do
-      # The incident shape: a monthly seller's next cadence Friday is a month out, so the
-      # payout-cycle gate would reject them and their balance would sit unpaid until then.
-      travel_to Time.utc(2026, 8, 4, 14, 0, 0) do
+    context "when a monthly seller's next cycle is weeks away" do
+      around do |example|
+        # The parent setup creates the balance, so the time freeze must wrap the setup too.
+        travel_to(Time.utc(2026, 8, 4, 14, 0, 0)) { example.run }
+      end
+
+      it "creates a new payout" do
+        # The incident shape: a monthly seller's next cadence Friday is a month out, so the
+        # payout-cycle gate would reject them and their balance would sit unpaid until then.
         period = User::PayoutSchedule.manual_payout_end_date
         seller.update!(payout_frequency: User::PayoutSchedule::MONTHLY)
         create_transient_failure(user: seller, bank_account: seller.active_bank_account, payout_period_end_date: period)
