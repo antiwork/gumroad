@@ -2,8 +2,10 @@
 
 # Deletes surplus ProductAffiliate rows for duplicated (affiliate_id, link_id) pairs.
 # affiliates_links has no composite unique index, so racing INSERTs bypassed the model
-# validation. Run only after PR 7167 (which serializes those writes) is deployed. Only
-# pairs whose rows all share the same content are collapsed, keeping the lowest id;
+# validation. Run only after PR 7167 (which serializes those writes) is deployed, and
+# during a quiet window for affiliate/collaborator writes: a request that already
+# holds a surplus row can destroy it after cleanup and still fire destroy callbacks.
+# Only pairs whose rows all share the same content are collapsed, keeping the lowest id;
 # `divergent_pairs` lists the rest for a manual keep-rule pass. The follow-up unique
 # index migration needs zero remaining duplicates (Alterity copies with INSERT IGNORE).
 #
@@ -30,7 +32,12 @@ module Onetime
       end
 
       puts "Divergent pair(s) left untouched: #{divergent.size}" if divergent.any?
-      puts dry_run ? "Dry run — no changes made. Re-run with dry_run: false to apply." : "Deleted #{deleted} surplus row(s)."
+      if dry_run
+        puts "Dry run — no changes made. Re-run with dry_run: false to apply."
+      else
+        puts "Deleted #{deleted} surplus row(s)."
+        report_remaining_duplicates
+      end
       deleted
     end
 
@@ -67,6 +74,14 @@ module Onetime
 
       def identical_content?(rows)
         rows.map { |row| row.attributes.values_at(*CONTENT_COLUMNS) }.uniq.size == 1
+      end
+
+      # The up-front partition can go stale mid-run (a pair skipped under lock stays
+      # duplicated), so the closing report rescans instead of trusting it. The unique
+      # index migration needs this count at zero; re-run the task if it is not.
+      def report_remaining_duplicates
+        remaining = ProductAffiliate.group(:affiliate_id, :link_id).having("COUNT(*) > 1").count.size
+        puts "Remaining duplicate pair(s) after this run: #{remaining}"
       end
   end
 end

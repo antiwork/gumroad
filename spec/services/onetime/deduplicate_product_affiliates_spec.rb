@@ -101,6 +101,12 @@ describe Onetime::DeduplicateProductAffiliates do
       expect(ProductAffiliate.exists?(url_pair_row_two.id)).to be(true)
     end
 
+    it "reports the remaining duplicate pairs from a fresh rescan after a live run" do
+      expect do
+        described_class.process(dry_run: false)
+      end.to output(/Remaining duplicate pair\(s\) after this run: 1/).to_stdout
+    end
+
     it "leaves non-duplicated rows untouched" do
       described_class.process(dry_run: false)
 
