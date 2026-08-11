@@ -4,7 +4,9 @@ class ElSalvadorBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "SV"
 
   BANK_CODE_FORMAT_REGEX = /^[a-zA-Z0-9]{8,11}$/
-  PLAIN_ACCOUNT_NUMBER_REGEX = /\A[0-9]{10,20}\z/
+  # 20-digit floor of the BBAN segment `build_iban` zero-pads into, not a real bank's account
+  # length — BAC's are 9 digits and other Salvadoran banks vary shorter still.
+  PLAIN_ACCOUNT_NUMBER_REGEX = /\A[0-9]{1,20}\z/
   IBAN_FORMAT_REGEX = /\ASV[0-9]{2}[A-Z]{4}[0-9]{20}\z/
   private_constant :BANK_CODE_FORMAT_REGEX, :PLAIN_ACCOUNT_NUMBER_REGEX, :IBAN_FORMAT_REGEX
 

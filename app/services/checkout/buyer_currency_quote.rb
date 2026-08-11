@@ -27,6 +27,8 @@ class Checkout::BuyerCurrencyQuote
                       :charges,
                       :line_allocations,
                       :later_charge_presentments,
+                      :listed_currency_rates,
+                      :listed_currency_codes,
                       keyword_init: true) do
     def id
       stripe_fx_quote_id
@@ -39,6 +41,16 @@ class Checkout::BuyerCurrencyQuote
     def future_installments_presentment_total_cents
       charges.to_a.sum { _1.future_installments_presentment_total_cents.to_i }
     end
+
+    # The rate `Purchase#set_price_and_rate` should reuse for a purchase priced in
+    # `permalink`'s listed currency, bound at the same moment the quote was minted
+    # (gumroad-private#1958). nil for USD-listed lines and for tokens signed before this
+    # field shipped — both fall back to `set_price_and_rate`'s live `get_rate` read.
+    def listed_currency_rate_for(permalink, currency:)
+      return unless listed_currency_codes&.[](permalink.to_s).to_s.casecmp?(currency.to_s)
+
+      listed_currency_rates&.[](permalink.to_s)&.to_d
+    end
   end
 
   # One cart line's canonical (USD) money, as computed by the surcharge endpoint. The
@@ -50,7 +62,7 @@ class Checkout::BuyerCurrencyQuote
                         :charge_price_cents, :charge_tip_cents,
                         :charge_seller_tax_cents, :charge_gumroad_tax_cents,
                         :charge_shipping_cents, :later_charge_kind,
-                        :later_charge_price_cents,
+                        :later_charge_price_cents, :listed_currency_rate,
                         keyword_init: true) do
     # Builds a line from one product's surcharge calculation. The submitted price includes
     # the buyer's tip share, so the tip is carved back out here; the tax lands in the same
@@ -69,9 +81,15 @@ class Checkout::BuyerCurrencyQuote
     # that double-converts (a €10.00 product posts 1233 USD cents, converting again gives
     # 1520) and makes every non-USD-priced checkout fail quote verification. Covered by the
     # units-invariant example in the spec.
+    #
+    # `listed_currency_rate` is the caller's rate reading for this product's listed currency,
+    # taken at the same moment it converted this line to canonical USD cents
+    # (gumroad-private#1958). Binding it here lets the charge path re-derive
+    # `rate_converted_to_usd` from the token instead of a second, possibly-drifted read.
     def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:,
                             charge_tax_result: nil, charge_tip_cents: nil, charge_shipping_usd_cents: nil,
-                            later_charge_kind: nil, later_charge_price_cents: nil, charge_now: true)
+                            later_charge_kind: nil, later_charge_price_cents: nil, charge_now: true,
+                            listed_currency_rate: nil)
       price_cents = tax_result.price_cents.to_i
       # The submitted price and tip are buyer-controlled request params. A crafted
       # negative price would make clamp's bounds invalid (min > max) and raise, and a
@@ -110,7 +128,8 @@ class Checkout::BuyerCurrencyQuote
         charge_gumroad_tax_cents: charge_seller_responsible ? 0 : charge_tax_cents,
         charge_shipping_cents: (charge_shipping_usd_cents.nil? ? shipping_usd_cents : charge_shipping_usd_cents).round.to_i,
         later_charge_kind:,
-        later_charge_price_cents:
+        later_charge_price_cents:,
+        listed_currency_rate:
       )
     end
 
@@ -179,6 +198,8 @@ class Checkout::BuyerCurrencyQuote
                            :line_allocations,
                            :future_installments_presentment_total_cents,
                            :later_charge_presentments,
+                           :listed_currency_rates,
+                           :listed_currency_codes,
                            keyword_init: true)
 
   TOKEN_PURPOSE = :buyer_currency_quote
@@ -244,7 +265,9 @@ class Checkout::BuyerCurrencyQuote
       fx_rate: BigDecimal(charge_payload.fetch("fx_rate")),
       stripe_fx_quote_id: charge_payload.fetch("stripe_fx_quote_id"),
       stripe_fx_quote_expires_at: Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")),
-      later_charge_presentments: charge_payload["later_charge_presentments"] || []
+      later_charge_presentments: charge_payload["later_charge_presentments"] || [],
+      listed_currency_rates: charge_payload["listed_currency_rates"] || {},
+      listed_currency_codes: charge_payload["listed_currency_codes"] || {}
     )
   rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, TypeError, ArgumentError => e
     raise InvalidToken, e.message
@@ -261,6 +284,31 @@ class Checkout::BuyerCurrencyQuote
     charge_payloads = payload["charges"].presence || [payload]
     charge_payloads.find { |charge_payload| charge_payload["seller_id"] == seller.id } ||
       raise(InvalidToken, "quote covers no charge for this seller")
+  end
+
+  # Signature- and expiry-checked but non-authoritative (gumroad-private#1958): confirms the
+  # token wasn't tampered with and is still inside its quote window, not
+  # seller/merchant-account/totals — `verify!` still runs the full check later via
+  # `Charge::CreateService#locked_buyer_currency_quote!` on Stripe charges. The expiry check is
+  # load-bearing on its own, though: non-Stripe charges (PayPal) never reach `verify!` — the
+  # charge service discards the token there — yet the rate bound here has already priced the
+  # purchase. Signatures do not age, so without this a buyer could replay a months-old token on
+  # a PayPal checkout and buy at a stale rate; with it, a replay is bounded by the quote window
+  # like every other consumer of the token.
+  def self.listed_currency_rate_hint(token:, seller_id:, permalink:, currency:)
+    return if token.blank?
+
+    payload = verifier.verify(token)
+    charge_payloads = payload["charges"].presence || [payload]
+    charge_payload = charge_payloads.find { |cp| cp["seller_id"] == seller_id }
+    return if charge_payload.blank?
+    return if Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
+
+    return unless charge_payload.dig("listed_currency_codes", permalink.to_s).to_s.casecmp?(currency.to_s)
+
+    charge_payload.dig("listed_currency_rates", permalink.to_s)&.to_d
+  rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, TypeError, ArgumentError
+    nil
   end
 
   def self.verifier
@@ -294,7 +342,7 @@ class Checkout::BuyerCurrencyQuote
     # A negative component means the submitted request was malformed (prices and tips
     # are sanitized above, but defense in depth: never lock a quote whose lines could
     # not represent a real cart).
-    return if line_items.any? { |line| line.to_h.except(:permalink, :product, :later_charge_kind).values.compact.any?(&:negative?) }
+    return if line_items.any? { |line| line.to_h.except(:permalink, :product, :later_charge_kind, :listed_currency_rate).values.compact.any?(&:negative?) }
 
     products = line_items.map(&:product)
     # A line item can carry a nil product when the caller built it from a product lookup
@@ -638,7 +686,19 @@ class Checkout::BuyerCurrencyQuote
         # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).
         line_allocations:,
         future_installments_presentment_total_cents:,
-        later_charge_presentments:
+        later_charge_presentments:,
+        # Keep the existing scalar rate shape so older app instances can read tokens minted
+        # during a rolling deploy. The additive code map binds each rate to its denomination.
+        listed_currency_rates: charge_line_items.filter_map do |line_item|
+          next if line_item.listed_currency_rate.blank?
+
+          [line_item.permalink.to_s, line_item.listed_currency_rate.to_s]
+        end.to_h,
+        listed_currency_codes: charge_line_items.filter_map do |line_item|
+          next if line_item.listed_currency_rate.blank?
+
+          [line_item.permalink.to_s, line_item.product.price_currency_type.to_s.downcase]
+        end.to_h
       )
     end
 
@@ -773,6 +833,8 @@ class Checkout::BuyerCurrencyQuote
           stripe_fx_quote_id: charge_quote.stripe_fx_quote_id,
           stripe_fx_quote_expires_at: charge_quote.stripe_fx_quote_expires_at.iso8601,
           fx_rate: charge_quote.fx_rate.to_s("F"),
+          listed_currency_rates: charge_quote.listed_currency_rates,
+          listed_currency_codes: charge_quote.listed_currency_codes,
         }
       end
 
