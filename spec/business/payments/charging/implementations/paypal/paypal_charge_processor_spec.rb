@@ -2569,7 +2569,7 @@ describe PaypalChargeProcessor, :vcr do
   end
 
   describe "gp#2008 fee-shift guard" do
-    it "rejects create_order_from_product_info when price_cents is shifted below the product's price" do
+    it "rejects create_order_from_product_info when tax_cents dwarfs price_cents at a fixed total" do
       creator = create(:user)
       product = create(:product, user: creator, price_cents: 17_50)
       create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
@@ -2591,10 +2591,10 @@ describe PaypalChargeProcessor, :vcr do
       expect(PaypalChargeProcessor).not_to receive(:create_order)
       expect do
         PaypalChargeProcessor.create_order_from_product_info(attack_purchase_unit_info)
-      end.to raise_error(ChargeProcessorError, /minimum price/)
+      end.to raise_error(ChargeProcessorError, /implausibly large/)
     end
 
-    it "rejects update_order_from_product_info when price_cents is shifted below the product's price" do
+    it "rejects update_order_from_product_info when tax_cents dwarfs price_cents at a fixed total" do
       creator = create(:user)
       product = create(:product, user: creator, price_cents: 17_50)
       create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
@@ -2621,7 +2621,79 @@ describe PaypalChargeProcessor, :vcr do
       expect(PaypalChargeProcessor).not_to receive(:update_order)
       expect do
         PaypalChargeProcessor.update_order_from_product_info(order_id, attack_purchase_unit_info)
-      end.to raise_error(ChargeProcessorError, /minimum price/)
+      end.to raise_error(ChargeProcessorError, /implausibly large/)
+    end
+
+    it "rejects a $0 price with any positive tax without dividing by zero" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 17_50)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      attack_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 0,
+        shipping_cents: 0,
+        tax_cents: 17_50,
+        exclusive_tax_cents: 17_50,
+        total_cents: 17_50,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).not_to receive(:create_order)
+      expect do
+        PaypalChargeProcessor.create_order_from_product_info(attack_purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /implausibly large/)
+    end
+
+    it "allows a discounted (offer code) price with proportionally discounted tax" do
+      creator = create(:user)
+      # Base price $17.50; an offer code has discounted it to $10 with tax recalculated on the
+      # discounted amount — a legitimate flow the guard must not break (the P0 caught in review).
+      product = create(:product, user: creator, price_cents: 17_50)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      discounted_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 10_00,
+        shipping_cents: 0,
+        tax_cents: 87,
+        exclusive_tax_cents: 87,
+        total_cents: 10_87,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
+      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(discounted_purchase_unit_info)
+      expect(paypal_order_id).to eq("FAKE_ORDER_ID")
+    end
+
+    it "allows a rental price well below the product's buy price" do
+      creator = create(:user)
+      # Rentals are legitimately priced far below price_cents; the guard only bounds tax/price,
+      # so a rental with no tax at all must still be allowed through untouched.
+      product = create(:product, user: creator, price_cents: 20_00, purchase_type: "buy_and_rent",
+                                 rental_price_cents: 3_00)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      rental_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 3_00,
+        shipping_cents: 0,
+        tax_cents: 0,
+        exclusive_tax_cents: 0,
+        total_cents: 3_00,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
+      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(rental_purchase_unit_info)
+      expect(paypal_order_id).to eq("FAKE_ORDER_ID")
     end
 
     it "allows a pay-what-you-want price above the product's price" do
@@ -2665,6 +2737,30 @@ describe PaypalChargeProcessor, :vcr do
 
       expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
       paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(purchase_unit_info)
+      expect(paypal_order_id).to eq("FAKE_ORDER_ID")
+    end
+
+    it "allows a high but real-world VAT rate (Hungary, 27%) just under the guard's ceiling" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 10_00)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      hungary_vat_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 10_00,
+        shipping_cents: 0,
+        vat_cents: 2_70,
+        exclusive_vat_cents: 2_70,
+        tax_cents: 2_70,
+        exclusive_tax_cents: 2_70,
+        total_cents: 12_70,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
+      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(hungary_vat_purchase_unit_info)
       expect(paypal_order_id).to eq("FAKE_ORDER_ID")
     end
   end
