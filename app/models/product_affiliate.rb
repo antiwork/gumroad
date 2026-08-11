@@ -13,7 +13,8 @@ class ProductAffiliate < ApplicationRecord
   belongs_to :product, class_name: "Link", foreign_key: :link_id
 
   around_save :serialize_assignment
-  before_destroy :lock_affiliate_for_assignment
+  before_validation :lock_assignment_rows, prepend: true
+  before_destroy :lock_assignment_rows
   validate :affiliate_is_unique_for_product
   validates :affiliate_basis_points, presence: true, if: -> { affiliate.is_a?(Collaborator) && !affiliate.apply_to_all_products? }
   validates :affiliate_basis_points, numericality: { greater_than_or_equal_to: Collaborator::MIN_PERCENT_COMMISSION * 100,
@@ -38,12 +39,15 @@ class ProductAffiliate < ApplicationRecord
       return false if current_assignment.lock("LOCK IN SHARE MODE").exists?
     end
 
-    affiliate.with_lock do
-      return false if assignments.lock.exists?
+    transaction do
+      product.lock!
+      affiliate.with_lock do
+        return false if assignments.lock.exists?
 
-      assignment = new(affiliate:, product:)
-      assignment.send(:save_with_assignment_lock!)
-      true
+        assignment = new(affiliate:, product:)
+        assignment.send(:save_with_assignment_lock!)
+        true
+      end
     end
   end
 
@@ -122,8 +126,7 @@ class ProductAffiliate < ApplicationRecord
       return yield if @assignment_lock_held
       return yield if affiliate_id.nil? || link_id.nil?
 
-      # The row lock must surround the final duplicate check and the insert.
-      Affiliate.where(id: affiliate_id).lock.load
+      lock_assignment_rows
       affiliate_is_unique_for_product(lock: true)
       if errors.of_kind?(:affiliate, :taken)
         affiliate.errors.add(:base, errors.full_messages_for(:affiliate).first)
@@ -133,9 +136,12 @@ class ProductAffiliate < ApplicationRecord
       yield
     end
 
-    def lock_affiliate_for_assignment
+    def lock_assignment_rows
+      return if @assignment_lock_held
       return if affiliate_id.nil? || link_id.nil?
 
+      # Assignment callbacks can update the product, so every write locks the product first.
+      product.lock!
       Affiliate.where(id: affiliate_id).lock.load
     end
 
@@ -152,7 +158,13 @@ class ProductAffiliate < ApplicationRecord
     def enable_product_collaborator_flag_and_disable_affiliates
       product.update!(is_collab: true)
       product.self_service_affiliate_products.map { _1.update!(enabled: false) }
-      product.product_affiliates.where.not(id:).joins(:affiliate).merge(Affiliate.direct_affiliates).order(:affiliate_id, :id).map { _1.destroy! }
+      product.product_affiliates
+        .where.not(id:)
+        .joins(:affiliate)
+        .merge(Affiliate.direct_affiliates)
+        .order(:affiliate_id, :id)
+        .lock
+        .map { _1.destroy! }
     end
 
     def disable_product_collaborator_flag
