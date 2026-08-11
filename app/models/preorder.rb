@@ -79,8 +79,8 @@ class Preorder < ApplicationRecord
     purchases.first
   end
 
-  def authorize!
-    authorization_purchase.process!
+  def authorize!(locked_rate: nil)
+    authorization_purchase.process!(locked_rate:)
 
     purchase_errors = authorization_purchase.errors
     if is_test_preorder?

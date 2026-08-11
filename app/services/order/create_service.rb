@@ -132,7 +132,9 @@ class Order::CreateService
 
         purchase, error, sca_response = Purchase::CreateService.new(
           product:,
-          params: purchase_params.merge(is_part_of_combined_charge: true).merge(card_params),
+          params: purchase_params.merge(is_part_of_combined_charge: true).merge(card_params).merge(
+            buyer_currency_quote: params[:buyer_currency_quote]
+          ),
           buyer:
         ).perform
 

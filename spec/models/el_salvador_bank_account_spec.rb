@@ -45,9 +45,13 @@ describe ElSalvadorBankAccount do
   end
 
   describe "#validate_account_number" do
-    it "accepts plain account numbers (10-20 digits)" do
-      expect(build(:el_salvador_bank_account, account_number: "1234567890")).to be_valid
+    it "accepts plain account numbers (1-20 digits)" do
+      expect(build(:el_salvador_bank_account, account_number: "1")).to be_valid
       expect(build(:el_salvador_bank_account, account_number: "12345678901234567890")).to be_valid
+    end
+
+    it "accepts a BAC-style 9-digit account number" do
+      expect(build(:el_salvador_bank_account, account_number: "123456789")).to be_valid
     end
 
     it "accepts valid SV IBAN format (28 chars)" do
@@ -56,7 +60,6 @@ describe ElSalvadorBankAccount do
     end
 
     it "rejects invalid formats" do
-      expect(build(:el_salvador_bank_account, account_number: "123456789")).not_to be_valid
       expect(build(:el_salvador_bank_account, account_number: "123456789012345678901")).not_to be_valid
       expect(build(:el_salvador_bank_account, account_number: "12345ABC90")).not_to be_valid
       expect(build(:el_salvador_bank_account, account_number: "SV99BCIE12345678901234567890")).not_to be_valid
@@ -86,6 +89,11 @@ describe ElSalvadorBankAccount do
     it "constructs an IBAN when a plain account number is stored" do
       ba = create(:el_salvador_bank_account, account_number: "3280602160", bank_number: "CAGRSVSS", account_number_last_four: "2160")
       expect(ba.stripe_account_number(passphrase)).to eq("SV88CAGR00000000003280602160")
+    end
+
+    it "constructs an IBAN for a BAC-style 9-digit account number" do
+      ba = create(:el_salvador_bank_account, account_number: "123456789", bank_number: "BAMCSVSS", account_number_last_four: "6789")
+      expect(ba.stripe_account_number(passphrase)).to eq("SV96BAMC00000000000123456789")
     end
 
     it "passes through a stored IBAN unchanged" do
