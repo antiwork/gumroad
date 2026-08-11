@@ -1034,12 +1034,33 @@ class LinksController < ApplicationController
       # (gumroad-private#2023). Tally per destination scope, not globally, or
       # this rejects the exact multi-scope save the client-side reconciliation
       # fix (ProductEditPage#applyCanonicalIds) is designed to handle.
-      duplicate_id = submitted_rich_content_page_references
+      per_scope_duplicate = submitted_rich_content_page_references
         .group_by { _1[:destination_scope_key] }
         .values
         .flat_map { |refs| refs.filter_map { _1[:page][:id].presence }.tally.select { |_id, count| count > 1 }.keys }
         .first
-      return if duplicate_id.nil?
+      raise Product::SaveContract::AmbiguousRichContentIdConflict if per_scope_duplicate
+
+      # The per-scope relaxation above only makes sense for NEW, client-
+      # generated ids: a brand-new page id can legitimately be minted twice
+      # (once per scope) as part of a single shared/per-tier toggle. An id
+      # that resolves to an EXISTING, owned RichContent row is a different
+      # animal — that row physically lives in exactly one scope, so the same
+      # existing id addressed from two different scopes in one save means the
+      # page was kept at both its source and destination (a stale-tab replay,
+      # not a move), and a single save response cannot remap one underlying
+      # row to two places. Reject that regardless of scope.
+      existing_id_scopes = submitted_rich_content_page_references
+        .filter_map do |ref|
+          raw_id = ref[:page][:id].presence
+          next unless raw_id && owned_submitted_rich_content_pages_by_external_id[raw_id]
+
+          [raw_id, ref[:destination_scope_key]]
+        end
+        .group_by(&:first)
+        .transform_values { |pairs| pairs.map(&:last).uniq }
+
+      return if existing_id_scopes.values.none? { |scopes| scopes.size > 1 }
 
       raise Product::SaveContract::AmbiguousRichContentIdConflict
     end
