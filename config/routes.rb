@@ -147,7 +147,13 @@ Rails.application.routes.draw do
           post :send, action: :send_email
         end
       end
-      resources :workflows, only: [:index, :show]
+      resources :workflows, only: [:index, :show] do
+        scope module: :workflows do
+          resources :emails, only: [:create], param: :email_id do
+            put :update, on: :member
+          end
+        end
+      end
       post "sales/exports", to: "sales#export"
       get "sales/summary", to: "sales#summary"
       resources :sales, only: [:index, :show] do

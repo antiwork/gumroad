@@ -7,10 +7,11 @@ class SendWorkflowEmailsToPastCanceledMembersJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
-  def perform(installment_id, _old_delayed_delivery_time = nil, _cutoff_reference_time = nil, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
+  def perform(installment_id, old_delayed_delivery_time = nil, cutoff_reference_time = nil, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
     @schedule_intent_token = schedule_intent_token
     @schedule_intent_fanout_token = schedule_intent_fanout_token
-    primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? || schedule_intent_fanout_token.present?
+    rescheduling = old_delayed_delivery_time.present? && cutoff_reference_time.present?
+    primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? || schedule_intent_fanout_token.present? || rescheduling
     ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
     return unless WorkflowInstallmentScheduleIntent.begin_fanout(
       intent_token: schedule_intent_token,
@@ -27,7 +28,8 @@ class SendWorkflowEmailsToPastCanceledMembersJob
     end
     workflow = installment.workflow
     unless workflow&.alive? && installment.alive? && installment.published? &&
-           workflow.member_cancellation_trigger? && workflow.send_to_past_customers? &&
+           workflow.member_cancellation_trigger? &&
+           (workflow.send_to_past_customers? || rescheduling) &&
            workflow.seller_or_product_or_variant_type?
       WorkflowInstallmentScheduleIntent.mark_processed(
         schedule_intent_token,
@@ -49,10 +51,24 @@ class SendWorkflowEmailsToPastCanceledMembersJob
 
     delay = rule.delayed_delivery_time
     rule_version = rule.version
-    Makara::Context.release_all
-    primary_pinned = false
+    cutoff = Time.zone.iso8601(cutoff_reference_time) if rescheduling
+    deactivated_after = cutoff - old_delayed_delivery_time if rescheduling
+    @keep_primary_for_cutoff_scan = rescheduling
+    unless rescheduling
+      Makara::Context.release_all
+      primary_pinned = false
+    end
 
-    case enqueue_all_member_jobs(workflow:, installment:, delay:, rule_version:)
+    case enqueue_all_member_jobs(
+      workflow:,
+      installment:,
+      delay:,
+      rule_version:,
+      rescheduling:,
+      old_delayed_delivery_time:,
+      cutoff:,
+      deactivated_after:
+    )
     when :complete
       WorkflowInstallmentScheduleIntent.mark_processed(
         schedule_intent_token,
@@ -74,8 +90,8 @@ class SendWorkflowEmailsToPastCanceledMembersJob
       ErrorNotifier.notify(e, installment_rule_id: rule.id)
     end
 
-    def enqueue_all_member_jobs(workflow:, installment:, delay:, rule_version:)
-      candidate_subscriptions(workflow).includes(:original_purchase).find_each do |subscription|
+    def enqueue_all_member_jobs(workflow:, installment:, delay:, rule_version:, rescheduling:, old_delayed_delivery_time:, cutoff:, deactivated_after:)
+      candidate_subscriptions(workflow, deactivated_after:).includes(:original_purchase).find_each do |subscription|
         return :ownership_lost unless renew_fanout_lease
 
         next unless subscription.cancelled?
@@ -83,10 +99,21 @@ class SendWorkflowEmailsToPastCanceledMembersJob
         next if original_purchase.nil?
         next unless workflow.applies_to_purchase?(original_purchase)
 
-        job_id = SendWorkflowInstallmentWorker.perform_at(
-          subscription.deactivated_at + delay,
-          installment.id, rule_version, nil, nil, nil, subscription.id
-        )
+        job_id = if rescheduling
+          reference_time = subscription.deactivated_at.change(usec: 0)
+          next if installment.is_for_new_customers_of_workflow && reference_time < installment.published_at
+          next unless reference_time + old_delayed_delivery_time > cutoff
+
+          SendWorkflowInstallmentRescheduleJob.perform_at(
+            reference_time + delay,
+            installment.id, rule_version, nil, nil, nil, subscription.id, reference_time.iso8601
+          )
+        else
+          SendWorkflowInstallmentWorker.perform_at(
+            subscription.deactivated_at + delay,
+            installment.id, rule_version, nil, nil, nil, subscription.id
+          )
+        end
         if job_id.blank?
           raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"
         end
@@ -104,7 +131,7 @@ class SendWorkflowEmailsToPastCanceledMembersJob
         intent_token: @schedule_intent_token,
         fanout_token: @schedule_intent_fanout_token
       )
-      Makara::Context.release_all
+      Makara::Context.release_all unless @keep_primary_for_cutoff_scan
       @next_fanout_heartbeat_at = now + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f if renewed
       renewed
     end
@@ -113,8 +140,9 @@ class SendWorkflowEmailsToPastCanceledMembersJob
       Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
-    def candidate_subscriptions(workflow)
+    def candidate_subscriptions(workflow, deactivated_after: nil)
       scope = Subscription.where.not(deactivated_at: nil).where.not(cancelled_at: nil)
+      scope = scope.where("subscriptions.deactivated_at > ?", deactivated_after) if deactivated_after.present?
       if workflow.product_or_variant_type?
         scope.where(link_id: workflow.link_id)
       else
