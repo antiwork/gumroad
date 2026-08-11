@@ -45,6 +45,26 @@ describe DominicanRepublicBankAccount do
     end
   end
 
+  describe "#validate_branch_code" do
+    it "is optional — blank/nil is valid" do
+      expect(build(:dominican_republic_bank_account, branch_code: nil)).to be_valid
+      expect(build(:dominican_republic_bank_account, branch_code: "")).to be_valid
+    end
+
+    it "allows 1 to 5 digits when present" do
+      expect(build(:dominican_republic_bank_account, branch_code: "1")).to be_valid
+      expect(build(:dominican_republic_bank_account, branch_code: "12345")).to be_valid
+      expect(build(:dominican_republic_bank_account, branch_code: "123456")).not_to be_valid
+      expect(build(:dominican_republic_bank_account, branch_code: "a1234")).not_to be_valid
+    end
+
+    it "feeds a present branch code into routing_number, dash-joined" do
+      account = build(:dominican_republic_bank_account, bank_code: "003", branch_code: "12345")
+      expect(account).to be_valid
+      expect(account.routing_number).to eq("003-12345")
+    end
+  end
+
   describe "#validate_account_number" do
     it "validates the account number format" do
       expect(bank_account).to be_valid
