@@ -247,9 +247,6 @@ Rails.application.routes.draw do
       collection do
         post :billing_agreement_token
         post :billing_agreement
-        post :order
-        get :fetch_order
-        post :update_order
       end
     end
 
@@ -1316,9 +1313,6 @@ Rails.application.routes.draw do
         post :disconnect
         post :billing_agreement_token
         post :billing_agreement
-        post :order
-        get :fetch_order
-        post :update_order
       end
     end
 
