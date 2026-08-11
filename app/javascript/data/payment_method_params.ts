@@ -57,21 +57,6 @@ export type PaymentRequestPaymentMethodParams = {
   email: string | null;
   zip_code: string | null;
 };
-export type PayPalNativePaymentMethodParams = {
-  status: "success";
-  type: "paypal-native";
-  reusable: false;
-  paypal_order_id: string;
-  visual: string;
-  card_country: string;
-  // PayPal params never carry Payment Element wallet details or element-collected billing
-  // details; declaring the keys as always-undefined lets serializeCardParamsIntoQueryParamsObject
-  // strip them from the whole AnyPaymentMethodParams union type-safely.
-  wallet?: undefined;
-  elementBillingAddress?: undefined;
-  elementBillingFullName?: undefined;
-};
-
 export type ReusableCardPaymentMethodParams = { stripe_customer_id: string; stripe_setup_intent_id: string } & Omit<
   CardPaymentMethodParams,
   "reusable"
@@ -90,7 +75,7 @@ export type ReusablePayPalBraintreePaymentMethodParams = {
   reusable: true;
   braintree_transient_customer_store_key: string | null;
   braintree_device_data: string | null;
-  // Same as PayPalNativePaymentMethodParams above: never present, declared for union safety.
+  // PayPal never carries Payment Element wallet/billing details; declared always-undefined for union safety.
   wallet?: undefined;
   elementBillingAddress?: undefined;
   elementBillingFullName?: undefined;
@@ -103,7 +88,7 @@ export type ReusablePayPalNativePaymentMethodParams = {
   billing_agreement_id: string;
   visual: string;
   card_country: string;
-  // Same as PayPalNativePaymentMethodParams above: never present, declared for union safety.
+  // PayPal never carries Payment Element wallet/billing details; declared always-undefined for union safety.
   wallet?: undefined;
   elementBillingAddress?: undefined;
   elementBillingFullName?: undefined;
@@ -111,8 +96,7 @@ export type ReusablePayPalNativePaymentMethodParams = {
 
 export type AnyPayPalMethodParams =
   | ReusablePayPalBraintreePaymentMethodParams
-  | ReusablePayPalNativePaymentMethodParams
-  | PayPalNativePaymentMethodParams;
+  | ReusablePayPalNativePaymentMethodParams;
 
 export type StripeErrorParams = { status: "error"; stripe_error: StripeError };
 
