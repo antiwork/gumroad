@@ -694,27 +694,30 @@ class PaypalChargeProcessor
     return raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:) unless product.is_physical
 
     tolerance = quantity
-    valid_shipping_rates = product.shipping_destinations.alive.map do |shipping_destination|
+    valid_shipping_rates_usd = product.shipping_destinations.alive.map do |shipping_destination|
+      # ShippingDestination#calculate_shipping_rate returns USD cents after converting each
+      # product-currency rate term with CurrencyHelper#get_usd_cents, so this compares USD cents
+      # to USD cents even for non-USD physical products.
       shipping_destination.calculate_shipping_rate(
         quantity:,
         currency_type: product.price_currency_type
       )
     end.compact
 
-    return if valid_shipping_rates.any? { |rate| (shipping_cents_usd - rate).abs <= tolerance }
+    return if valid_shipping_rates_usd.any? { |rate| (shipping_cents_usd - rate).abs <= tolerance }
 
-    raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:, valid_shipping_rates:)
+    raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:, valid_shipping_rates_usd:)
   end
   private_class_method :ensure_shipping_matches_product!
 
-  def self.raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:, valid_shipping_rates: [])
+  def self.raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:, valid_shipping_rates_usd: [])
     ErrorNotifier.notify(
       "PayPal order shipping does not match Gumroad product shipping",
       product_id: product.id,
       is_physical: product.is_physical,
       submitted_shipping_cents_usd: shipping_cents_usd,
       quantity:,
-      valid_shipping_rates_usd: valid_shipping_rates
+      valid_shipping_rates_usd:
     )
     raise ChargeProcessorError, "PayPal order shipping does not match Gumroad product shipping"
   end

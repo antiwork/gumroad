@@ -2727,6 +2727,30 @@ describe PaypalChargeProcessor, :vcr do
       expect(paypal_order_id).to eq("FAKE_ORDER_ID")
     end
 
+    it "allows configured shipping for a non-USD physical product" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_currency_type: "aud", price_cents: 5_00,
+                                 is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "AU", one_item_rate_cents: 1_00, multiple_items_rate_cents: 50)])
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      physical_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "aud",
+        price_cents: 5_00,
+        shipping_cents: 1_50,
+        tax_cents: 0,
+        exclusive_tax_cents: 0,
+        total_cents: 6_50,
+        quantity: 2,
+      }
+
+      expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
+      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(physical_purchase_unit_info)
+      expect(paypal_order_id).to eq("FAKE_ORDER_ID")
+    end
+
     it "rejects unconfigured shipping for a physical product" do
       creator = create(:user)
       product = create(:product, user: creator, price_cents: 5_00, is_physical: true, require_shipping: true,
