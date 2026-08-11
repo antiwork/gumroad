@@ -757,3 +757,84 @@ it("keeps move provenance for a page moved to another tier while the save was in
     source_id: "server-page-a",
   });
 });
+
+// Same in-flight move, but the raw id was sent under TWO scopes (the
+// duplicated-id state this PR legitimizes). The raw-id fallback must not give
+// up just because the id appeared twice: the tier B copy that stayed put
+// claims its own sent entry via the scoped lookup, so tier A's entry is the
+// only unclaimed one and still identifies the moved page's snapshot — keeping
+// its provenance and its own scope's canonical id (the global map holds the
+// other scope's row).
+it("keeps move provenance for an in-flight move when the raw id was sent in two scopes", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "dup-page",
+        newlyAdded: true,
+        title: "A",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-b", "Tier B", [
+      {
+        id: "dup-page",
+        newlyAdded: true,
+        title: "B",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-c", "Tier C", []),
+  ]);
+  const props = buildTieredProps(product);
+
+  const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+  saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  let save: Promise<boolean> | undefined;
+  act(() => {
+    save = contextCapture.current?.save();
+  });
+  await waitFor(() => expect(saveProductMock).toHaveBeenCalledOnce());
+
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const tierA = current.variants.find((variant) => variant.id === "tier-a");
+      const tierC = current.variants.find((variant) => variant.id === "tier-c");
+      const page = tierA?.rich_content[0];
+      if (!tierA || !tierC || !page) throw new Error("expected the tiers and the in-flight page");
+      tierA.rich_content = [];
+      tierC.rich_content = [{ ...page, move_source_scope: "tier-a" }];
+    }),
+  );
+
+  await act(async () => {
+    requests[0]?.resolve({
+      rich_content_id_mappings: { "dup-page": "server-row-b" },
+      rich_content_id_mappings_by_scope: {
+        "tier-a": { "dup-page": "server-row-a" },
+        "tier-b": { "dup-page": "server-row-b" },
+      },
+    } satisfies SaveProductResponse);
+    await save;
+  });
+
+  const tierB = contextCapture.current?.product.variants.find((variant) => variant.id === "tier-b");
+  const tierC = contextCapture.current?.product.variants.find((variant) => variant.id === "tier-c");
+  // Tier B's page stayed put: it takes its own scope's canonical id and
+  // carries no move bookkeeping.
+  expect(tierB?.rich_content[0]?.id).toBe("server-row-b");
+  expect(tierB?.rich_content[0]).not.toHaveProperty("move_source_scope");
+  // The moved page adopts tier A's canonical row (the global map points at
+  // tier B's row) and records that row as the source to remove next save.
+  expect(tierC?.rich_content[0]).toMatchObject({
+    id: "server-row-a",
+    move_source_scope: "tier-a",
+    move_source_id: "server-row-a",
+    source_id: "server-row-a",
+  });
+});

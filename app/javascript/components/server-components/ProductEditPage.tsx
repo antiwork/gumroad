@@ -257,14 +257,26 @@ const applyCanonicalIds = (
   // A page moved to another scope while the request ran misses the scoped
   // lookup below (its current scope isn't the one it was sent under), which
   // would skip the movedAfterRequest bookkeeping entirely. Fall back to the
-  // raw id — but only when it identifies exactly one sent page; a raw id sent
-  // in two scopes is genuinely ambiguous and gets no fallback.
-  const uniqueSentPagesByRawId = new Map<string, ScopedPage | null>();
-  for (const scopedPage of sentPagesById.values()) {
-    uniqueSentPagesByRawId.set(scopedPage.page.id, uniqueSentPagesByRawId.has(scopedPage.page.id) ? null : scopedPage);
+  // raw id among UNCLAIMED sent entries — ones no current page still matches
+  // in its own scope; a same-id page that stayed put claims its entry via the
+  // scoped lookup, so it never shadows the moved page's snapshot. A raw id
+  // with several unclaimed entries stays ambiguous and gets no fallback.
+  // Compute this before the remap loop below rewrites page ids in place.
+  const claimedSentKeys = new Set<string>();
+  for (const scopedPage of allScopedRichContentPages(product)) {
+    const key = scopedRichContentPageKey(scopedPage.scope, scopedPage.page.id);
+    if (sentPagesById.has(key)) claimedSentKeys.add(key);
+  }
+  const unclaimedSentPagesByRawId = new Map<string, ScopedPage | null>();
+  for (const [key, scopedPage] of sentPagesById) {
+    if (claimedSentKeys.has(key)) continue;
+    unclaimedSentPagesByRawId.set(
+      scopedPage.page.id,
+      unclaimedSentPagesByRawId.has(scopedPage.page.id) ? null : scopedPage,
+    );
   }
   const findSentPage = (scope: string | null, pageId: string) =>
-    sentPagesById.get(scopedRichContentPageKey(scope, pageId)) ?? uniqueSentPagesByRawId.get(pageId) ?? undefined;
+    sentPagesById.get(scopedRichContentPageKey(scope, pageId)) ?? unclaimedSentPagesByRawId.get(pageId) ?? undefined;
   const fileMappings = response.file_id_mappings ?? {};
   const variantTimestamps = response.variant_updated_at ?? {};
   const variantBaselines = response.variant_loaded_integrations ?? {};
