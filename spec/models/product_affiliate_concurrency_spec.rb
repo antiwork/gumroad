@@ -87,6 +87,89 @@ describe ProductAffiliate, "assignment concurrency" do
     end
   end
 
+  it "publishes once when two requests assign the same apply-to-all affiliate" do
+    @affiliate.update!(apply_to_all_products: true)
+    @product.update!(draft: true)
+    first_lock = Queue.new
+    release_first = Queue.new
+    second_connection_id = Queue.new
+    results = Queue.new
+    errors = Queue.new
+    first_publisher = nil
+    second_publisher = nil
+
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+      next unless Thread.current[:link_first_publisher]
+      next unless payload[:sql].include?("FROM `links`") && payload[:sql].include?("FOR UPDATE")
+
+      Thread.current[:link_first_publisher] = false
+      first_lock << true
+      release_first.pop
+    end
+
+    expect do
+      first_publisher = Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          Thread.current[:link_first_publisher] = true
+          results << Link.find(@product.id).publish!
+        rescue StandardError => error
+          errors << error
+        ensure
+          Thread.current[:link_first_publisher] = false
+        end
+      end
+      Timeout.timeout(10) { first_lock.pop }
+
+      second_publisher = Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          connection = ActiveRecord::Base.connection
+          second_connection_id << connection.select_value("SELECT CONNECTION_ID()")
+          results << Link.find(@product.id).publish!
+        rescue StandardError => error
+          errors << error
+        end
+      end
+      process_id = Timeout.timeout(10) { second_connection_id.pop }
+      Timeout.timeout(10) do
+        loop do
+          lock_wait_count = ActiveRecord::Base.connection.select_value(<<~SQL.squish)
+            SELECT COUNT(*)
+            FROM performance_schema.data_lock_waits AS lock_waits
+            INNER JOIN performance_schema.data_locks AS requested_lock
+              ON requested_lock.ENGINE_LOCK_ID = lock_waits.REQUESTING_ENGINE_LOCK_ID
+            INNER JOIN performance_schema.threads AS requesting_thread
+              ON requesting_thread.THREAD_ID = lock_waits.REQUESTING_THREAD_ID
+            WHERE requesting_thread.PROCESSLIST_ID = #{process_id.to_i}
+              AND requested_lock.OBJECT_SCHEMA = DATABASE()
+              AND requested_lock.OBJECT_NAME = 'links'
+          SQL
+          break if lock_wait_count.to_i.positive?
+
+          sleep 0.01
+        end
+      end
+
+      expect(second_publisher).to be_alive
+      expect(results).to be_empty
+
+      release_first << true
+      [first_publisher, second_publisher].each { expect(_1.join(10)).to be_present }
+    end.to have_enqueued_mail(AffiliateMailer, :notify_direct_affiliate_of_new_product).with(@affiliate.id, @product.id).once
+
+    expect(errors).to be_empty
+    expect(@product.reload).to be_published
+    expect(ProductAffiliate.where(affiliate_id: @affiliate.id, link_id: @product.id).count).to eq(1)
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+    release_first << true if defined?(release_first) && release_first
+    [first_publisher, second_publisher].compact.each do |thread|
+      next if thread.join(1)
+
+      thread.kill
+      thread.join
+    end
+  end
+
   it "returns the existing assignment after waiting with an old snapshot" do
     first_lock = Queue.new
     release_first = Queue.new
