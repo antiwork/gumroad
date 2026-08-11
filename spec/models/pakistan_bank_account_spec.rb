@@ -22,18 +22,30 @@ describe PakistanBankAccount do
   end
 
   describe "#routing_number" do
-    it "uses the 8-character bank identifier for an 11-character BIC" do
+    it "returns valid for 11 characters" do
+      ba = create(:pakistan_bank_account)
+      expect(ba).to be_valid
+      expect(ba.routing_number).to eq("AAAAPKKAXXX")
+    end
+  end
+
+  describe "#stripe_external_account_routing_number" do
+    it "uses the 8-character bank identifier for a branch-specific BIC" do
       ba = create(:pakistan_bank_account, bank_code: "HABBPKKA007")
 
-      expect(ba).to be_valid
-      expect(ba.routing_number).to eq("HABBPKKA")
+      expect(ba.stripe_external_account_routing_number).to eq("HABBPKKA")
     end
 
     it "keeps an 8-character BIC unchanged" do
       ba = create(:pakistan_bank_account, bank_code: "HABBPKKA")
 
-      expect(ba).to be_valid
-      expect(ba.routing_number).to eq("HABBPKKA")
+      expect(ba.stripe_external_account_routing_number).to eq("HABBPKKA")
+    end
+
+    it "keeps an 11-character head-office BIC unchanged" do
+      ba = create(:pakistan_bank_account, bank_code: "HABBPKKAXXX")
+
+      expect(ba.stripe_external_account_routing_number).to eq("HABBPKKAXXX")
     end
   end
 
