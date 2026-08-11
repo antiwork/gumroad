@@ -89,15 +89,15 @@ module Onetime
       duplicate_pairs.reject { |pair| identical?(*pair) }
     end
 
-    # Keep-rule pass for the commission-divergent pairs left after pass 2a, per Sahil
-    # (gp#2067): "Keep the row the app resolves" — the same rule pass 2a used for
-    # destination_url-only pairs, generalized to whatever a pair still diverges on.
-    # Safe to run before pass 2a too since it applies the identical rule to any
-    # remaining divergent pair.
+    # Keep-rule pass for the divergent pairs left after pass 2a, per Sahil (gp#2067):
+    # "Keep the row the app resolves" — the same rule pass 2a used for
+    # destination_url-only pairs, generalized to whatever a pair still diverges on
+    # (commission, flags, or both). Safe to run before pass 2a too since it applies
+    # the identical rule to every remaining divergent pair.
     def process_commission_divergent(dry_run: true)
       stick_to_primary unless dry_run
       pairs = divergent_pairs
-      puts "Found #{pairs.size} commission-divergent pair(s) to resolve"
+      puts "Found #{pairs.size} pair(s) to resolve to the row the app already serves"
 
       deleted = 0
       pairs.each_slice(BATCH_SIZE) do |batch|
