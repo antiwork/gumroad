@@ -230,6 +230,20 @@ class Rack::Attack
       req.remote_ip if req.path.match?(path_regexp)
     end
   end
+  # /paypal/order and /paypal/update_order are unauthenticated by design (a buyer checking out
+  # via PayPal is not logged in), which is exactly what gp#2008 abused to hammer the fee-shift
+  # exploit an unbounded number of times per IP. price_cents is now re-validated against the
+  # live product server-side (see PaypalChargeProcessor.ensure_price_matches_product!), so this
+  # throttle is defense-in-depth against brute-forcing rounding/currency edge cases and general
+  # abuse of a route that legitimately has no session to key off of.
+  PAYPAL_ORDER_PATHS = %w[/paypal/order /paypal/update_order /paypal/fetch_order].index_with do |path|
+    /\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/
+  end.freeze
+  PAYPAL_ORDER_PATHS.each do |path, path_regexp|
+    throttle_with_exponential_backoff(name: "/ip:#{path}", requests: 20, period: 20.seconds) do |req|
+      req.remote_ip if req.path.match?(path_regexp)
+    end
+  end
   # One shared per-recipient budget across both grouped-receipt endpoints — they send the
   # same email, so separate budgets would double the ceiling. Initial: 6rpm, Max: 36
   # requests/3 days — roomy enough for a buyer retrying a lookup, still a hard ceiling on

@@ -2568,6 +2568,107 @@ describe PaypalChargeProcessor, :vcr do
     end
   end
 
+  describe "gp#2008 fee-shift guard" do
+    it "rejects create_order_from_product_info when price_cents is shifted below the product's price" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 17_50)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      # Same total ($17.50) as a legitimate purchase, but price_cents is shifted down to 1 cent
+      # and the difference moved into exclusive_tax_cents — the gp#2008 fee-shift attack.
+      attack_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 1,
+        shipping_cents: 0,
+        tax_cents: 17_49,
+        exclusive_tax_cents: 17_49,
+        total_cents: 17_50,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).not_to receive(:create_order)
+      expect do
+        PaypalChargeProcessor.create_order_from_product_info(attack_purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /minimum price/)
+    end
+
+    it "rejects update_order_from_product_info when price_cents is shifted below the product's price" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 17_50)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+      order_id = "27B71908FM8616631"
+
+      attack_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 1,
+        shipping_cents: 0,
+        tax_cents: 17_49,
+        exclusive_tax_cents: 17_49,
+        total_cents: 17_50,
+        quantity: 1,
+      }
+
+      # The total-only guard would pass this (total is unchanged at $17.50), proving this is a
+      # distinct check from "rejects updates that would lower the PayPal order total" above.
+      allow(PaypalChargeProcessor).to receive(:fetch_order).with(order_id:).and_return(
+        "purchase_units" => [{ "amount" => { "value" => "17.50", "currency_code" => "USD" } }]
+      )
+
+      expect(PaypalChargeProcessor).not_to receive(:update_order)
+      expect do
+        PaypalChargeProcessor.update_order_from_product_info(order_id, attack_purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /minimum price/)
+    end
+
+    it "allows a pay-what-you-want price above the product's price" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 1_00, customizable_price: true)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      generous_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 50_00,
+        shipping_cents: 0,
+        tax_cents: 0,
+        exclusive_tax_cents: 0,
+        total_cents: 50_00,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
+      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(generous_purchase_unit_info)
+      expect(paypal_order_id).to eq("FAKE_ORDER_ID")
+    end
+
+    it "allows a quantity purchase priced at exactly quantity * price_cents" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 5_00)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 15_00,
+        shipping_cents: 0,
+        tax_cents: 0,
+        exclusive_tax_cents: 0,
+        total_cents: 15_00,
+        quantity: 3,
+      }
+
+      expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
+      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(purchase_unit_info)
+      expect(paypal_order_id).to eq("FAKE_ORDER_ID")
+    end
+  end
+
   describe ".update_order_from_product_info" do
     it "updates the paypal order when the requested total is not lower than the current total" do
       creator = create(:user)
