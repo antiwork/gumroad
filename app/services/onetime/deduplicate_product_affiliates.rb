@@ -12,16 +12,24 @@
 # Usage (dry run by default):
 #   Onetime::DeduplicateProductAffiliates.process
 #   Onetime::DeduplicateProductAffiliates.process(dry_run: false)
+#   Onetime::DeduplicateProductAffiliates.process_url_divergent
+#   Onetime::DeduplicateProductAffiliates.process_url_divergent(dry_run: false)
 module Onetime
   class DeduplicateProductAffiliates
     CONTENT_COLUMNS = %w[affiliate_basis_points destination_url flags].freeze
+    COMMISSION_COLUMNS = %w[affiliate_basis_points flags].freeze
     BATCH_SIZE = 100
 
     def self.process(dry_run: true)
       new.process(dry_run:)
     end
 
+    def self.process_url_divergent(dry_run: true)
+      new.process_url_divergent(dry_run:)
+    end
+
     def process(dry_run: true)
+      stick_to_primary unless dry_run
       identical, divergent = duplicate_pairs.partition { |pair| identical?(*pair) }
       puts "Found #{duplicate_pairs.size} duplicate pair(s): #{identical.size} identical, #{divergent.size} divergent"
 
@@ -41,11 +49,47 @@ module Onetime
       deleted
     end
 
+    # Pass 2a of the cleanup. Pairs whose rows agree on commission terms
+    # (affiliate_basis_points, flags) and differ only on destination_url collapse to
+    # the row the application already serves. Readers and seller edits resolve a pair
+    # through unordered LIMIT 1 lookups (`product_affiliates.find_by(link_id:)`), so
+    # the pass asks the database for that row instead of assuming an index order, and
+    # the URL served for the pair's product cannot change. An affiliate whose only
+    # product was duplicated regains the single-product redirect: the surplus row made
+    # `product_affiliates.one?` false, wrongly sending /a/:id to the seller profile.
+    # updated_at cannot rank URLs: any unrelated persisted change advances it. Pairs
+    # with commission divergence stay untouched; they need a reviewed keep-rule.
+    def process_url_divergent(dry_run: true)
+      stick_to_primary unless dry_run
+      eligible, held_for_review = divergent_pairs.partition { |pair| url_only_divergent?(*pair) }
+      puts "Found #{divergent_pairs.size} divergent pair(s): #{eligible.size} differ only on destination_url, #{held_for_review.size} held for review"
+
+      deleted = 0
+      eligible.each_slice(BATCH_SIZE) do |pairs|
+        ReplicaLagWatcher.watch unless dry_run
+        pairs.each { |affiliate_id, link_id| deleted += dedupe_url_divergent_pair(affiliate_id, link_id, dry_run:) }
+      end
+
+      if dry_run
+        puts "Dry run — no changes made. Re-run with dry_run: false to apply."
+      else
+        puts "Deleted #{deleted} surplus row(s)."
+        report_remaining_duplicates
+      end
+      deleted
+    end
+
     def divergent_pairs
       duplicate_pairs.reject { |pair| identical?(*pair) }
     end
 
     private
+      # Live runs discover candidates and report leftovers with plain SELECTs; a lagging
+      # replica would silently skip primary-side duplicates. Dry runs stay on the replica.
+      def stick_to_primary
+        ActiveRecord::Base.connection.stick_to_primary!
+      end
+
       def duplicate_pairs
         @duplicate_pairs ||= ProductAffiliate.group(:affiliate_id, :link_id).having("COUNT(*) > 1").count.keys
       end
@@ -74,6 +118,35 @@ module Onetime
 
       def identical_content?(rows)
         rows.map { |row| row.attributes.values_at(*CONTENT_COLUMNS) }.uniq.size == 1
+      end
+
+      def url_only_divergent?(affiliate_id, link_id)
+        url_only_divergent_content?(ProductAffiliate.where(affiliate_id:, link_id:).to_a)
+      end
+
+      def dedupe_url_divergent_pair(affiliate_id, link_id, dry_run:)
+        ProductAffiliate.transaction do
+          rows = ProductAffiliate.where(affiliate_id:, link_id:).order(:id).lock(!dry_run).to_a
+          next 0 if rows.size < 2 || !url_only_divergent_content?(rows)
+
+          # Same unordered LIMIT 1 shape as the app's find_by, so the keeper is the row
+          # the app currently serves, whatever plan the database picks. Runs under the
+          # locks taken above. The URL stays out of the log: it is seller-controlled
+          # and can carry tokens.
+          keeper = ProductAffiliate.where(affiliate_id:, link_id:).take
+          next 0 if keeper.nil?
+
+          surplus_ids = rows.map(&:id) - [keeper.id]
+          puts "Keeping ProductAffiliate #{keeper.id}; deleting #{surplus_ids.join(', ')}"
+          next 0 if dry_run
+
+          ProductAffiliate.where(id: surplus_ids).delete_all
+        end
+      end
+
+      def url_only_divergent_content?(rows)
+        rows.map { |row| row.attributes.values_at(*COMMISSION_COLUMNS) }.uniq.size == 1 &&
+          rows.map(&:destination_url).uniq.size > 1
       end
 
       # The up-front partition can go stale mid-run (a pair skipped under lock stays
