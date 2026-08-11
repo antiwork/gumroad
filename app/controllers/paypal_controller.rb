@@ -55,16 +55,6 @@ class PaypalController < ApplicationController
     render json: api_response || {}
   end
 
-  def update_order
-    begin
-      success = PaypalChargeProcessor.update_order_from_product_info(params[:order_id], params[:product])
-    rescue ChargeProcessorError => e
-      Rails.logger.error("PAYPAL BUYER UX AFFECTING ERROR-in #{__method__}-#{e.message}")
-    end
-
-    render json: { success: !!success }
-  end
-
   def connect
     authorize [:settings, :payments, current_seller], :paypal_connect?
 

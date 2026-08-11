@@ -243,7 +243,6 @@ Rails.application.routes.draw do
         post :billing_agreement
         post :order
         get :fetch_order
-        post :update_order
       end
     end
 
@@ -1312,7 +1311,6 @@ Rails.application.routes.draw do
         post :billing_agreement
         post :order
         get :fetch_order
-        post :update_order
       end
     end
 
