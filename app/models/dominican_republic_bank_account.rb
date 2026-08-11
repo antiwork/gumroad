@@ -3,25 +3,31 @@
 class DominicanRepublicBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "DO"
 
-  BANK_CODE_FORMAT_REGEX = /^\d{1,3}$/
-  BRANCH_CODE_FORMAT_REGEX = /^\d{1,5}$/
-  ACCOUNT_NUMBER_FORMAT_REGEX = /^\d{1,28}$/
+  BANK_CODE_FORMAT_REGEX = /\A\d{1,3}\z/
+  BRANCH_CODE_FORMAT_REGEX = /\A\d{1,5}\z/
+  ACCOUNT_NUMBER_FORMAT_REGEX = /\A\d{1,28}\z/
   private_constant :BANK_CODE_FORMAT_REGEX, :BRANCH_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
 
   validate :validate_bank_code
   # Branch code is optional (Stripe accepts the bare bank_code alone, per gp#2050's live test
-  # results), but any value a seller DOES enter still gets concatenated into routing_number sent
-  # to Stripe — so it needs the same format guard as bank_code, just without the presence check.
+  # results), but any value a seller DOES enter still needs a format guard even though it isn't
+  # sent to Stripe (see #routing_number) — an unvalidated column value is still a stored trust
+  # boundary, and a future caller of branch_code shouldn't inherit garbage input silently.
   validate :validate_branch_code
   validate :validate_account_number
 
   validates :bank_code, presence: true
   validates :account_number, presence: true
 
+  # Only bank_code is Stripe-verified: gp#2050 confirmed 3-digit codes (003/007/021) succeed and
+  # 8-digit bank+branch concatenations fail with routing_number_invalid. Nothing has tested a
+  # dash-joined bank_code-branch_code value, and the concatenated format is the one Stripe's own
+  # error message says it wants instead — so branch_code, while still collected, is NEVER fed into
+  # the value sent to Stripe until a branch-code-present case is actually verified against Stripe.
   def routing_number
-    branch_code.present? ? "#{bank_code}-#{branch_code}" : "#{bank_code}"
+    bank_code
   end
 
   def bank_account_type
