@@ -2369,7 +2369,8 @@ describe PaypalChargeProcessor, :vcr do
   describe ".create_order_from_product_info" do
     it "creates a new paypal order with the given product info" do
       creator = create(:user)
-      product = create(:product, user: creator)
+      product = create(:product, user: creator, price_currency_type: "gbp", is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "GB", one_item_rate_cents: 1_00, multiple_items_rate_cents: 50)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "CJS32DZ7NDN5L",
                                                                  user: creator, country: "GB", currency: "gbp")
 
@@ -2392,7 +2393,8 @@ describe PaypalChargeProcessor, :vcr do
       creator = create(:user)
       product_name = "🚧 MDE.TV High-Roller Paywall 🚧 (INCLUDES ALL NEW 🍖 VIDEO CONTENT & NICK ROCHEFORT) " \
                      "and you also get......... 💥 THE GREAT WAR!!! 💥 Your Favourite!!!"
-      product = create(:product, user: creator, name: product_name)
+      product = create(:product, user: creator, name: product_name, is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 1_00, multiple_items_rate_cents: 50)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "CJS32DZ7NDN5L",
                                                                  user: creator, country: "GB", currency: "gbp")
 
@@ -2427,7 +2429,8 @@ describe PaypalChargeProcessor, :vcr do
 
     it "creates a new paypal order if merchant account currency is usd but product currency is not" do
       creator = create(:user)
-      product = create(:product, user: creator, price_currency_type: "aud")
+      product = create(:product, user: creator, price_currency_type: "aud", is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 1_00, multiple_items_rate_cents: 50)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "B66YJBBNCRW6L",
                                                                  user: creator, country: "US", currency: "usd")
 
@@ -2461,7 +2464,8 @@ describe PaypalChargeProcessor, :vcr do
 
     it "creates a new paypal order if merchant account currency and product currency are different and none is usd" do
       creator = create(:user)
-      product = create(:product, user: creator, price_currency_type: "aud")
+      product = create(:product, user: creator, price_currency_type: "aud", is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 1_00, multiple_items_rate_cents: 50)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "CJS32DZ7NDN5L",
                                                                  user: creator, country: "GB", currency: "gbp")
 
@@ -2498,7 +2502,8 @@ describe PaypalChargeProcessor, :vcr do
        "sanitization" do
       creator = create(:user)
       product = create(:product, user: creator, price_currency_type: "aud", name: "🚧 🚧 🍖 💥 💥",
-                                 custom_permalink: "custom")
+                                 custom_permalink: "custom", is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 1_00, multiple_items_rate_cents: 50)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "CJS32DZ7NDN5L",
                                                                  user: creator, country: "GB", currency: "gbp")
 
@@ -2534,7 +2539,8 @@ describe PaypalChargeProcessor, :vcr do
     it "creates a new paypal order with item name as product's unique_permalink if the product's name becomes empty " \
        "on sanitization and there's no custom_permalink" do
       creator = create(:user)
-      product = create(:product, user: creator, price_currency_type: "aud", name: "🚧 🚧 🍖 💥 💥")
+      product = create(:product, user: creator, price_currency_type: "aud", name: "🚧 🚧 🍖 💥 💥", is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 1_00, multiple_items_rate_cents: 50)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "CJS32DZ7NDN5L",
                                                                  user: creator, country: "GB", currency: "gbp")
 
@@ -2624,6 +2630,57 @@ describe PaypalChargeProcessor, :vcr do
       end.to raise_error(ChargeProcessorError, /implausibly large/)
     end
 
+    it "rejects create_order_from_product_info when shipping_cents carries the fee-shift on a non-physical product" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 17_50)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      attack_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 1,
+        shipping_cents: 17_49,
+        tax_cents: 0,
+        exclusive_tax_cents: 0,
+        total_cents: 17_50,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).not_to receive(:create_order)
+      expect do
+        PaypalChargeProcessor.create_order_from_product_info(attack_purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /shipping does not match/)
+    end
+
+    it "rejects update_order_from_product_info when shipping_cents carries the fee-shift on a non-physical product" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 17_50)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+      order_id = "27B71908FM8616631"
+
+      attack_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 1,
+        shipping_cents: 17_49,
+        tax_cents: 0,
+        exclusive_tax_cents: 0,
+        total_cents: 17_50,
+        quantity: 1,
+      }
+
+      allow(PaypalChargeProcessor).to receive(:fetch_order).with(order_id:).and_return(
+        "purchase_units" => [{ "amount" => { "value" => "17.50", "currency_code" => "USD" } }]
+      )
+
+      expect(PaypalChargeProcessor).not_to receive(:update_order)
+      expect do
+        PaypalChargeProcessor.update_order_from_product_info(order_id, attack_purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /shipping does not match/)
+    end
+
     it "rejects a $0 price with any positive tax without dividing by zero" do
       creator = create(:user)
       product = create(:product, user: creator, price_cents: 17_50)
@@ -2645,6 +2702,53 @@ describe PaypalChargeProcessor, :vcr do
       expect do
         PaypalChargeProcessor.create_order_from_product_info(attack_purchase_unit_info)
       end.to raise_error(ChargeProcessorError, /implausibly large/)
+    end
+
+    it "allows configured shipping for a physical product" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 5_00, is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 20_00, multiple_items_rate_cents: 15_00)])
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      physical_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 5_00,
+        shipping_cents: 20_00,
+        tax_cents: 0,
+        exclusive_tax_cents: 0,
+        total_cents: 25_00,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
+      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(physical_purchase_unit_info)
+      expect(paypal_order_id).to eq("FAKE_ORDER_ID")
+    end
+
+    it "rejects unconfigured shipping for a physical product" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 5_00, is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 20_00, multiple_items_rate_cents: 15_00)])
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      inflated_shipping_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 1,
+        shipping_cents: 17_49,
+        tax_cents: 0,
+        exclusive_tax_cents: 0,
+        total_cents: 17_50,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).not_to receive(:create_order)
+      expect do
+        PaypalChargeProcessor.create_order_from_product_info(inflated_shipping_purchase_unit_info)
+      end.to raise_error(ChargeProcessorError, /shipping does not match/)
     end
 
     it "allows a discounted (offer code) price with proportionally discounted tax" do
@@ -2768,7 +2872,8 @@ describe PaypalChargeProcessor, :vcr do
   describe ".update_order_from_product_info" do
     it "updates the paypal order when the requested total is not lower than the current total" do
       creator = create(:user)
-      product = create(:product, user: creator)
+      product = create(:product, user: creator, is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 1_00, multiple_items_rate_cents: 50)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
                                                                  user: creator, country: "US", currency: "usd")
       paypal_order_id = "27B71908FM8616631"
@@ -2798,7 +2903,8 @@ describe PaypalChargeProcessor, :vcr do
 
     it "rejects updates that would lower the PayPal order total" do
       creator = create(:user)
-      product = create(:product, user: creator)
+      product = create(:product, user: creator, is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 50, multiple_items_rate_cents: 25)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
                                                                  user: creator, country: "US", currency: "usd")
       original_order_id = "27B71908FM8616631"
@@ -2825,7 +2931,8 @@ describe PaypalChargeProcessor, :vcr do
 
     it "rejects updates when PayPal's current order total is not numeric" do
       creator = create(:user)
-      product = create(:product, user: creator)
+      product = create(:product, user: creator, is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 1_00, multiple_items_rate_cents: 50)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
                                                                  user: creator, country: "US", currency: "usd")
       order_id = "27B71908FM8616631"
@@ -2852,7 +2959,8 @@ describe PaypalChargeProcessor, :vcr do
 
     it "rejects updates when PayPal's current order total is NaN" do
       creator = create(:user)
-      product = create(:product, user: creator)
+      product = create(:product, user: creator, is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 50, multiple_items_rate_cents: 25)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
                                                                  user: creator, country: "US", currency: "usd")
       order_id = "27B71908FM8616631"
@@ -2906,7 +3014,8 @@ describe PaypalChargeProcessor, :vcr do
   describe "#update_invoice_id" do
     it "updates the invoice id for paypal order" do
       creator = create(:user)
-      product = create(:product, user: creator)
+      product = create(:product, user: creator, price_currency_type: "gbp", is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "GB", one_item_rate_cents: 1_00, multiple_items_rate_cents: 50)])
       paypal_merchant_account = create(:merchant_account_paypal, charge_processor_merchant_id: "CJS32DZ7NDN5L",
                                                                  user: creator, country: "GB", currency: "gbp")
 

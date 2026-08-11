@@ -567,10 +567,12 @@ class PaypalChargeProcessor
         sanitize_for_paypal(product.general_permalink, MAXIMUM_ITEM_NAME_LENGTH)
 
     price_cents_usd = get_usd_cents(currency, product_info[:price_cents].to_i)
+    shipping_cents_usd = get_usd_cents(currency, product_info[:shipping_cents].to_i)
     tax_cents_usd = get_usd_cents(currency,
                                   product_info[:vat_cents].to_i > 0 ?
                                     product_info[:exclusive_vat_cents].to_i :
                                     product_info[:exclusive_tax_cents].to_i)
+    ensure_shipping_matches_product!(product:, quantity: product_info[:quantity].to_i, shipping_cents_usd:)
     ensure_tax_does_not_dwarf_price!(price_cents_usd:, tax_cents_usd:)
 
     purchase_unit_info = create_purchase_unit_info(permalink: product.unique_permalink,
@@ -579,7 +581,7 @@ class PaypalChargeProcessor
                                                    merchant_id: merchant_account.charge_processor_merchant_id,
                                                    descriptor: sanitize_for_paypal(product.statement_description, MAXIMUM_DESCRIPTOR_LENGTH),
                                                    price_cents_usd:,
-                                                   shipping_cents_usd: get_usd_cents(currency, product_info[:shipping_cents].to_i),
+                                                   shipping_cents_usd:,
                                                    tax_cents_usd:,
                                                    fee_cents_usd: product.gumroad_amount_for_paypal_order(
                                                      amount_cents: price_cents_usd,
@@ -605,10 +607,12 @@ class PaypalChargeProcessor
         sanitize_for_paypal(product.general_permalink, MAXIMUM_ITEM_NAME_LENGTH)
 
     price_cents_usd = get_usd_cents(currency, product_info[:price_cents].to_i)
+    shipping_cents_usd = get_usd_cents(currency, product_info[:shipping_cents].to_i)
     tax_cents_usd = get_usd_cents(currency,
                                   product_info[:vat_cents].to_i > 0 ?
                                     product_info[:exclusive_vat_cents].to_i :
                                     product_info[:exclusive_tax_cents].to_i)
+    ensure_shipping_matches_product!(product:, quantity: product_info[:quantity].to_i, shipping_cents_usd:)
     ensure_tax_does_not_dwarf_price!(price_cents_usd:, tax_cents_usd:)
 
     purchase_unit_info = create_purchase_unit_info(permalink: product.unique_permalink,
@@ -617,7 +621,7 @@ class PaypalChargeProcessor
                                                    merchant_id: merchant_account.charge_processor_merchant_id,
                                                    descriptor: sanitize_for_paypal(product.statement_description, MAXIMUM_DESCRIPTOR_LENGTH),
                                                    price_cents_usd:,
-                                                   shipping_cents_usd: get_usd_cents(currency, product_info[:shipping_cents].to_i),
+                                                   shipping_cents_usd:,
                                                    tax_cents_usd:,
                                                    fee_cents_usd: product.gumroad_amount_for_paypal_order(
                                                      amount_cents: price_cents_usd,
@@ -634,7 +638,7 @@ class PaypalChargeProcessor
 
   # gp#1916 closed the total-preserving version of this (a lower total was rejected outright);
   # this closes the FEE-SHIFT variant, where an attacker keeps the total unchanged but shifts
-  # cents from `price_cents` into `exclusive_tax_cents`/`exclusive_vat_cents`. The platform fee
+  # cents from `price_cents` into other buyer-supplied breakdown fields. The platform fee
   # (`Link#gumroad_amount_for_paypal_order`) is a percentage of `price_cents` alone, so an
   # artificially low `price_cents` collapses Gumroad's fee toward zero without tripping the
   # total-lower guard or `ensure_captured_amount_matches!` (both total-only checks).
@@ -678,6 +682,39 @@ class PaypalChargeProcessor
     raise ChargeProcessorError, "PayPal order tax/VAT is implausibly large relative to price"
   end
   private_class_method :raise_tax_price_mismatch!
+
+  def self.ensure_shipping_matches_product!(product:, quantity:, shipping_cents_usd:)
+    return if shipping_cents_usd <= 0
+
+    quantity = 1 if quantity <= 0
+    return raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:) unless product.is_physical
+
+    tolerance = quantity
+    valid_shipping_rates = product.shipping_destinations.alive.map do |shipping_destination|
+      shipping_destination.calculate_shipping_rate(
+        quantity:,
+        currency_type: product.price_currency_type
+      )
+    end.compact
+
+    return if valid_shipping_rates.any? { |rate| (shipping_cents_usd - rate).abs <= tolerance }
+
+    raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:, valid_shipping_rates:)
+  end
+  private_class_method :ensure_shipping_matches_product!
+
+  def self.raise_shipping_mismatch!(product:, quantity:, shipping_cents_usd:, valid_shipping_rates: [])
+    ErrorNotifier.notify(
+      "PayPal order shipping does not match Gumroad product shipping",
+      product_id: product.id,
+      is_physical: product.is_physical,
+      submitted_shipping_cents_usd: shipping_cents_usd,
+      quantity:,
+      valid_shipping_rates_usd: valid_shipping_rates
+    )
+    raise ChargeProcessorError, "PayPal order shipping does not match Gumroad product shipping"
+  end
+  private_class_method :raise_shipping_mismatch!
 
   def self.ensure_order_update_does_not_lower_total!(paypal_order_id, purchase_unit_info)
     order_details = fetch_order(order_id: paypal_order_id)

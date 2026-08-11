@@ -232,10 +232,10 @@ class Rack::Attack
   end
   # /paypal/order and /paypal/update_order are unauthenticated by design (a buyer checking out
   # via PayPal is not logged in), which is exactly what gp#2008 abused to hammer the fee-shift
-  # exploit an unbounded number of times per IP. price_cents is now re-validated against the
-  # live product server-side (see PaypalChargeProcessor.ensure_price_matches_product!), so this
-  # throttle is defense-in-depth against brute-forcing rounding/currency edge cases and general
-  # abuse of a route that legitimately has no session to key off of.
+  # exploit an unbounded number of times per IP. The submitted breakdown is now bounded against
+  # server-side product facts in PaypalChargeProcessor, so this throttle is defense-in-depth
+  # against brute-forcing rounding/currency edge cases and general abuse of a route that
+  # legitimately has no session to key off of.
   PAYPAL_ORDER_PATHS = %w[/paypal/order /paypal/update_order /paypal/fetch_order].index_with do |path|
     /\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/
   end.freeze

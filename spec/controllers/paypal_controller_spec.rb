@@ -225,10 +225,10 @@ describe PaypalController, :vcr do
         external_id: product.external_id,
         currency_code: "usd",
         price_cents: "1500",
-        shipping_cents: "150",
+        shipping_cents: "0",
         tax_cents: "100",
         exclusive_tax_cents: "100",
-        total_cents: "1750",
+        total_cents: "1600",
         quantity: 3
       }
     end
