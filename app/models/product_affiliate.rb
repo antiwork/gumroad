@@ -12,7 +12,7 @@ class ProductAffiliate < ApplicationRecord
   belongs_to :affiliate
   belongs_to :product, class_name: "Link", foreign_key: :link_id
 
-  before_validation :lock_affiliate_for_assignment
+  around_save :serialize_assignment
   before_destroy :lock_affiliate_for_assignment
   validate :affiliate_is_unique_for_product
   validates :affiliate_basis_points, presence: true, if: -> { affiliate.is_a?(Collaborator) && !affiliate.apply_to_all_products? }
@@ -29,6 +29,23 @@ class ProductAffiliate < ApplicationRecord
   after_create :enqueue_workflow_jobs, if: -> { affiliate.is_a?(DirectAffiliate) }
 
   has_flags 1 => :dont_show_as_co_creator
+
+  def self.create_if_missing!(affiliate:, product:)
+    assignments = where(affiliate:, product:)
+    assignment_id = assignments.pick(:id)
+    if assignment_id
+      current_assignment = where(id: assignment_id, affiliate_id: affiliate.id, link_id: product.id)
+      return false if current_assignment.lock("LOCK IN SHARE MODE").exists?
+    end
+
+    affiliate.with_lock do
+      return false if assignments.lock.exists?
+
+      assignment = new(affiliate:, product:)
+      assignment.send(:save_with_assignment_lock!)
+      true
+    end
+  end
 
   def affiliate_percentage
     return unless affiliate_basis_points.present?
@@ -94,18 +111,42 @@ class ProductAffiliate < ApplicationRecord
       self.workflow_schedule_token = self.class.workflow_schedule_token
     end
 
+    def save_with_assignment_lock!
+      @assignment_lock_held = true
+      save!
+    ensure
+      @assignment_lock_held = false
+    end
+
+    def serialize_assignment
+      return yield if @assignment_lock_held
+      return yield if affiliate_id.nil? || link_id.nil?
+
+      # The row lock must surround the final duplicate check and the insert.
+      Affiliate.where(id: affiliate_id).lock.load
+      affiliate_is_unique_for_product(lock: true)
+      if errors.of_kind?(:affiliate, :taken)
+        affiliate.errors.add(:base, errors.full_messages_for(:affiliate).first)
+        raise ActiveRecord::RecordInvalid, self
+      end
+
+      yield
+    end
+
     def lock_affiliate_for_assignment
       return if affiliate_id.nil? || link_id.nil?
 
       Affiliate.where(id: affiliate_id).lock.load
     end
 
-    def affiliate_is_unique_for_product
+    def affiliate_is_unique_for_product(lock: false)
       return if affiliate_id.nil? || link_id.nil?
+      return if @assignment_lock_held && !lock
 
       matching_assignments = ProductAffiliate.where(affiliate_id:, link_id:)
       matching_assignments = matching_assignments.where.not(id:) if persisted?
-      errors.add(:affiliate, :taken) if matching_assignments.lock.exists?
+      matching_assignments = matching_assignments.lock if lock
+      errors.add(:affiliate, :taken) if matching_assignments.exists?
     end
 
     def enable_product_collaborator_flag_and_disable_affiliates
