@@ -112,6 +112,8 @@ ESCALATE_PATTERNS = [
 
 # Paths that never affect the rspec suite.
 IGNORED_PATTERNS = [
+  # Minitest suite; test_minitest runs all of it on every PR, unfiltered.
+  %r{\Atest/},
   %r{\Aqa-media/},
   %r{\Adocs?/},
   %r{\.md\z},
