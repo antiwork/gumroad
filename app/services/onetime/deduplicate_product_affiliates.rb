@@ -1,24 +1,18 @@
 # frozen_string_literal: true
 
-# Removes duplicate ProductAffiliate rows for the same (affiliate_id, link_id) pair.
-# affiliates_links has no composite unique index, so racing INSERTs (concurrent
-# apply-to-all collaborator saves, before PR 7167 serialized them) slipped past the
-# model's uniqueness validation. Run this only after PR 7167 is deployed, so no new
-# duplicates form while it runs. A composite unique index follows in a later PR; the
-# table must hold zero duplicates before that index lands, because Alterity copies
-# tables with INSERT IGNORE and would silently drop rows for still-duplicated pairs.
-#
-# Pass 1 (this task) deletes surplus rows for pairs whose rows all carry the same
-# content (affiliate_basis_points, destination_url, flags), keeping the lowest id.
-# Pairs whose rows diverge on content need a keep-rule decision and stay untouched;
-# `divergent_pairs` lists them for the manual follow-up pass.
+# Deletes surplus ProductAffiliate rows for duplicated (affiliate_id, link_id) pairs.
+# affiliates_links has no composite unique index, so racing INSERTs bypassed the model
+# validation. Run only after PR 7167 (which serializes those writes) is deployed. Only
+# pairs whose rows all share the same content are collapsed, keeping the lowest id;
+# `divergent_pairs` lists the rest for a manual keep-rule pass. The follow-up unique
+# index migration needs zero remaining duplicates (Alterity copies with INSERT IGNORE).
 #
 # Usage (dry run by default):
 #   Onetime::DeduplicateProductAffiliates.process
 #   Onetime::DeduplicateProductAffiliates.process(dry_run: false)
 module Onetime
   class DeduplicateProductAffiliates
-    CONTENT_COLUMNS = %i[affiliate_basis_points destination_url flags].freeze
+    CONTENT_COLUMNS = %w[affiliate_basis_points destination_url flags].freeze
     BATCH_SIZE = 100
 
     def self.process(dry_run: true)
@@ -32,20 +26,7 @@ module Onetime
       deleted = 0
       identical.each_slice(BATCH_SIZE) do |pairs|
         ReplicaLagWatcher.watch unless dry_run
-        pairs.each do |affiliate_id, link_id|
-          rows = ProductAffiliate.where(affiliate_id:, link_id:).order(:id).to_a
-          next if rows.size < 2
-          # Re-check content at deletion time; the pair list may be stale.
-          next unless rows.map { |row| row.attributes.values_at(*CONTENT_COLUMNS.map(&:to_s)) }.uniq.size == 1
-
-          surplus_ids = rows.drop(1).map(&:id)
-          puts "Keeping ProductAffiliate #{rows.first.id}; deleting #{surplus_ids.join(', ')}"
-          next if dry_run
-
-          # delete_all skips callbacks on purpose: the kept row carries the same
-          # (affiliate, product) pair, so audience-member state does not change.
-          deleted += ProductAffiliate.where(id: surplus_ids).delete_all
-        end
+        pairs.each { |affiliate_id, link_id| deleted += dedupe_pair(affiliate_id, link_id, dry_run:) }
       end
 
       puts "Divergent pair(s) left untouched: #{divergent.size}" if divergent.any?
@@ -64,6 +45,28 @@ module Onetime
 
       def identical?(affiliate_id, link_id)
         ProductAffiliate.where(affiliate_id:, link_id:).pluck(*CONTENT_COLUMNS).uniq.size == 1
+      end
+
+      # FOR UPDATE makes the content re-check and the delete atomic; the up-front pair
+      # scan can be stale. The dry run skips the lock — it writes nothing and may run
+      # against a read-only replica, which rejects locking reads.
+      def dedupe_pair(affiliate_id, link_id, dry_run:)
+        ProductAffiliate.transaction do
+          rows = ProductAffiliate.where(affiliate_id:, link_id:).order(:id).lock(!dry_run).to_a
+          next 0 if rows.size < 2 || !identical_content?(rows)
+
+          surplus_ids = rows.drop(1).map(&:id)
+          puts "Keeping ProductAffiliate #{rows.first.id}; deleting #{surplus_ids.join(', ')}"
+          next 0 if dry_run
+
+          # delete_all skips callbacks on purpose: the kept row carries the same
+          # (affiliate, product) pair, so audience-member state does not change.
+          ProductAffiliate.where(id: surplus_ids).delete_all
+        end
+      end
+
+      def identical_content?(rows)
+        rows.map { |row| row.attributes.values_at(*CONTENT_COLUMNS) }.uniq.size == 1
       end
   end
 end

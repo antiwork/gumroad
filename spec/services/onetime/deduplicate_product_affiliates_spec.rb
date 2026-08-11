@@ -15,6 +15,15 @@ describe Onetime::DeduplicateProductAffiliates do
           **overrides).tap { _1.save!(validate: false) }
   end
 
+  def locking_queries_during(&block)
+    locking_queries = []
+    callback = lambda do |_name, _start, _finish, _id, payload|
+      locking_queries << payload[:sql] if payload[:sql].include?("FOR UPDATE")
+    end
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+    locking_queries
+  end
+
   let!(:identical_pair_keeper) do
     create(:product_affiliate, affiliate_basis_points: 1000, destination_url: "https://example.com/landing")
   end
@@ -35,6 +44,14 @@ describe Onetime::DeduplicateProductAffiliates do
     it "skips ReplicaLagWatcher on a dry run so it works against a replica connection" do
       expect(ReplicaLagWatcher).not_to receive(:watch)
       described_class.process
+    end
+
+    it "skips row locks on a dry run so it works against a read-only replica" do
+      expect(locking_queries_during { described_class.process }).to be_empty
+    end
+
+    it "locks the pair's rows so the content re-check and the delete are atomic" do
+      expect(locking_queries_during { described_class.process(dry_run: false) }).not_to be_empty
     end
 
     it "deletes the surplus row of an identical pair and keeps the lowest id" do
