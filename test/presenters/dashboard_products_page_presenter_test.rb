@@ -153,6 +153,36 @@ class DashboardProductsPagePresenterTest < ActiveSupport::TestCase
     assert_empty presenter(query: "nonexistent_xyz").products_table_props[:products]
   end
 
+  test "paginates the lean product relation without eager-loading thumbnails into it (GUMROAD-1AS)" do
+    create_product(user: @seller, name: "p")
+
+    paginated_collection = nil
+    presenter = self.presenter
+    presenter.stub(:sort_and_paginate_products, ->(**kwargs) {
+      paginated_collection = kwargs[:collection]
+      [{ page: 1, pages: 1 }, []]
+    }) do
+      presenter.send(:paginated_products)
+    end
+
+    refute_nil paginated_collection
+    # The thumbnail chain must be preloaded AFTER pagination, never eager-loaded
+    # into the paginated relation. `includes` here turns into an 11-way LEFT JOIN
+    # over a large catalogue and times the request out (GUMROAD-1AS, 73s span).
+    assert_empty paginated_collection.includes_values
+    assert_empty paginated_collection.eager_load_values
+  end
+
+  test "page products still render their thumbnail via the post-pagination preload (GUMROAD-1AS)" do
+    product = create_product(user: @seller, name: "thumbnailed_product")
+    create_thumbnail(product:)
+
+    thumbnail_prop = presenter.products_table_props[:products].sole["thumbnail"]
+
+    assert thumbnail_prop.present?, "expected the page product's thumbnail to be preloaded and rendered"
+    assert_equal product.thumbnail.alive.as_json, thumbnail_prop
+  end
+
   test "#products_table_props denies every product action for a read-only team member" do
     create_product(user: @seller, name: "normal_product")
 
