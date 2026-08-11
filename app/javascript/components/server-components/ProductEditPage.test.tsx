@@ -6,9 +6,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { type SaveProductResponse } from "$app/data/product_edit";
 
-import { showAlert } from "$app/components/server-components/Alert";
-
 import { ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
+import { showAlert } from "$app/components/server-components/Alert";
 import { ProductEditPage, type ProductEditPageProps } from "$app/components/server-components/ProductEditPage";
 
 type ProductEditContextValue = NonNullable<React.ContextType<typeof ProductEditContext>>;
