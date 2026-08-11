@@ -201,12 +201,9 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
   end
 
   private
-    # Strips tags and collapses whitespace, like Mail::Body#sanitized
-    # (spec/support/mail_body_extensions.rb) — but unfolds quoted-printable soft
-    # line breaks ("=\r\n") first. The encoder wraps at 76 columns, so where a
-    # soft break lands depends on the random test subdomain length; without the
-    # unfold, "Product 10 ( http://... )" intermittently reads "Product 10 = (
-    # http://... )" and the stats regexes flake.
+    # Like Mail::Body#sanitized (spec/support/mail_body_extensions.rb), but
+    # unfolds quoted-printable soft breaks ("=\r\n") first — they land at
+    # positions that depend on the random test subdomain length.
     def sanitized_body(mail)
       ActionView::Base.full_sanitizer
         .sanitize(mail.body.encoded.gsub("=\r\n", ""))
