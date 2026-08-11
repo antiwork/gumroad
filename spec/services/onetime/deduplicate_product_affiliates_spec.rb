@@ -225,4 +225,88 @@ describe Onetime::DeduplicateProductAffiliates do
       end.not_to change { ProductAffiliate.exists?(identical_pair_surplus.id) }
     end
   end
+
+  describe ".process_commission_divergent" do
+    it "does not delete anything on a dry run" do
+      expect do
+        described_class.process_commission_divergent
+      end.not_to change { ProductAffiliate.count }
+    end
+
+    it "skips row locks on a dry run so it works against a read-only replica" do
+      expect(locking_queries_during { described_class.process_commission_divergent }).to be_empty
+    end
+
+    it "locks the pair's rows so the content re-check and the delete are atomic" do
+      expect(locking_queries_during { described_class.process_commission_divergent(dry_run: false) }).not_to be_empty
+    end
+
+    it "sticks a live run to the primary so discovery cannot read a lagging replica" do
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      described_class.process_commission_divergent(dry_run: false)
+    end
+
+    it "keeps the row the application lookup returns for a basis-points-divergent pair" do
+      resolved_id = ProductAffiliate.where(affiliate_id: divergent_pair_row_one.affiliate_id,
+                                           link_id: divergent_pair_row_one.link_id).take.id
+
+      expect do
+        described_class.process_commission_divergent(dry_run: false)
+      end.to change { ProductAffiliate.count }.by(-1)
+
+      remaining_ids = ProductAffiliate.where(affiliate_id: divergent_pair_row_one.affiliate_id,
+                                             link_id: divergent_pair_row_one.link_id).pluck(:id)
+      expect(remaining_ids).to eq([resolved_id])
+    end
+
+    it "serves the same basis points the app resolved before the collapse" do
+      pair = create(:product_affiliate, affiliate_basis_points: 1000).tap { _1.update_columns(updated_at: 3.days.ago) }
+      create_duplicate_of(pair, affiliate_basis_points: 4000)
+      affiliate = pair.affiliate
+
+      basis_before = affiliate.product_affiliates.find_by(link_id: pair.link_id).affiliate_basis_points
+
+      described_class.process_commission_divergent(dry_run: false)
+
+      expect(affiliate.product_affiliates.find_by(link_id: pair.link_id).affiliate_basis_points).to eq(basis_before)
+    end
+
+    it "deletes every surplus row in a pair with more than two commission-divergent rows" do
+      create_duplicate_of(divergent_pair_row_one, affiliate_basis_points: 3000)
+      create_duplicate_of(divergent_pair_row_one, affiliate_basis_points: 5000)
+
+      described_class.process_commission_divergent(dry_run: false)
+
+      remaining = ProductAffiliate.where(affiliate_id: divergent_pair_row_one.affiliate_id,
+                                         link_id: divergent_pair_row_one.link_id).pluck(:id)
+      expect(remaining.size).to eq(1)
+    end
+
+    it "collapses a pair that diverges only on flags" do
+      flags_pair_row_one = create(:product_affiliate, affiliate_basis_points: 1000)
+      flags_pair_row_two = create_duplicate_of(flags_pair_row_one, dont_show_as_co_creator: true)
+
+      described_class.process_commission_divergent(dry_run: false)
+
+      remaining = ProductAffiliate.where(affiliate_id: flags_pair_row_one.affiliate_id,
+                                         link_id: flags_pair_row_one.link_id).pluck(:id)
+      expect(remaining.size).to eq(1)
+      expect(remaining).not_to include(flags_pair_row_two.id)
+    end
+
+    it "leaves identical pairs for the first pass" do
+      expect do
+        described_class.process_commission_divergent(dry_run: false)
+      end.not_to change { ProductAffiliate.exists?(identical_pair_surplus.id) }
+    end
+
+    it "leaves a destination_url-only pair for the second pass" do
+      url_pair = create(:product_affiliate, destination_url: "https://example.com/one")
+      create_duplicate_of(url_pair, destination_url: "https://example.com/two")
+
+      expect do
+        described_class.process_commission_divergent(dry_run: false)
+      end.not_to change { ProductAffiliate.where(affiliate_id: url_pair.affiliate_id, link_id: url_pair.link_id).count }
+    end
+  end
 end
