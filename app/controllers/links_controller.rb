@@ -1028,10 +1028,17 @@ class LinksController < ApplicationController
     end
 
     def ensure_rich_content_ids_are_unambiguous!
+      # Client-generated page ids are only unique WITHIN a scope (product-level,
+      # or a given variant) — the same raw id legitimately appears once per
+      # variant when pages move between shared/per-tier scopes in one save
+      # (gumroad-private#2023). Tally per destination scope, not globally, or
+      # this rejects the exact multi-scope save the client-side reconciliation
+      # fix (ProductEditPage#applyCanonicalIds) is designed to handle.
       duplicate_id = submitted_rich_content_page_references
-        .filter_map { _1[:page][:id].presence }
-        .tally
-        .find { |_id, count| count > 1 }
+        .group_by { _1[:destination_scope_key] }
+        .values
+        .flat_map { |refs| refs.filter_map { _1[:page][:id].presence }.tally.select { |_id, count| count > 1 }.keys }
+        .first
       return if duplicate_id.nil?
 
       raise Product::SaveContract::AmbiguousRichContentIdConflict
@@ -1629,16 +1636,23 @@ class LinksController < ApplicationController
     def submitted_rich_content_page_references
       @_submitted_rich_content_page_references ||= begin
         references = Array.wrap(product_permitted_params[:rich_content]).map do |page|
-          { page:, destination_entity_type: "Link", destination_entity_id: @product.id }
+          { page:, destination_entity_type: "Link", destination_entity_id: @product.id, destination_scope_key: "product" }
         end
 
-        Array.wrap(product_permitted_params[:variants]).each do |variant|
+        Array.wrap(product_permitted_params[:variants]).each_with_index do |variant, variant_index|
           destination_variant_id = decrypt_rich_content_external_id(variant[:id])
+          # A brand-new variant has no server id yet, so destination_variant_id
+          # is nil for every new variant in this save — falling back to it
+          # alone would bucket unrelated new variants' pages into one scope
+          # and falsely flag their (legitimately independent) client-generated
+          # ids as colliding. The submitted array position is stable and
+          # unique per variant regardless of whether it has a server id yet.
           Array.wrap(variant[:rich_content]).each do |page|
             references << {
               page:,
               destination_entity_type: "BaseVariant",
               destination_entity_id: destination_variant_id,
+              destination_scope_key: destination_variant_id || "new-variant-#{variant_index}",
             }
           end
         end
