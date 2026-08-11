@@ -239,6 +239,19 @@ const findPendingDeletions = (product: Product, lastSavedProduct: Product): Pend
 // server's Product::RichContentDeletionGuard).
 type ScopedPage = { page: Page; scope: string | null };
 
+// A page's client-generated id is unique WITHIN a scope, not across the whole
+// payload — a product-level page and a variant page (or two variants') can
+// legitimately carry the same id mid-move (gumroad-private#2023: the toggle
+// between shared and per-tier content passes pages through both scopes in
+// one save). Keying the lookup on id alone let the second scope's entry
+// silently clobber the first in the Map, so reconciliation read the WRONG
+// scope's sent snapshot for a page — corrupting its move_source_scope/
+// source_id bookkeeping and making the next save reference the same
+// underlying row from two scopes at once (the "references the same content
+// page more than once" guard). Scope-qualify the key so same-id pages in
+// different scopes stay distinct entries.
+const scopedPageKey = (scope: string | null, id: string) => `${scope ?? ""}\u0000${id}`;
+
 const allScopedRichContentPages = (product: Product): ScopedPage[] => [
   ...product.rich_content.map((page) => ({ page, scope: null })),
   ...product.variants.flatMap((variant) => variant.rich_content.map((page) => ({ page, scope: variant.id }))),
@@ -292,7 +305,7 @@ const applyCanonicalIds = (
     const variantBaseline = variantBaselines[variant.id];
     if (variantBaseline) variant.loaded_integrations = variantBaseline;
     for (const page of variant.rich_content) {
-      const sent = sentPagesById.get(page.id);
+      const sent = sentPagesById.get(scopedPageKey(variant.id, page.id));
       applyRichContentPageSaveResponse(
         page,
         response,
@@ -303,7 +316,7 @@ const applyCanonicalIds = (
     }
   }
   for (const page of product.rich_content) {
-    const sent = sentPagesById.get(page.id);
+    const sent = sentPagesById.get(scopedPageKey(null, page.id));
     applyRichContentPageSaveResponse(
       page,
       response,
@@ -430,7 +443,10 @@ const ProductEditPage = (props: Props) => {
       ...new Set([...(productSent.confirmed_removed_rich_content_ids ?? []), ...richContentMoveSourceIds(productSent)]),
     ];
     const sentPagesById = new Map(
-      allScopedRichContentPages(productSent).map((scopedPage) => [scopedPage.page.id, scopedPage]),
+      allScopedRichContentPages(productSent).map((scopedPage) => [
+        scopedPageKey(scopedPage.scope, scopedPage.page.id),
+        scopedPage,
+      ]),
     );
     const sentConfirmedVariantIds = new Set(productSent.confirmed_removed_variant_ids ?? []);
     try {
