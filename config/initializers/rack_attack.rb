@@ -143,34 +143,21 @@ class Rack::Attack
     throttle_by_ip path: "/sellers/brand_accounts",      requests: 3, period: 20.seconds, method: :post # Initial: 9rpm, Max: 45 requests/9 hours
     throttle_by_ip path: "/sellers/brand_accounts.json", requests: 3, period: 20.seconds, method: :post # Initial: 9rpm, Max: 45 requests/9 hours
 
-    # Gumroad Walks: realtime token creation is an *expensive* endpoint — each
-    # successful response gives the client up to 2h of OpenAI Realtime usage
-    # against our key. JWS verification is the primary gate, but a leaked or
-    # replayed JWS would otherwise be unbounded — IP throttling caps that
-    # blast radius at ~$10/IP/hr of OpenAI spend. 5 req/IP/hour is generous
-    # for real users (1-2 walks/day).
-    #
-    # `max_level: 1` skips the exponential-backoff tiers — with a 1-hour base
-    # period, `rpm * level` rounds to <1 and Rack::Attack would block the very
-    # first request that escalates. The base 5/hour limit is already strict.
-    #
-    # Both `/api/v2/walks/...` (gumroad.com) and `/v2/walks/...` (api.gumroad.com)
-    # need throttles since `api_routes` is mounted under both prefixes.
-    # Temporarily relaxed while debugging the App Attest reinstall flow, where a
-    # fresh install can burn the 3/hr attestation cap during repeated testing
-    # and get a 429 the client surfaces as "attestation rejected." Restored in a
-    # follow-up once the reinstall bug is fixed — these cap OpenAI/Anthropic
-    # spend and prevent attested-key fan-out.
+    # Gumroad Walks: each successful realtime token gives the client up to 2h of OpenAI
+    # Realtime usage against our key, so a leaked/replayed JWS is capped here at ~$10/IP/hr.
+    # `max_level: 1` skips the backoff tiers — with a 1-hour base period `rpm * level` rounds
+    # to <1 and would block the very first escalation. Both `/api/v2/walks/...` and
+    # `/v2/walks/...` need entries since `api_routes` is mounted under both prefixes.
+    # Temporarily relaxed while debugging the App Attest reinstall flow (repeated reinstalls
+    # burn the 3/hr attestation cap below and surface as "attestation rejected"); restore once fixed.
     # throttle_by_ip path: "/api/v2/walks/realtime_tokens", method: :post, requests: 5, period: 1.hour, max_level: 1
     # throttle_by_ip path: "/v2/walks/realtime_tokens",     method: :post, requests: 5, period: 1.hour, max_level: 1
     # throttle_by_ip path: "/api/v2/walks/synthesis",       method: :post, requests: 5, period: 1.hour, max_level: 1
     # throttle_by_ip path: "/v2/walks/synthesis",           method: :post, requests: 5, period: 1.hour, max_level: 1
 
-    # App Attest bootstrap. `attestations` is genuinely once-per-install on the
-    # happy path; cap at 3/IP/hr so a single corporate NAT can recover from
-    # transient failures but a botnet can't fan out attested keys.
-    # `challenges` is one-per-request on every walks call + once per
-    # attestation, so it needs more headroom.
+    # App Attest bootstrap. `attestations` is once-per-install on the happy path, so 3/IP/hr
+    # lets a NAT recover from transient failures without letting a botnet fan out keys.
+    # `challenges` fires once per walks call plus once per attestation, so it needs more headroom.
     # throttle_by_ip path: "/api/v2/walks/app_attest/attestations", method: :post, requests: 3,  period: 1.hour, max_level: 1
     # throttle_by_ip path: "/v2/walks/app_attest/attestations",     method: :post, requests: 3,  period: 1.hour, max_level: 1
     # throttle_by_ip path: "/api/v2/walks/app_attest/challenges",   method: :post, requests: 60, period: 1.hour, max_level: 1
@@ -202,15 +189,12 @@ class Rack::Attack
 
   throttle_by_ip_for_period path: "/purchases", requests: 50, period: 1.hour
 
-  # Help Center contact form. Each submission sends an email into the support
-  # inbox, so without a limit a single IP could flood support (and burn email
-  # reputation). Real users send one or two messages; `max_level: 1` skips the
-  # exponential-backoff tiers, which with a 1-minute base period would derive
-  # limits stricter than the base and block legitimate retries. The route is a
-  # Rails `resource`, so it accepts any format suffix (`/help/contact.xml`,
-  # `/help/contact.txt`, ...) — match by regex like the OAuth device-flow
-  # throttles below so no suffix variant bypasses the limit, and key on the IP
-  # alone so every variant shares one counter instead of getting its own budget.
+  # Help Center contact form. Each submission emails the support inbox, so an unthrottled IP
+  # could flood support and burn email reputation. `max_level: 1` skips the backoff tiers,
+  # which with a 1-minute base period would derive limits stricter than the base and block
+  # legit retries. Match by regex (like the OAuth device-flow throttles below) so a format
+  # suffix (`/help/contact.xml`) doesn't bypass the limit, keyed on IP alone so every suffix
+  # shares one counter.
   throttle_with_exponential_backoff(name: "help_center_contact/ip", requests: 3, period: 60.seconds, max_level: 1) do |req|
     req.remote_ip if req.path.match?(%r{\A/help/contact(?:\.[^/]+)?\z}) && req.post?
   end
@@ -286,13 +270,10 @@ class Rack::Attack
                             throttle_params: Proc.new { |req| req.params["seller_id"] }
 
   # Catalogue slices for the gumroad:products bridge on custom profile pages
-  # (gumroad-private#1691). The wrapper fetches this GET on the sandboxed
-  # page's behalf; the seller is identified by the request host (subdomain or
-  # custom domain) or the /:username prefix, both part of the identifier here
-  # (the regexp path form prefixes req.path, and req.host is the param). 30/min
-  # covers the largest real catalogue (1,430 products = 14 pages) in one
-  # burst while bounding a hostile page's loop; each slice is served from the
-  # profile-data cache after the first read.
+  # (gumroad-private#1691). Seller is identified by request host or /:username prefix, both
+  # part of the identifier here. 30/min covers the largest real catalogue (1,430 products =
+  # 14 pages) in one burst while bounding a hostile page's loop; each slice is served from
+  # the profile-data cache after the first read.
   throttle_by_ip_and_params path: %r{\A/(?:[^/]+/)?landing/products\z},
                             requests: 30,
                             method: :get,
@@ -388,14 +369,9 @@ class Rack::Attack
     nil
   end
 
-  # Throttle POST requests to /login by login param
-  #
-  # Key: "rack::attack:#{Time.now.to_i/:period}:logins/login:#{req.login}"
-  #
-  # Note: This creates a problem where a malicious user could intentionally
-  # throttle logins for another user and force their login requests to be
-  # denied, but that's not very common and shouldn't happen to you. (Knock
-  # on wood!)
+  # Throttle POST /login by the submitted login param, so a botnet can't dodge the by-IP
+  # login throttle by rotating IPs against one account. Trade-off: an attacker who knows a
+  # victim's login can also throttle that victim's own login attempts.
   throttle("logins/login", limit: 3, period: 20.seconds) do |req|
     if req.path == "/login.json" && req.post?
       # return the login if present, nil otherwise
@@ -493,18 +469,16 @@ class Rack::Attack
   throttle_by_ip path: /\A\/(api\/)?v2\/user\/preview_custom_html(\.\w+)?\z/, method: :post, requests: 60, period: 60.seconds
   throttle_by_params path: /\A\/(api\/)?v2\/user\/preview_custom_html(\.\w+)?\z/, method: :post, requests: 60, period: 60.seconds, throttle_params: v2_product_token
 
-  # Media uploads: each POST can make the server synchronously download up to 10 MB from a
-  # remote URL (CreatePublicMediaService), so this is one of the most expensive requests in the
-  # v2 API — an unthrottled loop would tie up workers and bandwidth. 20 uploads / 10 minutes is
-  # plenty for a creator (or the store agent) building a page, and useless for abuse. Keyed by
-  # OAuth token (falling back to IP-keyed throttle for tokenless probes) so rotating IPs doesn't
-  # bypass it. Both `/api/v2/media` (gumroad.com) and `/v2/media` (api.gumroad.com) prefixes are
-  # matched, mirroring the products/custom_html throttles above.
+  # Media uploads: each POST can synchronously download up to 10 MB from a remote URL
+  # (CreatePublicMediaService), making this one of the priciest v2 endpoints — unthrottled,
+  # it ties up workers and bandwidth. 20/10min is plenty for a creator (or the store agent)
+  # building a page. Keyed by OAuth token (IP-keyed fallback for tokenless probes) so
+  # rotating IPs doesn't bypass it. Matches both `/api/v2/media` and `/v2/media` prefixes,
+  # mirroring the products/custom_html throttles above.
   #
-  # `max_level: 1` skips the exponential-backoff tiers: with a 10-minute base period the derived
-  # rpm is 2, so the level-2 tier would allow only 4 requests per 64 seconds — stricter than the
-  # base limit and it would block a legitimate burst of uploads (same trap the walks throttles
-  # above document). The base 20/10min limit already caps the damage.
+  # `max_level: 1` skips the backoff tiers: with a 10-minute base period the derived rpm is
+  # 2, so level 2 would allow only 4 requests/64s — stricter than the base limit (same trap
+  # as the walks throttles above).
   v2_media_path = /\A\/(api\/)?v2\/media(\.\w+)?\z/
   throttle_by_ip path: v2_media_path, method: :post, requests: 20, period: 10.minutes, max_level: 1
   throttle_with_exponential_backoff(name: "media_uploads/token", requests: 20, period: 10.minutes, max_level: 1) do |req|
