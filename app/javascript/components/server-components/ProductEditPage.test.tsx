@@ -389,4 +389,3 @@ it("reconciles same-id pages in different variant scopes using each variant's ow
   expect(tierA?.rich_content[0]).not.toHaveProperty("move_source_scope");
   expect(tierA?.rich_content[0]).not.toHaveProperty("source_id");
 });
-
