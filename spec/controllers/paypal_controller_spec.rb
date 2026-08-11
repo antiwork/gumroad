@@ -225,10 +225,10 @@ describe PaypalController, :vcr do
         external_id: product.external_id,
         currency_code: "usd",
         price_cents: "1500",
-        shipping_cents: "150",
+        shipping_cents: "0",
         tax_cents: "100",
         exclusive_tax_cents: "100",
-        total_cents: "1750",
+        total_cents: "1600",
         quantity: 3
       }
     end
@@ -247,7 +247,7 @@ describe PaypalController, :vcr do
     context "for affiliate sales" do
       let(:purchase_info) do
         {
-          amount_cents: product_info[:price_cents].to_i,
+          amount_cents: product_info[:price_cents].to_i + product_info[:shipping_cents].to_i + product_info[:exclusive_tax_cents].to_i,
           vat_cents: 0,
           affiliate_id: nil,
           was_recommended: false,
