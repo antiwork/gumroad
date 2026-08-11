@@ -2704,7 +2704,7 @@ describe PaypalChargeProcessor, :vcr do
       end.to raise_error(ChargeProcessorError, /implausibly large/)
     end
 
-    it "allows configured shipping for a physical product" do
+    it "allows configured shipping and tax assessed on shipping for a physical product" do
       creator = create(:user)
       product = create(:product, user: creator, price_cents: 5_00, is_physical: true, require_shipping: true,
                                  shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 20_00, multiple_items_rate_cents: 15_00)])
@@ -2716,9 +2716,9 @@ describe PaypalChargeProcessor, :vcr do
         currency_code: "usd",
         price_cents: 5_00,
         shipping_cents: 20_00,
-        tax_cents: 0,
-        exclusive_tax_cents: 0,
-        total_cents: 25_00,
+        tax_cents: 2_25,
+        exclusive_tax_cents: 2_25,
+        total_cents: 27_25,
         quantity: 1,
       }
 

@@ -573,7 +573,7 @@ class PaypalChargeProcessor
                                     product_info[:exclusive_vat_cents].to_i :
                                     product_info[:exclusive_tax_cents].to_i)
     ensure_shipping_matches_product!(product:, quantity: product_info[:quantity].to_i, shipping_cents_usd:)
-    ensure_tax_does_not_dwarf_price!(price_cents_usd:, tax_cents_usd:)
+    ensure_tax_does_not_dwarf_price!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
 
     purchase_unit_info = create_purchase_unit_info(permalink: product.unique_permalink,
                                                    item_name:,
@@ -613,7 +613,7 @@ class PaypalChargeProcessor
                                     product_info[:exclusive_vat_cents].to_i :
                                     product_info[:exclusive_tax_cents].to_i)
     ensure_shipping_matches_product!(product:, quantity: product_info[:quantity].to_i, shipping_cents_usd:)
-    ensure_tax_does_not_dwarf_price!(price_cents_usd:, tax_cents_usd:)
+    ensure_tax_does_not_dwarf_price!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
 
     purchase_unit_info = create_purchase_unit_info(permalink: product.unique_permalink,
                                                    item_name:,
@@ -650,36 +650,40 @@ class PaypalChargeProcessor
   # apart from an attack (caught in review before merge).
   #
   # Instead, bound the ratio that IS attack-specific: real-world VAT/sales tax rates top out
-  # around 27% of the pre-tax price (Hungary's 27% VAT is the ceiling case), so tax/VAT
-  # legitimately exceeding roughly a third of the price never happens for an actual purchase —
-  # only for the fee-shift attack, which relies on tax_cents dwarfing price_cents while the total
-  # stays fixed. This is invariant to how price_cents was legitimately discounted, so it doesn't
-  # need to know the product's base price at all. 0.35 leaves headroom above the highest real
-  # rate without meaningfully widening the attack window: it caps how much of the total an
-  # attacker can still shift out of price_cents (at most ~26% of the total, vs. ~100% before this
-  # guard existed).
+  # around 27% of the taxable base (Hungary's 27% VAT is the ceiling case), so tax/VAT
+  # legitimately exceeding roughly a third of price + validated shipping never happens for an
+  # actual purchase — only for the fee-shift attack, which relies on tax_cents dwarfing the
+  # server-valid subtotal while the total stays fixed. This is invariant to how price_cents was
+  # legitimately discounted, so it doesn't need to know the product's base price at all. Shipping
+  # is included because physical-product shipping can itself be taxable, but it is safe to include
+  # only after `ensure_shipping_matches_product!` has independently rejected fake shipping.
   MAX_TAX_TO_PRICE_RATIO = 0.35
   private_constant :MAX_TAX_TO_PRICE_RATIO
 
-  def self.ensure_tax_does_not_dwarf_price!(price_cents_usd:, tax_cents_usd:)
+  def self.ensure_tax_does_not_dwarf_price!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
     return if tax_cents_usd <= 0
-    # A $0 (or near-$0) price with any positive tax is exactly the reported attack shape and
-    # can't be a legitimate ratio no matter how small tax_cents_usd is, so guard the zero case
-    # explicitly rather than dividing by it.
-    return raise_tax_price_mismatch!(price_cents_usd:, tax_cents_usd:) if price_cents_usd <= 0
-    return if tax_cents_usd <= price_cents_usd * MAX_TAX_TO_PRICE_RATIO
 
-    raise_tax_price_mismatch!(price_cents_usd:, tax_cents_usd:)
+    taxable_base_cents_usd = price_cents_usd + shipping_cents_usd
+    # A $0 (or near-$0) taxable base with any positive tax is exactly the reported attack shape
+    # and can't be a legitimate ratio no matter how small tax_cents_usd is, so guard the zero
+    # case explicitly rather than dividing by it.
+    if taxable_base_cents_usd <= 0
+      return raise_tax_price_mismatch!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
+    end
+    return if tax_cents_usd <= taxable_base_cents_usd * MAX_TAX_TO_PRICE_RATIO
+
+    raise_tax_price_mismatch!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
   end
   private_class_method :ensure_tax_does_not_dwarf_price!
 
-  def self.raise_tax_price_mismatch!(price_cents_usd:, tax_cents_usd:)
+  def self.raise_tax_price_mismatch!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
     ErrorNotifier.notify(
-      "PayPal order tax/VAT is implausibly large relative to price",
+      "PayPal order tax/VAT is implausibly large relative to taxable base",
       submitted_price_cents_usd: price_cents_usd,
+      submitted_shipping_cents_usd: shipping_cents_usd,
       submitted_tax_cents_usd: tax_cents_usd
     )
-    raise ChargeProcessorError, "PayPal order tax/VAT is implausibly large relative to price"
+    raise ChargeProcessorError, "PayPal order tax/VAT is implausibly large relative to taxable base"
   end
   private_class_method :raise_tax_price_mismatch!
 
