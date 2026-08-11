@@ -2778,8 +2778,8 @@ describe PaypalChargeProcessor, :vcr do
       create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
                                        user: creator, country: "US", currency: "usd")
 
-      # One cent above the only configured rate ($20.00). Under the old quantity-cent tolerance
-      # this slipped through; USD converts nothing, so a cent of drift can only be a shift.
+      # One cent above the only configured rate ($20.00). USD converts nothing, so an exact
+      # match is required and a cent of drift must be rejected.
       off_by_one_shipping = {
         external_id: product.external_id,
         currency_code: "usd",
@@ -2795,6 +2795,54 @@ describe PaypalChargeProcessor, :vcr do
       expect do
         PaypalChargeProcessor.create_order_from_product_info(off_by_one_shipping)
       end.to raise_error(ChargeProcessorError, /shipping does not match/)
+    end
+
+    it "rejects zero shipping on a physical product that has a positive configured rate" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 5_00, is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 5_00, multiple_items_rate_cents: 5_00)])
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      # Buyer omits shipping on a physical product with a live $5 rate; the order must not be
+      # created undercharged.
+      zero_shipping = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 5_00,
+        shipping_cents: 0,
+        tax_cents: 0,
+        exclusive_tax_cents: 0,
+        total_cents: 5_00,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).not_to receive(:create_order)
+      expect do
+        PaypalChargeProcessor.create_order_from_product_info(zero_shipping)
+      end.to raise_error(ChargeProcessorError, /shipping does not match/)
+    end
+
+    it "allows zero shipping on a physical product that offers a free shipping rate" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 5_00, is_physical: true, require_shipping: true,
+                                 shipping_destinations: [ShippingDestination.new(country_code: "US", one_item_rate_cents: 0, multiple_items_rate_cents: 0)])
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      free_shipping = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 5_00,
+        shipping_cents: 0,
+        tax_cents: 0,
+        exclusive_tax_cents: 0,
+        total_cents: 5_00,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
+      expect(PaypalChargeProcessor.create_order_from_product_info(free_shipping)).to eq("FAKE_ORDER_ID")
     end
 
     it "allows a discounted (offer code) price with proportionally discounted tax" do
