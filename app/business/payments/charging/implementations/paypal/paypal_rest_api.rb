@@ -69,13 +69,6 @@ class PaypalRestApi
     execute_request
   end
 
-  def update_order(order_id:, purchase_unit_info:)
-    @request = new_request(path: "/v2/checkout/orders/#{order_id}", verb: "PATCH")
-    @request.headers["Prefer"] = "return=representation"
-    @request.body = [{ op: "replace", path: "/purchase_units/@reference_id=='default'", value: purchase_unit(purchase_unit_info) }]
-    execute_request
-  end
-
   def fetch_order(order_id:)
     @request = new_request(path: "/v2/checkout/orders/#{order_id}", verb: "GET")
     execute_request

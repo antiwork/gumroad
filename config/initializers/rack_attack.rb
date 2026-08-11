@@ -234,7 +234,7 @@ class Rack::Attack
   # what gp#2008's fee-shift exploit relied on to hammer the endpoint per IP. The submitted
   # breakdown is now bounded server-side in PaypalChargeProcessor; this is defense-in-depth
   # against brute-forcing rounding/currency edge cases.
-  PAYPAL_ORDER_PATHS = %w[/paypal/order /paypal/update_order /paypal/fetch_order].index_with do |path|
+  PAYPAL_ORDER_PATHS = %w[/paypal/order /paypal/fetch_order].index_with do |path|
     /\A#{Regexp.escape(path)}(?:\.[^\/]+)?\z/
   end.freeze
   PAYPAL_ORDER_PATHS.each do |path, path_regexp|
