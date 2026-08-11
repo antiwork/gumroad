@@ -153,7 +153,7 @@ export const copyRichContentPages = (
     };
   });
 
-const hasMoveSourceScope = (page: Product["rich_content"][number]) =>
+export const hasMoveSourceScope = (page: Product["rich_content"][number]) =>
   Object.prototype.hasOwnProperty.call(page, "move_source_scope");
 
 // Moves pages between the shared scope (null) and a version scope (its id).

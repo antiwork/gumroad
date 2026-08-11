@@ -6,6 +6,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { type SaveProductResponse } from "$app/data/product_edit";
 
+import { showAlert } from "$app/components/server-components/Alert";
+
 import { ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
 import { ProductEditPage, type ProductEditPageProps } from "$app/components/server-components/ProductEditPage";
 
@@ -837,4 +839,297 @@ it("keeps move provenance for an in-flight move when the raw id was sent in two 
     move_source_id: "server-row-a",
     source_id: "server-row-a",
   });
+});
+
+// Hardest ambiguity: BOTH same-id pages move to new tiers during the save, so
+// neither claims its sent entry and the unclaimed set alone cannot tell them
+// apart. Each page's move_source_scope marker — written when its move began,
+// which is the scope it was sent under — identifies its own snapshot. Losing
+// them here would erase both pages' provenance and orphan both source rows.
+it("keeps both pages' move provenance when two same-id pages move during the save", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "dup-page",
+        newlyAdded: true,
+        title: "A",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-b", "Tier B", [
+      {
+        id: "dup-page",
+        newlyAdded: true,
+        title: "B",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-c", "Tier C", []),
+    buildTier("tier-d", "Tier D", []),
+  ]);
+  const props = buildTieredProps(product);
+
+  const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+  saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  let save: Promise<boolean> | undefined;
+  act(() => {
+    save = contextCapture.current?.save();
+  });
+  await waitFor(() => expect(saveProductMock).toHaveBeenCalledOnce());
+
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const [tierA, tierB, tierC, tierD] = current.variants;
+      const pageA = tierA?.rich_content[0];
+      const pageB = tierB?.rich_content[0];
+      if (!tierA || !tierB || !tierC || !tierD || !pageA || !pageB)
+        throw new Error("expected the tiers and both in-flight pages");
+      tierA.rich_content = [];
+      tierB.rich_content = [];
+      tierC.rich_content = [{ ...pageA, move_source_scope: "tier-a" }];
+      tierD.rich_content = [{ ...pageB, move_source_scope: "tier-b" }];
+    }),
+  );
+
+  await act(async () => {
+    requests[0]?.resolve({
+      rich_content_id_mappings: { "dup-page": "server-row-b" },
+      rich_content_id_mappings_by_scope: {
+        "tier-a": { "dup-page": "server-row-a" },
+        "tier-b": { "dup-page": "server-row-b" },
+      },
+    } satisfies SaveProductResponse);
+    await save;
+  });
+
+  const tierC = contextCapture.current?.product.variants.find((variant) => variant.id === "tier-c");
+  const tierD = contextCapture.current?.product.variants.find((variant) => variant.id === "tier-d");
+  expect(tierC?.rich_content[0]).toMatchObject({
+    id: "server-row-a",
+    move_source_scope: "tier-a",
+    move_source_id: "server-row-a",
+    source_id: "server-row-a",
+  });
+  expect(tierD?.rich_content[0]).toMatchObject({
+    id: "server-row-b",
+    move_source_scope: "tier-b",
+    move_source_id: "server-row-b",
+    source_id: "server-row-b",
+  });
+});
+
+// Chained move: tier A's page lands in tier B while tier B's same-id page
+// moves on to tier C, all during one in-flight save. Tier A's page now sits
+// on tier B's sent key, so a lookup that trusts the current scoped key binds
+// it to tier B's snapshot and leaves tier B's page to consume tier A's —
+// swapping both pages' canonical ids and provenance, so the next save can
+// delete the wrong source rows. The matcher must treat a marked page's
+// scoped key as someone else's entry and resolve both pages through their
+// move_source_scope markers instead.
+it("resolves a chained in-flight move without swapping the two pages' snapshots", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "dup-page",
+        newlyAdded: true,
+        title: "A",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-b", "Tier B", [
+      {
+        id: "dup-page",
+        newlyAdded: true,
+        title: "B",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-c", "Tier C", []),
+  ]);
+  const props = buildTieredProps(product);
+
+  const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+  saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  let save: Promise<boolean> | undefined;
+  act(() => {
+    save = contextCapture.current?.save();
+  });
+  await waitFor(() => expect(saveProductMock).toHaveBeenCalledOnce());
+
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const [tierA, tierB, tierC] = current.variants;
+      const pageA = tierA?.rich_content[0];
+      const pageB = tierB?.rich_content[0];
+      if (!tierA || !tierB || !tierC || !pageA || !pageB)
+        throw new Error("expected the tiers and both in-flight pages");
+      tierA.rich_content = [];
+      tierB.rich_content = [{ ...pageA, move_source_scope: "tier-a" }];
+      tierC.rich_content = [{ ...pageB, move_source_scope: "tier-b" }];
+    }),
+  );
+
+  await act(async () => {
+    requests[0]?.resolve({
+      rich_content_id_mappings: { "dup-page": "server-row-b" },
+      rich_content_id_mappings_by_scope: {
+        "tier-a": { "dup-page": "server-row-a" },
+        "tier-b": { "dup-page": "server-row-b" },
+      },
+    } satisfies SaveProductResponse);
+    await save;
+  });
+
+  const tierB = contextCapture.current?.product.variants.find((variant) => variant.id === "tier-b");
+  const tierC = contextCapture.current?.product.variants.find((variant) => variant.id === "tier-c");
+  // Tier A's page (now in tier B) keeps tier A's row and provenance.
+  expect(tierB?.rich_content[0]).toMatchObject({
+    id: "server-row-a",
+    move_source_scope: "tier-a",
+    move_source_id: "server-row-a",
+    source_id: "server-row-a",
+  });
+  // Tier B's page (now in tier C) keeps tier B's row and provenance.
+  expect(tierC?.rich_content[0]).toMatchObject({
+    id: "server-row-b",
+    move_source_scope: "tier-b",
+    move_source_id: "server-row-b",
+    source_id: "server-row-b",
+  });
+});
+
+// A cancelled move erases move_source_scope, so marker absence does not prove
+// a page never moved. Page P was SENT mid-move in tier B (marker tier-a);
+// same-id page Q was sent unmarked in tier A. During the request, P moves
+// back to tier A (cancelling its marker) while Q moves on to tier C (marker
+// tier-a). Every scope/id/marker signal now fits two opposite assignments —
+// only the reconciliation_id stamped at send time can tell P and Q apart.
+// Binding by current scope would hand P tier A's row and Q tier B's row,
+// swapping their provenance and deleting the wrong rows on the next save.
+it("matches pages by their send-time stamp when a cancelled move erases the marker", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "dup-page",
+        newlyAdded: true,
+        title: "Q",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-b", "Tier B", [
+      {
+        id: "dup-page",
+        newlyAdded: true,
+        title: "P",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+        move_source_scope: "tier-a",
+      },
+    ]),
+    buildTier("tier-c", "Tier C", []),
+  ]);
+  const props = buildTieredProps(product);
+
+  const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+  saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  let save: Promise<boolean> | undefined;
+  act(() => {
+    save = contextCapture.current?.save();
+  });
+  await waitFor(() => expect(saveProductMock).toHaveBeenCalledOnce());
+
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const [tierA, tierB, tierC] = current.variants;
+      const pageQ = tierA?.rich_content[0];
+      const pageP = tierB?.rich_content[0];
+      if (!tierA || !tierB || !tierC || !pageQ || !pageP)
+        throw new Error("expected the tiers and both in-flight pages");
+      // P moves back to its source: prepareRichContentPagesForMove cancels
+      // the marker. Q moves on to tier C and records its own move.
+      const cancelledP = { ...pageP };
+      delete cancelledP.move_source_scope;
+      tierA.rich_content = [cancelledP];
+      tierB.rich_content = [];
+      tierC.rich_content = [{ ...pageQ, move_source_scope: "tier-a" }];
+    }),
+  );
+
+  await act(async () => {
+    requests[0]?.resolve({
+      rich_content_id_mappings: { "dup-page": "server-row-p" },
+      rich_content_id_mappings_by_scope: {
+        "tier-a": { "dup-page": "server-row-q" },
+        "tier-b": { "dup-page": "server-row-p" },
+      },
+    } satisfies SaveProductResponse);
+    await save;
+  });
+
+  const tierA = contextCapture.current?.product.variants.find((variant) => variant.id === "tier-a");
+  const tierC = contextCapture.current?.product.variants.find((variant) => variant.id === "tier-c");
+  // P (now back in tier A) owns tier B's committed row and must delete it
+  // when the next save lands the page in tier A.
+  expect(tierA?.rich_content[0]).toMatchObject({
+    title: "P",
+    id: "server-row-p",
+    move_source_scope: "tier-b",
+    move_source_id: "server-row-p",
+    source_id: "server-row-p",
+  });
+  // Q (now in tier C) owns tier A's committed row.
+  expect(tierC?.rich_content[0]).toMatchObject({
+    title: "Q",
+    id: "server-row-q",
+    move_source_scope: "tier-a",
+    move_source_id: "server-row-q",
+    source_id: "server-row-q",
+  });
+});
+
+// The save-time reconciliation_id stamp lands on pages that the last-saved
+// baseline clone predates. That difference is save plumbing — a save that
+// touches no page content must not report updated content, or a seller with
+// sales gets the customer-notification prompt for pages they never edited.
+it("does not report a content update when only the send-time stamp differs", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "existing-page",
+        title: "Unchanged",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+  ]);
+  const props = { ...buildTieredProps(product), successful_sales_count: 5 };
+
+  saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+  vi.mocked(showAlert).mockClear();
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  await act(async () => {
+    await contextCapture.current?.save();
+  });
+
+  expect(showAlert).toHaveBeenCalledWith("Changes saved!", "success");
 });
