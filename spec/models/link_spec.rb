@@ -28,6 +28,43 @@ describe Link do
       expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_nil
     end
 
+    it "uses the current collaboration state" do
+      seller = create(:user)
+      affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
+      product = create(:product, user: seller, draft: true, is_collab: true)
+      Link.find(product.id).update_flag!(:is_collab, false, true)
+
+      product.publish!
+
+      expect(product.reload).to be_published
+      expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_present
+    end
+
+    it "preserves concurrent changes to other flags" do
+      seller = create(:user)
+      product = create(:product, user: seller, draft: true, display_product_reviews: false)
+      allow(product).to receive(:auto_transcode_videos?).and_return(false)
+      Link.find(product.id).update_flag!(:display_product_reviews, true, true)
+
+      product.publish!
+
+      expect(product.reload).to be_display_product_reviews
+      expect(product).to be_transcode_videos_on_purchase
+    end
+
+    it "merges the caller's flag changes into the current flags" do
+      seller = create(:user)
+      product = create(:product, user: seller, draft: true, display_product_reviews: false, should_show_sales_count: false)
+      allow(product).to receive(:auto_transcode_videos?).and_return(false)
+      product.display_product_reviews = true
+      Link.find(product.id).update_flag!(:should_show_sales_count, true, true)
+
+      product.publish!
+
+      expect(product.reload).to be_display_product_reviews
+      expect(product).to be_should_show_sales_count
+    end
+
     it "does not notify an affiliate when the assignment exists" do
       seller = create(:user)
       affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)

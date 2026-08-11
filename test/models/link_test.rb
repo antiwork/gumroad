@@ -666,24 +666,20 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil product.reload.purchase_disabled_at
   end
 
-  test "publish! retries on ActiveRecord::Deadlocked and succeeds" do
-    _user, product = publish_context
-    call_count = 0
-    product.define_singleton_method(:save!) do |*args, **kwargs|
-      call_count += 1
-      raise ActiveRecord::Deadlocked if call_count <= 2
-      super(*args, **kwargs)
-    end
-    assert_nothing_raised { product.publish! }
-    assert_equal 3, call_count
-  end
-
-  test "publish! re-raises ActiveRecord::Deadlocked after exhausting retries" do
+  test "publish! does not retry ActiveRecord::Deadlocked inside a caller transaction" do
     _user, product = publish_context
     call_count = 0
     product.define_singleton_method(:save!) { |*| call_count += 1; raise ActiveRecord::Deadlocked }
     assert_raises(ActiveRecord::Deadlocked) { product.publish! }
-    assert_equal 3, call_count
+    assert_equal 1, call_count
+  end
+
+  test "publish! does not retry ActiveRecord::LockWaitTimeout inside a caller transaction" do
+    _user, product = publish_context
+    call_count = 0
+    product.define_singleton_method(:save!) { |*| call_count += 1; raise ActiveRecord::LockWaitTimeout }
+    assert_raises(ActiveRecord::LockWaitTimeout) { product.publish! }
+    assert_equal 1, call_count
   end
 
   test "publish! raises when the user has not confirmed their email address" do
@@ -743,6 +739,7 @@ class LinkTest < ActiveSupport::TestCase
   test "publish! transcodes only the product files whose queue_for_transcoding? is true" do
     _, product = publish_context
     User.any_instance.stubs(:auto_transcode_videos?).returns(true)
+    AfterCommitEverywhere.stubs(:after_commit).yields
     file1 = create_streamable_video(link: product, url: "#{S3_BASE_URL}specs/chapter2.mp4", filetype: "mp4")
     file2 = create_streamable_video(link: product, url: "#{S3_BASE_URL}specs/chapter3.mp4", filetype: "mp4")
     file3 = create_streamable_video(link: product, url: "#{S3_BASE_URL}specs/chapter4.mp4", filetype: "mp4")
@@ -765,10 +762,23 @@ class LinkTest < ActiveSupport::TestCase
     _, product = publish_context
     video_file = create_streamable_video(link: product, url: "#{S3_BASE_URL}specs/chapter2.mp4", filetype: "mp4")
     product.stubs(:auto_transcode_videos?).returns(true)
+    AfterCommitEverywhere.stubs(:after_commit).yields
     ProductFile.any_instance.stubs(:queue_for_transcoding?).returns(true)
 
     product.publish!
     assert_includes TranscodeVideoForStreamingWorker.jobs.map { |job| job["args"].first }, video_file.id
+    assert_not product.reload.transcode_videos_on_purchase?
+  end
+
+  test "publish! keeps transcode-on-purchase when immediate transcoding fails" do
+    _, product = publish_context
+    product.stubs(:auto_transcode_videos?).returns(true)
+    AfterCommitEverywhere.stubs(:after_commit).yields
+    Link.any_instance.stubs(:transcode_videos!).raises(StandardError, "queue unavailable")
+    ErrorNotifier.expects(:notify).with(instance_of(StandardError), product_id: product.id)
+
+    assert_nothing_raised { product.publish! }
+    assert product.reload.transcode_videos_on_purchase?
   end
 
   test "publish! does not transcode videos when auto-transcode is disabled" do

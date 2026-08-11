@@ -502,11 +502,8 @@ class Link < ApplicationRecord
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
-    if auto_transcode_videos?
-      transcode_videos!
-    else
-      self.transcode_videos_on_purchase = true
-    end
+    transcode_after_publish = auto_transcode_videos?
+    caller_flags_change = changes["flags"]&.map(&:to_i)
 
     self.purchase_disabled_at = nil
     self.deleted_at = nil
@@ -516,7 +513,28 @@ class Link < ApplicationRecord
     lock_retries = 0
     begin
       Link.transaction do
+        current_flags = Link.where(id:).lock.pick(:flags).to_i
+        if caller_flags_change
+          # Merge only the caller's changed bits because all Link flags share one column.
+          previous_flags, requested_flags = caller_flags_change
+          changed_bits = previous_flags ^ requested_flags
+          self.flags = (current_flags & ~changed_bits) | (requested_flags & changed_bits)
+        else
+          self.flags = current_flags
+        end
+        self.transcode_videos_on_purchase = true
         save!
+
+        if transcode_after_publish
+          product_id = id
+          AfterCommitEverywhere.after_commit do
+            product = Link.find(product_id)
+            product.transcode_videos!
+            product.update_flag!(:transcode_videos_on_purchase, false, true)
+          rescue StandardError => error
+            ErrorNotifier.notify(error, product_id:)
+          end
+        end
 
         unless is_collab?
           user.direct_affiliates.alive.apply_to_all_products.order(:id).each do |affiliate|
