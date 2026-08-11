@@ -379,11 +379,7 @@ export const createPurchasesRequestData = (
       }
 
       if (paymentParams.type === "paypal-native") {
-        if (paymentParams.reusable) {
-          data.billing_agreement_id = paymentParams.billing_agreement_id;
-        } else {
-          data.paypal_order_id = paymentParams.paypal_order_id;
-        }
+        data.billing_agreement_id = paymentParams.billing_agreement_id;
         data.visual = paymentParams.visual;
         data.card_country = paymentParams.card_country;
       }
