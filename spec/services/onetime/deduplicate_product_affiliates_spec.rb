@@ -3,9 +3,7 @@
 require "spec_helper"
 
 describe Onetime::DeduplicateProductAffiliates do
-  # The task exists to clean up rows that predate the unique index, a state the
-  # index now makes unrepresentable. Drop it for this file so the fixtures can
-  # recreate that state, and restore it afterwards.
+  # Recreate the pre-index state this cleanup task must handle.
   unique_index_name = :index_affiliates_links_on_affiliate_id_and_link_id
 
   before(:all) do

@@ -311,9 +311,6 @@ describe AffiliatedProductsPresenter do
       end
 
       it "can no longer be given duplicate product-affiliate pairs to paginate" do
-        # This example used to prove the pagination total stayed in sync with
-        # the grouped rows when duplicate pairs existed. The unique index on
-        # (affiliate_id, link_id) now makes that state unrepresentable.
         duplicate_attributes = {
           affiliate_id: direct_affiliate_one.id,
           link_id: creator_one_product_one.id,

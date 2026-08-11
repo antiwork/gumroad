@@ -44,9 +44,7 @@ describe ProductAffiliate do
       end
 
       it "enforces uniqueness of (affiliate_id, link_id) at the database level" do
-        # Callbacks are bypassed on purpose: serialize_assignment blocks even
-        # validate: false saves, so a raw insert is the only way to reach the
-        # index — the same path the write race used to create duplicates.
+        # Bypass model callbacks to exercise the database constraint directly.
         existing = create(:product_affiliate)
         now = Time.current
 
