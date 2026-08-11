@@ -117,9 +117,11 @@ module Onetime
           rows = ProductAffiliate.where(affiliate_id:, link_id:).order(:id).lock(!dry_run).to_a
           next 0 if rows.size < 2 || !url_only_divergent_content?(rows)
 
-          keeper = rows.max_by { |row| [row.updated_at, row.id] }
+          # updated_at is nullable on affiliates_links; treat a missing timestamp as oldest.
+          # The URL stays out of the log: it is seller-controlled and can carry tokens.
+          keeper = rows.max_by { |row| [row.updated_at || Time.zone.at(0), row.id] }
           surplus_ids = (rows - [keeper]).map(&:id)
-          puts "Keeping ProductAffiliate #{keeper.id} (updated_at #{keeper.updated_at.iso8601}, destination_url #{keeper.destination_url.inspect}); deleting #{surplus_ids.join(', ')}"
+          puts "Keeping ProductAffiliate #{keeper.id} (updated_at #{keeper.updated_at&.iso8601 || "nil"}); deleting #{surplus_ids.join(', ')}"
           next 0 if dry_run
 
           ProductAffiliate.where(id: surplus_ids).delete_all

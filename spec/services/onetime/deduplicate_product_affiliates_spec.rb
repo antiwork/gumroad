@@ -157,6 +157,17 @@ describe Onetime::DeduplicateProductAffiliates do
       expect(ProductAffiliate.exists?(url_pair_older.id)).to be(false)
     end
 
+    it "treats a nil updated_at as oldest instead of aborting" do
+      nil_stamp_row = create(:product_affiliate, destination_url: "https://example.com/stale")
+                        .tap { _1.update_columns(updated_at: nil) }
+      stamped_row = create_duplicate_of(nil_stamp_row, destination_url: "https://example.com/current")
+
+      described_class.process_url_divergent(dry_run: false)
+
+      expect(ProductAffiliate.exists?(stamped_row.id)).to be(true)
+      expect(ProductAffiliate.exists?(nil_stamp_row.id)).to be(false)
+    end
+
     it "keeps the highest id when updated_at ties" do
       tied_at = 2.days.ago.change(usec: 0)
       tied_row_one = create(:product_affiliate, destination_url: "https://example.com/a")
