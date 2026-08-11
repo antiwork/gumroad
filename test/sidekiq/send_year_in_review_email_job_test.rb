@@ -1,10 +1,6 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# Mail::Body#sanitized (strips tags and collapses whitespace) is shared with the
-# RSpec suite and has no RSpec dependency; the content assertions here read the
-# email through it.
-require Rails.root.join("spec", "support", "mail_body_extensions")
 
 # Ported from spec/sidekiq/send_year_in_review_email_job_spec.rb (#5801).
 #
@@ -84,7 +80,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     mail = ActionMailer::Base.deliveries.last
     assert_equal [seller.email], mail.to
     assert_equal "Your 2022 in review", mail.subject
-    body = mail.body.sanitized
+    body = sanitized_body(mail)
     assert_includes body, "Views 2"
     assert_includes body, "Sales 1"
     assert_includes body, "Unique customers 1"
@@ -109,7 +105,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
       SendYearInReviewEmailJob.new.perform(seller.id, date.year)
     end
 
-    body = ActionMailer::Base.deliveries.last.body.sanitized
+    body = sanitized_body(ActionMailer::Base.deliveries.last)
     assert_includes body, "Hey, can you suggest some things I could buy with my Gumroad earnings"
     ["A nice desk lamp", "A hardcover notebook", "A cozy throw blanket", "A set of headphones", "A gourmet coffee kit"].each do |suggestion|
       assert_includes body, suggestion
@@ -129,7 +125,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     mail = ActionMailer::Base.deliveries.last
     assert_equal [seller.email], mail.to
     assert_us_seller_stats(mail, seller, permalinks, date)
-    assert_includes mail.body.sanitized, "Your 1099 form is available for download"
+    assert_includes sanitized_body(mail), "Your 1099 form is available for download"
   end
 
   test "perform sends the email to an explicit recipient instead of the seller" do
@@ -145,7 +141,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     mail = ActionMailer::Base.deliveries.last
     assert_equal ["gumbot@gumroad.com"], mail.to
     assert_us_seller_stats(mail, seller, permalinks, date)
-    assert_includes mail.body.sanitized, "Your 1099 form is available for download"
+    assert_includes sanitized_body(mail), "Your 1099 form is available for download"
   end
 
   test "perform tells a US seller who is not 1099-eligible that they do not qualify" do
@@ -160,7 +156,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     mail = ActionMailer::Base.deliveries.last
     assert_equal [seller.email], mail.to
     assert_us_seller_stats(mail, seller, permalinks, date)
-    assert_includes mail.body.sanitized, "You do not qualify for a 1099 this year."
+    assert_includes sanitized_body(mail), "You do not qualify for a 1099 this year."
   end
 
   test "perform omits the 1099 section entirely for a seller outside the US" do
@@ -186,13 +182,13 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     mail = ActionMailer::Base.deliveries.last
     assert_equal [seller.email], mail.to
     assert_equal "Your 2022 in review", mail.subject
-    body = mail.body.sanitized
+    body = sanitized_body(mail)
     assert_includes body, "Views 1"
     assert_includes body, "Sales 13"
     assert_includes body, "Unique customers 13"
     assert_includes body, "Products sold #{permalinks.size}"
     top_product_names.each do |name|
-      assert_match(/#{name} \( \S+ \)( =)? -+ Views \d+ Sales \d+ Total \d+/, body)
+      assert_match(/#{name} \( \S+ \) -+ Views \d+ Sales \d+ Total \d+/, body)
     end
     assert_includes body, "You earned a total of $1,300"
     assert_includes body, "You sold products in 2 countries"
@@ -205,10 +201,19 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
   end
 
   private
+    # Like Mail::Body#sanitized (spec/support/mail_body_extensions.rb), but
+    # unfolds quoted-printable soft breaks ("=\r\n") first — they land at
+    # positions that depend on the random test subdomain length.
+    def sanitized_body(mail)
+      ActionView::Base.full_sanitizer
+        .sanitize(mail.body.encoded.gsub("=\r\n", ""))
+        .gsub("\r\n", " ")
+        .gsub(/\s{2,}/, " ")
+    end
+
     # The download link for the seller's annual report. Asserted against the
-    # DECODED text part rather than mail.body.sanitized: the sanitizer strips the
-    # anchor's href, and quoted-printable soft-wraps a URL this long (the RSpec
-    # original ran against S3, whose public URLs are short enough to survive).
+    # decoded text part rather than sanitized_body: the sanitizer strips the
+    # anchor's href from the HTML part, so only the text part carries the URL.
     def assert_report_link(mail, seller, date)
       assert_includes mail.text_part.decoded, seller.financial_annual_report_url_for(year: date.year)
     end
@@ -292,13 +297,13 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     # these sales carry no country.
     def assert_us_seller_stats(mail, seller, permalinks, date)
       assert_equal "Your 2022 in review", mail.subject
-      body = mail.body.sanitized
+      body = sanitized_body(mail)
       assert_includes body, "Views 24"
       assert_includes body, "Sales 12"
       assert_includes body, "Unique customers 12"
       assert_includes body, "Products sold #{permalinks.size}"
       seller.products.where(unique_permalink: permalinks.first(5)).pluck(:name).each do |name|
-        assert_match(/#{name} \( \S+ \)( =)? -+ Views \d+ Sales \d+ Total \d+/, body)
+        assert_match(/#{name} \( \S+ \) -+ Views \d+ Sales \d+ Total \d+/, body)
       end
       assert_includes body, "You earned a total of $1,200"
       assert_includes body, "You sold products in 1 country"
