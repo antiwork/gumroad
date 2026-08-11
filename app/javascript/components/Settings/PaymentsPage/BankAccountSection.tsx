@@ -1781,16 +1781,14 @@ const BankAccountSection = ({
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
                     <FieldsetTitle>
-                      <Label htmlFor={`${uid}-branch-code`}>Branch code</Label>
+                      <Label htmlFor={`${uid}-branch-code`}>Branch code (optional)</Label>
                     </FieldsetTitle>
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
                       placeholder="4232"
                       maxLength={5}
-                      required
                       disabled={isFormDisabled}
-                      aria-invalid={errorFieldNames.has("branch_code")}
                       onChange={(evt) => updateBankAccount({ branch_code: evt.target.value })}
                     />
                   </Fieldset>
