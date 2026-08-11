@@ -225,4 +225,74 @@ describe Onetime::DeduplicateProductAffiliates do
       end.not_to change { ProductAffiliate.exists?(identical_pair_surplus.id) }
     end
   end
+
+  describe ".process_commission_divergent" do
+    it "does not delete anything on a dry run" do
+      expect do
+        described_class.process_commission_divergent
+      end.not_to change { ProductAffiliate.count }
+    end
+
+    it "skips row locks on a dry run so it works against a read-only replica" do
+      expect(locking_queries_during { described_class.process_commission_divergent }).to be_empty
+    end
+
+    it "locks the pair's rows so the re-check and the delete are atomic" do
+      expect(locking_queries_during { described_class.process_commission_divergent(dry_run: false) }).not_to be_empty
+    end
+
+    it "sticks a live run to the primary so discovery cannot read a lagging replica" do
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      described_class.process_commission_divergent(dry_run: false)
+    end
+
+    it "keeps the row the application lookup returns for a commission-divergent pair" do
+      resolved_id = ProductAffiliate.where(affiliate_id: divergent_pair_row_one.affiliate_id,
+                                           link_id: divergent_pair_row_one.link_id).take.id
+
+      expect do
+        described_class.process_commission_divergent(dry_run: false)
+      end.to change { ProductAffiliate.count }.by(-1)
+
+      remaining_ids = ProductAffiliate.where(affiliate_id: divergent_pair_row_one.affiliate_id,
+                                             link_id: divergent_pair_row_one.link_id).pluck(:id)
+      expect(remaining_ids).to eq([resolved_id])
+    end
+
+    it "resolves a pair that mixes url and basis_points divergence too" do
+      mixed_row_one = create(:product_affiliate, affiliate_basis_points: 1000, destination_url: "https://example.com/one")
+      mixed_row_two = create_duplicate_of(mixed_row_one, affiliate_basis_points: 2500, destination_url: "https://example.com/two")
+      resolved_id = ProductAffiliate.where(affiliate_id: mixed_row_one.affiliate_id, link_id: mixed_row_one.link_id).take.id
+
+      described_class.process_commission_divergent(dry_run: false)
+
+      remaining_ids = ProductAffiliate.where(affiliate_id: mixed_row_one.affiliate_id,
+                                             link_id: mixed_row_one.link_id).pluck(:id)
+      expect(remaining_ids).to eq([resolved_id])
+    end
+
+    it "resolves a pair that diverges only on flags, not just affiliate_basis_points" do
+      flags_row_one = create(:product_affiliate, affiliate_basis_points: 1000)
+      flags_row_two = create_duplicate_of(flags_row_one, dont_show_as_co_creator: true)
+      resolved_id = ProductAffiliate.where(affiliate_id: flags_row_one.affiliate_id, link_id: flags_row_one.link_id).take.id
+
+      described_class.process_commission_divergent(dry_run: false)
+
+      remaining_ids = ProductAffiliate.where(affiliate_id: flags_row_one.affiliate_id,
+                                             link_id: flags_row_one.link_id).pluck(:id)
+      expect(remaining_ids).to eq([resolved_id])
+    end
+
+    it "leaves identical pairs untouched — they need pass 1 first" do
+      expect do
+        described_class.process_commission_divergent(dry_run: false)
+      end.not_to change { ProductAffiliate.exists?(identical_pair_surplus.id) }
+    end
+
+    it "leaves non-duplicated rows untouched" do
+      described_class.process_commission_divergent(dry_run: false)
+
+      expect(ProductAffiliate.exists?(unique_row.id)).to be(true)
+    end
+  end
 end

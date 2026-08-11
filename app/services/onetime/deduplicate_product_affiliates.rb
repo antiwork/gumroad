@@ -14,6 +14,8 @@
 #   Onetime::DeduplicateProductAffiliates.process(dry_run: false)
 #   Onetime::DeduplicateProductAffiliates.process_url_divergent
 #   Onetime::DeduplicateProductAffiliates.process_url_divergent(dry_run: false)
+#   Onetime::DeduplicateProductAffiliates.process_commission_divergent
+#   Onetime::DeduplicateProductAffiliates.process_commission_divergent(dry_run: false)
 module Onetime
   class DeduplicateProductAffiliates
     CONTENT_COLUMNS = %w[affiliate_basis_points destination_url flags].freeze
@@ -26,6 +28,10 @@ module Onetime
 
     def self.process_url_divergent(dry_run: true)
       new.process_url_divergent(dry_run:)
+    end
+
+    def self.process_commission_divergent(dry_run: true)
+      new.process_commission_divergent(dry_run:)
     end
 
     def process(dry_run: true)
@@ -81,6 +87,31 @@ module Onetime
 
     def divergent_pairs
       duplicate_pairs.reject { |pair| identical?(*pair) }
+    end
+
+    # Keep-rule pass for the commission-divergent pairs left after pass 2a, per Sahil
+    # (gp#2067): "Keep the row the app resolves" — the same rule pass 2a used for
+    # destination_url-only pairs, generalized to whatever a pair still diverges on.
+    # Safe to run before pass 2a too since it applies the identical rule to any
+    # remaining divergent pair.
+    def process_commission_divergent(dry_run: true)
+      stick_to_primary unless dry_run
+      pairs = divergent_pairs
+      puts "Found #{pairs.size} commission-divergent pair(s) to resolve"
+
+      deleted = 0
+      pairs.each_slice(BATCH_SIZE) do |batch|
+        ReplicaLagWatcher.watch unless dry_run
+        batch.each { |affiliate_id, link_id| deleted += dedupe_commission_divergent_pair(affiliate_id, link_id, dry_run:) }
+      end
+
+      if dry_run
+        puts "Dry run — no changes made. Re-run with dry_run: false to apply."
+      else
+        puts "Deleted #{deleted} surplus row(s)."
+        report_remaining_duplicates
+      end
+      deleted
     end
 
     private
@@ -147,6 +178,25 @@ module Onetime
       def url_only_divergent_content?(rows)
         rows.map { |row| row.attributes.values_at(*COMMISSION_COLUMNS) }.uniq.size == 1 &&
           rows.map(&:destination_url).uniq.size > 1
+      end
+
+      # Same unordered LIMIT 1 shape as dedupe_url_divergent_pair, generalized to any
+      # remaining divergence (commission or flags) per Sahil's ruling on gp#2067: keep
+      # whichever row the app already resolves.
+      def dedupe_commission_divergent_pair(affiliate_id, link_id, dry_run:)
+        ProductAffiliate.transaction do
+          rows = ProductAffiliate.where(affiliate_id:, link_id:).order(:id).lock(!dry_run).to_a
+          next 0 if rows.size < 2
+
+          keeper = ProductAffiliate.where(affiliate_id:, link_id:).take
+          next 0 if keeper.nil?
+
+          surplus_ids = rows.map(&:id) - [keeper.id]
+          puts "Keeping ProductAffiliate #{keeper.id}; deleting #{surplus_ids.join(', ')}"
+          next 0 if dry_run
+
+          ProductAffiliate.where(id: surplus_ids).delete_all
+        end
       end
 
       # The up-front partition can go stale mid-run (a pair skipped under lock stays
