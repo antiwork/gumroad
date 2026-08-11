@@ -41,7 +41,7 @@ describe LinksController, type: :controller do
       confirmed_removed_variant_ids: [],
       confirmed_removed_rich_content_ids: [],
       preserved_rich_content_ids: [],
-      rich_content_provenance_version: 1,
+      rich_content_provenance_version: 2,
     }
   end
 
@@ -75,9 +75,19 @@ describe LinksController, type: :controller do
       ]
     )
 
-    post :update, params: params, as: :json
+    legacy_params = params.deep_dup
+    legacy_params[:rich_content_provenance_version] = 1
+    post :update, params: legacy_params, as: :json
+    expect(response).to have_http_status(:conflict).or have_http_status(:unprocessable_entity)
 
+    post :update, params: params, as: :json
     expect(response).to be_successful
+    tier_a_page = tier_a.reload.alive_rich_contents.sole
+    tier_b_page = tier_b.reload.alive_rich_contents.sole
+    mappings = response.parsed_body.fetch("rich_content_id_mappings_by_scope")
+    expect(mappings.dig(tier_a.external_id, "shared-client-id")).to eq(tier_a_page.external_id)
+    expect(mappings.dig(tier_b.external_id, "shared-client-id")).to eq(tier_b_page.external_id)
+    expect(tier_a_page.external_id).not_to eq(tier_b_page.external_id)
   end
 
   it "still rejects a genuine same-scope duplicate id" do

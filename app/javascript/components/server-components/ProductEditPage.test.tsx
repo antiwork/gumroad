@@ -366,6 +366,10 @@ it("reconciles same-id pages in different variant scopes using each variant's ow
 
   saveProductMock.mockResolvedValue({
     rich_content_id_mappings: { "shared-client-id": "server-page-canonical" },
+    rich_content_id_mappings_by_scope: {
+      "tier-a": { "shared-client-id": "server-page-a" },
+      "tier-b": { "shared-client-id": "server-page-b" },
+    },
   } satisfies SaveProductResponse);
 
   render(<ProductEditPage {...props} />);
@@ -378,18 +382,18 @@ it("reconciles same-id pages in different variant scopes using each variant's ow
   const savedProduct = contextCapture.current?.product;
   const tierA = savedProduct?.variants.find((v) => v.name === "Tier A");
   const tierB = savedProduct?.variants.find((v) => v.name === "Tier B");
-  // The response's id map is necessarily global (both pages shared one raw id),
-  // so both resolve to the same canonical id — that part of the contract can't
-  // be fixed client-side. What must NOT happen is tier B's bookkeeping being
-  // overwritten with tier A's sent snapshot (or vice versa): with the bug, a
+  // What must NOT happen is tier B's bookkeeping being overwritten with tier
+  // A's sent snapshot (or vice versa): with the bug, a
   // scope-blind Map key made tier B's reconciliation read tier A's ScopedPage
   // (scope "tier-a"), so `sentScope` ("tier-a") mismatched tier B's real
   // `currentScope` ("tier-b") and `movedAfterRequest` went true — falsely
   // reintroducing move_source_scope="tier-a" on a page the server actually
   // committed cleanly in tier B's own scope. Fixed, each variant reads its own
   // snapshot, matches its own scope, and the move bookkeeping is cleared.
-  expect(tierA?.rich_content[0]?.id).toBe("server-page-canonical");
-  expect(tierB?.rich_content[0]?.id).toBe("server-page-canonical");
+  expect(tierA?.rich_content[0]?.id).toBe("server-page-a");
+  expect(tierB?.rich_content[0]?.id).toBe("server-page-b");
+  expect(contextCapture.current?.richContentIdMappings["tier-a\u0000shared-client-id"]).toBe("server-page-a");
+  expect(contextCapture.current?.richContentIdMappings["tier-b\u0000shared-client-id"]).toBe("server-page-b");
   expect(tierA?.rich_content[0]?.title).toBe("A");
   expect(tierB?.rich_content[0]?.title).toBe("B");
   expect(tierB?.rich_content[0]).not.toHaveProperty("move_source_scope");
@@ -536,6 +540,9 @@ it("keeps a newly-created variant's move provenance after its own id is remapped
   saveProductMock.mockResolvedValue({
     variant_id_mappings: { "local-new-tier": "server-new-tier" },
     rich_content_id_mappings: { "moved-page": "server-page-canonical" },
+    rich_content_id_mappings_by_scope: {
+      "local-new-tier": { "moved-page": "server-page-canonical" },
+    },
   } satisfies SaveProductResponse);
   applyRichContentPageSaveResponseSpy.mockClear();
 
@@ -558,4 +565,7 @@ it("keeps a newly-created variant's move provenance after its own id is remapped
   expect(call).toBeDefined();
   const sentScope = call?.[4];
   expect(sentScope).toBe("server-new-tier");
+  expect(contextCapture.current?.richContentIdMappings["server-new-tier\u0000moved-page"]).toBe(
+    "server-page-canonical",
+  );
 });

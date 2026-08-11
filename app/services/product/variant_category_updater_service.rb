@@ -58,7 +58,12 @@ class Product::VariantCategoryUpdaterService
     @preserved_rich_content_ids = Array.wrap(preserved_rich_content_ids)
     @rewrite_budget = rewrite_budget
     @deletion_guard_diagnostics = deletion_guard_diagnostics
-    @id_mappings = id_mappings || { variants: {}, rich_content: {}, removed_file_embeds: {} }
+    @id_mappings = id_mappings || {
+      variants: {},
+      rich_content: {},
+      rich_content_by_scope: Hash.new { |scopes, scope| scopes[scope] = {} },
+      removed_file_embeds: {},
+    }
     @legacy_dead_file_embed_ids_by_rich_content_id = legacy_dead_file_embed_ids_by_rich_content_id
     @deletion_audit_context = deletion_audit_context || {}
     @contract = contract
@@ -539,7 +544,11 @@ class Product::VariantCategoryUpdaterService
         # A page submitted under an id the server didn't know was just created
         # with a canonical id — report the mapping so the editor's next save
         # addresses this page instead of re-creating it.
-        id_mappings[:rich_content][variant_rich_content[:id]] = rich_content.external_id if variant_rich_content[:id].present? && variant_rich_content[:id] != rich_content.external_id
+        if variant_rich_content[:id].present? && variant_rich_content[:id] != rich_content.external_id
+          id_mappings[:rich_content][variant_rich_content[:id]] = rich_content.external_id
+          submitted_scope = option[:id].presence || option[:client_id]
+          id_mappings[:rich_content_by_scope][submitted_scope][variant_rich_content[:id]] = rich_content.external_id
+        end
       end
       rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
         .reject { preserved_rich_content_ids.include?(_1.external_id) }

@@ -572,7 +572,10 @@ class LinksController < ApplicationController
           # A page submitted under an id the server didn't know was just
           # created with a canonical id — report the mapping so the editor's
           # next save addresses this page instead of re-creating it.
-          save_id_mappings[:rich_content][product_rich_content[:id]] = rich_content.external_id if product_rich_content[:id].present? && product_rich_content[:id] != rich_content.external_id
+          if product_rich_content[:id].present? && product_rich_content[:id] != rich_content.external_id
+            save_id_mappings[:rich_content][product_rich_content[:id]] = rich_content.external_id
+            save_id_mappings[:rich_content_by_scope][""][product_rich_content[:id]] = rich_content.external_id
+          end
         end
         product_rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
           .reject { preserved_rich_content_ids.include?(_1.external_id) }
@@ -1028,29 +1031,24 @@ class LinksController < ApplicationController
     end
 
     def ensure_rich_content_ids_are_unambiguous!
-      # Client-generated page ids are only unique WITHIN a scope (product-level,
-      # or a given variant) — the same raw id legitimately appears once per
-      # variant when pages move between shared/per-tier scopes in one save
-      # (gumroad-private#2023). Tally per destination scope, not globally, or
-      # this rejects the exact multi-scope save the client-side reconciliation
-      # fix (ProductEditPage#applyCanonicalIds) is designed to handle.
-      per_scope_duplicate = submitted_rich_content_page_references
+      references = submitted_rich_content_page_references
+      # Older editor tabs only understand the global response map, so keep
+      # enforcing global uniqueness until the scoped-mapping protocol is sent.
+      if product_permitted_params[:rich_content_provenance_version].to_i < 2
+        duplicate_id = references.filter_map { _1[:page][:id].presence }.tally.find { |_id, count| count > 1 }
+        raise Product::SaveContract::AmbiguousRichContentIdConflict if duplicate_id
+        return
+      end
+
+      per_scope_duplicate = references
         .group_by { _1[:destination_scope_key] }
         .values
-        .flat_map { |refs| refs.filter_map { _1[:page][:id].presence }.tally.select { |_id, count| count > 1 }.keys }
-        .first
+        .any? { |refs| refs.filter_map { _1[:page][:id].presence }.tally.any? { |_id, count| count > 1 } }
       raise Product::SaveContract::AmbiguousRichContentIdConflict if per_scope_duplicate
 
-      # The per-scope relaxation above only makes sense for NEW, client-
-      # generated ids: a brand-new page id can legitimately be minted twice
-      # (once per scope) as part of a single shared/per-tier toggle. An id
-      # that resolves to an EXISTING, owned RichContent row is a different
-      # animal — that row physically lives in exactly one scope, so the same
-      # existing id addressed from two different scopes in one save means the
-      # page was kept at both its source and destination (a stale-tab replay,
-      # not a move), and a single save response cannot remap one underlying
-      # row to two places. Reject that regardless of scope.
-      existing_id_scopes = submitted_rich_content_page_references
+      # Only new client ids may repeat across scopes. A persisted page belongs
+      # to one scope, so addressing it from multiple destinations is ambiguous.
+      existing_id_scopes = references
         .filter_map do |ref|
           raw_id = ref[:page][:id].presence
           next unless raw_id && owned_submitted_rich_content_pages_by_external_id[raw_id]
@@ -1060,9 +1058,7 @@ class LinksController < ApplicationController
         .group_by(&:first)
         .transform_values { |pairs| pairs.map(&:last).uniq }
 
-      return if existing_id_scopes.values.none? { |scopes| scopes.size > 1 }
-
-      raise Product::SaveContract::AmbiguousRichContentIdConflict
+      raise Product::SaveContract::AmbiguousRichContentIdConflict if existing_id_scopes.values.any? { |scopes| scopes.size > 1 }
     end
 
     def check_banned
@@ -1574,7 +1570,13 @@ class LinksController < ApplicationController
     # Returned to the editor so its next save addresses the created records
     # instead of re-creating them (which would trip the deletion guards).
     def save_id_mappings
-      @_save_id_mappings ||= { variants: {}, rich_content: {}, files: {}, removed_file_embeds: {} }
+      @_save_id_mappings ||= {
+        variants: {},
+        rich_content: {},
+        rich_content_by_scope: Hash.new { |scopes, scope| scopes[scope] = {} },
+        files: {},
+        removed_file_embeds: {},
+      }
     end
 
     # Snapshot stored move/copy provenance before this save can repair or
@@ -1774,6 +1776,7 @@ class LinksController < ApplicationController
       {
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
+        rich_content_id_mappings_by_scope: save_id_mappings[:rich_content_by_scope],
         file_id_mappings: save_id_mappings[:files],
         rich_content_removed_file_embed_ids: save_id_mappings[:removed_file_embeds],
         **content_updated_at_response,

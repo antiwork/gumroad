@@ -14,6 +14,7 @@ import {
   StaleContentConflictError,
   StaleDeletionConflictError,
   saveProduct,
+  scopedRichContentPageKey,
 } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
@@ -242,8 +243,6 @@ type ScopedPage = { page: Page; scope: string | null };
 // A page's client-generated id is only unique WITHIN a scope, not across the
 // whole payload (gumroad-private#2023). Key the lookup on scope+id so pages
 // sharing a raw id in different scopes don't clobber each other in the Map.
-const scopedPageKey = (scope: string | null, id: string) => `${scope ?? ""}\u0000${id}`;
-
 const allScopedRichContentPages = (product: Product): ScopedPage[] => [
   ...product.rich_content.map((page) => ({ page, scope: null })),
   ...product.variants.flatMap((variant) => variant.rich_content.map((page) => ({ page, scope: variant.id }))),
@@ -302,24 +301,26 @@ const applyCanonicalIds = (
     const variantBaseline = variantBaselines[variant.id];
     if (variantBaseline) variant.loaded_integrations = variantBaseline;
     for (const page of variant.rich_content) {
-      const sent = sentPagesById.get(scopedPageKey(sentVariantId, page.id));
+      const sent = sentPagesById.get(scopedRichContentPageKey(sentVariantId, page.id));
       applyRichContentPageSaveResponse(
         page,
         response,
         sent?.page ?? page,
         variant.id,
         canonicalRichContentScope(sent?.scope, variantMappings),
+        sentVariantId,
       );
     }
   }
   for (const page of product.rich_content) {
-    const sent = sentPagesById.get(scopedPageKey(null, page.id));
+    const sent = sentPagesById.get(scopedRichContentPageKey(null, page.id));
     applyRichContentPageSaveResponse(
       page,
       response,
       sent?.page ?? page,
       null,
       canonicalRichContentScope(sent?.scope, variantMappings),
+      null,
     );
   }
 };
@@ -441,7 +442,7 @@ const ProductEditPage = (props: Props) => {
     ];
     const sentPagesById = new Map(
       allScopedRichContentPages(productSent).map((scopedPage) => [
-        scopedPageKey(scopedPage.scope, scopedPage.page.id),
+        scopedRichContentPageKey(scopedPage.scope, scopedPage.page.id),
         scopedPage,
       ]),
     );
@@ -478,7 +479,17 @@ const ProductEditPage = (props: Props) => {
       reconciled.confirmed_removed_rich_content_ids = [];
       lastSavedProductRef.current = reconciled;
       setVariantIdMappings((previous) => ({ ...previous, ...response.variant_id_mappings }));
-      setRichContentIdMappings((previous) => ({ ...previous, ...response.rich_content_id_mappings }));
+      setRichContentIdMappings((previous) => {
+        const scopedMappings = Object.entries(response.rich_content_id_mappings_by_scope ?? {}).flatMap(
+          ([scope, mappings]) => {
+            const canonicalScope = scope === "" ? null : (response.variant_id_mappings?.[scope] ?? scope);
+            return Object.entries(mappings).map(
+              ([id, canonicalId]) => [scopedRichContentPageKey(canonicalScope, id), canonicalId] as const,
+            );
+          },
+        );
+        return { ...previous, ...response.rich_content_id_mappings, ...Object.fromEntries(scopedMappings) };
+      });
       setFileIdMappings((previous) => ({ ...previous, ...response.file_id_mappings }));
       setRichContentRemovedFileEmbedIds(response.rich_content_removed_file_embed_ids ?? {});
       updateProduct((current) => {

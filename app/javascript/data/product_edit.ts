@@ -20,6 +20,7 @@ export type SaveProductResponse = {
   // server's content deletion guard, duplicates variants, or re-attaches files).
   variant_id_mappings?: Record<string, string>;
   rich_content_id_mappings?: Record<string, string>;
+  rich_content_id_mappings_by_scope?: Record<string, Record<string, string>>;
   file_id_mappings?: Record<string, string>;
   // Canonical page id → file external ids removed while repairing legacy
   // content. The editor removes the same invisible nodes from its live state,
@@ -222,12 +223,15 @@ export const canonicalRichContentScope = (
   variantIdMappings: Record<string, string>,
 ): string | null | undefined => (typeof scope === "string" ? (variantIdMappings[scope] ?? scope) : scope);
 
+export const scopedRichContentPageKey = (scope: string | null, id: string) => `${scope ?? ""}\u0000${id}`;
+
 export const applyRichContentPageSaveResponse = (
   page: Product["rich_content"][number],
   response: SaveProductResponse,
   sentPage: Product["rich_content"][number] = page,
   currentScope?: string | null,
   sentScope?: string | null,
+  mappingScope: string | null | undefined = sentScope,
 ): void => {
   const originalId = page.id;
   const wasNewlyAdded = page.newlyAdded;
@@ -250,7 +254,10 @@ export const applyRichContentPageSaveResponse = (
   const mappedMoveSourceScope =
     typeof page.move_source_scope === "string" ? response.variant_id_mappings?.[page.move_source_scope] : undefined;
   if (mappedMoveSourceScope) page.move_source_scope = mappedMoveSourceScope;
-  const canonicalId = response.rich_content_id_mappings?.[originalId];
+  const canonicalId =
+    (mappingScope !== undefined
+      ? response.rich_content_id_mappings_by_scope?.[mappingScope ?? ""]?.[originalId]
+      : undefined) ?? response.rich_content_id_mappings?.[originalId];
   if (canonicalId) {
     page.id = canonicalId;
     delete page.newlyAdded;
@@ -473,7 +480,7 @@ export const saveProduct = async (
       // sent by an editor tab that was already open when provenance shipped.
       // The compatibility path for those older tabs can then stay narrow and
       // disappear once no such sessions remain.
-      rich_content_provenance_version: 1,
+      rich_content_provenance_version: 2,
       // The save contract (gumroad-private#1379). Sent on every save; the
       // server ignores both unless the :product_editor_save_contract flag is on
       // for this seller, so this is inert until the rollout enables it.
