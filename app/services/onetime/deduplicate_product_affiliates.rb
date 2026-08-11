@@ -29,6 +29,7 @@ module Onetime
     end
 
     def process(dry_run: true)
+      stick_to_primary unless dry_run
       identical, divergent = duplicate_pairs.partition { |pair| identical?(*pair) }
       puts "Found #{duplicate_pairs.size} duplicate pair(s): #{identical.size} identical, #{divergent.size} divergent"
 
@@ -53,10 +54,13 @@ module Onetime
     # the row the application already serves. Readers and seller edits resolve a pair
     # through unordered LIMIT 1 lookups (`product_affiliates.find_by(link_id:)`), so
     # the pass asks the database for that row instead of assuming an index order, and
-    # the served URL cannot change. updated_at cannot rank URLs: any unrelated
-    # persisted change advances it. Pairs with commission divergence stay untouched;
-    # they need a reviewed keep-rule.
+    # the URL served for the pair's product cannot change. An affiliate whose only
+    # product was duplicated regains the single-product redirect: the surplus row made
+    # `product_affiliates.one?` false, wrongly sending /a/:id to the seller profile.
+    # updated_at cannot rank URLs: any unrelated persisted change advances it. Pairs
+    # with commission divergence stay untouched; they need a reviewed keep-rule.
     def process_url_divergent(dry_run: true)
+      stick_to_primary unless dry_run
       eligible, held_for_review = divergent_pairs.partition { |pair| url_only_divergent?(*pair) }
       puts "Found #{divergent_pairs.size} divergent pair(s): #{eligible.size} differ only on destination_url, #{held_for_review.size} held for review"
 
@@ -80,6 +84,12 @@ module Onetime
     end
 
     private
+      # Live runs discover candidates and report leftovers with plain SELECTs; a lagging
+      # replica would silently skip primary-side duplicates. Dry runs stay on the replica.
+      def stick_to_primary
+        ActiveRecord::Base.connection.stick_to_primary!
+      end
+
       def duplicate_pairs
         @duplicate_pairs ||= ProductAffiliate.group(:affiliate_id, :link_id).having("COUNT(*) > 1").count.keys
       end

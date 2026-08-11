@@ -49,6 +49,11 @@ describe Onetime::DeduplicateProductAffiliates do
       described_class.process
     end
 
+    it "sticks a live run to the primary so discovery cannot read a lagging replica" do
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      described_class.process(dry_run: false)
+    end
+
     it "skips row locks on a dry run so it works against a read-only replica" do
       expect(locking_queries_during { described_class.process }).to be_empty
     end
@@ -167,6 +172,24 @@ describe Onetime::DeduplicateProductAffiliates do
       described_class.process_url_divergent(dry_run: false)
 
       expect(affiliate.reload.final_destination_url(product: pair_row.product)).to eq(url_before)
+    end
+
+    it "sticks a live run to the primary so discovery cannot read a lagging replica" do
+      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      described_class.process_url_divergent(dry_run: false)
+    end
+
+    it "restores the single-product redirect for an affiliate whose only product was duplicated" do
+      pair_row = create(:product_affiliate, destination_url: "https://example.com/one")
+      create_duplicate_of(pair_row, destination_url: "https://example.com/two")
+      affiliate = pair_row.affiliate
+
+      expect do
+        described_class.process_url_divergent(dry_run: false)
+      end.to change { affiliate.reload.product_affiliates.count }.from(2).to(1)
+
+      kept_row = affiliate.product_affiliates.sole
+      expect(affiliate.final_destination_url).to eq(kept_row.destination_url)
     end
 
     it "handles a pair whose rows carry nil updated_at" do
