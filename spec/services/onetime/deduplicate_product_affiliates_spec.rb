@@ -261,7 +261,7 @@ describe Onetime::DeduplicateProductAffiliates do
 
     it "resolves a pair that mixes url and basis_points divergence too" do
       mixed_row_one = create(:product_affiliate, affiliate_basis_points: 1000, destination_url: "https://example.com/one")
-      mixed_row_two = create_duplicate_of(mixed_row_one, affiliate_basis_points: 2500, destination_url: "https://example.com/two")
+      create_duplicate_of(mixed_row_one, affiliate_basis_points: 2500, destination_url: "https://example.com/two")
       resolved_id = ProductAffiliate.where(affiliate_id: mixed_row_one.affiliate_id, link_id: mixed_row_one.link_id).take.id
 
       described_class.process_commission_divergent(dry_run: false)
@@ -273,7 +273,7 @@ describe Onetime::DeduplicateProductAffiliates do
 
     it "resolves a pair that diverges only on flags, not just affiliate_basis_points" do
       flags_row_one = create(:product_affiliate, affiliate_basis_points: 1000)
-      flags_row_two = create_duplicate_of(flags_row_one, dont_show_as_co_creator: true)
+      create_duplicate_of(flags_row_one, dont_show_as_co_creator: true)
       resolved_id = ProductAffiliate.where(affiliate_id: flags_row_one.affiliate_id, link_id: flags_row_one.link_id).take.id
 
       described_class.process_commission_divergent(dry_run: false)

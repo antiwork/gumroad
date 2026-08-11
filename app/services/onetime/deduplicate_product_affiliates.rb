@@ -89,11 +89,8 @@ module Onetime
       duplicate_pairs.reject { |pair| identical?(*pair) }
     end
 
-    # Keep-rule pass for the divergent pairs left after pass 2a, per Sahil (gp#2067):
-    # "Keep the row the app resolves" — the same rule pass 2a used for
-    # destination_url-only pairs, generalized to whatever a pair still diverges on
-    # (commission, flags, or both). Safe to run before pass 2a too since it applies
-    # the identical rule to every remaining divergent pair.
+    # Resolves every remaining divergent pair (commission, flags, or both) by keeping
+    # the row the application lookup returns. Safe to run before process_url_divergent.
     def process_commission_divergent(dry_run: true)
       stick_to_primary unless dry_run
       pairs = divergent_pairs
@@ -180,9 +177,8 @@ module Onetime
           rows.map(&:destination_url).uniq.size > 1
       end
 
-      # Same unordered LIMIT 1 shape as dedupe_url_divergent_pair, generalized to any
-      # remaining divergence (commission or flags) per Sahil's ruling on gp#2067: keep
-      # whichever row the app already resolves.
+      # The keeper must come from the same unordered `.take` the app uses to resolve
+      # the pair — ordering by :id here would sometimes delete the row being served.
       def dedupe_commission_divergent_pair(affiliate_id, link_id, dry_run:)
         ProductAffiliate.transaction do
           rows = ProductAffiliate.where(affiliate_id:, link_id:).order(:id).lock(!dry_run).to_a
