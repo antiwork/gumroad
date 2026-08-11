@@ -300,7 +300,9 @@ class Order::ChargeService
       ).perform
 
       self.charge_intent = charge.charge_intent
-      charge.credit_card.update!(json_data: { stripe_payment_intent_id: charge_intent.id }) if charge.credit_card&.requires_mandate?
+      # charge_intent is nil when the processor call was rescued (e.g. a quote/settlement
+      # mismatch) — Charge::CreateService returns the charge with no intent attached in that case.
+      charge.credit_card.update!(json_data: { stripe_payment_intent_id: charge_intent.id }) if charge_intent.present? && charge.credit_card&.requires_mandate?
 
       if charge_intent&.succeeded?
         charge_waiting_for_flow_of_funds = charge_intent_waiting_for_flow_of_funds?(charge)
