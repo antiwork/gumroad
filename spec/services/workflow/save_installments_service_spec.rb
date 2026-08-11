@@ -628,6 +628,18 @@ describe Workflow::SaveInstallmentsService do
         )
       end
 
+      it "preserves the delay amount when only the unit changes" do
+        installment = create(:workflow_installment, seller:, link: product, workflow:)
+        rule = installment.installment_rule
+        rule.update!(delayed_delivery_time: 1.hour.to_i, time_period: "hour")
+        params[:installments] = [{ id: installment.external_id, time_period: "day" }]
+        service = described_class.new(seller:, params:, workflow:, preview_email_recipient:, replace_all: false)
+
+        expect(service.process).to eq([true, nil])
+
+        expect(rule.reload).to have_attributes(delayed_delivery_time: 1.day.to_i, time_period: "day")
+      end
+
       it "rolls back a delay change and its schedule after a preview failure" do
         published_at = 2.days.ago.change(usec: 0)
         workflow.update!(published_at:, first_published_at: published_at)
@@ -669,6 +681,23 @@ describe Workflow::SaveInstallmentsService do
 
         expect(sibling.reload).to be_alive
         expect(service.saved_installments).to be_empty
+      end
+
+      it "does not return installments from a rolled-back batch" do
+        installment = create(:workflow_installment, seller:, link: product, workflow:, message: "Original message")
+        params[:installments] = [
+          { id: installment.external_id, message: "Updated message" },
+          default_installment_params.merge(id: nil, message: ""),
+        ]
+        service = described_class.new(seller:, params:, workflow:, preview_email_recipient:, replace_all: false)
+
+        success, errors = service.process
+
+        expect(success).to be(false)
+        expect(errors.full_messages.first).to eq("Please include a message as part of the update.")
+        expect(installment.reload.message).to eq("Original message")
+        expect(service.saved_installments).to be_empty
+        expect(service.old_and_new_installment_id_mapping).to be_empty
       end
 
       it "creates a draft installment" do

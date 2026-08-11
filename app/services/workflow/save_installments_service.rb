@@ -95,6 +95,11 @@ class Workflow::SaveInstallmentsService
       @errors = workflow.errors
     end
 
+    if errors
+      saved_installments.clear
+      old_and_new_installment_id_mapping.clear
+    end
+
     [errors.nil?, errors]
   end
 
@@ -146,11 +151,8 @@ class Workflow::SaveInstallmentsService
         new_delayed_delivery_time = convert_to_seconds(installment_params[:time_duration], new_time_period)
       else
         new_time_period = installment_params.key?(:time_period) ? installment_params[:time_period] : rule.time_period
-        new_delayed_delivery_time = if installment_params.key?(:time_duration)
-          convert_to_seconds(installment_params[:time_duration], new_time_period)
-        else
-          rule.delayed_delivery_time
-        end
+        new_time_duration = installment_params.key?(:time_duration) ? installment_params[:time_duration] : rule.displayable_time_duration
+        new_delayed_delivery_time = convert_to_seconds(new_time_duration, new_time_period)
       end
       old_delayed_delivery_time = rule.delayed_delivery_time
       rule.time_period = new_time_period
