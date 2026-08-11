@@ -74,6 +74,24 @@ describe DirectAffiliate do
     end
   end
 
+  describe "assignment locks" do
+    it "locks only products whose assignments will change" do
+      second_product = create(:product, user: seller)
+      create(:product_affiliate, affiliate: direct_affiliate, product: second_product, affiliate_basis_points: 10_00)
+      direct_affiliate.product_affiliates.reload
+      assignments = direct_affiliate.product_affiliates.target.sort_by(&:id)
+      changed_assignment, unchanged_assignment = assignments
+      assignments.each { _1.association(:product).load_target }
+      changed_assignment.assign_attributes(affiliate_basis_points: 20_00)
+
+      expect(changed_assignment.product).to receive(:lock!).at_least(:once).and_call_original
+      expect(unchanged_assignment.product).not_to receive(:lock!)
+
+      direct_affiliate.save!
+      expect(changed_assignment.reload.affiliate_basis_points).to eq(20_00)
+    end
+  end
+
   describe "flags" do
     it "has a `apply_to_all_products` flag" do
       flag_on = create(:direct_affiliate, apply_to_all_products: true)
