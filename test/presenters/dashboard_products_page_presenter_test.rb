@@ -165,7 +165,7 @@ class DashboardProductsPagePresenterTest < ActiveSupport::TestCase
       presenter.send(:paginated_products)
     end
 
-    refute_nil paginated_collection
+    assert_not_nil paginated_collection
     # The thumbnail chain must be preloaded AFTER pagination, never eager-loaded
     # into the paginated relation. `includes` here turns into an 11-way LEFT JOIN
     # over a large catalogue and times the request out (GUMROAD-1AS, 73s span).
