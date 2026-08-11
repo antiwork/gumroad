@@ -636,27 +636,14 @@ class PaypalChargeProcessor
     update_order(paypal_order_id, purchase_unit_info)
   end
 
-  # gp#1916 closed the total-preserving version of this (a lower total was rejected outright);
-  # this closes the FEE-SHIFT variant, where an attacker keeps the total unchanged but shifts
-  # cents from `price_cents` into other buyer-supplied breakdown fields. The platform fee
-  # (`Link#gumroad_amount_for_paypal_order`) is a percentage of `price_cents` alone, so an
-  # artificially low `price_cents` collapses Gumroad's fee toward zero without tripping the
-  # total-lower guard or `ensure_captured_amount_matches!` (both total-only checks).
-  #
-  # A hard floor on price_cents against the product's live price (an earlier version of this
-  # guard) is wrong: this endpoint's product_info has no signal for which legitimate discount
-  # produced the submitted price — offer codes, PPP, rentals, and cheaper tiers/recurrences all
-  # send a price_cents below the product's base price by design, and the guard can't tell those
-  # apart from an attack (caught in review before merge).
-  #
-  # Instead, bound the ratio that IS attack-specific: real-world VAT/sales tax rates top out
-  # around 27% of the taxable base (Hungary's 27% VAT is the ceiling case), so tax/VAT
-  # legitimately exceeding roughly a third of price + validated shipping never happens for an
-  # actual purchase — only for the fee-shift attack, which relies on tax_cents dwarfing the
-  # server-valid subtotal while the total stays fixed. This is invariant to how price_cents was
-  # legitimately discounted, so it doesn't need to know the product's base price at all. Shipping
-  # is included because physical-product shipping can itself be taxable, but it is safe to include
-  # only after `ensure_shipping_matches_product!` has independently rejected fake shipping.
+  # gp#1916 closed the total-preserving lower-price attack. This closes the FEE-SHIFT variant:
+  # keep the total fixed but shift cents from `price_cents` into tax/VAT, which collapses
+  # Gumroad's percentage fee (based on `price_cents` alone) without tripping the total-only
+  # guards. A hard price floor can't tell that apart from a legitimate discount (offer code,
+  # PPP, rental), so this bounds tax/VAT against price+shipping instead — real tax rates never
+  # exceed ~27% (Hungary's VAT ceiling); 0.35 leaves headroom. Known gap: the fee itself is
+  # still computed from buyer-supplied price_cents, so a ratio *inside* 0.35 still shifts some
+  # fee to tax (gp#2008 panel review tracking a fix that doesn't need buyer-location data).
   MAX_TAX_TO_PRICE_RATIO = 0.35
   private_constant :MAX_TAX_TO_PRICE_RATIO
 
