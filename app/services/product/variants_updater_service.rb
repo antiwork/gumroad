@@ -48,7 +48,12 @@ class Product::VariantsUpdaterService
     @preserved_rich_content_ids = Array.wrap(preserved_rich_content_ids)
     @rewrite_budget = rewrite_budget
     @deletion_guard_diagnostics = deletion_guard_diagnostics
-    @id_mappings = id_mappings || { variants: {}, rich_content: {}, removed_file_embeds: {} }
+    @id_mappings = id_mappings || {
+      variants: {},
+      rich_content: {},
+      rich_content_by_scope: Hash.new { |scopes, scope| scopes[scope] = {} },
+      removed_file_embeds: {},
+    }
     @legacy_dead_file_embed_ids_by_rich_content_id = legacy_dead_file_embed_ids_by_rich_content_id
     @deletion_audit_context = deletion_audit_context || {}
     @contract = contract

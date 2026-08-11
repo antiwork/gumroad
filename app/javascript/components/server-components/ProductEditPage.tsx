@@ -254,6 +254,17 @@ const applyCanonicalIds = (
   sentPagesById: ReadonlyMap<string, ScopedPage> = new Map(),
 ) => {
   const variantMappings = response.variant_id_mappings ?? {};
+  // A page moved to another scope while the request ran misses the scoped
+  // lookup below (its current scope isn't the one it was sent under), which
+  // would skip the movedAfterRequest bookkeeping entirely. Fall back to the
+  // raw id — but only when it identifies exactly one sent page; a raw id sent
+  // in two scopes is genuinely ambiguous and gets no fallback.
+  const uniqueSentPagesByRawId = new Map<string, ScopedPage | null>();
+  for (const scopedPage of sentPagesById.values()) {
+    uniqueSentPagesByRawId.set(scopedPage.page.id, uniqueSentPagesByRawId.has(scopedPage.page.id) ? null : scopedPage);
+  }
+  const findSentPage = (scope: string | null, pageId: string) =>
+    sentPagesById.get(scopedRichContentPageKey(scope, pageId)) ?? uniqueSentPagesByRawId.get(pageId) ?? undefined;
   const fileMappings = response.file_id_mappings ?? {};
   const variantTimestamps = response.variant_updated_at ?? {};
   const variantBaselines = response.variant_loaded_integrations ?? {};
@@ -301,26 +312,28 @@ const applyCanonicalIds = (
     const variantBaseline = variantBaselines[variant.id];
     if (variantBaseline) variant.loaded_integrations = variantBaseline;
     for (const page of variant.rich_content) {
-      const sent = sentPagesById.get(scopedRichContentPageKey(sentVariantId, page.id));
+      const sent = findSentPage(sentVariantId, page.id);
       applyRichContentPageSaveResponse(
         page,
         response,
         sent?.page ?? page,
         variant.id,
         canonicalRichContentScope(sent?.scope, variantMappings),
-        sentVariantId,
+        // The server keyed this page's mapping by the scope it was SENT
+        // under, which for an in-flight move is not the current one.
+        sent !== undefined ? sent.scope : sentVariantId,
       );
     }
   }
   for (const page of product.rich_content) {
-    const sent = sentPagesById.get(scopedRichContentPageKey(null, page.id));
+    const sent = findSentPage(null, page.id);
     applyRichContentPageSaveResponse(
       page,
       response,
       sent?.page ?? page,
       null,
       canonicalRichContentScope(sent?.scope, variantMappings),
-      null,
+      sent !== undefined ? sent.scope : null,
     );
   }
 };
