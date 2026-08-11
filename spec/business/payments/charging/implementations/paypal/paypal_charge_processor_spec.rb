@@ -2418,7 +2418,7 @@ describe PaypalChargeProcessor, :vcr do
                         price_cents_usd: 15_00,
                         shipping_cents_usd: 1_50,
                         tax_cents_usd: 2_00,
-                        fee_cents_usd: 150,
+                        fee_cents_usd: 170,
                         total_cents_usd: 18_50,
                         quantity: 2 }
 
@@ -2453,7 +2453,7 @@ describe PaypalChargeProcessor, :vcr do
                         price_cents_usd: 15_47,
                         shipping_cents_usd: 1_55,
                         tax_cents_usd: 2_06,
-                        fee_cents_usd: 154,
+                        fee_cents_usd: 175,
                         total_cents_usd: 19_08,
                         quantity: 2 }
 
@@ -2488,7 +2488,7 @@ describe PaypalChargeProcessor, :vcr do
                         price_cents_usd: 15_47,
                         shipping_cents_usd: 1_55,
                         tax_cents_usd: 2_06,
-                        fee_cents_usd: 154,
+                        fee_cents_usd: 175,
                         total_cents_usd: 19_08,
                         quantity: 2 }
 
@@ -2526,7 +2526,7 @@ describe PaypalChargeProcessor, :vcr do
                         price_cents_usd: 15_47,
                         shipping_cents_usd: 1_55,
                         tax_cents_usd: 2_06,
-                        fee_cents_usd: 154,
+                        fee_cents_usd: 175,
                         total_cents_usd: 19_08,
                         quantity: 2 }
 
@@ -2565,7 +2565,7 @@ describe PaypalChargeProcessor, :vcr do
           price_cents_usd: 15_47,
           shipping_cents_usd: 1_55,
           tax_cents_usd: 2_06,
-          fee_cents_usd: 154,
+          fee_cents_usd: 175,
           total_cents_usd: 19_08,
           quantity: 2 }).and_call_original
 
@@ -2628,6 +2628,32 @@ describe PaypalChargeProcessor, :vcr do
       expect do
         PaypalChargeProcessor.update_order_from_product_info(order_id, attack_purchase_unit_info)
       end.to raise_error(ChargeProcessorError, /implausibly large/)
+    end
+
+    it "computes the platform fee on non-VAT tax so an in-ratio tax shift cannot reduce it" do
+      creator = create(:user)
+      product = create(:product, user: creator, price_cents: 17_50)
+      create(:merchant_account_paypal, charge_processor_merchant_id: "MN7CSWD6RCNJ8",
+                                       user: creator, country: "US", currency: "usd")
+
+      in_ratio_shift_purchase_unit_info = {
+        external_id: product.external_id,
+        currency_code: "usd",
+        price_cents: 12_97,
+        shipping_cents: 0,
+        tax_cents: 4_53,
+        exclusive_tax_cents: 4_53,
+        total_cents: 17_50,
+        quantity: 1,
+      }
+
+      expect(PaypalChargeProcessor).to receive(:create_purchase_unit_info).with(
+        hash_including(fee_cents_usd: 1_75)
+      ).and_call_original
+      expect(PaypalChargeProcessor).to receive(:create_order).and_return("FAKE_ORDER_ID")
+
+      paypal_order_id = PaypalChargeProcessor.create_order_from_product_info(in_ratio_shift_purchase_unit_info)
+      expect(paypal_order_id).to eq("FAKE_ORDER_ID")
     end
 
     it "rejects create_order_from_product_info when shipping_cents carries the fee-shift on a non-physical product" do

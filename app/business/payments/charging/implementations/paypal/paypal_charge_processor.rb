@@ -572,8 +572,10 @@ class PaypalChargeProcessor
                                   product_info[:vat_cents].to_i > 0 ?
                                     product_info[:exclusive_vat_cents].to_i :
                                     product_info[:exclusive_tax_cents].to_i)
+    vat_cents_usd = get_usd_cents(currency, product_info[:vat_cents].to_i)
     ensure_shipping_matches_product!(product:, quantity: product_info[:quantity].to_i, shipping_cents_usd:)
     ensure_tax_does_not_dwarf_price!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
+    fee_basis_cents_usd = paypal_fee_basis_cents(price_cents_usd:, tax_cents_usd:, vat_cents_usd:)
 
     purchase_unit_info = create_purchase_unit_info(permalink: product.unique_permalink,
                                                    item_name:,
@@ -584,9 +586,9 @@ class PaypalChargeProcessor
                                                    shipping_cents_usd:,
                                                    tax_cents_usd:,
                                                    fee_cents_usd: product.gumroad_amount_for_paypal_order(
-                                                     amount_cents: price_cents_usd,
+                                                     amount_cents: fee_basis_cents_usd,
                                                      affiliate_id: product_info[:affiliate_id],
-                                                     vat_cents: get_usd_cents(currency, product_info[:vat_cents].to_i),
+                                                     vat_cents: vat_cents_usd,
                                                      was_recommended: !!product_info[:was_recommended]),
                                                    total_cents_usd: get_usd_cents(currency, product_info[:total_cents].to_i),
                                                    quantity: product_info[:quantity].to_i)
@@ -612,8 +614,10 @@ class PaypalChargeProcessor
                                   product_info[:vat_cents].to_i > 0 ?
                                     product_info[:exclusive_vat_cents].to_i :
                                     product_info[:exclusive_tax_cents].to_i)
+    vat_cents_usd = get_usd_cents(currency, product_info[:vat_cents].to_i)
     ensure_shipping_matches_product!(product:, quantity: product_info[:quantity].to_i, shipping_cents_usd:)
     ensure_tax_does_not_dwarf_price!(price_cents_usd:, shipping_cents_usd:, tax_cents_usd:)
+    fee_basis_cents_usd = paypal_fee_basis_cents(price_cents_usd:, tax_cents_usd:, vat_cents_usd:)
 
     purchase_unit_info = create_purchase_unit_info(permalink: product.unique_permalink,
                                                    item_name:,
@@ -624,9 +628,9 @@ class PaypalChargeProcessor
                                                    shipping_cents_usd:,
                                                    tax_cents_usd:,
                                                    fee_cents_usd: product.gumroad_amount_for_paypal_order(
-                                                     amount_cents: price_cents_usd,
+                                                     amount_cents: fee_basis_cents_usd,
                                                      affiliate_id: product_info[:affiliate_id],
-                                                     vat_cents: get_usd_cents(currency, product_info[:vat_cents].to_i),
+                                                     vat_cents: vat_cents_usd,
                                                      was_recommended: !!product_info[:was_recommended]),
                                                    total_cents_usd: get_usd_cents(currency, product_info[:total_cents].to_i),
                                                    quantity: product_info[:quantity].to_i)
@@ -637,13 +641,12 @@ class PaypalChargeProcessor
   end
 
   # gp#1916 closed the total-preserving lower-price attack. This closes the FEE-SHIFT variant:
-  # keep the total fixed but shift cents from `price_cents` into tax/VAT, which collapses
-  # Gumroad's percentage fee (based on `price_cents` alone) without tripping the total-only
-  # guards. A hard price floor can't tell that apart from a legitimate discount (offer code,
-  # PPP, rental), so this bounds tax/VAT against price+shipping instead — real tax rates never
-  # exceed ~27% (Hungary's VAT ceiling); 0.35 leaves headroom. Known gap: the fee itself is
-  # still computed from buyer-supplied price_cents, so a ratio *inside* 0.35 still shifts some
-  # fee to tax (gp#2008 panel review tracking a fix that doesn't need buyer-location data).
+  # keep the total fixed but shift cents from `price_cents` into tax/VAT, which would collapse
+  # Gumroad's percentage fee if the fee basis stayed on buyer-supplied `price_cents` alone. A
+  # hard price floor can't tell that apart from a legitimate discount (offer code, PPP, rental),
+  # so this bounds tax/VAT against price+validated shipping and computes the fee on price plus
+  # non-VAT tax. VAT stays separate because `gumroad_amount_for_paypal_order` already adds it
+  # through the `vat_cents` argument.
   MAX_TAX_TO_PRICE_RATIO = 0.35
   private_constant :MAX_TAX_TO_PRICE_RATIO
 
@@ -673,6 +676,14 @@ class PaypalChargeProcessor
     raise ChargeProcessorError, "PayPal order tax/VAT is implausibly large relative to taxable base"
   end
   private_class_method :raise_tax_price_mismatch!
+
+  def self.paypal_fee_basis_cents(price_cents_usd:, tax_cents_usd:, vat_cents_usd:)
+    # Buyer-submitted non-VAT tax cannot reduce the PayPal partner fee by moving cents out of
+    # price_cents. VAT is already collected by gumroad_amount_for_paypal_order(vat_cents:), so
+    # do not include that passthrough in the percentage-fee basis as well.
+    price_cents_usd + [tax_cents_usd - vat_cents_usd, 0].max
+  end
+  private_class_method :paypal_fee_basis_cents
 
   def self.ensure_shipping_matches_product!(product:, quantity:, shipping_cents_usd:)
     return if shipping_cents_usd <= 0
