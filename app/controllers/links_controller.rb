@@ -1065,20 +1065,17 @@ class LinksController < ApplicationController
       raise_ambiguous_rich_content_conflict!(check: "existing_id_multiple_scopes", conflicts: existing_id_scopes) if existing_id_scopes.any?
     end
 
-    # Which of the three ambiguity checks fired, and on what. gp#2023 burned
-    # two fix attempts against 409s nobody could classify after the fact, so
-    # the offending ids/scopes are captured here for the rescue in #update to
-    # log. Page ids are client ids or external ids and scope keys are variant
-    # ids — no seller content.
+    # Captures which check fired and the offending ids/scopes for the rescue
+    # in #update to log. Ids and scope keys are opaque identifiers, never
+    # seller content.
     def raise_ambiguous_rich_content_conflict!(check:, conflicts:)
       @_rich_content_ambiguity_details = { check:, conflicts: }
       raise Product::SaveContract::AmbiguousRichContentIdConflict
     end
 
-    # One greppable line per refused editor save. The conflict responses are
-    # deliberate refusals the seller sees, and until now nothing recorded which
-    # one fired: lograge strips params and the guards raise without logging, so
-    # every support report of a failed save starts from zero.
+    # One greppable line per refused editor save. Lograge strips params, so
+    # without this the conflict responses are indistinguishable in production
+    # logs (gumroad-private#2023).
     def log_editor_save_conflict(error_code, details = {})
       detail_suffix = details.map { |key, value| " #{key}=#{value.inspect}" }.join
       Rails.logger.info(

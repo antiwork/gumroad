@@ -152,9 +152,7 @@ describe LinksController, type: :controller do
     expect(page.reload.entity).to eq(tier_a)
   end
 
-  # gumroad-private#2023 stayed open through two fix attempts because the 409s
-  # left no record of which check fired or on what payload. These pin the
-  # classification line each refusal now writes.
+  # Pins the classification line each refusal writes (gumroad-private#2023).
   describe "conflict logging" do
     before { allow(Rails.logger).to receive(:info).and_call_original }
 
