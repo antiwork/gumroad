@@ -29,6 +29,7 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
   ];
   const [checked, setChecked] = React.useState<number[]>([]);
   const [error, setError] = React.useState("");
+  const allRequirementsChecked = checked.length === checkboxes.length;
 
   const save = async () => {
     setSaving(true);
@@ -63,7 +64,12 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
         }}
         title="Where are you located?"
         footer={
-          <Button color="accent" disabled={checked.length !== checkboxes.length || saving} onClick={() => void save()}>
+          <Button
+            color="accent"
+            disabled={!allRequirementsChecked || saving}
+            aria-describedby={!allRequirementsChecked ? `${uid}requirements-hint` : undefined}
+            onClick={() => void save()}
+          >
             {saving ? <LoadingSpinner /> : null}
             {saving ? "Saving..." : "Save"}
           </Button>
@@ -86,8 +92,13 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
           <Fieldset>
             <FieldsetTitle>To ensure prompt payouts, please check off each item:</FieldsetTitle>
             {checkboxes.map((item, i) => (
-              <Label key={item} className="items-start">
+              <Label
+                key={item}
+                htmlFor={`${uid}requirement-${i}`}
+                className="w-full items-start rounded border border-border p-3 transition-colors focus-within:ring-1 focus-within:ring-accent hover:bg-active-bg active:bg-active-bg"
+              >
                 <Checkbox
+                  id={`${uid}requirement-${i}`}
                   checked={checked.includes(i)}
                   onChange={(e) =>
                     setChecked(e.target.checked ? [...checked, i] : checked.filter((item) => item !== i))
@@ -96,6 +107,11 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
                 {item}
               </Label>
             ))}
+            {!allRequirementsChecked ? (
+              <FieldsetDescription id={`${uid}requirements-hint`}>
+                Check both statements above to enable Save.
+              </FieldsetDescription>
+            ) : null}
           </Fieldset>
         </div>
       </Modal>
