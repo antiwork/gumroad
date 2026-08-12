@@ -39,6 +39,7 @@ import {
   reconcileMountedEditorFileEmbeds,
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
+  scopedRichContentPageKey,
 } from "$app/data/product_edit";
 import { reorderRowsPreservingMembership } from "$app/data/product_save_contract";
 import { type Post } from "$app/types/workflow";
@@ -244,7 +245,10 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   // selection keeps pointing at the same page instead of falling back to the
   // first one.
   const selectedPageId =
-    rawSelectedPageId == null ? rawSelectedPageId : resolveServerIdMapping(rawSelectedPageId, richContentIdMappings);
+    rawSelectedPageId == null
+      ? rawSelectedPageId
+      : (richContentIdMappings[scopedRichContentPageKey(selectedVariant?.id ?? null, rawSelectedPageId)] ??
+        resolveServerIdMapping(rawSelectedPageId, richContentIdMappings));
   const selectedPage = pages.find((page) => page.id === selectedPageId);
   if ((selectedPageId || pages.length) && !selectedPage) setSelectedPageId(pages[0]?.id);
   const [renamingPageId, setRenamingPageId] = React.useState<string | null>(null);

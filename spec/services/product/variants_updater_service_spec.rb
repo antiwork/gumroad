@@ -56,6 +56,47 @@ describe Product::VariantsUpdaterService do
         expect(@large.reload.name).to eq "LARGE"
       end
 
+      # Pins the default id_mappings shape: the editor's save path passes the
+      # controller's accumulator in, but a direct caller relies on this default.
+      # It must carry :rich_content_by_scope, or recording a scoped mapping for
+      # a page created under a client-generated id raises NoMethodError on nil.
+      it "records scoped rich-content id mappings without an injected id_mappings accumulator" do
+        service = Product::VariantsUpdaterService.new(
+          product: @product,
+          variants_params: {
+            "0" => {
+              name: "Size",
+              id: @size_category.external_id,
+              options: {
+                "0" => {
+                  name: @small.name,
+                  id: @small.external_id,
+                  # The controller unwraps the submitted doc to its content
+                  # nodes before the params reach this service, so pass the
+                  # node array directly here.
+                  rich_content: [
+                    {
+                      id: "client-page-id",
+                      title: "Page",
+                      description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }],
+                    }
+                  ],
+                },
+                "1" => {
+                  name: @large.name,
+                  id: @large.external_id,
+                },
+              },
+            },
+          }
+        )
+        service.perform
+
+        page = @small.reload.alive_rich_contents.sole
+        expect(service.id_mappings[:rich_content]["client-page-id"]).to eq(page.external_id)
+        expect(service.id_mappings[:rich_content_by_scope][@small.external_id]["client-page-id"]).to eq(page.external_id)
+      end
+
       context "missing category name" do
         it "sets the category title to nil" do
           @variants_params["0"].delete(:name)

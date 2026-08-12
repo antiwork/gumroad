@@ -572,7 +572,10 @@ class LinksController < ApplicationController
           # A page submitted under an id the server didn't know was just
           # created with a canonical id — report the mapping so the editor's
           # next save addresses this page instead of re-creating it.
-          save_id_mappings[:rich_content][product_rich_content[:id]] = rich_content.external_id if product_rich_content[:id].present? && product_rich_content[:id] != rich_content.external_id
+          if product_rich_content[:id].present? && product_rich_content[:id] != rich_content.external_id
+            save_id_mappings[:rich_content][product_rich_content[:id]] = rich_content.external_id
+            save_id_mappings[:rich_content_by_scope][""][product_rich_content[:id]] = rich_content.external_id
+          end
         end
         product_rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
           .reject { preserved_rich_content_ids.include?(_1.external_id) }
@@ -1028,13 +1031,34 @@ class LinksController < ApplicationController
     end
 
     def ensure_rich_content_ids_are_unambiguous!
-      duplicate_id = submitted_rich_content_page_references
-        .filter_map { _1[:page][:id].presence }
-        .tally
-        .find { |_id, count| count > 1 }
-      return if duplicate_id.nil?
+      references = submitted_rich_content_page_references
+      # Older editor tabs only understand the global response map, so keep
+      # enforcing global uniqueness until the scoped-mapping protocol is sent.
+      if product_permitted_params[:rich_content_provenance_version].to_i < 2
+        duplicate_id = references.filter_map { _1[:page][:id].presence }.tally.find { |_id, count| count > 1 }
+        raise Product::SaveContract::AmbiguousRichContentIdConflict if duplicate_id
+        return
+      end
 
-      raise Product::SaveContract::AmbiguousRichContentIdConflict
+      per_scope_duplicate = references
+        .group_by { _1[:destination_scope_key] }
+        .values
+        .any? { |refs| refs.filter_map { _1[:page][:id].presence }.tally.any? { |_id, count| count > 1 } }
+      raise Product::SaveContract::AmbiguousRichContentIdConflict if per_scope_duplicate
+
+      # Only new client ids may repeat across scopes. A persisted page belongs
+      # to one scope, so addressing it from multiple destinations is ambiguous.
+      existing_id_scopes = references
+        .filter_map do |ref|
+          raw_id = ref[:page][:id].presence
+          next unless raw_id && owned_submitted_rich_content_pages_by_external_id[raw_id]
+
+          [raw_id, ref[:destination_scope_key]]
+        end
+        .group_by(&:first)
+        .transform_values { |pairs| pairs.map(&:last).uniq }
+
+      raise Product::SaveContract::AmbiguousRichContentIdConflict if existing_id_scopes.values.any? { |scopes| scopes.size > 1 }
     end
 
     def check_banned
@@ -1546,7 +1570,13 @@ class LinksController < ApplicationController
     # Returned to the editor so its next save addresses the created records
     # instead of re-creating them (which would trip the deletion guards).
     def save_id_mappings
-      @_save_id_mappings ||= { variants: {}, rich_content: {}, files: {}, removed_file_embeds: {} }
+      @_save_id_mappings ||= {
+        variants: {},
+        rich_content: {},
+        rich_content_by_scope: Hash.new { |scopes, scope| scopes[scope] = {} },
+        files: {},
+        removed_file_embeds: {},
+      }
     end
 
     # Snapshot stored move/copy provenance before this save can repair or
@@ -1629,16 +1659,23 @@ class LinksController < ApplicationController
     def submitted_rich_content_page_references
       @_submitted_rich_content_page_references ||= begin
         references = Array.wrap(product_permitted_params[:rich_content]).map do |page|
-          { page:, destination_entity_type: "Link", destination_entity_id: @product.id }
+          { page:, destination_entity_type: "Link", destination_entity_id: @product.id, destination_scope_key: "product" }
         end
 
-        Array.wrap(product_permitted_params[:variants]).each do |variant|
+        Array.wrap(product_permitted_params[:variants]).each_with_index do |variant, variant_index|
           destination_variant_id = decrypt_rich_content_external_id(variant[:id])
+          # A brand-new variant has no server id yet, so destination_variant_id
+          # is nil for every new variant in this save — falling back to it
+          # alone would bucket unrelated new variants' pages into one scope
+          # and falsely flag their (legitimately independent) client-generated
+          # ids as colliding. The submitted array position is stable and
+          # unique per variant regardless of whether it has a server id yet.
           Array.wrap(variant[:rich_content]).each do |page|
             references << {
               page:,
               destination_entity_type: "BaseVariant",
               destination_entity_id: destination_variant_id,
+              destination_scope_key: destination_variant_id || "new-variant-#{variant_index}",
             }
           end
         end
@@ -1739,6 +1776,7 @@ class LinksController < ApplicationController
       {
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
+        rich_content_id_mappings_by_scope: save_id_mappings[:rich_content_by_scope],
         file_id_mappings: save_id_mappings[:files],
         rich_content_removed_file_embed_ids: save_id_mappings[:removed_file_embeds],
         **content_updated_at_response,
