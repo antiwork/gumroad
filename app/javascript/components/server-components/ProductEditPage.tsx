@@ -203,52 +203,45 @@ type PendingDeletions = {
   pages: { id: string; title: string | null }[];
 };
 
-// Every UI deletion path records the removed id into confirmed_removed_*_ids
-// (the per-row "Yes, remove" / delete-page modals), so that list is the record
-// of what the seller actually asked to delete. Splitting on it separates the
-// two situations a missing-from-state diff can mean:
-// - `confirmed`: the seller deleted it this session. Shown in the save-time
-//   summary modal — deliberately a second gate on top of the per-row modals,
-//   the last chance to notice an accumulated (possibly large) wipe as one
-//   list before it becomes permanent.
-// - `unexpected`: nothing recorded intent, so the browser state lost the
-//   record (gumroad-private#2023: blank editor mounts, cross-visit state
-//   leaks). Saving would present the loss as a deletion the seller never
-//   asked for, so the save must stop and offer a reload instead.
+// Splits the missing-from-state diff on recorded intent: every UI deletion
+// path writes the removed id into confirmed_removed_*_ids, so a missing id
+// on that list is a seller deletion (summary modal) and one off it is lost
+// browser state (gumroad-private#2023) — the save must stop and offer a
+// reload rather than present the loss as a deletion.
 const findPendingDeletions = (
   product: Product,
   lastSavedProduct: Product,
 ): { confirmed: PendingDeletions; unexpected: PendingDeletions } => {
   const currentVariantIds = new Set(product.variants.map(({ id }) => id));
-  // Only content-bearing variants warrant the scary confirmation — mirroring
-  // the server-side guard, which protects variants with visible rich-content
-  // pages OR directly-attached files (legacy products predating embedded
-  // rich-content files). Contentless variants (e.g. a coffee product's
-  // "suggested amounts", an empty just-added version) delete without fuss.
+  // Only content-bearing variants warrant the scary confirmation, mirroring
+  // the server-side guard; contentless ones delete without fuss.
   const removedVariants = lastSavedProduct.variants.filter(
     ({ id, rich_content, has_files }) =>
       !currentVariantIds.has(id) && (rich_content.some(pageHasVisibleContent) || has_files === true),
   );
 
-  // A page id that still appears anywhere in the current state (product-level
-  // or under any variant) is a MOVE (e.g. toggling "use the same content for
-  // all versions"), not a deletion.
-  const currentPageIds = new Set([
-    ...product.rich_content.map(({ id }) => id),
-    ...product.variants.flatMap((variant) => variant.rich_content.map(({ id }) => id)),
-  ]);
+  const currentPages = [...product.rich_content, ...product.variants.flatMap((variant) => variant.rich_content)];
+  const currentPageIds = new Set(currentPages.map(({ id }) => id));
+  const currentPageStamps = new Set(
+    currentPages.flatMap((page) => (page.reconciliation_id ? [page.reconciliation_id] : [])),
+  );
+  // A page still present somewhere in current state was moved, not deleted.
+  // Presence is judged by the send-time stamp when the baseline has one: raw
+  // ids can repeat across scopes, so a same-id page in another scope proves
+  // nothing about THIS page. Unstamped baselines (no save this session yet)
+  // hold server-loaded pages with unique ids, so the raw id suffices there.
+  const pageStillPresent = (page: Page) =>
+    page.reconciliation_id ? currentPageStamps.has(page.reconciliation_id) : currentPageIds.has(page.id);
   const removedPagesById = new Map<string, Page>();
   for (const page of [
     ...lastSavedProduct.rich_content,
     ...lastSavedProduct.variants.flatMap((variant) => variant.rich_content),
   ]) {
-    if (!currentPageIds.has(page.id) && pageHasVisibleContent(page)) removedPagesById.set(page.id, page);
+    if (!pageStillPresent(page) && pageHasVisibleContent(page)) removedPagesById.set(page.id, page);
   }
 
-  // Deleting a whole variant confirms its pages individually too
-  // (confirmRemovedVariantPageDeletions records the ids of the pages the
-  // variant held at that moment), so a page-level confirmed id is the single
-  // test for intent here.
+  // Removing a variant records its pages' ids too, so a page-level confirmed
+  // id is the single test for intent.
   const confirmedVariantIds = new Set(product.confirmed_removed_variant_ids ?? []);
   const confirmedPageIds = new Set(product.confirmed_removed_rich_content_ids ?? []);
   const variants = removedVariants.map(({ id, name }) => ({ id, name }));
@@ -436,15 +429,11 @@ const applyCanonicalIds = (
   }
 };
 
-// Confirmed page removals recorded while a request ran can hold client ids
-// the response has now mapped. The flat rich_content_id_mappings is ambiguous
-// when the same raw id was sent in two scopes (each scope got its own row):
-// remapping through it can turn the seller's deletion into intent against a
-// row they kept. Resolve each raw id through the sent snapshot's scoped
-// mappings instead. When two scopes disagree, the scope whose variant the
-// seller also removed is the one the recording came from; with no such
-// tiebreak the remap is dropped — an unmapped client id is inert server-side,
-// so a wrong deletion cannot happen, only a blocked save (fail-safe).
+// Remaps confirmed page removals through the response's SCOPED id mappings:
+// the flat map is last-write-wins across scopes, and a raw id sent in two
+// scopes could remap a deletion onto a row the seller kept. Disagreeing
+// scopes tiebreak on the confirmed-removed variant; failing that the remap
+// is dropped, which can only block a save (unmapped ids are inert).
 const scopedConfirmedPageIdMappings = (
   response: SaveProductResponse,
   sentPagesById: ReadonlyMap<string, ScopedPage>,
@@ -735,11 +724,8 @@ const ProductEditPage = (props: Props) => {
   };
   const runSave = (): Promise<boolean> => {
     const { confirmed, unexpected } = findPendingDeletions(product, lastSavedProductRef.current);
-    // Content that vanished from browser state without the seller deleting it
-    // means this session's record of the product is no longer trustworthy.
-    // Fail closed: block the save and offer a reload — presenting the loss as
-    // a deletion to confirm would ask the seller to authorize destroying
-    // content they never touched (gumroad-private#2023).
+    // Content missing without recorded intent means the session lost state:
+    // fail closed and ask for a reload instead of offering it as a deletion.
     if (unexpected.variants.length + unexpected.pages.length > 0) {
       setMissingContentConflict(unexpected);
       return Promise.resolve(false);

@@ -60,11 +60,18 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
   // server-side wipe guard allows deleting it even if it still has content.
   const confirmRemoval = (tier: Tier) => {
     updateProduct((product) => {
-      // Recorded even for a newly added tier: an in-flight save may be
-      // creating it right now, and reconciliation remaps the recorded id to
-      // the canonical one. An id the server never learns is inert.
+      // Recorded even when newly added: an in-flight save may be creating it,
+      // and reconciliation remaps the id; unknown ids are inert server-side.
       product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), tier.id];
-      confirmRemovedVariantPageDeletions(product, tier.rich_content);
+      const survivingPageIds = new Set(
+        [
+          ...product.rich_content,
+          ...product.variants
+            .filter((existing) => existing.id !== tier.id)
+            .flatMap((existing) => existing.rich_content),
+        ].map(({ id }) => id),
+      );
+      confirmRemovedVariantPageDeletions(product, tier.rich_content, survivingPageIds);
     });
     onChange(tiers.filter(({ id }) => id !== tier.id));
   };

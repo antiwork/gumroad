@@ -28,11 +28,18 @@ export const SuggestedAmountsEditor = ({
   // custom price, which the guard treats as configuration worth protecting.
   const removeVersion = (version: Version) => {
     updateProduct((product) => {
-      // Recorded even for a newly added version: an in-flight save may be
-      // creating it right now, and reconciliation remaps the recorded id to
-      // the canonical one. An id the server never learns is inert.
+      // Recorded even when newly added: an in-flight save may be creating it,
+      // and reconciliation remaps the id; unknown ids are inert server-side.
       product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), version.id];
-      confirmRemovedVariantPageDeletions(product, version.rich_content);
+      const survivingPageIds = new Set(
+        [
+          ...product.rich_content,
+          ...product.variants
+            .filter((existing) => existing.id !== version.id)
+            .flatMap((existing) => existing.rich_content),
+        ].map(({ id }) => id),
+      );
+      confirmRemovedVariantPageDeletions(product, version.rich_content, survivingPageIds);
     });
     onChange(versions.filter(({ id }) => id !== version.id));
   };

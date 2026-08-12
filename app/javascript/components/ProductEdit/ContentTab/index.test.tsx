@@ -458,3 +458,53 @@ it("resets the rename editor across a variant switch between same-id pages", asy
   await act(async () => {});
   expect(document.querySelector('[role="tab"] .tiptap')?.textContent).toBe("Beta");
 });
+
+// Deleting a page whose STORED id another page still carries must not record
+// deletion intent: the shared id names the surviving page's row, and sending
+// it would let the save delete content the seller kept (gumroad-private#2023).
+// A unique id records as before.
+it("skips recording a deleted page's id while another page still carries it", async () => {
+  const impostor = makePage("shared-stored-id", "IMPOSTOR", "Impostor");
+  const uniquePage = makePage("unique-id", "UNIQUE", "Unique");
+  const realPage = makePage("shared-stored-id", "REAL", "Real");
+  const paidVariant: VariantFixture = { id: "variant-paid", name: "Paid", rich_content: [impostor, uniquePage] };
+  const freeVariant: VariantFixture = { id: "variant-free", name: "Free", rich_content: [realPage] };
+  const product = buildProduct([paidVariant, freeVariant]);
+
+  context.product = product;
+  context.updateProduct = (update: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- narrowing the update union for the fixture
+    if (typeof update === "function") (update as (p: Product) => void)(product);
+    else Object.assign(product, update);
+  };
+
+  const { getByText } = render(<ContentTabContent selectedVariantId="variant-paid" />);
+  await act(async () => {});
+
+  const deletePageAt = async (rowIndex: number) => {
+    const triggers = document.querySelectorAll('[role="tab"] button');
+    act(() => {
+      (triggers[rowIndex] instanceof HTMLElement ? triggers[rowIndex] : undefined)?.click();
+    });
+    await act(async () => {});
+    act(() => {
+      getByText("Delete").click();
+    });
+    await act(async () => {});
+    act(() => {
+      getByText("Yes, delete").click();
+    });
+    await act(async () => {});
+  };
+
+  // The impostor shares its stored id with the real page in the other
+  // variant: deleting it must record nothing.
+  await deletePageAt(0);
+  expect(product.confirmed_removed_rich_content_ids ?? []).toEqual([]);
+  expect(paidVariant.rich_content.map(({ id }) => id)).toEqual(["unique-id"]);
+
+  // The unique page records normally.
+  await deletePageAt(0);
+  expect(product.confirmed_removed_rich_content_ids).toEqual(["unique-id"]);
+  expect(paidVariant.rich_content).toEqual([]);
+});

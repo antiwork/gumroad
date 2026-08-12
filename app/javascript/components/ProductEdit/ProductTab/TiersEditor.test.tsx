@@ -21,6 +21,8 @@ const productEditContext = vi.hoisted(() => ({
     vi.fn<
       (
         update: (product: {
+          rich_content: { id: string }[];
+          variants: { id: string; rich_content: { id: string }[] }[];
           confirmed_removed_variant_ids?: string[];
           confirmed_removed_rich_content_ids?: string[];
         }) => void,
@@ -99,7 +101,12 @@ it("records a newly added tier's id and its page ids when the seller removes it"
 
   const record = productEditContext.updateProduct.mock.lastCall?.[0];
   expect(record).toBeTypeOf("function");
-  const recorded: { confirmed_removed_variant_ids?: string[]; confirmed_removed_rich_content_ids?: string[] } = {};
+  const recorded: {
+    rich_content: { id: string }[];
+    variants: { id: string; rich_content: { id: string }[] }[];
+    confirmed_removed_variant_ids?: string[];
+    confirmed_removed_rich_content_ids?: string[];
+  } = { rich_content: [], variants: [] };
   record?.(recorded);
   expect(recorded.confirmed_removed_variant_ids).toEqual(["local-new-tier"]);
   expect(recorded.confirmed_removed_rich_content_ids).toEqual(["new-tier-page"]);

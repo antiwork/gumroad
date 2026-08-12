@@ -1260,7 +1260,15 @@ it("keeps the deletion summary when a confirmed variant removal takes its pages 
       const tierA = current.variants[index];
       if (index === -1 || !tierA) throw new Error("expected tier A");
       current.confirmed_removed_variant_ids = ["tier-a"];
-      confirmRemovedVariantPageDeletions(current, tierA.rich_content);
+      confirmRemovedVariantPageDeletions(
+        current,
+        tierA.rich_content,
+        new Set(
+          current.variants
+            .filter((variant) => variant.id !== "tier-a")
+            .flatMap((variant) => variant.rich_content.map(({ id }) => id)),
+        ),
+      );
       current.variants.splice(index, 1);
     }),
   );
@@ -1317,7 +1325,15 @@ it("blocks the save when a page that left a deleted tier goes missing", async ()
       tierA.rich_content = [];
       tierB.rich_content = [{ ...page, move_source_scope: "tier-a", move_source_id: page.id, source_id: page.id }];
       current.confirmed_removed_variant_ids = ["tier-a"];
-      confirmRemovedVariantPageDeletions(current, tierA.rich_content);
+      confirmRemovedVariantPageDeletions(
+        current,
+        tierA.rich_content,
+        new Set(
+          current.variants
+            .filter((variant) => variant.id !== "tier-a")
+            .flatMap((variant) => variant.rich_content.map(({ id }) => id)),
+        ),
+      );
       current.variants.splice(index, 1);
       // The session then loses the page from tier B — the gp#2023 bug class.
       tierB.rich_content = [];
@@ -1375,7 +1391,15 @@ it("keeps the deletion summary when a tier deleted mid-save held a page that sav
       const tierA = current.variants[index];
       if (index === -1 || !tierA) throw new Error("expected tier A");
       current.confirmed_removed_variant_ids = ["tier-a"];
-      confirmRemovedVariantPageDeletions(current, tierA.rich_content);
+      confirmRemovedVariantPageDeletions(
+        current,
+        tierA.rich_content,
+        new Set(
+          current.variants
+            .filter((variant) => variant.id !== "tier-a")
+            .flatMap((variant) => variant.rich_content.map(({ id }) => id)),
+        ),
+      );
       current.variants.splice(index, 1);
     }),
   );
@@ -1453,7 +1477,15 @@ it("remaps a mid-save tier deletion's page through its own scope, never the dupl
       const tierA = current.variants[index];
       if (index === -1 || !tierA) throw new Error("expected tier A");
       current.confirmed_removed_variant_ids = ["tier-a"];
-      confirmRemovedVariantPageDeletions(current, tierA.rich_content);
+      confirmRemovedVariantPageDeletions(
+        current,
+        tierA.rich_content,
+        new Set(
+          current.variants
+            .filter((variant) => variant.id !== "tier-a")
+            .flatMap((variant) => variant.rich_content.map(({ id }) => id)),
+        ),
+      );
       current.variants.splice(index, 1);
     }),
   );
@@ -1489,4 +1521,60 @@ it("remaps a mid-save tier deletion's page through its own scope, never the dupl
   // Tier A's row is the confirmed deletion; tier B's row must never be.
   const secondPayload: unknown = saveProductMock.mock.calls[1]?.[2];
   expect(secondPayload).toMatchObject({ confirmed_removed_rich_content_ids: ["server-row-a"] });
+});
+
+// Presence must be judged per page, not per raw id: a same-id page in
+// ANOTHER scope proves nothing about this one. Here tier A's saved page is
+// lost while an unrelated page carrying the same raw id sits in tier B — an
+// id-only check reads that as a move and lets the save through, and the
+// legacy omission path could then delete the lost page's stored row. The
+// send-time stamp identifies the page, so the guard must block.
+it("blocks the save when a lost page's raw id survives only on a different page in another tier", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "server-page",
+        title: "Real lesson",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-b", "Tier B", []),
+  ]);
+  const props = buildTieredProps(product);
+
+  saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  // First save stamps the pages and moves the baseline to the stamped state.
+  await act(async () => {
+    await contextCapture.current?.save();
+  });
+
+  // The session loses tier A's page while an unrelated page reusing the same
+  // raw id appears in tier B (a state leak, not a move: it lacks the lost
+  // page's send-time stamp).
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const tierA = current.variants.find((variant) => variant.id === "tier-a");
+      const tierB = current.variants.find((variant) => variant.id === "tier-b");
+      if (!tierA || !tierB) throw new Error("expected both tiers");
+      tierA.rich_content = [];
+      tierB.rich_content = [
+        { id: "server-page", title: "Impostor", description: {}, updated_at: "2026-01-01T00:00:00Z" },
+      ];
+    }),
+  );
+
+  let saved: boolean | undefined;
+  await act(async () => {
+    saved = await contextCapture.current?.save();
+  });
+
+  expect(saved).toBe(false);
+  expect(saveProductMock).toHaveBeenCalledOnce();
+  expect(screen.getByText("Some content couldn't be loaded")).toBeTruthy();
+  expect(screen.getByText("Real lesson")).toBeTruthy();
 });

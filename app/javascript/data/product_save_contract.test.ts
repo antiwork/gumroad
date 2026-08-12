@@ -75,13 +75,17 @@ describe("buildDeletionOperations", () => {
   it("records a removed variant's pages and their move sources", () => {
     const product = productWith({ confirmed_removed_rich_content_ids: ["already-confirmed"] });
 
-    confirmRemovedVariantPageDeletions(product, [
-      { id: "stored-page", move_source_id: "shared-source" },
-      { id: "stored-page-2", move_source_id: "shared-source" },
-      // An unsaved page's client id is recorded too: inert server-side, and
-      // remapped to the canonical id if an in-flight save creates the row.
-      { id: "unsaved-page" },
-    ]);
+    confirmRemovedVariantPageDeletions(
+      product,
+      [
+        { id: "stored-page", move_source_id: "shared-source" },
+        { id: "stored-page-2", move_source_id: "shared-source" },
+        // An unsaved page's client id is recorded too: inert server-side, and
+        // remapped to the canonical id if an in-flight save creates the row.
+        { id: "unsaved-page" },
+      ],
+      new Set(),
+    );
 
     expect(product.confirmed_removed_rich_content_ids).toEqual([
       "already-confirmed",
@@ -97,6 +101,26 @@ describe("buildDeletionOperations", () => {
       "stored-page-2",
       "unsaved-page",
     ]);
+  });
+
+  // Raw ids can repeat across scopes; a stored id a surviving page still
+  // carries must not become deletion intent against the survivor's row. A
+  // newly added page's client id records regardless: it is inert until
+  // reconciliation resolves it, and ambiguous resolutions are dropped.
+  it("skips a removed stored page's id when a surviving page still carries it", () => {
+    const product = productWith({});
+
+    confirmRemovedVariantPageDeletions(
+      product,
+      [
+        { id: "shared-stored-id" },
+        { id: "only-here", move_source_id: "kept-source" },
+        { id: "shared-new-id", newlyAdded: true },
+      ],
+      new Set(["shared-stored-id", "kept-source", "shared-new-id"]),
+    );
+
+    expect(product.confirmed_removed_rich_content_ids).toEqual(["only-here", "shared-new-id"]);
   });
 
   // Clearing a whole collection is never inferred: the caller has to pass it,

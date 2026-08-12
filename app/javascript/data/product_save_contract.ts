@@ -70,26 +70,25 @@ export type DeletionSources = {
   }[];
 };
 
-// Called at the moment a variant removal is confirmed, with the pages the
-// variant holds at that moment. Records into the durable confirmed-removal
-// list:
-// - each page's id: a page still inside the variant goes down with it, and
-//   the id doubles as the session's record that the SELLER removed it — the
-//   save-time missing-content guard reads the list as intent, so a page that
-//   left the variant before this confirmation must not inherit it. A newly
-//   added page's client id is recorded too: it is inert server-side (intent
-//   ids that match no stored row authorize nothing), and if an in-flight
-//   save creates the row, reconcileConfirmedRemovalIds remaps the recorded
-//   id to the canonical one so the deletion still lands.
-// - each page's move_source_id: a page moved INTO this variant is a new
-//   destination row plus an explicit deletion of its stored source, and the
-//   page carrying that marker disappears from state with the variant. Without
-//   the promotion the save loses the source-row deletion intent.
+// Records a confirmed variant removal's page deletions: the ids of the pages
+// the variant holds at that moment (client ids included — inert server-side,
+// and remapped to canonical if an in-flight save creates the row) plus their
+// move_source_ids, whose deletion intent would otherwise vanish with the
+// variant. A page that left the variant earlier is deliberately not covered.
+// A STORED id a surviving page still carries is skipped: raw ids can repeat
+// across scopes, and sending a shared stored id names the survivor's row for
+// deletion. A newly added page's client id records even when shared — it is
+// inert until reconciliation resolves it through the removed scope's mapping,
+// which drops ambiguous cases instead of guessing.
 export const confirmRemovedVariantPageDeletions = (
   product: Pick<DeletionSources, "confirmed_removed_rich_content_ids">,
-  pages: { id: string; move_source_id?: string }[],
+  removedPages: { id: string; newlyAdded?: boolean; move_source_id?: string }[],
+  survivingPageIds: ReadonlySet<string>,
 ): void => {
-  const removedIds = pages.flatMap((page) => [page.id, ...(page.move_source_id ? [page.move_source_id] : [])]);
+  const removedIds = removedPages.flatMap((page) => [
+    ...(page.newlyAdded || !survivingPageIds.has(page.id) ? [page.id] : []),
+    ...(page.move_source_id && !survivingPageIds.has(page.move_source_id) ? [page.move_source_id] : []),
+  ]);
   if (removedIds.length === 0) return;
 
   product.confirmed_removed_rich_content_ids = [

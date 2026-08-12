@@ -40,11 +40,18 @@ export const DurationsEditor = ({
   // server-side wipe guard allows deleting it even if it still has content.
   const confirmRemoval = (duration: Duration) => {
     updateProduct((product) => {
-      // Recorded even for a newly added duration: an in-flight save may be
-      // creating it right now, and reconciliation remaps the recorded id to
-      // the canonical one. An id the server never learns is inert.
+      // Recorded even when newly added: an in-flight save may be creating it,
+      // and reconciliation remaps the id; unknown ids are inert server-side.
       product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), duration.id];
-      confirmRemovedVariantPageDeletions(product, duration.rich_content);
+      const survivingPageIds = new Set(
+        [
+          ...product.rich_content,
+          ...product.variants
+            .filter((existing) => existing.id !== duration.id)
+            .flatMap((existing) => existing.rich_content),
+        ].map(({ id }) => id),
+      );
+      confirmRemovedVariantPageDeletions(product, duration.rich_content, survivingPageIds);
     });
     onChange(durations.filter(({ id }) => id !== duration.id));
   };
