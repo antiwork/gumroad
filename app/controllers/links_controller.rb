@@ -400,15 +400,10 @@ class LinksController < ApplicationController
       end
 
       ActiveRecord::Base.transaction do
-        # Serialize concurrent saves of the same product. `lock!` takes a
-        # SELECT ... FOR UPDATE on the product row and reloads it (dropping
-        # stale association caches), so the freshness check below reads the
-        # committed state and no second save can slip between the check and
-        # the writes: a concurrent save blocks here until this transaction
-        # commits, then re-reads the rows this save just wrote and sees its own
-        # snapshot as stale. Without the lock, two saves echoing the same
-        # (fresh) timestamps could both pass the check and the last writer
-        # would silently win — the exact overwrite this guard exists to stop.
+        # Serialize concurrent saves. lock! takes FOR UPDATE and reloads
+        # (dropping stale association caches) so the freshness check below
+        # reads committed state. Without it, two saves echoing the same
+        # timestamps both pass and the last writer silently wins.
         @product.lock!
 
         # Capture the deletion-guard diagnostics (alive counts, persisted
@@ -429,45 +424,23 @@ class LinksController < ApplicationController
         # even if this same transaction repairs or deletes its source first.
         legacy_dead_file_embed_ids_by_rich_content_id
 
-        # Build the save contract NOW, before anything is written
-        # (gumroad-private#1379). Its freshness check compares the client's
-        # revision token against the product's current fingerprint, and the
-        # save mutates rows as it proceeds — creating a content page changes
-        # that fingerprint. Constructing it here, immediately after the lock and
-        # reload, means the question it answers is "was the client editing the
-        # state that was committed when this save started?", which is the only
-        # version of the question that has a stable answer.
+        # Build the save contract now, before any write. Creating a content
+        # page mutates the product fingerprint; only a post-lock, pre-write
+        # contract answers "was the client editing the committed start state?"
         product_save_contract
 
-        # Reject a DESTRUCTIVE save built from a stale (or absent) snapshot
-        # before anything is written. Skipping the deletion silently, as an
-        # earlier revision of this branch did, is the worst available outcome:
-        # the seller is told "Changes saved", the editor clears the pending
-        # removals, and the versions they deleted are still there — so the
-        # interface now disagrees with the database and the next save has lost
-        # the intent entirely.
-        #
-        # Only destructive saves are refused. A stale tab fixing a typo still
-        # saves normally, because a stale write is recoverable and a stale
-        # delete is not — rejecting every stale save is what forced #6245 to be
-        # switched off.
+        # Reject a DESTRUCTIVE save from a stale (or absent) snapshot before
+        # any write. Silently skipping the deletion tells the seller "Changes
+        # saved", clears pending removals, and leaves the versions in the DB.
+        # Only destructive saves are refused — a stale typo-fix is recoverable;
+        # a stale delete is not. Rejecting every stale save is what killed #6245.
         ensure_contract_deletions_are_fresh!
 
-        # Reject a save built from a stale snapshot BEFORE any mutation: a
-        # payload that echoes page/variant snapshot timestamps older than the
-        # stored rows would silently overwrite content another session saved in
-        # between (gumroad-private#1295). The deletion guards below can't catch
-        # this — an in-place update under an existing id deletes nothing.
-        #
-        # NOTE: the seller-visible rejection is currently gated OFF by default
-        # (the `product_editor_stale_content_block` Flipper flag) because
-        # enforcing it blocked hundreds of legitimate saves — see
-        # Product::StaleContentWriteGuard's class comment for why. By default
-        # this call therefore DETECTS and reports staleness to Sentry and
-        # returns normally, letting the save continue. It only raises when the
-        # flag is on; raising rolls the transaction back (nothing has been
-        # written yet) and releases the lock, and the rescue below renders the
-        # 409.
+        # Reject a stale in-place overwrite before any mutation. Deletion
+        # guards cannot catch this — an update under an existing id deletes
+        # nothing. Seller-visible 409 is gated OFF by default
+        # (`product_editor_stale_content_block`); without the flag this only
+        # reports to Sentry. See Product::StaleContentWriteGuard.
         Product::StaleContentWriteGuard.ensure_fresh!(
           product: @product,
           pages_params: snapshot_pages_params,
@@ -640,37 +613,22 @@ class LinksController < ApplicationController
         error_code: "ambiguous_rich_content_id_conflict",
       }, status: :conflict
     rescue Product::SaveContract::StaleDeletionConflict => e
-      # Raised before any mutation, so the transaction rolls back with nothing
-      # written and the removals are still pending in the database. The editor
-      # must NOT clear its pending-removal state on this response — the whole
-      # point is that the seller's deletion has not happened yet.
-      #
-      # Deliberately NO fresh `editor_revision` here, unlike the success
-      # response. Adopting a token on this path can only authorise the session's
-      # NEXT save — which is the same stale full snapshot — so the deletion
-      # would land while every field a co-editor changed in between was reverted
-      # to this session's values (proved in LinksControllerSaveContractTest,
-      # "resending a stale snapshot with the 409's fresh token deletes as asked
-      # AND reverts the other session's edit"). It was emitted here for a
-      # reconcile-and-retry affordance that does not exist and cannot be built
-      # client-side; the client threw it away (see saveProductError). Both
-      # candidate retries in gumroad-private#1532 — a deletion-only write, or
-      # re-fetch-then-reconcile — get a current token from the reload they
-      # already have to do, so neither needs one on the refusal.
+      # Raised before any mutation, so the rollback leaves removals pending.
+      # The editor must NOT clear pending-removal state — the deletion has
+      # not happened. Deliberately no fresh editor_revision: adopting one
+      # would authorize the same stale snapshot on the next save, landing
+      # the deletion and reverting a co-editor's intervening edits. The
+      # client discards any token (saveProductError); a retry reloads.
       log_editor_save_conflict("stale_deletion_conflict")
       return render json: {
         error_message: e.message,
         error_code: "stale_deletion_conflict",
       }, status: :conflict
     rescue Product::RichContentDeletionGuard::HiddenVariantContentConflict => e
-      # The fail-closed inconsistent-content case: hidden version-level pages
-      # AND real product-level content both exist, so the save must not pick a
-      # winner. Return the hidden pages so the editor can present the seller
-      # an explicit choice between keeping the product-level content and
-      # keeping the version-level content. The guard raises on the first version
-      # it inspects, so list every hidden version page here (fresh from the
-      # rolled-back state) — one choice must cover all of them, not one dialog
-      # per version.
+      # Fail-closed: hidden version-level pages AND real product-level content
+      # both exist, so the save must not pick a winner. Return every hidden
+      # version page (the guard raises on the first it inspects) for one
+      # seller choice, not one dialog per version.
       log_editor_save_conflict("hidden_variant_content_conflict")
       return render json: {
         error_message: e.message,
@@ -912,22 +870,12 @@ class LinksController < ApplicationController
       end
     end
 
-    # The editor's save contract (Product::SaveContract, gumroad-private#1379).
-    # Built from PERMITTED params on purpose: `submitted?` must see collections
-    # exactly as strong parameters shaped them, so a malformed value — which
-    # the permit list drops — reads as "not submitted" rather than as data.
-    # The contract-specific keys (editor_revision, deletion_operations) are not
-    # product attributes, so they are permitted here rather than in the policy.
-    # Deletion operations are wired per collection as its save path adopts the
-    # contract: :files, :public_files (ids are PublicFile#public_id) and
-    # :integrations (integrations have no external id in the editor payload —
-    # they are keyed by provider name, so their "ids" here are provider names
-    # from Integration::ALL_NAMES).
-    #
-    # deep_symbolize_keys is load-bearing: the contract reads
-    # `deletion_operations.dig(:deleted_ids, :files)` with symbol keys, and
-    # Parameters#to_unsafe_h.symbolize_keys re-stringifies NESTED keys, so the
-    # contract must be handed plain, deeply-symbolized hashes.
+    # Built from PERMITTED params so submitted? sees collections as strong
+    # parameters shaped them — a dropped malformed value is "not submitted".
+    # editor_revision / deletion_operations are not product attributes, so
+    # they are permitted here rather than in the policy.
+    # deep_symbolize_keys is load-bearing: the contract digs symbol keys, and
+    # Parameters#to_unsafe_h.symbolize_keys re-stringifies NESTED keys.
     def product_save_contract
       @_product_save_contract ||= begin
         contract_params = product_permitted_params.to_h.deep_symbolize_keys.merge(
