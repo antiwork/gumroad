@@ -119,6 +119,68 @@ describe Charge, :vcr do
     end
   end
 
+  describe "#eligible_for_split_receipts?" do
+    context "with a single purchase" do
+      let(:charge) { create(:charge, purchases: [create(:purchase)]) }
+
+      it "returns false" do
+        expect(charge.eligible_for_split_receipts?).to be(false)
+      end
+    end
+
+    context "with exactly two purchases" do
+      let(:charge) { create(:charge, purchases: [create(:purchase), create(:purchase)]) }
+
+      it "returns true" do
+        expect(charge.eligible_for_split_receipts?).to be(true)
+      end
+
+      context "when one of them failed" do
+        let(:charge) { create(:charge, purchases: [create(:purchase), create(:failed_purchase)]) }
+
+        it "returns false" do
+          expect(charge.eligible_for_split_receipts?).to be(false)
+        end
+      end
+    end
+
+    context "with three purchases" do
+      let(:charge) { create(:charge, purchases: [create(:purchase), create(:purchase), create(:purchase)]) }
+
+      it "returns false" do
+        expect(charge.eligible_for_split_receipts?).to be(false)
+      end
+    end
+
+    context "when the splits_receipts flag is already set" do
+      let(:charge) { create(:charge, purchases: [create(:purchase)]) }
+
+      before { charge.update!(splits_receipts: true) }
+
+      it "returns true regardless of item count" do
+        expect(charge.eligible_for_split_receipts?).to be(true)
+      end
+    end
+  end
+
+  describe "#receipt_email_infos" do
+    context "when the charge split its receipts" do
+      let(:purchase_one) { create(:purchase) }
+      let(:purchase_two) { create(:purchase) }
+      let(:charge) { create(:charge, purchases: [purchase_one, purchase_two]) }
+
+      before { charge.update!(splits_receipts: true) }
+
+      it "returns the per-purchase receipt email infos, oldest first" do
+        info_two = create(:customer_email_info, purchase_id: purchase_two.id, email_name: "receipt")
+        info_one = create(:customer_email_info, purchase_id: purchase_one.id, email_name: "receipt")
+        create(:customer_email_info, purchase_id: purchase_one.id, email_name: "preorder_receipt")
+
+        expect(charge.receipt_email_infos).to eq([info_two, info_one])
+      end
+    end
+  end
+
   describe "#refund_and_save!" do
     it "attempts every purchase refund even when one purchase fails" do
       charge = create(:charge)

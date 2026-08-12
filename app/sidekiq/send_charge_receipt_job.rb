@@ -16,7 +16,18 @@ class SendChargeReceiptJob
     end
 
     charge.with_lock do
-      CustomerMailer.receipt(nil, charge.id).deliver_now
+      if charge.eligible_for_split_receipts?
+        # Flag before delivering: uses_charge_receipt? reads it, and it must be false
+        # while these mails render so each one resolves to its purchase, not the charge.
+        charge.update!(splits_receipts: true)
+        charge.successful_purchases.each do |purchase|
+          # A retry after a partial failure must not resend the receipts that already went out.
+          next if CustomerEmailInfo.where(purchase_id: purchase.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).exists?
+          CustomerMailer.receipt(purchase.id).deliver_now
+        end
+      else
+        CustomerMailer.receipt(nil, charge.id).deliver_now
+      end
       SendAutoInvoiceEmailJob.perform_async(nil, charge.id) if AutoInvoiceEligibility.eligible?(charge)
       charge.update!(receipt_sent: true)
     end

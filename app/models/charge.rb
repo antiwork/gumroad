@@ -18,9 +18,15 @@ class Charge < ApplicationRecord
 
   has_flags 1 => :receipt_sent,
             2 => :client_confirmed,
+            3 => :splits_receipts,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
+
+  # Two-item charges get one receipt per purchase instead of a combined receipt
+  # (gumroad-private#2025: buyers read the combined email as covering only the first
+  # item). Three or more items keep the combined, itemized receipt.
+  SPLIT_RECEIPTS_ITEM_COUNT = 2
 
   delegate :full_name, :purchaser, to: :purchase_as_chargeable
   delegate :tax_label_with_creator_tax_info, to: :purchase_with_tax_as_chargeable, allow_nil: true
@@ -168,6 +174,13 @@ class Charge < ApplicationRecord
     @_is_multi_item_charge ||= successful_purchases.many?
   end
 
+  # gumroad-private#2025: exactly-two-item charges send one receipt per purchase so each
+  # product is unmistakably covered; 3+ items keep the combined, itemized receipt. Counts
+  # charged line items (a bundle is one line item), matching what the buyer put in the cart.
+  def eligible_for_split_receipts?
+    splits_receipts? || successful_purchases.count == SPLIT_RECEIPTS_ITEM_COUNT
+  end
+
   def require_shipping?
     purchase_with_shipping_as_chargeable.present?
   end
@@ -262,6 +275,15 @@ class Charge < ApplicationRecord
   # Every send attempt for this charge, oldest first. See
   # Purchase::Receipt#receipt_email_infos.
   def receipt_email_infos
+    # A split charge (splits_receipts?) delivered per-purchase receipts, so its send
+    # history lives on the purchases' email_infos rows, not on email_info_charges.
+    if splits_receipts?
+      return CustomerEmailInfo
+        .where(purchase_id: purchases.ids, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
+        .order(:id)
+        .to_a
+    end
+
     # Queries `email_info_charges` first to leverage the index since there is no `purchase_id` on the associated
     # `email_infos` record (`email_infos` has > 1b records, and relies on `purchase_id` index)
     EmailInfoCharge.includes(:email_info)

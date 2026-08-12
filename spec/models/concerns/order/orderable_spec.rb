@@ -181,6 +181,16 @@ describe Order::Orderable do
         it "returns true" do
           expect(purchase.uses_charge_receipt?).to eq(true)
         end
+
+        context "when the charge split its receipts" do
+          before do
+            charge.update!(splits_receipts: true)
+          end
+
+          it "returns false" do
+            expect(purchase.uses_charge_receipt?).to eq(false)
+          end
+        end
       end
     end
   end

@@ -26,6 +26,11 @@ module Order::Orderable
     # * a stand-alone purchase without a charge or a order
     # * a purchase that belongs directly to an order (before charges were introduced)
     # * a purchase that belongs to a charge, and the charge belongs to an order
-    is_a?(Order) ? seller_receipt_enabled? : (charge&.order&.seller_receipt_enabled? || false)
+    # A charge flagged splits_receipts sent (or is sending) per-purchase receipts instead
+    # of a combined one, so its purchases resolve receipt rendering, resends, and email
+    # history to themselves.
+    return seller_receipt_enabled? if is_a?(Order)
+
+    (charge&.order&.seller_receipt_enabled? && !charge.splits_receipts?) || false
   end
 end
