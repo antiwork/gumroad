@@ -48,16 +48,13 @@ class CustomerMailer < ApplicationMailer
     )
   end
 
-  # charge_id is only passed for the initial order (SendChargeReceiptJob); duplicate/post-purchase
-  # receipts pass purchase_id alone and let find_by_purchase_or_charge! resolve the charge.
-  # single_purchase forces @chargeable to that one purchase — find_by_purchase_or_charge!
-  # would otherwise resolve a charge-receipt purchase back to its (combined) charge.
   def receipt(purchase_id = nil, charge_id = nil, for_email: true, single_purchase: false)
-    @chargeable = if single_purchase
-      Purchase.find(purchase_id)
+    purchase = Purchase.find_by(id: purchase_id)
+    @chargeable = if single_purchase || purchase&.split_charge_receipt_sent?
+      purchase
     else
       Charge::Chargeable.find_by_purchase_or_charge!(
-        purchase: Purchase.find_by(id: purchase_id),
+        purchase:,
         charge: Charge.find_by(id: charge_id)
       )
     end

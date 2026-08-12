@@ -33,8 +33,6 @@ class SendChargeReceiptJob
         purchases.each do |purchase|
           # Retry after a partial failure must not resend a receipt already delivered.
           next if CustomerEmailInfo.where(purchase_id: purchase.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).exists?
-          # single_purchase: the mailer's charge-resolution would otherwise fold both
-          # emails back into one combined render.
           CustomerMailer.receipt(purchase.id, single_purchase: true).deliver_now
         end
       else

@@ -91,7 +91,9 @@ class MailerInfo::HeaderBuilder
     charge_id = mailer_args.second unless mailer_args.second.is_a?(Hash)
     if mailer_method == SendgridEventInfo::RECEIPT_MAILER_METHOD
       # Split charge receipts need purchase-keyed markers so retries can dedupe each send.
-      return [purchase_id, nil] if options[:single_purchase] || options["single_purchase"]
+      purchase = Purchase.find_by(id: purchase_id)
+      split_receipt = options[:single_purchase] || options["single_purchase"] || purchase&.split_charge_receipt_sent?
+      return [purchase_id, nil] if split_receipt
 
       # Normalizes to the charge so every send and every event for one receipt
       # resolves to the same lineage. Use case:

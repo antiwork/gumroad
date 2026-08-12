@@ -11,7 +11,7 @@ module Purchase::Receipt
   end
 
   def receipt_email_info
-    @_receipt_email_info ||= if uses_charge_receipt?
+    @_receipt_email_info ||= if uses_charge_receipt? && !split_charge_receipt_sent?
       charge.receipt_email_info
     else
       receipt_email_info_from_purchase
@@ -23,11 +23,20 @@ module Purchase::Receipt
   # ORIGINAL send — chargeback evidence especially — read this instead of
   # `receipt_email_info`, which is the newest.
   def receipt_email_infos
-    if uses_charge_receipt?
+    if uses_charge_receipt? && !split_charge_receipt_sent?
       charge.receipt_email_infos
     else
       email_infos.where(type: CustomerEmailInfo.name, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).order(:id)
     end
+  end
+
+  def split_charge_receipt_sent?
+    return false unless uses_charge_receipt?
+
+    CustomerEmailInfo.where(
+      purchase_id: charge.successful_purchases.select(:id),
+      email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+    ).exists?
   end
 
   def send_receipt

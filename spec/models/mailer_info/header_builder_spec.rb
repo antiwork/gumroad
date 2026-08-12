@@ -55,8 +55,9 @@ RSpec.describe MailerInfo::HeaderBuilder do
         expect(smtpapi["unique_args"]["purchase_id"]).to eq(purchase.id)
       end
 
-      context "when rendering one purchase from a charge receipt" do
-        let!(:charge) { create(:charge, purchases: [purchase]) }
+      context "when rendering one purchase from a split charge receipt" do
+        let(:purchase_two) { create(:purchase, link: create(:product, user: purchase.seller), seller: purchase.seller) }
+        let!(:charge) { create(:charge, purchases: [purchase, purchase_two], seller: purchase.seller) }
         let(:mailer_args) { [purchase.id, { single_purchase: true }] }
 
         it "keeps the delivery marker on the purchase" do

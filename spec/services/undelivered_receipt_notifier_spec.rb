@@ -126,10 +126,12 @@ describe UndeliveredReceiptNotifier do
       let(:charge) { create(:charge, seller:) }
       let(:first_purchase) { create(:purchase, seller:, link: create(:product, user: seller)) }
       let(:second_purchase) { create(:purchase, seller:, link: create(:product, user: seller)) }
+      let(:third_purchase) { create(:purchase, seller:, link: create(:product, user: seller)) }
 
       before do
         charge.purchases << first_purchase
         charge.purchases << second_purchase
+        charge.purchases << third_purchase
         charge.update!(order: create(:order))
         create(:customer_email_info, purchase: nil, state: "sent", sent_at: 3.days.ago,
                                      email_info_charge_attributes: { charge_id: charge.id })
@@ -154,6 +156,7 @@ describe UndeliveredReceiptNotifier do
       # item must not suppress the notice.
       it "is true when only one purchase in the charge was paid" do
         first_purchase.update_columns(price_cents: 0)
+        third_purchase.update_columns(price_cents: 0)
         create(:url_redirect, purchase: first_purchase, link: first_purchase.link, uses: 0)
         create(:url_redirect, purchase: second_purchase, link: second_purchase.link, uses: 0)
 
@@ -163,9 +166,26 @@ describe UndeliveredReceiptNotifier do
       it "is false when every purchase in the charge was free" do
         first_purchase.update_columns(price_cents: 0)
         second_purchase.update_columns(price_cents: 0)
+        third_purchase.update_columns(price_cents: 0)
         create(:url_redirect, purchase: first_purchase, link: first_purchase.link, uses: 0)
 
         expect(described_class.undelivered?(first_purchase)).to eq(false)
+      end
+    end
+
+    context "with split receipts for a two-purchase charge" do
+      let(:seller) { create(:user) }
+      let(:first_purchase) { create(:purchase, seller:, link: create(:product, user: seller)) }
+      let(:second_purchase) { create(:purchase, seller:, link: create(:product, user: seller)) }
+      let!(:charge) { create(:charge, purchases: [first_purchase, second_purchase], seller:) }
+
+      it "judges each purchase independently" do
+        create(:customer_email_info, purchase: first_purchase, state: "sent", sent_at: 3.days.ago)
+        create(:url_redirect, purchase: first_purchase, link: first_purchase.link, uses: 0)
+        create(:url_redirect, purchase: second_purchase, link: second_purchase.link, uses: 1)
+
+        expect(first_purchase.split_charge_receipt_sent?).to be(true)
+        expect(described_class.undelivered?(first_purchase)).to eq(true)
       end
     end
   end
