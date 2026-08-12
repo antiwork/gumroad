@@ -7,10 +7,10 @@ class SendChargeReceiptJob
   include Sidekiq::Job
   sidekiq_options queue: :critical,
                   retry: 5,
-                  lock: :while_executing,
+                  lock: :until_and_while_executing,
                   lock_timeout: 2,
                   unique_across_queues: true,
-                  on_conflict: { server: :raise }
+                  on_conflict: { client: :log, server: :raise }
 
   def perform(charge_id)
     charge = Charge.find(charge_id)

@@ -23,10 +23,10 @@ describe SendChargeReceiptJob do
     critical_job = default_job.merge("queue" => "critical")
 
     expect(SidekiqUniqueJobs::LockDigest.call(default_job)).to eq(SidekiqUniqueJobs::LockDigest.call(critical_job))
-    expect(described_class.sidekiq_options["lock"]).to eq(:while_executing)
+    expect(described_class.sidekiq_options["lock"]).to eq(:until_and_while_executing)
     expect(described_class.sidekiq_options["lock_timeout"]).to eq(2)
     expect(described_class.sidekiq_options["unique_across_queues"]).to be(true)
-    expect(described_class.sidekiq_options["on_conflict"]).to eq({ "server" => :raise })
+    expect(described_class.sidekiq_options["on_conflict"]).to eq({ "client" => :log, "server" => :raise })
   end
 
   context "with all purchases ready" do
