@@ -203,14 +203,22 @@ type PendingDeletions = {
   pages: { id: string; title: string | null }[];
 };
 
-const findPendingDeletions = (product: Product, lastSavedProduct: Product): PendingDeletions => {
-  // Note: deletions the seller confirmed per-row (the "Yes, remove" /
-  // delete-page modals record ids into confirmed_removed_*_ids) are NOT
-  // excluded here. Those ids exist to satisfy the server-side deletion guard;
-  // this summary modal is deliberately a second, save-time gate — the last
-  // chance to notice an accumulated (possibly large) wipe as one list before
-  // it becomes permanent. Every UI deletion path records a confirmed id, so
-  // excluding them would mean the summary never appears at all.
+// Every UI deletion path records the removed id into confirmed_removed_*_ids
+// (the per-row "Yes, remove" / delete-page modals), so that list is the record
+// of what the seller actually asked to delete. Splitting on it separates the
+// two situations a missing-from-state diff can mean:
+// - `confirmed`: the seller deleted it this session. Shown in the save-time
+//   summary modal — deliberately a second gate on top of the per-row modals,
+//   the last chance to notice an accumulated (possibly large) wipe as one
+//   list before it becomes permanent.
+// - `unexpected`: nothing recorded intent, so the browser state lost the
+//   record (gumroad-private#2023: blank editor mounts, cross-visit state
+//   leaks). Saving would present the loss as a deletion the seller never
+//   asked for, so the save must stop and offer a reload instead.
+const findPendingDeletions = (
+  product: Product,
+  lastSavedProduct: Product,
+): { confirmed: PendingDeletions; unexpected: PendingDeletions } => {
   const currentVariantIds = new Set(product.variants.map(({ id }) => id));
   // Only content-bearing variants warrant the scary confirmation — mirroring
   // the server-side guard, which protects variants with visible rich-content
@@ -237,9 +245,23 @@ const findPendingDeletions = (product: Product, lastSavedProduct: Product): Pend
     if (!currentPageIds.has(page.id) && pageHasVisibleContent(page)) removedPagesById.set(page.id, page);
   }
 
+  // Deleting a whole variant confirms its pages individually too
+  // (confirmRemovedVariantPageDeletions records the ids of the pages the
+  // variant held at that moment), so a page-level confirmed id is the single
+  // test for intent here.
+  const confirmedVariantIds = new Set(product.confirmed_removed_variant_ids ?? []);
+  const confirmedPageIds = new Set(product.confirmed_removed_rich_content_ids ?? []);
+  const variants = removedVariants.map(({ id, name }) => ({ id, name }));
+  const pages = [...removedPagesById.values()].map(({ id, title }) => ({ id, title }));
   return {
-    variants: removedVariants.map(({ id, name }) => ({ id, name })),
-    pages: [...removedPagesById.values()].map(({ id, title }) => ({ id, title })),
+    confirmed: {
+      variants: variants.filter(({ id }) => confirmedVariantIds.has(id)),
+      pages: pages.filter(({ id }) => confirmedPageIds.has(id)),
+    },
+    unexpected: {
+      variants: variants.filter(({ id }) => !confirmedVariantIds.has(id)),
+      pages: pages.filter(({ id }) => !confirmedPageIds.has(id)),
+    },
   };
 };
 
@@ -414,6 +436,59 @@ const applyCanonicalIds = (
   }
 };
 
+// Confirmed page removals recorded while a request ran can hold client ids
+// the response has now mapped. The flat rich_content_id_mappings is ambiguous
+// when the same raw id was sent in two scopes (each scope got its own row):
+// remapping through it can turn the seller's deletion into intent against a
+// row they kept. Resolve each raw id through the sent snapshot's scoped
+// mappings instead. When two scopes disagree, the scope whose variant the
+// seller also removed is the one the recording came from; with no such
+// tiebreak the remap is dropped — an unmapped client id is inert server-side,
+// so a wrong deletion cannot happen, only a blocked save (fail-safe).
+const scopedConfirmedPageIdMappings = (
+  response: SaveProductResponse,
+  sentPagesById: ReadonlyMap<string, ScopedPage>,
+  confirmedRemovedVariantIds: string[],
+): Record<string, string> => {
+  const byScope = response.rich_content_id_mappings_by_scope;
+  const mappings = { ...response.rich_content_id_mappings };
+  if (!byScope) return mappings;
+
+  const canonicalsByRawId = new Map<string, Map<string, string>>();
+  for (const scopedPage of sentPagesById.values()) {
+    const scopeKey = scopedPage.scope ?? "";
+    const canonical = byScope[scopeKey]?.[scopedPage.page.id];
+    if (!canonical) continue;
+    const perScope = canonicalsByRawId.get(scopedPage.page.id) ?? new Map<string, string>();
+    perScope.set(scopeKey, canonical);
+    canonicalsByRawId.set(scopedPage.page.id, perScope);
+  }
+
+  const confirmedVariantIds = new Set(confirmedRemovedVariantIds);
+  const ambiguousRawIds = new Set<string>();
+  for (const [rawId, perScope] of canonicalsByRawId) {
+    const [onlyCanonical, ...others] = new Set(perScope.values());
+    if (onlyCanonical && others.length === 0) {
+      mappings[rawId] = onlyCanonical;
+      continue;
+    }
+    const removedScopeCanonicals = [...perScope.entries()].filter(([scopeKey]) => confirmedVariantIds.has(scopeKey));
+    const tiebreak = removedScopeCanonicals.length === 1 ? removedScopeCanonicals[0] : undefined;
+    if (tiebreak) {
+      mappings[rawId] = tiebreak[1];
+    } else {
+      ambiguousRawIds.add(rawId);
+    }
+  }
+  if (ambiguousRawIds.size === 0) return mappings;
+  const unambiguousMappings: Record<string, string> = {};
+  for (const rawId in mappings) {
+    const canonical = mappings[rawId];
+    if (canonical && !ambiguousRawIds.has(rawId)) unambiguousMappings[rawId] = canonical;
+  }
+  return unambiguousMappings;
+};
+
 const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
   const contentUpdatedVariantIds = product.variants
     .filter((variant) => {
@@ -453,6 +528,10 @@ const ProductEditPage = (props: Props) => {
   // in-flight save() promise so callers awaiting save() (e.g. "Save and
   // continue") settle once the seller decides.
   const [pendingDeletions, setPendingDeletions] = React.useState<PendingDeletions | null>(null);
+  // Content present at the last save but gone from browser state without any
+  // recorded deletion intent. Non-null while the reload modal is open; every
+  // save attempt is blocked until the seller reloads (see runSave).
+  const [missingContentConflict, setMissingContentConflict] = React.useState<PendingDeletions | null>(null);
   const pendingSaveRef = React.useRef<((saved: boolean) => void) | null>(null);
   // Hidden version-level pages the server refused to delete without an
   // explicit choice (see HiddenVariantContentConflictError). Non-null while
@@ -596,6 +675,14 @@ const ProductEditPage = (props: Props) => {
       setRichContentRemovedFileEmbedIds(response.rich_content_removed_file_embed_ids ?? {});
       updateProduct((current) => {
         applyCanonicalIds(current, response, sentPagesById);
+        // Read before the variant reconcile below remaps the list: the
+        // confirmed ids and the sent snapshot's scope keys share the
+        // sent-era id namespace.
+        const confirmedPageIdMappings = scopedConfirmedPageIdMappings(
+          response,
+          sentPagesById,
+          current.confirmed_removed_variant_ids ?? [],
+        );
         current.confirmed_removed_variant_ids = reconcileConfirmedRemovalIds(
           current.confirmed_removed_variant_ids ?? [],
           sentConfirmedVariantIds,
@@ -604,7 +691,7 @@ const ProductEditPage = (props: Props) => {
         current.confirmed_removed_rich_content_ids = reconcileConfirmedRemovalIds(
           current.confirmed_removed_rich_content_ids ?? [],
           sentConfirmedPageIds,
-          response.rich_content_id_mappings,
+          confirmedPageIdMappings,
         );
       });
 
@@ -647,14 +734,23 @@ const ProductEditPage = (props: Props) => {
     return saved;
   };
   const runSave = (): Promise<boolean> => {
+    const { confirmed, unexpected } = findPendingDeletions(product, lastSavedProductRef.current);
+    // Content that vanished from browser state without the seller deleting it
+    // means this session's record of the product is no longer trustworthy.
+    // Fail closed: block the save and offer a reload — presenting the loss as
+    // a deletion to confirm would ask the seller to authorize destroying
+    // content they never touched (gumroad-private#2023).
+    if (unexpected.variants.length + unexpected.pages.length > 0) {
+      setMissingContentConflict(unexpected);
+      return Promise.resolve(false);
+    }
     // A save that deletes existing versions/tiers or content pages gets one
     // final summary confirmation before the request goes out. Each deletion
     // already had its own modal when the seller clicked delete, but this is
     // the last chance to notice an accumulated (possibly large) wipe before
     // it becomes permanent.
-    const deletions = findPendingDeletions(product, lastSavedProductRef.current);
-    if (deletions.variants.length + deletions.pages.length > 0) {
-      setPendingDeletions(deletions);
+    if (confirmed.variants.length + confirmed.pages.length > 0) {
+      setPendingDeletions(confirmed);
       return new Promise<boolean>((resolve) => {
         pendingSaveRef.current = resolve;
       });
@@ -797,6 +893,40 @@ const ProductEditPage = (props: Props) => {
                 </div>
               ) : null}
               <p>Customers who purchased this content will lose access to it.</p>
+            </div>
+          </Modal>
+        ) : null}
+        {missingContentConflict ? (
+          <Modal
+            open
+            onClose={() => setMissingContentConflict(null)}
+            title="Some content couldn't be loaded"
+            footer={
+              <>
+                <Button onClick={() => setMissingContentConflict(null)}>Keep editing</Button>
+                <Button color="accent" onClick={() => window.location.reload()}>
+                  Reload page
+                </Button>
+              </>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <p>This editor session lost track of the following content, so saving could permanently delete it:</p>
+              {missingContentConflict.variants.length > 0 ? (
+                <ul className="list-disc pl-6">
+                  {missingContentConflict.variants.map(({ id, name }) => (
+                    <li key={id}>{name || "Untitled"}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {missingContentConflict.pages.length > 0 ? (
+                <ul className="list-disc pl-6">
+                  {missingContentConflict.pages.map(({ id, title }) => (
+                    <li key={id}>{titleWithFallback(title)}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <p>Nothing was saved or deleted. Reload the page to keep editing with the full content.</p>
             </div>
           </Modal>
         ) : null}

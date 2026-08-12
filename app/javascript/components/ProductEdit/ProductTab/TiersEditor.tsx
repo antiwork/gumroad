@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import * as React from "react";
 
 import { sendSamplePriceChangeEmail } from "$app/data/membership_tiers";
-import { confirmRichContentMoveSourceDeletions, reorderPreservingMembership } from "$app/data/product_save_contract";
+import { confirmRemovedVariantPageDeletions, reorderPreservingMembership } from "$app/data/product_save_contract";
 import { CurrencyCode, currencyCodeList, getIsSingleUnitCurrency } from "$app/utils/currency";
 import { priceCentsToUnit } from "$app/utils/price";
 import {
@@ -60,10 +60,11 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
   // server-side wipe guard allows deleting it even if it still has content.
   const confirmRemoval = (tier: Tier) => {
     updateProduct((product) => {
-      if (!tier.newlyAdded) {
-        product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), tier.id];
-      }
-      confirmRichContentMoveSourceDeletions(product, tier.rich_content);
+      // Recorded even for a newly added tier: an in-flight save may be
+      // creating it right now, and reconciliation remaps the recorded id to
+      // the canonical one. An id the server never learns is inert.
+      product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), tier.id];
+      confirmRemovedVariantPageDeletions(product, tier.rich_content);
     });
     onChange(tiers.filter(({ id }) => id !== tier.id));
   };

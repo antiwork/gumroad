@@ -1,7 +1,7 @@
 import { Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
-import { confirmRichContentMoveSourceDeletions } from "$app/data/product_save_contract";
+import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 
 import { Button } from "$app/components/Button";
 import { PriceInput } from "$app/components/PriceInput";
@@ -28,10 +28,11 @@ export const SuggestedAmountsEditor = ({
   // custom price, which the guard treats as configuration worth protecting.
   const removeVersion = (version: Version) => {
     updateProduct((product) => {
-      if (!version.newlyAdded) {
-        product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), version.id];
-      }
-      confirmRichContentMoveSourceDeletions(product, version.rich_content);
+      // Recorded even for a newly added version: an in-flight save may be
+      // creating it right now, and reconciliation remaps the recorded id to
+      // the canonical one. An id the server never learns is inert.
+      product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), version.id];
+      confirmRemovedVariantPageDeletions(product, version.rich_content);
     });
     onChange(versions.filter(({ id }) => id !== version.id));
   };

@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, Clock, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
-import { confirmRichContentMoveSourceDeletions, reorderPreservingMembership } from "$app/data/product_save_contract";
+import { confirmRemovedVariantPageDeletions, reorderPreservingMembership } from "$app/data/product_save_contract";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -40,10 +40,11 @@ export const DurationsEditor = ({
   // server-side wipe guard allows deleting it even if it still has content.
   const confirmRemoval = (duration: Duration) => {
     updateProduct((product) => {
-      if (!duration.newlyAdded) {
-        product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), duration.id];
-      }
-      confirmRichContentMoveSourceDeletions(product, duration.rich_content);
+      // Recorded even for a newly added duration: an in-flight save may be
+      // creating it right now, and reconciliation remaps the recorded id to
+      // the canonical one. An id the server never learns is inert.
+      product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), duration.id];
+      confirmRemovedVariantPageDeletions(product, duration.rich_content);
     });
     onChange(durations.filter(({ id }) => id !== duration.id));
   };

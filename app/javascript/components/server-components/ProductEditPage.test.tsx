@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { type SaveProductResponse } from "$app/data/product_edit";
+import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 
 import { ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -1131,4 +1132,361 @@ it("does not report a content update when only the send-time stamp differs", asy
   });
 
   expect(showAlert).toHaveBeenCalledWith("Changes saved!", "success");
+});
+
+// Pins the missing-content reload guard (gp#2023 follow-up): every UI
+// deletion path records the removed id into confirmed_removed_*_ids, so a
+// page that is missing from browser state WITHOUT a confirmed id was lost by
+// the session (blank editor mount, cross-visit state leak) — the seller never
+// deleted it. The old save-time summary presented that loss as a deletion to
+// confirm; the save must instead stop and offer a reload.
+it("blocks the save and offers a reload when saved content is missing without a recorded deletion", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "vanished-page",
+        title: "Lesson 1",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+  ]);
+  const props = buildTieredProps(product);
+
+  saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  // The page vanishes from browser state with NO confirmed removal recorded —
+  // the signature of a lost session record, never of a seller action.
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const tierA = current.variants.find((variant) => variant.id === "tier-a");
+      if (!tierA) throw new Error("expected tier A");
+      tierA.rich_content = [];
+    }),
+  );
+
+  let saved: boolean | undefined;
+  await act(async () => {
+    saved = await contextCapture.current?.save();
+  });
+
+  expect(saved).toBe(false);
+  expect(saveProductMock).not.toHaveBeenCalled();
+  expect(screen.getByText("Some content couldn't be loaded")).toBeTruthy();
+  expect(screen.getByText("Lesson 1")).toBeTruthy();
+  expect(screen.getByText("Reload page")).toBeTruthy();
+});
+
+// The reload guard must not swallow real deletions: a page whose id IS in
+// confirmed_removed_rich_content_ids was removed by the seller, so the
+// existing save-time summary still runs and confirming it still saves.
+it("keeps the deletion summary for content the seller explicitly removed", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "removed-page",
+        title: "Old lesson",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+  ]);
+  const props = buildTieredProps(product);
+
+  saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  // The seller deletes the page: the UI path removes it from state AND
+  // records the confirmed id, exactly like the per-row delete modal does.
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const tierA = current.variants.find((variant) => variant.id === "tier-a");
+      if (!tierA) throw new Error("expected tier A");
+      tierA.rich_content = [];
+      current.confirmed_removed_rich_content_ids = ["removed-page"];
+    }),
+  );
+
+  let save: Promise<boolean> | undefined;
+  act(() => {
+    save = contextCapture.current?.save();
+  });
+
+  await waitFor(() => expect(screen.getByText("Save and delete content?")).toBeTruthy());
+  expect(screen.queryByText("Some content couldn't be loaded")).toBeNull();
+  expect(saveProductMock).not.toHaveBeenCalled();
+
+  await act(async () => {
+    fireEvent.click(screen.getByText("Yes, save and delete"));
+    await save;
+  });
+  expect(saveProductMock).toHaveBeenCalledOnce();
+  await expect(save).resolves.toBe(true);
+});
+
+// Deleting a whole tier must not trip the reload guard: the variant editors'
+// removal path (confirmRemovedVariantPageDeletions) records the ids of the
+// pages the tier held at that moment, so the guard sees seller intent for
+// every page that went down with the tier.
+it("keeps the deletion summary when a confirmed variant removal takes its pages with it", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "tier-a-page",
+        title: "Tier A lesson",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-b", "Tier B", []),
+  ]);
+  const props = buildTieredProps(product);
+
+  saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  // The seller removes the whole tier — the same mutation the variant
+  // editors' confirmRemoval performs.
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const index = current.variants.findIndex((variant) => variant.id === "tier-a");
+      const tierA = current.variants[index];
+      if (index === -1 || !tierA) throw new Error("expected tier A");
+      current.confirmed_removed_variant_ids = ["tier-a"];
+      confirmRemovedVariantPageDeletions(current, tierA.rich_content);
+      current.variants.splice(index, 1);
+    }),
+  );
+
+  let save: Promise<boolean> | undefined;
+  act(() => {
+    save = contextCapture.current?.save();
+  });
+
+  await waitFor(() => expect(screen.getByText("Save and delete content?")).toBeTruthy());
+  expect(screen.queryByText("Some content couldn't be loaded")).toBeNull();
+
+  await act(async () => {
+    fireEvent.click(screen.getByText("Yes, save and delete"));
+    await save;
+  });
+  expect(saveProductMock).toHaveBeenCalledOnce();
+  await expect(save).resolves.toBe(true);
+});
+
+// A page that moved OUT of a tier before the tier was deleted must not
+// inherit the tier's confirmation: the tier no longer held it, so if the
+// session later loses the page from its destination, that is lost content —
+// the reload guard must block the save, or confirming would delete the
+// page's stored row with no destination copy saved anywhere.
+it("blocks the save when a page that left a deleted tier goes missing", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "moved-page",
+        title: "Moved lesson",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-b", "Tier B", []),
+  ]);
+  const props = buildTieredProps(product);
+
+  saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const index = current.variants.findIndex((variant) => variant.id === "tier-a");
+      const tierA = current.variants[index];
+      const tierB = current.variants.find((variant) => variant.id === "tier-b");
+      const page = tierA?.rich_content[0];
+      if (index === -1 || !tierA || !tierB || !page) throw new Error("expected the tiers and the page");
+      // The page moves to tier B first, so tier A holds nothing when the
+      // seller deletes it — its confirmation covers no pages.
+      tierA.rich_content = [];
+      tierB.rich_content = [{ ...page, move_source_scope: "tier-a", move_source_id: page.id, source_id: page.id }];
+      current.confirmed_removed_variant_ids = ["tier-a"];
+      confirmRemovedVariantPageDeletions(current, tierA.rich_content);
+      current.variants.splice(index, 1);
+      // The session then loses the page from tier B — the gp#2023 bug class.
+      tierB.rich_content = [];
+    }),
+  );
+
+  let saved: boolean | undefined;
+  await act(async () => {
+    saved = await contextCapture.current?.save();
+  });
+
+  expect(saved).toBe(false);
+  expect(saveProductMock).not.toHaveBeenCalled();
+  expect(screen.getByText("Some content couldn't be loaded")).toBeTruthy();
+  expect(screen.getByText("Moved lesson")).toBeTruthy();
+});
+
+// A tier deleted while a save is in flight can hold a page that same save is
+// creating. The removal records the page's CLIENT id; the response then maps
+// it to the canonical row id (reconcileConfirmedRemovalIds), so the next
+// save's diff still reads the page as a confirmed deletion. Without the
+// remapped record, the reload guard would block the seller's confirmed tier
+// deletion after the response lands.
+it("keeps the deletion summary when a tier deleted mid-save held a page that save created", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "new-page",
+        newlyAdded: true,
+        title: "Brand new lesson",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-b", "Tier B", []),
+  ]);
+  const props = buildTieredProps(product);
+
+  const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+  saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  let firstSave: Promise<boolean> | undefined;
+  act(() => {
+    firstSave = contextCapture.current?.save();
+  });
+  await waitFor(() => expect(saveProductMock).toHaveBeenCalledOnce());
+
+  // The seller deletes the tier while the save that creates its page runs.
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const index = current.variants.findIndex((variant) => variant.id === "tier-a");
+      const tierA = current.variants[index];
+      if (index === -1 || !tierA) throw new Error("expected tier A");
+      current.confirmed_removed_variant_ids = ["tier-a"];
+      confirmRemovedVariantPageDeletions(current, tierA.rich_content);
+      current.variants.splice(index, 1);
+    }),
+  );
+
+  await act(async () => {
+    requests[0]?.resolve({
+      rich_content_id_mappings: { "new-page": "server-new-page" },
+      rich_content_id_mappings_by_scope: { "tier-a": { "new-page": "server-new-page" } },
+    } satisfies SaveProductResponse);
+    await firstSave;
+  });
+
+  saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+  let secondSave: Promise<boolean> | undefined;
+  act(() => {
+    secondSave = contextCapture.current?.save();
+  });
+
+  await waitFor(() => expect(screen.getByText("Save and delete content?")).toBeTruthy());
+  expect(screen.queryByText("Some content couldn't be loaded")).toBeNull();
+
+  await act(async () => {
+    fireEvent.click(screen.getByText("Yes, save and delete"));
+    await secondSave;
+  });
+  await expect(secondSave).resolves.toBe(true);
+  // The second save carries the canonical row id as the confirmed deletion.
+  const secondPayload: unknown = saveProductMock.mock.calls[1]?.[2];
+  expect(secondPayload).toMatchObject({ confirmed_removed_rich_content_ids: ["server-new-page"] });
+});
+
+// The flat rich_content_id_mappings is last-write-wins across scopes, so when
+// the same raw client id was sent in two tiers and one tier is deleted
+// mid-save, remapping the recorded deletion through the flat map can point it
+// at the OTHER tier's row — deletion intent against a row the seller kept.
+// The remap must resolve through the deleted tier's scoped mapping instead.
+it("remaps a mid-save tier deletion's page through its own scope, never the duplicate's", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "dup-page",
+        newlyAdded: true,
+        title: "A lesson",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+    buildTier("tier-b", "Tier B", [
+      {
+        id: "dup-page",
+        newlyAdded: true,
+        title: "B lesson",
+        description: {},
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+  ]);
+  const props = buildTieredProps(product);
+
+  const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+  saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  let firstSave: Promise<boolean> | undefined;
+  act(() => {
+    firstSave = contextCapture.current?.save();
+  });
+  await waitFor(() => expect(saveProductMock).toHaveBeenCalledOnce());
+
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      const index = current.variants.findIndex((variant) => variant.id === "tier-a");
+      const tierA = current.variants[index];
+      if (index === -1 || !tierA) throw new Error("expected tier A");
+      current.confirmed_removed_variant_ids = ["tier-a"];
+      confirmRemovedVariantPageDeletions(current, tierA.rich_content);
+      current.variants.splice(index, 1);
+    }),
+  );
+
+  await act(async () => {
+    requests[0]?.resolve({
+      // The flat map's last write points at tier B's row.
+      rich_content_id_mappings: { "dup-page": "server-row-b" },
+      rich_content_id_mappings_by_scope: {
+        "tier-a": { "dup-page": "server-row-a" },
+        "tier-b": { "dup-page": "server-row-b" },
+      },
+    } satisfies SaveProductResponse);
+    await firstSave;
+  });
+
+  saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+  let secondSave: Promise<boolean> | undefined;
+  act(() => {
+    secondSave = contextCapture.current?.save();
+  });
+
+  // The deleted tier's page resolves through tier A's scope, so the guard
+  // sees it as confirmed and the summary (not the reload guard) runs.
+  await waitFor(() => expect(screen.getByText("Save and delete content?")).toBeTruthy());
+  expect(screen.queryByText("Some content couldn't be loaded")).toBeNull();
+
+  await act(async () => {
+    fireEvent.click(screen.getByText("Yes, save and delete"));
+    await secondSave;
+  });
+  await expect(secondSave).resolves.toBe(true);
+  // Tier A's row is the confirmed deletion; tier B's row must never be.
+  const secondPayload: unknown = saveProductMock.mock.calls[1]?.[2];
+  expect(secondPayload).toMatchObject({ confirmed_removed_rich_content_ids: ["server-row-a"] });
 });

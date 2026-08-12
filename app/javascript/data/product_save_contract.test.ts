@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DeletionSources,
   buildDeletionOperations,
-  confirmRichContentMoveSourceDeletions,
+  confirmRemovedVariantPageDeletions,
   hasDeletions,
   reorderPreservingMembership,
   reorderRowsPreservingMembership,
@@ -72,17 +72,31 @@ describe("buildDeletionOperations", () => {
     expect(operations.deleted_ids.variants).toEqual(["variant-a", "variant-b"]);
   });
 
-  it("preserves a moved page's source deletion when its destination variant is removed", () => {
+  it("records a removed variant's pages and their move sources", () => {
     const product = productWith({ confirmed_removed_rich_content_ids: ["already-confirmed"] });
 
-    confirmRichContentMoveSourceDeletions(product, [
-      { move_source_id: "shared-source" },
-      { move_source_id: "shared-source" },
-      {},
+    confirmRemovedVariantPageDeletions(product, [
+      { id: "stored-page", move_source_id: "shared-source" },
+      { id: "stored-page-2", move_source_id: "shared-source" },
+      // An unsaved page's client id is recorded too: inert server-side, and
+      // remapped to the canonical id if an in-flight save creates the row.
+      { id: "unsaved-page" },
     ]);
 
-    expect(product.confirmed_removed_rich_content_ids).toEqual(["already-confirmed", "shared-source"]);
-    expect(buildDeletionOperations(product).deleted_ids.rich_content).toEqual(["already-confirmed", "shared-source"]);
+    expect(product.confirmed_removed_rich_content_ids).toEqual([
+      "already-confirmed",
+      "stored-page",
+      "shared-source",
+      "stored-page-2",
+      "unsaved-page",
+    ]);
+    expect(buildDeletionOperations(product).deleted_ids.rich_content).toEqual([
+      "already-confirmed",
+      "stored-page",
+      "shared-source",
+      "stored-page-2",
+      "unsaved-page",
+    ]);
   });
 
   // Clearing a whole collection is never inferred: the caller has to pass it,

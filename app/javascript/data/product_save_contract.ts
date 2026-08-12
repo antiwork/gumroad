@@ -70,21 +70,30 @@ export type DeletionSources = {
   }[];
 };
 
-// A page moved between shared and per-version scopes is represented by a new
-// destination row plus an explicit deletion of its stored source. If the
-// seller removes the destination variant before saving, the page carrying that
-// move marker disappears from product state. Promote the marker into the
-// durable confirmed-removal list at the same moment as the variant removal so
-// the save cannot lose the source-row deletion intent.
-export const confirmRichContentMoveSourceDeletions = (
+// Called at the moment a variant removal is confirmed, with the pages the
+// variant holds at that moment. Records into the durable confirmed-removal
+// list:
+// - each page's id: a page still inside the variant goes down with it, and
+//   the id doubles as the session's record that the SELLER removed it — the
+//   save-time missing-content guard reads the list as intent, so a page that
+//   left the variant before this confirmation must not inherit it. A newly
+//   added page's client id is recorded too: it is inert server-side (intent
+//   ids that match no stored row authorize nothing), and if an in-flight
+//   save creates the row, reconcileConfirmedRemovalIds remaps the recorded
+//   id to the canonical one so the deletion still lands.
+// - each page's move_source_id: a page moved INTO this variant is a new
+//   destination row plus an explicit deletion of its stored source, and the
+//   page carrying that marker disappears from state with the variant. Without
+//   the promotion the save loses the source-row deletion intent.
+export const confirmRemovedVariantPageDeletions = (
   product: Pick<DeletionSources, "confirmed_removed_rich_content_ids">,
-  pages: { move_source_id?: string }[],
+  pages: { id: string; move_source_id?: string }[],
 ): void => {
-  const moveSourceIds = pages.flatMap((page) => (page.move_source_id ? [page.move_source_id] : []));
-  if (moveSourceIds.length === 0) return;
+  const removedIds = pages.flatMap((page) => [page.id, ...(page.move_source_id ? [page.move_source_id] : [])]);
+  if (removedIds.length === 0) return;
 
   product.confirmed_removed_rich_content_ids = [
-    ...new Set([...(product.confirmed_removed_rich_content_ids ?? []), ...moveSourceIds]),
+    ...new Set([...(product.confirmed_removed_rich_content_ids ?? []), ...removedIds]),
   ];
 };
 
