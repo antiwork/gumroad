@@ -205,16 +205,9 @@ it("saves changed state after the active save reconciles server ids", async () =
   await expect(secondSave).resolves.toBe(true);
 });
 
-// Pins gumroad-private#2023: `applyCanonicalIds` used to look up a page's SENT
-// snapshot (source_id, move_source_scope/id) with a Map keyed on the page id
-// alone. Page ids are unique per scope, not globally — a product-level page
-// and a variant page (or two variants') can carry the same id mid-move, and
-// the second scope's entry silently clobbered the first in that Map. The next
-// reconciliation pass then applied one variant's move/source bookkeeping to
-// the OTHER variant's page, corrupting the record the server-side "same
-// content page more than once" guard checks against. Scope-qualifying the
-// lookup key (this fix) keeps each variant's reconciliation reading its own
-// sent snapshot even when two pages happen to share a raw id.
+// Page ids are unique per scope, not globally: two variants can legitimately
+// carry the same raw id in one save, so every sent-snapshot lookup in
+// `applyCanonicalIds` must be keyed by scope + page id (gumroad-private#2023).
 it("reconciles same-id pages in different variant scopes using each variant's own sent snapshot", async () => {
   const product: Product = {
     name: "Tiered product",
@@ -382,14 +375,9 @@ it("reconciles same-id pages in different variant scopes using each variant's ow
   const savedProduct = contextCapture.current?.product;
   const tierA = savedProduct?.variants.find((v) => v.name === "Tier A");
   const tierB = savedProduct?.variants.find((v) => v.name === "Tier B");
-  // What must NOT happen is tier B's bookkeeping being overwritten with tier
-  // A's sent snapshot (or vice versa): with the bug, a
-  // scope-blind Map key made tier B's reconciliation read tier A's ScopedPage
-  // (scope "tier-a"), so `sentScope` ("tier-a") mismatched tier B's real
-  // `currentScope` ("tier-b") and `movedAfterRequest` went true — falsely
-  // reintroducing move_source_scope="tier-a" on a page the server actually
-  // committed cleanly in tier B's own scope. Fixed, each variant reads its own
-  // snapshot, matches its own scope, and the move bookkeeping is cleared.
+  // Each tier must reconcile against its OWN sent snapshot; a scope-blind
+  // lookup would hand tier B tier A's snapshot and falsely reintroduce
+  // move_source_scope on a page the server committed cleanly.
   expect(tierA?.rich_content[0]?.id).toBe("server-page-a");
   expect(tierB?.rich_content[0]?.id).toBe("server-page-b");
   expect(contextCapture.current?.richContentIdMappings["tier-a\u0000shared-client-id"]).toBe("server-page-a");
@@ -402,12 +390,10 @@ it("reconciles same-id pages in different variant scopes using each variant's ow
   expect(tierA?.rich_content[0]).not.toHaveProperty("source_id");
 });
 
-// Pins gumroad-private#2023 follow-up (Greptile P1): applyCanonicalIds keyed
-// sentPagesById by the SENT variant id, but read it back with variant.id
-// AFTER the variant-id remap loop had already rewritten it to the canonical
-// server id — so a page moved into a variant created by this very save
-// missed its sent snapshot and lost move_source_scope/move_source_id/
-// source_id, leaving the next save unable to represent the move.
+// sentPagesById is keyed by the SENT variant id, but the variant-id remap
+// loop rewrites variant.id to the canonical server id before the lookup —
+// the read-back must translate ids or a newly-created variant's pages miss
+// their snapshot and lose move provenance.
 it("keeps a newly-created variant's move provenance after its own id is remapped", async () => {
   const product: Product = {
     name: "Tiered product",
@@ -553,14 +539,9 @@ it("keeps a newly-created variant's move provenance after its own id is remapped
     await contextCapture.current?.save();
   });
 
-  // applyRichContentPageSaveResponse's 5th arg (sentScope) comes from the
-  // sentPagesById lookup. With the bug, the lookup missed (keyed by the
-  // pre-remap local variant id, read back by the post-remap canonical id),
-  // so `sent` was undefined and sentScope fell through to undefined instead
-  // of the canonical variant id it was actually sent under — collapsing
-  // `hasScopeContext` to false and skipping the branch that correctly
-  // updates move provenance for a page moved into a variant this save
-  // itself created.
+  // sentScope (5th arg) must resolve to the canonical variant id even though
+  // the page was sent under the pre-remap local id; undefined here collapses
+  // hasScopeContext and skips the move-provenance update.
   const call = applyRichContentPageSaveResponseSpy.mock.calls[0];
   expect(call).toBeDefined();
   const sentScope = call?.[4];
