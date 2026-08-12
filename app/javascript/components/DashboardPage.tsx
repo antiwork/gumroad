@@ -36,8 +36,8 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
-import placeholderImage from "$assets/images/placeholders/dashboard.png";
 import gumheadImage from "$assets/images/gumhead.png";
+import placeholderImage from "$assets/images/placeholders/dashboard.png";
 
 type ProductRow = {
   id: string;
