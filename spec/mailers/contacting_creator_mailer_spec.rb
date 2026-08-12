@@ -2120,6 +2120,16 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include product.long_url
         expect(mail.body.encoded).to include edit_link_url(product)
       end
+
+      it "renders from one delivery-time refund-policy snapshot" do
+        allow(Dispute).to receive(:find).with(dispute.id).and_return(dispute)
+        expect(purchase).to receive(:first_product_without_refund_policy).once.and_return(product)
+
+        mail = ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id)
+
+        expect(mail.body.encoded).to include product.name
+        expect(mail.body.encoded).to include edit_link_url(product)
+      end
     end
 
     context "for a dispute on Charge" do

@@ -461,10 +461,9 @@ class ContactingCreatorMailer < ApplicationMailer
   def chargeback_lost_no_refund_policy(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
-    # Enqueued only when the caller's own snapshot found a product with no refund policy, but
-    # this job can run well after enqueue — the seller may have added one in the meantime, and
-    # the view calls this twice more, unguarded, so a nil here 500s mail delivery.
-    return do_not_send if @disputable.first_product_without_refund_policy.nil?
+    # Mailer jobs can render after product refund policies change.
+    @product_without_refund_policy = @disputable.first_product_without_refund_policy
+    return do_not_send if @product_without_refund_policy.nil?
 
     @seller = @disputable.seller
     @subject = "A dispute has been lost"
