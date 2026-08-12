@@ -15,27 +15,31 @@ class SendChargeReceiptJob
       PdfStampingService.stamp_for_purchase!(purchase)
     end
 
+    # Deliveries run outside a shared transaction with the receipt_sent update: an
+    # earlier delivery's committed CustomerEmailInfo must survive a later delivery's
+    # failure, or a retry would resend an already-delivered receipt.
+    send_receipts(charge)
+
     charge.with_lock do
-      send_receipts(charge)
       SendAutoInvoiceEmailJob.perform_async(nil, charge.id) if AutoInvoiceEligibility.eligible?(charge)
       charge.update!(receipt_sent: true)
     end
   end
 
   private
-    # A two-item order (e.g. the free + paid variants of one product bought in one
-    # checkout) previously got a single combined receipt whose line items were near
-    # identical ("You bought MacWhisper!" / "You got MacWhisper!"), which buyers read
-    # as "I only received the free one" (gumroad-private#2025). Sending one receipt
-    # per purchase makes the paid item unambiguous. Three or more items keep the
-    # combined itemized receipt.
+    # 3+-item orders keep the combined, itemized receipt; exactly-2-item orders (e.g.
+    # a free + paid variant bought together) get one receipt per purchase so neither
+    # reads as unsent (gumroad-private#2025).
     def send_receipts(charge)
       purchases = charge.unbundled_purchases
       if purchases.count == 2
-        # Pass only the purchase: the mailer's header tracking resolves a charge-receipt
-        # purchase back to its charge (find_by_purchase_or_charge!), so both emails in
-        # the split stay on the same EmailInfo/charge lineage.
-        purchases.each { |purchase| CustomerMailer.receipt(purchase.id, single_purchase: true).deliver_now }
+        purchases.each do |purchase|
+          # Retry after a partial failure must not resend a receipt already delivered.
+          next if CustomerEmailInfo.where(purchase_id: purchase.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).exists?
+          # single_purchase: the mailer's charge-resolution would otherwise fold both
+          # emails back into one combined render.
+          CustomerMailer.receipt(purchase.id, single_purchase: true).deliver_now
+        end
       else
         CustomerMailer.receipt(nil, charge.id).deliver_now
       end

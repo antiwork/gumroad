@@ -41,6 +41,40 @@ describe SendChargeReceiptJob do
         expect(CustomerMailer).not_to have_received(:receipt).with(nil, charge.id)
         expect(charge.reload.receipt_sent?).to be(true)
       end
+
+      it "skips a purchase whose receipt already went out on a retry" do
+        create(:customer_email_info, purchase_id: purchase_one.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
+
+        described_class.new.perform(charge.id)
+
+        expect(CustomerMailer).not_to have_received(:receipt).with(purchase_one.id, single_purchase: true)
+        expect(CustomerMailer).to have_received(:receipt).with(purchase_two.id, single_purchase: true)
+        expect(charge.reload.receipt_sent?).to be(true)
+      end
+
+      it "keeps the first purchase's sent marker and does not resend it, even when the second delivery raises" do
+        # Regression for the Greptile P1: deliveries must not share a transaction with
+        # each other. If they did, a raise on purchase_two's delivery would roll back the
+        # CustomerEmailInfo the mail observer just committed for purchase_one, and a
+        # Sidekiq retry would resend a receipt that already reached the buyer's inbox.
+        call_count = 0
+        allow(CustomerMailer).to receive(:receipt) do |purchase_id, **|
+          call_count += 1
+          raise "delivery failed" if call_count == 2
+          create(:customer_email_info, purchase_id:, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
+          double(deliver_now: true)
+        end
+
+        expect { described_class.new.perform(charge.id) }.to raise_error("delivery failed")
+        expect(charge.reload.receipt_sent?).to be(false)
+
+        first_sent_purchase_id = CustomerEmailInfo.where(email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).sole.purchase_id
+
+        described_class.new.perform(charge.id)
+
+        expect(CustomerMailer).to have_received(:receipt).with(first_sent_purchase_id, single_purchase: true).once
+        expect(charge.reload.receipt_sent?).to be(true)
+      end
     end
   end
 
