@@ -235,12 +235,26 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     setPages(reorderRowsPreservingMembership(reportedPages, pagesRef.current));
   // Records that the seller explicitly deleted these pages, so the server-side
   // wipe guard allows removing them even though they may still have content.
+  // A STORED id another surviving page still carries is skipped: raw ids can
+  // repeat across scopes, and sending a shared stored id names the surviving
+  // page's row for deletion. Newly added pages' client ids record regardless
+  // (inert until reconciliation resolves them, which drops ambiguous cases).
   const confirmPageRemovals = (removedPages: Page[]) => {
     if (removedPages.length === 0) return;
     updateProduct((product) => {
+      const removed = new Set<Page>(removedPages);
+      const survivingPageIds = new Set(
+        [...product.rich_content, ...product.variants.flatMap((variant) => variant.rich_content)]
+          .filter((page) => !removed.has(page))
+          .map(({ id }) => id),
+      );
+      const removableIds = removedPages
+        .filter((page) => page.newlyAdded || !survivingPageIds.has(page.id))
+        .map(({ id }) => id);
+      if (removableIds.length === 0) return;
       product.confirmed_removed_rich_content_ids = [
         ...(product.confirmed_removed_rich_content_ids ?? []),
-        ...removedPages.map(({ id }) => id),
+        ...removableIds,
       ];
     });
   };

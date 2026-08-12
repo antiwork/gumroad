@@ -70,21 +70,29 @@ export type DeletionSources = {
   }[];
 };
 
-// A page moved between shared and per-version scopes is represented by a new
-// destination row plus an explicit deletion of its stored source. If the
-// seller removes the destination variant before saving, the page carrying that
-// move marker disappears from product state. Promote the marker into the
-// durable confirmed-removal list at the same moment as the variant removal so
-// the save cannot lose the source-row deletion intent.
-export const confirmRichContentMoveSourceDeletions = (
+// Records a confirmed variant removal's page deletions: the ids of the pages
+// the variant holds at that moment (client ids included — inert server-side,
+// and remapped to canonical if an in-flight save creates the row) plus their
+// move_source_ids, whose deletion intent would otherwise vanish with the
+// variant. A page that left the variant earlier is deliberately not covered.
+// A STORED id a surviving page still carries is skipped: raw ids can repeat
+// across scopes, and sending a shared stored id names the survivor's row for
+// deletion. A newly added page's client id records even when shared — it is
+// inert until reconciliation resolves it through the removed scope's mapping,
+// which drops ambiguous cases instead of guessing.
+export const confirmRemovedVariantPageDeletions = (
   product: Pick<DeletionSources, "confirmed_removed_rich_content_ids">,
-  pages: { move_source_id?: string }[],
+  removedPages: { id: string; newlyAdded?: boolean; move_source_id?: string }[],
+  survivingPageIds: ReadonlySet<string>,
 ): void => {
-  const moveSourceIds = pages.flatMap((page) => (page.move_source_id ? [page.move_source_id] : []));
-  if (moveSourceIds.length === 0) return;
+  const removedIds = removedPages.flatMap((page) => [
+    ...(page.newlyAdded || !survivingPageIds.has(page.id) ? [page.id] : []),
+    ...(page.move_source_id && !survivingPageIds.has(page.move_source_id) ? [page.move_source_id] : []),
+  ]);
+  if (removedIds.length === 0) return;
 
   product.confirmed_removed_rich_content_ids = [
-    ...new Set([...(product.confirmed_removed_rich_content_ids ?? []), ...moveSourceIds]),
+    ...new Set([...(product.confirmed_removed_rich_content_ids ?? []), ...removedIds]),
   ];
 };
 
