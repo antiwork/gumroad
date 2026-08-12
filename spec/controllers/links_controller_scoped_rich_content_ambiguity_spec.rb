@@ -2,10 +2,19 @@
 
 require "spec_helper"
 
-# Regression coverage for gumroad-private#2023: client page ids are unique per
-# scope, not globally, so `ensure_rich_content_ids_are_unambiguous!` must tally
-# them per scope — the same raw id in two different variants is legitimate
-# (shared/per-tier toggles produce it), while a same-scope collision stays rejected.
+# Regression coverage for gumroad-private#2023.
+#
+# `ensure_rich_content_ids_are_unambiguous!` used to tally submitted page ids
+# GLOBALLY across the whole save payload. Client-generated page ids are only
+# unique WITHIN a scope (product-level, or a given variant) — the same raw id
+# legitimately shows up once per variant when pages move between shared/
+# per-tier scopes in one save (e.g. toggling "use same content for all
+# versions"). The old global tally rejected that save outright with
+# "references the same content page more than once", before the request ever
+# reached the reconciliation logic PR#7178 fixed client-side — so the
+# client-side fix alone could never be exercised end-to-end for its own target
+# scenario. This spec pins that the same raw id in two DIFFERENT variant
+# scopes is accepted, while a genuine same-scope collision is still rejected.
 describe LinksController, type: :controller do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
@@ -41,7 +50,10 @@ describe LinksController, type: :controller do
     tier_a = create(:variant, variant_category: category, name: "Tier A")
     tier_b = create(:variant, variant_category: category, name: "Tier B")
 
-    # Same raw client id under two different variants — must be accepted.
+    # Same raw client id ("shared-client-id") submitted as a NEW page under
+    # two different variants — plausible after a shared/per-tier toggle
+    # round-trip generates both from the same source pass. This must be
+    # accepted: the ids are scoped per variant, not globally unique.
     params = editor_save_params(
       [
         {

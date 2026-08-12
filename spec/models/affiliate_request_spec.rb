@@ -209,7 +209,9 @@ describe AffiliateRequest do
       creator = create(:user)
       affiliate_user = create(:user)
       published_product_one = create(:product, user: creator)
+      published_product_two = create(:product, user: creator)
       create(:self_service_affiliate_product, enabled: true, seller: creator, product: published_product_one, affiliate_basis_points: 1000)
+      create(:self_service_affiliate_product, enabled: true, seller: creator, product: published_product_two, affiliate_basis_points: 1000)
       affiliate_request = create(:affiliate_request, seller: creator, email: affiliate_user.email)
 
       affiliate_workflow = create(:workflow, seller: creator, link: nil, workflow_type: Workflow::AFFILIATE_TYPE, published_at: 1.week.ago)
@@ -218,13 +220,38 @@ describe AffiliateRequest do
       installment2 = create(:installment, workflow: affiliate_workflow)
       create(:installment_rule, installment: installment2, delayed_delivery_time: 10.days)
 
-      expect_any_instance_of(DirectAffiliate).to receive(:schedule_workflow_jobs).and_call_original
-      expect do
+      travel_to Time.current.change(usec: 0) do
         expect do
-          affiliate_request.approve!
-        end.to change { affiliate_request.reload.approved? }.from(false).to(true)
-      end.to change { DirectAffiliate.count }.by(1)
+          expect do
+            affiliate_request.approve!
+          end.to change { affiliate_request.reload.approved? }.from(false).to(true)
+        end.to change { DirectAffiliate.count }.by(1)
+      end
+
+      affiliate = creator.direct_affiliates.sole
+      product_affiliates = affiliate.product_affiliates.order(:id).to_a
+      expect(product_affiliates.size).to eq(2)
+      workflow_schedule_token = product_affiliates.first.workflow_schedule_token
+      expect(product_affiliates.map(&:workflow_schedule_token).uniq).to eq([workflow_schedule_token])
+      expect(ScheduleAffiliateWorkflowJobsJob).to have_enqueued_sidekiq_job(workflow_schedule_token)
+      ScheduleAffiliateWorkflowJobsJob.new.perform(workflow_schedule_token)
       expect(SendWorkflowInstallmentWorker.jobs.size).to eq(2)
+    end
+
+    it "keeps workflow scheduling pending if Sidekiq is unavailable" do
+      creator = create(:user)
+      affiliate_user = create(:user)
+      product = create(:product, user: creator)
+      create(:self_service_affiliate_product, enabled: true, seller: creator, product:)
+      affiliate_request = create(:affiliate_request, seller: creator, email: affiliate_user.email)
+      allow(ScheduleAffiliateWorkflowJobsJob).to receive(:perform_async).and_raise("Redis is unavailable")
+      expect(Rails.logger).to receive(:error).with(/Redis is unavailable/)
+
+      affiliate_request.approve!
+
+      expect(affiliate_request.reload).to be_approved
+      affiliate = DirectAffiliate.find_by!(seller: creator)
+      expect(affiliate.product_affiliates.sole.workflow_schedule_token).to be_present
     end
   end
 

@@ -33,6 +33,13 @@ export type Page = {
   // id lets the save contract name exactly the row to delete.
   move_source_scope?: string | null;
   move_source_id?: string;
+  // Client-only identity stamped when a save snapshots the page. Ids repeat
+  // across scopes and a cancelled move erases move_source_scope, so scope,
+  // id, and marker together cannot always tell same-id pages apart once moves
+  // land mid-request; this can. Moves spread the page object, so it survives;
+  // copies rebuild pages field by field, so a copy correctly starts without
+  // one. The server ignores it.
+  reconciliation_id?: string;
   title: string | null;
   description: object;
   updated_at: string;

@@ -32,10 +32,10 @@ class Workflow < ApplicationRecord
     audience_type?
   end
 
-  def applies_to_purchase?(purchase)
+  def applies_to_purchase?(purchase, **filter_options)
     return false if product_type? && link_id != purchase.link_id
     return false if variant_type? && !purchase.variant_attributes.include?(base_variant)
-    purchase_passes_filters(purchase)
+    purchase_passes_filters(purchase, **filter_options)
   end
 
   def new_customer_trigger?
@@ -113,13 +113,23 @@ class Workflow < ApplicationRecord
     first_published_at.nil?
   end
 
-  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, minimum_rule_version: nil, schedule_intent_token: nil, schedule_intent_fanout_token: nil)
+  def schedule_installment(installment, old_delayed_delivery_time: nil, cutoff_reference_time: Time.current, reschedule_on_stale: false, minimum_rule_version: nil, schedule_intent_token: nil, schedule_intent_fanout_token: nil)
     return :not_applicable if installment.abandoned_cart_type?
     return :not_applicable unless alive?
     return :not_applicable unless installment.published?
 
+    delay_edit_recovery = reschedule_on_stale && old_delayed_delivery_time.present?
+
     if member_cancellation_trigger?
-      if send_to_past_customers?
+      if delay_edit_recovery
+        args = [installment.id, old_delayed_delivery_time, cutoff_reference_time.iso8601]
+        with_intent = minimum_rule_version.present? || schedule_intent_token.present? || schedule_intent_fanout_token.present?
+        args << minimum_rule_version if with_intent
+        args << schedule_intent_token if schedule_intent_token.present? || schedule_intent_fanout_token.present?
+        args << schedule_intent_fanout_token if schedule_intent_fanout_token.present?
+        job_id = SendWorkflowEmailsToPastCanceledMembersJob.perform_async(*args)
+        return job_id.present? ? :enqueued : :not_enqueued
+      elsif send_to_past_customers?
         args = [installment.id]
         with_intent = schedule_intent_token.present? || schedule_intent_fanout_token.present?
         args.concat([nil, nil, minimum_rule_version]) if minimum_rule_version.present? || with_intent
@@ -150,7 +160,8 @@ class Workflow < ApplicationRecord
 
     args = [installment.id, earliest_valid_time&.iso8601]
     with_intent = schedule_intent_token.present? || schedule_intent_fanout_token.present?
-    args.concat([false, minimum_rule_version]) if minimum_rule_version.present? || with_intent
+    args << delay_edit_recovery if delay_edit_recovery || minimum_rule_version.present? || with_intent
+    args << minimum_rule_version if minimum_rule_version.present? || with_intent
     args.concat([schedule_intent_token, schedule_intent_fanout_token]) if with_intent
     SendWorkflowPostEmailsJob.perform_async(*args).present? ? :enqueued : :not_enqueued
   end

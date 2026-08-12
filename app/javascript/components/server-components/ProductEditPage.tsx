@@ -7,6 +7,7 @@ import typia from "typia";
 import {
   applyRichContentPageSaveResponse,
   canonicalRichContentScope,
+  hasMoveSourceScope,
   HiddenVariantContentConflictError,
   reconcileConfirmedRemovalIds,
   richContentMoveSourceIds,
@@ -23,6 +24,7 @@ import { CurrencyCode } from "$app/utils/currency";
 import { useDedupeInFlight } from "$app/utils/dedupeInFlight";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
+import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -155,7 +157,15 @@ const createContextValue = (props: Props) => ({
   aiGenerated: props.ai_generated,
 });
 
-const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean => isEqual(pages1, pages2);
+// reconciliation_id is save plumbing, not content: the first save stamps
+// pages that the baseline clone predates, and that difference must not read
+// as a content change (it would offer customer notifications for pages the
+// seller never touched).
+const pagesHaveSameContent = (pages1: Page[], pages2: Page[]): boolean =>
+  isEqual(
+    pages1.map(({ reconciliation_id: _, ...page }) => page),
+    pages2.map(({ reconciliation_id: _, ...page }) => page),
+  );
 
 // Client-side mirror of RichContent#has_editor_content?: a page counts as
 // contentful when its tiptap document contains anything a buyer could see.
@@ -254,6 +264,83 @@ const applyCanonicalIds = (
   sentPagesById: ReadonlyMap<string, ScopedPage> = new Map(),
 ) => {
   const variantMappings = response.variant_id_mappings ?? {};
+  // Matching sent snapshots to current pages must be one-to-one: raw ids can
+  // repeat across scopes, and moves land while the request runs, so a page's
+  // current scoped key can point at ANOTHER page's sent entry (a chained
+  // move: A's page now sits in B while B's page moved on to C). The
+  // reconciliation_id stamped on every page at send time is exact identity —
+  // moves spread the page object, so the stamp travels with it. The passes
+  // after it recover pages whose stamp was lost to a flow that rebuilt the
+  // object, in confidence order, computed before the loops below rewrite ids
+  // in place:
+  //   1. an unmarked page sits where it was sent — its scoped key is identity;
+  //   2. a marked page whose scoped entry carries the SAME marker was sent in
+  //      place (its move predates the request);
+  //   3. a marked page's move began mid-flight from move_source_scope, so
+  //      that scope's entry is its snapshot (unless two pages contend);
+  //   4. a leftover page takes the only unclaimed entry with its raw id.
+  // Whatever stays unmatched reconciles without a snapshot, which skips the
+  // move bookkeeping rather than guessing (fail-safe).
+  const sentPageMatches = new Map<Page, ScopedPage>();
+  const claimedSentKeys = new Set<string>();
+  const currentScopedPages = allScopedRichContentPages(product);
+  const claimMatch = (page: Page, key: string) => {
+    if (sentPageMatches.has(page)) return;
+    const snapshot = sentPagesById.get(key);
+    if (!snapshot || claimedSentKeys.has(key)) return;
+    sentPageMatches.set(page, snapshot);
+    claimedSentKeys.add(key);
+  };
+  const sentPagesByReconciliationId = new Map<string, ScopedPage>();
+  for (const snapshot of sentPagesById.values()) {
+    if (snapshot.page.reconciliation_id) sentPagesByReconciliationId.set(snapshot.page.reconciliation_id, snapshot);
+  }
+  for (const { page } of currentScopedPages) {
+    const snapshot = page.reconciliation_id ? sentPagesByReconciliationId.get(page.reconciliation_id) : undefined;
+    if (snapshot) claimMatch(page, scopedRichContentPageKey(snapshot.scope, snapshot.page.id));
+  }
+  for (const { page, scope } of currentScopedPages) {
+    if (!hasMoveSourceScope(page)) claimMatch(page, scopedRichContentPageKey(scope, page.id));
+  }
+  for (const { page, scope } of currentScopedPages) {
+    if (sentPageMatches.has(page) || !hasMoveSourceScope(page)) continue;
+    const key = scopedRichContentPageKey(scope, page.id);
+    const snapshot = sentPagesById.get(key);
+    if (
+      snapshot &&
+      hasMoveSourceScope(snapshot.page) &&
+      snapshot.page.move_source_scope === page.move_source_scope &&
+      snapshot.page.move_source_id === page.move_source_id
+    ) {
+      claimMatch(page, key);
+    }
+  }
+  const markerContenders = new Map<string, Page[]>();
+  for (const { page } of currentScopedPages) {
+    if (sentPageMatches.has(page) || !hasMoveSourceScope(page)) continue;
+    const key = scopedRichContentPageKey(page.move_source_scope ?? null, page.id);
+    if (!sentPagesById.has(key) || claimedSentKeys.has(key)) continue;
+    markerContenders.set(key, [...(markerContenders.get(key) ?? []), page]);
+  }
+  for (const [key, pages] of markerContenders) {
+    if (pages.length === 1 && pages[0]) claimMatch(pages[0], key);
+  }
+  const unclaimedSentPagesByRawId = new Map<string, ScopedPage | null>();
+  for (const [key, snapshot] of sentPagesById) {
+    if (claimedSentKeys.has(key)) continue;
+    unclaimedSentPagesByRawId.set(snapshot.page.id, unclaimedSentPagesByRawId.has(snapshot.page.id) ? null : snapshot);
+  }
+  const rawIdContenders = new Map<string, Page[]>();
+  for (const { page } of currentScopedPages) {
+    if (sentPageMatches.has(page) || !unclaimedSentPagesByRawId.get(page.id)) continue;
+    rawIdContenders.set(page.id, [...(rawIdContenders.get(page.id) ?? []), page]);
+  }
+  for (const [rawId, pages] of rawIdContenders) {
+    const snapshot = unclaimedSentPagesByRawId.get(rawId);
+    if (snapshot && pages.length === 1 && pages[0]) {
+      claimMatch(pages[0], scopedRichContentPageKey(snapshot.scope, snapshot.page.id));
+    }
+  }
   const fileMappings = response.file_id_mappings ?? {};
   const variantTimestamps = response.variant_updated_at ?? {};
   const variantBaselines = response.variant_loaded_integrations ?? {};
@@ -301,26 +388,28 @@ const applyCanonicalIds = (
     const variantBaseline = variantBaselines[variant.id];
     if (variantBaseline) variant.loaded_integrations = variantBaseline;
     for (const page of variant.rich_content) {
-      const sent = sentPagesById.get(scopedRichContentPageKey(sentVariantId, page.id));
+      const sent = sentPageMatches.get(page);
       applyRichContentPageSaveResponse(
         page,
         response,
         sent?.page ?? page,
         variant.id,
         canonicalRichContentScope(sent?.scope, variantMappings),
-        sentVariantId,
+        // The server keyed this page's mapping by the scope it was SENT
+        // under, which for an in-flight move is not the current one.
+        sent !== undefined ? sent.scope : sentVariantId,
       );
     }
   }
   for (const page of product.rich_content) {
-    const sent = sentPagesById.get(scopedRichContentPageKey(null, page.id));
+    const sent = sentPageMatches.get(page);
     applyRichContentPageSaveResponse(
       page,
       response,
       sent?.page ?? page,
       null,
       canonicalRichContentScope(sent?.scope, variantMappings),
-      null,
+      sent !== undefined ? sent.scope : null,
     );
   }
 };
@@ -431,6 +520,19 @@ const ProductEditPage = (props: Props) => {
         ],
         preserved_rich_content_ids: conflictResolution.hiddenPageIds,
       };
+    }
+    // Stamp every page with its client-only identity before freezing the
+    // snapshot: reconciliation matches each page back to its sent snapshot by
+    // this stamp, because scope, id, and move marker together cannot always
+    // tell same-id pages apart once moves land mid-request (see Page).
+    // Stamping mutates the live page objects on purpose — the seller's moves
+    // spread those objects, carrying the stamp to wherever the page is when
+    // the response returns.
+    for (const page of [
+      ...productToSave.rich_content,
+      ...productToSave.variants.flatMap((variant) => variant.rich_content),
+    ]) {
+      page.reconciliation_id ??= GuidGenerator.generate();
     }
     // Freeze the exact request snapshot before awaiting the network. The seller
     // can keep editing while a save runs; response reconciliation must update

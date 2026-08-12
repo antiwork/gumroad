@@ -3,6 +3,104 @@
 require "spec_helper"
 
 describe Link do
+  describe "#publish! with an apply-to-all affiliate" do
+    it "creates the assignment through ProductAffiliate" do
+      seller = create(:user)
+      affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
+      product = create(:product, user: seller, draft: true)
+      expect(ProductAffiliate).to receive(:create_if_missing!).with(affiliate:, product:).and_call_original
+
+      expect do
+        product.publish!
+      end.to have_enqueued_mail(AffiliateMailer, :notify_direct_affiliate_of_new_product).with(affiliate.id, product.id)
+
+      expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_present
+    end
+
+    it "does not add apply-to-all affiliates to a collab product" do
+      seller = create(:user)
+      affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
+      product = create(:product, user: seller, draft: true, is_collab: true)
+
+      product.publish!
+
+      expect(product.reload).to be_published
+      expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_nil
+    end
+
+    it "uses the current collaboration state" do
+      seller = create(:user)
+      affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
+      product = create(:product, user: seller, draft: true, is_collab: true)
+      Link.find(product.id).update_flag!(:is_collab, false, true)
+
+      product.publish!
+
+      expect(product.reload).to be_published
+      expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_present
+    end
+
+    it "preserves concurrent changes to other flags" do
+      seller = create(:user)
+      product = create(:product, user: seller, draft: true, display_product_reviews: false)
+      allow(product).to receive(:auto_transcode_videos?).and_return(false)
+      Link.find(product.id).update_flag!(:display_product_reviews, true, true)
+
+      product.publish!
+
+      expect(product.reload).to be_display_product_reviews
+      expect(product).to be_transcode_videos_on_purchase
+    end
+
+    it "merges the caller's flag changes into the current flags" do
+      seller = create(:user)
+      product = create(:product, user: seller, draft: true, display_product_reviews: false, should_show_sales_count: false)
+      allow(product).to receive(:auto_transcode_videos?).and_return(false)
+      product.display_product_reviews = true
+      Link.find(product.id).update_flag!(:should_show_sales_count, true, true)
+
+      product.publish!
+
+      expect(product.reload).to be_display_product_reviews
+      expect(product).to be_should_show_sales_count
+    end
+
+    it "does not notify an affiliate when the assignment exists" do
+      seller = create(:user)
+      affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
+      product = create(:product, user: seller, draft: true)
+      create(:product_affiliate, affiliate:, product:)
+
+      expect do
+        product.publish!
+      end.not_to have_enqueued_mail(AffiliateMailer, :notify_direct_affiliate_of_new_product)
+
+      expect(ProductAffiliate.where(affiliate:, product:).count).to eq(1)
+    end
+
+    it "lets an assignment deadlock roll back the caller transaction" do
+      seller = create(:user)
+      affiliates = create_list(:direct_affiliate, 2, seller:, apply_to_all_products: true)
+      product = create(:product, user: seller, draft: true)
+      assignment_count = 0
+      allow(ProductAffiliate).to receive(:create_if_missing!).and_wrap_original do |method, **attributes|
+        assignment_count += 1
+        raise ActiveRecord::Deadlocked if assignment_count == 2
+
+        method.call(**attributes)
+      end
+      expect(AffiliateMailer).not_to receive(:notify_direct_affiliate_of_new_product)
+
+      expect do
+        ActiveRecord::Base.transaction { product.publish! }
+      end.to raise_error(ActiveRecord::Deadlocked)
+
+      expect(product.reload).not_to be_published
+      expect(ProductAffiliate.where(affiliate: affiliates, product:)).to be_empty
+      expect(assignment_count).to eq(2)
+    end
+  end
+
   describe "default offer code validation" do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller, price_cents: 2000) }

@@ -3,36 +3,35 @@
 class DominicanRepublicBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "DO"
 
-  BANK_CODE_FORMAT_REGEX = /^\d{1,3}$/
-  BRANCH_CODE_FORMAT_REGEX = /^\d{1,5}$/
-  ACCOUNT_NUMBER_FORMAT_REGEX = /^\d{1,28}$/
-  # Stripe requires the concatenated bank + branch code to be exactly 8 digits (format xxxxxxxx);
-  # the individual bank/branch regexes above are looser, so this catches valid-looking segments
-  # that combine to the wrong length.
-  ROUTING_NUMBER_FORMAT_REGEX = /\A\d{8}\z/
-  private_constant :BANK_CODE_FORMAT_REGEX, :BRANCH_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX,
-                   :ROUTING_NUMBER_FORMAT_REGEX
+  # Exactly 3 digits, not 1-3: gp#2050's Stripe test only confirmed 3-digit codes (003/007/021)
+  # as valid routing numbers. #7171 loosened this to 1-3 digits as a side effect of its own
+  # (unrelated, since-reverted) branch_code work; restoring the exact-3 constraint Nyoman set in
+  # 1301ff656 rather than reintroducing that unverified laxity.
+  BANK_CODE_FORMAT_REGEX = /\A\d{3}\z/
+  BRANCH_CODE_FORMAT_REGEX = /\A\d{1,5}\z/
+  ACCOUNT_NUMBER_FORMAT_REGEX = /\A\d{1,28}\z/
+  private_constant :BANK_CODE_FORMAT_REGEX, :BRANCH_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
 
   validate :validate_bank_code
-  # Only on write: branch_code was optional before this fix, so an existing row saved without one
-  # would otherwise fail validation on any unrelated future save (e.g. switching payout method).
-  validate :validate_branch_code, if: -> { new_record? || will_save_change_to_branch_code? }
-  # routing_number combines bank_code and branch_code, so a bank-code-only edit (bank_code is
-  # aliased to bank_number) must re-check it too, not just branch_code changes.
-  validate :validate_routing_number, if: -> { new_record? || will_save_change_to_branch_code? || will_save_change_to_bank_number? }
+  # Branch code is optional (Stripe accepts the bare bank_code alone, per gp#2050's live test
+  # results), but any value a seller DOES enter still needs a format guard even though it isn't
+  # sent to Stripe (see #routing_number) — an unvalidated column value is still a stored trust
+  # boundary, and a future caller of branch_code shouldn't inherit garbage input silently.
+  validate :validate_branch_code
   validate :validate_account_number
 
   validates :bank_code, presence: true
-  validates :branch_code, presence: true, if: -> { new_record? || will_save_change_to_branch_code? }
   validates :account_number, presence: true
 
-  # Stripe rejects a routing number without both segments concatenated with no separator
-  # (routing_number_invalid: "must contain both the bank code and the branch code ... format
-  # xxxxxxxx"), so branch_code can't stay optional and the dash has to go.
+  # Only bank_code is Stripe-verified: gp#2050 confirmed 3-digit codes (003/007/021) succeed and
+  # 8-digit bank+branch concatenations fail with routing_number_invalid. Nothing has tested a
+  # dash-joined bank_code-branch_code value, and the concatenated format is the one Stripe's own
+  # error message says it wants instead — so branch_code, while still collected, is NEVER fed into
+  # the value sent to Stripe until a branch-code-present case is actually verified against Stripe.
   def routing_number
-    "#{bank_code}#{branch_code}"
+    bank_code
   end
 
   def bank_account_type
@@ -66,13 +65,10 @@ class DominicanRepublicBankAccount < BankAccount
     end
 
     def validate_branch_code
-      return if BRANCH_CODE_FORMAT_REGEX.match?(branch_code)
+      # Presence is optional (nil/blank branch_code is a valid, Stripe-accepted account) — only
+      # reject a PRESENT value that doesn't match, so blank keeps passing.
+      return if branch_code.blank? || BRANCH_CODE_FORMAT_REGEX.match?(branch_code)
       errors.add :base, "The branch code is invalid."
-    end
-
-    def validate_routing_number
-      return if ROUTING_NUMBER_FORMAT_REGEX.match?(routing_number)
-      errors.add :base, "The bank code and branch code together must be 8 digits."
     end
 
     def validate_account_number

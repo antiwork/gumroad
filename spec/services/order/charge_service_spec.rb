@@ -1349,6 +1349,32 @@ describe Order::ChargeService, :vcr do
       expect(charge_responses[charge_responses.keys[0]]).to eq(order.purchases.last.purchase_response)
     end
 
+    it "does not read a missing payment intent when a mandate card's processor outcome is already handled" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      credit_card = instance_double(CreditCard, requires_mandate?: true, update!: true)
+      charge = instance_double(Charge, charge_intent: nil, credit_card:)
+      processor_error = Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      create_service = instance_double(Charge::CreateService)
+      allow(create_service).to receive(:perform) do
+        purchase.errors.add(:base, processor_error)
+        charge
+      end
+      service = Order::ChargeService.new(order:, params: {})
+      allow(service).to receive(:mandate_options_for_stripe).and_return(nil)
+      allow(Charge::CreateService).to receive(:new).and_return(create_service)
+
+      expect { service.send(:create_charge_for_seller_purchases, [purchase], instance_double(Chargeable), false, false) }.not_to raise_error
+      expect(purchase.errors[:base]).to eq([processor_error])
+      expect(credit_card).not_to have_received(:update!)
+    end
+
     it "fixes a preorder release price when its setup intent is created" do
       configure_seller_1_for_presentment_charges
       create(:merchant_account_stripe_connect,
