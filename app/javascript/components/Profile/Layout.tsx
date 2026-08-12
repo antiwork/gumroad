@@ -49,7 +49,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
     <div className="flex min-h-screen flex-col">
       <header className="z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap lg:flex-nowrap lg:items-center lg:gap-6">
-          <div className="relative flex grow items-center gap-3 border-b border-border p-4 lg:flex-1 lg:border-0 lg:p-0">
+          <div className="relative flex min-w-0 grow flex-wrap items-center gap-3 border-b border-border p-4 lg:flex-1 lg:flex-nowrap lg:border-0 lg:p-0">
             {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
             creatorProfile.external_id !== loggedInUser.id ? (
               <NavigationButton
@@ -64,22 +64,16 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
               </NavigationButton>
             ) : null}
             {creatorProfile.avatar_url ? <Avatar src={creatorProfile.avatar_url} alt="Profile Picture" /> : null}
-            <a
-              href={Routes.root_path()}
-              className="flex shrink-0 items-center gap-2 whitespace-nowrap no-underline"
-            >
-              {creatorProfile.name}
+            <a href={Routes.root_path()} className="flex max-w-full min-w-0 items-center gap-2 no-underline">
+              <span className="truncate">{creatorProfile.name}</span>
               {creatorProfile.is_verified ? (
-                <WithTooltip tip="Top creator" position="bottom">
+                <WithTooltip tip="Top creator" position="bottom" className="shrink-0">
                   <TopCreatorBadge />
                 </WithTooltip>
               ) : null}
             </a>
             {creatorProfile.reputation ? (
-              <div
-                className="flex min-w-0 flex-wrap items-center gap-1 text-sm text-muted"
-                aria-label="Creator rating"
-              >
+              <div className="flex min-w-0 flex-wrap items-center gap-1 text-sm text-muted" aria-label="Creator rating">
                 <Star pack="filled" className="size-4" />
                 {`${creatorProfile.reputation.average} from ${creatorProfile.reputation.count} verified ${creatorProfile.reputation.count === 1 ? "review" : "reviews"} across ${creatorProfile.reputation.products_count} products`}
               </div>
