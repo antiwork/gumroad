@@ -64,7 +64,10 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
               </NavigationButton>
             ) : null}
             {creatorProfile.avatar_url ? <Avatar src={creatorProfile.avatar_url} alt="Profile Picture" /> : null}
-            <a href={Routes.root_path()} className="flex items-center gap-2 no-underline">
+            <a
+              href={Routes.root_path()}
+              className="flex shrink-0 items-center gap-2 whitespace-nowrap no-underline"
+            >
               {creatorProfile.name}
               {creatorProfile.is_verified ? (
                 <WithTooltip tip="Top creator" position="bottom">
@@ -73,7 +76,10 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
               ) : null}
             </a>
             {creatorProfile.reputation ? (
-              <div className="flex items-center gap-1 text-sm text-muted" aria-label="Creator rating">
+              <div
+                className="flex min-w-0 flex-wrap items-center gap-1 text-sm text-muted"
+                aria-label="Creator rating"
+              >
                 <Star pack="filled" className="size-4" />
                 {`${creatorProfile.reputation.average} from ${creatorProfile.reputation.count} verified ${creatorProfile.reputation.count === 1 ? "review" : "reviews"} across ${creatorProfile.reputation.products_count} products`}
               </div>
