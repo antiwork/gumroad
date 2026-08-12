@@ -545,4 +545,110 @@ describe Api::Internal::Admin::ProductsController do
       expect(row).not_to have_key("recent_chargeback_rate")
     end
   end
+
+  describe "GET file_download_url" do
+    include_examples "admin api authorization required", :get, :file_download_url, { id: "fake", file_id: "fake" }
+
+    let(:product) { create(:product, user: seller) }
+    let(:product_file) { create(:readable_document, link: product, display_name: "Anthology") }
+
+    before do
+      per_actor_token = AdminApiToken.mint!(actor_user_id: admin_user.id)
+      request.headers["Authorization"] = "Bearer #{per_actor_token}"
+    end
+
+    it "rejects the legacy shared admin token" do
+      request.headers["Authorization"] = "Bearer test-admin-token"
+
+      get :file_download_url, params: { id: product.external_id, file_id: product_file.external_id }
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body["message"]).to eq("per-actor admin token is required")
+    end
+
+    it "returns not found when no product matches" do
+      get :file_download_url, params: { id: "fake", file_id: product_file.external_id }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "Product not found" }.as_json)
+    end
+
+    it "returns not found when the file does not belong to the product" do
+      other_product = create(:product, user: seller)
+      foreign_file = create(:readable_document, link: other_product)
+
+      get :file_download_url, params: { id: product.external_id, file_id: foreign_file.external_id }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "File not found" }.as_json)
+    end
+
+    it "returns the signed URL with the file metadata" do
+      allow_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename)
+        .and_return("https://files.example.com/signed?sig=abc")
+
+      get :file_download_url, params: { id: product.external_id, file_id: product_file.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "success" => true,
+        "signed_url" => "https://files.example.com/signed?sig=abc",
+        "external_link" => false
+      )
+      expect(response.parsed_body["file"]).to include(
+        "id" => product_file.external_id,
+        "display_name" => "Anthology"
+      )
+    end
+
+    it "returns the signed URL for a soft-deleted file" do
+      allow_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename)
+        .and_return("https://files.example.com/signed?sig=deleted")
+      product_file.mark_deleted!
+
+      get :file_download_url, params: { id: product.external_id, file_id: product_file.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["signed_url"]).to eq("https://files.example.com/signed?sig=deleted")
+      expect(response.parsed_body["file"]["deleted_at"]).to be_present
+    end
+
+    it "returns the raw URL for external-link files" do
+      external = create(:external_link, link: product)
+
+      get :file_download_url, params: { id: product.external_id, file_id: external.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include(
+        "signed_url" => external.url,
+        "external_link" => true
+      )
+    end
+
+    it "returns not found when the file is missing from storage" do
+      allow_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename)
+        .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+      get :file_download_url, params: { id: product.external_id, file_id: product_file.external_id }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "File is not available in storage" }.as_json)
+    end
+
+    it "writes an audit log row for the download" do
+      allow_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename)
+        .and_return("https://files.example.com/signed?sig=abc")
+
+      expect do
+        get :file_download_url, params: { id: product.external_id, file_id: product_file.external_id }
+      end.to change { AdminApiAuditLog.count }.by(1)
+
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "products.file_download_url",
+        target_type: "ProductFile",
+        target_external_id: product_file.external_id,
+        actor_user_id: admin_user.id
+      )
+    end
+  end
 end
