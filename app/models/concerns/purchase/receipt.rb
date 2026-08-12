@@ -32,6 +32,7 @@ module Purchase::Receipt
 
   def split_charge_receipt_sent?
     return false unless uses_charge_receipt?
+    return false unless charge.split_receipt_eligible?
 
     CustomerEmailInfo.where(
       purchase_id: charge.successful_purchases.select(:id),

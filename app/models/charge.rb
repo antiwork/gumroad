@@ -259,12 +259,16 @@ class Charge < ApplicationRecord
     receipt_email_infos.last
   end
 
+  def split_receipt_eligible?
+    successful_purchases.size == 2
+  end
+
   # Every send attempt for this charge, oldest first. See
   # Purchase::Receipt#receipt_email_infos.
   def receipt_email_infos
     # Queries `email_info_charges` first to leverage the index since there is no `purchase_id` on the associated
     # `email_infos` record (`email_infos` has > 1b records, and relies on `purchase_id` index)
-    EmailInfoCharge.includes(:email_info)
+    charge_email_infos = EmailInfoCharge.includes(:email_info)
       .where(charge_id: id)
       .where(
         email_infos: {
@@ -274,6 +278,17 @@ class Charge < ApplicationRecord
       )
       .order(:email_info_id)
       .map(&:email_info)
+
+    purchase_email_infos = if split_receipt_eligible?
+      CustomerEmailInfo
+        .where(purchase_id: successful_purchases.select(:id), email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
+        .order(:id)
+        .to_a
+    else
+      []
+    end
+
+    (charge_email_infos + purchase_email_infos).sort_by(&:id)
   end
 
   def first_purchase_for_subscription

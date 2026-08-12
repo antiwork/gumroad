@@ -175,6 +175,23 @@ describe CustomerEmailInfo do
       expect(charge.reload.receipt_email_infos.map(&:id)).to eq([first.id, resend.id])
     end
 
+    it "includes purchase-keyed split sends in charge history" do
+      seller = create(:named_seller)
+      purchase_one = create(:purchase, link: create(:product, user: seller), seller:)
+      purchase_two = create(:purchase, link: create(:product, user: seller), seller:)
+      charge = create(:charge, purchases: [purchase_one, purchase_two], seller:)
+
+      first = CustomerEmailInfo.build_for_charge(charge_id: charge.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
+      first.mark_sent!
+      split_one = CustomerEmailInfo.build_for_purchase(purchase_id: purchase_one.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
+      split_one.mark_sent!
+      split_two = CustomerEmailInfo.build_for_purchase(purchase_id: purchase_two.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
+      split_two.mark_sent!
+
+      expect(charge.reload.receipt_email_infos).to eq([first, split_one, split_two])
+      expect(charge.receipt_email_info).to eq(split_two)
+    end
+
     # Providers deliver events at-least-once and out of order, so an event for
     # the original send can arrive after a resend exists. Attributing it to the
     # resend would manufacture history: a row showing delivery for an email it
