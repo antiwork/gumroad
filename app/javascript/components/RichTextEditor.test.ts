@@ -4,9 +4,14 @@ import { Editor, getSchema, Node } from "@tiptap/core";
 import { undoDepth } from "@tiptap/pm/history";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { dropUnknownNodes, useRichTextEditor, validateUrl } from "$app/components/RichTextEditor";
+import {
+  dropUnknownNodes,
+  lastContentResetFailed,
+  useRichTextEditor,
+  validateUrl,
+} from "$app/components/RichTextEditor";
 
 // vite.config.ts's `define` replaces the bare `SSR` identifier at build time; vitest doesn't run
 // through that build step, so stub the global here for the hook test below.
@@ -211,5 +216,144 @@ describe("useRichTextEditor", () => {
       await Promise.resolve();
     });
     expect(getEditor().getText()).toBe("PAGE B");
+  });
+
+  // The deferred reset runs inside queueMicrotask, which swallows exceptions.
+  // A doc the schema refuses used to die there silently: the PREVIOUS content
+  // stayed mounted while the UI claimed the new selection, and callers had no
+  // signal to block writes (gumroad-private#2023's display symptom).
+  it("keeps the previous doc, records the failure, and recovers when a reset throws", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    let editor: Editor | null = null;
+    const Harness = ({ initialValue }: { initialValue: object }) => {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- exercising the hook's public Content type
+      editor = useRichTextEditor({ initialValue: initialValue as never });
+      return null;
+    };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
+
+    const valid = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "first" }] }] };
+    // A known node type with an invalid shape: dropUnknownNodes keeps it, and
+    // ProseMirror's nodeFromJSON throws on a text node without text.
+    const poison = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text" }] }] };
+    const { rerender } = render(React.createElement(Harness, { initialValue: valid }));
+    expect(getEditor().getText()).toBe("first");
+
+    rerender(React.createElement(Harness, { initialValue: poison }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getEditor().getText()).toBe("first");
+    expect(lastContentResetFailed(getEditor())).toBe(true);
+    expect(consoleError).toHaveBeenCalledWith("RichTextEditor: content reset failed", expect.anything());
+
+    const next = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "second" }] }] };
+    rerender(React.createElement(Harness, { initialValue: next }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getEditor().getText()).toBe("second");
+    expect(lastContentResetFailed(getEditor())).toBe(false);
+    consoleError.mockRestore();
+  });
+
+  // The strict content check must not regress HTML consumers: stored product
+  // HTML legitimately contains tags with no schema rule (e.g. span), and the
+  // lenient DOM parse keeps their supported children.
+  it("keeps parsing HTML strings leniently when they contain unsupported tags", async () => {
+    let editor: Editor | null = null;
+    const Harness = ({ initialValue }: { initialValue: string }) => {
+      editor = useRichTextEditor({ initialValue });
+      return null;
+    };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
+
+    const { rerender } = render(React.createElement(Harness, { initialValue: "<p>first</p>" }));
+    expect(getEditor().getText()).toBe("first");
+
+    rerender(React.createElement(Harness, { initialValue: "<p><span>kept</span></p>" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getEditor().getText()).toBe("kept");
+    expect(lastContentResetFailed(getEditor())).toBe(false);
+  });
+
+  // useEditor's own creation path mounts an EMPTY doc for malformed initial
+  // content without any signal. The reset effect re-runs when the editor
+  // materializes, so the very first content also goes through the strict
+  // check and records the failure.
+  it("records the failure when the INITIAL content is malformed", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    let editor: Editor | null = null;
+    const Harness = ({ initialValue }: { initialValue: object }) => {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- exercising the hook's public Content type
+      editor = useRichTextEditor({ initialValue: initialValue as never });
+      return null;
+    };
+
+    const poison = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text" }] }] };
+    render(React.createElement(Harness, { initialValue: poison }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    if (!editor) throw new Error("editor did not mount");
+    expect(lastContentResetFailed(editor)).toBe(true);
+    expect(consoleError).toHaveBeenCalledWith("RichTextEditor: content reset failed", expect.anything());
+    consoleError.mockRestore();
+  });
+
+  // Edits typed while a failed selection was displayed land on the STALE
+  // mounted doc. Returning to the previous content must reset the editor from
+  // state even though that content's identity never changed — otherwise the
+  // stray edits would be attributed to it on the next update or blur.
+  it("discards edits made over a stale doc when returning to the last valid content", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    let editor: Editor | null = null;
+    const Harness = ({ initialValue }: { initialValue: object }) => {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- exercising the hook's public Content type
+      editor = useRichTextEditor({ initialValue: initialValue as never });
+      return null;
+    };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
+
+    // A STRING content: the processed value compares equal across recomputes,
+    // which is the one path where the identity check alone would skip the
+    // recovery reset (object contents get a fresh identity from the memo).
+    const pageA = "<p>PAGE A</p>";
+    const poison = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text" }] }] };
+    const { rerender } = render(React.createElement(Harness, { initialValue: pageA }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getEditor().getText()).toBe("PAGE A");
+
+    rerender(React.createElement(Harness, { initialValue: poison }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(lastContentResetFailed(getEditor())).toBe(true);
+    // The seller types into what LOOKS like the new page but is the stale doc.
+    act(() => {
+      getEditor().chain().focus("end").insertContent(" STRAY").run();
+    });
+    expect(getEditor().getText()).toBe("PAGE A STRAY");
+
+    rerender(React.createElement(Harness, { initialValue: pageA }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getEditor().getText()).toBe("PAGE A");
+    expect(lastContentResetFailed(getEditor())).toBe(false);
+    consoleError.mockRestore();
   });
 });

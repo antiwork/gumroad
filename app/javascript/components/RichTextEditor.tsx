@@ -402,23 +402,60 @@ export const useRichTextEditor = ({
 
   React.useEffect(() => editor?.setOptions({ editable }), [editable]);
 
+  // What useEditor itself applied at creation. The effect below also fires
+  // when the editor materializes (`editor` dep); replaying the same content
+  // there would discard anything typed since creation, so that run validates
+  // without replacing the state.
+  const appliedContentRef = React.useRef(content);
+  // `editor` is a dependency on purpose: with immediatelyRender: false it is
+  // null on the first render, and useEditor's own creation path silently
+  // mounts an EMPTY doc for malformed initial content — the strict check must
+  // also cover the very first content once the editor exists.
   React.useEffect(
     () =>
       queueMicrotask(() => {
-        // discard any history from before content was reset
-        editor?.view.updateState(
-          EditorState.create({
-            doc: createDocument(content, editor.state.schema),
-            schema: editor.schema,
-            plugins: editor.state.plugins,
-          }),
-        );
+        if (!editor) return;
+        try {
+          // Strict only for JSON docs: without errorOnInvalidContent an
+          // unparseable doc silently mounts EMPTY, and the next update/blur
+          // serializes that emptiness over the real stored content. HTML
+          // strings keep the lenient parse — stored product HTML legitimately
+          // contains tags with no schema rule, and the DOM parser degrades by
+          // keeping their supported children.
+          const doc = createDocument(content, editor.state.schema, undefined, {
+            errorOnInvalidContent: typeof content !== "string",
+          });
+          // Also reset when RECOVERING from a failure with unchanged content:
+          // the mounted doc may carry edits typed while the failed selection
+          // was displayed, and skipping the reset would let a later update
+          // attribute them to this content.
+          if (appliedContentRef.current !== content || contentResetFailures.has(editor)) {
+            // discard any history from before content was reset
+            editor.view.updateState(EditorState.create({ doc, schema: editor.schema, plugins: editor.state.plugins }));
+          }
+          appliedContentRef.current = content;
+          contentResetFailures.delete(editor);
+        } catch (error) {
+          // The previous (or empty initial) doc stays mounted while the UI
+          // claims the new selection. Record the failure so callers that gate
+          // writes on the mounted doc (ContentTab's editorContentPageIdRef)
+          // keep them blocked.
+          contentResetFailures.set(editor, error);
+          // eslint-disable-next-line no-console
+          console.error("RichTextEditor: content reset failed", error);
+        }
       }),
-    [content],
+    [content, editor],
   );
 
   return editor ?? null;
 };
+
+// Editors whose most recent content reset threw. queueMicrotask swallows
+// exceptions, so this is the only signal that the mounted doc does not match
+// the content the caller last passed in.
+const contentResetFailures = new WeakMap<Editor, unknown>();
+export const lastContentResetFailed = (editor: Editor) => contentResetFailures.has(editor);
 
 export const RichTextEditorToolbar = ({
   editor,
