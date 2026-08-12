@@ -31,6 +31,7 @@ vi.mock("$app/components/Checkout/PaymentElementInput", () => ({
 }));
 vi.mock("$app/components/useRecaptcha", () => ({
   useRecaptcha: () => ({ execute: vi.fn(), container: null }),
+  RecaptchaDisclosure: () => null,
   RECAPTCHA_UNAVAILABLE_MESSAGE: "unavailable",
   RecaptchaUnavailableError: class extends Error {},
   RecaptchaCancelledError: class extends Error {},

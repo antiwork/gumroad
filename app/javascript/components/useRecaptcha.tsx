@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
+
 export class RecaptchaCancelledError extends Error {}
 
 // Thrown when reCAPTCHA itself never produced a token for a reason that was NOT the user
@@ -191,3 +193,21 @@ export function useRecaptcha({
     execute,
   };
 }
+
+// Google's floating badge is hidden globally (.grecaptcha-badge in _global.scss) because it
+// covers the mobile CtaBar's Add to cart button. Google's terms allow hiding it only when the
+// branding disclosure appears inline in the protected flow — render this wherever a
+// useRecaptcha surface submits.
+export const RecaptchaDisclosure = ({ className }: { className?: string }) => (
+  <p className={classNames("text-xs text-muted", className)}>
+    This site is protected by reCAPTCHA and the Google{" "}
+    <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
+      Privacy Policy
+    </a>{" "}
+    and{" "}
+    <a href="https://policies.google.com/terms" target="_blank" rel="noreferrer">
+      Terms of Service
+    </a>{" "}
+    apply.
+  </p>
+);

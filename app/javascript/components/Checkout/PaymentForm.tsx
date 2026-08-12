@@ -84,6 +84,7 @@ import { useOnChangeSync } from "$app/components/useOnChange";
 import {
   RECAPTCHA_UNAVAILABLE_MESSAGE,
   RecaptchaCancelledError,
+  RecaptchaDisclosure,
   RecaptchaUnavailableError,
   useRecaptcha,
 } from "$app/components/useRecaptcha";
@@ -1936,6 +1937,7 @@ export const PaymentForm = ({
       )}
       {recaptcha.container}
       {challengeRecaptcha.container}
+      {state.recaptchaKey != null ? <RecaptchaDisclosure /> : null}
     </div>
   );
 };
