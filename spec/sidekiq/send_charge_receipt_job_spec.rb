@@ -91,6 +91,20 @@ describe SendChargeReceiptJob do
         expect(charge.reload.receipt_sent?).to be(true)
       end
 
+      it "keeps a historical combined receipt when the charge is not marked sent" do
+        create(
+          :customer_email_info,
+          purchase: nil,
+          email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+          email_info_charge_attributes: { charge_id: charge.id },
+        )
+
+        described_class.new.perform(charge.id)
+
+        expect(CustomerMailer).not_to have_received(:receipt)
+        expect(charge.reload.receipt_sent?).to be(true)
+      end
+
       it "keeps the first purchase's sent marker and does not resend it, even when the second delivery raises" do
         # Each successful delivery commits its marker outside the later charge transaction.
         call_count = 0

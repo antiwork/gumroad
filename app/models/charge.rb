@@ -263,12 +263,22 @@ class Charge < ApplicationRecord
     successful_purchases.size == 2
   end
 
-  # Every send attempt for this charge, oldest first. See
-  # Purchase::Receipt#receipt_email_infos.
-  def receipt_email_infos
+  def split_receipt_mode?
+    return false unless split_receipt_eligible?
+
+    split_receipt_sent? || combined_receipt_email_infos.empty?
+  end
+
+  def split_receipt_sent?
+    return false unless split_receipt_eligible?
+
+    split_receipt_email_info_scope.exists?
+  end
+
+  def combined_receipt_email_infos
     # Queries `email_info_charges` first to leverage the index since there is no `purchase_id` on the associated
     # `email_infos` record (`email_infos` has > 1b records, and relies on `purchase_id` index)
-    charge_email_infos = EmailInfoCharge.includes(:email_info)
+    EmailInfoCharge.includes(:email_info)
       .where(charge_id: id)
       .where(
         email_infos: {
@@ -278,17 +288,18 @@ class Charge < ApplicationRecord
       )
       .order(:email_info_id)
       .map(&:email_info)
+  end
 
-    purchase_email_infos = if split_receipt_eligible?
-      CustomerEmailInfo
-        .where(purchase_id: successful_purchases.select(:id), email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
-        .order(:id)
-        .to_a
-    else
-      []
-    end
+  def split_receipt_email_infos
+    return [] unless split_receipt_eligible?
 
-    (charge_email_infos + purchase_email_infos).sort_by(&:id)
+    split_receipt_email_info_scope.order(:id).to_a
+  end
+
+  # Every send attempt for this charge, oldest first. See
+  # Purchase::Receipt#receipt_email_infos.
+  def receipt_email_infos
+    (combined_receipt_email_infos + split_receipt_email_infos).sort_by(&:id)
   end
 
   def first_purchase_for_subscription
@@ -300,6 +311,13 @@ class Charge < ApplicationRecord
   end
 
   private
+    def split_receipt_email_info_scope
+      CustomerEmailInfo.where(
+        purchase_id: successful_purchases.select(:id),
+        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+      )
+    end
+
     # Combined-charge refunds update every purchase in the charge plus the shared
     # seller balance inside one transaction. Each Purchase#refund_purchase! locks
     # its purchase row and then the balance, so without this pre-pass the

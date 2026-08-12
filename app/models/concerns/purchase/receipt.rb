@@ -32,12 +32,8 @@ module Purchase::Receipt
 
   def split_charge_receipt_sent?
     return false unless uses_charge_receipt?
-    return false unless charge.split_receipt_eligible?
 
-    CustomerEmailInfo.where(
-      purchase_id: charge.successful_purchases.select(:id),
-      email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
-    ).exists?
+    charge.split_receipt_sent?
   end
 
   def send_receipt

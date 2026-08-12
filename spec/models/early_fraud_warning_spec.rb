@@ -174,6 +174,40 @@ describe EarlyFraudWarning do
             expect(early_fraud_warning.purchase_for_subscription_contactable?).to eq(false)
           end
         end
+
+        context "when a resend bounces after an earlier delivery" do
+          before do
+            create(:customer_email_info_delivered, purchase:)
+            create(:customer_email_info, purchase:, state: "bounced")
+          end
+
+          it "returns false" do
+            expect(early_fraud_warning.purchase_for_subscription_contactable?).to eq(false)
+          end
+        end
+      end
+    end
+
+    context "when a two-item charge contains a subscription" do
+      let(:subscription_purchase) { create(:membership_purchase) }
+      let(:other_product) { create(:product, user: subscription_purchase.seller) }
+      let(:other_purchase) { create(:purchase, link: other_product, seller: subscription_purchase.seller) }
+      let(:charge) { create(:charge, purchases: [subscription_purchase, other_purchase], seller: subscription_purchase.seller) }
+      let!(:early_fraud_warning) do
+        create(
+          :early_fraud_warning,
+          purchase: nil,
+          charge:,
+          fraud_type: EarlyFraudWarning::FRAUD_TYPE_UNAUTHORIZED_USE_OF_CARD,
+          charge_risk_level: EarlyFraudWarning::CHARGE_RISK_LEVEL_NORMAL,
+        )
+      end
+
+      it "returns true when one split receipt was delivered and the other bounced" do
+        create(:customer_email_info_delivered, purchase: subscription_purchase)
+        create(:customer_email_info, purchase: other_purchase, state: "bounced")
+
+        expect(early_fraud_warning.purchase_for_subscription_contactable?).to eq(true)
       end
     end
   end
