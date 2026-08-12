@@ -18,6 +18,15 @@ describe SendChargeReceiptJob do
     allow(CustomerMailer).to receive_message_chain(:receipt, :deliver_now)
   end
 
+  it "deduplicates the same charge across the default and critical queues" do
+    default_job = { "class" => described_class.name, "queue" => "default", "lock_args" => [charge.id] }
+    critical_job = default_job.merge("queue" => "critical")
+
+    expect(SidekiqUniqueJobs::LockDigest.call(default_job)).to eq(SidekiqUniqueJobs::LockDigest.call(critical_job))
+    expect(described_class.sidekiq_options["lock"]).to eq(:until_executed)
+    expect(described_class.sidekiq_options["unique_across_queues"]).to be(true)
+  end
+
   context "with all purchases ready" do
     context "for a single-item order" do
       let(:charge) { create(:charge, purchases: [purchase_one], seller: seller) }

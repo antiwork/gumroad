@@ -5,7 +5,7 @@
 #
 class SendChargeReceiptJob
   include Sidekiq::Job
-  sidekiq_options queue: :critical, retry: 5, lock: :until_executed
+  sidekiq_options queue: :critical, retry: 5, lock: :until_executed, unique_across_queues: true
 
   def perform(charge_id)
     charge = Charge.find(charge_id)
@@ -27,9 +27,6 @@ class SendChargeReceiptJob
   end
 
   private
-    # 3+-item orders keep the combined, itemized receipt; exactly-2-item orders (e.g.
-    # a free + paid variant bought together) get one receipt per purchase so neither
-    # reads as unsent (gumroad-private#2025).
     def send_receipts(charge)
       purchases = charge.unbundled_purchases
       if purchases.count == 2
