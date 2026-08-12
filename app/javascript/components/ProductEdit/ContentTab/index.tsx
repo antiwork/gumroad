@@ -22,7 +22,7 @@ import {
   Star,
   TwitterX,
 } from "@boxicons/react";
-import { findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
+import { type Editor, findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { EditorContent } from "@tiptap/react";
 import { parseISO } from "date-fns";
@@ -70,6 +70,7 @@ import { ReviewForm } from "$app/components/ReviewForm";
 import {
   baseEditorOptions,
   getInsertAtFromSelection,
+  lastContentResetFailed,
   PopoverMenuItem,
   RichTextEditorToolbar,
   useImageUploadSettings,
@@ -115,6 +116,22 @@ declare global {
     ___dropbox_files_picked: DropboxFile[] | null;
   }
 }
+
+// "Reset requested, not yet confirmed" marker for the mounted-doc identity
+// guard. Distinct from undefined on purpose: undefined is the VALID no-page
+// selection, and conflating the two lets a write fire in the switch window to
+// an empty variant — addPage would copy the stale doc into it.
+const EDITOR_CONTENT_PENDING = Symbol("editor-content-pending");
+
+// Fallback node search for a stored doc the schema cannot parse: walks the
+// raw JSON so single-instance checks (license key) stay fail-closed even when
+// the doc also contains invalid nodes.
+export const rawDocContainsNode = (value: unknown, type: string): boolean => {
+  if (Array.isArray(value)) return value.some((child) => rawDocContainsNode(child, type));
+  if (typeof value !== "object" || value === null) return false;
+  if ("type" in value && value.type === type) return true;
+  return "content" in value && rawDocContainsNode(value.content, type);
+};
 
 export const extensions = (productId: string, extraExtensions: TiptapNode[] = []) => [
   ...extraExtensions,
@@ -252,12 +269,20 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   const selectedPage = pages.find((page) => page.id === selectedPageId);
   if ((selectedPageId || pages.length) && !selectedPage) setSelectedPageId(pages[0]?.id);
   const [renamingPageId, setRenamingPageId] = React.useState<string | null>(null);
+  // A rename in progress names a page by raw id; after a variant switch that
+  // id can address a DIFFERENT page in the new variant. Close the rename
+  // instead of letting it carry over.
+  React.useEffect(() => setRenamingPageId(null), [selectedVariantId]);
   const [confirmingDeletePage, setConfirmingDeletePage] = React.useState<Page | null>(null);
   const [pagesExpanded, setPagesExpanded] = React.useState(false);
   const showPageList =
     pages.length > 1 || selectedPage?.title || renamingPageId != null || product.native_type === "commission";
   const [insertMenuState, setInsertMenuState] = React.useState<"open" | "inputs" | null>(null);
-  const initialValue = React.useMemo(() => selectedPage?.description ?? "", [selectedPageId]);
+  // Page identity is scope + id: two variants' pages can share a raw id
+  // before save reconciliation, so raw-id keys miss same-id variant switches.
+  const selectedScopedPageKey =
+    selectedPageId == null ? undefined : scopedRichContentPageKey(selectedVariant?.id ?? null, selectedPageId);
+  const initialValue = React.useMemo(() => selectedPage?.description ?? "", [selectedScopedPageKey]);
 
   const onSelectFiles = (ids: string[]) => {
     if (!editor) return;
@@ -358,15 +383,27 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
   const removedFileEmbedIds = removedFileEmbedIdsForPage(selectedPage, richContentRemovedFileEmbedIds);
-  // Tracks which page the mounted doc actually belongs to. Queued after
-  // useRichTextEditor's own reset microtask (hook order), so it only flips
-  // once the editor really holds the new page's doc — see updateContentRef.
-  const editorContentPageIdRef = React.useRef<string | undefined>(selectedPageId);
+  // Which page the mounted doc actually belongs to (see updateContentRef).
+  // Queued after useRichTextEditor's reset microtask (hook order), and set
+  // only after a SUCCESSFUL reset: a failed reset leaves the wrong doc
+  // mounted, so writes stay blocked and the seller gets an explicit error.
+  const editorContentPageKeyRef = React.useRef<string | undefined | typeof EDITOR_CONTENT_PENDING>(
+    EDITOR_CONTENT_PENDING,
+  );
   React.useEffect(() => {
+    // Invalidate synchronously: the mounted doc no longer matches the
+    // selection until the paired reset lands — a switch-back to the key the
+    // ref still holds must not inherit the old match.
+    editorContentPageKeyRef.current = EDITOR_CONTENT_PENDING;
     queueMicrotask(() => {
-      editorContentPageIdRef.current = selectedPageId;
+      if (!editor) return;
+      if (lastContentResetFailed(editor)) {
+        showAlert("This page's content could not be displayed. Reload the page before editing it.", "error");
+        return;
+      }
+      editorContentPageKeyRef.current = selectedScopedPageKey;
     });
-  }, [selectedPageId]);
+  }, [selectedScopedPageKey, editor]);
   React.useEffect(() => {
     if (editor) reconcileMountedEditorFileEmbedIds(editor, fileIdMappings);
   }, [editor, fileIdMappings]);
@@ -383,7 +420,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     if (!editor) return;
     // Mounted doc still belongs to the previous page during the switch window
     // (gp#1943); skip rather than misfile it under the newly selected page.
-    if (editorContentPageIdRef.current !== selectedPageId) return;
+    if (editorContentPageKeyRef.current !== selectedScopedPageKey) return;
 
     // Correctly set the IDs of the file embeds copied from another product
     const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
@@ -415,19 +452,45 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     };
   }, [editor]);
 
+  // A page whose stored doc the schema refuses must degrade to a plain page
+  // entry, not crash the whole tab at render — the guarded editor reset is
+  // what surfaces the failure when the page is selected.
+  const parsedPageDescription = (mountedEditor: Editor, page: Page) => {
+    try {
+      return mountedEditor.schema.nodeFromJSON(page.description);
+    } catch {
+      return null;
+    }
+  };
+
+  const findPageWithNode = (type: string) =>
+    editor &&
+    pages.find((page) => {
+      const description = parsedPageDescription(editor, page);
+      // Unparseable page: scan the raw JSON instead. Answering "not present"
+      // here would let single-instance nodes (the license key) be inserted a
+      // second time on a healthy page.
+      if (!description) return rawDocContainsNode(page.description, type);
+      return findChildren(description, (node) => node.type.name === type).length > 0;
+    });
+
   const pageIcons = React.useMemo(
     () =>
       new Map(
         editor
           ? pages.map((page) => {
-              const description = editor.schema.nodeFromJSON(page.description);
+              const description = parsedPageDescription(editor, page);
               return [
                 page.id,
                 generatePageIcon({
-                  hasLicense: findChildren(description, (node) => node.type.name === LicenseKey.name).length > 0,
-                  fileIds: findChildren(description, (node) => node.type.name === FileEmbed.name).map(({ node }) =>
-                    String(node.attrs.id),
-                  ),
+                  hasLicense: description
+                    ? findChildren(description, (node) => node.type.name === LicenseKey.name).length > 0
+                    : false,
+                  fileIds: description
+                    ? findChildren(description, (node) => node.type.name === FileEmbed.name).map(({ node }) =>
+                        String(node.attrs.id),
+                      )
+                    : [],
                   allFiles: product.files,
                 }),
               ] as const;
@@ -436,13 +499,6 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
       ),
     [pages],
   );
-
-  const findPageWithNode = (type: string) =>
-    editor &&
-    pages.find(
-      (page) =>
-        findChildren(editor.schema.nodeFromJSON(page.description), (node) => node.type.name === type).length > 0,
-    );
 
   const onInsertPosts = () => {
     if (!editor) return;
@@ -942,7 +998,10 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                         <>
                           {pages.map((page) => (
                             <PageTab
-                              key={page.id}
+                              // Scoped key: PageTab's title editor never resets
+                              // on prop changes, so same-id pages across
+                              // variants need a remount.
+                              key={scopedRichContentPageKey(selectedVariant?.id ?? null, page.id)}
                               page={page}
                               selected={page === selectedPage}
                               icon={pageIcons.get(page.id) ?? "text-only"}

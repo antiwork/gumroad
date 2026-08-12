@@ -29,7 +29,11 @@ export default function ProductEditInertiaPage() {
   return (
     <ProductEditBoundary>
       <React.Suspense fallback={<ProductEditLoadingSkeleton title={editProps.product.name} />}>
-        <LazyProductEditPage {...editProps} />
+        {/* Keyed by product: Inertia keeps this page component mounted across
+            client-side visits, and the editor seeds its state from props once
+            (useState(props.product)) — without the key, product A's editor
+            state survives into product B's URL. */}
+        <LazyProductEditPage key={editProps.id} {...editProps} />
       </React.Suspense>
     </ProductEditBoundary>
   );
