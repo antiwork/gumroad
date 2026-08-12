@@ -40,11 +40,16 @@ describe SendChargeReceiptJob do
       end
 
       it "does not resend a delivered combined receipt when auto-invoice enqueue fails" do
-        receipt_delivered = false
         delivery = double
-        allow(delivery).to receive(:deliver_now) { receipt_delivered = true }
+        allow(delivery).to receive(:deliver_now) do
+          email_info = CustomerEmailInfo.build_for_charge(
+            charge_id: charge.id,
+            email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+          )
+          email_info.sent_at = Time.current
+          email_info.save!
+        end
         allow(CustomerMailer).to receive(:receipt).with(nil, charge.id).and_return(delivery)
-        allow_any_instance_of(Charge).to receive(:receipt_email_infos) { receipt_delivered ? [double] : [] }
         allow(AutoInvoiceEligibility).to receive(:eligible?).and_return(true)
         invoice_attempts = 0
         allow(SendAutoInvoiceEmailJob).to receive(:perform_async) do
@@ -53,6 +58,8 @@ describe SendChargeReceiptJob do
         end
 
         expect { described_class.new.perform(charge.id) }.to raise_error("invoice enqueue failed")
+        expect(charge.reload.receipt_email_infos.one?).to be(true)
+
         described_class.new.perform(charge.id)
 
         expect(CustomerMailer).to have_received(:receipt).with(nil, charge.id).once
