@@ -53,6 +53,12 @@ describe PakistanBankAccount do
 
       expect(ba.stripe_external_account_routing_number).to eq("habbpkkaxxx")
     end
+
+    it "uses the 8-character bank identifier for a lowercase branch-specific BIC" do
+      ba = create(:pakistan_bank_account, bank_code: "habbpkka007")
+
+      expect(ba.stripe_external_account_routing_number).to eq("habbpkka")
+    end
   end
 
   describe "#account_number_visual" do
