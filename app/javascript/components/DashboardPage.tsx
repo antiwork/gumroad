@@ -27,7 +27,9 @@ import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -35,6 +37,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
+import gumheadImage from "$assets/images/gumhead.png";
 
 type ProductRow = {
   id: string;
@@ -74,6 +77,9 @@ export type DashboardPageProps = {
   tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
   tax_center_enabled: boolean;
+  gumhead?: {
+    download_url: string;
+  } | null;
 };
 type TableProps = { sales: ProductRow[] };
 
@@ -316,6 +322,7 @@ export const DashboardPage = ({
   tax_forms,
   show_1099_download_notice,
   tax_center_enabled,
+  gumhead,
 }: DashboardPageProps) => {
   const loggedInUser = useLoggedInUser();
   const currentSeller = useCurrentSeller();
@@ -413,6 +420,37 @@ export const DashboardPage = ({
               .
             </Alert>
           ) : null}
+        </div>
+      ) : null}
+
+      {gumhead ? (
+        <div className="grid gap-4 p-4 md:p-8">
+          <Card>
+            <CardContent className="items-center sm:flex-nowrap">
+              <img
+                src={gumheadImage}
+                alt=""
+                width={96}
+                height={96}
+                className="size-24 shrink-0 rounded-sm border border-border bg-body object-contain"
+              />
+              <div className="grid min-w-0 flex-1 gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl">Meet Gumhead</h2>
+                  <Pill size="small">Mac app</Pill>
+                </div>
+                <p className="text-muted">
+                  Drop a folder on your Mac. Gumhead looks inside, tells you what could sell, drafts a product, and asks
+                  before anything goes live.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <NavigationButton href={gumhead.download_url} color="primary" target="_blank" rel="noreferrer">
+                    Download for Mac
+                  </NavigationButton>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       ) : null}
 
