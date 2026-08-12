@@ -31,12 +31,16 @@ class SendChargeReceiptJob
       purchases = charge.successful_purchases
       if charge.split_receipt_eligible?
         purchases.each do |purchase|
-          # Retry after a partial failure must not resend a receipt already delivered.
-          next if CustomerEmailInfo.where(purchase_id: purchase.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).exists?
-          CustomerMailer.receipt(purchase.id, single_purchase: true).deliver_now
+          charge.with_lock do
+            # Retry after a partial failure must not resend a receipt already delivered.
+            next if CustomerEmailInfo.where(purchase_id: purchase.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).exists?
+            CustomerMailer.receipt(purchase.id, single_purchase: true).deliver_now
+          end
         end
       else
-        CustomerMailer.receipt(nil, charge.id).deliver_now unless charge.receipt_email_infos.any?
+        charge.with_lock do
+          CustomerMailer.receipt(nil, charge.id).deliver_now unless charge.receipt_email_infos.any?
+        end
       end
     end
 end
