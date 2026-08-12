@@ -19,12 +19,28 @@ describe SendChargeReceiptJob do
   end
 
   context "with all purchases ready" do
-    it "delivers the email and updates the charge without stamping" do
-      described_class.new.perform(charge.id)
+    context "for a single-item order" do
+      let(:charge) { create(:charge, purchases: [purchase_one], seller: seller) }
 
-      expect(PdfStampingService).not_to have_received(:stamp_for_purchase!)
-      expect(CustomerMailer).to have_received(:receipt).with(nil, charge.id)
-      expect(charge.reload.receipt_sent?).to be(true)
+      it "delivers one combined receipt and updates the charge without stamping" do
+        described_class.new.perform(charge.id)
+
+        expect(PdfStampingService).not_to have_received(:stamp_for_purchase!)
+        expect(CustomerMailer).to have_received(:receipt).with(nil, charge.id)
+        expect(charge.reload.receipt_sent?).to be(true)
+      end
+    end
+
+    context "for a two-item order" do
+      it "delivers one receipt per purchase instead of a combined receipt" do
+        described_class.new.perform(charge.id)
+
+        expect(PdfStampingService).not_to have_received(:stamp_for_purchase!)
+        expect(CustomerMailer).to have_received(:receipt).with(purchase_one.id, single_purchase: true)
+        expect(CustomerMailer).to have_received(:receipt).with(purchase_two.id, single_purchase: true)
+        expect(CustomerMailer).not_to have_received(:receipt).with(nil, charge.id)
+        expect(charge.reload.receipt_sent?).to be(true)
+      end
     end
   end
 
@@ -45,12 +61,13 @@ describe SendChargeReceiptJob do
       allow_any_instance_of(Charge).to receive(:purchases_requiring_stamping).and_return([purchase_one])
     end
 
-    it "stamps the PDFs and delivers the email" do
+    it "stamps the PDFs and delivers a receipt per purchase" do
       described_class.new.perform(charge.id)
 
       expect(PdfStampingService).to have_received(:stamp_for_purchase!).exactly(:once)
       expect(PdfStampingService).to have_received(:stamp_for_purchase!).with(purchase_one)
-      expect(CustomerMailer).to have_received(:receipt).with(nil, charge.id)
+      expect(CustomerMailer).to have_received(:receipt).with(purchase_one.id, single_purchase: true)
+      expect(CustomerMailer).to have_received(:receipt).with(purchase_two.id, single_purchase: true)
       expect(charge.reload.receipt_sent?).to be(true)
     end
 

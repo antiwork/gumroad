@@ -50,11 +50,19 @@ class CustomerMailer < ApplicationMailer
 
   # charge_id is only passed for the initial order (SendChargeReceiptJob); duplicate/post-purchase
   # receipts pass purchase_id alone and let find_by_purchase_or_charge! resolve the charge.
-  def receipt(purchase_id = nil, charge_id = nil, for_email: true)
-    @chargeable = Charge::Chargeable.find_by_purchase_or_charge!(
-      purchase: Purchase.find_by(id: purchase_id),
-      charge: Charge.find_by(id: charge_id)
-    )
+  # Single-purchase rendering inside a charge (gumroad-private#2025): when a 2-item
+  # order is split into one receipt per purchase, the chargeable must be that one
+  # purchase, not the whole charge — `find_by_purchase_or_charge!` would resolve a
+  # charge-receipt purchase back to the charge and render the combined receipt again.
+  def receipt(purchase_id = nil, charge_id = nil, for_email: true, single_purchase: false)
+    @chargeable = if single_purchase
+      Purchase.find(purchase_id)
+    else
+      Charge::Chargeable.find_by_purchase_or_charge!(
+        purchase: Purchase.find_by(id: purchase_id),
+        charge: Charge.find_by(id: charge_id)
+      )
+    end
     @email_name = __method__
 
     @receipt_presenter = ReceiptPresenter.new(@chargeable, for_email:)
