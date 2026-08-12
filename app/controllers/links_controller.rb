@@ -624,6 +624,7 @@ class LinksController < ApplicationController
       # are older than the stored rows, meaning another session saved after
       # this session loaded. Return the conflicting records so the editor can
       # show the seller what changed and offer a reload.
+      log_editor_save_conflict("stale_content_conflict", stale_record_ids: e.stale_records.map { { type: _1[:type], id: _1[:id] } })
       return render json: {
         error_message: e.message,
         error_code: "stale_content_conflict",
@@ -633,6 +634,7 @@ class LinksController < ApplicationController
       # Raised under the product lock before any mutation. The current response
       # mapping has no scope dimension, so the client must reload rather than
       # guess which stored row a repeated submitted page id should address.
+      log_editor_save_conflict("ambiguous_rich_content_id_conflict", @_rich_content_ambiguity_details || {})
       return render json: {
         error_message: e.message,
         error_code: "ambiguous_rich_content_id_conflict",
@@ -655,6 +657,7 @@ class LinksController < ApplicationController
       # candidate retries in gumroad-private#1532 — a deletion-only write, or
       # re-fetch-then-reconcile — get a current token from the reload they
       # already have to do, so neither needs one on the refusal.
+      log_editor_save_conflict("stale_deletion_conflict")
       return render json: {
         error_message: e.message,
         error_code: "stale_deletion_conflict",
@@ -668,6 +671,7 @@ class LinksController < ApplicationController
       # it inspects, so list every hidden version page here (fresh from the
       # rolled-back state) — one choice must cover all of them, not one dialog
       # per version.
+      log_editor_save_conflict("hidden_variant_content_conflict")
       return render json: {
         error_message: e.message,
         error_code: "hidden_variant_content_conflict",
@@ -1035,16 +1039,16 @@ class LinksController < ApplicationController
       # Older editor tabs only understand the global response map, so keep
       # enforcing global uniqueness until the scoped-mapping protocol is sent.
       if product_permitted_params[:rich_content_provenance_version].to_i < 2
-        duplicate_id = references.filter_map { _1[:page][:id].presence }.tally.find { |_id, count| count > 1 }
-        raise Product::SaveContract::AmbiguousRichContentIdConflict if duplicate_id
+        duplicate_ids = references.filter_map { _1[:page][:id].presence }.tally.select { |_id, count| count > 1 }.keys
+        raise_ambiguous_rich_content_conflict!(check: "global", conflicts: duplicate_ids) if duplicate_ids.any?
         return
       end
 
-      per_scope_duplicate = references
+      per_scope_duplicate_ids = references
         .group_by { _1[:destination_scope_key] }
-        .values
-        .any? { |refs| refs.filter_map { _1[:page][:id].presence }.tally.any? { |_id, count| count > 1 } }
-      raise Product::SaveContract::AmbiguousRichContentIdConflict if per_scope_duplicate
+        .transform_values { |refs| refs.filter_map { _1[:page][:id].presence }.tally.select { |_id, count| count > 1 }.keys }
+        .select { |_scope, ids| ids.any? }
+      raise_ambiguous_rich_content_conflict!(check: "per_scope", conflicts: per_scope_duplicate_ids) if per_scope_duplicate_ids.any?
 
       # Only new client ids may repeat across scopes. A persisted page belongs
       # to one scope, so addressing it from multiple destinations is ambiguous.
@@ -1057,8 +1061,31 @@ class LinksController < ApplicationController
         end
         .group_by(&:first)
         .transform_values { |pairs| pairs.map(&:last).uniq }
+        .select { |_id, scopes| scopes.size > 1 }
+      raise_ambiguous_rich_content_conflict!(check: "existing_id_multiple_scopes", conflicts: existing_id_scopes) if existing_id_scopes.any?
+    end
 
-      raise Product::SaveContract::AmbiguousRichContentIdConflict if existing_id_scopes.values.any? { |scopes| scopes.size > 1 }
+    # Which of the three ambiguity checks fired, and on what. gp#2023 burned
+    # two fix attempts against 409s nobody could classify after the fact, so
+    # the offending ids/scopes are captured here for the rescue in #update to
+    # log. Page ids are client ids or external ids and scope keys are variant
+    # ids — no seller content.
+    def raise_ambiguous_rich_content_conflict!(check:, conflicts:)
+      @_rich_content_ambiguity_details = { check:, conflicts: }
+      raise Product::SaveContract::AmbiguousRichContentIdConflict
+    end
+
+    # One greppable line per refused editor save. The conflict responses are
+    # deliberate refusals the seller sees, and until now nothing recorded which
+    # one fired: lograge strips params and the guards raise without logging, so
+    # every support report of a failed save starts from zero.
+    def log_editor_save_conflict(error_code, details = {})
+      detail_suffix = details.map { |key, value| " #{key}=#{value.inspect}" }.join
+      Rails.logger.info(
+        "[product_editor_save_conflict] error_code=#{error_code} product_id=#{@product.id} " \
+        "seller_id=#{@product.user_id} provenance_version=#{product_permitted_params[:rich_content_provenance_version].to_i} " \
+        "request_id=#{request.request_id}#{detail_suffix}"
+      )
     end
 
     def check_banned
