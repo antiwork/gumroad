@@ -566,21 +566,39 @@ describe Api::Internal::Admin::ProductsController do
       expect(response.parsed_body["message"]).to eq("per-actor admin token is required")
     end
 
-    it "returns not found when no product matches" do
-      get :file_download_url, params: { id: "fake", file_id: product_file.external_id }
+    it "returns not found and audits the attempt when no product matches" do
+      expect do
+        get :file_download_url, params: { id: "fake", file_id: product_file.external_id }
+      end.to change { AdminApiAuditLog.count }.by(1)
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "Product not found" }.as_json)
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "products.file_download_url",
+        target_type: nil,
+        target_id: nil,
+        actor_user_id: admin_user.id,
+        response_status: 404
+      )
     end
 
-    it "returns not found when the file does not belong to the product" do
+    it "returns not found and audits the attempt when the file does not belong to the product" do
       other_product = create(:product, user: seller)
       foreign_file = create(:readable_document, link: other_product)
 
-      get :file_download_url, params: { id: product.external_id, file_id: foreign_file.external_id }
+      expect do
+        get :file_download_url, params: { id: product.external_id, file_id: foreign_file.external_id }
+      end.to change { AdminApiAuditLog.count }.by(1)
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "File not found" }.as_json)
+      expect(AdminApiAuditLog.last).to have_attributes(
+        action: "products.file_download_url",
+        target_type: nil,
+        target_id: nil,
+        actor_user_id: admin_user.id,
+        response_status: 404
+      )
     end
 
     it "returns the signed URL with the file metadata" do
