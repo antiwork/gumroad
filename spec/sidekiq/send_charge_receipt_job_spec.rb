@@ -62,10 +62,7 @@ describe SendChargeReceiptJob do
       end
 
       it "keeps the first purchase's sent marker and does not resend it, even when the second delivery raises" do
-        # Regression for the Greptile P1: deliveries must not share a transaction with
-        # each other. If they did, a raise on purchase_two's delivery would roll back the
-        # CustomerEmailInfo the mail observer just committed for purchase_one, and a
-        # Sidekiq retry would resend a receipt that already reached the buyer's inbox.
+        # Each successful delivery commits its marker outside the later charge transaction.
         call_count = 0
         allow(CustomerMailer).to receive(:receipt) do |purchase_id, **|
           call_count += 1
@@ -83,6 +80,28 @@ describe SendChargeReceiptJob do
 
         expect(CustomerMailer).to have_received(:receipt).with(first_sent_purchase_id, single_purchase: true).once
         expect(charge.reload.receipt_sent?).to be(true)
+      end
+    end
+
+    context "for a bundle with two product rows" do
+      let(:bundle) { create(:product, user: seller, is_bundle: true) }
+      let(:bundle_purchase) { create(:purchase, link: bundle, seller:, is_bundle_purchase: true) }
+      let(:charge) { create(:charge, purchases: [bundle_purchase], seller:) }
+
+      before do
+        create(:bundle_product_purchase, bundle_purchase:, product_purchase: purchase_one)
+        create(:bundle_product_purchase, bundle_purchase:, product_purchase: purchase_two)
+      end
+
+      it "delivers the paid bundle receipt instead of splitting its access rows" do
+        expect(charge.unbundled_purchases.size).to eq(2)
+        expect(charge.successful_purchases).to contain_exactly(bundle_purchase)
+
+        described_class.new.perform(charge.id)
+
+        expect(CustomerMailer).to have_received(:receipt).with(nil, charge.id)
+        expect(CustomerMailer).not_to have_received(:receipt).with(purchase_one.id, single_purchase: true)
+        expect(CustomerMailer).not_to have_received(:receipt).with(purchase_two.id, single_purchase: true)
       end
     end
   end

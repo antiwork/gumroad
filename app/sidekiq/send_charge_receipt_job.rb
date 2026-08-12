@@ -28,7 +28,7 @@ class SendChargeReceiptJob
 
   private
     def send_receipts(charge)
-      purchases = charge.unbundled_purchases
+      purchases = charge.successful_purchases
       if purchases.count == 2
         purchases.each do |purchase|
           # Retry after a partial failure must not resend a receipt already delivered.

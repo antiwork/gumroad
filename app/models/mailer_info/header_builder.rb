@@ -86,8 +86,13 @@ class MailerInfo::HeaderBuilder
 
   def determine_receipt_record_ids
     return [nil, nil] unless receipt_email?
-    purchase_id, charge_id = mailer_args.slice(0, 2)
+    purchase_id = mailer_args.first
+    options = mailer_args.last.is_a?(Hash) ? mailer_args.last : {}
+    charge_id = mailer_args.second unless mailer_args.second.is_a?(Hash)
     if mailer_method == SendgridEventInfo::RECEIPT_MAILER_METHOD
+      # Split charge receipts need purchase-keyed markers so retries can dedupe each send.
+      return [purchase_id, nil] if options[:single_purchase] || options["single_purchase"]
+
       # Normalizes to the charge so every send and every event for one receipt
       # resolves to the same lineage. Use case:
       # 1. Sending the first receipt uses charge_id, and EmailInfo + EmailInfoCharge records are created
