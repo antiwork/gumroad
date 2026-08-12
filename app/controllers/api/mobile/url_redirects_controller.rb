@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
+  rescue_from Aws::S3::Errors::NotFound, with: :file_not_available
+
   before_action :fetch_url_redirect_by_external_id, only: :url_redirect_attributes
   before_action :fetch_url_redirect_by_token, only: %i[stream hls_playlist download]
   before_action :check_permissions, only: %i[stream hls_playlist download]
@@ -43,6 +45,10 @@ class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
   end
 
   private
+    def file_not_available
+      render json: { success: false, message: "The file is no longer available." }, status: :not_found
+    end
+
     def fetch_product_file
       @product_file = if @url_redirect.installment.present? && @url_redirect.installment.has_files?
         @url_redirect.installment.product_files.find_by_external_id(permitted_params[:product_file_id])

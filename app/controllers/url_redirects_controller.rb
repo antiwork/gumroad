@@ -44,8 +44,13 @@ class UrlRedirectsController < ApplicationController
   end
 
   def show
+    location = @url_redirect.redirect_or_s3_location
     trigger_files_lifecycle_events
-    redirect_to @url_redirect.redirect_or_s3_location, allow_other_host: true
+    redirect_to location, allow_other_host: true
+  rescue Aws::S3::Errors::NotFound
+    @file_download_failed = true
+    flash[:warning] = "The file is no longer available. Please contact the seller."
+    redirect_to @url_redirect.download_page_url, allow_other_host: true
   end
 
   def read
@@ -410,6 +415,7 @@ class UrlRedirectsController < ApplicationController
 
     def register_that_user_has_downloaded_product
       return if @url_redirect.nil?
+      return if @file_download_failed
       return if download_page_polling_request?
 
       @url_redirect.increment!(:uses, 1)
@@ -528,6 +534,8 @@ class UrlRedirectsController < ApplicationController
     end
 
     def create_consumption_event!(event_type)
+      return if @file_download_failed
+
       ConsumptionEvent.create_event!(
         event_type:,
         platform: Platform::WEB,
