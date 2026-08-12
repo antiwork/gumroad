@@ -93,9 +93,9 @@ const getMountedEditor = () => {
   return mountedEditor;
 };
 
-const makePage = (id: string, text: string) => ({
+const makePage = (id: string, text: string, title: string | null = null) => ({
   id,
-  title: null,
+  title,
   description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] } as const,
   updated_at: "2026-01-01T00:00:00.000Z",
 });
@@ -153,11 +153,8 @@ it("rejects a stale variant write, resets the real editor, and persists the next
   expect(paidVariant.rich_content[0]?.description).toEqual(paidPage.description);
 });
 
-// gumroad-private#2023's display symptom: a page whose stored doc the schema
-// refuses used to fail its deferred reset silently, leaving the PREVIOUS
-// variant's doc mounted while the page list claimed the new selection — and
-// the gp#1943 guard then flipped its ref anyway, reopening the misfiled-write
-// window. The reset failure now blocks the flip and surfaces an error.
+// A failed reset leaves the previous doc mounted; writes must stay blocked
+// and the seller alerted (gumroad-private#2023).
 it("blocks writes and alerts when the newly selected page's doc cannot be parsed", async () => {
   const paidPage = makePage("page-paid-1", "PAID PAGE");
   // A known node type with an invalid shape: dropUnknownNodes keeps it, and
@@ -186,8 +183,7 @@ it("blocks writes and alerts when the newly selected page's doc cannot be parsed
 
   rerender(<ContentTabContent selectedVariantId="variant-free" />);
   await act(async () => {});
-  // The poison doc failed to mount, so the paid doc is still live. Any write
-  // event in this state must not land under the free page.
+  // The poison doc failed to mount; writes must not land under the free page.
   expect(getMountedEditor().getText()).toBe("PAID PAGE");
   expect(alerts).toContainEqual({
     message: "This page's content could not be displayed. Reload the page before editing it.",
@@ -207,10 +203,8 @@ it("blocks writes and alerts when the newly selected page's doc cannot be parsed
   expect(paidVariant.rich_content[0]?.description).toEqual(getMountedEditor().getJSON());
 });
 
-// The malformed page can also be the FIRST one the tab mounts with. useEditor
-// then mounts an empty doc without any reset having run — writes must stay
-// blocked from the start or a blur would overwrite the stored content with
-// that emptiness.
+// useEditor mounts an EMPTY doc for a malformed first page; writes must stay
+// blocked from the start or a blur overwrites the stored content.
 it("blocks writes and alerts when the initially selected page's doc cannot be parsed", async () => {
   const poisonPage = {
     id: "page-free-1",
@@ -262,10 +256,8 @@ it("finds a node in a raw doc that also contains invalid nodes", () => {
   ).toBe(true);
 });
 
-// Page identity is scope + id: two variants' pages can share a raw id before
-// save reconciliation. Keying the editor reset and the write guard on the raw
-// id alone made a switch between same-id pages a no-op — the first variant's
-// doc stayed mounted and writable under the second variant's page.
+// Two variants' pages can share a raw id before save reconciliation, so the
+// reset and the write guard must key on scope + id.
 it("re-mounts the doc and scopes writes when two variants' pages share a raw id", async () => {
   const tierAPage = makePage("shared-id", "TIER A DOC");
   const tierBPage = makePage("shared-id", "TIER B DOC");
@@ -285,8 +277,7 @@ it("re-mounts the doc and scopes writes when two variants' pages share a raw id"
   expect(getMountedEditor().getText()).toBe("TIER A DOC");
 
   rerender(<ContentTabContent selectedVariantId="variant-b" />);
-  // Still inside the switch window: the mounted doc is tier A's, and a write
-  // event must not land under tier B's same-id page.
+  // Switch window: a write must not land under tier B's same-id page.
   expect(getMountedEditor().getText()).toBe("TIER A DOC");
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the update handler ignores its args
   getMountedEditor().emit("update", { editor: getMountedEditor(), transaction: null } as never);
@@ -337,10 +328,8 @@ it("blocks writes and alerts when a same-id page in another variant cannot be pa
   expect(tierB.rich_content[0]?.description).toEqual(poisonPage.description);
 });
 
-// Returning to the page whose key the guard ref still holds (after a failed
-// reset for another page) must not reopen writes before the recovery reset
-// lands: the mounted doc may carry edits typed while the failed page was
-// selected, and an async editor transaction in that window would store them.
+// Switch-back after a failed reset must not reopen writes before the recovery
+// reset lands: the mounted doc may carry edits typed over the stale page.
 it("keeps writes blocked on switch-back until the recovery reset lands", async () => {
   const pageA = makePage("page-a", "PAGE A");
   const poisonPage = {
@@ -364,8 +353,6 @@ it("keeps writes blocked on switch-back until the recovery reset lands", async (
   await act(async () => {});
   expect(getMountedEditor().getText()).toBe("PAGE A");
 
-  // Select the poison page via the page list, type over the stale doc, then
-  // select page A again.
   const pageTabs = document.querySelectorAll('[role="tab"]');
   act(() => {
     (pageTabs[1] instanceof HTMLElement ? pageTabs[1] : undefined)?.click();
@@ -382,8 +369,7 @@ it("keeps writes blocked on switch-back until the recovery reset lands", async (
       : undefined
     )?.click();
   });
-  // Inside the pre-reset window: the mounted doc still carries the stray
-  // edits, and an async update event must not store them into page A.
+  // Pre-reset window: the stray edits must not be stored into page A.
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the update handler ignores its args
   getMountedEditor().emit("update", { editor: getMountedEditor(), transaction: null } as never);
   expect(variant.rich_content[0]?.description).toEqual(pageA.description);
@@ -391,9 +377,8 @@ it("keeps writes blocked on switch-back until the recovery reset lands", async (
   await act(async () => {});
   expect(getMountedEditor().getText()).toBe("PAGE A");
 });
-// Switching to a variant with NO pages must not let a write event in the
-// switch window copy the previous variant's doc into it via addPage:
-// "no page selected" and "reset pending" are distinct guard states.
+// "No page selected" and "reset pending" are distinct guard states: conflating
+// them lets addPage copy the stale doc into an empty variant.
 it("does not copy the stale doc into an empty variant during the switch window", async () => {
   const tierAPage = makePage("page-a", "TIER A DOC");
   const tierA: VariantFixture = { id: "variant-a", name: "A", rich_content: [tierAPage] };
@@ -412,8 +397,7 @@ it("does not copy the stale doc into an empty variant during the switch window",
   expect(getMountedEditor().getText()).toBe("TIER A DOC");
 
   rerender(<ContentTabContent selectedVariantId="variant-b" />);
-  // Inside the switch window the mounted doc is still tier A's; an update
-  // event here used to create a page holding it inside the empty variant.
+  // Switch window: the mounted doc is still tier A's.
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the update handler ignores its args
   getMountedEditor().emit("update", { editor: getMountedEditor(), transaction: null } as never);
   expect(emptyTier.rich_content).toHaveLength(0);
@@ -421,13 +405,11 @@ it("does not copy the stale doc into an empty variant during the switch window",
   await act(async () => {});
   expect(getMountedEditor().getText()).toBe("");
 });
-// PageTab's internal title editor never resets on prop changes, so the page
-// list must remount it when the variant changes — two variants' pages can
-// share a raw id, and a reused instance shows (and would write) the other
-// variant's title. An in-progress rename likewise must not carry over.
+// PageTab's title editor never resets on prop changes: same-id pages across
+// variants need a remount, and an in-progress rename must not carry over.
 it("resets the rename editor across a variant switch between same-id pages", async () => {
-  const tierAPage = { ...makePage("shared-id", "TIER A DOC"), title: "Alpha" };
-  const tierBPage = { ...makePage("shared-id", "TIER B DOC"), title: "Beta" };
+  const tierAPage = makePage("shared-id", "TIER A DOC", "Alpha");
+  const tierBPage = makePage("shared-id", "TIER B DOC", "Beta");
   // Two pages per variant so the page list renders.
   const tierA: VariantFixture = { id: "variant-a", name: "A", rich_content: [tierAPage, makePage("extra-a", "X")] };
   const tierB: VariantFixture = { id: "variant-b", name: "B", rich_content: [tierBPage, makePage("extra-b", "Y")] };
@@ -444,7 +426,6 @@ it("resets the rename editor across a variant switch between same-id pages", asy
   await act(async () => {});
   expect(getByText("Alpha")).toBeTruthy();
 
-  // Open the rename editor for tier A's page through the page-tab menu.
   const menuTriggers = document.querySelectorAll('[role="tab"] button');
   act(() => {
     (menuTriggers[0] instanceof HTMLElement ? menuTriggers[0] : undefined)?.click();
@@ -455,18 +436,17 @@ it("resets the rename editor across a variant switch between same-id pages", asy
     renameItem.click();
   });
   await act(async () => {});
-  // The title editor holds tier A's title.
+
   const titleEditor = document.querySelector('[role="tab"] .tiptap');
   expect(titleEditor?.textContent).toBe("Alpha");
 
   rerender(<ContentTabContent selectedVariantId="variant-b" />);
   await act(async () => {});
-  // The rename closed on the switch, and the tab shows tier B's own title.
+
   expect(document.querySelector('[role="tab"] .tiptap')).toBeNull();
   expect(getByText("Beta")).toBeTruthy();
   expect(queryByText("Alpha")).toBeNull();
 
-  // Re-opening the rename edits tier B's title, never tier A's.
   const newTriggers = document.querySelectorAll('[role="tab"] button');
   act(() => {
     (newTriggers[0] instanceof HTMLElement ? newTriggers[0] : undefined)?.click();

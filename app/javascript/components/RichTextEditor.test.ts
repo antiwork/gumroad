@@ -218,10 +218,8 @@ describe("useRichTextEditor", () => {
     expect(getEditor().getText()).toBe("PAGE B");
   });
 
-  // The deferred reset runs inside queueMicrotask, which swallows exceptions.
-  // A doc the schema refuses used to die there silently: the PREVIOUS content
-  // stayed mounted while the UI claimed the new selection, and callers had no
-  // signal to block writes (gumroad-private#2023's display symptom).
+  // queueMicrotask swallows exceptions, so a refused doc used to leave the
+  // previous content mounted with no signal to block writes.
   it("keeps the previous doc, records the failure, and recovers when a reset throws", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     let editor: Editor | null = null;
@@ -260,8 +258,7 @@ describe("useRichTextEditor", () => {
     consoleError.mockRestore();
   });
 
-  // The strict content check must not regress HTML consumers: stored product
-  // HTML legitimately contains tags with no schema rule (e.g. span), and the
+  // Stored product HTML legitimately contains tags with no schema rule; the
   // lenient DOM parse keeps their supported children.
   it("keeps parsing HTML strings leniently when they contain unsupported tags", async () => {
     let editor: Editor | null = null;
@@ -285,10 +282,8 @@ describe("useRichTextEditor", () => {
     expect(lastContentResetFailed(getEditor())).toBe(false);
   });
 
-  // useEditor's own creation path mounts an EMPTY doc for malformed initial
-  // content without any signal. The reset effect re-runs when the editor
-  // materializes, so the very first content also goes through the strict
-  // check and records the failure.
+  // useEditor mounts an EMPTY doc for malformed initial content; the strict
+  // check must also cover the first content once the editor materializes.
   it("records the failure when the INITIAL content is malformed", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     let editor: Editor | null = null;
@@ -309,14 +304,12 @@ describe("useRichTextEditor", () => {
     consoleError.mockRestore();
   });
 
-  // Edits typed while a failed selection was displayed land on the STALE
-  // mounted doc. Returning to the previous content must reset the editor from
-  // state even though that content's identity never changed — otherwise the
-  // stray edits would be attributed to it on the next update or blur.
+  // Returning to the previous content must reset even when its identity never
+  // changed, or stray edits typed over the stale doc get attributed to it.
   it("discards edits made over a stale doc when returning to the last valid content", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     let editor: Editor | null = null;
-    const Harness = ({ initialValue }: { initialValue: object }) => {
+    const Harness = ({ initialValue }: { initialValue: object | string }) => {
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- exercising the hook's public Content type
       editor = useRichTextEditor({ initialValue: initialValue as never });
       return null;
@@ -326,9 +319,8 @@ describe("useRichTextEditor", () => {
       return editor;
     };
 
-    // A STRING content: the processed value compares equal across recomputes,
-    // which is the one path where the identity check alone would skip the
-    // recovery reset (object contents get a fresh identity from the memo).
+    // String content compares by value across recomputes — the one path where
+    // the identity check alone would skip the recovery reset.
     const pageA = "<p>PAGE A</p>";
     const poison = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text" }] }] };
     const { rerender } = render(React.createElement(Harness, { initialValue: pageA }));
@@ -342,7 +334,6 @@ describe("useRichTextEditor", () => {
       await Promise.resolve();
     });
     expect(lastContentResetFailed(getEditor())).toBe(true);
-    // The seller types into what LOOKS like the new page but is the stale doc.
     act(() => {
       getEditor().chain().focus("end").insertContent(" STRAY").run();
     });

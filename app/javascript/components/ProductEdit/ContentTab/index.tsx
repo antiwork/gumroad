@@ -278,10 +278,8 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   const showPageList =
     pages.length > 1 || selectedPage?.title || renamingPageId != null || product.native_type === "commission";
   const [insertMenuState, setInsertMenuState] = React.useState<"open" | "inputs" | null>(null);
-  // Page identity is scope + id, never the raw id alone: two variants' pages
-  // can share a raw id before save reconciliation, and a variant switch
-  // between them changes which doc must be mounted while selectedPageId stays
-  // the same. Everything keyed on the selection below uses this composite.
+  // Page identity is scope + id: two variants' pages can share a raw id
+  // before save reconciliation, so raw-id keys miss same-id variant switches.
   const selectedScopedPageKey =
     selectedPageId == null ? undefined : scopedRichContentPageKey(selectedVariant?.id ?? null, selectedPageId);
   const initialValue = React.useMemo(() => selectedPage?.description ?? "", [selectedScopedPageKey]);
@@ -385,23 +383,17 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
   const removedFileEmbedIds = removedFileEmbedIdsForPage(selectedPage, richContentRemovedFileEmbedIds);
-  // Tracks which page the mounted doc actually belongs to. Queued after
-  // useRichTextEditor's own reset microtask (hook order + same deps), so it
-  // only flips once the editor really holds that page's doc — see
-  // updateContentRef. Starts undefined and flips only after a SUCCESSFUL
-  // reset: a failed reset leaves the wrong doc mounted (the previous page's,
-  // or the empty doc useEditor mounts for a malformed first page), so writes
-  // stay blocked and the seller gets an explicit error instead of a silent
-  // wrong render.
+  // Which page the mounted doc actually belongs to (see updateContentRef).
+  // Queued after useRichTextEditor's reset microtask (hook order), and set
+  // only after a SUCCESSFUL reset: a failed reset leaves the wrong doc
+  // mounted, so writes stay blocked and the seller gets an explicit error.
   const editorContentPageKeyRef = React.useRef<string | undefined | typeof EDITOR_CONTENT_PENDING>(
     EDITOR_CONTENT_PENDING,
   );
   React.useEffect(() => {
     // Invalidate synchronously: the mounted doc no longer matches the
-    // selection until the paired reset lands. In particular, returning to the
-    // page whose key the ref still holds (after a failed reset for another
-    // page) must not inherit the old match — the mounted doc may carry stray
-    // edits the recovery reset is about to discard.
+    // selection until the paired reset lands — a switch-back to the key the
+    // ref still holds must not inherit the old match.
     editorContentPageKeyRef.current = EDITOR_CONTENT_PENDING;
     queueMicrotask(() => {
       if (!editor) return;
@@ -1006,11 +998,9 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                         <>
                           {pages.map((page) => (
                             <PageTab
-                              // Scoped key: two variants' pages can share a raw
-                              // id, and PageTab's internal title editor never
-                              // resets on prop changes — reusing the instance
-                              // across a variant switch would show (and write)
-                              // the other variant's title.
+                              // Scoped key: PageTab's title editor never resets
+                              // on prop changes, so same-id pages across
+                              // variants need a remount.
                               key={scopedRichContentPageKey(selectedVariant?.id ?? null, page.id)}
                               page={page}
                               selected={page === selectedPage}
