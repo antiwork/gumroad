@@ -38,6 +38,27 @@ describe SendChargeReceiptJob do
         expect(CustomerMailer).to have_received(:receipt).with(nil, charge.id)
         expect(charge.reload.receipt_sent?).to be(true)
       end
+
+      it "does not resend a delivered combined receipt when auto-invoice enqueue fails" do
+        receipt_delivered = false
+        delivery = double
+        allow(delivery).to receive(:deliver_now) { receipt_delivered = true }
+        allow(CustomerMailer).to receive(:receipt).with(nil, charge.id).and_return(delivery)
+        allow_any_instance_of(Charge).to receive(:receipt_email_infos) { receipt_delivered ? [double] : [] }
+        allow(AutoInvoiceEligibility).to receive(:eligible?).and_return(true)
+        invoice_attempts = 0
+        allow(SendAutoInvoiceEmailJob).to receive(:perform_async) do
+          invoice_attempts += 1
+          raise "invoice enqueue failed" if invoice_attempts == 1
+        end
+
+        expect { described_class.new.perform(charge.id) }.to raise_error("invoice enqueue failed")
+        described_class.new.perform(charge.id)
+
+        expect(CustomerMailer).to have_received(:receipt).with(nil, charge.id).once
+        expect(invoice_attempts).to eq(2)
+        expect(charge.reload.receipt_sent?).to be(true)
+      end
     end
 
     context "for a two-item order" do

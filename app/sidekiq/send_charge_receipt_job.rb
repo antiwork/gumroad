@@ -38,7 +38,7 @@ class SendChargeReceiptJob
           CustomerMailer.receipt(purchase.id, single_purchase: true).deliver_now
         end
       else
-        CustomerMailer.receipt(nil, charge.id).deliver_now
+        CustomerMailer.receipt(nil, charge.id).deliver_now unless charge.receipt_email_infos.any?
       end
     end
 end
