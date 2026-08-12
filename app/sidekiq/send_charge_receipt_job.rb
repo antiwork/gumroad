@@ -5,7 +5,12 @@
 #
 class SendChargeReceiptJob
   include Sidekiq::Job
-  sidekiq_options queue: :critical, retry: 5, lock: :until_executed, unique_across_queues: true
+  sidekiq_options queue: :critical,
+                  retry: 5,
+                  lock: :until_and_while_executing,
+                  lock_timeout: 2,
+                  unique_across_queues: true,
+                  on_conflict: { client: :log, server: :raise }
 
   def perform(charge_id)
     charge = Charge.find(charge_id)
@@ -31,16 +36,12 @@ class SendChargeReceiptJob
       purchases = charge.successful_purchases
       if charge.split_receipt_eligible?
         purchases.each do |purchase|
-          charge.with_lock do
-            # Retry after a partial failure must not resend a receipt already delivered.
-            next if CustomerEmailInfo.where(purchase_id: purchase.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).exists?
-            CustomerMailer.receipt(purchase.id, single_purchase: true).deliver_now
-          end
+          # Retry after a partial failure must not resend a receipt already delivered.
+          next if CustomerEmailInfo.where(purchase_id: purchase.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).exists?
+          CustomerMailer.receipt(purchase.id, single_purchase: true).deliver_now
         end
       else
-        charge.with_lock do
-          CustomerMailer.receipt(nil, charge.id).deliver_now unless charge.receipt_email_infos.any?
-        end
+        CustomerMailer.receipt(nil, charge.id).deliver_now unless charge.receipt_email_infos.any?
       end
     end
 end

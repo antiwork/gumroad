@@ -23,8 +23,10 @@ describe SendChargeReceiptJob do
     critical_job = default_job.merge("queue" => "critical")
 
     expect(SidekiqUniqueJobs::LockDigest.call(default_job)).to eq(SidekiqUniqueJobs::LockDigest.call(critical_job))
-    expect(described_class.sidekiq_options["lock"]).to eq(:until_executed)
+    expect(described_class.sidekiq_options["lock"]).to eq(:until_and_while_executing)
+    expect(described_class.sidekiq_options["lock_timeout"]).to eq(2)
     expect(described_class.sidekiq_options["unique_across_queues"]).to be(true)
+    expect(described_class.sidekiq_options["on_conflict"]).to eq({ "client" => :log, "server" => :raise })
   end
 
   context "with all purchases ready" do
@@ -108,43 +110,6 @@ describe SendChargeReceiptJob do
 
         expect(CustomerMailer).to have_received(:receipt).with(first_sent_purchase_id, single_purchase: true).once
         expect(charge.reload.receipt_sent?).to be(true)
-      end
-
-      it "serializes concurrent workers before checking delivery markers" do
-        marker_ids = Set.new
-        marker_mutex = Mutex.new
-        lock = Mutex.new
-        ready = Queue.new
-        start = Queue.new
-        fake_charge = instance_double(Charge, successful_purchases: [purchase_one, purchase_two], split_receipt_eligible?: true)
-        allow(fake_charge).to receive(:with_lock) { |&block| lock.synchronize(&block) }
-        allow(CustomerEmailInfo).to receive(:where) do |purchase_id:, email_name:|
-          expect(email_name).to eq(SendgridEventInfo::RECEIPT_MAILER_METHOD)
-          double(exists?: marker_mutex.synchronize { marker_ids.include?(purchase_id) })
-        end
-        allow(CustomerMailer).to receive(:receipt) do |purchase_id, single_purchase:|
-          expect(single_purchase).to be(true)
-          delivery = double
-          allow(delivery).to receive(:deliver_now) do
-            sleep 0.1
-            marker_mutex.synchronize { marker_ids << purchase_id }
-          end
-          delivery
-        end
-
-        workers = 2.times.map do
-          Thread.new do
-            ready << true
-            start.pop
-            described_class.new.send(:send_receipts, fake_charge)
-          end
-        end
-        2.times { ready.pop }
-        2.times { start << true }
-        workers.each(&:join)
-
-        expect(CustomerMailer).to have_received(:receipt).with(purchase_one.id, single_purchase: true).once
-        expect(CustomerMailer).to have_received(:receipt).with(purchase_two.id, single_purchase: true).once
       end
     end
 
