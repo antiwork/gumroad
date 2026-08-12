@@ -15,6 +15,11 @@ class PakistanBankAccount < BankAccount
     "#{bank_code}"
   end
 
+  def stripe_external_account_routing_number
+    # Stripe links PK head-office BICs, but rejects branch-specific suffixes.
+    routing_number.upcase.end_with?("XXX") ? routing_number : routing_number.first(8)
+  end
+
   def bank_account_type
     BANK_ACCOUNT_TYPE
   end
