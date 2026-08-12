@@ -5,6 +5,11 @@ describe SendWorkflowInstallmentWorker do
     @product = create(:product)
   end
 
+  it "does not suppress delivery jobs at enqueue time" do
+    expect(described_class.sidekiq_options["lock"]).to be_nil
+    expect(SendWorkflowInstallmentRescheduleJob.sidekiq_options["lock"]).to be_nil
+  end
+
   describe "purchase_installment" do
     before do
       @workflow = create(:workflow, seller: @product.user, link: @product, created_at: Time.current)
@@ -84,6 +89,123 @@ describe SendWorkflowInstallmentWorker do
     it "does not call any mailer if neither purchase_id nor follower_id nor affiliate_user_id are passed" do
       expect(PostSendgridApi).not_to receive(:process)
       SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, nil, nil)
+    end
+  end
+
+  describe "purchase installment reschedules" do
+    before do
+      @reschedule_seller = create(:user)
+      @reschedule_product = create(:product, user: @reschedule_seller, price_cents: 0)
+      @reschedule_workflow = create(:workflow, seller: @reschedule_seller, link: @reschedule_product)
+      @reschedule_installment = create(
+        :installment,
+        seller: @reschedule_seller,
+        link: @reschedule_product,
+        workflow: @reschedule_workflow,
+        published_at: 3.days.ago,
+        installment_type: Installment::PRODUCT_TYPE
+      )
+      @reschedule_rule = create(:installment_rule, installment: @reschedule_installment, delayed_delivery_time: 1.day)
+      @reschedule_purchase = create(:free_purchase, link: @reschedule_product, created_at: 2.days.ago)
+      @reschedule_purchase.add_to_audience_member_details
+      @reschedule_reference_time = @reschedule_purchase.created_at.change(usec: 0)
+    end
+
+    it "reschedules a queued version after a newer version commits" do
+      stale_version = @reschedule_rule.version
+      @reschedule_rule.update!(delayed_delivery_time: 2.days)
+
+      described_class.new.perform(
+        @reschedule_installment.id,
+        stale_version,
+        @reschedule_purchase.id,
+        nil,
+        nil
+      )
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @reschedule_installment.id,
+        @reschedule_rule.version,
+        @reschedule_purchase.id,
+        nil,
+        nil,
+        nil,
+        @reschedule_reference_time.iso8601
+      ).immediately
+    end
+
+    it "delivers a same-version reschedule" do
+      expect(PostSendgridApi).to receive(:process).with(
+        post: @reschedule_installment,
+        recipients: [{ email: @reschedule_purchase.email, purchase: @reschedule_purchase }],
+        cache: {}
+      )
+
+      described_class.new.perform(
+        @reschedule_installment.id,
+        @reschedule_rule.version,
+        @reschedule_purchase.id,
+        nil,
+        nil,
+        nil,
+        @reschedule_reference_time.iso8601
+      )
+    end
+
+    it "does not restore a purchase that left the audience" do
+      stale_version = @reschedule_rule.version
+      @reschedule_rule.update!(delayed_delivery_time: 2.days)
+      @reschedule_purchase.update!(stripe_refunded: true)
+
+      expect do
+        described_class.new.perform(
+          @reschedule_installment.id,
+          stale_version,
+          @reschedule_purchase.id,
+          nil,
+          nil,
+          nil,
+          @reschedule_reference_time.iso8601
+        )
+      end.not_to change(SendWorkflowInstallmentRescheduleJob.jobs, :size)
+    end
+
+    it "reschedules a resubscribed membership from its adjusted reference time" do
+      subscription = create(:subscription, link: @reschedule_product)
+      purchase = create(
+        :free_purchase,
+        link: @reschedule_product,
+        subscription:,
+        is_original_subscription_purchase: true,
+        email: "resubscribed@example.com",
+        created_at: 10.days.ago
+      )
+      create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
+      create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
+      purchase.add_to_audience_member_details
+      stale_version = @reschedule_rule.version
+      @reschedule_rule.update!(delayed_delivery_time: 3.days)
+      reference_time = @reschedule_installment.workflow_delivery_reference_time(purchase).change(usec: 0)
+
+      described_class.new.perform(
+        @reschedule_installment.id,
+        stale_version,
+        purchase.id,
+        nil,
+        nil,
+        nil,
+        reference_time.iso8601
+      )
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @reschedule_installment.id,
+        @reschedule_rule.version,
+        purchase.id,
+        nil,
+        nil,
+        nil,
+        reference_time.iso8601
+      ).at(reference_time + @reschedule_rule.delayed_delivery_time)
     end
   end
 
@@ -290,6 +412,37 @@ describe SendWorkflowInstallmentWorker do
       end.to raise_error(SendWorkflowInstallmentWorker::RuleNotCommittedError)
     end
 
+    it "reschedules a stale follower job from its confirmation time" do
+      @follower.update_columns(created_at: 3.days.ago, confirmed_at: 2.hours.ago)
+      reference_time = @follower.confirmed_at.change(usec: 0)
+      stale_version = @installment_rule.version
+      @installment_rule.update!(delayed_delivery_time: 2.days)
+
+      expect do
+        described_class.new.perform(@installment.id, stale_version, nil, @follower.id, nil)
+      end.to change(SendWorkflowInstallmentRescheduleJob.jobs, :size).by(1)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        @follower.id,
+        nil,
+        nil,
+        reference_time.iso8601
+      ).at(reference_time + @installment_rule.delayed_delivery_time)
+    end
+
+    it "does not restore a deleted follower" do
+      stale_version = @installment_rule.version
+      @installment_rule.update!(delayed_delivery_time: 2.days)
+      @follower.mark_deleted!
+
+      expect do
+        described_class.new.perform(@installment.id, stale_version, nil, @follower.id, nil)
+      end.not_to change(SendWorkflowInstallmentRescheduleJob.jobs, :size)
+    end
+
     it "does not call mailer if different version" do
       expect(PostSendgridApi).not_to receive(:process)
       expect do
@@ -316,6 +469,130 @@ describe SendWorkflowInstallmentWorker do
     end
   end
 
+  describe "affiliate_installment" do
+    before do
+      @seller = create(:user)
+      @product = create(:product, user: @seller, price_cents: 0)
+      @affiliate = create(:direct_affiliate, seller: @seller, send_posts: true, created_at: 1.day.ago)
+      @reference_time = 1.hour.ago.change(usec: 0)
+      @product_affiliate = create(
+        :product_affiliate,
+        affiliate: @affiliate,
+        product: @product,
+        created_at: @reference_time
+      )
+      @workflow = create(
+        :workflow,
+        seller: @seller,
+        link: nil,
+        workflow_type: Workflow::AFFILIATE_TYPE,
+        published_at: 2.days.ago
+      )
+      @installment = create(
+        :installment,
+        seller: @seller,
+        workflow: @workflow,
+        installment_type: Installment::AFFILIATE_TYPE,
+        affiliate_products: [@product.unique_permalink],
+        published_at: @workflow.published_at
+      )
+      @installment_rule = create(:installment_rule, installment: @installment, delayed_delivery_time: 1.day)
+    end
+
+    it "sends for the current product assignment" do
+      expect_any_instance_of(Installment).to receive(:send_installment_from_workflow_for_affiliate_user).with(@affiliate.affiliate_user_id)
+
+      perform_affiliate_job
+    end
+
+    it "does not send after the product assignment is removed" do
+      @product_affiliate.destroy!
+      expect_any_instance_of(Installment).not_to receive(:send_installment_from_workflow_for_affiliate_user)
+
+      perform_affiliate_job
+    end
+
+    it "sends when an equivalent product assignment remains" do
+      other_product = create(:product, user: @seller)
+      create(:product_affiliate, affiliate: @affiliate, product: other_product, created_at: @reference_time)
+      @installment.update!(affiliate_products: [])
+      @product_affiliate.destroy!
+      expect_any_instance_of(Installment).to receive(:send_installment_from_workflow_for_affiliate_user).with(@affiliate.affiliate_user_id)
+
+      perform_affiliate_job
+    end
+
+    it "does not send after the affiliate is deleted" do
+      @affiliate.mark_deleted!
+      expect_any_instance_of(Installment).not_to receive(:send_installment_from_workflow_for_affiliate_user)
+
+      perform_affiliate_job
+    end
+
+    it "does not send after the affiliate opts out" do
+      @affiliate.update_posts_subscription(send_posts: false)
+      expect_any_instance_of(Installment).not_to receive(:send_installment_from_workflow_for_affiliate_user)
+
+      perform_affiliate_job
+    end
+
+    it "does not send after the assignment time changes" do
+      @product_affiliate.update_columns(created_at: 30.minutes.ago)
+      expect_any_instance_of(Installment).not_to receive(:send_installment_from_workflow_for_affiliate_user)
+
+      perform_affiliate_job
+    end
+
+    it "does not send outside the workflow product scope" do
+      other_product = create(:product, user: @seller)
+      @installment.update!(affiliate_products: [other_product.unique_permalink])
+      expect_any_instance_of(Installment).not_to receive(:send_installment_from_workflow_for_affiliate_user)
+
+      perform_affiliate_job
+    end
+
+    it "reschedules a stale affiliate job from its product assignment time" do
+      stale_version = @installment_rule.version
+      @installment_rule.update!(delayed_delivery_time: 2.days)
+
+      expect do
+        described_class.new.perform(@installment.id, stale_version, nil, nil, @affiliate.affiliate_user_id)
+      end.to change(SendWorkflowInstallmentRescheduleJob.jobs, :size).by(1)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        nil,
+        @affiliate.affiliate_user_id,
+        nil,
+        @reference_time.iso8601
+      ).at(@reference_time + @installment_rule.delayed_delivery_time)
+    end
+
+    it "does not restore a removed product assignment" do
+      stale_version = @installment_rule.version
+      @installment_rule.update!(delayed_delivery_time: 2.days)
+      @product_affiliate.destroy!
+
+      expect do
+        described_class.new.perform(@installment.id, stale_version, nil, nil, @affiliate.affiliate_user_id)
+      end.not_to change(SendWorkflowInstallmentRescheduleJob.jobs, :size)
+    end
+
+    def perform_affiliate_job
+      described_class.new.perform(
+        @installment.id,
+        @installment_rule.version,
+        nil,
+        nil,
+        @affiliate.affiliate_user_id,
+        nil,
+        @reference_time.iso8601
+      )
+    end
+  end
+
   describe "member_cancellation_installment" do
     before do
       @creator = create(:user)
@@ -334,6 +611,48 @@ describe SendWorkflowInstallmentWorker do
         cache: {}
       )
       SendWorkflowInstallmentWorker.new.perform(@installment.id, @installment_rule.version, nil, nil, nil, @subscription.id)
+    end
+  end
+
+  describe "member cancellation reschedules" do
+    it "uses the membership deactivation time" do
+      product = create(:subscription_product)
+      subscription = create(:subscription, link: product, cancelled_by_buyer: true, cancelled_at: 2.days.ago, deactivated_at: 1.day.ago)
+      create(:free_purchase, is_original_subscription_purchase: true, link: product, subscription:, created_at: 1.week.ago)
+      workflow = create(:workflow, seller: product.user, link: product, workflow_trigger: "member_cancellation")
+      installment = create(:published_installment, link: product, workflow:, workflow_trigger: "member_cancellation")
+      rule = create(:installment_rule, installment:, delayed_delivery_time: 1.day)
+      stale_version = rule.version
+      rule.update!(delayed_delivery_time: 3.days)
+      reference_time = subscription.deactivated_at.change(usec: 0)
+
+      described_class.new.perform(installment.id, stale_version, nil, nil, nil, subscription.id, reference_time.iso8601)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        installment.id,
+        rule.version,
+        nil,
+        nil,
+        nil,
+        subscription.id,
+        reference_time.iso8601
+      ).at(reference_time + rule.delayed_delivery_time)
+    end
+
+    it "does not restore a cancellation job after the membership ends for another reason" do
+      product = create(:subscription_product)
+      subscription = create(:subscription, link: product, ended_at: 1.day.ago, deactivated_at: 1.day.ago)
+      create(:free_purchase, is_original_subscription_purchase: true, link: product, subscription:, created_at: 1.week.ago)
+      workflow = create(:workflow, seller: product.user, link: product, workflow_trigger: "member_cancellation")
+      installment = create(:published_installment, link: product, workflow:, workflow_trigger: "member_cancellation")
+      rule = create(:installment_rule, installment:, delayed_delivery_time: 1.day)
+      stale_version = rule.version
+      rule.update!(delayed_delivery_time: 3.days)
+      reference_time = subscription.deactivated_at.change(usec: 0)
+
+      expect do
+        described_class.new.perform(installment.id, stale_version, nil, nil, nil, subscription.id, reference_time.iso8601)
+      end.not_to change(SendWorkflowInstallmentRescheduleJob.jobs, :size)
     end
   end
 

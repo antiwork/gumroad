@@ -94,7 +94,6 @@ class AffiliateRequest < ApplicationRecord
         affiliate_basis_points: self_service_affiliate_product.affiliate_basis_points || affiliate.affiliate_basis_points
       )
       affiliate.save!
-      affiliate.schedule_workflow_jobs
       product_ids << self_service_affiliate_product.product_id
     end
 

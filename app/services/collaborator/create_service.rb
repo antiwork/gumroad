@@ -48,7 +48,13 @@ class Collaborator::CreateService
 
     return { success: false, collaborator: } if collaborator.errors.any?
 
-    if collaborator.save
+    saved = ActiveRecord::Base.transaction do
+      # ProductAffiliate locks its affiliate during autosave, so lock products first.
+      Link.where(id: collaborator.product_affiliates.map(&:link_id)).order(:id).lock.load
+      collaborator.save
+    end
+
+    if saved
       deliver_email_for(collaborator)
       { success: true }
     else

@@ -76,6 +76,49 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
     expect(SendWorkflowInstallmentWorker.jobs).to be_empty
   end
 
+  it "reschedules pending cancellation emails when send_to_past_customers is false" do
+    @workflow.update!(send_to_past_customers: false)
+    @installment.update!(published_at: 2.hours.ago, is_for_new_customers_of_workflow: true)
+    recent = create(:subscription, link: @product, cancelled_at: 1.hour.ago, deactivated_at: 1.hour.ago)
+    create(:free_purchase, is_original_subscription_purchase: true, link: @product, subscription: recent, created_at: 2.hours.ago)
+    old_delayed_delivery_time = 2.days.to_i
+
+    described_class.new.perform(
+      @installment.id,
+      old_delayed_delivery_time,
+      Time.current.iso8601
+    )
+
+    reference_time = recent.deactivated_at.change(usec: 0)
+    expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+      @installment.id,
+      @rule.version,
+      nil,
+      nil,
+      nil,
+      recent.id,
+      reference_time.iso8601
+    ).at(reference_time + @rule.delayed_delivery_time)
+    expect(SendWorkflowInstallmentRescheduleJob.jobs.size).to eq(1)
+    expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+  end
+
+  it "does not reschedule a cancellation before publication" do
+    @workflow.update!(send_to_past_customers: false)
+    @installment.update!(published_at: 2.hours.ago, is_for_new_customers_of_workflow: true)
+    old = create(:subscription, link: @product, cancelled_at: 3.hours.ago, deactivated_at: 3.hours.ago)
+    create(:free_purchase, is_original_subscription_purchase: true, link: @product, subscription: old, created_at: 1.day.ago)
+
+    described_class.new.perform(
+      @installment.id,
+      2.days.to_i,
+      Time.current.iso8601
+    )
+
+    expect(SendWorkflowInstallmentRescheduleJob.jobs).to be_empty
+    expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+  end
+
   it "does nothing when workflow trigger is not member_cancellation" do
     @workflow.update!(workflow_trigger: nil)
     described_class.new.perform(@installment.id)
@@ -133,5 +176,109 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
       expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@seller_installment.id, @seller_rule.version, nil, nil, nil, @canceled_subscription.id)
       expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@seller_installment.id, @seller_rule.version, nil, nil, nil, @other_product_canceled_subscription.id)
     end
+  end
+end
+
+describe SendWorkflowEmailsToPastCanceledMembersJob, "primary repair scans", :freeze_time do
+  it "does not treat a missing old delay as a cancellation repair" do
+    seller = create(:user)
+    product = create(:subscription_product, user: seller)
+    workflow = create(
+      :workflow,
+      seller:,
+      link: product,
+      workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER,
+      send_to_past_customers: false
+    )
+    installment = create(
+      :published_installment,
+      link: product,
+      workflow:,
+      workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER
+    )
+    rule = create(:installment_rule, installment:, delayed_delivery_time: 14.days)
+
+    described_class.new.perform(installment.id, nil, Time.current.iso8601, rule.version)
+
+    expect(SendWorkflowInstallmentRescheduleJob.jobs).to be_empty
+    expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+  end
+
+  it "limits cancellation repairs to deactivations strictly inside the prior delay window" do
+    seller = create(:user)
+    product = create(:subscription_product, user: seller)
+    workflow = create(
+      :workflow,
+      seller:,
+      link: product,
+      workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER
+    )
+    cutoff_reference_time = Time.current.change(usec: 0)
+    old_delayed_delivery_time = 2.days
+    boundary = create(
+      :subscription,
+      link: product,
+      cancelled_at: cutoff_reference_time - old_delayed_delivery_time,
+      deactivated_at: cutoff_reference_time - old_delayed_delivery_time
+    )
+    inside = create(
+      :subscription,
+      link: product,
+      cancelled_at: cutoff_reference_time - old_delayed_delivery_time + 1.second,
+      deactivated_at: cutoff_reference_time - old_delayed_delivery_time + 1.second
+    )
+    historical = create(
+      :subscription,
+      link: product,
+      cancelled_at: cutoff_reference_time - old_delayed_delivery_time - 1.day,
+      deactivated_at: cutoff_reference_time - old_delayed_delivery_time - 1.day
+    )
+
+    candidates = described_class.new.send(
+      :candidate_subscriptions,
+      workflow,
+      deactivated_after: cutoff_reference_time - old_delayed_delivery_time
+    )
+
+    expect(candidates).to include(inside)
+    expect(candidates).not_to include(boundary, historical)
+  end
+
+  it "keeps a repair scan on the primary connection" do
+    seller = create(:user)
+    product = create(:subscription_product, user: seller)
+    workflow = create(
+      :workflow,
+      seller:,
+      link: product,
+      workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER,
+      send_to_past_customers: false
+    )
+    installment = create(
+      :published_installment,
+      link: product,
+      workflow:,
+      workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER
+    )
+    rule = create(:installment_rule, installment:, delayed_delivery_time: 14.days)
+    job = described_class.new
+    cutoff_reference_time = Time.current.change(usec: 0)
+    candidate_scope = instance_double(ActiveRecord::Relation)
+    loaded_scope = instance_double(ActiveRecord::Relation)
+    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).ordered.and_call_original
+    expect(job).to receive(:candidate_subscriptions).with(
+      workflow,
+      deactivated_after: cutoff_reference_time - 2.days
+    ).ordered.and_return(candidate_scope)
+    expect(candidate_scope).to receive(:includes).with(:original_purchase).ordered.and_return(loaded_scope)
+    expect(loaded_scope).to receive(:find_each).ordered
+    expect(Makara::Context).to receive(:release_all).ordered
+
+    job.perform(
+      installment.id,
+      2.days.to_i,
+      cutoff_reference_time.iso8601,
+      rule.version
+    )
   end
 end

@@ -45,7 +45,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
     it "keeps a cutoff scan on the primary database until the audience loads" do
       expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).ordered.and_call_original
-      expect(WithMaxExecutionTime).to receive(:timeout_queries).twice.ordered.and_call_original
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).exactly(3).times.ordered.and_call_original
       expect(Makara::Context).to receive(:release_all).ordered
 
       described_class.new.perform(@post.id, 1.day.ago.iso8601)
@@ -126,12 +126,12 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
     it "does not rematerialize a follower already selected by the cutoff" do
       allow(AudienceMember).to receive(:filter).and_call_original
-      expect(AudienceMember).not_to receive(:filter).with(
+      expect(AudienceMember).to receive(:filter).once.with(
         seller_id: @seller.id,
         params: anything,
         with_ids: true,
         ids: anything
-      )
+      ).and_call_original
 
       described_class.new.perform(@post.id, 3.days.ago.iso8601)
     end
@@ -210,8 +210,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       product = create(:product, user: @seller, price_cents: 0)
       purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 3.days.ago)
       purchase.add_to_audience_member_details
-      @post.update!(created_after: 2.days.ago, bought_products: [product.unique_permalink])
-      @basic_follower.update_columns(created_at: 1.day.ago, confirmed_at: 1.hour.ago.change(usec: 0))
+      @post.update!(created_after: 3.days.ago, bought_products: [product.unique_permalink])
+      @basic_follower.update!(confirmed_at: 1.hour.ago.change(usec: 0))
 
       described_class.new.perform(@post.id, 1.day.ago.iso8601)
 
@@ -273,6 +273,325 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(queried_ids.map(&:size)).to eq([2, 1])
       expect(queried_ids.flatten).to contain_exactly(@basic_follower.id, second_follower.id, third_follower.id)
     end
+
+    it "preserves the follower confirmation time during a reschedule scan" do
+      described_class.new.perform(@post.id, nil, true, @post_rule.version)
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      ).immediately
+    end
+
+    it "repairs a follower confirmed in the publication second" do
+      published_at = Time.current.change(usec: 0)
+      @post.update!(published_at:, is_for_new_customers_of_workflow: true)
+      @basic_follower.update_columns(created_at: 1.day.ago, confirmed_at: published_at)
+
+      described_class.new.perform(@post.id, published_at.iso8601, true, @post_rule.version)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        published_at.iso8601
+      ).at(published_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "repairs a follower before the old job after a shorter delay edit" do
+      old_delay = 7.days
+      old_deliver_at = @basic_follower.confirmed_at + old_delay
+      @post_rule.update!(delayed_delivery_time: 1.hour)
+
+      described_class.new.perform(@post.id, (Time.current - old_delay).iso8601, true, @post_rule.version)
+
+      expect(old_deliver_at).to be > Time.current
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        @basic_follower.id,
+        nil,
+        nil,
+        @basic_follower.confirmed_at.iso8601
+      ).immediately
+    end
+  end
+
+  describe "#perform with an affiliate" do
+    before do
+      @product = create(:product, user: @seller)
+      @affiliate = create(:direct_affiliate, seller: @seller, send_posts: true, created_at: 5.days.ago)
+      @product_affiliate = create(:product_affiliate, affiliate: @affiliate, product: @product, created_at: 2.hours.ago)
+      @post.update!(installment_type: Installment::AFFILIATE_TYPE, affiliate_products: [@product.unique_permalink])
+    end
+
+    it "schedules from the product assignment time" do
+      described_class.new.perform(@post.id)
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        nil,
+        @affiliate.affiliate_user_id,
+        nil,
+        @product_affiliate.created_at.iso8601
+      ).at(@product_affiliate.created_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "preserves each distinct product assignment trigger" do
+      other_product = create(:product, user: @seller)
+      older_assignment = create(:product_affiliate, affiliate: @affiliate, product: other_product, created_at: 3.hours.ago)
+      @post.update!(affiliate_products: [])
+
+      described_class.new.perform(@post.id)
+
+      reference_times = SendWorkflowInstallmentWorker.jobs.map { _1["args"][6] }
+      expect(reference_times).to contain_exactly(older_assignment.created_at.iso8601, @product_affiliate.created_at.iso8601)
+    end
+
+    it "uses the product assignment for the fanout cutoff" do
+      described_class.new.perform(@post.id, 3.hours.ago.iso8601)
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        nil,
+        @affiliate.affiliate_user_id,
+        nil,
+        @product_affiliate.created_at.iso8601
+      ).at(@product_affiliate.created_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "includes product assignments from the cutoff second" do
+      cutoff = @product_affiliate.created_at + 0.5.seconds
+
+      described_class.new.perform(@post.id, cutoff.iso8601(6))
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        nil,
+        @affiliate.affiliate_user_id,
+        nil,
+        @product_affiliate.created_at.iso8601
+      ).at(@product_affiliate.created_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "uses the product assignment cutoff for an audience workflow" do
+      @post.update!(installment_type: Installment::AUDIENCE_TYPE)
+
+      described_class.new.perform(@post.id, 3.hours.ago.iso8601)
+
+      expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        nil,
+        @affiliate.affiliate_user_id,
+        nil,
+        @product_affiliate.created_at.iso8601
+      ).at(@product_affiliate.created_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "keeps workflow date filters on the affiliate identity" do
+      @post.update!(created_after: 3.days.ago.to_date.iso8601)
+
+      described_class.new.perform(@post.id)
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+    end
+
+    it "loads product assignments in bounded queries" do
+      second_affiliate = create(:direct_affiliate, seller: @seller, send_posts: true)
+      third_affiliate = create(:direct_affiliate, seller: @seller, send_posts: true)
+      create(:product_affiliate, affiliate: second_affiliate, product: @product)
+      create(:product_affiliate, affiliate: third_affiliate, product: @product)
+      stub_const("#{described_class}::AFFILIATE_LOOKUP_BATCH_SIZE", 2)
+      expect(ProductAffiliate).to receive(:joins).with(:affiliate).twice.and_call_original
+
+      described_class.new.perform(@post.id)
+
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(3)
+    end
+
+    it "preserves the product assignment time during a reschedule scan" do
+      described_class.new.perform(@post.id, nil, true, @post_rule.version)
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        nil,
+        @affiliate.affiliate_user_id,
+        nil,
+        @product_affiliate.created_at.iso8601
+      ).at(@product_affiliate.created_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "repairs an affiliate assigned in the publication second" do
+      published_at = Time.current.change(usec: 0)
+      @post.update!(published_at:, is_for_new_customers_of_workflow: true)
+      @product_affiliate.update_columns(created_at: published_at)
+
+      described_class.new.perform(@post.id, published_at.iso8601, true, @post_rule.version)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        nil,
+        @affiliate.affiliate_user_id,
+        nil,
+        published_at.iso8601
+      ).at(published_at + @post_rule.delayed_delivery_time)
+    end
+
+    it "repairs an affiliate before the old job after a shorter delay edit" do
+      old_delay = 7.days
+      old_deliver_at = @product_affiliate.created_at + old_delay
+      @post_rule.update!(delayed_delivery_time: 1.hour)
+
+      described_class.new.perform(@post.id, (Time.current - old_delay).iso8601, true, @post_rule.version)
+
+      expect(old_deliver_at).to be > Time.current
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        nil,
+        nil,
+        @affiliate.affiliate_user_id,
+        nil,
+        @product_affiliate.created_at.iso8601
+      ).immediately
+    end
+  end
+
+  describe "#perform with a purchase reschedule" do
+    before do
+      @product = create(:product, user: @seller, price_cents: 0)
+      @post.update!(
+        installment_type: Installment::PRODUCT_TYPE,
+        link: @product,
+        bought_products: [@product.unique_permalink]
+      )
+    end
+
+    it "preserves the purchase trigger time" do
+      purchase = create(:free_purchase, link: @product, created_at: 2.hours.ago)
+      purchase.add_to_audience_member_details
+      reference_time = purchase.created_at.change(usec: 0)
+
+      described_class.new.perform(@post.id, nil, true, @post_rule.version)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        purchase.id,
+        nil,
+        nil,
+        nil,
+        reference_time.iso8601
+      ).at(reference_time + @post_rule.delayed_delivery_time)
+    end
+
+    it "schedules only the older purchase that matches the product filter" do
+      email = "filtered-buyer@example.com"
+      matching_purchase = create(:free_purchase, link: @product, email:, created_at: 2.hours.ago)
+      matching_purchase.add_to_audience_member_details
+      other_product = create(:product, user: @seller, price_cents: 0)
+      nonmatching_purchase = create(:free_purchase, link: other_product, email:, created_at: 1.hour.ago)
+      nonmatching_purchase.add_to_audience_member_details
+
+      member = AudienceMember.filter(
+        seller_id: @post.seller_id,
+        params: @post.audience_members_filter_params,
+        with_ids: true
+      ).sole
+      expect(member.purchase_id).to eq(matching_purchase.id)
+
+      described_class.new.perform(@post.id, nil, true, @post_rule.version)
+
+      reference_time = matching_purchase.created_at.change(usec: 0)
+      expect(SendWorkflowInstallmentRescheduleJob.jobs.size).to eq(1)
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        matching_purchase.id,
+        nil,
+        nil,
+        nil,
+        reference_time.iso8601
+      ).at(reference_time + @post_rule.delayed_delivery_time)
+    end
+
+    it "does not use an embedded purchase when the aggregate id is nil" do
+      other_product = create(:product, user: @seller, price_cents: 0)
+      nonmatching_purchase = create(:free_purchase, link: other_product, created_at: 2.hours.ago)
+      member = double(
+        id: 123,
+        purchase_id: nil,
+        follower_id: nil,
+        affiliate_id: nil,
+        details: {
+          "purchases" => [
+            {
+              "id" => nonmatching_purchase.id,
+              "created_at" => nonmatching_purchase.created_at.iso8601,
+            },
+          ],
+        }
+      )
+      allow(AudienceMember).to receive(:filter).and_return(double(select: [member]))
+      expect(Rails.logger).to receive(:error).with(/could not resolve a purchase recipient/)
+
+      described_class.new.perform(@post.id, nil, true, @post_rule.version)
+
+      expect(SendWorkflowInstallmentRescheduleJob.jobs).to be_empty
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+    end
+
+    it "keeps a later configured recipient cutoff" do
+      @post.update!(created_after: 1.day.ago.to_date.iso8601)
+      purchase = create(:free_purchase, link: @product, created_at: 2.days.ago)
+      purchase.add_to_audience_member_details
+
+      described_class.new.perform(@post.id, 3.days.ago.iso8601, true, @post_rule.version)
+
+      expect(SendWorkflowInstallmentRescheduleJob.jobs).to be_empty
+    end
+
+    it "repairs a purchase from the publication second" do
+      published_at = Time.current.change(usec: 0)
+      @post.update!(published_at:, is_for_new_customers_of_workflow: true)
+      purchase = create(:free_purchase, link: @product, created_at: published_at)
+      purchase.add_to_audience_member_details
+
+      described_class.new.perform(@post.id, published_at.iso8601, true, @post_rule.version)
+
+      expect(SendWorkflowInstallmentRescheduleJob).to have_enqueued_sidekiq_job(
+        @post.id,
+        @post_rule.version,
+        purchase.id,
+        nil,
+        nil,
+        nil,
+        published_at.iso8601
+      ).at(published_at + @post_rule.delayed_delivery_time)
+    end
   end
 
   describe "#perform" do
@@ -301,6 +620,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         @affiliates << create(:direct_affiliate, seller: @seller, send_posts: true, created_at: 4.hours.ago)
         @affiliates[0].products << @products[0]
         @affiliates[0].products << @products[1]
+        @affiliate_trigger = @affiliates[0].product_affiliates.max_by(&:created_at)
+        @affiliate_trigger_time = @affiliate_trigger.created_at.change(usec: 0)
 
         # Basic check for working recipient filtering.
         # The details of it are tested in the Installment model specs.
@@ -367,7 +688,15 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         described_class.new.perform(@post.id)
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+          @post.id,
+          @post_rule.version,
+          nil,
+          nil,
+          @affiliates[0].affiliate_user_id,
+          nil,
+          @affiliate_trigger_time.iso8601
+        ).at(@affiliate_trigger_time + @post_rule.delayed_delivery_time)
       end
 
       it "when affiliate_type? is true and a bought-product filter is set, it still resolves the matching affiliate" do
@@ -380,7 +709,15 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         described_class.new.perform(@post.id)
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+          @post.id,
+          @post_rule.version,
+          nil,
+          nil,
+          @affiliates[0].affiliate_user_id,
+          nil,
+          @affiliate_trigger_time.iso8601
+        ).at(@affiliate_trigger_time + @post_rule.delayed_delivery_time)
       end
 
       it "enqueues an affiliate id the worker can actually resolve to a user" do
@@ -389,7 +726,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
         # The worker resolves this argument with User.find_by, so a DirectAffiliate id here
         # lands on whichever unrelated user happens to share that number, or on nobody.
-        enqueued_id = SendWorkflowInstallmentWorker.jobs.last["args"].last
+        enqueued_id = SendWorkflowInstallmentWorker.jobs.last["args"][4]
         expect(User.find_by(id: enqueued_id)).to eq(@affiliates[0].affiliate_user)
         expect(enqueued_id).not_to eq(@affiliates[0].id)
       end
@@ -411,13 +748,23 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         # Reproduce the case Greptile flagged: the member still qualifies, but the aggregate over
         # the JSON_TABLE join hands back a NULL affiliate id, so the job resolves it itself.
         allow(member).to receive(:details).and_return(details)
-        allow(member).to receive(:affiliate_id).and_return(nil)
+        affiliate_id = nil
+        allow(member).to receive(:affiliate_id) { affiliate_id }
+        allow(member).to receive(:affiliate_id=) { |value| affiliate_id = value }
         allow(AudienceMember).to receive(:filter).and_return(double(select: [member]))
 
         described_class.new.perform(@post.id)
 
         expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+          @post.id,
+          @post_rule.version,
+          nil,
+          nil,
+          @affiliates[0].affiliate_user_id,
+          nil,
+          @affiliate_trigger_time.iso8601
+        ).at(@affiliate_trigger_time + @post_rule.delayed_delivery_time)
       end
 
       it "when the affiliate id is missing and nothing on the member is in scope, it skips them instead of sending" do
@@ -431,7 +778,9 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
           { "id" => @affiliates[0].id + 1_000, "product_id" => @products[2].id, "created_at" => 1.hour.ago.iso8601 },
         ]
         allow(member).to receive(:details).and_return(details)
-        allow(member).to receive(:affiliate_id).and_return(nil)
+        affiliate_id = nil
+        allow(member).to receive(:affiliate_id) { affiliate_id }
+        allow(member).to receive(:affiliate_id=) { |value| affiliate_id = value }
         allow(AudienceMember).to receive(:filter).and_return(double(select: [member]))
 
         expect(Rails.logger).to receive(:error).with(/could not resolve a affiliate recipient/)
@@ -449,7 +798,15 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[0].id, nil, nil, @followers[0].confirmed_at.iso8601).immediately
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, @followers[1].id, nil, nil, @followers[1].confirmed_at.iso8601).at(19.hours.from_now)
 
-        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, nil, nil, @affiliates[0].affiliate_user_id).at(20.hours.from_now)
+        expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
+          @post.id,
+          @post_rule.version,
+          nil,
+          nil,
+          @affiliates[0].affiliate_user_id,
+          nil,
+          @affiliate_trigger_time.iso8601
+        ).at(@affiliate_trigger_time + @post_rule.delayed_delivery_time)
 
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, @sales[2].id, nil, nil).immediately
         expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@post.id, @post_rule.version, @sales[3].id, nil, nil).immediately

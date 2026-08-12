@@ -8,12 +8,13 @@ class SendWorkflowPostEmailsJob
   sidekiq_options retry: 5, queue: :low
 
   FOLLOWER_LOOKUP_BATCH_SIZE = 1_000
+  AFFILIATE_LOOKUP_BATCH_SIZE = 1_000
 
-  def perform(post_id, earliest_valid_time = nil, _reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
+  def perform(post_id, earliest_valid_time = nil, reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
     @schedule_intent_token = schedule_intent_token
     @schedule_intent_fanout_token = schedule_intent_fanout_token
     primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? ||
-                     schedule_intent_fanout_token.present? || earliest_valid_time.present?
+                     schedule_intent_fanout_token.present? || earliest_valid_time.present? || reschedule_on_stale
     ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
     return unless WorkflowInstallmentScheduleIntent.begin_fanout(
       intent_token: schedule_intent_token,
@@ -29,6 +30,7 @@ class SendWorkflowPostEmailsJob
       return
     end
     @workflow = @post.workflow
+    @reschedule_on_stale = reschedule_on_stale
     unless @workflow&.alive? && @post.alive? && @post.published?
       WorkflowInstallmentScheduleIntent.mark_processed(
         schedule_intent_token,
@@ -59,18 +61,23 @@ class SendWorkflowPostEmailsJob
       @recipient_cutoff_time
     end
     apply_recipient_cutoff_to_filters
-    @keep_primary_for_cutoff_scan = @recipient_cutoff_time.present?
+    @keep_primary_for_cutoff_scan = @recipient_cutoff_time.present? || @reschedule_on_stale
     unless @keep_primary_for_cutoff_scan
       Makara::Context.release_all
       primary_pinned = false
     end
+    @recovered_affiliate_member_ids = Set.new
     # Same protection as SendPostBlastEmailsJob: for sellers with very large audiences the
     # filter query can exceed the database's default 5-minute statement cap, so raise it for
     # this one query.
     audience_timeout = audience_load_timeout_seconds
     return unless renew_fanout_lease(force: true)
     @members = WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) do
-      AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).
+      filter_params = @post.affiliate_type? && @recipient_cutoff_time ? @original_filters : @filters
+      filter_ids = affiliate_member_ids_after_cutoff if @post.affiliate_type? && @recipient_cutoff_time
+      filter_options = { seller_id: @post.seller_id, params: filter_params, with_ids: true }
+      filter_options[:ids] = filter_ids if filter_ids
+      AudienceMember.filter(**filter_options).
         select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
     end
     return unless renew_fanout_lease(force: true)
@@ -78,8 +85,17 @@ class SendWorkflowPostEmailsJob
       return unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_confirmed_followers_after_cutoff(@members) }
       return unless renew_fanout_lease(force: true)
     end
+    if affiliate_recovery?
+      return unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_affiliates_after_cutoff(@members) }
+      return unless renew_fanout_lease(force: true)
+    end
     @follower_confirmation_times_by_id = follower_confirmation_times_by_id(@members)
     return if @follower_confirmation_times_by_id.nil?
+    return unless renew_fanout_lease(force: true)
+    @affiliate_recipients_by_key = affiliate_recipients_by_key(@members)
+    return if @affiliate_recipients_by_key.nil?
+    return unless renew_fanout_lease(force: true)
+    normalize_affiliate_matches(@members)
     return unless renew_fanout_lease(force: true)
     if @keep_primary_for_cutoff_scan
       @keep_primary_for_cutoff_scan = false
@@ -166,40 +182,33 @@ class SendWorkflowPostEmailsJob
         purchase = member.details["purchases"].find { _1["id"] == id }
         return log_unresolvable_recipient(member:, type:) if purchase.nil?
         created_at = Time.zone.parse(purchase["created_at"])
-        enqueue_installment_worker(created_at + @rule_delay, @post.id, @rule_version, id, nil, nil)
+        enqueue_installment_worker(created_at:, purchase_id: id)
       elsif type == :follower
         id ||= member.details.dig("follower", "id")
         return log_unresolvable_recipient(member:, type:) if id.nil?
         confirmed_at = @follower_confirmation_times_by_id[id]
         return log_unresolvable_recipient(member:, type:) if confirmed_at.nil?
-        enqueue_installment_worker(
-          confirmed_at + @rule_delay,
-          @post.id,
-          @rule_version,
-          nil,
-          id,
-          nil,
-          nil,
-          confirmed_at.iso8601
-        )
+        enqueue_installment_worker(created_at: confirmed_at, follower_id: id, preserve_reference_time: true)
       elsif type == :affiliate
-        affiliate = resolve_affiliate(member:, id:)
-        return log_unresolvable_recipient(member:, type:) if affiliate.nil?
-        # The worker's last positional argument is an affiliate USER id — it does
-        # `User.find_by(id: affiliate_user_id)`. What we have resolved here is a
-        # DirectAffiliate id: that is what `details["affiliates"]` stores and what
-        # `max(jt.affiliate_id)` aggregates. The two id spaces are unrelated, so passing the
-        # affiliate id sent the email to whichever user happened to share that number, or to
-        # nobody at all. Translate it, the same way DirectAffiliate's own enqueue path does.
-        affiliate_user_id = Affiliate.where(id: affiliate["id"]).pick(:affiliate_user_id)
-        return log_unresolvable_recipient(member:, type:) if affiliate_user_id.nil?
-        created_at = Time.zone.parse(affiliate["created_at"])
-        enqueue_installment_worker(created_at + @rule_delay, @post.id, @rule_version, nil, nil, affiliate_user_id)
+        affiliate_triggers = resolve_affiliate_triggers(member:, id:)
+        return log_unresolvable_recipient(member:, type:) if affiliate_triggers.empty?
+
+        affiliate_triggers.each do |affiliate|
+          enqueue_installment_worker(
+            created_at: affiliate[:created_at],
+            affiliate_user_id: affiliate[:affiliate_user_id],
+            preserve_reference_time: true
+          )
+        end
       end
     end
 
-    def enqueue_installment_worker(deliver_at, *args)
-      job_id = SendWorkflowInstallmentWorker.perform_at(deliver_at, *args)
+    def enqueue_installment_worker(created_at:, purchase_id: nil, follower_id: nil, affiliate_user_id: nil, preserve_reference_time: false)
+      args = [@post.id, @rule_version, purchase_id, follower_id, affiliate_user_id]
+      reschedule_recipient = @reschedule_on_stale && [purchase_id, follower_id, affiliate_user_id].one?(&:present?)
+      args.push(nil, created_at.iso8601) if reschedule_recipient || preserve_reference_time
+      worker = reschedule_recipient ? SendWorkflowInstallmentRescheduleJob : SendWorkflowInstallmentWorker
+      job_id = worker.perform_at(created_at + @rule_delay, *args)
       return job_id if job_id.present?
 
       raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"
@@ -253,6 +262,49 @@ class SendWorkflowPostEmailsJob
       true
     end
 
+    def affiliate_member_ids_after_cutoff
+      product_affiliates = ProductAffiliate
+        .joins(affiliate: :affiliate_user)
+        .merge(DirectAffiliate.alive.send_posts)
+        .where(affiliates: { seller_id: @post.seller_id })
+        .where("affiliates_links.created_at >= ?", @recipient_cutoff_time.change(usec: 0))
+      if @original_filters[:affiliate_product_ids].present?
+        product_affiliates = product_affiliates.where(link_id: @original_filters[:affiliate_product_ids])
+      end
+      affiliate_emails = product_affiliates.select("LOWER(users.email)")
+      AudienceMember.where(seller_id: @post.seller_id, email: affiliate_emails).select(:id)
+    end
+
+    def affiliates_after_cutoff
+      return [] if @recipient_cutoff_time.nil? || !@post.audience_type?
+
+      AudienceMember.filter(
+        seller_id: @post.seller_id,
+        params: @original_filters,
+        with_ids: true,
+        ids: affiliate_member_ids_after_cutoff
+      ).select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
+        .select { scoped_affiliate_details(member: _1, id: nil).any? }
+    end
+
+    def merge_affiliates_after_cutoff(members)
+      members_by_id = members.index_by(&:id)
+      affiliates_after_cutoff.each do |affiliate_member|
+        @recovered_affiliate_member_ids << affiliate_member.id
+        next if members_by_id.key?(affiliate_member.id)
+
+        affiliate_member.purchase_id = nil
+        affiliate_member.follower_id = nil
+        members << affiliate_member
+        members_by_id[affiliate_member.id] = affiliate_member
+      end
+      members
+    end
+
+    def affiliate_recovery?
+      @recipient_cutoff_time.present? && (@post.affiliate_type? || @post.audience_type?)
+    end
+
     def follower_confirmation_times_by_id(members)
       return {} unless @post.follower_type? || @post.audience_type?
 
@@ -270,28 +322,78 @@ class SendWorkflowPostEmailsJob
       end
     end
 
-    # A person can be an affiliate for several of the seller's products, and `details["affiliates"]`
-    # holds one entry per (affiliate relationship, product) pair, each with its own id and
-    # created_at. When the join handed us an id, that entry already satisfied the post's filters,
-    # so use it directly. When it did not, we cannot just take the newest entry on the member: if
-    # the post is scoped to specific products ("affiliate of these products"), only the entries for
-    # those products are legitimate recipients. Sending with any other entry would email the person
-    # as the affiliate of a product this post is not about, and would schedule the delayed delivery
-    # off that unrelated relationship's created_at. So narrow to the post's products first, then
-    # take the highest id, which is the entry `max(jt.affiliate_id)` in AudienceMember.filter would
-    # have picked. With no product scope, every entry is a valid recipient.
-    def resolve_affiliate(member:, id:)
-      affiliates = member.details["affiliates"] || []
-      return affiliates.find { _1["id"] == id } if id.present?
+    def affiliate_recipients_by_key(members)
+      affiliate_ids = members.flat_map do |member|
+        next [] unless @post.affiliate_type? || member.affiliate_id.present? || @recovered_affiliate_member_ids.include?(member.id)
 
-      product_ids = @filters[:affiliate_product_ids]
-      candidates = if product_ids.present?
-        allowed = product_ids.map(&:to_i).to_set
-        affiliates.select { allowed.include?(_1["product_id"].to_i) }
-      else
-        affiliates
+        id = @recovered_affiliate_member_ids.include?(member.id) ? nil : member.affiliate_id
+        scoped_affiliate_details(member:, id:).filter_map { _1["id"] }
+      end.uniq
+
+      affiliate_ids.each_slice(AFFILIATE_LOOKUP_BATCH_SIZE).each_with_object({}) do |ids, recipients|
+        return unless renew_fanout_lease
+
+        product_affiliates = ProductAffiliate
+          .joins(:affiliate)
+          .merge(DirectAffiliate.alive.send_posts)
+          .where(affiliate_id: ids)
+          .where.not(created_at: nil)
+        if @original_filters[:affiliate_product_ids].present?
+          product_affiliates = product_affiliates.where(link_id: @original_filters[:affiliate_product_ids])
+        end
+        product_affiliates
+          .pluck(
+            "affiliates_links.affiliate_id",
+            "affiliates_links.link_id",
+            "affiliates_links.created_at",
+            "affiliates.affiliate_user_id",
+            "affiliates.created_at"
+          )
+          .each do |affiliate_id, product_id, created_at, affiliate_user_id, identity_created_at|
+            recipients[[affiliate_id, product_id]] ||= []
+            recipients[[affiliate_id, product_id]] << {
+              affiliate_id:,
+              affiliate_user_id:,
+              product_id:,
+              created_at: created_at.change(usec: 0),
+              identity_created_at:
+            }
+          end
       end
-      candidates.select { _1["id"].present? }.max_by { _1["id"] }
+    end
+
+    def normalize_affiliate_matches(members)
+      return unless @post.affiliate_type? || @post.audience_type?
+
+      members.each do |member|
+        recovered = @recovered_affiliate_member_ids.include?(member.id)
+        next unless @post.affiliate_type? || member.affiliate_id.present? || recovered
+
+        affiliate = resolve_affiliate_triggers(member:, id: recovered ? nil : member.affiliate_id).last
+        member.affiliate_id = affiliate&.fetch(:affiliate_id, nil)
+      end
+    end
+
+    # Product assignments are the durable delivery trigger. Audience dates still describe the affiliate identity.
+    def resolve_affiliate_triggers(member:, id:)
+      recipients = scoped_affiliate_details(member:, id:).filter_map do |details|
+        @affiliate_recipients_by_key[[details["id"], details["product_id"]]]
+      end.flatten
+      recipients.select! { workflow_dates_include?(_1[:identity_created_at]) }
+      recipients.select! { _1[:created_at] >= @recipient_cutoff_time.change(usec: 0) } if @recipient_cutoff_time
+      recipients
+        .uniq { [_1[:affiliate_user_id], _1[:created_at]] }
+        .sort_by { _1[:created_at] }
+    end
+
+    def scoped_affiliate_details(member:, id:)
+      candidates = member.details["affiliates"] || []
+      candidates = candidates.select { _1["id"] == id } if id.present?
+      if @original_filters[:affiliate_product_ids].present?
+        allowed_product_ids = @original_filters[:affiliate_product_ids].map(&:to_i).to_set
+        candidates = candidates.select { allowed_product_ids.include?(_1["product_id"].to_i) }
+      end
+      candidates.select { workflow_dates_include?(_1["created_at"]) }
     end
 
     def workflow_dates_include?(created_at)
