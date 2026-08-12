@@ -5,12 +5,14 @@
 #
 class SendChargeReceiptJob
   include Sidekiq::Job
+  # Runtime-only locking avoids the until-and-while lock's lossy handoff. Sequential duplicates
+  # are safe because receipt_sent and delivery markers make them no-ops.
   sidekiq_options queue: :critical,
                   retry: 5,
-                  lock: :until_and_while_executing,
+                  lock: :while_executing,
                   lock_timeout: 2,
                   unique_across_queues: true,
-                  on_conflict: { client: :log, server: :raise }
+                  on_conflict: { server: :raise }
 
   def perform(charge_id)
     charge = Charge.find(charge_id)
