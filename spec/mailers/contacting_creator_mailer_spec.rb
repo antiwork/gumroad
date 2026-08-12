@@ -2150,6 +2150,21 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include edit_link_url(product_without_refund_policy)
       end
     end
+
+    context "when every disputed product has since gained a refund policy" do
+      let(:product) { create(:product, user: seller) }
+      let!(:purchase) { create(:purchase, seller:, link: product) }
+      let(:dispute) { create(:dispute_formalized, purchase:) }
+
+      it "does not send" do
+        create(:product_refund_policy, seller:, product:)
+        product.update!(product_refund_policy_enabled: true)
+
+        mail = ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id)
+
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+    end
   end
 
   describe "chargeback_won" do
