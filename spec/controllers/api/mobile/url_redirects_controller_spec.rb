@@ -430,6 +430,23 @@ describe Api::Mobile::UrlRedirectsController do
       end.to change { @url_redirect.reload.uses }.from(0).to(1)
     end
 
+    it "returns a 404 without recording a download when the file is missing from storage" do
+      file = @product.product_files.first
+      allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file)
+        .with(file)
+        .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+      expect do
+        get :download, params: { token: @url_redirect.token,
+                                 product_file_id: file.external_id,
+                                 mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+      end.to_not change(ConsumptionEvent, :count)
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "The file is no longer available." }.as_json)
+      expect(@url_redirect.reload.uses).to eq(0)
+    end
+
     it "does not download content for a terminated purchase" do
       [
         [:refunded, ->(purchase) { purchase.update!(stripe_refunded: true) }],

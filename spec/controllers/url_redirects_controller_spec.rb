@@ -1414,6 +1414,19 @@ describe UrlRedirectsController, inertia: true do
       expect(loc.include?("X-Amz-Signature=")).to be(true)
     end
 
+    it "redirects to the download page with a warning when the only file is missing from storage" do
+      allow_any_instance_of(UrlRedirect).to receive(:redirect_or_s3_location)
+        .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+      expect do
+        get :show, params: { id: @token }
+      end.to_not change(ConsumptionEvent, :count)
+
+      expect(response).to redirect_to(@url_redirect.download_page_url)
+      expect(flash[:warning]).to eq("The file is no longer available. Please contact the seller.")
+      expect(@url_redirect.reload.uses).to eq(0)
+    end
+
     it "marks the url_redirect as seen" do
       expect { get :show, params: { id: @url_redirect.token } }.to change { @url_redirect.reload.has_been_seen }.from(false).to(true)
     end
