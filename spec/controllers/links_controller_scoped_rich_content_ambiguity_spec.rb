@@ -118,4 +118,154 @@ describe LinksController, type: :controller do
 
     expect(response).to have_http_status(:conflict).or have_http_status(:unprocessable_entity)
   end
+
+  it "rejects an existing page id submitted under two different variant scopes" do
+    category = create(:variant_category, link: product, title: "Tier")
+    tier_a = create(:variant, variant_category: category, name: "Tier A")
+    tier_b = create(:variant, variant_category: category, name: "Tier B")
+    page = create(:rich_content, entity: tier_a, title: "One", description: paragraph("Original"))
+
+    params = editor_save_params(
+      [
+        {
+          id: tier_a.external_id,
+          name: tier_a.name,
+          price_difference_cents: 0,
+          rich_content: [
+            { id: page.external_id, title: "One", description: { type: "doc", content: paragraph("Kept") } }
+          ],
+        },
+        {
+          id: tier_b.external_id,
+          name: tier_b.name,
+          price_difference_cents: 0,
+          rich_content: [
+            { id: page.external_id, title: "One", description: { type: "doc", content: paragraph("Also here") } }
+          ],
+        }
+      ]
+    )
+
+    post :update, params: params, as: :json
+
+    expect(response).to have_http_status(:conflict)
+    expect(page.reload.entity).to eq(tier_a)
+  end
+
+  # Pins the classification line each refusal writes (gumroad-private#2023).
+  describe "conflict logging" do
+    before { allow(Rails.logger).to receive(:info).and_call_original }
+
+    it "logs the per-scope duplicate check with the offending id" do
+      category = create(:variant_category, link: product, title: "Tier")
+      tier_a = create(:variant, variant_category: category, name: "Tier A")
+
+      params = editor_save_params(
+        [
+          {
+            id: tier_a.external_id,
+            name: tier_a.name,
+            price_difference_cents: 0,
+            rich_content: [
+              { id: "dup-id", title: "One", description: { type: "doc", content: paragraph("1") } },
+              { id: "dup-id", title: "Two", description: { type: "doc", content: paragraph("2") } }
+            ],
+          }
+        ]
+      )
+
+      post :update, params: params, as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(Rails.logger).to have_received(:info).with(
+        a_string_including(
+          "[product_editor_save_conflict]",
+          "error_code=ambiguous_rich_content_id_conflict",
+          "product_id=#{product.id}",
+          "provenance_version=2",
+          'check="per_scope"',
+          "dup-id"
+        )
+      )
+    end
+
+    it "logs the global check for a payload without scoped-mapping support" do
+      category = create(:variant_category, link: product, title: "Tier")
+      tier_a = create(:variant, variant_category: category, name: "Tier A")
+      tier_b = create(:variant, variant_category: category, name: "Tier B")
+
+      params = editor_save_params(
+        [
+          {
+            id: tier_a.external_id,
+            name: tier_a.name,
+            price_difference_cents: 0,
+            rich_content: [
+              { id: "shared-client-id", title: "A", description: { type: "doc", content: paragraph("A") } }
+            ],
+          },
+          {
+            id: tier_b.external_id,
+            name: tier_b.name,
+            price_difference_cents: 0,
+            rich_content: [
+              { id: "shared-client-id", title: "B", description: { type: "doc", content: paragraph("B") } }
+            ],
+          }
+        ]
+      )
+      params[:rich_content_provenance_version] = 1
+
+      post :update, params: params, as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(Rails.logger).to have_received(:info).with(
+        a_string_including(
+          "error_code=ambiguous_rich_content_id_conflict",
+          "provenance_version=1",
+          'check="global"',
+          "shared-client-id"
+        )
+      )
+    end
+
+    it "logs the existing-id check with the id and both scopes" do
+      category = create(:variant_category, link: product, title: "Tier")
+      tier_a = create(:variant, variant_category: category, name: "Tier A")
+      tier_b = create(:variant, variant_category: category, name: "Tier B")
+      page = create(:rich_content, entity: tier_a, title: "One", description: paragraph("Original"))
+
+      params = editor_save_params(
+        [
+          {
+            id: tier_a.external_id,
+            name: tier_a.name,
+            price_difference_cents: 0,
+            rich_content: [
+              { id: page.external_id, title: "One", description: { type: "doc", content: paragraph("Kept") } }
+            ],
+          },
+          {
+            id: tier_b.external_id,
+            name: tier_b.name,
+            price_difference_cents: 0,
+            rich_content: [
+              { id: page.external_id, title: "One", description: { type: "doc", content: paragraph("Also here") } }
+            ],
+          }
+        ]
+      )
+
+      post :update, params: params, as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(Rails.logger).to have_received(:info).with(
+        a_string_including(
+          "error_code=ambiguous_rich_content_id_conflict",
+          'check="existing_id_multiple_scopes"',
+          page.external_id
+        )
+      )
+    end
+  end
 end
