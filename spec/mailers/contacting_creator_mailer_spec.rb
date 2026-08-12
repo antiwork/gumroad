@@ -2120,6 +2120,16 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include product.long_url
         expect(mail.body.encoded).to include edit_link_url(product)
       end
+
+      it "renders from one delivery-time refund-policy snapshot" do
+        allow(Dispute).to receive(:find).with(dispute.id).and_return(dispute)
+        expect(purchase).to receive(:first_product_without_refund_policy).once.and_return(product)
+
+        mail = ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id)
+
+        expect(mail.body.encoded).to include product.name
+        expect(mail.body.encoded).to include edit_link_url(product)
+      end
     end
 
     context "for a dispute on Charge" do
@@ -2148,6 +2158,21 @@ describe ContactingCreatorMailer do
         product_without_refund_policy = charge.first_product_without_refund_policy
         expect(mail.body.encoded).to include "We noticed that #{product_without_refund_policy.name} currently doesn't have a refund policy."
         expect(mail.body.encoded).to include edit_link_url(product_without_refund_policy)
+      end
+    end
+
+    context "when every disputed product has since gained a refund policy" do
+      let(:product) { create(:product, user: seller) }
+      let!(:purchase) { create(:purchase, seller:, link: product) }
+      let(:dispute) { create(:dispute_formalized, purchase:) }
+
+      it "does not send" do
+        create(:product_refund_policy, seller:, product:)
+        product.update!(product_refund_policy_enabled: true)
+
+        mail = ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id)
+
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
       end
     end
   end

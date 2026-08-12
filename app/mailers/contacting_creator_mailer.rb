@@ -461,6 +461,10 @@ class ContactingCreatorMailer < ApplicationMailer
   def chargeback_lost_no_refund_policy(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
+    # Mailer jobs can render after product refund policies change.
+    @product_without_refund_policy = @disputable.first_product_without_refund_policy
+    return do_not_send if @product_without_refund_policy.nil?
+
     @seller = @disputable.seller
     @subject = "A dispute has been lost"
   end
