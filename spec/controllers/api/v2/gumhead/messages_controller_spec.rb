@@ -11,6 +11,7 @@ describe Api::V2::Gumhead::MessagesController do
 
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(GlobalConfig).to receive(:get).with("GUMHEAD_ANTHROPIC_API_KEY").and_return("sk-ant-gateway-test")
+    allow(GlobalConfig).to receive(:get).with("GUMHEAD_OAUTH_APPLICATION_UIDS", "").and_return(@app.uid)
 
     request.headers["Authorization"] = "Bearer #{@token.token}"
   end
@@ -71,6 +72,17 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(503)
     end
 
+    it "rejects a token from an OAuth application outside the allowlist" do
+      foreign_app = create(:oauth_application, owner: @user)
+      foreign_token = create("doorkeeper/access_token", application: foreign_app, resource_owner_id: @user.id, scopes: "account")
+      request.headers["Authorization"] = "Bearer #{foreign_token.token}"
+
+      post_messages
+
+      expect(response.status).to eq(403)
+      expect(JSON.parse(response.body)["error"]["message"]).to include("OAuth application")
+    end
+
     it "throttles once the hourly request budget is spent" do
       $redis.setex(
         RedisKey.gumhead_gateway_throttle(@user.id),
@@ -86,13 +98,16 @@ describe Api::V2::Gumhead::MessagesController do
     end
 
     it "rejects a request past the concurrent in-flight limit and frees the probe slot" do
-      $redis.set(RedisKey.gumhead_gateway_in_flight(@user.id), described_class::MAX_IN_FLIGHT_REQUESTS)
+      $redis.setex(RedisKey.gumhead_gateway_in_flight(@user.id), 120, described_class::MAX_IN_FLIGHT_REQUESTS)
 
       post_messages
 
       expect(response.status).to eq(429)
       expect(WebMock).not_to have_requested(:post, messages_url)
       expect($redis.get(RedisKey.gumhead_gateway_in_flight(@user.id)).to_i).to eq(described_class::MAX_IN_FLIGHT_REQUESTS)
+      # A rejected probe must not renew the stale counter's TTL, or retries
+      # would keep a leaked counter alive forever.
+      expect($redis.ttl(RedisKey.gumhead_gateway_in_flight(@user.id))).to be_between(1, 120)
     end
   end
 
@@ -156,6 +171,14 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(response.status).to eq(400)
       expect(JSON.parse(response.body)["error"]["type"]).to eq("invalid_request_error")
+    end
+
+    it "rejects pricing modifiers the ledger cannot weight" do
+      post_messages(request_payload.merge(speed: "fast"))
+      expect(response.status).to eq(400)
+
+      post_messages(request_payload.merge(inference_geo: "us"))
+      expect(response.status).to eq(400)
     end
   end
 

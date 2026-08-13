@@ -29,12 +29,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   end
 
   before_action { doorkeeper_authorize! }
-  before_action :ensure_gumhead_enabled
   before_action :ensure_gateway_configured
+  before_action :ensure_first_party_client
+  before_action :ensure_gumhead_enabled
   before_action :throttle_gateway_requests
   before_action :load_body
   before_action :validate_model
   before_action :validate_tools
+  before_action :validate_pricing_modifiers
   before_action :validate_max_tokens, only: [:create]
   before_action :enforce_daily_token_caps, only: [:create]
 
@@ -101,9 +103,23 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     def ensure_gateway_configured
-      return if anthropic_api_key.present?
+      return if anthropic_api_key.present? && gumhead_oauth_application_uids.any?
 
       render json: anthropic_error("api_error", "The Gumhead gateway is not configured."), status: :service_unavailable
+    end
+
+    # The base controller accepts any token with the public `account` scope,
+    # which third-party OAuth applications can hold. This gateway spends
+    # Gumroad's model key, so only Gumhead's own OAuth application may call
+    # it — same first-party pattern as MOBILE_API_OAUTH_APPLICATION_UID.
+    def ensure_first_party_client
+      return if gumhead_oauth_application_uids.include?(doorkeeper_token.application&.uid)
+
+      render json: anthropic_error("permission_error", "This OAuth application cannot use the Gumhead gateway."), status: :forbidden
+    end
+
+    def gumhead_oauth_application_uids
+      GlobalConfig.get("GUMHEAD_OAUTH_APPLICATION_UIDS", "").to_s.split(",").map(&:strip).reject(&:blank?)
     end
 
     # Not Throttling#throttle!: that helper renders {error:, retry_after:},
@@ -124,7 +140,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def acquire_in_flight_slot
       key = RedisKey.gumhead_gateway_in_flight(current_resource_owner.id)
       count = $redis.incr(key)
-      $redis.expire(key, IN_FLIGHT_TTL.to_i)
+      # Only the first acquisition arms the TTL. A rejected probe must not
+      # renew it: after a leak (killed worker), per-TTL retries would
+      # otherwise keep the stale counter alive forever. Live streams renew
+      # explicitly via renew_in_flight_lease.
+      $redis.expire(key, IN_FLIGHT_TTL.to_i) if count == 1
       return true if count <= MAX_IN_FLIGHT_REQUESTS
 
       release_in_flight_slot
@@ -192,6 +212,15 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       nil
     end
 
+    # `speed: "fast"` and `inference_geo` carry pricing multipliers the
+    # ledger does not weight, so they would spend the shared key invisibly.
+    def validate_pricing_modifiers
+      speed_ok = @body["speed"].nil? || @body["speed"] == "standard"
+      return if speed_ok && @body["inference_geo"].nil?
+
+      render json: anthropic_error("invalid_request_error", "speed and inference_geo options are not available through the Gumhead gateway."), status: :bad_request
+    end
+
     # A missing max_tokens passes through: Anthropic's own error for it is
     # the better message. Everything else must be an integer under the
     # ceiling — untrusted JSON can put any type here.
@@ -212,12 +241,19 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     def forward_buffered(url, meter:)
+      upstream = nil
       upstream = HTTP.timeout(BUFFERED_TIMEOUT).headers(upstream_headers).post(url, body: @raw_body)
       body = upstream.body.to_s
       meter_buffered_usage(body) if meter && upstream.status.success?
       render body:, content_type: "application/json", status: upstream.status.code
     rescue HTTP::Error => e
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+      # A success status whose body was lost mid-read was still generated
+      # and billed upstream. Charge a floor estimate of the prompt (~4
+      # bytes per token) so the failure is not free against the caps.
+      if meter && upstream&.status&.success?
+        record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4 })
+      end
       render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
     end
 
