@@ -42,7 +42,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
   ANTHROPIC_API_BASE = "https://api.anthropic.com/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
-  ALLOWED_MODEL_PREFIX = "claude-"
+  # The model families Gumhead actually uses (main loop, narrator, artist).
+  # The caps are token-denominated, so an unlisted pricier SKU cannot be
+  # smuggled in to spend faster per token; ops can extend the list without
+  # a deploy via GUMHEAD_ALLOWED_MODEL_PREFIXES.
+  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-"
   # Matches nginx's client_max_body_size; a larger constant here would
   # document a limit requests can never reach.
   MAX_BODY_BYTES = 10.megabytes
@@ -143,8 +147,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # Only the first acquisition arms the TTL. A rejected probe must not
       # renew it: after a leak (killed worker), per-TTL retries would
       # otherwise keep the stale counter alive forever. Live streams renew
-      # explicitly via renew_in_flight_lease.
-      $redis.expire(key, IN_FLIGHT_TTL.to_i) if count == 1
+      # explicitly via renew_in_flight_lease. The ttl == -1 arm repairs a
+      # counter whose worker died between INCR and EXPIRE — without it that
+      # key would never expire and could lock the seller out permanently.
+      $redis.expire(key, IN_FLIGHT_TTL.to_i) if count == 1 || $redis.ttl(key) == -1
       return true if count <= MAX_IN_FLIGHT_REQUESTS
 
       release_in_flight_slot
@@ -171,9 +177,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     def validate_model
-      return if @body["model"].to_s.start_with?(ALLOWED_MODEL_PREFIX)
+      model = @body["model"].to_s
+      return if allowed_model_prefixes.any? { |prefix| model.start_with?(prefix) }
 
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
+    end
+
+    def allowed_model_prefixes
+      GlobalConfig.get("GUMHEAD_ALLOWED_MODEL_PREFIXES", DEFAULT_ALLOWED_MODEL_PREFIXES).to_s.split(",").map(&:strip).reject(&:blank?)
     end
 
     # Server-side tools (web search, code execution) bill per use outside
@@ -307,7 +318,9 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     def write_stream_error_frame
       payload = anthropic_error("api_error", "The connection to the model service was interrupted.")
-      response.stream.write("event: error\ndata: #{payload.to_json}\n\n")
+      # The last upstream chunk can end mid-line; the leading blank line
+      # terminates any partial event so this frame parses on its own.
+      response.stream.write("\n\nevent: error\ndata: #{payload.to_json}\n\n")
     rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
       # Both sides are gone; nothing left to tell anyone.
     end

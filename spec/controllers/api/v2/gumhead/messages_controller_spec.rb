@@ -159,6 +159,12 @@ describe Api::V2::Gumhead::MessagesController do
       expect(JSON.parse(response.body)["error"]["message"]).to include("not available")
     end
 
+    it "rejects a Claude SKU outside the default family allowlist" do
+      post_messages(request_payload.merge(model: "claude-fable-5"))
+
+      expect(response.status).to eq(400)
+    end
+
     it "rejects max_tokens over the per-request ceiling" do
       post_messages(request_payload.merge(max_tokens: described_class::MAX_TOKENS_PER_REQUEST + 1))
 
