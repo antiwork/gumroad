@@ -448,8 +448,6 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     end
 
     it "synthesizes a flow of funds and heals a combined-charge PayPal purchase whose success callback was missed" do
-      # gumroad-private#1608: PaypalCharge never builds a flow of funds, so the "processor hasn't
-      # settled yet, retry later" guard fired on every pass forever for these rows.
       merchant_account = create(:merchant_account_paypal, user: @product.user,
                                                           charge_processor_merchant_id: "CJS32DZ7NDN5L", currency: "gbp")
       purchase = create(:purchase, link: @product, purchase_state: "in_progress",
