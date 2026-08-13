@@ -527,6 +527,7 @@ describe ProductPresenter do
           receipt_email_from: "#{product.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
           price_checker_enabled: false,
           custom_html_pages_enabled: false,
+          autosave_enabled: false,
           custom_html_store_hostnames: product.user.custom_html_store_hostnames,
           custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
           custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
@@ -583,6 +584,14 @@ describe ProductPresenter do
 
       it "exposes custom_html_pages_enabled: true in edit_props" do
         expect(presenter.edit_props[:custom_html_pages_enabled]).to eq(true)
+      end
+    end
+
+    context "when the product_editor_autosave feature flag is enabled for the seller" do
+      before { Feature.activate_user(:product_editor_autosave, product.user) }
+
+      it "exposes autosave_enabled: true in edit_props" do
+        expect(presenter.edit_props[:autosave_enabled]).to eq(true)
       end
     end
 
@@ -882,6 +891,7 @@ describe ProductPresenter do
             receipt_email_from: "#{membership.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
             price_checker_enabled: false,
             custom_html_pages_enabled: false,
+            autosave_enabled: false,
             custom_html_store_hostnames: membership.user.custom_html_store_hostnames,
             custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
             custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
@@ -1130,6 +1140,7 @@ describe ProductPresenter do
             receipt_email_from: "#{new_product.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
             price_checker_enabled: false,
             custom_html_pages_enabled: false,
+            autosave_enabled: false,
             custom_html_store_hostnames: new_product.user.custom_html_store_hostnames,
             custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
             custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,

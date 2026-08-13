@@ -103,7 +103,7 @@ type Props = {
   receipt_email_from: string;
   price_checker_enabled: boolean;
   custom_html_pages_enabled: boolean;
-
+  autosave_enabled: boolean;
   custom_html_store_hostnames: string[];
   custom_html_global_nav_hosts: string[];
   custom_html_global_nav_paths: string[];
@@ -786,7 +786,14 @@ const ProductEditPage = (props: Props) => {
   }, [hasUnsavedChanges]);
 
   React.useEffect(() => {
-    if (!hasUnsavedChanges || uploadsInProgress || saving || deletionsNeedAttention || saveBlockedByModal) {
+    if (
+      !hasUnsavedChanges ||
+      uploadsInProgress ||
+      saving ||
+      deletionsNeedAttention ||
+      saveBlockedByModal ||
+      !props.autosave_enabled
+    ) {
       return;
     }
 
@@ -813,6 +820,7 @@ const ProductEditPage = (props: Props) => {
     deletionsNeedAttention,
     saveBlockedByModal,
     autosaveGeneration,
+    props.autosave_enabled,
   ]);
 
   const confirmDeletionsAndSave = async () => {
