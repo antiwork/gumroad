@@ -690,6 +690,106 @@ const buildTieredProps = (product: Product): ProductEditPageProps => ({
   ai_generated: false,
 });
 
+it("autosaves the latest product state after the seller stops editing", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+    vi.mocked(showAlert).mockClear();
+
+    render(<ProductEditPage {...props} />);
+    expect(contextCapture.current).not.toBeNull();
+
+    await act(async () => void vi.advanceTimersByTime(2_000));
+    expect(saveProductMock).not.toHaveBeenCalled();
+
+    act(() => contextCapture.current?.updateProduct({ name: "First draft" }));
+    act(() => void vi.advanceTimersByTime(1_000));
+    act(() => contextCapture.current?.updateProduct({ name: "Final title" }));
+    act(() => void vi.advanceTimersByTime(1_499));
+    expect(saveProductMock).not.toHaveBeenCalled();
+
+    await act(async () => void vi.advanceTimersByTime(1));
+
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    expect(saveProductMock.mock.calls[0]?.[2]).toMatchObject({ name: "Final title" });
+    expect(showAlert).not.toHaveBeenCalledWith("Changes saved!", "success");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("waits for file uploads to finish before autosaving", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    product.files = [
+      {
+        id: "uploading-file",
+        display_name: "Video",
+        description: null,
+        extension: "mp4",
+        file_size: 100,
+        is_pdf: false,
+        pdf_stamp_enabled: false,
+        hide_kindle_and_read_buttons: false,
+        is_streamable: true,
+        stream_only: false,
+        is_transcoding_in_progress: false,
+        url: "blob:video",
+        subtitle_files: [],
+        thumbnail: null,
+        status: {
+          type: "unsaved",
+          uploadStatus: { type: "uploading", progress: { percent: 50, bitrate: 1 } },
+          url: "blob:video",
+        },
+      },
+    ];
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Changed during upload" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).not.toHaveBeenCalled();
+
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        const file = current.files[0];
+        if (!file) throw new Error("expected file");
+        file.status = { type: "unsaved", uploadStatus: { type: "uploaded" }, url: "https://cdn.example/video.mp4" };
+      }),
+    );
+    await act(async () => void vi.advanceTimersByTime(1_500));
+
+    expect(saveProductMock).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("reports whether edits are saved without waiting for another change", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    expect(contextCapture.current?.saveStatus).toBe("saved");
+
+    act(() => contextCapture.current?.updateProduct({ name: "Changed" }));
+    expect(contextCapture.current?.saveStatus).toBe("unsaved");
+
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(contextCapture.current?.saveStatus).toBe("saved");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 // Pins the in-flight cross-scope move path: the scoped sentPagesById lookup
 // keys on the page's CURRENT container, so a page the seller moves to another
 // tier while the save request runs would miss its sent snapshot. The

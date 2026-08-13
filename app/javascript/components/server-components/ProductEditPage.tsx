@@ -40,6 +40,7 @@ import { ShareTab } from "$app/components/ProductEdit/ShareTab";
 import {
   ContentUpdates,
   ExistingFileEntry,
+  isFileUploading,
   Product,
   ProductEditContext,
   ProfileSection,
@@ -137,6 +138,7 @@ const createContextValue = (props: Props) => ({
   s3Url: props.s3_url,
   availableCountries: props.available_countries,
   saving: false,
+  saveStatus: "saved" as const,
   save: () => Promise.resolve(false),
   variantIdMappings: {},
   richContentIdMappings: {},
@@ -499,6 +501,8 @@ const ProductEditPage = (props: Props) => {
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
+  const lastSavedCurrencyTypeRef = React.useRef(props.currency_type);
+  const automaticSaveRef = React.useRef(false);
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
     setProduct((prevProduct) => {
@@ -567,6 +571,7 @@ const ProductEditPage = (props: Props) => {
     choice: "keep_shared" | "keep_version";
     hiddenPageIds: string[];
   }): Promise<boolean> => {
+    const isAutomaticSave = automaticSaveRef.current;
     let saved = false;
     let productToSave = product;
     if (conflictResolution?.choice === "keep_shared") {
@@ -648,6 +653,7 @@ const ProductEditPage = (props: Props) => {
       reconciled.confirmed_removed_variant_ids = [];
       reconciled.confirmed_removed_rich_content_ids = [];
       lastSavedProductRef.current = reconciled;
+      lastSavedCurrencyTypeRef.current = currencyType;
       setVariantIdMappings((previous) => ({ ...previous, ...response.variant_id_mappings }));
       setRichContentIdMappings((previous) => {
         const scopedMappings = Object.entries(response.rich_content_id_mappings_by_scope ?? {}).flatMap(
@@ -697,7 +703,7 @@ const ProductEditPage = (props: Props) => {
           setContentUpdates({
             uniquePermalinkOrVariantIds,
           });
-        } else {
+        } else if (!isAutomaticSave) {
           showAlert("Changes saved!", "success");
         }
       }
@@ -745,6 +751,28 @@ const ProductEditPage = (props: Props) => {
   };
   const saveKey = React.useMemo(() => ({ product, currencyType }), [product, currencyType]);
   const save = useDedupeInFlight(saveKey, runSave, (saved) => saved);
+  const hasUnsavedChanges =
+    !isEqual(product, lastSavedProductRef.current) || currencyType !== lastSavedCurrencyTypeRef.current;
+  const uploadsInProgress =
+    imagesUploading.size > 0 ||
+    product.public_files.some(isFileUploading) ||
+    product.files.some((file) => isFileUploading(file) || file.subtitle_files.some(isFileUploading));
+  const saveStatus: "saved" | "unsaved" | "saving" = saving ? "saving" : hasUnsavedChanges ? "unsaved" : "saved";
+  const saveRef = React.useRef(save);
+  saveRef.current = save;
+
+  React.useEffect(() => {
+    if (!hasUnsavedChanges || uploadsInProgress) return;
+
+    const timer = window.setTimeout(() => {
+      automaticSaveRef.current = true;
+      void saveRef.current().finally(() => {
+        automaticSaveRef.current = false;
+      });
+    }, 1_500);
+    return () => window.clearTimeout(timer);
+  }, [product, currencyType, hasUnsavedChanges, uploadsInProgress]);
+
   const confirmDeletionsAndSave = async () => {
     setPendingDeletions(null);
     const saved = await performSave();
@@ -775,6 +803,7 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
+      saveStatus,
       variantIdMappings,
       richContentIdMappings,
       fileIdMappings,

@@ -280,6 +280,7 @@ export const ProductEditContext = React.createContext<{
   s3Url: string;
   availableCountries: ShippingCountry[];
   saving: boolean;
+  saveStatus: "saved" | "unsaved" | "saving";
   // Resolves true only when the save request actually succeeded (false on
   // request failure or when the seller cancels the deletion confirmation) —
   // callers chaining navigation on save() must check it before proceeding.
@@ -330,6 +331,9 @@ type FileStatus =
       uploadStatus: { type: "uploaded" } | { type: "uploading"; progress: UploadProgress };
       url: string;
     };
+
+export const isFileUploading = (file: { status?: { type: string; uploadStatus?: { type: string } } }) =>
+  file.status?.type === "unsaved" && file.status.uploadStatus?.type === "uploading";
 
 export type FileEntry = {
   display_name: string;

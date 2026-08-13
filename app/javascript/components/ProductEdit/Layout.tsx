@@ -14,14 +14,13 @@ import { Preview } from "$app/components/Preview";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { FileEntry, useProductEditContext } from "./state";
+import { isFileUploading, useProductEditContext } from "./state";
 
 export const useProductUrl = (params = {}) => {
   const { product, uniquePermalink } = useProductEditContext();
@@ -139,7 +138,8 @@ export const Layout = ({
   // preview body), shown in the Receipt tab's email chrome. Null while the preview is loading.
   receiptSubject?: string | null;
 }) => {
-  const { product, updateProduct, uniquePermalink, saving, save, receiptEmailFrom } = useProductEditContext();
+  const { product, updateProduct, uniquePermalink, saving, save, saveStatus, receiptEmailFrom } =
+    useProductEditContext();
   const currentSeller = useCurrentSeller();
   const rootPath = Routes.edit_link_path(uniquePermalink);
 
@@ -200,11 +200,9 @@ export const Layout = ({
     setIsPublishing(false);
   };
 
-  const isUploadingFile = (file: FileEntry | SubtitleFile) =>
-    file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading";
   const isUploadingFiles =
-    product.public_files.some((f) => f.status?.type === "unsaved" && f.status.uploadStatus.type === "uploading") ||
-    product.files.some((file) => isUploadingFile(file) || file.subtitle_files.some(isUploadingFile));
+    product.public_files.some(isFileUploading) ||
+    product.files.some((file) => isFileUploading(file) || file.subtitle_files.some(isFileUploading));
   const imageSettings = useImageUploadSettings();
   const isUploadingFilesOrImages = isLoading || isUploadingFiles || !!imageSettings?.isUploading;
   const isBusy = isUploadingFilesOrImages || saving || isPublishing;
@@ -232,6 +230,13 @@ export const Layout = ({
         {saving ? "Saving changes..." : "Save changes"}
       </Button>
     </WithTooltip>
+  );
+  const saveStatusLabel =
+    saveStatus === "saving" ? "Saving..." : saveStatus === "unsaved" ? "Unsaved changes" : "All changes saved";
+  const saveStatusIndicator = (
+    <span className="text-sm text-muted" aria-live="polite">
+      {saveStatusLabel}
+    </span>
   );
 
   const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
@@ -293,6 +298,7 @@ export const Layout = ({
         actions={
           product.is_published ? (
             <>
+              {saveStatusIndicator}
               {/* Just these two actions, on desktop and mobile alike. Copying the product /
                   checkout links lives at the top of the Share tab instead of crowding the
                   header. */}
@@ -302,19 +308,23 @@ export const Layout = ({
               {saveButton}
             </>
           ) : tab === "product" && !isCoffee ? (
-            <Button
-              color="primary"
-              disabled={isBusy}
-              onClick={() =>
-                void save().then((saved) => {
-                  if (saved) navigate.current(`${rootPath}/content`);
-                })
-              }
-            >
-              {saving ? "Saving changes..." : "Save and continue"}
-            </Button>
+            <>
+              {saveStatusIndicator}
+              <Button
+                color="primary"
+                disabled={isBusy}
+                onClick={() =>
+                  void save().then((saved) => {
+                    if (saved) navigate.current(`${rootPath}/content`);
+                  })
+                }
+              >
+                {saving ? "Saving changes..." : "Save and continue"}
+              </Button>
+            </>
           ) : (
             <>
+              {saveStatusIndicator}
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
                 <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
