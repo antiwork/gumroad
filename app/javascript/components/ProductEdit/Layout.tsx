@@ -206,6 +206,7 @@ export const Layout = ({
   const imageSettings = useImageUploadSettings();
   const isUploadingFilesOrImages = isLoading || isUploadingFiles || !!imageSettings?.isUploading;
   const isBusy = isUploadingFilesOrImages || saving || isPublishing;
+  const saveDisabled = isBusy || saveStatus === "saved";
   const saveButtonTooltip = isUploadingFiles
     ? "Files are still uploading..."
     : isUploadingFilesOrImages
@@ -213,6 +214,9 @@ export const Layout = ({
       : isBusy
         ? "Please wait..."
         : undefined;
+  // Autosave disables these every 1.5s; fading the label would pulse the header.
+  // Keep type at full contrast and signal disabled via cursor + native disabled.
+  const headerButtonClass = "disabled:opacity-100";
 
   React.useEffect(() => {
     if (!isUploadingFilesOrImages) return;
@@ -226,8 +230,8 @@ export const Layout = ({
 
   const saveButton = (
     <WithTooltip tip={saveButtonTooltip}>
-      <Button color="primary" disabled={isBusy} onClick={() => void save()}>
-        {saving ? "Saving changes..." : "Save changes"}
+      <Button color="primary" className={headerButtonClass} disabled={saveDisabled} onClick={() => void save()}>
+        Save changes
       </Button>
     </WithTooltip>
   );
@@ -302,7 +306,7 @@ export const Layout = ({
               {/* Just these two actions, on desktop and mobile alike. Copying the product /
                   checkout links lives at the top of the Share tab instead of crowding the
                   header. */}
-              <Button disabled={isBusy} onClick={() => void setPublished(false)}>
+              <Button className={headerButtonClass} disabled={isBusy} onClick={() => void setPublished(false)}>
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
               </Button>
               {saveButton}
@@ -312,6 +316,7 @@ export const Layout = ({
               {saveStatusIndicator}
               <Button
                 color="primary"
+                className={headerButtonClass}
                 disabled={isBusy}
                 onClick={() =>
                   void save().then((saved) => {
@@ -319,7 +324,7 @@ export const Layout = ({
                   })
                 }
               >
-                {saving ? "Saving changes..." : "Save and continue"}
+                Save and continue
               </Button>
             </>
           ) : (
@@ -327,7 +332,12 @@ export const Layout = ({
               {saveStatusIndicator}
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
-                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
+                <Button
+                  color="accent"
+                  className={headerButtonClass}
+                  disabled={isBusy}
+                  onClick={() => void setPublished(true)}
+                >
                   {isPublishing ? "Publishing..." : "Publish and continue"}
                 </Button>
               </WithTooltip>
