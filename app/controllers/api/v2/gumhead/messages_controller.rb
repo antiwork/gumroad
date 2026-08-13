@@ -307,12 +307,12 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # from a generation still running — and Anthropic bills generations
       # whose client went away. A slow full-size buffered generation
       # reliably outlives BUFFERED_TIMEOUT, so charging nothing here would
-      # be a repeatable unmetered-spend hole. Charge the bounded worst case
-      # (prompt floor at ~4 bytes per token, plus max_tokens, itself capped
-      # by MAX_BUFFERED_OUTPUT_TOKENS): a false charge costs at most a few
-      # percent of the daily output cap per event.
+      # be a repeatable unmetered-spend hole. Charge the exact prompt size
+      # plus max_tokens (capped by MAX_BUFFERED_OUTPUT_TOKENS): a false
+      # charge costs at most a few percent of the daily output cap per
+      # event.
       if meter
-        record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4, "output_tokens" => @body["max_tokens"].to_i })
+        record_usage!(model: @body["model"], usage: { "input_tokens" => charge_input_tokens, "output_tokens" => @body["max_tokens"].to_i })
       end
       render json: anthropic_error("api_error", "The model service timed out."), status: :bad_gateway
     rescue HTTP::Error => e
@@ -320,9 +320,31 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # Success headers followed by a lost body: the response was generated
       # and billed, so it gets the same bounded worst-case charge.
       if meter && upstream&.status&.success?
-        record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4, "output_tokens" => @body["max_tokens"].to_i })
+        record_usage!(model: @body["model"], usage: { "input_tokens" => charge_input_tokens, "output_tokens" => @body["max_tokens"].to_i })
       end
       render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
+    end
+
+    # The input charge for a request whose real usage was never reported.
+    # count_tokens is free upstream and uses the real tokenizer, so the
+    # charge is exact; bytes/2 is the fallback — deliberately above the
+    # ~4 bytes-per-token average, because an average is not a floor and
+    # adversarial text can tokenize near one token per byte.
+    def charge_input_tokens
+      counted = HTTP.timeout(10).headers(upstream_headers)
+        .post("#{ANTHROPIC_API_BASE}/messages/count_tokens", body: count_tokens_body)
+      parsed = safe_parse_json(counted.body.to_s)
+      if counted.status.success? && parsed.is_a?(Hash) && parsed["input_tokens"].is_a?(Integer)
+        parsed["input_tokens"]
+      else
+        @raw_body.bytesize / 2
+      end
+    rescue HTTP::Error
+      @raw_body.bytesize / 2
+    end
+
+    def count_tokens_body
+      @body.slice("model", "messages", "system", "tools", "thinking").to_json
     end
 
     def stream_upstream

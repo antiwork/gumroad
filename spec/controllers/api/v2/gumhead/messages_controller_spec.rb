@@ -289,16 +289,29 @@ describe Api::V2::Gumhead::MessagesController do
 
     # A slow buffered generation and a network stall are indistinguishable
     # past TCP connect, and Anthropic bills abandoned generations — so a
-    # post-connect timeout charges the bounded worst case.
+    # post-connect timeout charges the bounded worst case, with the input
+    # counted exactly via the free count_tokens endpoint.
     it "charges the bounded worst case for a post-connect timeout" do
       stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 200, body: { input_tokens: 37 }.to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages
 
       expect(response.status).to eq(502)
       event = GumheadUsageEvent.sole
       expect(event.output_tokens).to eq(request_payload[:max_tokens])
-      expect(event.input_tokens).to be > 0
+      expect(event.input_tokens).to eq(37)
+    end
+
+    it "falls back to a conservative byte estimate when count_tokens also fails" do
+      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, count_tokens_url).to_raise(HTTP::ConnectionError)
+
+      post_messages
+
+      expect(response.status).to eq(502)
+      expect(GumheadUsageEvent.sole.input_tokens).to eq(request_payload.to_json.bytesize / 2)
     end
 
     it "charges nothing when the connection itself times out" do

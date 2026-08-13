@@ -25,8 +25,17 @@ Sentry.init do |config|
   # ActionController::Live runs controller callbacks in a child thread —
   # events and transactions captured on the parent thread never see a
   # scope cleared there.
+  # Sentry::Event exposes `request` read-only; the interface's own fields
+  # are writable, so the scrub empties those.
   scrub_gumhead_gateway_request = lambda do |event|
-    event.request = nil if event.request&.url.to_s.include?("/v2/gumhead/")
+    request = event.request
+    if request && request.url.to_s.include?("/v2/gumhead/")
+      request.data = nil
+      request.headers = {}
+      request.cookies = nil
+      request.query_string = nil
+      request.env = nil
+    end
     event
   end
 
