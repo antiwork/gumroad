@@ -4566,13 +4566,15 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal false, new_purchase.can_contact
   end
 
-  test "#toggle_off_can_contact_if_buyer_has_unsubscribed when customer has previously unsubscribed does not add the customer to AudienceMember for the new purchase" do
+  test "#toggle_off_can_contact_if_buyer_has_unsubscribed keeps the soft-deleted audience member hidden" do
     setup_previously_unsubscribed
-    assert_nil AudienceMember.find_by(email: @buyer_email, seller: @seller)
+    member = AudienceMember.find_by!(email: @buyer_email, seller: @seller)
+    assert member.deleted_at.present?
 
     create_purchase(link: @product_2, email: @buyer_email, seller: @seller)
 
-    assert_nil AudienceMember.find_by(email: @buyer_email, seller: @seller)
+    assert member.reload.deleted_at.present?
+    assert_empty AudienceMember.filter(seller_id: @seller.id).where(email: @buyer_email)
   end
 
   test "#toggle_off_can_contact_if_buyer_has_unsubscribed when customer has previously unsubscribed prevents the customer from appearing in email blast audience" do
@@ -5475,29 +5477,41 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_nil member.details["purchases"]
   end
 
-  test "AudienceMember removes member when uncontactable with no other audience types" do
+  test "AudienceMember soft-deletes member when uncontactable with no other audience types" do
     purchase = create_purchase
-    assert_difference -> { AudienceMember.count }, -1 do
-      purchase.update!(can_contact: false)
+    assert_no_difference -> { AudienceMember.count } do
+      assert_difference -> { AudienceMember.active.count }, -1 do
+        purchase.update!(can_contact: false)
+      end
     end
 
     member = AudienceMember.find_by(email: purchase.email, seller: purchase.seller)
-    assert_nil member
+    assert member.deleted_at.present?
+    assert_empty member.details
   end
 
-  test "AudienceMember removes member when subscription is deactivated" do
+  test "AudienceMember soft-deletes and restores the same member when a subscription is deactivated and resumed" do
     purchase = create_membership_purchase
+    member = AudienceMember.find_by!(email: purchase.email, seller: purchase.seller)
 
-    assert_difference -> { AudienceMember.count }, -1 do
-      purchase.subscription.deactivate!
+    assert_no_difference -> { AudienceMember.count } do
+      assert_difference -> { AudienceMember.active.count }, -1 do
+        purchase.subscription.deactivate!
+      end
     end
+    assert_equal member.id, member.reload.id
+    assert member.deleted_at.present?
 
-    assert_difference -> { AudienceMember.count }, 1 do
-      purchase.subscription.resubscribe!
+    assert_no_difference -> { AudienceMember.count } do
+      assert_difference -> { AudienceMember.active.count }, 1 do
+        purchase.subscription.resubscribe!
+      end
     end
+    assert_equal member.id, member.reload.id
+    assert_nil member.deleted_at
   end
 
-  test "AudienceMember recreates member when changing email" do
+  test "AudienceMember soft-deletes the old email and creates a member for the new email" do
     purchase = create_purchase
     old_email = purchase.email
     new_email = "new@example.com"
@@ -5505,7 +5519,7 @@ class PurchaseTest < ActiveSupport::TestCase
 
     old_member = AudienceMember.find_by(email: old_email, seller: purchase.seller)
     new_member = AudienceMember.find_by(email: new_email, seller: purchase.seller)
-    assert_nil old_member
+    assert old_member.deleted_at.present?
     assert new_member.present?
   end
 
