@@ -813,6 +813,36 @@ it("reports whether edits are saved without waiting for another change", async (
   }
 });
 
+it("queues a manual save that overlaps an automatic save", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+    saveProductMock.mockImplementation(
+      () => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })),
+    );
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Overlapping save" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+
+    let manualSave: Promise<boolean> | undefined;
+    act(() => {
+      manualSave = contextCapture.current?.save();
+    });
+    requests[0]?.resolve({});
+    await act(async () => void (await manualSave));
+
+    expect(saveProductMock).toHaveBeenCalledTimes(2);
+    requests[1]?.resolve({});
+    await act(async () => void (await Promise.resolve()));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("retries a failed autosave without waiting for another edit", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {

@@ -752,7 +752,8 @@ const ProductEditPage = (props: Props) => {
     return performSave();
   };
   const saveKey = React.useMemo(() => ({ product, currencyType }), [product, currencyType]);
-  const save = useDedupeInFlight(saveKey, runSave, (saved) => saved);
+  const dedupedSave = useDedupeInFlight(saveKey, runSave, (saved) => saved);
+  const save = React.useCallback(() => dedupedSave(automaticSaveRef.current), [dedupedSave]);
   const hasUnsavedChanges =
     !isEqual(product, lastSavedProductRef.current) || currencyType !== lastSavedCurrencyTypeRef.current;
   const uploadsInProgress =
