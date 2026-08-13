@@ -98,6 +98,16 @@ describe AudienceMember::Searchable, :freeze_time do
       end.to change { ElasticsearchIndexerWorker.jobs.size }.by(1)
       expect(ElasticsearchIndexerWorker.jobs.last["args"]).to eq(["delete", { "record_id" => member.id, "class_name" => "AudienceMember" }])
     end
+
+    it "deletes the indexed document when soft-deleted" do
+      member = create(:audience_member)
+
+      expect do
+        member.soft_delete!
+      end.to change { ElasticsearchIndexerWorker.jobs.size }.by(1)
+
+      expect(ElasticsearchIndexerWorker.jobs.last["args"]).to eq(["delete", { "record_id" => member.id, "class_name" => "AudienceMember" }])
+    end
   end
 
   describe ".count_for_seller", :sidekiq_inline, :elasticsearch_wait_for_refresh do

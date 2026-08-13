@@ -347,6 +347,9 @@ class AudienceMember < ApplicationRecord
   def soft_delete!
     # Persist details with the marker; leaving stale details could restore dead membership.
     update_columns(deleted_at: Time.current, details: {})
+    AfterCommitEverywhere.after_commit do
+      ElasticsearchIndexerWorker.perform_async("delete", { "record_id" => id, "class_name" => self.class.name })
+    end
   end
 
   private

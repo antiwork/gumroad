@@ -42,15 +42,21 @@ class ElasticsearchIndexerWorker
       client_params[:id] = params.fetch("id")
     end
 
+    record = klass.find(record_id) if params.key?("record_id") && operation.in?(%w[index update])
+    if record&.respond_to?(:search_indexable?) && !record.search_indexable?
+      client_params[:ignore] << 404
+      return EsClient.delete(client_params)
+    end
+
     case operation
     when "index"
-      client_params[:body] = params["body"] || klass.find(record_id).as_indexed_json
+      client_params[:body] = params["body"] || record.as_indexed_json
       client_params[:index] = klass.index_name_from_body(client_params[:body]) if klass.respond_to?(:index_name_from_body)
       EsClient.index(client_params)
     when "update"
       fields = params.fetch("fields")
       client_params[:body] = {
-        "doc" => klass.find(record_id).as_indexed_json(only: fields)
+        "doc" => record.as_indexed_json(only: fields)
       }
       EsClient.update(client_params)
     when "delete"

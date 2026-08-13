@@ -156,6 +156,22 @@ describe ElasticsearchIndexerWorker, :elasticsearch_wait_for_refresh do
       end
     end
 
+    context "when an AudienceMember was soft-deleted after a stale indexing job was queued" do
+      it "deletes the document instead of indexing the tombstone" do
+        member = create(:audience_member)
+        member.update_column(:deleted_at, Time.current)
+
+        expect(EsClient).to receive(:delete).with(hash_including(index: AudienceMember.index_name, id: member.id))
+        expect(EsClient).not_to receive(:index)
+
+        described_class.new.perform(
+          "index",
+          "class_name" => "AudienceMember",
+          "record_id" => member.id
+        )
+      end
+    end
+
     context "when updating" do
       before do
         @record = @model.create!(name: "Drawing", country: "France")

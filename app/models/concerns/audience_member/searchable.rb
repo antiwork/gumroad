@@ -83,6 +83,8 @@ module AudienceMember::Searchable
         attributes[field_name]
       end.as_json
     end
+
+    def search_indexable? = deleted_at.nil?
   end
 
   class_methods do
