@@ -425,19 +425,21 @@ export const DashboardPage = ({
 
       {gumhead ? (
         <div className="grid gap-4 p-4 md:p-8">
-          <Card>
+          <Card className="shadow-[0.25rem_0.25rem_0_var(--color-pink)]">
             <CardContent className="items-center sm:flex-nowrap">
               <img
                 src={gumheadImage}
                 alt=""
-                width={96}
-                height={96}
-                className="size-24 shrink-0 rounded-sm border border-border bg-body object-contain"
+                width={380}
+                height={363}
+                className="h-28 w-auto shrink-0 -rotate-3 object-contain drop-shadow-[0.25rem_0.25rem_0_rgb(0_0_0/0.25)] transition-transform duration-200 hover:rotate-3 md:-mt-12 md:h-32"
               />
               <div className="grid min-w-0 flex-1 gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl">Meet Gumhead</h2>
-                  <Pill size="small">Mac app</Pill>
+                  <Pill size="small" className="border-black bg-pink text-black">
+                    Mac app
+                  </Pill>
                 </div>
                 <p className="text-muted">
                   Drop a folder on your Mac. Gumhead looks inside, tells you what could sell, drafts a product, and asks
