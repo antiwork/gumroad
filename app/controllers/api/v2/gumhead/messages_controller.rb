@@ -193,13 +193,9 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     def load_body
+      # Body params never exist on this route: GumheadBodyParamsGuard pins
+      # them empty before dispatch, so only this raw body carries the prompt.
       @raw_body = request.raw_post.to_s
-      # Nothing on this route reads body params — the raw body is handled
-      # here. Pre-seeding the memoized request parameters stops Rails from
-      # ever parsing the body into params: parsing would put prompts into
-      # params, and a malformed body would be dumped to the debug log by
-      # ActionDispatch's parse-error handler before ParseError even raises.
-      request.env["action_dispatch.request.request_parameters"] = {}
       if @raw_body.bytesize > MAX_BODY_BYTES
         return render json: anthropic_error("invalid_request_error", "Request body too large."), status: :bad_request
       end
@@ -303,9 +299,8 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       meter_buffered_usage(body) if meter && upstream.status.success?
       copy_retry_after(upstream)
       render body:, content_type: "application/json", status: upstream.status.code
-    rescue HTTP::ConnectTimeoutError, OpenSSL::SSL::SSLError => e
-      # Rescued before HTTP::TimeoutError (ConnectTimeoutError subclasses
-      # it; SSLError escapes the http gem unwrapped): connect or TLS setup
+    rescue HTTP::ConnectTimeoutError => e
+      # Rescued before HTTP::TimeoutError, which it subclasses: TCP connect
       # failed, so the request never reached Anthropic and nothing is
       # charged.
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
@@ -324,10 +319,13 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => @body["max_tokens"].to_i))
       end
       render json: anthropic_error("api_error", "The model service timed out."), status: :bad_gateway
-    rescue HTTP::Error => e
+    rescue HTTP::Error, OpenSSL::SSL::SSLError => e
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
       # Success headers followed by a lost body: the response was generated
       # and billed, so it gets the same bounded worst-case charge.
+      # SSLError escapes the http gem unwrapped; during handshake upstream
+      # is nil (uncharged), during a body read the success headers are the
+      # billing evidence, same as any lost body.
       if meter && upstream&.status&.success?
         record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => @body["max_tokens"].to_i))
       end
@@ -337,24 +335,37 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # A synthetic charge cannot know how much of the prompt was a cache
     # write, and cache writes bill above the base rate — so when the request
     # asks for caching at all, the whole count is charged at the matching
-    # cache-write rate. The raw-body scan can over-match ("1h" in content),
-    # which only overcharges a failure path; a worst case may not undershoot.
+    # cache-write rate; a worst case may not undershoot. The parsed body is
+    # inspected (not the raw text, which unicode escapes can slip past).
     def synthetic_input_usage
       counted = charge_input_tokens
-      return { "input_tokens" => counted } unless @raw_body.include?("cache_control")
+      ttls = collect_cache_ttls(@body, [])
+      return { "input_tokens" => counted } if ttls.empty?
 
-      if @raw_body.include?('"1h"')
+      if ttls.include?("1h")
         { "cache_creation_input_tokens" => counted, "cache_creation" => { "ephemeral_1h_input_tokens" => counted } }
       else
         { "cache_creation_input_tokens" => counted }
       end
     end
 
+    def collect_cache_ttls(node, ttls)
+      case node
+      when Hash
+        control = node["cache_control"]
+        ttls << (control.is_a?(Hash) ? control["ttl"].to_s.presence || "5m" : "5m") if control
+        node.each_value { |value| collect_cache_ttls(value, ttls) }
+      when Array
+        node.each { |value| collect_cache_ttls(value, ttls) }
+      end
+      ttls
+    end
+
     # The input charge for a request whose real usage was never reported.
     # count_tokens is free upstream and uses the real tokenizer, so the
-    # charge is exact; bytes/2 is the fallback — deliberately above the
-    # ~4 bytes-per-token average, because an average is not a floor and
-    # adversarial text can tokenize near one token per byte.
+    # charge is exact; one token per body byte is the fallback — a true
+    # upper bound (adversarial text approaches it), and it only applies
+    # when the primary request AND the count both failed.
     def charge_input_tokens
       counted = HTTP.timeout(10).headers(upstream_headers)
         .post("#{ANTHROPIC_API_BASE}/messages/count_tokens", body: count_tokens_body)
@@ -362,10 +373,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       if counted.status.success? && parsed.is_a?(Hash) && parsed["input_tokens"].is_a?(Integer)
         parsed["input_tokens"]
       else
-        @raw_body.bytesize / 2
+        @raw_body.bytesize
       end
     rescue HTTP::Error, OpenSSL::SSL::SSLError
-      @raw_body.bytesize / 2
+      @raw_body.bytesize
     end
 
     def count_tokens_body

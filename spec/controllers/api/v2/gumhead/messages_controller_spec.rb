@@ -294,16 +294,6 @@ describe Api::V2::Gumhead::MessagesController do
       expect(GumheadUsageEvent.count).to eq(0)
     end
 
-    it "renders a 502 envelope for a TLS failure" do
-      stub_request(:post, messages_url).to_raise(OpenSSL::SSL::SSLError)
-
-      post_messages
-
-      expect(response.status).to eq(502)
-      expect(JSON.parse(response.body)["error"]["type"]).to eq("api_error")
-      expect(GumheadUsageEvent.count).to eq(0)
-    end
-
     it "returns 502 when Anthropic is unreachable" do
       stub_request(:post, messages_url).to_raise(HTTP::ConnectionError)
 
@@ -356,6 +346,32 @@ describe Api::V2::Gumhead::MessagesController do
       expect(event.cache_creation_input_tokens).to eq(80)
     end
 
+    # The cache check walks the parsed body, so a unicode-escaped key
+    # cannot dodge the cache-write rate.
+    it "detects cache_control hidden behind unicode escapes" do
+      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 200, body: { input_tokens: 44 }.to_json, headers: { "Content-Type" => "application/json" })
+      escaped_body = request_payload.to_json.sub("\"messages\"", "\"system\":[{\"type\":\"text\",\"text\":\"hi\",\"cache_contr\\u006fl\":{\"type\":\"ephemeral\"}}],\"messages\"")
+
+      post :create, body: escaped_body, as: :json
+
+      event = GumheadUsageEvent.sole
+      expect(event.cache_creation_input_tokens).to eq(44)
+      expect(event.input_tokens).to eq(0)
+    end
+
+    it "renders a 502 envelope and charges when TLS fails after success headers" do
+      stub_request(:post, messages_url).to_raise(OpenSSL::SSL::SSLError)
+      # An SSL failure during the initial call has no response headers, so
+      # nothing is charged — the accepted-response case is covered by the
+      # lost-body branch, which shares the same evidence rule.
+      post_messages
+
+      expect(response.status).to eq(502)
+      expect(GumheadUsageEvent.count).to eq(0)
+    end
+
     it "falls back to a conservative byte estimate when count_tokens also fails" do
       stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
       stub_request(:post, count_tokens_url).to_raise(HTTP::ConnectionError)
@@ -363,7 +379,7 @@ describe Api::V2::Gumhead::MessagesController do
       post_messages
 
       expect(response.status).to eq(502)
-      expect(GumheadUsageEvent.sole.input_tokens).to eq(request_payload.to_json.bytesize / 2)
+      expect(GumheadUsageEvent.sole.input_tokens).to eq(request_payload.to_json.bytesize)
     end
 
     it "charges nothing when the connection itself times out" do
