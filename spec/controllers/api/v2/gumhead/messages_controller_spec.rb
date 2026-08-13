@@ -366,6 +366,23 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.body).to include("event: error")
     end
 
+    it "keeps message_start counts when message_delta sends null usage fields" do
+      stream = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1,"cache_read_input_tokens":9}}}\n\n),
+        %(event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":42,"input_tokens":null,"cache_read_input_tokens":null}}\n\n),
+        %(event: message_stop\ndata: {"type":"message_stop"}\n\n),
+      ].join
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      event = GumheadUsageEvent.sole
+      expect(event.input_tokens).to eq(50)
+      expect(event.output_tokens).to eq(42)
+      expect(event.cache_read_input_tokens).to eq(9)
+    end
+
     it "does not append an error frame to a stream that ended with message_stop" do
       stub_request(:post, messages_url)
         .to_return(status: 200, body: sse_body, headers: { "Content-Type" => "text/event-stream" })

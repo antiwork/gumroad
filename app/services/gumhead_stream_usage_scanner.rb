@@ -75,7 +75,12 @@ class GumheadStreamUsageScanner
         @content_delta_count += 1
         delta = event["delta"]
         if delta.is_a?(Hash)
-          content = delta["text"] || delta["partial_json"] || delta["thinking"]
+          # "data" is redacted thinking — billed output that streams as an
+          # encrypted string. Reasoning that is billed but never streamed
+          # (summarized thinking) has no byte trail at all; the floor is a
+          # floor, and the final message_delta carries the true count on
+          # every stream that completes.
+          content = delta["text"] || delta["partial_json"] || delta["thinking"] || delta["data"]
           @streamed_output_bytes += content.bytesize if content.is_a?(String)
         end
       when "message_delta"
@@ -86,11 +91,12 @@ class GumheadStreamUsageScanner
 
         @saw_usage = true
         # message_delta reports cumulative counts; refresh every field it
-        # carries so the ledger row records the final billed numbers.
-        @output_tokens = usage["output_tokens"].to_i if usage.key?("output_tokens")
-        @input_tokens = usage["input_tokens"].to_i if usage.key?("input_tokens")
-        @cache_creation_input_tokens = usage["cache_creation_input_tokens"].to_i if usage.key?("cache_creation_input_tokens")
-        @cache_read_input_tokens = usage["cache_read_input_tokens"].to_i if usage.key?("cache_read_input_tokens")
+        # carries so the ledger row records the final billed numbers. The
+        # fields are nullable — a null must not erase message_start's count.
+        @output_tokens = usage["output_tokens"].to_i unless usage["output_tokens"].nil?
+        @input_tokens = usage["input_tokens"].to_i unless usage["input_tokens"].nil?
+        @cache_creation_input_tokens = usage["cache_creation_input_tokens"].to_i unless usage["cache_creation_input_tokens"].nil?
+        @cache_read_input_tokens = usage["cache_read_input_tokens"].to_i unless usage["cache_read_input_tokens"].nil?
         track_cache_creation_split(usage)
       end
     rescue JSON::ParserError
