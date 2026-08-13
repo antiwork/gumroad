@@ -22,12 +22,19 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
   skip_before_action :verify_authenticity_token
 
+  # Malformed JSON raises lazily on the first params access (Doorkeeper's),
+  # not in load_body; answer it with the promised envelope.
+  rescue_from ActionDispatch::Http::Parameters::ParseError do
+    render json: anthropic_error("invalid_request_error", "Request body must be valid JSON."), status: :bad_request
+  end
+
   before_action { doorkeeper_authorize! }
   before_action :ensure_gumhead_enabled
   before_action :ensure_gateway_configured
   before_action :throttle_gateway_requests
   before_action :load_body
   before_action :validate_model
+  before_action :validate_tools
   before_action :validate_max_tokens, only: [:create]
   before_action :enforce_daily_token_caps, only: [:create]
 
@@ -67,25 +74,23 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
   # POST /v2/gumhead/v1/messages
   def create
-    unless acquire_in_flight_slot
-      return render json: anthropic_error("rate_limit_error", "Too many concurrent Gumhead requests. Please retry shortly."), status: :too_many_requests
-    end
-
-    begin
+    with_in_flight_slot do
       if @body["stream"] == true
         stream_upstream
       else
         forward_buffered("#{ANTHROPIC_API_BASE}/messages", meter: true)
       end
-    ensure
-      release_in_flight_slot
     end
   end
 
   # POST /v2/gumhead/v1/messages/count_tokens
-  # Token counting is free upstream, so it passes through unmetered.
+  # Token counting is free upstream, so it passes through unmetered — but it
+  # still occupies a Live thread and an upstream connection, so it shares
+  # the in-flight limit.
   def count_tokens
-    forward_buffered("#{ANTHROPIC_API_BASE}/messages/count_tokens", meter: false)
+    with_in_flight_slot do
+      forward_buffered("#{ANTHROPIC_API_BASE}/messages/count_tokens", meter: false)
+    end
   end
 
   private
@@ -149,6 +154,42 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       return if @body["model"].to_s.start_with?(ALLOWED_MODEL_PREFIX)
 
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
+    end
+
+    # Server-side tools (web search, code execution) bill per use outside
+    # the token fields this ledger stores, so they would spend the shared
+    # key invisibly. Only plain client tools pass — every tool Gumhead
+    # defines is one.
+    def validate_tools
+      tools = @body["tools"]
+      return if tools.nil?
+      unless tools.is_a?(Array)
+        return render json: anthropic_error("invalid_request_error", "tools must be an array."), status: :bad_request
+      end
+      return if tools.all? { |tool| tool.is_a?(Hash) && (tool["type"].blank? || tool["type"] == "custom") }
+
+      render json: anthropic_error("invalid_request_error", "Server-side tools are not available through the Gumhead gateway."), status: :bad_request
+    end
+
+    def with_in_flight_slot
+      unless acquire_in_flight_slot
+        return render json: anthropic_error("rate_limit_error", "Too many concurrent Gumhead requests. Please retry shortly."), status: :too_many_requests
+      end
+
+      begin
+        yield
+      ensure
+        release_in_flight_slot
+      end
+    end
+
+    # Skip the params-derived log fields for a body that cannot parse; the
+    # request was already answered with the error envelope, and logging must
+    # not turn that answer into a 500.
+    def append_info_to_payload(payload)
+      super
+    rescue ActionDispatch::Http::Parameters::ParseError
+      nil
     end
 
     # A missing max_tokens passes through: Anthropic's own error for it is

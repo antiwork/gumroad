@@ -16,6 +16,7 @@ class GumheadStreamUsageScanner
     @cache_creation_input_tokens = 0
     @cache_creation_1h_input_tokens = 0
     @cache_read_input_tokens = 0
+    @content_delta_count = 0
     @saw_usage = false
   end
 
@@ -30,10 +31,15 @@ class GumheadStreamUsageScanner
 
   def usage? = @saw_usage
 
+  # A stream that breaks between message_start and the final message_delta
+  # has only the provisional output count (usually 1). Every
+  # content_block_delta carries at least one token, so the delta count is a
+  # floor that keeps an interrupted stream from being recorded as almost
+  # free.
   def usage
     {
       "input_tokens" => @input_tokens,
-      "output_tokens" => @output_tokens,
+      "output_tokens" => [@output_tokens, @content_delta_count].max,
       "cache_creation_input_tokens" => @cache_creation_input_tokens,
       "cache_creation" => { "ephemeral_1h_input_tokens" => @cache_creation_1h_input_tokens },
       "cache_read_input_tokens" => @cache_read_input_tokens,
@@ -50,6 +56,8 @@ class GumheadStreamUsageScanner
       case event["type"]
       when "message_start"
         started(event)
+      when "content_block_delta"
+        @content_delta_count += 1
       when "message_delta"
         usage = event["usage"]
         return unless usage.is_a?(Hash)

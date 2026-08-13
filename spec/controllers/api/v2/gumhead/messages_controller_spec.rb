@@ -97,14 +97,36 @@ describe Api::V2::Gumhead::MessagesController do
   end
 
   describe "request validation" do
-    # A malformed body posted as application/json is rejected by the JSON
-    # params parser before the controller runs; this guard covers bodies
-    # sent without that content type.
+    it "rejects a malformed JSON body with the gateway's error envelope" do
+      post :create, body: "not json", as: :json
+
+      expect(response.status).to eq(400)
+      expect(JSON.parse(response.body)["error"]["type"]).to eq("invalid_request_error")
+    end
+
+    # Same guard for a body sent without the JSON content type, where the
+    # params parser never runs and load_body does the rejecting.
     it "rejects a non-JSON body" do
       post :create, body: "not json"
 
       expect(response.status).to eq(400)
       expect(JSON.parse(response.body)["error"]["type"]).to eq("invalid_request_error")
+    end
+
+    it "rejects server-side tools" do
+      post_messages(request_payload.merge(tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }]))
+
+      expect(response.status).to eq(400)
+      expect(JSON.parse(response.body)["error"]["message"]).to include("Server-side tools")
+    end
+
+    it "allows plain client tools" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages(request_payload.merge(tools: [{ name: "read_folder", input_schema: { type: "object" } }]))
+
+      expect(response.status).to eq(200)
     end
 
     it "rejects a body over the size limit" do
@@ -209,6 +231,23 @@ describe Api::V2::Gumhead::MessagesController do
       expect(event.cache_read_input_tokens).to eq(14)
     end
 
+    it "floors the recorded output at the delta count when the final message_delta never arrives" do
+      truncated = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\n\n),
+        %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"He"}}\n\n),
+        %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"ll"}}\n\n),
+        %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"o"}}\n\n),
+      ].join
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: truncated, headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      event = GumheadUsageEvent.sole
+      expect(event.input_tokens).to eq(50)
+      expect(event.output_tokens).to eq(3)
+    end
+
     it "returns a buffered 502 when the upstream connection fails before the stream starts" do
       stub_request(:post, messages_url).to_raise(HTTP::ConnectionError)
 
@@ -285,6 +324,15 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(200)
       expect(JSON.parse(response.body)["input_tokens"]).to eq(123)
       expect(GumheadUsageEvent.count).to eq(0)
+    end
+
+    it "shares the concurrent in-flight limit" do
+      $redis.set(RedisKey.gumhead_gateway_in_flight(@user.id), described_class::MAX_IN_FLIGHT_REQUESTS)
+
+      post :count_tokens, body: request_payload.to_json, as: :json
+
+      expect(response.status).to eq(429)
+      expect(WebMock).not_to have_requested(:post, count_tokens_url)
     end
   end
 end
