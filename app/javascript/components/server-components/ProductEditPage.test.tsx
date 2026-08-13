@@ -163,7 +163,6 @@ it("saves changed state after the active save reconciles server ids", async () =
     receipt_email_from: "seller@example.com",
     price_checker_enabled: false,
     custom_html_pages_enabled: false,
-    autosave_enabled: false,
     custom_html_store_hostnames: [],
     custom_html_global_nav_hosts: [],
     custom_html_global_nav_paths: [],
@@ -360,7 +359,6 @@ it("reconciles same-id pages in different variant scopes using each variant's ow
     receipt_email_from: "seller@example.com",
     price_checker_enabled: false,
     custom_html_pages_enabled: false,
-    autosave_enabled: false,
     custom_html_store_hostnames: [],
     custom_html_global_nav_hosts: [],
     custom_html_global_nav_paths: [],
@@ -534,7 +532,6 @@ it("keeps a newly-created variant's move provenance after its own id is remapped
     receipt_email_from: "seller@example.com",
     price_checker_enabled: false,
     custom_html_pages_enabled: false,
-    autosave_enabled: false,
     custom_html_store_hostnames: [],
     custom_html_global_nav_hosts: [],
     custom_html_global_nav_paths: [],
@@ -686,7 +683,6 @@ const buildTieredProps = (product: Product): ProductEditPageProps => ({
   receipt_email_from: "seller@example.com",
   price_checker_enabled: false,
   custom_html_pages_enabled: false,
-  autosave_enabled: true,
   custom_html_store_hostnames: [],
   custom_html_global_nav_hosts: [],
   custom_html_global_nav_paths: [],
@@ -900,23 +896,6 @@ it("does not autosave a deletion that still needs seller confirmation", async ()
     await act(async () => void vi.advanceTimersByTime(1_500));
     expect(saveProductMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-it("does not autosave when the feature flag is off", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  try {
-    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
-    const props = { ...buildTieredProps(product), autosave_enabled: false };
-    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
-
-    render(<ProductEditPage {...props} />);
-    act(() => contextCapture.current?.updateProduct({ name: "Should stay local" }));
-    await act(async () => void vi.advanceTimersByTime(1_500));
-    expect(saveProductMock).not.toHaveBeenCalled();
-    expect(contextCapture.current?.saveStatus).toBe("unsaved");
   } finally {
     vi.useRealTimers();
   }
