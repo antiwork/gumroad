@@ -91,10 +91,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   DEFAULT_DAILY_INPUT_TOKEN_CAP = 20_000_000
   DEFAULT_DAILY_OUTPUT_TOKEN_CAP = 500_000
   MAX_IN_FLIGHT_REQUESTS = 4
-  # Safety net for a leaked slot (killed process): the counter expires on
-  # its own. Live streams renew the TTL as chunks arrive, so an active
-  # lease cannot expire out from under the count; the release guard below
-  # repairs a counter that expired anyway.
+  # In-flight slots are per-request members in a sorted set, scored by
+  # their last renewal time. A leaked lease (killed process) simply ages
+  # out of the score window; releasing removes one specific member, so a
+  # stale release can never corrupt a newer counter generation.
   IN_FLIGHT_TTL = 10.minutes
   IN_FLIGHT_RENEWAL_INTERVAL = 1.minute
 
@@ -173,25 +173,21 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     def acquire_in_flight_slot
       key = RedisKey.gumhead_gateway_in_flight(current_resource_owner.id)
-      count = $redis.incr(key)
-      # Only the first acquisition arms the TTL. A rejected probe must not
-      # renew it: after a leak (killed worker), per-TTL retries would
-      # otherwise keep the stale counter alive forever. Live streams renew
-      # explicitly via renew_in_flight_lease. The ttl == -1 arm repairs a
-      # counter whose worker died between INCR and EXPIRE — without it that
-      # key would never expire and could lock the seller out permanently.
-      $redis.expire(key, IN_FLIGHT_TTL.to_i) if count == 1 || $redis.ttl(key) == -1
-      return true if count <= MAX_IN_FLIGHT_REQUESTS
+      @in_flight_lease_id = SecureRandom.uuid
+      now = Time.current.to_f
+      # Age out leases that stopped renewing (killed process, dead stream).
+      $redis.zremrangebyscore(key, 0, now - IN_FLIGHT_TTL.to_i)
+      $redis.zadd(key, now, @in_flight_lease_id)
+      # Key-level backstop only; member freshness is score-based.
+      $redis.expire(key, IN_FLIGHT_TTL.to_i * 2)
+      return true if $redis.zcard(key) <= MAX_IN_FLIGHT_REQUESTS
 
       release_in_flight_slot
       false
     end
 
     def release_in_flight_slot
-      key = RedisKey.gumhead_gateway_in_flight(current_resource_owner.id)
-      # A TTL expiry between acquire and release would drive the counter
-      # negative and silently widen the limit; delete instead.
-      $redis.del(key) if $redis.decr(key).negative?
+      $redis.zrem(RedisKey.gumhead_gateway_in_flight(current_resource_owner.id), @in_flight_lease_id)
     end
 
     def load_body
@@ -488,13 +484,15 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     # Best effort: a Redis blip must not abort a committed stream — the
-    # worst case of a missed renewal is a briefly loosened in-flight limit,
-    # which the release guard already tolerates.
+    # worst case of a missed renewal is one lease aging out early, which
+    # briefly loosens the limit by a single slot.
     def renew_in_flight_lease(last_renewal)
       return last_renewal if Time.current - last_renewal < IN_FLIGHT_RENEWAL_INTERVAL
 
       begin
-        $redis.expire(RedisKey.gumhead_gateway_in_flight(current_resource_owner.id), IN_FLIGHT_TTL.to_i)
+        key = RedisKey.gumhead_gateway_in_flight(current_resource_owner.id)
+        $redis.zadd(key, Time.current.to_f, @in_flight_lease_id)
+        $redis.expire(key, IN_FLIGHT_TTL.to_i * 2)
       rescue Redis::BaseError => e
         Rails.logger.warn("Gumhead in-flight lease renewal failed: #{e.class} #{e.message}")
       end

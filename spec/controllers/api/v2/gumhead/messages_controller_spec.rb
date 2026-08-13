@@ -125,16 +125,27 @@ describe Api::V2::Gumhead::MessagesController do
     end
 
     it "rejects a request past the concurrent in-flight limit and frees the probe slot" do
-      $redis.setex(RedisKey.gumhead_gateway_in_flight(@user.id), 120, described_class::MAX_IN_FLIGHT_REQUESTS)
+      key = RedisKey.gumhead_gateway_in_flight(@user.id)
+      described_class::MAX_IN_FLIGHT_REQUESTS.times { |i| $redis.zadd(key, Time.current.to_f, "lease-#{i}") }
 
       post_messages
 
       expect(response.status).to eq(429)
       expect(WebMock).not_to have_requested(:post, messages_url)
-      expect($redis.get(RedisKey.gumhead_gateway_in_flight(@user.id)).to_i).to eq(described_class::MAX_IN_FLIGHT_REQUESTS)
-      # A rejected probe must not renew the stale counter's TTL, or retries
-      # would keep a leaked counter alive forever.
-      expect($redis.ttl(RedisKey.gumhead_gateway_in_flight(@user.id))).to be_between(1, 120)
+      # The probe's own lease is removed; the active ones stay.
+      expect($redis.zcard(key)).to eq(described_class::MAX_IN_FLIGHT_REQUESTS)
+    end
+
+    it "ages expired leases out of the in-flight set" do
+      key = RedisKey.gumhead_gateway_in_flight(@user.id)
+      stale = Time.current.to_f - described_class::IN_FLIGHT_TTL.to_i - 60
+      described_class::MAX_IN_FLIGHT_REQUESTS.times { |i| $redis.zadd(key, stale, "dead-#{i}") }
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
     end
   end
 
@@ -606,7 +617,8 @@ describe Api::V2::Gumhead::MessagesController do
     end
 
     it "shares the concurrent in-flight limit" do
-      $redis.set(RedisKey.gumhead_gateway_in_flight(@user.id), described_class::MAX_IN_FLIGHT_REQUESTS)
+      key = RedisKey.gumhead_gateway_in_flight(@user.id)
+      described_class::MAX_IN_FLIGHT_REQUESTS.times { |i| $redis.zadd(key, Time.current.to_f, "lease-#{i}") }
 
       post :count_tokens, body: request_payload.to_json, as: :json
 
