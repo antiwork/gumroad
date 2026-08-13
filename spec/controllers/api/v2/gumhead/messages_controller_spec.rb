@@ -362,6 +362,17 @@ describe Api::V2::Gumhead::MessagesController do
       event = GumheadUsageEvent.sole
       expect(event.input_tokens).to eq(50)
       expect(event.output_tokens).to eq(3)
+      # An EOF without message_stop must not read as a clean close.
+      expect(response.body).to include("event: error")
+    end
+
+    it "does not append an error frame to a stream that ended with message_stop" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: sse_body, headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.body).not_to include("event: error")
     end
 
     it "floors interrupted output by streamed bytes when one delta carries many tokens" do

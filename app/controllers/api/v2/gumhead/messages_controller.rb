@@ -335,6 +335,9 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
           response.stream.write(chunk)
           last_renewal = renew_in_flight_lease(last_renewal)
         end
+        # A clean EOF without message_stop (or an upstream error event) is
+        # an interruption the client would otherwise see as a silent close.
+        write_stream_error_frame unless scanner.terminal?
       rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
         # The client went away mid-turn, but Anthropic keeps generating and
         # billing until the message ends. Drain the rest of the upstream so

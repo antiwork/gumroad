@@ -20,7 +20,12 @@ class GumheadStreamUsageScanner
     @streamed_output_bytes = 0
     @stop_reason = nil
     @saw_usage = false
+    @terminal = false
   end
+
+  # True once the stream carried a proper ending — message_stop or a
+  # top-level error event. An EOF without one is an interruption.
+  def terminal? = @terminal
 
   # A refusal that stopped the message before any output is not billed by
   # Anthropic; a mid-output refusal is. The delta count separates the two.
@@ -62,6 +67,8 @@ class GumheadStreamUsageScanner
       return unless event.is_a?(Hash)
 
       case event["type"]
+      when "message_stop", "error"
+        @terminal = true
       when "message_start"
         started(event)
       when "content_block_delta"
