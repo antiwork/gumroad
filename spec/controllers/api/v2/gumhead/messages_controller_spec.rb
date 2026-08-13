@@ -287,15 +287,18 @@ describe Api::V2::Gumhead::MessagesController do
       expect(JSON.parse(response.body)["error"]["type"]).to eq("api_error")
     end
 
-    # No response headers means no evidence Anthropic received the request;
-    # the buffered output ceiling keeps the uncharged worst case small.
-    it "charges nothing for a timeout before response headers" do
+    # A slow buffered generation and a network stall are indistinguishable
+    # past TCP connect, and Anthropic bills abandoned generations — so a
+    # post-connect timeout charges the bounded worst case.
+    it "charges the bounded worst case for a post-connect timeout" do
       stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
 
       post_messages
 
       expect(response.status).to eq(502)
-      expect(GumheadUsageEvent.count).to eq(0)
+      event = GumheadUsageEvent.sole
+      expect(event.output_tokens).to eq(request_payload[:max_tokens])
+      expect(event.input_tokens).to be > 0
     end
 
     it "charges nothing when the connection itself times out" do

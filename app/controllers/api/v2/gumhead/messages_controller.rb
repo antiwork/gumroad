@@ -30,9 +30,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
   # Every request here carries the seller's bearer token and, in the body,
   # their prompt and file contents. With send_default_pii on, Sentry's
-  # automatic capture would export both on any unhandled error or sampled
-  # transaction. Clearing the ambient scope up front limits gateway
-  # telemetry to what is attached explicitly (see record_usage!).
+  # automatic capture would export both. This clear covers captures on the
+  # Live child thread that runs the action; the parent thread's events and
+  # transactions are scrubbed in config/initializers/sentry.rb, because
+  # this callback never runs on that thread's hub.
   prepend_before_action { Sentry.get_current_scope.clear if defined?(Sentry) && Sentry.initialized? }
 
   before_action { doorkeeper_authorize! }
@@ -295,17 +296,29 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       body = upstream.body.to_s
       meter_buffered_usage(body) if meter && upstream.status.success?
       render body:, content_type: "application/json", status: upstream.status.code
+    rescue HTTP::ConnectTimeoutError => e
+      # Subclass of HTTP::TimeoutError, rescued first: TCP connect failed,
+      # so the request never reached Anthropic and nothing is charged.
+      Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+      render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
+    rescue HTTP::TimeoutError => e
+      Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+      # Past TCP connect, a timeout cannot distinguish a TLS/write stall
+      # from a generation still running — and Anthropic bills generations
+      # whose client went away. A slow full-size buffered generation
+      # reliably outlives BUFFERED_TIMEOUT, so charging nothing here would
+      # be a repeatable unmetered-spend hole. Charge the bounded worst case
+      # (prompt floor at ~4 bytes per token, plus max_tokens, itself capped
+      # by MAX_BUFFERED_OUTPUT_TOKENS): a false charge costs at most a few
+      # percent of the daily output cap per event.
+      if meter
+        record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4, "output_tokens" => @body["max_tokens"].to_i })
+      end
+      render json: anthropic_error("api_error", "The model service timed out."), status: :bad_gateway
     rescue HTTP::Error => e
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
-      # Charge only on evidence of dispatch: received success headers mean
-      # Anthropic generated (and billed) a response whose body was then
-      # lost, so the prompt floor (~4 bytes per token) plus the request's
-      # maximum output is recorded — bounded small by
-      # MAX_BUFFERED_OUTPUT_TOKENS. A failure before headers (connect, TLS,
-      # write, or timeout) charges nothing: it usually never reached
-      # Anthropic, and the buffered output ceiling keeps the uncharged
-      # worst case small. Large generations must stream and are metered
-      # incrementally there.
+      # Success headers followed by a lost body: the response was generated
+      # and billed, so it gets the same bounded worst-case charge.
       if meter && upstream&.status&.success?
         record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4, "output_tokens" => @body["max_tokens"].to_i })
       end
