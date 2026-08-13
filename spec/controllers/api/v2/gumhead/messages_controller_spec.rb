@@ -56,6 +56,14 @@ describe Api::V2::Gumhead::MessagesController do
       expect(JSON.parse(response.body)["error"]["type"]).to eq("authentication_error")
     end
 
+    it "rejects a token sent as a query parameter" do
+      request.headers["Authorization"] = nil
+
+      post :create, params: { access_token: @token.token }, body: request_payload.to_json, as: :json
+
+      expect(response.status).to eq(401)
+    end
+
     it "rejects a token sent in the request body instead of the header" do
       post_messages(request_payload.merge(access_token: @token.token))
 
@@ -186,6 +194,12 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(response.status).to eq(400)
       expect(JSON.parse(response.body)["error"]["type"]).to eq("invalid_request_error")
+    end
+
+    it "rejects a negative max_tokens" do
+      post_messages(request_payload.merge(max_tokens: -64_000))
+
+      expect(response.status).to eq(400)
     end
 
     it "rejects pricing modifiers the ledger cannot weight" do

@@ -8,6 +8,11 @@ class GumheadUsageEvent < ApplicationRecord
   belongs_to :user
 
   validates :model, presence: true
+  # The caps sum these columns; a negative row would silently raise every
+  # later request's remaining budget.
+  validates :input_tokens, :output_tokens, :cache_creation_input_tokens,
+            :cache_creation_1h_input_tokens, :cache_read_input_tokens,
+            numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
   # Cache tokens are billed too, so the input cap counts a cost-weighted
   # total — otherwise a cache-heavy agent loop would spend almost entirely

@@ -106,6 +106,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   end
 
   private
+    # Doorkeeper's defaults also authenticate `access_token`/`bearer_token`
+    # request parameters. A token in the URL leaks into access logs, and a
+    # token in the body would forward upstream — only the Authorization
+    # header is accepted here.
+    def doorkeeper_token
+      @doorkeeper_token ||= Doorkeeper::OAuth::Token.authenticate(request, :from_bearer_authorization)
+    end
+
     def ensure_gumhead_enabled
       return if Feature.active?(:gumhead, current_resource_owner)
 
@@ -252,9 +260,9 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def validate_max_tokens
       max_tokens = @body["max_tokens"]
       return if max_tokens.nil?
-      return if max_tokens.is_a?(Integer) && max_tokens <= MAX_TOKENS_PER_REQUEST
+      return if max_tokens.is_a?(Integer) && max_tokens.positive? && max_tokens <= MAX_TOKENS_PER_REQUEST
 
-      render json: anthropic_error("invalid_request_error", "max_tokens must be an integer no greater than #{MAX_TOKENS_PER_REQUEST} on the Gumhead gateway."), status: :bad_request
+      render json: anthropic_error("invalid_request_error", "max_tokens must be a positive integer no greater than #{MAX_TOKENS_PER_REQUEST} on the Gumhead gateway."), status: :bad_request
     end
 
     def enforce_daily_token_caps
@@ -291,10 +299,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     rescue HTTP::Error => e
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
       # A success status whose body was lost mid-read was still generated
-      # and billed upstream. Charge a floor estimate of the prompt so the
-      # failure is not free against the caps.
+      # and billed upstream. Charge the prompt floor plus the request's
+      # maximum output, mirroring the timeout branch, so the failure is not
+      # free against either cap.
       if meter && upstream&.status&.success?
-        record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4 })
+        record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4, "output_tokens" => @body["max_tokens"].to_i })
       end
       render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
     end
@@ -369,10 +378,17 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # upstream itself broke.
     end
 
+    # Best effort: a Redis blip must not abort a committed stream — the
+    # worst case of a missed renewal is a briefly loosened in-flight limit,
+    # which the release guard already tolerates.
     def renew_in_flight_lease(last_renewal)
       return last_renewal if Time.current - last_renewal < IN_FLIGHT_RENEWAL_INTERVAL
 
-      $redis.expire(RedisKey.gumhead_gateway_in_flight(current_resource_owner.id), IN_FLIGHT_TTL.to_i)
+      begin
+        $redis.expire(RedisKey.gumhead_gateway_in_flight(current_resource_owner.id), IN_FLIGHT_TTL.to_i)
+      rescue Redis::BaseError => e
+        Rails.logger.warn("Gumhead in-flight lease renewal failed: #{e.class} #{e.message}")
+      end
       Time.current
     end
 
@@ -400,9 +416,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       )
     rescue => e
       # Losing one ledger row must not break the seller's reply, but it needs
-      # a human to notice — unmetered spend is invisible spend.
+      # a human to notice — unmetered spend is invisible spend. The request
+      # scope stays out of the report: with send_default_pii on, it would
+      # carry the seller's bearer token and prompt to Sentry.
       Rails.logger.error("Gumhead usage recording failed: #{e.full_message}")
-      ErrorNotifier.notify(e)
+      ErrorNotifier.notify(e, exclude_request_context: true, user_id: current_resource_owner&.id, model: model.to_s)
     end
 
     def upstream_headers
