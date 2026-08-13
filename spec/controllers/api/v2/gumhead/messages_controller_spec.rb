@@ -31,7 +31,13 @@ describe Api::V2::Gumhead::MessagesController do
       type: "message",
       model: "claude-sonnet-5",
       content: [{ type: "text", text: "Hello!" }],
-      usage: { input_tokens: 50, output_tokens: 7, cache_creation_input_tokens: 3, cache_read_input_tokens: 11 },
+      usage: {
+        input_tokens: 50,
+        output_tokens: 7,
+        cache_creation_input_tokens: 3,
+        cache_creation: { ephemeral_5m_input_tokens: 1, ephemeral_1h_input_tokens: 2 },
+        cache_read_input_tokens: 11,
+      },
     }
   end
 
@@ -122,6 +128,13 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(400)
       expect(JSON.parse(response.body)["error"]["message"]).to include("max_tokens")
     end
+
+    it "rejects a non-integer max_tokens instead of raising" do
+      post_messages(request_payload.merge(max_tokens: { "sneaky" => true }))
+
+      expect(response.status).to eq(400)
+      expect(JSON.parse(response.body)["error"]["type"]).to eq("invalid_request_error")
+    end
   end
 
   describe "buffered forwarding" do
@@ -143,6 +156,7 @@ describe Api::V2::Gumhead::MessagesController do
       expect(event.input_tokens).to eq(50)
       expect(event.output_tokens).to eq(7)
       expect(event.cache_creation_input_tokens).to eq(3)
+      expect(event.cache_creation_1h_input_tokens).to eq(2)
       expect(event.cache_read_input_tokens).to eq(11)
     end
 

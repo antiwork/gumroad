@@ -34,9 +34,13 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   ANTHROPIC_API_BASE = "https://api.anthropic.com/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
   ALLOWED_MODEL_PREFIX = "claude-"
-  MAX_BODY_BYTES = 20.megabytes
+  # Matches nginx's client_max_body_size; a larger constant here would
+  # document a limit requests can never reach.
+  MAX_BODY_BYTES = 10.megabytes
   MAX_TOKENS_PER_REQUEST = 64_000
-  BUFFERED_TIMEOUT = 300
+  # Matches nginx's proxy_read_timeout: a buffered response Rails is still
+  # waiting on past that point has already lost its client.
+  BUFFERED_TIMEOUT = 120
 
   # One Gumhead turn is a whole tool loop of model calls, so the request
   # throttle is deliberately loose; the real spend control is the daily
@@ -55,9 +59,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   DEFAULT_DAILY_OUTPUT_TOKEN_CAP = 500_000
   MAX_IN_FLIGHT_REQUESTS = 4
   # Safety net for a leaked slot (killed process): the counter expires on
-  # its own. A stream outliving the TTL frees its slot early, which only
-  # loosens the limit briefly — the release guard below repairs the count.
+  # its own. Live streams renew the TTL as chunks arrive, so an active
+  # lease cannot expire out from under the count; the release guard below
+  # repairs a counter that expired anyway.
   IN_FLIGHT_TTL = 10.minutes
+  IN_FLIGHT_RENEWAL_INTERVAL = 1.minute
 
   # POST /v2/gumhead/v1/messages
   def create
@@ -145,10 +151,15 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
     end
 
+    # A missing max_tokens passes through: Anthropic's own error for it is
+    # the better message. Everything else must be an integer under the
+    # ceiling — untrusted JSON can put any type here.
     def validate_max_tokens
-      return if @body["max_tokens"].to_i <= MAX_TOKENS_PER_REQUEST
+      max_tokens = @body["max_tokens"]
+      return if max_tokens.nil?
+      return if max_tokens.is_a?(Integer) && max_tokens <= MAX_TOKENS_PER_REQUEST
 
-      render json: anthropic_error("invalid_request_error", "max_tokens must be #{MAX_TOKENS_PER_REQUEST} or less on the Gumhead gateway."), status: :bad_request
+      render json: anthropic_error("invalid_request_error", "max_tokens must be an integer no greater than #{MAX_TOKENS_PER_REQUEST} on the Gumhead gateway."), status: :bad_request
     end
 
     def enforce_daily_token_caps
@@ -186,13 +197,19 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
       scanner = GumheadStreamUsageScanner.new
       begin
+        last_renewal = Time.current
         while (chunk = upstream.body.readpartial)
           scanner << chunk
           response.stream.write(chunk)
+          last_renewal = renew_in_flight_lease(last_renewal)
         end
       rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
-        # The client went away mid-turn. The tokens scanned so far are still
-        # real spend, so the ensure below records them anyway.
+        # The client went away mid-turn, but Anthropic keeps generating and
+        # billing until the message ends. Drain the rest of the upstream so
+        # the final message_delta's cumulative counts reach the ledger —
+        # otherwise disconnecting early would leave most of the output
+        # unmetered. The in-flight slot stays held while draining.
+        drain_upstream(upstream, scanner)
       rescue HTTP::Error => e
         # Upstream broke mid-stream. Emit the SSE error event before the
         # ensure closes the stream — a bare EOF (or, before the first chunk,
@@ -218,6 +235,24 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # Both sides are gone; nothing left to tell anyone.
     end
 
+    def drain_upstream(upstream, scanner)
+      last_renewal = Time.current
+      while (chunk = upstream.body.readpartial)
+        scanner << chunk
+        last_renewal = renew_in_flight_lease(last_renewal)
+      end
+    rescue HTTP::Error, IOError, SystemCallError
+      # Best effort: the ledger records whatever was scanned before the
+      # upstream itself broke.
+    end
+
+    def renew_in_flight_lease(last_renewal)
+      return last_renewal if Time.current - last_renewal < IN_FLIGHT_RENEWAL_INTERVAL
+
+      $redis.expire(RedisKey.gumhead_gateway_in_flight(current_resource_owner.id), IN_FLIGHT_TTL.to_i)
+      Time.current
+    end
+
     def meter_buffered_usage(body)
       parsed = safe_parse_json(body)
       usage = parsed.is_a?(Hash) ? parsed["usage"] : nil
@@ -227,12 +262,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     def record_usage!(model:, usage:)
+      cache_creation_split = usage["cache_creation"]
       GumheadUsageEvent.create!(
         user: current_resource_owner,
         model: model.to_s,
         input_tokens: usage["input_tokens"].to_i,
         output_tokens: usage["output_tokens"].to_i,
         cache_creation_input_tokens: usage["cache_creation_input_tokens"].to_i,
+        cache_creation_1h_input_tokens: cache_creation_split.is_a?(Hash) ? cache_creation_split["ephemeral_1h_input_tokens"].to_i : 0,
         cache_read_input_tokens: usage["cache_read_input_tokens"].to_i,
       )
     rescue => e

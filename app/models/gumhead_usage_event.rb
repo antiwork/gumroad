@@ -9,16 +9,22 @@ class GumheadUsageEvent < ApplicationRecord
 
   validates :model, presence: true
 
-  # Cache tokens are billed too (creation at a premium, reads at a
-  # discount), so the input cap counts a cost-weighted total — otherwise a
-  # cache-heavy agent loop would spend almost entirely outside the cap.
+  # Cache tokens are billed too, so the input cap counts a cost-weighted
+  # total — otherwise a cache-heavy agent loop would spend almost entirely
+  # outside the cap. Anthropic prices 5-minute cache writes at 1.25x,
+  # 1-hour writes at 2x, and reads at 0.1x. `cache_creation_input_tokens`
+  # is the total across both TTLs, so the 1-hour share is stored separately
+  # and weighted up from the 1.25 base here.
   CACHE_CREATION_COST_MULTIPLIER = 1.25
+  CACHE_CREATION_1H_COST_MULTIPLIER = 2
   CACHE_READ_COST_MULTIPLIER = 0.1
 
   def self.input_equivalent_tokens_today(user)
     where(user:, created_at: Time.current.all_day)
       .sum(
-        "input_tokens + CEIL(cache_creation_input_tokens * #{CACHE_CREATION_COST_MULTIPLIER}) + " \
+        "input_tokens + " \
+        "CEIL((cache_creation_input_tokens - cache_creation_1h_input_tokens) * #{CACHE_CREATION_COST_MULTIPLIER}) + " \
+        "(cache_creation_1h_input_tokens * #{CACHE_CREATION_1H_COST_MULTIPLIER}) + " \
         "CEIL(cache_read_input_tokens * #{CACHE_READ_COST_MULTIPLIER})"
       ).to_i
   end

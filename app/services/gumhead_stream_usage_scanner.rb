@@ -14,6 +14,7 @@ class GumheadStreamUsageScanner
     @input_tokens = 0
     @output_tokens = 0
     @cache_creation_input_tokens = 0
+    @cache_creation_1h_input_tokens = 0
     @cache_read_input_tokens = 0
     @saw_usage = false
   end
@@ -34,6 +35,7 @@ class GumheadStreamUsageScanner
       "input_tokens" => @input_tokens,
       "output_tokens" => @output_tokens,
       "cache_creation_input_tokens" => @cache_creation_input_tokens,
+      "cache_creation" => { "ephemeral_1h_input_tokens" => @cache_creation_1h_input_tokens },
       "cache_read_input_tokens" => @cache_read_input_tokens,
     }
   end
@@ -59,6 +61,7 @@ class GumheadStreamUsageScanner
         @input_tokens = usage["input_tokens"].to_i if usage.key?("input_tokens")
         @cache_creation_input_tokens = usage["cache_creation_input_tokens"].to_i if usage.key?("cache_creation_input_tokens")
         @cache_read_input_tokens = usage["cache_read_input_tokens"].to_i if usage.key?("cache_read_input_tokens")
+        track_cache_creation_split(usage)
       end
     rescue JSON::ParserError
       # A partial or non-JSON data line carries no usage; skip it.
@@ -74,5 +77,15 @@ class GumheadStreamUsageScanner
       @output_tokens = usage["output_tokens"].to_i
       @cache_creation_input_tokens = usage["cache_creation_input_tokens"].to_i
       @cache_read_input_tokens = usage["cache_read_input_tokens"].to_i
+      track_cache_creation_split(usage)
+    end
+
+    # 1-hour cache writes cost more than the 5-minute default, so the split
+    # under `cache_creation` is kept for the ledger's cost weighting.
+    def track_cache_creation_split(usage)
+      split = usage["cache_creation"]
+      return unless split.is_a?(Hash) && split.key?("ephemeral_1h_input_tokens")
+
+      @cache_creation_1h_input_tokens = split["ephemeral_1h_input_tokens"].to_i
     end
 end
