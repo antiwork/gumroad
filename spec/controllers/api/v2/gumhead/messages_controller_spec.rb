@@ -267,14 +267,25 @@ describe Api::V2::Gumhead::MessagesController do
       expect(event.cache_read_input_tokens).to eq(11)
     end
 
-    it "passes an upstream error through with its status and body" do
+    it "passes an upstream error through with its status, body, and retry timing" do
       stub_request(:post, messages_url)
-        .to_return(status: 429, body: { type: "error", error: { type: "rate_limit_error", message: "Slow down" } }.to_json)
+        .to_return(status: 429, body: { type: "error", error: { type: "rate_limit_error", message: "Slow down" } }.to_json, headers: { "Retry-After" => "13" })
 
       post_messages
 
       expect(response.status).to eq(429)
       expect(response.body).to include("Slow down")
+      expect(response.headers["Retry-After"]).to eq("13")
+      expect(GumheadUsageEvent.count).to eq(0)
+    end
+
+    it "renders a 502 envelope for a TLS failure" do
+      stub_request(:post, messages_url).to_raise(OpenSSL::SSL::SSLError)
+
+      post_messages
+
+      expect(response.status).to eq(502)
+      expect(JSON.parse(response.body)["error"]["type"]).to eq("api_error")
       expect(GumheadUsageEvent.count).to eq(0)
     end
 
@@ -302,6 +313,17 @@ describe Api::V2::Gumhead::MessagesController do
       event = GumheadUsageEvent.sole
       expect(event.output_tokens).to eq(request_payload[:max_tokens])
       expect(event.input_tokens).to eq(37)
+    end
+
+    it "counts output_config in the timeout charge" do
+      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 200, body: { input_tokens: 90 }.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages(request_payload.merge(output_config: { format: { type: "json_schema", schema: { type: "object" } } }))
+
+      expect(WebMock).to have_requested(:post, count_tokens_url).with { |req| req.body.include?("output_config") }
+      expect(GumheadUsageEvent.sole.input_tokens).to eq(90)
     end
 
     it "falls back to a conservative byte estimate when count_tokens also fails" do

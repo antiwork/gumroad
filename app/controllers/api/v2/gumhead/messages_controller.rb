@@ -295,10 +295,13 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       upstream = HTTP.timeout(BUFFERED_TIMEOUT).headers(upstream_headers).post(url, body: @raw_body)
       body = upstream.body.to_s
       meter_buffered_usage(body) if meter && upstream.status.success?
+      copy_retry_after(upstream)
       render body:, content_type: "application/json", status: upstream.status.code
-    rescue HTTP::ConnectTimeoutError => e
-      # Subclass of HTTP::TimeoutError, rescued first: TCP connect failed,
-      # so the request never reached Anthropic and nothing is charged.
+    rescue HTTP::ConnectTimeoutError, OpenSSL::SSL::SSLError => e
+      # Rescued before HTTP::TimeoutError (ConnectTimeoutError subclasses
+      # it; SSLError escapes the http gem unwrapped): connect or TLS setup
+      # failed, so the request never reached Anthropic and nothing is
+      # charged.
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
       render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
     rescue HTTP::TimeoutError => e
@@ -339,12 +342,22 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       else
         @raw_body.bytesize / 2
       end
-    rescue HTTP::Error
+    rescue HTTP::Error, OpenSSL::SSL::SSLError
       @raw_body.bytesize / 2
     end
 
     def count_tokens_body
-      @body.slice("model", "messages", "system", "tools", "thinking").to_json
+      # Every accepted field that adds billed prompt tokens must be counted
+      # — output_config schemas are part of the prompt.
+      @body.slice("model", "messages", "system", "tools", "thinking", "output_config").to_json
+    end
+
+    # Anthropic's 429/529 responses carry retry timing the client SDK
+    # obeys; dropping it would make Gumhead retry too early and burn its
+    # retry budget on guaranteed failures.
+    def copy_retry_after(upstream)
+      retry_after = upstream.headers["Retry-After"].presence
+      response.set_header("Retry-After", retry_after) if retry_after
     end
 
     def stream_upstream
@@ -353,6 +366,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         .post("#{ANTHROPIC_API_BASE}/messages", body: @raw_body)
 
       unless upstream.status.success?
+        copy_retry_after(upstream)
         return render body: upstream.body.to_s, content_type: "application/json", status: upstream.status.code
       end
 
@@ -380,7 +394,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         # otherwise disconnecting early would leave most of the output
         # unmetered. The in-flight slot stays held while draining.
         drain_upstream(upstream, scanner)
-      rescue HTTP::Error => e
+      rescue HTTP::Error, OpenSSL::SSL::SSLError => e
         # Upstream broke mid-stream. Emit the SSE error event before the
         # ensure closes the stream — a bare EOF (or, before the first chunk,
         # an empty 200) would leave the client guessing. Anthropic delivers
@@ -393,9 +407,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         end
         response.stream.close
       end
-    rescue HTTP::Error => e
+    rescue HTTP::Error, OpenSSL::SSL::SSLError => e
       # The initial POST failed before any response headers were streamed, so
-      # a buffered error is still possible.
+      # a buffered error is still possible. SSLError escapes the http gem
+      # unwrapped, hence the explicit rescue.
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
       render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
     end
@@ -415,7 +430,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         scanner << chunk
         last_renewal = renew_in_flight_lease(last_renewal)
       end
-    rescue HTTP::Error, IOError, SystemCallError
+    rescue HTTP::Error, OpenSSL::SSL::SSLError, IOError, SystemCallError
       # Best effort: the ledger records whatever was scanned before the
       # upstream itself broke.
     end
