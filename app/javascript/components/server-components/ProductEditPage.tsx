@@ -103,6 +103,7 @@ type Props = {
   receipt_email_from: string;
   price_checker_enabled: boolean;
   custom_html_pages_enabled: boolean;
+  autosave_enabled: boolean;
   custom_html_store_hostnames: string[];
   custom_html_global_nav_hosts: string[];
   custom_html_global_nav_paths: string[];
@@ -515,6 +516,7 @@ const ProductEditPage = (props: Props) => {
   const [router] = React.useState(() => createBrowserRouter(routes));
 
   const [saving, setSaving] = React.useState(false);
+  const [autosaveGeneration, setAutosaveGeneration] = React.useState(0);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
   // Deletions awaiting the seller's final confirmation in the save-time summary
   // modal. Non-null while the modal is open; the ref holds the resolver of the
@@ -755,8 +757,22 @@ const ProductEditPage = (props: Props) => {
     !isEqual(product, lastSavedProductRef.current) || currencyType !== lastSavedCurrencyTypeRef.current;
   const uploadsInProgress =
     imagesUploading.size > 0 ||
+    product.description.includes("blob:") ||
     product.public_files.some(isFileUploading) ||
     product.files.some((file) => isFileUploading(file) || file.subtitle_files.some(isFileUploading));
+  const pendingDeletionsByKind = findPendingDeletions(product, lastSavedProductRef.current);
+  const deletionsNeedAttention =
+    pendingDeletionsByKind.confirmed.variants.length +
+      pendingDeletionsByKind.confirmed.pages.length +
+      pendingDeletionsByKind.unexpected.variants.length +
+      pendingDeletionsByKind.unexpected.pages.length >
+    0;
+  const saveBlockedByModal =
+    pendingDeletions !== null ||
+    missingContentConflict !== null ||
+    hiddenContentConflict !== null ||
+    staleContentConflict !== null ||
+    staleDeletionConflict !== null;
   const saveStatus: "saved" | "unsaved" | "saving" = saving ? "saving" : hasUnsavedChanges ? "unsaved" : "saved";
   const saveRef = React.useRef(save);
   saveRef.current = save;
@@ -770,16 +786,42 @@ const ProductEditPage = (props: Props) => {
   }, [hasUnsavedChanges]);
 
   React.useEffect(() => {
-    if (!hasUnsavedChanges || uploadsInProgress) return;
+    if (
+      !hasUnsavedChanges ||
+      uploadsInProgress ||
+      saving ||
+      deletionsNeedAttention ||
+      saveBlockedByModal ||
+      !props.autosave_enabled
+    ) {
+      return;
+    }
 
     const timer = window.setTimeout(() => {
       automaticSaveRef.current = true;
-      void saveRef.current().finally(() => {
-        automaticSaveRef.current = false;
-      });
+      void saveRef.current().then(
+        (saved) => {
+          automaticSaveRef.current = false;
+          if (!saved) setAutosaveGeneration((generation) => generation + 1);
+        },
+        () => {
+          automaticSaveRef.current = false;
+          setAutosaveGeneration((generation) => generation + 1);
+        },
+      );
     }, 1_500);
     return () => window.clearTimeout(timer);
-  }, [product, currencyType, hasUnsavedChanges, uploadsInProgress]);
+  }, [
+    product,
+    currencyType,
+    hasUnsavedChanges,
+    uploadsInProgress,
+    saving,
+    deletionsNeedAttention,
+    saveBlockedByModal,
+    autosaveGeneration,
+    props.autosave_enabled,
+  ]);
 
   const confirmDeletionsAndSave = async () => {
     setPendingDeletions(null);

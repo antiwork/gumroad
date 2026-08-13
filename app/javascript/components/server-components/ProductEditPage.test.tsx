@@ -163,6 +163,7 @@ it("saves changed state after the active save reconciles server ids", async () =
     receipt_email_from: "seller@example.com",
     price_checker_enabled: false,
     custom_html_pages_enabled: false,
+    autosave_enabled: false,
     custom_html_store_hostnames: [],
     custom_html_global_nav_hosts: [],
     custom_html_global_nav_paths: [],
@@ -359,6 +360,7 @@ it("reconciles same-id pages in different variant scopes using each variant's ow
     receipt_email_from: "seller@example.com",
     price_checker_enabled: false,
     custom_html_pages_enabled: false,
+    autosave_enabled: false,
     custom_html_store_hostnames: [],
     custom_html_global_nav_hosts: [],
     custom_html_global_nav_paths: [],
@@ -532,6 +534,7 @@ it("keeps a newly-created variant's move provenance after its own id is remapped
     receipt_email_from: "seller@example.com",
     price_checker_enabled: false,
     custom_html_pages_enabled: false,
+    autosave_enabled: false,
     custom_html_store_hostnames: [],
     custom_html_global_nav_hosts: [],
     custom_html_global_nav_paths: [],
@@ -683,6 +686,7 @@ const buildTieredProps = (product: Product): ProductEditPageProps => ({
   receipt_email_from: "seller@example.com",
   price_checker_enabled: false,
   custom_html_pages_enabled: false,
+  autosave_enabled: true,
   custom_html_store_hostnames: [],
   custom_html_global_nav_hosts: [],
   custom_html_global_nav_paths: [],
@@ -808,6 +812,111 @@ it("reports whether edits are saved without waiting for another change", async (
 
     await act(async () => void vi.advanceTimersByTime(1_500));
     expect(contextCapture.current?.saveStatus).toBe("saved");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("retries a failed autosave without waiting for another edit", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    const { ResponseError } = await import("$app/utils/request");
+    saveProductMock
+      .mockRejectedValueOnce(new ResponseError("Save failed"))
+      .mockResolvedValueOnce({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Needs retry" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+
+    await act(async () => Promise.resolve());
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledTimes(2);
+    expect(saveProductMock.mock.calls[1]?.[2]).toMatchObject({ name: "Needs retry" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("waits for description image uploads before autosaving", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() =>
+      contextCapture.current?.updateProduct({
+        description: '<img src="blob:https://gumroad.test/pending-image">',
+      }),
+    );
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).not.toHaveBeenCalled();
+
+    act(() =>
+      contextCapture.current?.updateProduct({
+        description: '<img src="https://cdn.example/image.png">',
+      }),
+    );
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    expect(saveProductMock.mock.calls[0]?.[2]).toMatchObject({
+      description: '<img src="https://cdn.example/image.png">',
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("does not autosave a deletion that still needs seller confirmation", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([
+      buildTier("tier-a", "Tier A", [
+        {
+          id: "page-a",
+          newlyAdded: false,
+          title: "Buyer page",
+          description: {},
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ]),
+    ]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        const tier = current.variants[0];
+        if (!tier) throw new Error("expected tier");
+        tier.rich_content = [];
+      }),
+    );
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("does not autosave when the feature flag is off", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = { ...buildTieredProps(product), autosave_enabled: false };
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Should stay local" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).not.toHaveBeenCalled();
+    expect(contextCapture.current?.saveStatus).toBe("unsaved");
   } finally {
     vi.useRealTimers();
   }

@@ -57,6 +57,7 @@ const makePageProps = (id: string): Record<string, unknown> => ({
   receipt_email_from: "seller@example.com",
   price_checker_enabled: false,
   custom_html_pages_enabled: false,
+  autosave_enabled: false,
   custom_html_store_hostnames: [],
   custom_html_global_nav_hosts: [],
   custom_html_global_nav_paths: [],
