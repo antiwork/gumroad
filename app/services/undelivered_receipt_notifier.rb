@@ -138,7 +138,7 @@ class UndeliveredReceiptNotifier
   end
   private_class_method :accessed_content?
 
-  # A charge receipt stands for the whole order unless it was split.
+  # Judging only the representative purchase would answer for one cart line.
   def self.order_purchases(purchase)
     purchase.uses_charge_receipt? && !purchase.split_charge_receipt_sent? ? purchase.charge.purchases.to_a : [purchase]
   end
