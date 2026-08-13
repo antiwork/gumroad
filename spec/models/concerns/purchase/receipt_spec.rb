@@ -42,6 +42,40 @@ describe Purchase::Receipt do
       it "returns the email info" do
         expect(purchase.receipt_email_info).to eq(email_info_from_charge)
       end
+
+      context "with exactly two purchases" do
+        let(:purchase_two) { create(:purchase, link: create(:product, user: purchase.seller), seller: purchase.seller) }
+        let(:charge) { create(:charge, purchases: [purchase, purchase_two], seller: purchase.seller) }
+        let!(:email_info_from_purchase) do
+          create(
+            :customer_email_info,
+            purchase_id: purchase.id,
+            email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+          )
+        end
+
+        it "reads the split receipt history from the purchase" do
+          expect(purchase.split_charge_receipt_sent?).to be(true)
+          expect(purchase_two.split_charge_receipt_sent?).to be(true)
+          expect(purchase.receipt_email_info).to eq(email_info_from_purchase)
+          expect(purchase.receipt_email_infos).to eq([email_info_from_purchase])
+        end
+      end
+
+      context "with three purchases and a legacy purchase-keyed marker" do
+        let(:purchase_two) { create(:purchase, link: create(:product, user: purchase.seller), seller: purchase.seller) }
+        let(:purchase_three) { create(:purchase, link: create(:product, user: purchase.seller), seller: purchase.seller) }
+        let(:charge) { create(:charge, purchases: [purchase, purchase_two, purchase_three], seller: purchase.seller) }
+        let!(:legacy_purchase_marker) do
+          create(:customer_email_info, purchase_id: purchase.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
+        end
+
+        it "keeps the combined receipt mode" do
+          expect(charge.successful_purchases.size).to eq(3)
+          expect(purchase.split_charge_receipt_sent?).to be(false)
+          expect(purchase.receipt_email_info).to eq(email_info_from_charge)
+        end
+      end
     end
   end
 

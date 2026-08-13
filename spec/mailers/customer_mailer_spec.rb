@@ -26,6 +26,33 @@ describe CustomerMailer do
       expect(mail[:reply_to].value).to eq("bob@gumroad.com")
     end
 
+    context "when the purchase belongs to a two-purchase charge" do
+      let(:seller) { create(:named_seller) }
+      let(:purchase) { create(:purchase, link: create(:product, user: seller, name: "Paid edition"), seller:, email: "buyer@example.com") }
+      let(:purchase_two) { create(:purchase, link: create(:product, user: seller, name: "Free edition"), seller:, email: purchase.email) }
+      let!(:charge) { create(:charge, purchases: [purchase, purchase_two], seller:) }
+      let!(:split_receipt) { create(:customer_email_info, purchase:, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD) }
+
+      it "renders only the selected purchase after split receipts were sent" do
+        rendered = described_class.receipt(purchase.id)
+
+        expect(purchase.split_charge_receipt_sent?).to be(true)
+        expect(rendered.subject).to eq("You bought Paid edition!")
+        expect(rendered.subject).not_to include("Free edition")
+      end
+
+      it "keeps a historical charge-keyed receipt combined" do
+        split_receipt.destroy!
+        create(:customer_email_info, purchase: nil, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+                                     email_info_charge_attributes: { charge_id: charge.id })
+
+        rendered = described_class.receipt(purchase.id)
+
+        expect(purchase.split_charge_receipt_sent?).to be(false)
+        expect(rendered.subject).to eq("You bought Paid edition and Free edition")
+      end
+    end
+
     context "when support email exists" do
       subject(:mail) do
         user = create(:user, email: "bob@gumroad.com", name: "bob walsh")

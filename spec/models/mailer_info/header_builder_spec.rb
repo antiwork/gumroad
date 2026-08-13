@@ -54,6 +54,21 @@ RSpec.describe MailerInfo::HeaderBuilder do
         smtpapi = JSON.parse(headers[MailerInfo::SENDGRID_X_SMTPAPI_HEADER])
         expect(smtpapi["unique_args"]["purchase_id"]).to eq(purchase.id)
       end
+
+      context "when rendering one purchase from a split charge receipt" do
+        let(:purchase_two) { create(:purchase, link: create(:product, user: purchase.seller), seller: purchase.seller) }
+        let!(:charge) { create(:charge, purchases: [purchase, purchase_two], seller: purchase.seller) }
+        let(:mailer_args) { [purchase.id, { single_purchase: true }] }
+
+        it "keeps the delivery marker on the purchase" do
+          expect(purchase.uses_charge_receipt?).to be(true)
+
+          smtpapi = JSON.parse(builder.build_for_sendgrid.fetch(MailerInfo::SENDGRID_X_SMTPAPI_HEADER))
+
+          expect(smtpapi.dig("unique_args", "purchase_id")).to eq(purchase.id)
+          expect(smtpapi.dig("unique_args", "charge_id")).to be_nil
+        end
+      end
     end
 
     context "with preorder receipt email" do
