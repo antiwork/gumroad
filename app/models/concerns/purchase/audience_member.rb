@@ -98,6 +98,16 @@ module Purchase::AudienceMember
     member.valid? ? member.save! : member.soft_delete!
   end
 
+  # Support restores deliberately bypass callbacks. Rebuild while a tombstone exists so a
+  # callback-free re-enable cannot leave a paying buyer hidden.
+  def update_columns(attributes)
+    can_contact = attributes.stringify_keys["can_contact"]
+    restore_audience = self.class.type_for_attribute("can_contact").cast(can_contact)
+    result = super
+    rebuild_audience_member_details if result && restore_audience && AudienceMember.where(email:, seller:).where.not(deleted_at: nil).exists?
+    result
+  end
+
   # Rebuilds the buyer's whole audience_members row from live purchase/follower/affiliate
   # state, instead of just adding or removing this one purchase from it.
   #
@@ -119,15 +129,8 @@ module Purchase::AudienceMember
       # Re-subscribing has to rebuild the buyer's audience_members row from scratch rather than
       # append this single purchase to it.
       #
-      # Unsubscribing sets can_contact = false on EVERY purchase row for the (email, seller)
-      # pair, and once the last contactable purchase is gone the audience_members row itself is
-      # destroyed. Re-subscribing flips those rows back one at a time, and each row's callback
-      # only ever knows about itself. Two things then go wrong: a row that is not an audience
-      # member in its own right (a subscription renewal charge, which is skipped because only
-      # the original purchase represents a subscription) contributes nothing at all, and any
-      # purchase that was already contactable is never saved, so it never gets re-added. A buyer
-      # can end up with no audience row at all while their subscription keeps billing, which
-      # makes them invisible to every post, blast, and workflow the creator sends.
+      # Re-subscribing must rebuild all live sources; the saved row may be a renewal that does
+      # not represent the subscription, while its already-contactable original is not saved.
       return rebuild_audience_member_details if resubscribed?
       return remove_from_audience_member_details unless should_be_audience_member?
 

@@ -104,4 +104,16 @@ describe Exports::AudienceExportService do
       end
     end
   end
+
+  describe "soft-deleted members" do
+    it "excludes them from the export" do
+      seller = create(:user)
+      member = create(:audience_member, seller:, follower: {})
+      member.soft_delete!
+
+      rows = CSV.parse(described_class.new(seller, followers: true).perform.tempfile.read)
+
+      expect(rows).to eq([described_class::FIELDS])
+    end
+  end
 end

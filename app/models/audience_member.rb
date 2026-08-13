@@ -16,6 +16,7 @@ class AudienceMember < ApplicationRecord
   ].freeze
 
   belongs_to :seller, class_name: "User"
+  scope :active, -> { where(deleted_at: nil) }
   after_initialize :assign_default_details_value
   before_validation :compact_details
   before_validation :clear_deleted_at_when_repopulated
@@ -45,7 +46,7 @@ class AudienceMember < ApplicationRecord
   # to revalidate their snapshotted recipient lists.
   def self.filter(seller_id:, params: {}, with_ids: false, ids: nil)
     params = normalize_filter_params(params)
-    base_scope = where(seller_id:, deleted_at: nil)
+    base_scope = active.where(seller_id:)
     base_scope = base_scope.where(id: ids) if ids
 
     if params[:type]
@@ -343,20 +344,8 @@ class AudienceMember < ApplicationRecord
     end
   end
 
-  # When an audience_members row loses its last source (a buyer unsubscribes, the final
-  # purchase/follower/affiliate is removed), it has no content left, but DESTROYING it is
-  # what strands the buyer: any re-enable that doesn't save a contactable purchase — e.g. a
-  # support or seller flipping can_contact back on with update_columns, which skips the
-  # after_save rebuild — finds nothing to restore and the buyer stays invisible to every
-  # post/blast while their subscription keeps billing. Keep the row and soft-delete it so a
-  # later repopulation (#clear_deleted_at_when_repopulated) can restore it in place.
   def soft_delete!
-    # Must persist the just-emptied `details` atomically with the deleted marker: the caller
-    # (e.g. remove_from_audience_member_details) finished mutating details before calling
-    # this, and `update_column` would drop that in-memory change — leaving the DB row still
-    # carrying the purchase it no longer has, which #clear_deleted_at_when_repopulated would
-    # then misread as a live member on the next fetch. update_columns skips the json-schema
-    # validation, which an emptied `{}` would fail.
+    # Persist details with the marker; leaving stale details could restore dead membership.
     update_columns(deleted_at: Time.current, details: {})
   end
 
@@ -366,10 +355,6 @@ class AudienceMember < ApplicationRecord
       self.details ||= {}
     end
 
-    # Restore a soft-deleted row the moment it is repopulated (a re-subscribe, a seller
-    # flipping can_contact back on, a support re-enable that lands on a purchase THE
-    # NORMAL way, or a direct rebuild). Runs before validation so the row is live again
-    # by the time validators run.
     def clear_deleted_at_when_repopulated
       self.deleted_at = nil if details.present?
     end

@@ -75,18 +75,13 @@ RSpec.describe Purchase::AudienceMember do
       expect(AudienceMember.filter(seller_id: seller.id, params: { bought_product_ids: [product.id] })).to be_empty
     end
 
-    it "restores a soft-deleted row directly when its purchase becomes contactable again (the support re-enable shape)" do
-      # The 8/13 recurrence: support flipped can_contact back on WITHOUT going through a purchase
-      # callbacks path that rebuilds (the row was soft-deleted, so it survived). Repopulating that
-      # surviving row must clear the deleted marker so the buyer is visible again.
+    it "restores a soft-deleted row when support bypasses callbacks to re-enable its purchase" do
       original_purchase.unsubscribe_buyer
       expect(audience_member_for(original_purchase).deleted_at).to be_present
 
-      member = audience_member_for(original_purchase)
-      member.details = { "purchases" => [original_purchase.audience_member_details] }
-      member.save!
+      original_purchase.reload.update_columns(can_contact: true)
 
-      expect(member.reload.deleted_at).to be_nil
+      expect(audience_member_for(original_purchase).deleted_at).to be_nil
       expect(AudienceMember.filter(seller_id: seller.id, params: { bought_product_ids: [product.id] }).map(&:email))
         .to eq([original_purchase.email])
     end

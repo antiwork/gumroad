@@ -18,7 +18,7 @@ class Exports::AudienceExportService
     @tempfile = Tempfile.new(["Subscribers", ".csv"], encoding: "UTF-8")
 
     CsvSafe.open(@tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
-      query = @user.audience_members.select(:id, :email, :min_created_at)
+      query = @user.audience_members.active.select(:id, :email, :min_created_at)
 
       conditions = []
       conditions << "follower = true" if @options[:followers]

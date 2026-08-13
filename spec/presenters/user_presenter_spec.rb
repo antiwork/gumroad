@@ -7,8 +7,9 @@ describe UserPresenter do
   let(:presenter) { described_class.new(user: seller) }
 
   describe "#audience_count" do
-    it "returns audience_members count" do
+    it "counts only active audience members" do
       create_list(:audience_member, 3, seller:)
+      create(:audience_member, seller:).update_column(:deleted_at, Time.current)
       expect(presenter.audience_count).to eq(3)
     end
   end
@@ -22,6 +23,9 @@ describe UserPresenter do
       expect(presenter.audience_types).to eq([:customers, :followers])
       create(:audience_member, seller:, affiliates: [{}])
       expect(presenter.audience_types).to eq([:customers, :followers, :affiliates])
+
+      seller.audience_members.update_all(deleted_at: Time.current)
+      expect(presenter.audience_types).to be_empty
     end
   end
 

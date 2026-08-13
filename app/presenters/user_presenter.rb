@@ -9,13 +9,13 @@ class UserPresenter
     @user = user
   end
 
-  def audience_count = user.audience_members.count
+  def audience_count = user.audience_members.active.count
 
   def audience_types
     result = []
-    result << :customers if user.audience_members.where(customer: true).exists?
-    result << :followers if user.audience_members.where(follower: true).exists?
-    result << :affiliates if user.audience_members.where(affiliate: true).exists?
+    result << :customers if user.audience_members.active.where(customer: true).exists?
+    result << :followers if user.audience_members.active.where(follower: true).exists?
+    result << :affiliates if user.audience_members.active.where(affiliate: true).exists?
     result
   end
 

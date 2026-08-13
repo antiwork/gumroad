@@ -25,6 +25,7 @@ describe AudienceController, inertia: true do
 
     it "renders Inertia component with correct follower count and deferred audience data" do
       create(:active_follower, user: seller)
+      create(:audience_member, seller:, follower: {}).update_column(:deleted_at, Time.current)
 
       get :index
 

@@ -11,7 +11,7 @@ class AudienceController < Sellers::BaseController
   def index
     authorize :audience
 
-    total_follower_count = current_seller.audience_members.where(follower: true).count
+    total_follower_count = current_seller.audience_members.active.where(follower: true).count
 
     render inertia: "Audience/Index", props: {
       total_follower_count: InertiaRails.always { total_follower_count },
