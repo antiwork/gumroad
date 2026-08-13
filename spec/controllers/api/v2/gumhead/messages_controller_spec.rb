@@ -364,6 +364,20 @@ describe Api::V2::Gumhead::MessagesController do
       expect(event.output_tokens).to eq(3)
     end
 
+    it "floors interrupted output by streamed bytes when one delta carries many tokens" do
+      long_text = "a" * 400
+      truncated = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\n\n),
+        %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"#{long_text}"}}\n\n),
+      ].join
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: truncated, headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(GumheadUsageEvent.sole.output_tokens).to eq(100)
+    end
+
     it "does not meter a streamed pre-output refusal" do
       refusal_stream = [
         %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\n\n),

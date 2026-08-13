@@ -17,6 +17,7 @@ class GumheadStreamUsageScanner
     @cache_creation_1h_input_tokens = 0
     @cache_read_input_tokens = 0
     @content_delta_count = 0
+    @streamed_output_bytes = 0
     @stop_reason = nil
     @saw_usage = false
   end
@@ -39,14 +40,14 @@ class GumheadStreamUsageScanner
   def usage? = @saw_usage
 
   # A stream that breaks between message_start and the final message_delta
-  # has only the provisional output count (usually 1). Every
-  # content_block_delta carries at least one token, so the delta count is a
-  # floor that keeps an interrupted stream from being recorded as almost
-  # free.
+  # has only the provisional output count (usually 1). Two floors keep an
+  # interrupted stream from being recorded as almost free: the delta count
+  # (a delta rarely carries zero tokens) and the streamed content bytes at
+  # ~4 bytes per token (one delta can carry many tokens).
   def usage
     {
       "input_tokens" => @input_tokens,
-      "output_tokens" => [@output_tokens, @content_delta_count].max,
+      "output_tokens" => [@output_tokens, @content_delta_count, (@streamed_output_bytes + 3) / 4].max,
       "cache_creation_input_tokens" => @cache_creation_input_tokens,
       "cache_creation" => { "ephemeral_1h_input_tokens" => @cache_creation_1h_input_tokens },
       "cache_read_input_tokens" => @cache_read_input_tokens,
@@ -65,6 +66,11 @@ class GumheadStreamUsageScanner
         started(event)
       when "content_block_delta"
         @content_delta_count += 1
+        delta = event["delta"]
+        if delta.is_a?(Hash)
+          content = delta["text"] || delta["partial_json"] || delta["thinking"]
+          @streamed_output_bytes += content.bytesize if content.is_a?(String)
+        end
       when "message_delta"
         delta = event["delta"]
         @stop_reason = delta["stop_reason"] if delta.is_a?(Hash) && delta["stop_reason"]

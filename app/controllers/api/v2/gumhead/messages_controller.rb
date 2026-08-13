@@ -28,6 +28,13 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     render json: anthropic_error("invalid_request_error", "Request body must be valid JSON."), status: :bad_request
   end
 
+  # Every request here carries the seller's bearer token and, in the body,
+  # their prompt and file contents. With send_default_pii on, Sentry's
+  # automatic capture would export both on any unhandled error or sampled
+  # transaction. Clearing the ambient scope up front limits gateway
+  # telemetry to what is attached explicitly (see record_usage!).
+  prepend_before_action { Sentry.get_current_scope.clear if defined?(Sentry) && Sentry.initialized? }
+
   before_action { doorkeeper_authorize! }
   before_action :ensure_gateway_configured
   before_action :ensure_first_party_client
