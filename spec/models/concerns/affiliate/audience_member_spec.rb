@@ -64,4 +64,13 @@ describe Affiliate::AudienceMember do
       expect(save_count).to eq(2)
     end
   end
+
+  describe "a LockWaitTimeout on an existing audience_members row" do
+    it "does not raise from update_audience_member_with_added_product" do
+      allow_any_instance_of(AudienceMember).to receive(:save!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout))
+
+      expect { direct_affiliate.update_audience_member_with_added_product(product.id) }.not_to raise_error
+    end
+  end
 end
