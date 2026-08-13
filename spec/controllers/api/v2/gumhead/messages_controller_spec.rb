@@ -185,6 +185,22 @@ describe Api::V2::Gumhead::MessagesController do
 
       post_messages(request_payload.merge(inference_geo: "us"))
       expect(response.status).to eq(400)
+
+      post_messages(request_payload.merge(fallbacks: [{ model: "claude-opus-5" }]))
+      expect(response.status).to eq(400)
+    end
+
+    it "forwards only allowlisted anthropic-beta features" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+      request.headers["anthropic-beta"] = "interleaved-thinking-2025-05-14, server-side-fallback-2026-07-01"
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+        req.headers["Anthropic-Beta"] == "interleaved-thinking-2025-05-14"
+      }
     end
   end
 

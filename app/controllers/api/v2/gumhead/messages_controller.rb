@@ -51,9 +51,15 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # document a limit requests can never reach.
   MAX_BODY_BYTES = 10.megabytes
   MAX_TOKENS_PER_REQUEST = 64_000
-  # Matches nginx's proxy_read_timeout: a buffered response Rails is still
-  # waiting on past that point has already lost its client.
-  BUFFERED_TIMEOUT = 120
+  # Below nginx's proxy_read_timeout and the Rack service timeout (both
+  # 120s): those clocks start before this one, and an upstream deadline
+  # equal to them would let the outer layers cut the client before the
+  # rescue can render its error envelope.
+  BUFFERED_TIMEOUT = 90
+  # Beta features can change what a request may do and what usage reports
+  # (fallbacks being the sharpest example), so only vetted ones forward.
+  # Extend via GUMHEAD_ALLOWED_ANTHROPIC_BETAS without a deploy.
+  DEFAULT_ALLOWED_ANTHROPIC_BETAS = "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"
 
   # One Gumhead turn is a whole tool loop of model calls, so the request
   # throttle is deliberately loose; the real spend control is the daily
@@ -224,12 +230,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     # `speed: "fast"` and `inference_geo` carry pricing multipliers the
-    # ledger does not weight, so they would spend the shared key invisibly.
+    # ledger does not weight, and `fallbacks` runs extra attempts whose
+    # nested options bypass every top-level validator here. All three would
+    # spend the shared key invisibly.
     def validate_pricing_modifiers
       speed_ok = @body["speed"].nil? || @body["speed"] == "standard"
-      return if speed_ok && @body["inference_geo"].nil?
+      return if speed_ok && @body["inference_geo"].nil? && !@body.key?("fallbacks")
 
-      render json: anthropic_error("invalid_request_error", "speed and inference_geo options are not available through the Gumhead gateway."), status: :bad_request
+      render json: anthropic_error("invalid_request_error", "speed, inference_geo, and fallbacks options are not available through the Gumhead gateway."), status: :bad_request
     end
 
     # A missing max_tokens passes through: Anthropic's own error for it is
@@ -375,9 +383,21 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         "anthropic-version" => request.headers["anthropic-version"].presence || DEFAULT_ANTHROPIC_VERSION,
         "content-type" => "application/json",
       }
-      beta = request.headers["anthropic-beta"].presence
-      headers["anthropic-beta"] = beta if beta
+      beta = filtered_beta_features
+      headers["anthropic-beta"] = beta if beta.present?
       headers
+    end
+
+    # Unvetted betas are dropped rather than rejected: a request whose body
+    # depends on a dropped beta gets Anthropic's own error naming the field,
+    # and harmless unknown betas from a runtime upgrade degrade instead of
+    # hard-failing every call.
+    def filtered_beta_features
+      requested = request.headers["anthropic-beta"].to_s.split(",").map(&:strip).reject(&:blank?)
+      return if requested.empty?
+
+      allowed = GlobalConfig.get("GUMHEAD_ALLOWED_ANTHROPIC_BETAS", DEFAULT_ALLOWED_ANTHROPIC_BETAS).to_s.split(",").map(&:strip).reject(&:blank?)
+      (requested & allowed).join(",")
     end
 
     def anthropic_api_key
