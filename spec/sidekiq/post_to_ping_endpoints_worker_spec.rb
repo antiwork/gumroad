@@ -51,7 +51,7 @@ describe PostToPingEndpointsWorker, :vcr do
     {
       body: HTTParty::HashConversions.to_params(params.deep_stringify_keys),
       headers: { "Content-Type" => content_type },
-      max_redirects: 0,
+      max_redirects: PostToIndividualPingEndpointWorker::MAX_REDIRECTS,
       allow_unfollowed_redirects: true,
       http_options: { open_timeout: 5, read_timeout: 5 }
     }
