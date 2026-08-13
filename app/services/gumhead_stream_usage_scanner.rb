@@ -53,7 +53,12 @@ class GumheadStreamUsageScanner
         return unless usage.is_a?(Hash)
 
         @saw_usage = true
-        @output_tokens = usage["output_tokens"].to_i
+        # message_delta reports cumulative counts; refresh every field it
+        # carries so the ledger row records the final billed numbers.
+        @output_tokens = usage["output_tokens"].to_i if usage.key?("output_tokens")
+        @input_tokens = usage["input_tokens"].to_i if usage.key?("input_tokens")
+        @cache_creation_input_tokens = usage["cache_creation_input_tokens"].to_i if usage.key?("cache_creation_input_tokens")
+        @cache_read_input_tokens = usage["cache_read_input_tokens"].to_i if usage.key?("cache_read_input_tokens")
       end
     rescue JSON::ParserError
       # A partial or non-JSON data line carries no usage; skip it.

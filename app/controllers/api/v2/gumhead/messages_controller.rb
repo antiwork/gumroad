@@ -28,12 +28,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   before_action :throttle_gateway_requests
   before_action :load_body
   before_action :validate_model
+  before_action :validate_max_tokens, only: [:create]
   before_action :enforce_daily_token_caps, only: [:create]
 
   ANTHROPIC_API_BASE = "https://api.anthropic.com/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
   ALLOWED_MODEL_PREFIX = "claude-"
   MAX_BODY_BYTES = 20.megabytes
+  MAX_TOKENS_PER_REQUEST = 64_000
   BUFFERED_TIMEOUT = 300
 
   # One Gumhead turn is a whole tool loop of model calls, so the request
@@ -43,17 +45,34 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   GATEWAY_REQUESTS_PERIOD_WINDOW = 1.hour
 
   # Caps are read per-request from GlobalConfig so ops can tune them without
-  # a deploy. They are checked before the upstream call, so one in-flight
-  # request can overshoot by a single turn — that slack is accepted.
+  # a deploy. They are checked before the upstream call and usage is written
+  # after it, so concurrent requests can overshoot the caps. The in-flight
+  # limit and the per-request max_tokens ceiling bound that overshoot to a
+  # known worst case (MAX_IN_FLIGHT_REQUESTS * MAX_TOKENS_PER_REQUEST output
+  # tokens) instead of leaving it open-ended. The input cap counts
+  # cost-weighted input-equivalent tokens (see GumheadUsageEvent).
   DEFAULT_DAILY_INPUT_TOKEN_CAP = 20_000_000
   DEFAULT_DAILY_OUTPUT_TOKEN_CAP = 500_000
+  MAX_IN_FLIGHT_REQUESTS = 4
+  # Safety net for a leaked slot (killed process): the counter expires on
+  # its own. A stream outliving the TTL frees its slot early, which only
+  # loosens the limit briefly — the release guard below repairs the count.
+  IN_FLIGHT_TTL = 10.minutes
 
   # POST /v2/gumhead/v1/messages
   def create
-    if @body["stream"] == true
-      stream_upstream
-    else
-      forward_buffered("#{ANTHROPIC_API_BASE}/messages", meter: true)
+    unless acquire_in_flight_slot
+      return render json: anthropic_error("rate_limit_error", "Too many concurrent Gumhead requests. Please retry shortly."), status: :too_many_requests
+    end
+
+    begin
+      if @body["stream"] == true
+        stream_upstream
+      else
+        forward_buffered("#{ANTHROPIC_API_BASE}/messages", meter: true)
+      end
+    ensure
+      release_in_flight_slot
     end
   end
 
@@ -76,12 +95,36 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       render json: anthropic_error("api_error", "The Gumhead gateway is not configured."), status: :service_unavailable
     end
 
+    # Not Throttling#throttle!: that helper renders {error:, retry_after:},
+    # and this gateway promises the Anthropic error envelope on every
+    # response. Same counting scheme, different body.
     def throttle_gateway_requests
-      throttle!(
-        key: RedisKey.gumhead_gateway_throttle(current_resource_owner.id),
-        limit: GATEWAY_REQUESTS_PER_PERIOD,
-        period: GATEWAY_REQUESTS_PERIOD_WINDOW,
-      )
+      key = RedisKey.gumhead_gateway_throttle(current_resource_owner.id)
+      count = $redis.incr(key)
+      $redis.expire(key, GATEWAY_REQUESTS_PERIOD_WINDOW.to_i) if count == 1
+      return if count <= GATEWAY_REQUESTS_PER_PERIOD
+
+      retry_after = ttl_to_retry_after(redis: $redis, key:, period: GATEWAY_REQUESTS_PERIOD_WINDOW)
+      response.set_header("Retry-After", retry_after)
+      timing = retry_after.positive? ? "Try again in #{retry_after} seconds." : "You can retry now."
+      render json: anthropic_error("rate_limit_error", "Hourly Gumhead request limit reached. #{timing}"), status: :too_many_requests
+    end
+
+    def acquire_in_flight_slot
+      key = RedisKey.gumhead_gateway_in_flight(current_resource_owner.id)
+      count = $redis.incr(key)
+      $redis.expire(key, IN_FLIGHT_TTL.to_i)
+      return true if count <= MAX_IN_FLIGHT_REQUESTS
+
+      release_in_flight_slot
+      false
+    end
+
+    def release_in_flight_slot
+      key = RedisKey.gumhead_gateway_in_flight(current_resource_owner.id)
+      # A TTL expiry between acquire and release would drive the counter
+      # negative and silently widen the limit; delete instead.
+      $redis.del(key) if $redis.decr(key).negative?
     end
 
     def load_body
@@ -102,9 +145,15 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
     end
 
+    def validate_max_tokens
+      return if @body["max_tokens"].to_i <= MAX_TOKENS_PER_REQUEST
+
+      render json: anthropic_error("invalid_request_error", "max_tokens must be #{MAX_TOKENS_PER_REQUEST} or less on the Gumhead gateway."), status: :bad_request
+    end
+
     def enforce_daily_token_caps
       user = current_resource_owner
-      return if GumheadUsageEvent.input_tokens_today(user) < daily_input_token_cap &&
+      return if GumheadUsageEvent.input_equivalent_tokens_today(user) < daily_input_token_cap &&
                 GumheadUsageEvent.output_tokens_today(user) < daily_output_token_cap
 
       render json: anthropic_error("rate_limit_error", "Daily Gumhead usage limit reached. Please try again tomorrow."), status: :too_many_requests
@@ -144,30 +193,29 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
         # The client went away mid-turn. The tokens scanned so far are still
         # real spend, so the ensure below records them anyway.
+      rescue HTTP::Error => e
+        # Upstream broke mid-stream. Emit the SSE error event before the
+        # ensure closes the stream — a bare EOF (or, before the first chunk,
+        # an empty 200) would leave the client guessing. Anthropic delivers
+        # mid-stream failures the same way: an error event on the open stream.
+        Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+        write_stream_error_frame
       ensure
         record_usage!(model: scanner.model || @body["model"], usage: scanner.usage) if scanner.usage?
         response.stream.close
       end
     rescue HTTP::Error => e
-      handle_stream_failure(e)
+      # The initial POST failed before any response headers were streamed, so
+      # a buffered error is still possible.
+      Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+      render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
     end
 
-    def handle_stream_failure(error)
-      Rails.logger.warn("Gumhead gateway upstream error: #{error.class} #{error.message}")
-      unless response.committed?
-        return render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
-      end
-
-      # Mid-stream failure: the SSE contract has an error event, so emit one
-      # and close — a silent half-open socket would leave the client hanging.
-      begin
-        payload = anthropic_error("api_error", "The connection to the model service was interrupted.")
-        response.stream.write("event: error\ndata: #{payload.to_json}\n\n")
-      rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
-        # Both sides are gone; nothing left to tell anyone.
-      ensure
-        response.stream.close
-      end
+    def write_stream_error_frame
+      payload = anthropic_error("api_error", "The connection to the model service was interrupted.")
+      response.stream.write("event: error\ndata: #{payload.to_json}\n\n")
+    rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
+      # Both sides are gone; nothing left to tell anyone.
     end
 
     def meter_buffered_usage(body)

@@ -9,8 +9,18 @@ class GumheadUsageEvent < ApplicationRecord
 
   validates :model, presence: true
 
-  def self.input_tokens_today(user)
-    where(user:, created_at: Time.current.all_day).sum(:input_tokens)
+  # Cache tokens are billed too (creation at a premium, reads at a
+  # discount), so the input cap counts a cost-weighted total — otherwise a
+  # cache-heavy agent loop would spend almost entirely outside the cap.
+  CACHE_CREATION_COST_MULTIPLIER = 1.25
+  CACHE_READ_COST_MULTIPLIER = 0.1
+
+  def self.input_equivalent_tokens_today(user)
+    where(user:, created_at: Time.current.all_day)
+      .sum(
+        "input_tokens + CEIL(cache_creation_input_tokens * #{CACHE_CREATION_COST_MULTIPLIER}) + " \
+        "CEIL(cache_read_input_tokens * #{CACHE_READ_COST_MULTIPLIER})"
+      ).to_i
   end
 
   def self.output_tokens_today(user)

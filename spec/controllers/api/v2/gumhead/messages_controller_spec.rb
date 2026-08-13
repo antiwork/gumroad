@@ -15,7 +15,10 @@ describe Api::V2::Gumhead::MessagesController do
     request.headers["Authorization"] = "Bearer #{@token.token}"
   end
 
-  after { $redis.del(RedisKey.gumhead_gateway_throttle(@user.id)) }
+  after do
+    $redis.del(RedisKey.gumhead_gateway_throttle(@user.id))
+    $redis.del(RedisKey.gumhead_gateway_in_flight(@user.id))
+  end
 
   let(:messages_url) { "https://api.anthropic.com/v1/messages" }
   let(:count_tokens_url) { "https://api.anthropic.com/v1/messages/count_tokens" }
@@ -72,6 +75,18 @@ describe Api::V2::Gumhead::MessagesController do
       post_messages
 
       expect(response.status).to eq(429)
+      expect(JSON.parse(response.body)["error"]["type"]).to eq("rate_limit_error")
+      expect(response.headers["Retry-After"]).to be_present
+    end
+
+    it "rejects a request past the concurrent in-flight limit and frees the probe slot" do
+      $redis.set(RedisKey.gumhead_gateway_in_flight(@user.id), described_class::MAX_IN_FLIGHT_REQUESTS)
+
+      post_messages
+
+      expect(response.status).to eq(429)
+      expect(WebMock).not_to have_requested(:post, messages_url)
+      expect($redis.get(RedisKey.gumhead_gateway_in_flight(@user.id)).to_i).to eq(described_class::MAX_IN_FLIGHT_REQUESTS)
     end
   end
 
@@ -99,6 +114,13 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(response.status).to eq(400)
       expect(JSON.parse(response.body)["error"]["message"]).to include("not available")
+    end
+
+    it "rejects max_tokens over the per-request ceiling" do
+      post_messages(request_payload.merge(max_tokens: described_class::MAX_TOKENS_PER_REQUEST + 1))
+
+      expect(response.status).to eq(400)
+      expect(JSON.parse(response.body)["error"]["message"]).to include("max_tokens")
     end
   end
 
@@ -150,7 +172,7 @@ describe Api::V2::Gumhead::MessagesController do
       [
         %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1,"cache_creation_input_tokens":2,"cache_read_input_tokens":9}}}\n\n),
         %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}\n\n),
-        %(event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":42}}\n\n),
+        %(event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":42,"input_tokens":60,"cache_read_input_tokens":14}}\n\n),
         %(event: message_stop\ndata: {"type":"message_stop"}\n\n),
       ].join
     end
@@ -166,10 +188,20 @@ describe Api::V2::Gumhead::MessagesController do
 
       event = GumheadUsageEvent.sole
       expect(event.model).to eq("claude-sonnet-5")
-      expect(event.input_tokens).to eq(50)
+      # message_delta carries cumulative counts and wins over message_start.
+      expect(event.input_tokens).to eq(60)
       expect(event.output_tokens).to eq(42)
       expect(event.cache_creation_input_tokens).to eq(2)
-      expect(event.cache_read_input_tokens).to eq(9)
+      expect(event.cache_read_input_tokens).to eq(14)
+    end
+
+    it "returns a buffered 502 when the upstream connection fails before the stream starts" do
+      stub_request(:post, messages_url).to_raise(HTTP::ConnectionError)
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.status).to eq(502)
+      expect(JSON.parse(response.body)["error"]["type"]).to eq("api_error")
     end
 
     it "renders an upstream rejection as a buffered error instead of a stream" do
@@ -196,6 +228,19 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(response.status).to eq(429)
       expect(JSON.parse(response.body)["error"]["type"]).to eq("rate_limit_error")
+      expect(WebMock).not_to have_requested(:post, messages_url)
+    end
+
+    it "counts cache tokens toward the input cap at their cost weight" do
+      GumheadUsageEvent.create!(
+        user: @user,
+        model: "claude-sonnet-5",
+        cache_read_input_tokens: (described_class::DEFAULT_DAILY_INPUT_TOKEN_CAP / GumheadUsageEvent::CACHE_READ_COST_MULTIPLIER).to_i,
+      )
+
+      post_messages
+
+      expect(response.status).to eq(429)
       expect(WebMock).not_to have_requested(:post, messages_url)
     end
 
