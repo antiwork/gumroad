@@ -107,11 +107,14 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
                 {item}
               </Label>
             ))}
-            {!allRequirementsChecked ? (
-              <FieldsetDescription id={`${uid}requirements-hint`}>
-                Check both statements above to enable Save.
-              </FieldsetDescription>
-            ) : null}
+            {/* Always rendered so toggling a checkbox doesn't reflow the modal. */}
+            <FieldsetDescription
+              id={`${uid}requirements-hint`}
+              aria-hidden={allRequirementsChecked}
+              className={allRequirementsChecked ? "invisible" : undefined}
+            >
+              Check both statements above to enable Save.
+            </FieldsetDescription>
           </Fieldset>
         </div>
       </Modal>

@@ -28,11 +28,14 @@ describe("CountrySelectionModal", () => {
 
     const save = screen.getByRole("button", { name: "Save" });
     expect(save.hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText("Check both statements above to enable Save.")).toBeTruthy();
+    const hint = screen.getByText("Check both statements above to enable Save.");
+    expect(hint.className).not.toContain("invisible");
 
     for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
 
     expect(save.hasAttribute("disabled")).toBe(false);
-    expect(screen.queryByText("Check both statements above to enable Save.")).toBeNull();
+    // The hint stays mounted (hidden, not removed) so checking a box doesn't reflow the modal.
+    expect(hint.className).toContain("invisible");
+    expect(hint.getAttribute("aria-hidden")).toBe("true");
   });
 });
