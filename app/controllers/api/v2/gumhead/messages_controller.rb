@@ -177,9 +177,15 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       end
 
       @body = safe_parse_json(@raw_body)
-      return if @body.is_a?(Hash)
+      unless @body.is_a?(Hash)
+        return render json: anthropic_error("invalid_request_error", "Request body must be a JSON object."), status: :bad_request
+      end
 
-      render json: anthropic_error("invalid_request_error", "Request body must be a JSON object."), status: :bad_request
+      # Doorkeeper also accepts a token as a body parameter, and this body
+      # forwards verbatim to Anthropic — a credential must never ride in it.
+      return unless @body.key?("access_token") || @body.key?("bearer_token")
+
+      render json: anthropic_error("invalid_request_error", "Send the Gumroad token in the Authorization header, never in the request body."), status: :bad_request
     end
 
     def validate_model
@@ -265,11 +271,21 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       body = upstream.body.to_s
       meter_buffered_usage(body) if meter && upstream.status.success?
       render body:, content_type: "application/json", status: upstream.status.code
+    rescue HTTP::TimeoutError => e
+      Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+      # A timeout means the generation likely kept running (and billing)
+      # after we stopped waiting. Charge the worst case — the prompt floor
+      # (~4 bytes per token) plus the full max_tokens — so repeated
+      # deliberate timeouts cannot spend the shared key outside the caps.
+      if meter
+        record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4, "output_tokens" => @body["max_tokens"].to_i })
+      end
+      render json: anthropic_error("api_error", "The model service timed out."), status: :bad_gateway
     rescue HTTP::Error => e
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
       # A success status whose body was lost mid-read was still generated
-      # and billed upstream. Charge a floor estimate of the prompt (~4
-      # bytes per token) so the failure is not free against the caps.
+      # and billed upstream. Charge a floor estimate of the prompt so the
+      # failure is not free against the caps.
       if meter && upstream&.status&.success?
         record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4 })
       end
@@ -414,6 +430,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     def anthropic_error(type, message)
       { type: "error", error: { type:, message: } }
+    end
+
+    # Doorkeeper's defaults answer auth failures with an empty body; this
+    # gateway promises the Anthropic envelope on every response.
+    def doorkeeper_unauthorized_render_options(error: nil)
+      { json: anthropic_error("authentication_error", "Invalid or expired Gumroad token.") }
+    end
+
+    def doorkeeper_forbidden_render_options(error: nil)
+      { json: anthropic_error("permission_error", "This token cannot use the Gumhead gateway.") }
     end
 
     def safe_parse_json(text)

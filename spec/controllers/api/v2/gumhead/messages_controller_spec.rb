@@ -47,12 +47,21 @@ describe Api::V2::Gumhead::MessagesController do
   end
 
   describe "authentication and gating" do
-    it "rejects a request without a valid access token" do
+    it "rejects a request without a valid access token, in the error envelope" do
       request.headers["Authorization"] = "Bearer nope"
 
       post_messages
 
       expect(response.status).to eq(401)
+      expect(JSON.parse(response.body)["error"]["type"]).to eq("authentication_error")
+    end
+
+    it "rejects a token sent in the request body instead of the header" do
+      post_messages(request_payload.merge(access_token: @token.token))
+
+      expect(response.status).to eq(400)
+      expect(JSON.parse(response.body)["error"]["message"]).to include("Authorization header")
+      expect(WebMock).not_to have_requested(:post, messages_url)
     end
 
     it "rejects a seller without the gumhead feature" do
@@ -245,6 +254,17 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(response.status).to eq(502)
       expect(JSON.parse(response.body)["error"]["type"]).to eq("api_error")
+    end
+
+    it "charges the worst case when the upstream call times out" do
+      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
+
+      post_messages
+
+      expect(response.status).to eq(502)
+      event = GumheadUsageEvent.sole
+      expect(event.output_tokens).to eq(request_payload[:max_tokens])
+      expect(event.input_tokens).to be > 0
     end
   end
 
