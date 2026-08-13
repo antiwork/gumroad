@@ -86,6 +86,20 @@ RSpec.describe Purchase::AudienceMember do
         .to eq([original_purchase.email])
     end
 
+    it "restores purchase details when another audience source kept the row active" do
+      affiliate_user = create(:affiliate_user, email: original_purchase.email)
+      affiliate = create(:direct_affiliate, affiliate_user:, seller:)
+      create(:product_affiliate, product:, affiliate:, affiliate_basis_points: 10_00)
+      original_purchase.unsubscribe_buyer
+      member = audience_member_for(original_purchase)
+      expect(member).to have_attributes(deleted_at: nil, customer: false, affiliate: true)
+
+      original_purchase.reload.update_columns(can_contact: true)
+
+      expect(member.reload).to have_attributes(deleted_at: nil, customer: true, affiliate: true)
+      expect(member.details["purchases"].map { _1["id"] }).to include(original_purchase.id)
+    end
+
     it "does not pay for a rebuild when the buyer is being unsubscribed" do
       # Rebuilding is self-correcting, so an unsubscribe would still end up with the right
       # (soft-deleted) row — but it would re-read every purchase the buyer has to get there. The

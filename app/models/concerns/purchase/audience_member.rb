@@ -104,7 +104,7 @@ module Purchase::AudienceMember
     can_contact = attributes.stringify_keys["can_contact"]
     restore_audience = self.class.type_for_attribute("can_contact").cast(can_contact)
     result = super
-    rebuild_audience_member_details if result && restore_audience && AudienceMember.where(email:, seller:).where.not(deleted_at: nil).exists?
+    rebuild_audience_member_details if result && restore_audience
     result
   end
 
