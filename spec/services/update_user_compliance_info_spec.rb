@@ -53,6 +53,27 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "when the submitted birthday is not a real calendar date" do
+      let!(:compliance_info) { create(:user_compliance_info, user:) }
+
+      it "returns an error without creating a new compliance info row" do
+        params = ActionController::Parameters.new(
+          dob_year: "2005",
+          dob_month: "6",
+          dob_day: "31",
+        )
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user: user).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Please enter a valid date of birth")
+        expect(user.reload.alive_user_compliance_info.id).to eq(compliance_info.id)
+      end
+    end
+
     context "when submitted compliance values match the current compliance info" do
       let!(:compliance_info) { create(:user_compliance_info, user:) }
 
