@@ -40,6 +40,7 @@ class RedisKey
     def blast_sent_emails(blast_id) = "blast:#{blast_id}:sent_emails"
     def blast_audience_snapshot(blast_id) = "blast:#{blast_id}:audience_snapshot"
     def blast_non_opener_emails(blast_id) = "blast:#{blast_id}:non_opener_emails"
+    def blast_sender_lock(blast_id) = "blast:#{blast_id}:sender_lock"
     def workflow_installment_rule_version(installment_id) = "workflow_installment_rule:#{installment_id}:version"
     def workflow_installment_rule_pending_token(installment_id) = "workflow_installment_rule:#{installment_id}:pending_token"
     def audience_member_load_max_execution_time_seconds = "audience_member_load:max_execution_time_seconds"

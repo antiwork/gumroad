@@ -3,13 +3,38 @@
 class SendPostBlastEmailsJob
   include Sidekiq::Job
   include ActionView::Helpers::SanitizeHelper
-  # Deliberately no `lock: :until_executed`. The digest keys on the blast id, and every caller
-  # creates a fresh blast row before enqueuing, so it never deduplicated anything — but a hard-killed
-  # worker skips its release, and the held digest then drops every later `perform_async` for that
-  # blast silently, which is what made the documented recovery a no-op (gumroad-private#1816).
+  # Deliberately no `lock: :until_executed`: a hard-killed worker skips the digest release, and the
+  # stranded digest then silently drops every later `perform_async` for the blast, which is what
+  # made the documented recovery a no-op (gumroad-private#1816). Mutual exclusion comes from the
+  # TTL'd run lock in #perform instead — staleness is bounded, and contention reschedules the
+  # attempt rather than dropping it.
   sidekiq_options retry: 10, queue: :default
 
+  # Must outlive the longest phase with no refresh point (the audience load, capped at
+  # audience_load_timeout_seconds — default 1h). After a hard kill the lock lingers at most this
+  # long before a resume can proceed, immaterial against the 4h stall threshold of
+  # AlertOnStalledPostEmailBlastsJob.
+  SENDER_LOCK_TTL = 2.hours
+
+  SENDER_LOCK_RETRY_DELAY = 15.minutes
+
+  LOCK_RELEASE_SCRIPT = <<~LUA.squish
+    if redis.call('get', KEYS[1]) == ARGV[1] then
+      return redis.call('del', KEYS[1])
+    end
+  LUA
+
   def perform(blast_id)
+    @lock_key = RedisKey.blast_sender_lock(blast_id)
+    # CAS token, not a bare flag: a run that outlived its TTL must not delete a successor's lock.
+    @lock_token = SecureRandom.uuid
+    unless $redis.set(@lock_key, @lock_token, nx: true, ex: SENDER_LOCK_TTL.to_i)
+      # Another sender owns this blast. Re-check later rather than drop the enqueue — a silently
+      # dropped enqueue is exactly what stranded blasts before (gumroad-private#1816).
+      self.class.perform_in(SENDER_LOCK_RETRY_DELAY, blast_id)
+      return
+    end
+
     @blast = PostEmailBlast.find(blast_id)
     @post = @blast.post
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
@@ -45,6 +70,8 @@ class SendPostBlastEmailsJob
     end
 
     mark_blast_as_completed
+  ensure
+    $redis.eval(LOCK_RELEASE_SCRIPT, keys: [@lock_key], argv: [@lock_token]) if @lock_token
   end
 
   private
@@ -76,6 +103,7 @@ class SendPostBlastEmailsJob
     # already accepted its recipients must not be handed them again because a later
     # provider failed, so the cleanup below only rolls back the slice that raised.
     def send_provider_slice(provider:, members:, cache:)
+      $redis.expire(@lock_key, SENDER_LOCK_TTL.to_i)
       members = store_recipients_as_sent(members)
       recipients = prepare_recipients(members)
 

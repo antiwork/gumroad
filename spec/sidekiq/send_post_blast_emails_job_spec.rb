@@ -717,6 +717,47 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe "sender run lock" do
+    it "reschedules and sends nothing when another sender holds the blast's lock" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      lock_key = RedisKey.blast_sender_lock(blast.id)
+      $redis.set(lock_key, "other-run")
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to change { described_class.jobs.size }.by(1)
+
+      expect(described_class.jobs.last["args"]).to eq([blast.id])
+      expect_sent_count 0
+      expect(blast.reload.started_at).to be_blank
+      # The bounced run's own release must not delete the owner's lock.
+      expect($redis.get(lock_key)).to eq("other-run")
+    ensure
+      $redis.del(lock_key) if lock_key
+    end
+
+    it "releases the lock after a completed send" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+
+      described_class.new.perform(blast.id)
+
+      expect(blast.reload.completed_at).to be_present
+      expect($redis.exists?(RedisKey.blast_sender_lock(blast.id))).to eq(false)
+    end
+
+    it "releases the lock when a provider send raises so a retry can reacquire it" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(StandardError, "API failure")
+
+      expect($redis.exists?(RedisKey.blast_sender_lock(blast.id))).to eq(false)
+    end
+  end
+
   def expect_sent_count(count)
     expect(PostSendgridApi.mails.size).to eq(count)
   end
