@@ -212,11 +212,26 @@ describe Api::V2::Gumhead::MessagesController do
     it "allows large outputs when streaming" do
       stub_request(:post, messages_url)
         .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 200, body: { input_tokens: 12 }.to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages(request_payload.merge(max_tokens: described_class::MAX_TOKENS_PER_REQUEST, stream: true))
 
       expect(response.status).to eq(200)
       expect(WebMock).to have_requested(:post, messages_url)
+    end
+
+    it "charges the prompt when an accepted stream never reports usage" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 200, body: { input_tokens: 21 }.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      event = GumheadUsageEvent.sole
+      expect(event.input_tokens).to eq(21)
+      expect(event.output_tokens).to eq(0)
     end
 
     it "rejects pricing modifiers the ledger cannot weight" do
@@ -324,6 +339,21 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(WebMock).to have_requested(:post, count_tokens_url).with { |req| req.body.include?("output_config") }
       expect(GumheadUsageEvent.sole.input_tokens).to eq(90)
+    end
+
+    it "charges timed-out cached prompts at the cache-write rate" do
+      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 200, body: { input_tokens: 80 }.to_json, headers: { "Content-Type" => "application/json" })
+      cached_payload = request_payload.merge(
+        system: [{ type: "text", text: "You are Gumhead.", cache_control: { type: "ephemeral" } }],
+      )
+
+      post_messages(cached_payload)
+
+      event = GumheadUsageEvent.sole
+      expect(event.input_tokens).to eq(0)
+      expect(event.cache_creation_input_tokens).to eq(80)
     end
 
     it "falls back to a conservative byte estimate when count_tokens also fails" do

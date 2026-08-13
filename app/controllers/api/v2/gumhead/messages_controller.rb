@@ -194,6 +194,12 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     def load_body
       @raw_body = request.raw_post.to_s
+      # Nothing on this route reads body params — the raw body is handled
+      # here. Pre-seeding the memoized request parameters stops Rails from
+      # ever parsing the body into params: parsing would put prompts into
+      # params, and a malformed body would be dumped to the debug log by
+      # ActionDispatch's parse-error handler before ParseError even raises.
+      request.env["action_dispatch.request.request_parameters"] = {}
       if @raw_body.bytesize > MAX_BODY_BYTES
         return render json: anthropic_error("invalid_request_error", "Request body too large."), status: :bad_request
       end
@@ -315,7 +321,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # charge costs at most a few percent of the daily output cap per
       # event.
       if meter
-        record_usage!(model: @body["model"], usage: { "input_tokens" => charge_input_tokens, "output_tokens" => @body["max_tokens"].to_i })
+        record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => @body["max_tokens"].to_i))
       end
       render json: anthropic_error("api_error", "The model service timed out."), status: :bad_gateway
     rescue HTTP::Error => e
@@ -323,9 +329,25 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # Success headers followed by a lost body: the response was generated
       # and billed, so it gets the same bounded worst-case charge.
       if meter && upstream&.status&.success?
-        record_usage!(model: @body["model"], usage: { "input_tokens" => charge_input_tokens, "output_tokens" => @body["max_tokens"].to_i })
+        record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => @body["max_tokens"].to_i))
       end
       render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
+    end
+
+    # A synthetic charge cannot know how much of the prompt was a cache
+    # write, and cache writes bill above the base rate — so when the request
+    # asks for caching at all, the whole count is charged at the matching
+    # cache-write rate. The raw-body scan can over-match ("1h" in content),
+    # which only overcharges a failure path; a worst case may not undershoot.
+    def synthetic_input_usage
+      counted = charge_input_tokens
+      return { "input_tokens" => counted } unless @raw_body.include?("cache_control")
+
+      if @raw_body.include?('"1h"')
+        { "cache_creation_input_tokens" => counted, "cache_creation" => { "ephemeral_1h_input_tokens" => counted } }
+      else
+        { "cache_creation_input_tokens" => counted }
+      end
     end
 
     # The input charge for a request whose real usage was never reported.
@@ -402,8 +424,13 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
         write_stream_error_frame
       ensure
-        if scanner.usage? && !scanner.unbilled_refusal?
-          record_usage!(model: scanner.model || @body["model"], usage: scanner.usage)
+        if scanner.usage?
+          record_usage!(model: scanner.model || @body["model"], usage: scanner.usage) unless scanner.unbilled_refusal?
+        else
+          # Anthropic accepted the stream (success headers) but no usage
+          # event arrived — input billing may still have started. Charge
+          # the exact prompt; no deltas arrived, so output stays zero.
+          record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => 0))
         end
         response.stream.close
       end
