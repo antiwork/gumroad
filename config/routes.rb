@@ -483,7 +483,11 @@ Rails.application.routes.draw do
             end
           end
 
-          resources :products, only: [:index, :show]
+          resources :products, only: [:index, :show] do
+            member do
+              get "files/:file_id/download_url", action: :file_download, as: :file_download
+            end
+          end
         end
 
         namespace :grmc do

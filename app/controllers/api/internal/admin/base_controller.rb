@@ -17,6 +17,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     "stranded_buyers.recover" => %w[email]
   }.freeze
   ADMIN_AUDIT_ACTIONS_ALLOWING_NULL_TARGET = %w[
+    products.file_download_url
     purchases.reassign
     purchases.resend_all_receipts
     sendgrid_emails.remove_suppression
