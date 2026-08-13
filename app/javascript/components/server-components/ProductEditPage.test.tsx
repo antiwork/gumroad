@@ -770,6 +770,29 @@ it("waits for file uploads to finish before autosaving", async () => {
   }
 });
 
+it("warns before leaving while an edit has not been saved", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Still pending" }));
+
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    const afterSave = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(afterSave);
+    expect(afterSave.defaultPrevented).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("reports whether edits are saved without waiting for another change", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {

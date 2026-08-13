@@ -762,6 +762,14 @@ const ProductEditPage = (props: Props) => {
   saveRef.current = save;
 
   React.useEffect(() => {
+    if (!hasUnsavedChanges) return;
+
+    const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [hasUnsavedChanges]);
+
+  React.useEffect(() => {
     if (!hasUnsavedChanges || uploadsInProgress) return;
 
     const timer = window.setTimeout(() => {
