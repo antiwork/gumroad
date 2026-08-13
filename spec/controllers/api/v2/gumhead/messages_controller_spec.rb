@@ -266,6 +266,26 @@ describe Api::V2::Gumhead::MessagesController do
       expect(event.output_tokens).to eq(request_payload[:max_tokens])
       expect(event.input_tokens).to be > 0
     end
+
+    it "charges nothing when the connection itself times out" do
+      stub_request(:post, messages_url).to_raise(HTTP::ConnectTimeoutError)
+
+      post_messages
+
+      expect(response.status).to eq(502)
+      expect(GumheadUsageEvent.count).to eq(0)
+    end
+
+    it "does not meter an unbilled pre-output refusal" do
+      refusal = anthropic_response.merge(stop_reason: "refusal", content: [])
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: refusal.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(GumheadUsageEvent.count).to eq(0)
+    end
   end
 
   describe "streaming" do
@@ -311,6 +331,20 @@ describe Api::V2::Gumhead::MessagesController do
       event = GumheadUsageEvent.sole
       expect(event.input_tokens).to eq(50)
       expect(event.output_tokens).to eq(3)
+    end
+
+    it "does not meter a streamed pre-output refusal" do
+      refusal_stream = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\n\n),
+        %(event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":1}}\n\n),
+        %(event: message_stop\ndata: {"type":"message_stop"}\n\n),
+      ].join
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: refusal_stream, headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(GumheadUsageEvent.count).to eq(0)
     end
 
     it "returns a buffered 502 when the upstream connection fails before the stream starts" do

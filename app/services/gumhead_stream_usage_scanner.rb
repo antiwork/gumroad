@@ -17,7 +17,14 @@ class GumheadStreamUsageScanner
     @cache_creation_1h_input_tokens = 0
     @cache_read_input_tokens = 0
     @content_delta_count = 0
+    @stop_reason = nil
     @saw_usage = false
+  end
+
+  # A refusal that stopped the message before any output is not billed by
+  # Anthropic; a mid-output refusal is. The delta count separates the two.
+  def unbilled_refusal?
+    @stop_reason == "refusal" && @content_delta_count.zero?
   end
 
   def <<(chunk)
@@ -59,6 +66,8 @@ class GumheadStreamUsageScanner
       when "content_block_delta"
         @content_delta_count += 1
       when "message_delta"
+        delta = event["delta"]
+        @stop_reason = delta["stop_reason"] if delta.is_a?(Hash) && delta["stop_reason"]
         usage = event["usage"]
         return unless usage.is_a?(Hash)
 

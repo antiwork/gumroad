@@ -271,12 +271,19 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       body = upstream.body.to_s
       meter_buffered_usage(body) if meter && upstream.status.success?
       render body:, content_type: "application/json", status: upstream.status.code
+    rescue HTTP::ConnectTimeoutError => e
+      # Subclass of HTTP::TimeoutError, so it must be rescued first: the
+      # request never reached Anthropic, and charging worst-case output for
+      # a failed connection would falsely exhaust the daily cap.
+      Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+      render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
     rescue HTTP::TimeoutError => e
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
-      # A timeout means the generation likely kept running (and billing)
-      # after we stopped waiting. Charge the worst case — the prompt floor
-      # (~4 bytes per token) plus the full max_tokens — so repeated
-      # deliberate timeouts cannot spend the shared key outside the caps.
+      # A post-dispatch timeout means the generation likely kept running
+      # (and billing) after we stopped waiting. Charge the worst case — the
+      # prompt floor (~4 bytes per token) plus the full max_tokens — so
+      # repeated deliberate timeouts cannot spend the shared key outside
+      # the caps.
       if meter
         record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4, "output_tokens" => @body["max_tokens"].to_i })
       end
@@ -330,7 +337,9 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
         write_stream_error_frame
       ensure
-        record_usage!(model: scanner.model || @body["model"], usage: scanner.usage) if scanner.usage?
+        if scanner.usage? && !scanner.unbilled_refusal?
+          record_usage!(model: scanner.model || @body["model"], usage: scanner.usage)
+        end
         response.stream.close
       end
     rescue HTTP::Error => e
@@ -371,6 +380,9 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       parsed = safe_parse_json(body)
       usage = parsed.is_a?(Hash) ? parsed["usage"] : nil
       return unless usage.is_a?(Hash)
+      # A pre-output refusal reports usage but is not billed; recording it
+      # would burn the seller's cap on spend that never happened.
+      return if parsed["stop_reason"] == "refusal" && Array(parsed["content"]).empty?
 
       record_usage!(model: parsed["model"] || @body["model"], usage:)
     end
