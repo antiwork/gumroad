@@ -797,6 +797,18 @@ it("warns before leaving while an edit has not been saved", async () => {
   }
 });
 
+it("does not warn before leaving when autosave is off", () => {
+  const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+  const props = { ...buildTieredProps(product), autosave_enabled: false };
+
+  render(<ProductEditPage {...props} />);
+  act(() => contextCapture.current?.updateProduct({ name: "Still pending" }));
+
+  const beforeUnload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(beforeUnload);
+  expect(beforeUnload.defaultPrevented).toBe(false);
+});
+
 it("reports whether edits are saved without waiting for another change", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {

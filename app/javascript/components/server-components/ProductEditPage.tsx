@@ -778,12 +778,13 @@ const ProductEditPage = (props: Props) => {
   saveRef.current = save;
 
   React.useEffect(() => {
-    if (!hasUnsavedChanges) return;
+    // Kill switch: flag off must match main (editor specs navigate away dirty).
+    if (!props.autosave_enabled || !hasUnsavedChanges) return;
 
     const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, [hasUnsavedChanges]);
+  }, [hasUnsavedChanges, props.autosave_enabled]);
 
   React.useEffect(() => {
     if (
