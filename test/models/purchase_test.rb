@@ -6102,6 +6102,27 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal 525, mandate_options[:payment_method_options][:card][:mandate_options][:amount]
   end
 
+  test "#mandate_options_for_stripe maps the fixed recurrence interval for a restart purchase (not sporadic)" do
+    product = create_membership_product  # monthly recurrence
+    subscription = create_subscription(link: product)
+    # A restart purchase re-establishes the mandate on the existing subscription: it is not
+    # the original purchase and not an upgrade, but it does set up future off-session
+    # charges, so it must carry the same fixed interval as the rest of the recurrence.
+    restart_purchase = create_purchase(charge_processor_id: StripeChargeProcessor.charge_processor_id, link: product, purchase_state: "in_progress",
+                                       card_country: "IN", subscription:, is_original_subscription_purchase: false,
+                                       price_cents: 100, total_transaction_cents: 105, displayed_price_cents: 100,
+                                       setup_future_charges: true)
+    chargeable = mock("chargeable")
+    chargeable.stubs(:requires_mandate?).returns(true)
+    restart_purchase.stubs(:chargeable).returns(chargeable)
+    restart_purchase.stubs(:subscription_duration).returns("monthly")
+
+    mandate_options = restart_purchase.mandate_options_for_stripe
+
+    assert_equal "month", mandate_options[:payment_method_options][:card][:mandate_options][:interval]
+    assert_equal 1, mandate_options[:payment_method_options][:card][:mandate_options][:interval_count]
+  end
+
   # ---- #is_an_async_off_session_charge_in_india? ----------------------------
 
   test "#is_an_async_off_session_charge_in_india? when card country is not India returns false if it is a regular purchase" do
