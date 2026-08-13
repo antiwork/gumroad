@@ -48,7 +48,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   before_action :validate_max_tokens, only: [:create]
   before_action :enforce_daily_token_caps, only: [:create]
 
-  ANTHROPIC_API_BASE = "https://api.anthropic.com/v1"
+  # The model supply behind the gateway. The front door (auth, ledger,
+  # caps) stays here; where the tokens come from is a config value, so the
+  # upstream can move (another provider, or a Gumroad-run endpoint) without
+  # a deploy — any upstream must speak the Anthropic Messages protocol.
+  DEFAULT_UPSTREAM_API_BASE = "https://api.anthropic.com/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
   # The model families Gumhead actually uses (main loop, narrator, artist).
   # The caps are token-denominated, so an unlisted pricier SKU cannot be
@@ -104,7 +108,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       if @body["stream"] == true
         stream_upstream
       else
-        forward_buffered("#{ANTHROPIC_API_BASE}/messages", meter: true)
+        forward_buffered("#{upstream_api_base}/messages", meter: true)
       end
     end
   end
@@ -115,7 +119,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # the in-flight limit.
   def count_tokens
     with_in_flight_slot do
-      forward_buffered("#{ANTHROPIC_API_BASE}/messages/count_tokens", meter: false)
+      forward_buffered("#{upstream_api_base}/messages/count_tokens", meter: false)
     end
   end
 
@@ -366,7 +370,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # when the primary request AND the count both failed.
     def charge_input_tokens
       counted = HTTP.timeout(10).headers(upstream_headers)
-        .post("#{ANTHROPIC_API_BASE}/messages/count_tokens", body: count_tokens_body)
+        .post("#{upstream_api_base}/messages/count_tokens", body: count_tokens_body)
       parsed = safe_parse_json(counted.body.to_s)
       if counted.status.success? && parsed.is_a?(Hash) && parsed["input_tokens"].is_a?(Integer)
         parsed["input_tokens"]
@@ -394,7 +398,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def stream_upstream
       upstream = HTTP.timeout(connect: 10, write: 30, read: 60)
         .headers(upstream_headers)
-        .post("#{ANTHROPIC_API_BASE}/messages", body: @raw_body)
+        .post("#{upstream_api_base}/messages", body: @raw_body)
 
       unless upstream.status.success?
         copy_retry_after(upstream)
@@ -555,6 +559,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     def anthropic_api_key
       GlobalConfig.get("GUMHEAD_ANTHROPIC_API_KEY")
+    end
+
+    def upstream_api_base
+      GlobalConfig.get("GUMHEAD_UPSTREAM_API_BASE", DEFAULT_UPSTREAM_API_BASE)
     end
 
     def daily_input_token_cap
