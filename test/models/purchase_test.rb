@@ -6105,6 +6105,9 @@ class PurchaseTest < ActiveSupport::TestCase
   test "#mandate_options_for_stripe maps the fixed recurrence interval for a restart purchase (not sporadic)" do
     product = create_membership_product  # monthly recurrence
     subscription = create_subscription(link: product)
+    create_purchase(charge_processor_id: StripeChargeProcessor.charge_processor_id, link: product, purchase_state: "successful",
+                    card_country: "IN", subscription:, is_original_subscription_purchase: true,
+                    price_cents: 100, total_transaction_cents: 105, displayed_price_cents: 100)
     # A restart purchase re-establishes the mandate on the existing subscription: it is not
     # the original purchase and not an upgrade, but it does set up future off-session
     # charges, so it must carry the same fixed interval as the rest of the recurrence.

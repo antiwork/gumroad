@@ -3838,7 +3838,7 @@ class Purchase < ApplicationRecord
     # Restart purchases re-establish a mandate on the same fixed interval as the rest of
     # the recurrence (they pass the guard above via `setup_future_charges`, not an original
     # or upgrade flag), so they must be mapped like any other recurring membership charge.
-    if is_original_subscription_purchase? || is_upgrade_purchase? || is_recurring_subscription_charge?
+    if is_original_subscription_purchase? || is_upgrade_purchase? || is_recurring_subscription_charge
       case subscription_duration
       when "every_two_years"
         interval = "year"
