@@ -114,6 +114,16 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.headers["Retry-After"]).to be_present
     end
 
+    it "repairs an hourly throttle key that lost its expiry" do
+      $redis.set(RedisKey.gumhead_gateway_throttle(@user.id), 3)
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect($redis.ttl(RedisKey.gumhead_gateway_throttle(@user.id))).to be > 0
+    end
+
     it "rejects a request past the concurrent in-flight limit and frees the probe slot" do
       $redis.setex(RedisKey.gumhead_gateway_in_flight(@user.id), 120, described_class::MAX_IN_FLIGHT_REQUESTS)
 
@@ -502,6 +512,19 @@ describe Api::V2::Gumhead::MessagesController do
       post_messages(request_payload.merge(stream: true))
 
       expect(GumheadUsageEvent.count).to eq(0)
+    end
+
+    it "charges the prompt when the stream header wait times out" do
+      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 200, body: { input_tokens: 33 }.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.status).to eq(502)
+      event = GumheadUsageEvent.sole
+      expect(event.input_tokens).to eq(33)
+      expect(event.output_tokens).to eq(0)
     end
 
     it "returns a buffered 502 when the upstream connection fails before the stream starts" do

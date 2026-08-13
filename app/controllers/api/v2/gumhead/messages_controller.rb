@@ -160,7 +160,9 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def throttle_gateway_requests
       key = RedisKey.gumhead_gateway_throttle(current_resource_owner.id)
       count = $redis.incr(key)
-      $redis.expire(key, GATEWAY_REQUESTS_PERIOD_WINDOW.to_i) if count == 1
+      # The ttl == -1 arm repairs a counter whose worker died between INCR
+      # and EXPIRE — the same permanent-lockout guard as the in-flight key.
+      $redis.expire(key, GATEWAY_REQUESTS_PERIOD_WINDOW.to_i) if count == 1 || $redis.ttl(key) == -1
       return if count <= GATEWAY_REQUESTS_PER_PERIOD
 
       retry_after = ttl_to_retry_after(redis: $redis, key:, period: GATEWAY_REQUESTS_PERIOD_WINDOW)
@@ -445,6 +447,18 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         end
         response.stream.close
       end
+    rescue HTTP::ConnectTimeoutError => e
+      # TCP connect failed; the request never reached Anthropic.
+      Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+      render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
+    rescue HTTP::TimeoutError => e
+      # Timed out waiting for stream headers after the request was written:
+      # input processing bills, but no output token was streamed anywhere —
+      # so the charge is the exact prompt, mirroring the accepted-stream
+      # no-usage case above.
+      Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+      record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => 0))
+      render json: anthropic_error("api_error", "The model service timed out."), status: :bad_gateway
     rescue HTTP::Error, OpenSSL::SSL::SSLError => e
       # The initial POST failed before any response headers were streamed, so
       # a buffered error is still possible. SSLError escapes the http gem
