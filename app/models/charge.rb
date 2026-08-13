@@ -259,9 +259,23 @@ class Charge < ApplicationRecord
     receipt_email_infos.last
   end
 
-  # Every send attempt for this charge, oldest first. See
-  # Purchase::Receipt#receipt_email_infos.
-  def receipt_email_infos
+  def split_receipt_eligible?
+    successful_purchases.size == 2
+  end
+
+  def split_receipt_mode?
+    return false unless split_receipt_eligible?
+
+    split_receipt_sent? || combined_receipt_email_infos.empty?
+  end
+
+  def split_receipt_sent?
+    return false unless split_receipt_eligible?
+
+    split_receipt_email_info_scope.exists?
+  end
+
+  def combined_receipt_email_infos
     # Queries `email_info_charges` first to leverage the index since there is no `purchase_id` on the associated
     # `email_infos` record (`email_infos` has > 1b records, and relies on `purchase_id` index)
     EmailInfoCharge.includes(:email_info)
@@ -276,6 +290,18 @@ class Charge < ApplicationRecord
       .map(&:email_info)
   end
 
+  def split_receipt_email_infos
+    return [] unless split_receipt_eligible?
+
+    split_receipt_email_info_scope.order(:id).to_a
+  end
+
+  # Every send attempt for this charge, oldest first. See
+  # Purchase::Receipt#receipt_email_infos.
+  def receipt_email_infos
+    (combined_receipt_email_infos + split_receipt_email_infos).sort_by(&:id)
+  end
+
   def first_purchase_for_subscription
     successful_purchases.includes(:subscription).detect { _1.subscription.present? }
   end
@@ -285,6 +311,13 @@ class Charge < ApplicationRecord
   end
 
   private
+    def split_receipt_email_info_scope
+      CustomerEmailInfo.where(
+        purchase_id: successful_purchases.select(:id),
+        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+      )
+    end
+
     # Combined-charge refunds update every purchase in the charge plus the shared
     # seller balance inside one transaction. Each Purchase#refund_purchase! locks
     # its purchase row and then the balance, so without this pre-pass the

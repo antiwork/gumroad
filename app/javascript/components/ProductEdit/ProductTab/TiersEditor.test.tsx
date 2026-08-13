@@ -17,7 +17,17 @@ const productEditContext = vi.hoisted(() => ({
   currencyType: "usd",
   setCurrencyType: vi.fn(),
   uniquePermalink: "membership",
-  updateProduct: vi.fn(),
+  updateProduct:
+    vi.fn<
+      (
+        update: (product: {
+          rich_content: { id: string }[];
+          variants: { id: string; rich_content: { id: string }[] }[];
+          confirmed_removed_variant_ids?: string[];
+          confirmed_removed_rich_content_ids?: string[];
+        }) => void,
+      ) => void
+    >(),
   earliestMembershipPriceChangeDate: new Date("2026-08-12T00:00:00.000Z"),
 }));
 
@@ -65,6 +75,43 @@ const tier: Tier = {
     every_two_years: { enabled: false },
   },
 };
+
+// A newly added tier can be mid-creation by an in-flight save when the seller
+// removes it, so its client id must be recorded like any other: the response
+// remaps it to the canonical id, and an id the server never learns is inert.
+// Skipping it would leave the created tier (and its pages) with no recorded
+// deletion intent, and the save-time missing-content guard would block the
+// seller's own deletion behind a reload.
+it("records a newly added tier's id and its page ids when the seller removes it", () => {
+  const onChange = vi.fn<(tiers: Tier[]) => void>();
+  const newTier: Tier = {
+    ...tier,
+    id: "local-new-tier",
+    newlyAdded: true,
+    rich_content: [{ id: "new-tier-page", title: "Lesson", description: {}, updated_at: "2026-01-01T00:00:00Z" }],
+  };
+  const view = render(
+    <CurrentSellerProvider value={null}>
+      <TiersEditor tiers={[newTier]} onChange={onChange} />
+    </CurrentSellerProvider>,
+  );
+
+  fireEvent.click(view.getByLabelText("Remove"));
+  fireEvent.click(view.getByText("Yes, remove"));
+
+  const record = productEditContext.updateProduct.mock.lastCall?.[0];
+  expect(record).toBeTypeOf("function");
+  const recorded: {
+    rich_content: { id: string }[];
+    variants: { id: string; rich_content: { id: string }[] }[];
+    confirmed_removed_variant_ids?: string[];
+    confirmed_removed_rich_content_ids?: string[];
+  } = { rich_content: [], variants: [] };
+  record?.(recorded);
+  expect(recorded.confirmed_removed_variant_ids).toEqual(["local-new-tier"]);
+  expect(recorded.confirmed_removed_rich_content_ids).toEqual(["new-tier-page"]);
+  expect(onChange).toHaveBeenCalledWith([]);
+});
 
 it("keeps the membership price-change date stable across rerenders", () => {
   const onChange = vi.fn<(tiers: Tier[]) => void>();

@@ -83,8 +83,9 @@ class EarlyFraudWarning < ApplicationRecord
     return false if fraud_type != FRAUD_TYPE_UNAUTHORIZED_USE_OF_CARD
     return false if purchase_for_subscription.present? && purchase_for_subscription.subscription.blank?
     return false if charge_risk_level != CHARGE_RISK_LEVEL_NORMAL
-    return false if receipt_email_info.blank? ||
-      ELIGIBLE_EMAIL_INFO_STATES_FOR_SUBSCRIPTION_CONTACTABLE.exclude?(receipt_email_info.state)
+    return false unless latest_receipt_email_infos.any? do |email_info|
+      ELIGIBLE_EMAIL_INFO_STATES_FOR_SUBSCRIPTION_CONTACTABLE.include?(email_info.state)
+    end
 
     true
   end
@@ -116,6 +117,14 @@ class EarlyFraudWarning < ApplicationRecord
   private
     def receipt_email_info
       @_receipt_email_info ||= chargeable.receipt_email_info
+    end
+
+    def receipt_email_infos
+      @_receipt_email_infos ||= chargeable.receipt_email_infos
+    end
+
+    def latest_receipt_email_infos
+      receipt_email_infos.group_by(&:purchase_id).values.map(&:last)
     end
 
     def only_one_of_purchase_or_charge_is_allowed

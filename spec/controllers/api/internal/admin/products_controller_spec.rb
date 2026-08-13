@@ -546,8 +546,8 @@ describe Api::Internal::Admin::ProductsController do
     end
   end
 
-  describe "GET file_download_url" do
-    include_examples "admin api authorization required", :get, :file_download_url, { id: "fake", file_id: "fake" }
+  describe "GET file_download" do
+    include_examples "admin api authorization required", :get, :file_download, { id: "fake", file_id: "fake" }
 
     let(:product) { create(:product, user: seller) }
     let(:product_file) { create(:readable_document, link: product, display_name: "Anthology") }
@@ -560,7 +560,7 @@ describe Api::Internal::Admin::ProductsController do
     it "rejects the legacy shared admin token" do
       request.headers["Authorization"] = "Bearer test-admin-token"
 
-      get :file_download_url, params: { id: product.external_id, file_id: product_file.external_id }
+      get :file_download, params: { id: product.external_id, file_id: product_file.external_id }
 
       expect(response).to have_http_status(:unauthorized)
       expect(response.parsed_body["message"]).to eq("per-actor admin token is required")
@@ -568,7 +568,7 @@ describe Api::Internal::Admin::ProductsController do
 
     it "returns not found and audits the attempt when no product matches" do
       expect do
-        get :file_download_url, params: { id: "fake", file_id: product_file.external_id }
+        get :file_download, params: { id: "fake", file_id: product_file.external_id }
       end.to change { AdminApiAuditLog.count }.by(1)
 
       expect(response).to have_http_status(:not_found)
@@ -587,7 +587,7 @@ describe Api::Internal::Admin::ProductsController do
       foreign_file = create(:readable_document, link: other_product)
 
       expect do
-        get :file_download_url, params: { id: product.external_id, file_id: foreign_file.external_id }
+        get :file_download, params: { id: product.external_id, file_id: foreign_file.external_id }
       end.to change { AdminApiAuditLog.count }.by(1)
 
       expect(response).to have_http_status(:not_found)
@@ -605,7 +605,7 @@ describe Api::Internal::Admin::ProductsController do
       allow_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename)
         .and_return("https://files.example.com/signed?sig=abc")
 
-      get :file_download_url, params: { id: product.external_id, file_id: product_file.external_id }
+      get :file_download, params: { id: product.external_id, file_id: product_file.external_id }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
@@ -624,7 +624,7 @@ describe Api::Internal::Admin::ProductsController do
         .and_return("https://files.example.com/signed?sig=deleted")
       product_file.mark_deleted!
 
-      get :file_download_url, params: { id: product.external_id, file_id: product_file.external_id }
+      get :file_download, params: { id: product.external_id, file_id: product_file.external_id }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["signed_url"]).to eq("https://files.example.com/signed?sig=deleted")
@@ -634,7 +634,7 @@ describe Api::Internal::Admin::ProductsController do
     it "returns the raw URL for external-link files" do
       external = create(:external_link, link: product)
 
-      get :file_download_url, params: { id: product.external_id, file_id: external.external_id }
+      get :file_download, params: { id: product.external_id, file_id: external.external_id }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
@@ -647,7 +647,7 @@ describe Api::Internal::Admin::ProductsController do
       allow_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename)
         .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
 
-      get :file_download_url, params: { id: product.external_id, file_id: product_file.external_id }
+      get :file_download, params: { id: product.external_id, file_id: product_file.external_id }
 
       expect(response).to have_http_status(:not_found)
       expect(response.parsed_body).to eq({ success: false, message: "File is not available in storage" }.as_json)
@@ -658,7 +658,7 @@ describe Api::Internal::Admin::ProductsController do
         .and_return("https://files.example.com/signed?sig=abc")
 
       expect do
-        get :file_download_url, params: { id: product.external_id, file_id: product_file.external_id }
+        get :file_download, params: { id: product.external_id, file_id: product_file.external_id }
       end.to change { AdminApiAuditLog.count }.by(1)
 
       expect(AdminApiAuditLog.last).to have_attributes(

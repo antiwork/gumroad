@@ -485,7 +485,7 @@ Rails.application.routes.draw do
 
           resources :products, only: [:index, :show] do
             member do
-              get "files/:file_id/download_url", action: :file_download_url, as: :file_download_url
+              get "files/:file_id/download_url", action: :file_download, as: :file_download
             end
           end
         end

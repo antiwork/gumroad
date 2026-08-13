@@ -72,4 +72,11 @@
   ul {
     padding-left: spacer(6);
   }
+
+  // Google's floating reCAPTCHA badge renders fixed bottom-right and covers the mobile
+  // CtaBar's Add to cart button (gumroad-private#2105). Hiding it is permitted because the
+  // branding disclosure is shown inline instead (RecaptchaDisclosure in useRecaptcha.tsx).
+  .grecaptcha-badge {
+    visibility: hidden;
+  }
 }

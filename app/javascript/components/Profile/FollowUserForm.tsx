@@ -14,6 +14,7 @@ import { Input } from "$app/components/ui/Input";
 import {
   RECAPTCHA_UNAVAILABLE_MESSAGE,
   RecaptchaCancelledError,
+  RecaptchaDisclosure,
   RecaptchaUnavailableError,
   useRecaptcha,
 } from "$app/components/useRecaptcha";
@@ -104,6 +105,7 @@ export const FollowUserForm = ({
           </Button>
         </div>
         {recaptcha.container}
+        {recaptchaSiteKey != null ? <RecaptchaDisclosure className="mt-2" /> : null}
       </Fieldset>
     </form>
   );

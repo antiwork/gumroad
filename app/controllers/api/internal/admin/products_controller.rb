@@ -6,7 +6,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
   # Serving a signed URL for a seller's actual file bytes is more sensitive
   # than the metadata-only reads in this controller, so it is audited like a
   # write and refuses legacy shared tokens.
-  before_action :require_per_actor_token!, only: :file_download_url
+  before_action :require_per_actor_token!, only: :file_download
 
   # Inlined from the deleted admin web UI concern (Admin::Users::ListPaginatedProducts):
   # live products first, newest first.
@@ -59,7 +59,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
     render json: { success: true, product: serialize_product(product, with_fraud_context: true, ancestry_paths:) }
   end
 
-  def file_download_url
+  def file_download
     product = Link.find_by_external_id(params[:id])
     # Reviewed content is often the soft-deleted prior version of a file, so
     # this deliberately does not filter to alive files.
