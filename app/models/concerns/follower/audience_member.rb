@@ -39,6 +39,6 @@ module Follower::AudienceMember
       return if member.nil?
 
       member.details.delete("follower")
-      member.valid? ? member.save! : member.destroy!
+      member.valid? ? member.save! : member.soft_delete!
     end
 end

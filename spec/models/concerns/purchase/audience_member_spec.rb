@@ -13,16 +13,19 @@ RSpec.describe Purchase::AudienceMember do
   describe "re-subscribing after an unsubscribe" do
     let!(:original_purchase) { create(:membership_purchase, link: product, seller:) }
 
-    it "rebuilds the audience member row that unsubscribing destroyed" do
+    it "soft-deletes the audience row on unsubscribe instead of destroying it, and restores it on re-subscribe" do
       expect(audience_member_for(original_purchase)).to be_present
 
       original_purchase.unsubscribe_buyer
-      expect(audience_member_for(original_purchase)).to be_nil
+      member = audience_member_for(original_purchase)
+      expect(member).to be_present
+      expect(member.deleted_at).to be_present
 
       original_purchase.reload.update!(can_contact: true)
 
       member = audience_member_for(original_purchase)
       expect(member).to be_present
+      expect(member.deleted_at).to be_nil
       expect(member.details["purchases"].map { _1["id"] }).to include(original_purchase.id)
       expect(member.customer).to be(true)
     end
@@ -43,9 +46,9 @@ RSpec.describe Purchase::AudienceMember do
                                              is_original_subscription_purchase: false)
       renewal.update!(can_contact: false)
       # The mixed state seen in production: the original purchase reads as contactable, so a
-      # spot-check looks fine, but its audience row was destroyed while it was unsubscribed and
-      # nothing ever saved that purchase again to rebuild it.
-      audience_member_for(original_purchase).destroy!
+      # spot-check looks fine, but its audience row was soft-deleted while it was unsubscribed and
+      # nothing ever saved that purchase again to restore it.
+      audience_member_for(original_purchase).soft_delete!
       expect(original_purchase.reload.can_contact?).to be(true)
 
       # A renewal charge is never an audience member in its own right, so adding just this row
@@ -67,18 +70,36 @@ RSpec.describe Purchase::AudienceMember do
       original_purchase.reload.update!(is_access_revoked: true)
 
       expect(original_purchase.reload.can_contact?).to be(false)
-      expect(audience_member_for(original_purchase)).to be_nil
+      expect(audience_member_for(original_purchase)).to be_present
+      expect(audience_member_for(original_purchase).deleted_at).to be_present
+      expect(AudienceMember.filter(seller_id: seller.id, params: { bought_product_ids: [product.id] })).to be_empty
+    end
+
+    it "restores a soft-deleted row directly when its purchase becomes contactable again (the support re-enable shape)" do
+      # The 8/13 recurrence: support flipped can_contact back on WITHOUT going through a purchase
+      # callbacks path that rebuilds (the row was soft-deleted, so it survived). Repopulating that
+      # surviving row must clear the deleted marker so the buyer is visible again.
+      original_purchase.unsubscribe_buyer
+      expect(audience_member_for(original_purchase).deleted_at).to be_present
+
+      member = audience_member_for(original_purchase)
+      member.details = { "purchases" => [original_purchase.audience_member_details] }
+      member.save!
+
+      expect(member.reload.deleted_at).to be_nil
+      expect(AudienceMember.filter(seller_id: seller.id, params: { bought_product_ids: [product.id] }).map(&:email))
+        .to eq([original_purchase.email])
     end
 
     it "does not pay for a rebuild when the buyer is being unsubscribed" do
       # Rebuilding is self-correcting, so an unsubscribe would still end up with the right
-      # (absent) row — but it would re-read every purchase the buyer has to get there. The
+      # (soft-deleted) row — but it would re-read every purchase the buyer has to get there. The
       # can_contact? condition keeps the expensive path on the re-subscribe side only.
       allow(AudienceMember).to receive(:find_or_initialize_by).and_call_original
 
       original_purchase.unsubscribe_buyer
 
-      expect(audience_member_for(original_purchase)).to be_nil
+      expect(audience_member_for(original_purchase).deleted_at).to be_present
       expect(AudienceMember).not_to have_received(:find_or_initialize_by)
     end
   end
@@ -97,7 +118,8 @@ RSpec.describe Purchase::AudienceMember do
           purchase.update!(can_contact: true)
         end
         # Nothing is rebuilt until the block finishes.
-        expect(audience_member_for(original_purchase)).to be_nil
+        expect(audience_member_for(original_purchase)).to be_present
+        expect(audience_member_for(original_purchase).deleted_at).to be_present
       end
 
       member = audience_member_for(original_purchase)
@@ -139,7 +161,8 @@ RSpec.describe Purchase::AudienceMember do
       second = create(:purchase, link: create(:product, user: seller), seller:, email: first.email)
 
       expect(second.can_contact?).to be(false)
-      expect(audience_member_for(first)).to be_nil
+      expect(audience_member_for(first)).to be_present
+      expect(audience_member_for(first).deleted_at).to be_present
     end
 
     it "stays contactable when the subscription's original purchase is contactable again" do

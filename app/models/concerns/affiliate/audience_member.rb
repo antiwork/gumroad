@@ -35,7 +35,7 @@ module Affiliate::AudienceMember
     return if member.nil?
 
     member.details["affiliates"]&.delete_if { _1["id"] == id && _1["product_id"] == product_id }
-    member.valid? ? member.save! : member.destroy!
+    member.valid? ? member.save! : member.soft_delete!
   end
 
   def should_be_audience_member?
@@ -75,6 +75,6 @@ module Affiliate::AudienceMember
       return if member.nil?
 
       member.details["affiliates"]&.delete_if { _1["id"] == id }
-      member.valid? ? member.save! : member.destroy!
+      member.valid? ? member.save! : member.soft_delete!
     end
 end

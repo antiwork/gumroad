@@ -95,7 +95,7 @@ module Purchase::AudienceMember
     return if member.nil?
 
     member.details["purchases"]&.delete_if { _1["id"] == id }
-    member.valid? ? member.save! : member.destroy!
+    member.valid? ? member.save! : member.soft_delete!
   end
 
   # Rebuilds the buyer's whole audience_members row from live purchase/follower/affiliate
