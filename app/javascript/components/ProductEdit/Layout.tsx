@@ -138,7 +138,7 @@ export const Layout = ({
   // preview body), shown in the Receipt tab's email chrome. Null while the preview is loading.
   receiptSubject?: string | null;
 }) => {
-  const { product, updateProduct, uniquePermalink, saving, save, saveStatus, receiptEmailFrom } =
+  const { product, updateProduct, uniquePermalink, saving, save, saveStatus, autosaveEnabled, receiptEmailFrom } =
     useProductEditContext();
   const currentSeller = useCurrentSeller();
   const rootPath = Routes.edit_link_path(uniquePermalink);
@@ -206,7 +206,7 @@ export const Layout = ({
   const imageSettings = useImageUploadSettings();
   const isUploadingFilesOrImages = isLoading || isUploadingFiles || !!imageSettings?.isUploading;
   const isBusy = isUploadingFilesOrImages || saving || isPublishing;
-  const saveDisabled = isBusy || saveStatus === "saved";
+  const saveDisabled = isBusy || (autosaveEnabled && saveStatus === "saved");
   const saveButtonTooltip = isUploadingFiles
     ? "Files are still uploading..."
     : isUploadingFilesOrImages
@@ -237,11 +237,11 @@ export const Layout = ({
   );
   const saveStatusLabel =
     saveStatus === "saving" ? "Saving..." : saveStatus === "unsaved" ? "Unsaved changes" : "All changes saved";
-  const saveStatusIndicator = (
+  const saveStatusIndicator = autosaveEnabled ? (
     <span className="text-sm text-muted" aria-live="polite">
       {saveStatusLabel}
     </span>
-  );
+  ) : null;
 
   const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
     const message = isUploadingFiles

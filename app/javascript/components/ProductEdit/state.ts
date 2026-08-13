@@ -281,6 +281,7 @@ export const ProductEditContext = React.createContext<{
   availableCountries: ShippingCountry[];
   saving: boolean;
   saveStatus: "saved" | "unsaved" | "saving";
+  autosaveEnabled: boolean;
   // Resolves true only when the save request actually succeeded (false on
   // request failure or when the seller cancels the deletion confirmation) —
   // callers chaining navigation on save() must check it before proceeding.

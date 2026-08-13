@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+/* eslint-disable @typescript-eslint/consistent-type-assertions -- header stubs a huge Product/context */
 import { cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -56,7 +57,15 @@ const publishedProduct = {
   files: [],
 } as unknown as Product;
 
-const renderHeader = ({ saving, saveStatus }: { saving: boolean; saveStatus: "saved" | "unsaved" | "saving" }) => {
+const renderHeader = ({
+  saving,
+  saveStatus,
+  autosaveEnabled = true,
+}: {
+  saving: boolean;
+  saveStatus: "saved" | "unsaved" | "saving";
+  autosaveEnabled?: boolean;
+}) => {
   const save = vi.fn(async () => true);
   const router = createMemoryRouter(
     [
@@ -84,6 +93,7 @@ const renderHeader = ({ saving, saveStatus }: { saving: boolean; saveStatus: "sa
                     updateProduct: () => undefined,
                     saving,
                     saveStatus,
+                    autosaveEnabled,
                     save,
                     receiptEmailFrom: "seller@example.com",
                   } as never
@@ -126,4 +136,11 @@ it("enables Save changes only while there are unsaved edits", () => {
 
   expect(screen.getByRole("button", { name: "Save changes" }).hasAttribute("disabled")).toBe(false);
   expect(screen.getByText("Unsaved changes")).toBeTruthy();
+});
+
+it("leaves Save changes enabled and hides status when autosave is off", () => {
+  renderHeader({ saving: false, saveStatus: "saved", autosaveEnabled: false });
+
+  expect(screen.getByRole("button", { name: "Save changes" }).hasAttribute("disabled")).toBe(false);
+  expect(screen.queryByText("All changes saved")).toBeNull();
 });
