@@ -173,6 +173,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   city: "",
   state: "",
   zipCode: "10001",
+  buyerCurrency: null,
   saveAddress: false,
   gift: null,
   customFieldValues: {},
@@ -1624,7 +1625,13 @@ describe("reduceCheckoutState", () => {
       }
     });
 
-    it("does not cancel an in-progress wallet payment when its own address updates land", () => {
+    it("invalidates surcharges when the buyer picks a currency", () => {
+      const next = reduceCheckoutState(state(), { type: "set-value", buyerCurrency: "gbp" });
+      expect(next.buyerCurrency).toBe("gbp");
+      expect(next.surcharges).toEqual({ type: "pending" });
+    });
+
+        it("does not cancel an in-progress wallet payment when its own address updates land", () => {
       // The Apple Pay / Google Pay sheet dispatches address set-values as part of its own
       // payment flow (shipping address change, billing details from the chosen card). Wallet
       // payments never attach the buyer-currency quote token, so there is no stale-quote risk —

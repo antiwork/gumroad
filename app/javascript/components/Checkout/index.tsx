@@ -41,8 +41,10 @@ import {
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Select } from "$app/components/ui/Select";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -111,6 +113,36 @@ const nameOfSalesTaxForCountry = (countryCode: string) => {
   }
 };
 
+const CurrencyPicker = () => {
+  const [state, dispatch] = useState();
+  const uid = React.useId();
+  const loaded = state.surcharges.type === "loaded" ? state.surcharges.result : null;
+  const options = loaded?.available_buyer_currencies ?? [];
+  if (options.length < 2) return null;
+  const detected = loaded?.detected_buyer_currency ?? null;
+  const value = state.buyerCurrency ?? detected ?? "usd";
+  return (
+    <Fieldset>
+      <FieldsetTitle>
+        <Label htmlFor={uid}>Currency</Label>
+      </FieldsetTitle>
+      <Select
+        id={uid}
+        value={value}
+        disabled={isProcessing(state)}
+        onChange={(e) => dispatch({ type: "set-value", buyerCurrency: e.target.value })}
+      >
+        {options.map((option) => (
+          <option key={option.code} value={option.code}>
+            {option.label}
+            {option.code === detected ? " — detected" : ""}
+          </option>
+        ))}
+      </Select>
+    </Fieldset>
+  );
+};
+
 export const Checkout = ({
   discoverUrl,
   cart,
@@ -122,7 +154,7 @@ export const Checkout = ({
   updateCart: (updated: Partial<CartState>) => void;
   recommendedProducts?: CardProduct[] | null;
 }) => {
-  const [state] = useState();
+  const [state, dispatch] = useState();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
   const [loadingDiscount, setLoadingDiscount] = React.useState(false);
 
@@ -471,6 +503,7 @@ export const Checkout = ({
                 {total != null ? (
                   <>
                     <footer className="grid gap-4 border-t border-border p-4 sm:px-5">
+                      <CurrencyPicker />
                       <CartPriceItem
                         title="Total"
                         price={

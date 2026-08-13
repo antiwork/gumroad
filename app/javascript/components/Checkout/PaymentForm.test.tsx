@@ -84,6 +84,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   city: "",
   state: "",
   zipCode: "",
+  buyerCurrency: null,
   saveAddress: false,
   gift: null,
   customFieldValues: {},

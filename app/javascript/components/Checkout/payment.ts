@@ -203,8 +203,29 @@ export type Tip =
       listedAmount?: number | null;
     };
 
+
+const BUYER_CURRENCY_COOKIE = "gumroad_buyer_currency";
+
+export function readBuyerCurrencyPreference(): string | null {
+  if (typeof window === "undefined") return null;
+  const fromUrl = new URL(window.location.href).searchParams.get("currency");
+  if (fromUrl) return fromUrl.toLowerCase();
+  const match = document.cookie.match(/(?:^|; )gumroad_buyer_currency=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+export function writeBuyerCurrencyPreference(code: string | null) {
+  if (typeof window === "undefined") return;
+  if (!code) {
+    document.cookie = `${BUYER_CURRENCY_COOKIE}=; path=/; max-age=0`;
+    return;
+  }
+  document.cookie = `${BUYER_CURRENCY_COOKIE}=${encodeURIComponent(code)}; path=/; max-age=31536000; SameSite=Lax`;
+}
+
 export type State = {
   products: Product[];
+  buyerCurrency: string | null;
   countries: Record<string, string>;
   usStates: string[];
   caProvinces: string[];
@@ -324,7 +345,8 @@ type SimpleValue =
   | "payLabel"
   | "warning"
   | "tip"
-  | "emailTypoSuggestion";
+  | "emailTypoSuggestion"
+  | "buyerCurrency";
 
 type PublicAction =
   | ({ type: "set-value" } & Partial<{ [key in SimpleValue]?: State[key] | undefined }>)
@@ -822,6 +844,7 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       state: state.state,
       vat_id: state.vatId,
       postal_code: state.zipCode,
+      buyer_currency: state.buyerCurrency ?? undefined,
     },
     abortSignal,
   );
@@ -919,6 +942,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         ("state" in action && action.state !== state.state && state.country === "CA") ||
         ("vatId" in action && action.vatId !== state.vatId) ||
         ("gift" in action && action.gift?.type !== state.gift?.type) ||
+        ("buyerCurrency" in action && action.buyerCurrency !== state.buyerCurrency) ||
         "products" in action ||
         "tip" in action
       ) {
@@ -952,6 +976,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         state.emailTypoSuggestion = null;
       }
       Object.assign(state, action);
+      if ("buyerCurrency" in action) writeBuyerCurrencyPreference(state.buyerCurrency);
       break;
     case "set-wallet-billing-address": {
       // The wallet (Apple Pay / Google Pay) sheet shares its billing address only after the
@@ -1247,6 +1272,7 @@ export function createReducer(initial: {
       state: initial.state ?? "",
       email: url.searchParams.get("email") ?? initial.email,
       zipCode: initial.address?.zip ?? "",
+      buyerCurrency: readBuyerCurrencyPreference(),
       customFieldValues,
       surcharges: { type: "pending" },
       saveAddress: !!initial.address,

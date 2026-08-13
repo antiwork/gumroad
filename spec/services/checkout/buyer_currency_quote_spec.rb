@@ -55,6 +55,46 @@ describe Checkout::BuyerCurrencyQuote do
   end
 
   describe ".create" do
+    it "quotes the requested currency instead of the IP currency" do
+      allow(StripeFxQuote).to receive(:create).with(
+        to_currency: Currency::USD,
+        from_currency: Currency::GBP,
+        stripe_account_id: merchant_account.charge_processor_merchant_id,
+        destination_account_id: nil
+      ).and_return(stripe_fx_quote)
+
+      result = described_class.create(
+        line_items: line_items_for(product),
+        canonical_total_cents: 10_00,
+        ip: "24.48.0.1",
+        currency: Currency::GBP
+      )
+
+      expect(result).to have_attributes(currency: Currency::GBP, canonical_total_cents: 10_00)
+    end
+
+    it "does not quote when the buyer asks for US dollars" do
+      result = described_class.create(
+        line_items: line_items_for(product),
+        canonical_total_cents: 10_00,
+        ip: "24.48.0.1",
+        currency: Currency::USD
+      )
+
+      expect(result).to be_nil
+    end
+
+    it "ignores an unknown requested currency and uses the IP currency" do
+      result = described_class.create(
+        line_items: line_items_for(product),
+        canonical_total_cents: 10_00,
+        ip: "24.48.0.1",
+        currency: "xyz"
+      )
+
+      expect(result).to have_attributes(currency: Currency::CAD)
+    end
+
     it "creates a signed quote for an eligible single-product checkout" do
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 

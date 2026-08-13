@@ -211,8 +211,13 @@ class Checkout::BuyerCurrencyQuote
   # falls back to canonical USD.
   MAX_QUOTED_CHARGES = 4
 
-  def self.create(line_items:, canonical_total_cents:, ip:)
-    new(line_items:, canonical_total_cents:, ip:).create
+  def self.create(line_items:, canonical_total_cents:, ip:, currency: nil)
+    new(line_items:, canonical_total_cents:, ip:, currency:).create
+  end
+
+  def self.normalize_requested_currency(currency)
+    code = currency.to_s.downcase.presence
+    code if code && CURRENCY_CHOICES.key?(code)
   end
 
   # Verifies the quote token submitted with a checkout against ONE charge: this seller, this
@@ -324,12 +329,13 @@ class Checkout::BuyerCurrencyQuote
   end
   private_class_method :verifier, :normalize_canonical_line_items, :normalize_later_charge_line_items, :charge_payload_for
 
-  attr_reader :line_items, :canonical_total_cents, :ip
+  attr_reader :line_items, :canonical_total_cents, :ip, :currency
 
-  def initialize(line_items:, canonical_total_cents:, ip:)
+  def initialize(line_items:, canonical_total_cents:, ip:, currency: nil)
     @line_items = line_items
     @canonical_total_cents = canonical_total_cents.to_i
     @ip = ip
+    @currency = self.class.normalize_requested_currency(currency)
   end
 
   def create
@@ -372,7 +378,7 @@ class Checkout::BuyerCurrencyQuote
     sellers = line_items_by_seller.keys.map { sellers_by_id.fetch(_1) }
     return unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
 
-    buyer_currency = buyer_currency_for_ip(ip)
+    buyer_currency = currency.presence || buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
     # The quote locks each charge's total, so every item must individually support
