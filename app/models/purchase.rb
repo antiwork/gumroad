@@ -5334,7 +5334,9 @@ class Purchase < ApplicationRecord
         "in_progress"
       ]
 
-      last_allowed_purchase_at = if is_upgrade_purchase? || link.quantity_enabled || link.is_physical || link.is_licensed
+      last_allowed_purchase_at = if link.is_physical
+        2.hours.ago
+      elsif is_upgrade_purchase? || link.quantity_enabled || link.is_licensed
         10.seconds.ago
       else
         3.minutes.ago

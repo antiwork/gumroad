@@ -2669,19 +2669,29 @@ class PurchaseTest < ActiveSupport::TestCase
   end
 
   # context "purchasing physical products"
-  test "not_double_charged purchasing physical products prohibits double-charges within 10 seconds" do
+  test "not_double_charged purchasing physical products requires confirmation within 2 hours" do
     product = create_physical_product
     ip = unique_ip
-    create_physical_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first], created_at: 8.seconds.ago)
+    create_physical_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first], created_at: 90.minutes.ago)
     purchase2 = build_physical_purchase(link: product, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first])
     assert_not purchase2.valid?
+    assert_equal PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED, purchase2.error_code
     assert_equal ["You have already paid for this product. It has been emailed to you. Do you want to buy it again?"], purchase2.errors[:base]
   end
 
-  test "not_double_charged purchasing physical products allows double-charges after 10 seconds" do
+  test "not_double_charged purchasing physical products allows a confirmed repeat within 2 hours" do
     product = create_physical_product
     ip = unique_ip
-    create_physical_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first], created_at: 11.seconds.ago)
+    create_physical_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first], created_at: 90.minutes.ago)
+    purchase2 = build_physical_purchase(link: product, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first])
+    purchase2.confirmed_duplicate_purchase = true
+    assert purchase2.valid?
+  end
+
+  test "not_double_charged purchasing physical products allows double-charges after 2 hours" do
+    product = create_physical_product
+    ip = unique_ip
+    create_physical_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first], created_at: 121.minutes.ago)
     purchase2 = build_physical_purchase(link: product, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first])
     assert purchase2.valid?
   end
