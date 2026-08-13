@@ -193,6 +193,45 @@ describe AlertOnStalledPostEmailBlastsJob do
         end
       end
 
+      it "never auto-resumes an UNACCOUNTED non-opener resend, even inside the window" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        blast.update!(recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(false)
+        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+          expect(message).to match(/blast #{blast.id}.*UNACCOUNTED → HELD \(non-opener/)
+        end
+      end
+
+      it "still retries a DEAD non-opener resend, since its dead entry proves no sender is running" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        blast.update!(recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+        stub_sidekiq(dead: [blast.id])
+
+        described_class.new.perform
+
+        expect(@dead_jobs.fetch(blast.id)).to have_received(:retry)
+      end
+
+      it "skips the resume without burning the once-per-blast marker when the sender reappears at action time" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        stub_sidekiq
+        job = described_class.new
+        allow(job).to receive(:busy_blast_ids).and_return([], [blast.id])
+
+        job.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(false)
+        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+          expect(message).to match(/blast #{blast.id}.*UNACCOUNTED → SKIPPED \(sender reappeared/)
+        end
+      end
+
       it "does not touch RUNNING, QUEUED, or RETRYING blasts" do
         running = stalled_blast
         queued_blast = stalled_blast(post: create(:installment))
@@ -209,6 +248,20 @@ describe AlertOnStalledPostEmailBlastsJob do
     end
 
     context "when the flag is off" do
+      it "never truncates action rows out of the report" do
+        stub_const("#{described_class}::MAX_REPORTED", 1)
+        resumable = stalled_blast(requested_hours_ago: 6)
+        running = stalled_blast(requested_hours_ago: 5, post: create(:installment))
+        stub_sidekiq(busy: [running.id])
+
+        described_class.new.perform
+
+        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+          expect(message).to match(/blast #{resumable.id}.*WOULD RESUME/)
+          expect(message).to include("…and 1 more.")
+        end
+      end
+
       it "reports WOULD RESUME without touching anything" do
         blast = stalled_blast(requested_hours_ago: 6)
         stub_sidekiq(dead: [blast.id])
