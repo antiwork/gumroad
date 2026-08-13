@@ -3566,7 +3566,9 @@ describe User, :vcr do
       member_2 = seller_1.audience_members.find_by(email: "new@example.com")
       expect(member_2.affiliate).to eq(true) # moves affiliate to its own member record
 
-      expect(seller_2.audience_members.find_by(email: "original@example.com")).to be_blank # record was removed because it wasn't an affiliate or anything else anymore
+      old_member = seller_2.audience_members.find_by!(email: "original@example.com")
+      expect(old_member.deleted_at).to be_present
+      expect(seller_2.audience_members.active.where(id: old_member.id)).to be_empty
       expect(seller_2.audience_members.find_by(email: "new@example.com")).to be_present
 
       expect(seller_3.audience_members.find_by(email: "original@example.com")).to be_blank # the missing member was ignored

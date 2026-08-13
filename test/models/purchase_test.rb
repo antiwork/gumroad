@@ -5465,7 +5465,7 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal 2, member.details["purchases"].size
   end
 
-  test "AudienceMember removes member when uncontactable" do
+  test "AudienceMember removes purchase details when uncontactable but another audience type remains" do
     purchase = create_purchase
     create_active_follower(user: purchase.seller, email: purchase.email)
     assert_no_difference -> { AudienceMember.count } do

@@ -353,7 +353,7 @@ RSpec.describe AudienceMember, :freeze_time do
   describe ".refresh_all! and #refresh!" do
     let(:seller) { create(:user) }
 
-    it "creates / updates / deletes members" do
+    it "creates, updates, and soft-deletes members" do
       outdated_follower = create(:active_follower, user: seller)
       outdated_follower.update_column(:confirmed_at, nil) # simulate deleted follower outside of callbacks
 
@@ -381,10 +381,13 @@ RSpec.describe AudienceMember, :freeze_time do
       expect(member_with_several_affiliate_products).to be_present
       expect(member_with_several_affiliate_products.details["affiliates"].size).to eq(3)
 
-      described_class.refresh_all!(seller:)
+      expect(described_class.refresh_all!(seller:)).to eq(3)
 
-      expect(seller.audience_members.count).to eq(3)
-      expect(seller.audience_members.where(email: outdated_follower.email, follower: true)).to be_blank
+      expect(seller.audience_members.count).to eq(4)
+      expect(seller.audience_members.active.count).to eq(3)
+      outdated_member = seller.audience_members.find_by!(email: outdated_follower.email)
+      expect(outdated_member.deleted_at).to be_present
+      expect(outdated_member.details).to be_empty
       expect(seller.audience_members.where(email: missing_purchase.email, customer: true)).to be_present
       member_with_several_purchases = seller.audience_members.find_by(email: normal_purchase.email, customer: true)
       expect(member_with_several_purchases).to be_present

@@ -45,10 +45,12 @@ RSpec.describe Onetime::RepairMissingSubscriptionAudienceMembers do
   it "skips buyers who are genuinely unsubscribed" do
     purchase = create(:membership_purchase, link: product, seller:)
     purchase.unsubscribe_buyer
-    expect(audience_member_for(purchase)).to be_nil
+    member = audience_member_for(purchase)
+    expect(member.deleted_at).to be_present
+    expect(AudienceMember.active.where(id: member.id)).to be_empty
 
     expect(described_class.process).to eq(scanned: 0, repaired: 0)
-    expect(audience_member_for(purchase)).to be_nil
+    expect(member.reload.deleted_at).to be_present
   end
 
   it "skips deactivated subscriptions" do
