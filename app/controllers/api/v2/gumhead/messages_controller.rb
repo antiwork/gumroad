@@ -487,15 +487,18 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # upstream itself broke.
     end
 
-    # Best effort: a Redis blip must not abort a committed stream — the
-    # worst case of a missed renewal is one lease aging out early, which
-    # briefly loosens the limit by a single slot.
+    # Best effort: a Redis blip must not abort a committed stream. XX makes
+    # renewal refresh-only — a lease that already aged out (renewals failed
+    # past the TTL) is NOT recreated, because a newer request may hold that
+    # slot by now; resurrecting it would put the set over the limit. The
+    # stream itself keeps running either way, and its release becomes a
+    # no-op.
     def renew_in_flight_lease(last_renewal)
       return last_renewal if Time.current - last_renewal < IN_FLIGHT_RENEWAL_INTERVAL
 
       begin
         key = RedisKey.gumhead_gateway_in_flight(current_resource_owner.id)
-        $redis.zadd(key, Time.current.to_f, @in_flight_lease_id)
+        $redis.zadd(key, Time.current.to_f, @in_flight_lease_id, xx: true)
         $redis.expire(key, IN_FLIGHT_TTL.to_i * 2)
       rescue Redis::BaseError => e
         Rails.logger.warn("Gumhead in-flight lease renewal failed: #{e.class} #{e.message}")
