@@ -310,15 +310,15 @@ class AudienceMember < ApplicationRecord
     seller.sales.select(:id, :email).find_each(batch_size:) { emails << _1.email.downcase }
     seller.followers.alive.select(:id, :email).find_each(batch_size:) { emails << _1.email.downcase }
     seller.direct_affiliates.alive.includes(:affiliate_user).select(:id, :affiliate_user_id).find_each(batch_size:) { emails << _1.affiliate_user.email.downcase }
-    # remove members that are no longer members
-    seller.audience_members.find_each { emails.member?(_1.email) || _1.destroy! }
+    # soft-delete members that no longer have a source
+    seller.audience_members.find_each { emails.member?(_1.email) || _1.soft_delete! }
     # create or update members
     emails.each { seller.audience_members.find_or_initialize_by(email: _1).refresh! }
     # return final count
-    seller.audience_members.count
+    seller.audience_members.active.count
   end
 
-  # Admin method: refreshes the details of a specific audience member, or deletes record if no longer a member.
+  # Admin method: refreshes the details of a specific audience member, or soft-deletes it if empty.
   def refresh!
     self.details = {}
     seller.sales.where(email:).find_each do |purchase|

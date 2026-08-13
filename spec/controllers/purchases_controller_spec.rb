@@ -1451,12 +1451,16 @@ describe PurchasesController, :vcr do
         product = create(:membership_product, user: seller)
         purchase = create(:membership_purchase, link: product, seller:)
         purchase.unsubscribe_buyer
-        expect(AudienceMember.find_by(email: purchase.email, seller_id: seller.id)).to be_nil
+        deleted_member = AudienceMember.find_by!(email: purchase.email, seller_id: seller.id)
+        expect(deleted_member.deleted_at).to be_present
+        expect(AudienceMember.active.where(id: deleted_member.id)).to be_empty
 
         post :subscribe, params: { id: purchase.external_id }
 
         expect(response).to be_successful
         member = AudienceMember.find_by(email: purchase.email, seller_id: seller.id)
+        expect(member.id).to eq(deleted_member.id)
+        expect(member.deleted_at).to be_nil
         expect(member.details["purchases"].map { _1["id"] }).to eq([purchase.id])
       end
 

@@ -1613,7 +1613,7 @@ class User < ApplicationRecord
         member = AudienceMember.find_by(seller_id:, email: email_previously_was, affiliate: true)
         next if member.nil?
         affiliate_details = member.details.delete("affiliates")
-        member.valid? ? member.save! : member.destroy!
+        member.valid? ? member.save! : member.soft_delete!
 
         new_member = AudienceMember.find_or_initialize_by(seller_id:, email:)
         new_member.details["affiliates"] = affiliate_details

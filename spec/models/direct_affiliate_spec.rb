@@ -592,7 +592,7 @@ describe DirectAffiliate do
       expect(member.details["affiliates"].map { _1["product_id"] }).to match_array(affiliate.products.map(&:id))
     end
 
-    it "removes member when product affiliation is removed" do
+    it "soft-deletes the member when its final product affiliation is removed" do
       member_relation = AudienceMember.where(seller: affiliate.seller, email: affiliate.affiliate_user.email)
       affiliate.products << create(:product, user: affiliate.seller)
       affiliate.products << create(:product, user: affiliate.seller)
@@ -607,12 +607,12 @@ describe DirectAffiliate do
 
       affiliate.products.delete(products.second)
 
-      expect do
-        member.reload
-      end.to raise_error(ActiveRecord::RecordNotFound)
+      expect(member.reload.deleted_at).to be_present
+      expect(member.details).to be_empty
+      expect(AudienceMember.active.where(id: member.id)).to be_empty
     end
 
-    it "removes the member when the affiliate user unsubscribes from a seller post" do
+    it "soft-deletes the member when the affiliate user unsubscribes from a seller post" do
       affiliate = create(:direct_affiliate)
       product = create(:product, user: affiliate.seller)
       affiliate.products << product
@@ -622,7 +622,9 @@ describe DirectAffiliate do
 
       affiliate.update(send_posts: false)
 
-      expect(member_relation.exists?).to eq(false)
+      expect(member_relation.exists?).to eq(true)
+      expect(member_relation.first.deleted_at).to be_present
+      expect(AudienceMember.active.where(id: member_relation.select(:id))).to be_empty
     end
   end
 

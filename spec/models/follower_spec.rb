@@ -304,17 +304,19 @@ RSpec.describe Follower do
       expect(member.details["purchases"]).to be_present
     end
 
-    it "removes audience member when marked as deleted with no other audience types" do
+    it "soft-deletes the audience member when marked as deleted with no other audience types" do
       follower = create(:active_follower)
       expect do
         follower.mark_deleted!
-      end.to change(AudienceMember, :count).by(-1)
+      end.not_to change(AudienceMember, :count)
 
       member = AudienceMember.find_by(email: follower.email, seller: follower.user)
-      expect(member).to be_nil
+      expect(member.deleted_at).to be_present
+      expect(member.details).to be_empty
+      expect(AudienceMember.active.where(id: member.id)).to be_empty
     end
 
-    it "recreates audience member when changing email" do
+    it "soft-deletes the old email and creates an audience member for the new email" do
       follower = create(:active_follower)
       old_email = follower.email
       new_email = "new@example.com"
@@ -322,7 +324,7 @@ RSpec.describe Follower do
 
       old_member = AudienceMember.find_by(email: old_email, seller: follower.user)
       new_member = AudienceMember.find_by(email: new_email, seller: follower.user)
-      expect(old_member).to be_nil
+      expect(old_member.deleted_at).to be_present
       expect(new_member).to be_present
     end
   end
