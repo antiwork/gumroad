@@ -202,20 +202,22 @@ RSpec.describe Purchase::AudienceMember do
   describe "a LockWaitTimeout on an existing audience_members row" do
     let!(:purchase) { create(:purchase, link: create(:product, user: seller), seller:, can_contact: true) }
 
-    it "does not raise from add_to_audience_member_details" do
+    it "does not raise from add_to_audience_member_details and enqueues a refresh" do
       allow_any_instance_of(AudienceMember).to receive(:save!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
       expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout))
 
       expect { purchase.send(:add_to_audience_member_details) }.not_to raise_error
+      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(purchase.email, seller.id)
     end
 
-    it "does not raise from remove_from_audience_member_details" do
+    it "does not raise from remove_from_audience_member_details and enqueues a refresh" do
       purchase.send(:add_to_audience_member_details)
       allow_any_instance_of(AudienceMember).to receive(:save!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
       allow_any_instance_of(AudienceMember).to receive(:destroy!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
       expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout))
 
       expect { purchase.send(:remove_from_audience_member_details) }.not_to raise_error
+      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(purchase.email, seller.id)
     end
   end
 end

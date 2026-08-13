@@ -92,6 +92,7 @@ module Purchase::AudienceMember
     # Concurrent writers already waited innodb_lock_wait_timeout on this row.
     # Retrying queues behind the same lock. The purchase write already committed.
     ErrorNotifier.notify(e)
+    RefreshAudienceMemberJob.perform_in(1.minute, email, seller_id)
   end
 
   def remove_from_audience_member_details(email = attributes["email"])
@@ -102,6 +103,7 @@ module Purchase::AudienceMember
     member.valid? ? member.save! : member.destroy!
   rescue ActiveRecord::LockWaitTimeout => e
     ErrorNotifier.notify(e)
+    RefreshAudienceMemberJob.perform_in(1.minute, email, seller_id)
   end
 
   # Rebuilds the buyer's whole audience_members row from live purchase/follower/affiliate

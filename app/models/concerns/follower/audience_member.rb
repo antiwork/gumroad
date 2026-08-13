@@ -35,6 +35,7 @@ module Follower::AudienceMember
     rescue ActiveRecord::LockWaitTimeout => e
       # See Purchase::AudienceMember#add_to_audience_member_details — do not retry.
       ErrorNotifier.notify(e)
+      RefreshAudienceMemberJob.perform_in(1.minute, email, followed_id)
     end
 
     def remove_from_audience_member_details(email = attributes["email"])
@@ -45,5 +46,6 @@ module Follower::AudienceMember
       member.valid? ? member.save! : member.destroy!
     rescue ActiveRecord::LockWaitTimeout => e
       ErrorNotifier.notify(e)
+      RefreshAudienceMemberJob.perform_in(1.minute, email, followed_id)
     end
 end
