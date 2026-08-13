@@ -445,10 +445,11 @@ export const DashboardPage = ({
                   Drop a folder on your Mac. Gumhead looks inside, tells you what could sell, drafts a product, and asks
                   before anything goes live.
                 </p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <NavigationButton href={gumhead.download_url} color="primary" target="_blank" rel="noreferrer">
                     Download for Mac
                   </NavigationButton>
+                  <span className="text-sm text-muted">Windows coming soon</span>
                 </div>
               </div>
             </CardContent>
