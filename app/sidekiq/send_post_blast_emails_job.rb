@@ -3,11 +3,10 @@
 class SendPostBlastEmailsJob
   include Sidekiq::Job
   include ActionView::Helpers::SanitizeHelper
-  # Deliberately no `lock: :until_executed`. The digest keys on the blast id, and every caller
-  # creates a fresh blast row before enqueuing, so it never deduplicated anything — but a hard-killed
-  # worker skips its release, and the held digest then drops every later `perform_async` for that
-  # blast silently, which is what made the documented recovery a no-op (gumroad-private#1816).
-  sidekiq_options retry: 10, queue: :default
+  # Lock only while executing: recovery must be enqueueable after a hard kill, while two live
+  # attempts for the same blast must never send concurrently. The TTL releases an orphaned lock.
+  sidekiq_options retry: 10, queue: :default, lock: :while_executing, lock_ttl: 6.hours.to_i,
+                  lock_timeout: 2, on_conflict: { server: :raise }
 
   def perform(blast_id)
     @blast = PostEmailBlast.find(blast_id)
