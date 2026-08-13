@@ -7,6 +7,7 @@ class PostToIndividualPingEndpointWorker
   ERROR_CODES_TO_RETRY = [499, 500, 502, 503, 504].freeze
   BACKOFF_STRATEGY = [60, 180, 600, 3600].freeze
   REQUEST_TIMEOUT_SECONDS = 5
+  MAX_REDIRECTS = 3
 
   def perform(post_url, params, content_type = Mime[:url_encoded_form].to_s, user_id = nil)
     retry_count = params["retry_count"] || 0
@@ -24,8 +25,11 @@ class PostToIndividualPingEndpointWorker
     options = {
       body:,
       headers: { "Content-Type" => content_type },
-      # Refuse redirects, but get the 3xx back (instead of a raise) so it can be logged.
-      max_redirects: 0,
+      # Endpoints commonly answer with trailing-slash/https normalization redirects (gp#2058:
+      # refusing them silently dropped sale pings), so follow a few — SsrfFilter re-validates
+      # every hop's resolved IPs, and the same POST body is re-sent on each hop. Past the limit
+      # we want the 3xx back (instead of a raise) so it can be logged.
+      max_redirects: MAX_REDIRECTS,
       allow_unfollowed_redirects: true,
       http_options: { open_timeout: REQUEST_TIMEOUT_SECONDS, read_timeout: REQUEST_TIMEOUT_SECONDS }
     }
@@ -41,7 +45,7 @@ class PostToIndividualPingEndpointWorker
     response = SsrfFilter.post(post_url, options)
 
     if response.is_a?(Net::HTTPRedirection)
-      Rails.logger.info("PostToIndividualPingEndpointWorker refused redirect response=#{response.code} content_type=#{content_type} user_id=#{user_id}")
+      Rails.logger.info("PostToIndividualPingEndpointWorker exhausted redirect limit response=#{response.code} content_type=#{content_type} user_id=#{user_id}")
       return
     end
 
