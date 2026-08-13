@@ -202,6 +202,23 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(400)
     end
 
+    it "requires streaming for outputs over the buffered ceiling" do
+      post_messages(request_payload.merge(max_tokens: described_class::MAX_BUFFERED_OUTPUT_TOKENS + 1))
+
+      expect(response.status).to eq(400)
+      expect(JSON.parse(response.body)["error"]["message"]).to include("stream")
+    end
+
+    it "allows large outputs when streaming" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(max_tokens: described_class::MAX_TOKENS_PER_REQUEST, stream: true))
+
+      expect(response.status).to eq(200)
+      expect(WebMock).to have_requested(:post, messages_url)
+    end
+
     it "rejects pricing modifiers the ledger cannot weight" do
       post_messages(request_payload.merge(speed: "fast"))
       expect(response.status).to eq(400)
@@ -270,15 +287,15 @@ describe Api::V2::Gumhead::MessagesController do
       expect(JSON.parse(response.body)["error"]["type"]).to eq("api_error")
     end
 
-    it "charges the worst case when the upstream call times out" do
+    # No response headers means no evidence Anthropic received the request;
+    # the buffered output ceiling keeps the uncharged worst case small.
+    it "charges nothing for a timeout before response headers" do
       stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
 
       post_messages
 
       expect(response.status).to eq(502)
-      event = GumheadUsageEvent.sole
-      expect(event.output_tokens).to eq(request_payload[:max_tokens])
-      expect(event.input_tokens).to be > 0
+      expect(GumheadUsageEvent.count).to eq(0)
     end
 
     it "charges nothing when the connection itself times out" do

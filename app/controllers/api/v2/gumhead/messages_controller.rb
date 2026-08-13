@@ -51,6 +51,12 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # document a limit requests can never reach.
   MAX_BODY_BYTES = 10.megabytes
   MAX_TOKENS_PER_REQUEST = 64_000
+  # A non-streaming response arrives only after the whole generation, so a
+  # large buffered generation and a network stall are indistinguishable at
+  # timeout — one must be charged, the other must not. Keeping buffered
+  # outputs small removes the ambiguity: big outputs must stream, and
+  # streams meter incrementally.
+  MAX_BUFFERED_OUTPUT_TOKENS = 8_192
   # Below nginx's proxy_read_timeout and the Rack service timeout (both
   # 120s): those clocks start before this one, and an upstream deadline
   # equal to them would let the outer layers cut the client before the
@@ -260,9 +266,12 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def validate_max_tokens
       max_tokens = @body["max_tokens"]
       return if max_tokens.nil?
-      return if max_tokens.is_a?(Integer) && max_tokens.positive? && max_tokens <= MAX_TOKENS_PER_REQUEST
+      unless max_tokens.is_a?(Integer) && max_tokens.positive? && max_tokens <= MAX_TOKENS_PER_REQUEST
+        return render json: anthropic_error("invalid_request_error", "max_tokens must be a positive integer no greater than #{MAX_TOKENS_PER_REQUEST} on the Gumhead gateway."), status: :bad_request
+      end
+      return if @body["stream"] == true || max_tokens <= MAX_BUFFERED_OUTPUT_TOKENS
 
-      render json: anthropic_error("invalid_request_error", "max_tokens must be a positive integer no greater than #{MAX_TOKENS_PER_REQUEST} on the Gumhead gateway."), status: :bad_request
+      render json: anthropic_error("invalid_request_error", "Set stream: true for outputs larger than #{MAX_BUFFERED_OUTPUT_TOKENS} tokens on the Gumhead gateway."), status: :bad_request
     end
 
     def enforce_daily_token_caps
@@ -279,29 +288,17 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       body = upstream.body.to_s
       meter_buffered_usage(body) if meter && upstream.status.success?
       render body:, content_type: "application/json", status: upstream.status.code
-    rescue HTTP::ConnectTimeoutError => e
-      # Subclass of HTTP::TimeoutError, so it must be rescued first: the
-      # request never reached Anthropic, and charging worst-case output for
-      # a failed connection would falsely exhaust the daily cap.
-      Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
-      render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
-    rescue HTTP::TimeoutError => e
-      Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
-      # A post-dispatch timeout means the generation likely kept running
-      # (and billing) after we stopped waiting. Charge the worst case — the
-      # prompt floor (~4 bytes per token) plus the full max_tokens — so
-      # repeated deliberate timeouts cannot spend the shared key outside
-      # the caps.
-      if meter
-        record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4, "output_tokens" => @body["max_tokens"].to_i })
-      end
-      render json: anthropic_error("api_error", "The model service timed out."), status: :bad_gateway
     rescue HTTP::Error => e
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
-      # A success status whose body was lost mid-read was still generated
-      # and billed upstream. Charge the prompt floor plus the request's
-      # maximum output, mirroring the timeout branch, so the failure is not
-      # free against either cap.
+      # Charge only on evidence of dispatch: received success headers mean
+      # Anthropic generated (and billed) a response whose body was then
+      # lost, so the prompt floor (~4 bytes per token) plus the request's
+      # maximum output is recorded — bounded small by
+      # MAX_BUFFERED_OUTPUT_TOKENS. A failure before headers (connect, TLS,
+      # write, or timeout) charges nothing: it usually never reached
+      # Anthropic, and the buffered output ceiling keeps the uncharged
+      # worst case small. Large generations must stream and are metered
+      # incrementally there.
       if meter && upstream&.status&.success?
         record_usage!(model: @body["model"], usage: { "input_tokens" => @raw_body.bytesize / 4, "output_tokens" => @body["max_tokens"].to_i })
       end
