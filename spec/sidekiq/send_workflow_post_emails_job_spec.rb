@@ -188,7 +188,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
     it "recovers a follower id hidden by purchase filters" do
       product = create(:product, user: @seller, price_cents: 0)
       purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 3.days.ago)
-      purchase.add_to_audience_member_details
+      purchase.rebuild_audience_member_details
       @post.update!(installment_type: Installment::FOLLOWER_TYPE, bought_products: [product.unique_permalink])
       @basic_follower.update_columns(created_at: 3.days.ago)
       @basic_follower.update!(confirmed_at: 1.hour.ago.change(usec: 0))
@@ -209,7 +209,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
     it "recovers a follower in range when the required purchase predates the range" do
       product = create(:product, user: @seller, price_cents: 0)
       purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 3.days.ago)
-      purchase.add_to_audience_member_details
+      purchase.rebuild_audience_member_details
       @post.update!(created_after: 3.days.ago, bought_products: [product.unique_permalink])
       @basic_follower.update!(confirmed_at: 1.hour.ago.change(usec: 0))
 
@@ -229,7 +229,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
     it "preserves a qualifying purchase for an audience workflow" do
       product = create(:product, user: @seller, price_cents: 0)
       purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 30.minutes.ago)
-      purchase.add_to_audience_member_details
+      purchase.rebuild_audience_member_details
       @basic_follower.update_columns(created_at: 3.days.ago)
       @basic_follower.update!(confirmed_at: 1.hour.ago.change(usec: 0))
 
@@ -248,7 +248,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
     it "keeps workflow date filters on the follower identity" do
       product = create(:product, user: @seller, price_cents: 0)
       purchase = create(:free_purchase, link: product, email: @basic_follower.email, created_at: 36.hours.ago)
-      purchase.add_to_audience_member_details
+      purchase.rebuild_audience_member_details
       @post.update!(created_after: 2.days.ago)
       @basic_follower.update_columns(created_at: 3.days.ago)
       @basic_follower.update!(confirmed_at: 1.hour.ago.change(usec: 0))
@@ -492,7 +492,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
     it "preserves the purchase trigger time" do
       purchase = create(:free_purchase, link: @product, created_at: 2.hours.ago)
-      purchase.add_to_audience_member_details
+      purchase.rebuild_audience_member_details
       reference_time = purchase.created_at.change(usec: 0)
 
       described_class.new.perform(@post.id, nil, true, @post_rule.version)
@@ -511,10 +511,10 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
     it "schedules only the older purchase that matches the product filter" do
       email = "filtered-buyer@example.com"
       matching_purchase = create(:free_purchase, link: @product, email:, created_at: 2.hours.ago)
-      matching_purchase.add_to_audience_member_details
+      matching_purchase.rebuild_audience_member_details
       other_product = create(:product, user: @seller, price_cents: 0)
       nonmatching_purchase = create(:free_purchase, link: other_product, email:, created_at: 1.hour.ago)
-      nonmatching_purchase.add_to_audience_member_details
+      nonmatching_purchase.rebuild_audience_member_details
 
       member = AudienceMember.filter(
         seller_id: @post.seller_id,
@@ -567,7 +567,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
     it "keeps a later configured recipient cutoff" do
       @post.update!(created_after: 1.day.ago.to_date.iso8601)
       purchase = create(:free_purchase, link: @product, created_at: 2.days.ago)
-      purchase.add_to_audience_member_details
+      purchase.rebuild_audience_member_details
 
       described_class.new.perform(@post.id, 3.days.ago.iso8601, true, @post_rule.version)
 
@@ -578,7 +578,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       published_at = Time.current.change(usec: 0)
       @post.update!(published_at:, is_for_new_customers_of_workflow: true)
       purchase = create(:free_purchase, link: @product, created_at: published_at)
-      purchase.add_to_audience_member_details
+      purchase.rebuild_audience_member_details
 
       described_class.new.perform(@post.id, published_at.iso8601, true, @post_rule.version)
 

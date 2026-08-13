@@ -107,7 +107,7 @@ describe SendWorkflowInstallmentWorker do
       )
       @reschedule_rule = create(:installment_rule, installment: @reschedule_installment, delayed_delivery_time: 1.day)
       @reschedule_purchase = create(:free_purchase, link: @reschedule_product, created_at: 2.days.ago)
-      @reschedule_purchase.add_to_audience_member_details
+      @reschedule_purchase.rebuild_audience_member_details
       @reschedule_reference_time = @reschedule_purchase.created_at.change(usec: 0)
     end
 
@@ -182,7 +182,7 @@ describe SendWorkflowInstallmentWorker do
       )
       create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: 9.days.ago)
       create(:subscription_event, subscription:, event_type: :restarted, occurred_at: 1.day.ago)
-      purchase.add_to_audience_member_details
+      purchase.rebuild_audience_member_details
       stale_version = @reschedule_rule.version
       @reschedule_rule.update!(delayed_delivery_time: 3.days)
       reference_time = @reschedule_installment.workflow_delivery_reference_time(purchase).change(usec: 0)
@@ -263,7 +263,7 @@ describe SendWorkflowInstallmentWorker do
     it "does not let a purchase mask a follower outside the workflow dates" do
       product = create(:product, user: @user, price_cents: 0)
       purchase = create(:free_purchase, link: product, email: @follower.email, created_at: 1.day.ago)
-      purchase.add_to_audience_member_details
+      purchase.rebuild_audience_member_details
       @installment.update!(created_after: 2.days.ago)
       @follower.update_columns(created_at: 3.days.ago, confirmed_at: 1.hour.ago.change(usec: 0))
       expect(PostSendgridApi).not_to receive(:process)
@@ -282,7 +282,7 @@ describe SendWorkflowInstallmentWorker do
     it "matches a follower in range when the required purchase predates the range" do
       product = create(:product, user: @user, price_cents: 0)
       purchase = create(:free_purchase, link: product, email: @follower.email, created_at: 3.days.ago)
-      purchase.add_to_audience_member_details
+      purchase.rebuild_audience_member_details
       @installment.update!(created_after: 2.days.ago, bought_products: [product.unique_permalink])
       @follower.update_columns(created_at: 1.day.ago, confirmed_at: 1.hour.ago.change(usec: 0))
       allow(PostSendgridApi).to receive(:process)

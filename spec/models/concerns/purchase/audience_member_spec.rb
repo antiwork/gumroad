@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-RSpec.describe Purchase::AudienceMember do
+RSpec.describe Purchase::AudienceMember, defer_audience_refresh: true do
   let(:seller) { create(:user) }
   let(:product) { create(:membership_product, user: seller) }
 
@@ -10,16 +10,76 @@ RSpec.describe Purchase::AudienceMember do
     AudienceMember.find_by(email: purchase.email, seller_id: seller.id)
   end
 
+  # The projection is rebuilt out of band. Specs drain the queued refreshes to observe the
+  # converged state.
+  def drain_audience_refreshes
+    jobs = RefreshAudienceMemberJob.jobs.dup
+    RefreshAudienceMemberJob.clear
+    jobs.map { _1["args"] }.uniq.each { RefreshAudienceMemberJob.new.perform(*_1) }
+  end
+
+  describe "scheduling" do
+    it "schedules a refresh when a purchase is created" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+
+      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(purchase.email, seller.id)
+
+      drain_audience_refreshes
+      member = audience_member_for(purchase)
+      expect(member).to be_present
+      expect(member.details["purchases"].map { _1["id"] }).to eq([purchase.id])
+    end
+
+    it "does not schedule a refresh for saves that cannot affect the audience" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      drain_audience_refreshes
+
+      purchase.reload.update!(referrer: "https://example.com")
+
+      expect(RefreshAudienceMemberJob.jobs).to be_empty
+    end
+
+    it "schedules refreshes for both emails when the purchase email changes" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      drain_audience_refreshes
+      old_email = purchase.email
+
+      purchase.reload.update!(email: "new-address@example.com")
+
+      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(old_email, seller.id)
+      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job("new-address@example.com", seller.id)
+
+      drain_audience_refreshes
+      expect(AudienceMember.find_by(email: old_email, seller:)).to be_nil
+      expect(AudienceMember.find_by(email: "new-address@example.com", seller:)).to be_present
+    end
+
+    it "schedules a refresh when a purchase is destroyed" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      drain_audience_refreshes
+      expect(audience_member_for(purchase)).to be_present
+
+      purchase.destroy!
+      drain_audience_refreshes
+
+      expect(audience_member_for(purchase)).to be_nil
+    end
+  end
+
   describe "re-subscribing after an unsubscribe" do
     let!(:original_purchase) { create(:membership_purchase, link: product, seller:) }
+
+    before { drain_audience_refreshes }
 
     it "rebuilds the audience member row that unsubscribing destroyed" do
       expect(audience_member_for(original_purchase)).to be_present
 
       original_purchase.unsubscribe_buyer
+      drain_audience_refreshes
       expect(audience_member_for(original_purchase)).to be_nil
 
       original_purchase.reload.update!(can_contact: true)
+      drain_audience_refreshes
 
       member = audience_member_for(original_purchase)
       expect(member).to be_present
@@ -29,9 +89,11 @@ RSpec.describe Purchase::AudienceMember do
 
     it "puts the buyer back in the seller's audience filter results" do
       original_purchase.unsubscribe_buyer
+      drain_audience_refreshes
       expect(AudienceMember.filter(seller_id: seller.id, params: { bought_product_ids: [product.id] })).to be_empty
 
       original_purchase.reload.update!(can_contact: true)
+      drain_audience_refreshes
 
       expect(AudienceMember.filter(seller_id: seller.id, params: { bought_product_ids: [product.id] }).map(&:email))
         .to eq([original_purchase.email])
@@ -42,16 +104,18 @@ RSpec.describe Purchase::AudienceMember do
                                              subscription: original_purchase.subscription,
                                              is_original_subscription_purchase: false)
       renewal.update!(can_contact: false)
+      drain_audience_refreshes
       # The mixed state seen in production: the original purchase reads as contactable, so a
       # spot-check looks fine, but its audience row was destroyed while it was unsubscribed and
-      # nothing ever saved that purchase again to rebuild it.
-      audience_member_for(original_purchase).destroy!
+      # nothing ever rebuilt it.
+      audience_member_for(original_purchase)&.destroy!
       expect(original_purchase.reload.can_contact?).to be(true)
 
-      # A renewal charge is never an audience member in its own right, so adding just this row
-      # back would contribute nothing and the buyer would stay invisible.
+      # A renewal charge is never an audience member in its own right, but the refresh rebuilds
+      # the whole row from live state, so the original purchase comes back with it.
       expect(renewal.reload.should_be_audience_member?).to be(false)
       renewal.update!(can_contact: true)
+      drain_audience_refreshes
 
       member = audience_member_for(original_purchase)
       expect(member).to be_present
@@ -60,74 +124,14 @@ RSpec.describe Purchase::AudienceMember do
 
     it "does not resurrect a row for a buyer who is still unsubscribed" do
       original_purchase.unsubscribe_buyer
+      drain_audience_refreshes
 
       # Save a change to another attribute the callback watches, with can_contact still false.
-      # Re-saving can_contact: false alone would be a no-op save, so the callback would bail at
-      # its first guard and the example would pass without exercising anything.
       original_purchase.reload.update!(is_access_revoked: true)
+      drain_audience_refreshes
 
       expect(original_purchase.reload.can_contact?).to be(false)
       expect(audience_member_for(original_purchase)).to be_nil
-    end
-
-    it "does not pay for a rebuild when the buyer is being unsubscribed" do
-      # Rebuilding is self-correcting, so an unsubscribe would still end up with the right
-      # (absent) row — but it would re-read every purchase the buyer has to get there. The
-      # can_contact? condition keeps the expensive path on the re-subscribe side only.
-      allow(AudienceMember).to receive(:find_or_initialize_by).and_call_original
-
-      original_purchase.unsubscribe_buyer
-
-      expect(audience_member_for(original_purchase)).to be_nil
-      expect(AudienceMember).not_to have_received(:find_or_initialize_by)
-    end
-  end
-
-  describe ".deferring_audience_member_rebuilds" do
-    let!(:original_purchase) { create(:membership_purchase, link: product, seller:) }
-
-    it "rebuilds once for the buyer instead of once per purchase row" do
-      4.times { create(:purchase, link: create(:product, user: seller), seller:, email: original_purchase.email) }
-      original_purchase.unsubscribe_buyer
-
-      allow(AudienceMember).to receive(:find_or_initialize_by).and_call_original
-
-      Purchase.deferring_audience_member_rebuilds do
-        Purchase.where(email: original_purchase.email, seller_id: seller.id, can_contact: false).find_each do |purchase|
-          purchase.update!(can_contact: true)
-        end
-        # Nothing is rebuilt until the block finishes.
-        expect(audience_member_for(original_purchase)).to be_nil
-      end
-
-      member = audience_member_for(original_purchase)
-      expect(member.details["purchases"].size).to eq(5)
-      expect(AudienceMember).to have_received(:find_or_initialize_by).once
-    end
-
-    it "rebuilds immediately when there is no block in progress" do
-      original_purchase.unsubscribe_buyer
-
-      original_purchase.reload.update!(can_contact: true)
-
-      expect(audience_member_for(original_purchase)).to be_present
-    end
-
-    it "still rebuilds when the block raises partway through" do
-      other = create(:purchase, link: create(:product, user: seller), seller:, email: original_purchase.email)
-      original_purchase.unsubscribe_buyer
-
-      expect do
-        Purchase.deferring_audience_member_rebuilds do
-          original_purchase.reload.update!(can_contact: true)
-          raise "boom"
-        end
-      end.to raise_error("boom")
-
-      # The block bailed out, so the rebuild did not run — but the deferral state must not leak
-      # into later saves, which have to rebuild immediately again.
-      other.reload.update!(can_contact: true)
-      expect(audience_member_for(original_purchase)).to be_present
     end
   end
 
@@ -135,8 +139,10 @@ RSpec.describe Purchase::AudienceMember do
     it "stays uncontactable for one-off purchases" do
       first = create(:purchase, link: create(:product, user: seller), seller:)
       first.unsubscribe_buyer
+      drain_audience_refreshes
 
       second = create(:purchase, link: create(:product, user: seller), seller:, email: first.email)
+      drain_audience_refreshes
 
       expect(second.can_contact?).to be(false)
       expect(audience_member_for(first)).to be_nil
@@ -155,6 +161,7 @@ RSpec.describe Purchase::AudienceMember do
       renewal = create(:membership_purchase, link: product, seller:, email: original_purchase.email,
                                              subscription: original_purchase.subscription,
                                              is_original_subscription_purchase: false)
+      drain_audience_refreshes
 
       expect(renewal.can_contact?).to be(true)
       member = audience_member_for(original_purchase)
@@ -162,62 +169,22 @@ RSpec.describe Purchase::AudienceMember do
     end
   end
 
-  describe "a concurrent insert race on the same (seller, email) pair" do
-    let!(:purchase) { create(:purchase, link: create(:product, user: seller), seller:, can_contact: true) }
+  describe "RefreshAudienceMemberJob" do
+    it "removes a row whose buyer no longer qualifies" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      drain_audience_refreshes
+      expect(audience_member_for(purchase)).to be_present
 
-    it "retries once and updates the winner's row instead of raising" do
-      # Simulate losing the insert race: a concurrent process's insert (the "winner") lands
-      # between this process's find_or_initialize_by and its own save!, so the first save!
-      # raises RecordNotUnique. The winner row is inserted via `insert_all` (not `create!`) so
-      # it doesn't also trip the `save!` stub below. Stubbing save! rather than
-      # find_or_initialize_by exercises the real retry lookup, including the `.lock` it takes
-      # on the second pass.
-      save_count = 0
-      allow_any_instance_of(AudienceMember).to receive(:save!).and_wrap_original do |original|
-        save_count += 1
-        if save_count == 1
-          AudienceMember.insert_all([{ seller_id: seller.id, email: purchase.email,
-                                       details: { "follower" => { "id" => 1, "created_at" => Time.current.iso8601 } },
-                                       created_at: Time.current, updated_at: Time.current }])
-          raise ActiveRecord::RecordNotUnique, "boom"
-        end
-        original.call
-      end
+      purchase.update_columns(stripe_refunded: true)
+      RefreshAudienceMemberJob.new.perform(purchase.email, seller.id)
 
-      expect { purchase.send(:add_to_audience_member_details) }.not_to raise_error
-
-      member = audience_member_for(purchase)
-      expect(member).to be_present
-      expect(member.details["purchases"].map { _1["id"] }).to include(purchase.id)
-      expect(save_count).to eq(2)
+      expect(audience_member_for(purchase)).to be_nil
     end
 
-    it "raises if the race persists past the single retry" do
-      allow_any_instance_of(AudienceMember).to receive(:save!).and_raise(ActiveRecord::RecordNotUnique, "boom")
-
-      expect { purchase.send(:add_to_audience_member_details) }.to raise_error(ActiveRecord::RecordNotUnique)
-    end
-  end
-
-  describe "a LockWaitTimeout on an existing audience_members row" do
-    let!(:purchase) { create(:purchase, link: create(:product, user: seller), seller:, can_contact: true) }
-
-    it "does not raise from add_to_audience_member_details and enqueues a refresh" do
-      allow_any_instance_of(AudienceMember).to receive(:save!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
-      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout))
-
-      expect { purchase.send(:add_to_audience_member_details) }.not_to raise_error
-      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(purchase.email, seller.id)
-    end
-
-    it "does not raise from remove_from_audience_member_details and enqueues a refresh" do
-      purchase.send(:add_to_audience_member_details)
-      allow_any_instance_of(AudienceMember).to receive(:save!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
-      allow_any_instance_of(AudienceMember).to receive(:destroy!).and_raise(ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded")
-      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout))
-
-      expect { purchase.send(:remove_from_audience_member_details) }.not_to raise_error
-      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(purchase.email, seller.id)
+    it "is a no-op for an email with no qualifying records and no existing row" do
+      expect do
+        RefreshAudienceMemberJob.new.perform("nobody@example.com", seller.id)
+      end.not_to change(AudienceMember, :count)
     end
   end
 end
