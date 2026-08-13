@@ -178,6 +178,21 @@ describe AlertOnStalledPostEmailBlastsJob do
         end
       end
 
+      it "holds the blast when a concurrent run wins the NX claim between the check and the resume" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        stub_sidekiq
+        marker = RedisKey.stalled_blast_auto_resumed(blast.id)
+        allow($redis).to receive(:exists?).with(marker).and_return(false)
+        allow($redis).to receive(:set).with(marker, anything, hash_including(nx: true)).and_return(false)
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+          expect(message).to match(/blast #{blast.id}.*HELD \(already auto-resumed/)
+        end
+      end
+
       it "does not touch RUNNING, QUEUED, or RETRYING blasts" do
         running = stalled_blast
         queued_blast = stalled_blast(post: create(:installment))

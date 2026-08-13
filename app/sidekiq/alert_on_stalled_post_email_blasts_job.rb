@@ -88,21 +88,23 @@ class AlertOnStalledPostEmailBlastsJob
       return :held_already_resumed if $redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))
       return :would_resume unless live
 
-      resume(entry)
-      :resumed
+      resume(entry) ? :resumed : :held_already_resumed
     end
 
     def resume(entry)
       blast = entry[:blast]
-      # Marked before the resume so a crash between the two holds the blast for a human instead of
-      # risking a second automated resume of a blast in an unknown state.
-      $redis.set(RedisKey.stalled_blast_auto_resumed(blast.id), Time.current.iso8601, ex: LOOKBACK.to_i)
+      # Atomic NX claim, written before the resume: overlapping runs cannot both claim the same
+      # blast, and a crash between claim and resume holds the blast for a human instead of risking
+      # a second automated resume of a blast in an unknown state.
+      claimed = $redis.set(RedisKey.stalled_blast_auto_resumed(blast.id), Time.current.iso8601, nx: true, ex: LOOKBACK.to_i)
+      return false unless claimed
 
       if entry[:disposition] == :dead
         @dead_entries.fetch(blast.id).retry
       else
         SendPostBlastEmailsJob.perform_async(blast.id)
       end
+      true
     end
 
     def dead_blast_entries
