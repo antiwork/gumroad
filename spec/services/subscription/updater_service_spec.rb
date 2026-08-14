@@ -3493,7 +3493,7 @@ describe Subscription::UpdaterService, :vcr do
     end
 
     it "requires a replacement mandate when a temporary discount makes the current price zero" do
-      allow(service).to receive(:current_subscription_price_cents).and_return(0)
+      allow(subscription).to receive(:current_subscription_price_cents).and_return(0)
       allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(10_00)
       original_purchase.create_purchase_offer_code_discount!(
         offer_code: create(:offer_code, products: [product]),
@@ -3510,7 +3510,7 @@ describe Subscription::UpdaterService, :vcr do
     end
 
     it "does not require a replacement mandate when a permanent discount makes every renewal free" do
-      allow(service).to receive(:current_subscription_price_cents).and_return(0)
+      allow(subscription).to receive(:current_subscription_price_cents).and_return(0)
       allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(10_00)
       original_purchase.create_purchase_offer_code_discount!(
         offer_code: create(:offer_code, products: [product]),

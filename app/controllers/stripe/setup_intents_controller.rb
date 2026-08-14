@@ -132,13 +132,14 @@ class Stripe::SetupIntentsController < ApplicationController
     end
 
     def restartable_checkout_subscription
-      recurring_product_params = product_params_list.filter_map do |product_params|
+      future_charge_product_params = product_params_list.filter_map do |product_params|
         product = Link.find_by(unique_permalink: product_params["permalink"]) if product_params["permalink"].present?
-        [product, product_params] if product&.is_recurring_billing
+        [product, product_params] if product_requires_future_authorization?(product)
       end
-      return unless recurring_product_params.one?
+      return unless future_charge_product_params.one?
 
-      product, product_params = recurring_product_params.first
+      product, product_params = future_charge_product_params.first
+      return unless product.is_recurring_billing?
       return if ActiveModel::Type::Boolean.new.cast(product_params["force_new_subscription"])
 
       subscription = if logged_in_user.present?
@@ -147,6 +148,15 @@ class Stripe::SetupIntentsController < ApplicationController
         Subscription.restartable_for_product_and_email(product:, email: params[:email])
       end
       subscription if subscription&.india_card_mandate_reliability_enabled?
+    end
+
+    def product_requires_future_authorization?(product)
+      product.present? && (
+        product.is_recurring_billing? ||
+        product.is_in_preorder_state? ||
+        product.native_type == Link::NATIVE_TYPE_COMMISSION ||
+        product.installment_plan.present?
+      )
     end
 
     def product_params

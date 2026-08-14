@@ -166,6 +166,23 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(controller.send(:authenticated_subscription)).to be_nil
       end
 
+      it "does not bind a restart setup intent when a preorder also needs future authorization" do
+        restart_product = create(:subscription_product)
+        preorder_product = create(:product, is_in_preorder_state: true)
+        allow(controller).to receive(:params).and_return(
+          ActionController::Parameters.new(
+            email: "buyer@example.com",
+            products: [
+              { price: restart_product.price_cents, permalink: restart_product.unique_permalink },
+              { price: preorder_product.price_cents, permalink: preorder_product.unique_permalink }
+            ]
+          )
+        )
+        expect(Subscription).not_to receive(:restartable_for_product_and_email)
+
+        expect(controller.send(:authenticated_subscription)).to be_nil
+      end
+
       context "when setup intent succeeds" do
         it "renders a successful response" do
           post :create, params: StripePaymentMethodHelper.success_with_sca.to_stripejs_params

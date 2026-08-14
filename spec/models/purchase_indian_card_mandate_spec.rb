@@ -528,6 +528,24 @@ describe "Indian card mandate reliability" do
     expect(subscription).to be_alive
   end
 
+  it "shows the payment update state during a temporary free renewal" do
+    registration = create_registration
+    registration.update!(displayed_price_cents: 0)
+    registration.create_purchase_offer_code_discount!(
+      offer_code: create(:offer_code, products: [product]),
+      offer_code_amount: 100,
+      offer_code_is_percent: true,
+      pre_discount_minimum_price_cents: 10_00,
+      duration_in_billing_cycles: 2
+    )
+    subscription = registration.subscription.reload
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+
+    expect(subscription.current_subscription_price_cents).to eq(0)
+    expect(subscription).to be_future_subscription_charge
+    expect(subscription.status).to eq("payment_method_update_required")
+  end
+
   it "does not let an old active registration clear a plan reauthorization" do
     registration = create_registration
     subscription = registration.subscription

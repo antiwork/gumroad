@@ -409,11 +409,7 @@ class Subscription::UpdaterService
     end
 
     def future_subscription_charge?
-      return false if subscription.charges_completed?
-      return true if current_subscription_price_cents.positive?
-
-      discount = subscription.original_purchase.purchase_offer_code_discount
-      discount&.duration_in_billing_cycles.present? && subscription.renewal_pre_discount_total_cents.positive?
+      subscription.future_subscription_charge?(authenticated_offer_code_buyer: logged_in_user)
     end
 
     def saved_card_update_requires_reauthorization?(previous_terms, plan_or_price_changed:, mandate_billing_info_changed:)

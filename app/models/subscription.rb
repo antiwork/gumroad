@@ -546,6 +546,14 @@ class Subscription < ApplicationRecord
     { amount:, currency:, interval:, interval_count: }
   end
 
+  def future_subscription_charge?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    return false if charges_completed?
+    return true if current_subscription_price_cents(authenticated_offer_code_buyer:).positive?
+
+    discount = original_purchase&.purchase_offer_code_discount
+    discount&.duration_in_billing_cycles.present? && renewal_pre_discount_total_cents.positive?
+  end
+
   def indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: nil)
     displayed_price_cents = purchase.mandate_maximum_displayed_price_cents
     displayed_price_cents = renewal_price_cents if displayed_price_cents.zero?
@@ -1298,7 +1306,7 @@ class Subscription < ApplicationRecord
     elsif pending_cancellation?
       "pending_cancellation"
     elsif renewal_disabled_due_to_indian_card_mandate? && india_card_mandate_reliability_enabled? &&
-          (original_purchase.nil? || current_subscription_price_cents.positive?)
+          (original_purchase.nil? || future_subscription_charge?)
       "payment_method_update_required"
     elsif pending_failure?
       "pending_failure"
