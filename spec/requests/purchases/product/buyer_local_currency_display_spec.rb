@@ -104,7 +104,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       add_to_cart(@product)
       check_out(@product) do
         expect(page).to have_text("US$10", normalize_ws: true)
-        expect(page).to have_no_text("Total €")
+        within("[data-checkout-price-rows]") { expect(page).to have_no_text("€") }
       end
 
       purchase = Purchase.successful.last
@@ -266,7 +266,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       check_out(@product, zip_code: nil, credit_card: { number: "4000003800000008" }) do
         expect(page).to have_text("VAT US$2.20", normalize_ws: true)
         expect(page).to have_text("Total US$12.20", normalize_ws: true)
-        expect(page).to have_no_text("Total €")
+        within("[data-checkout-price-rows]") { expect(page).to have_no_text("€") }
       end
 
       purchase = Purchase.successful.last

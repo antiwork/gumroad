@@ -406,7 +406,10 @@ export const Checkout = ({
                     />
                   </div>
                 ) : null}
-                <div className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}>
+                <div
+                  className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}
+                  data-checkout-price-rows="true"
+                >
                   {state.surcharges.type === "loaded" ? (
                     <>
                       <CartPriceItem
