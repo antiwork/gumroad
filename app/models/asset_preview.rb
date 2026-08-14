@@ -110,6 +110,11 @@ class AssetPreview < ApplicationRecord
 
   IMAGE_PROCESSING_TIMEOUT_SECONDS = 30
 
+  # The cover's retina copy, processed. Only ever reached from background work
+  # (GenerateRetinaAssetPreviewWorker / backfills) and from tests: building the
+  # resized copy of a large original runs ImageMagick long enough to blow the
+  # web request timeout (see #retina_url). The processing is bounded by a
+  # timeout so a stuck convert can't hold a worker.
   def retina_variant
     return unless file.attached?
     Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
@@ -311,7 +316,7 @@ class AssetPreview < ApplicationRecord
     return nil unless blob&.preview_image&.attached?
 
     variant = blob.preview_image.variant(resize_to_limit: [retina_width || RETINA_DISPLAY_WIDTH, nil])
-    return nil unless process || resized_poster_exists?(variant)
+    return nil unless process || resized_variant_exists?(variant)
 
     cdn_url_for(variant.processed.url)
   rescue StandardError => e
@@ -390,15 +395,55 @@ class AssetPreview < ApplicationRecord
 
     style ||= default_style
 
-    Rails.cache.fetch("attachment_#{file.id}_#{style}_url") do
-      if style == :retina
-        retina_variant.url
-      else
-        file.url
-      end
-    end
+    style == :retina ? retina_url : file.url
   rescue
     file.url
+  end
+
+  # The URL of the cover's retina copy, or the original file's URL when the
+  # retina copy isn't ready yet. Never runs ImageMagick on a web request:
+  # building the resized copy of a large original (a real case was a 254 MB,
+  # 18000px-wide PNG) can run past Rack::Timeout and 500 every product page.
+  # When the copy doesn't exist, serve the original and enqueue
+  # GenerateRetinaAssetPreviewWorker to build it off-request — the same
+  # read-through contract the video poster uses (persisted_video_poster_url).
+  # The fallback is deliberately NOT cached under the retina key: caching it
+  # would make a not-yet-generated cover keep serving the original even after
+  # the worker made the retina copy.
+  def retina_url
+    return file.url unless should_post_process?
+
+    cached = Rails.cache.read(retina_url_cache_key)
+    return cached if cached.present?
+
+    variant = retina_variant_variation
+    unless resized_variant_exists?(variant)
+      GenerateRetinaAssetPreviewWorker.perform_async(id)
+      return file.url
+    end
+
+    url = variant.processed.url
+    Rails.cache.write(retina_url_cache_key, url)
+    url
+  rescue StandardError => e
+    Rails.logger.warn("AssetPreview#retina_url failed for asset_preview #{id}: #{e.message}")
+    file.url
+  end
+
+  # Builds the retina copy of an image cover in the background and caches its
+  # URL (see GenerateRetinaAssetPreviewWorker). Only ever called from a worker —
+  # on a web request this is exactly the ImageMagick run that used to 500
+  # product pages. No-ops if the resized copy already exists.
+  def generate_retina_variant!
+    return nil unless file.attached? && should_post_process?
+    return nil if resized_variant_exists?(retina_variant_variation)
+
+    url = Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) { retina_variant.url }
+    Rails.cache.write(retina_url_cache_key, url)
+    url
+  rescue StandardError => e
+    Rails.logger.warn("AssetPreview#generate_retina_variant! failed for asset_preview #{id}: #{e.message}")
+    nil
   end
 
   def default_style
@@ -450,17 +495,25 @@ class AssetPreview < ApplicationRecord
       "attachment_#{file.id}_poster_url"
     end
 
-    # Whether the resized copy of the persisted poster already exists, so that
+    def retina_url_cache_key
+      "attachment_#{file.id}_retina_url"
+    end
+
+    def retina_variant_variation
+      file.variant(resize_to_limit: [retina_width, nil])
+    end
+
+    # Whether the resized copy of the cover/poster already exists, so that
     # asking for its URL is a lookup instead of an image-processing run. Rails
     # records every resized copy it has made in active_storage_variant_records
     # (config.active_storage.track_variants, on by default), so this is one
     # indexed row read.
     #
     # Returning false when we can't tell is deliberate: the caller then reports
-    # "no poster yet", which enqueues GenerateVideoPosterWorker unless the
-    # failure sentinel is still live, and the worker makes the resized copy off
-    # the request path.
-    def resized_poster_exists?(variant)
+    # "not ready", which enqueues the background worker (unless the failure
+    # sentinel is still live) and the worker makes the resized copy off the
+    # request path.
+    def resized_variant_exists?(variant)
       return false unless ActiveStorage.track_variants
 
       variant.blob.variant_records.exists?(variation_digest: variant.variation.digest)

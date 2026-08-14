@@ -341,10 +341,56 @@ class AssetPreviewTest < ActiveSupport::TestCase
     assert_equal 210, asset_preview.display_height
   end
 
-  test "retina_variant falls back to the original file URL when image processing times out" do
+  test "retina url falls back to the original and enqueues generation when the retina copy isn't ready" do
+    GenerateRetinaAssetPreviewWorker.jobs.clear
     asset_preview = create_asset_preview
-    asset_preview.file.stubs(:variant).raises(Timeout::Error)
+
     assert_equal asset_preview.file.url, asset_preview.url_from_file(style: :retina)
+    assert GenerateRetinaAssetPreviewWorker.jobs.any? { |job| job["args"] == [asset_preview.id] }
+    # The fallback must not be cached under the retina key, or a cover whose
+    # copy is still being generated would keep serving the original forever.
+    assert_nil Rails.cache.read("attachment_#{asset_preview.file.id}_retina_url")
+  end
+
+  test "retina url serves and caches the retina copy when it is ready" do
+    asset_preview = create_asset_preview
+    # Simulate the worker having already made the resized copy.
+    variant = asset_preview.retina_variant
+
+    assert_equal variant.url, asset_preview.url_from_file(style: :retina)
+    assert_equal variant.url, Rails.cache.read("attachment_#{asset_preview.file.id}_retina_url")
+  end
+
+  test "generate_retina_variant! no-ops and leaves the cache intact when the retina copy already exists" do
+    asset_preview = create_asset_preview
+    asset_preview.retina_variant # makes the resized copy
+    Rails.cache.write("attachment_#{asset_preview.file.id}_retina_url", "cached-example")
+
+    assert_nil asset_preview.generate_retina_variant!
+    assert_equal "cached-example", Rails.cache.read("attachment_#{asset_preview.file.id}_retina_url")
+  end
+
+  test "generate_retina_variant! builds and caches the retina copy" do
+    asset_preview = create_asset_preview
+    url = "https://asset.example.com/retina-1005.png"
+    variant = mock("variant")
+    variant.stubs(:url).returns(url)
+    asset_preview.stubs(:retina_variant).returns(variant)
+
+    assert_equal url, asset_preview.generate_retina_variant!
+    assert_equal url, Rails.cache.read("attachment_#{asset_preview.file.id}_retina_url")
+  end
+
+  test "generate_retina_variant! returns nil when processing exceeds the timeout" do
+    asset_preview = create_asset_preview
+    Timeout.stubs(:timeout).with(AssetPreview::IMAGE_PROCESSING_TIMEOUT_SECONDS).raises(Timeout::Error)
+    assert_nil asset_preview.generate_retina_variant!
+  end
+
+  test "generate_retina_variant! returns nil instead of raising when processing fails" do
+    asset_preview = create_asset_preview
+    asset_preview.file.expects(:variant).once.raises(MiniMagick::Error)
+    assert_nil asset_preview.generate_retina_variant!
   end
 
   test "url returns the retina variant for image covers" do
