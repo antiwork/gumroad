@@ -216,7 +216,12 @@ export function readBuyerCurrencyPreference(): string | null {
     : (() => {
         const match = document.cookie.match(/(?:^|; )gumroad_buyer_currency=([^;]*)/u);
         const value = match?.[1];
-        return value ? decodeURIComponent(value).toLowerCase() : null;
+        if (!value) return null;
+        try {
+          return decodeURIComponent(value).toLowerCase();
+        } catch {
+          return null;
+        }
       })();
   return raw && isKnownCurrencyCode(raw) ? raw : null;
 }
@@ -554,6 +559,7 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
     cartPermalinks: state.products.map((product) => product.permalink),
     willSaveCard: state.willSaveCard,
     paymentMethod: state.paymentMethod,
+    paymentElementType: state.paymentElementType,
   });
   if (!display) return null;
 

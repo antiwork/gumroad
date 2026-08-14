@@ -1,6 +1,7 @@
 import { X } from "@boxicons/react";
 import * as React from "react";
 
+import { isWalletPaymentElementType } from "$app/data/card_payment_method_data";
 import { computeOfferDiscount } from "$app/data/offer_code";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
@@ -118,7 +119,11 @@ const CurrencyPicker = () => {
   const uid = React.useId();
   const loaded = state.surcharges.type === "loaded" ? state.surcharges.result : null;
   const options = loaded?.available_buyer_currencies ?? [];
-  if (options.length < 2) return null;
+  // Wallet / PayPal / Payment Request charge canonical USD. Don't offer a currency
+  // the charge path will not honor.
+  if (options.length < 2 || state.paymentMethod !== "card" || isWalletPaymentElementType(state.paymentElementType)) {
+    return null;
+  }
   const detected = loaded?.detected_buyer_currency ?? null;
   const preferred = state.buyerCurrency ?? detected ?? "usd";
   const value = options.some((option) => option.code === preferred)
@@ -277,6 +282,7 @@ export const Checkout = ({
       cartPermalinks: cart.items.map((item) => item.product.permalink),
       willSaveCard: state.willSaveCard,
       paymentMethod: state.paymentMethod,
+      paymentElementType: state.paymentElementType,
     },
   );
   // The buyer-currency amounts every row of the table renders from, so the visible numbers

@@ -687,3 +687,71 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(queryByText("R$49.90")).toBeNull();
   });
 });
+
+describe("Checkout currency picker", () => {
+  const quotedSurcharges = {
+    vat_id_valid: false,
+    has_vat_id_input: false,
+    shipping_rate_cents: 0,
+    tax_cents: 0,
+    tax_included_cents: 0,
+    subtotal: 1_000,
+    detected_buyer_currency: "cad",
+    available_buyer_currencies: [
+      { code: "usd", label: "$ (US Dollars)" },
+      { code: "cad", label: "CA$ (Canadian Dollars)" },
+    ],
+    buyer_currency_quote: {
+      token: "quote-token",
+      currency: "cad",
+      canonical_total_cents: 1_000,
+      presentment_total_cents: 1_250,
+      charge_presentment_total_cents: 1_250,
+      rate: 1.25,
+      subunit_to_unit: 100,
+      expires_at: "2999-01-01T00:00:00Z",
+      line_allocations: [
+        {
+          permalink: "prod",
+          price_cents: 1_250,
+          tip_cents: 0,
+          tax_cents: 0,
+          shipping_cents: 0,
+          total_cents: 1_250,
+        },
+      ],
+    },
+  };
+  const cart: CartState = { items: [cartItem()], discountCodes: [] };
+
+  it("shows the picker on a card checkout that can settle more than one currency", () => {
+    const { getByLabelText } = renderCheckout(
+      buildState({ surcharges: { type: "loaded", result: quotedSurcharges } }),
+      cart,
+    );
+    expect(getByLabelText("Currency")).toBeTruthy();
+  });
+
+  it("hides the picker and keeps USD totals when Apple Pay is selected", () => {
+    const { queryByLabelText, getAllByText } = renderCheckout(
+      buildState({
+        paymentElementType: "apple_pay",
+        surcharges: { type: "loaded", result: quotedSurcharges },
+      }),
+      cart,
+    );
+    expect(queryByLabelText("Currency")).toBeNull();
+    expect(getAllByText("US$10").length).toBeGreaterThan(0);
+  });
+
+  it("hides the picker when PayPal is selected", () => {
+    const { queryByLabelText } = renderCheckout(
+      buildState({
+        paymentMethod: "paypal",
+        surcharges: { type: "loaded", result: quotedSurcharges },
+      }),
+      cart,
+    );
+    expect(queryByLabelText("Currency")).toBeNull();
+  });
+});

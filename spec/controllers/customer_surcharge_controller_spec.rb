@@ -162,6 +162,20 @@ describe CustomerSurchargeController, :vcr do
       expect(codes).not_to include(Currency::GBP)
     end
 
+    it "does not advertise non-USD currencies when a cart line cannot be quoted" do
+      post "calculate_all", params: {
+        products: [
+          { permalink: @product.unique_permalink, price: 100, quantity: 1 },
+          { permalink: "missing-product", price: 100, quantity: 1 },
+        ],
+        buyer_currency: Currency::GBP,
+      }, as: :json
+
+      expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).to eq([Currency::USD])
+    end
+
     it "returns the locked quote props including the currency's minor-unit scale" do
       post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }] }, as: :json
 

@@ -83,6 +83,18 @@ describe("getCheckoutBuyerCurrencyDisplay", () => {
     expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentMethod: "card" })).not.toBeNull();
   });
 
+  it("does not use buyer-currency display when Apple Pay or Google Pay is selected in the Payment Element", () => {
+    expect(
+      getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentElementType: "apple_pay" }),
+    ).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentElementType: "google_pay" }),
+    ).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentElementType: "card" }),
+    ).not.toBeNull();
+  });
+
   it("does not use buyer-currency display when the allocation is missing or belongs to another cart", () => {
     const responseWithoutAllocations = surcharges();
     if (responseWithoutAllocations.buyer_currency_quote) {

@@ -89,7 +89,13 @@ class CustomerSurchargeController < ApplicationController
       canonical_total_cents: quote_line_items.sum(&:canonical_total_cents),
       currency: params[:buyer_currency]
     )
-    available = available_buyer_currencies(quote_line_items.filter_map(&:product).uniq)
+    # create() refuses a mixed/unquotable cart. Advertising those currencies would
+    # let the picker claim a presentment the charge will never honor.
+    available = if all_lines_quotable
+      available_buyer_currencies(quote_line_items.filter_map(&:product).uniq)
+    else
+      available_buyer_currencies([])
+    end
     requested = Checkout::BuyerCurrencyQuote.normalize_requested_currency(params[:buyer_currency])
     # Settlement can list a currency that create() then refuses (cart-wide seller /
     # mixed-shape gates). Don't advertise the currency we just failed to quote.
