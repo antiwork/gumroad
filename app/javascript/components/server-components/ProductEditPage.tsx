@@ -755,7 +755,7 @@ const ProductEditPage = (props: Props) => {
             const accumulated = [...pendingNotifyIdsRef.current];
             if (accumulated.some((id) => !shownNotifyIdsRef.current.has(id))) {
               for (const id of accumulated) shownNotifyIdsRef.current.add(id);
-              setContentUpdates({ uniquePermalinkOrVariantIds: accumulated });
+              setContentUpdates({ uniquePermalinkOrVariantIds: accumulated, automatic: true });
             }
           } else if (props.autosave_enabled) {
             // An explicit save prompts like it always has, folding in targets
@@ -768,7 +768,7 @@ const ProductEditPage = (props: Props) => {
               pendingNotifyIdsRef.current.add(id);
               shownNotifyIdsRef.current.add(id);
             }
-            setContentUpdates({ uniquePermalinkOrVariantIds: merged });
+            setContentUpdates({ uniquePermalinkOrVariantIds: merged, automatic: false });
           } else {
             // Kill switch: with the flag off, each explicit save preselects
             // exactly its own changed targets, as before autosave existed.

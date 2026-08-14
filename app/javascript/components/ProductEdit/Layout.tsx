@@ -20,7 +20,7 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { isFileUploading, useProductEditContext } from "./state";
+import { isFileUploading, SaveStatus, useProductEditContext } from "./state";
 
 export const useProductUrl = (params = {}) => {
   const { product, uniquePermalink } = useProductEditContext();
@@ -100,7 +100,11 @@ const NotifyAboutProductUpdatesAlert = () => {
     >
       <Alert variant="info">
         <div className="flex flex-col gap-4">
-          Changes saved! Would you like to notify your customers about those changes?
+          {contentUpdates?.automatic
+            ? // No click happened, so no "Changes saved!" — and the seller
+              // deserves to know this prompt will not keep reappearing.
+              "Your changes were saved automatically. Would you like to notify your customers? We won't ask again for these changes."
+            : "Changes saved! Would you like to notify your customers about those changes?"}
           <div className="flex gap-2">
             <Button color="primary" outline onClick={() => close()}>
               Skip for now
@@ -254,20 +258,39 @@ export const Layout = ({
       </Button>
     </WithTooltip>
   );
+  // "unsaved" renders empty on purpose: between keystrokes, no news is good
+  // news, and a header that ticks Unsaved/Saving/Saved on every pause reads
+  // like a warning light. Words are reserved for rest ("All changes saved")
+  // and for states that need the seller.
   const saveStatusLabel = {
     saved: "All changes saved",
-    unsaved: "Unsaved changes",
+    unsaved: "",
     saving: "Saving...",
     uploading: "Waiting for uploads...",
-    // Autosave never confirms a deletion on the seller's behalf; the label
-    // points at the Save button, which opens the confirmation.
     review_deletions: "Save to review deletions",
     failed: "Couldn't save changes",
   }[saveStatus];
+  // Routine saves stay silent for screen readers too; only the states that
+  // need the seller are announced, through a separate visually-hidden region.
+  const announcedStatuses: SaveStatus[] = ["uploading", "review_deletions", "failed"];
   const saveStatusIndicator = autosaveEnabled ? (
-    <span className="text-sm text-muted" aria-live="polite">
-      {saveStatusLabel}
-    </span>
+    <>
+      <span className="text-sm text-muted">
+        {saveStatus === "review_deletions" ? (
+          // Autosave never confirms a deletion on the seller's behalf. The
+          // label is the affordance they actually see, so it opens the same
+          // deletion summary the Save button would.
+          <button type="button" className="underline" disabled={isBusy} onClick={() => void save()}>
+            {saveStatusLabel}
+          </button>
+        ) : (
+          saveStatusLabel
+        )}
+      </span>
+      <span className="sr-only" role="status">
+        {announcedStatuses.includes(saveStatus) ? saveStatusLabel : ""}
+      </span>
+    </>
   ) : null;
 
   const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
@@ -345,13 +368,22 @@ export const Layout = ({
                 color="primary"
                 className={headerButtonClass}
                 disabled={isBusy}
-                onClick={() =>
+                onClick={() => {
+                  // A button that says "Continue" must only continue: with
+                  // everything already persisted, a redundant save would
+                  // toast, and its failure would block the navigation.
+                  if (autosaveEnabled && saveStatus === "saved") {
+                    navigate.current(`${rootPath}/content`);
+                    return;
+                  }
                   void save().then((saved) => {
                     if (saved) navigate.current(`${rootPath}/content`);
-                  })
-                }
+                  });
+                }}
               >
-                Save and continue
+                {/* When autosave already saved everything, "Save and" is a
+                    promise of work that will not happen. */}
+                {autosaveEnabled && saveStatus === "saved" ? "Continue" : "Save and continue"}
               </Button>
             </>
           ) : (

@@ -1094,7 +1094,10 @@ it("prompts to notify customers once per target across automatic saves", async (
 
     addPage(0, "page-a");
     await act(async () => void vi.advanceTimersByTime(1_500));
-    expect(contextCapture.current?.contentUpdates).toEqual({ uniquePermalinkOrVariantIds: ["tier-a"] });
+    expect(contextCapture.current?.contentUpdates).toEqual({
+      uniquePermalinkOrVariantIds: ["tier-a"],
+      automatic: true,
+    });
 
     // The seller dismisses the prompt; more edits to the same tier stay quiet.
     act(() => contextCapture.current?.setContentUpdates(null));
@@ -1199,7 +1202,10 @@ it("keeps explicit-save targets in the prompt when autosave adds another", async
     await act(async () => {
       await contextCapture.current?.save();
     });
-    expect(contextCapture.current?.contentUpdates).toEqual({ uniquePermalinkOrVariantIds: ["tier-a"] });
+    expect(contextCapture.current?.contentUpdates).toEqual({
+      uniquePermalinkOrVariantIds: ["tier-a"],
+      automatic: false,
+    });
 
     // The automatic prompt for tier B must replace the visible alert with a
     // superset that still carries the explicitly saved tier A.

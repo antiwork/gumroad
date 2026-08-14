@@ -258,6 +258,10 @@ export type ShippingCountry = { code: string; name: string };
 
 export type ContentUpdates = {
   uniquePermalinkOrVariantIds: string[];
+  // True when an automatic save produced this prompt — the alert copy must
+  // not thank the seller for a click they never made. Absent on the flag-off
+  // path, which stays byte-identical to the pre-autosave shape.
+  automatic?: boolean;
 } | null;
 
 export const ProductEditContext = React.createContext<{
