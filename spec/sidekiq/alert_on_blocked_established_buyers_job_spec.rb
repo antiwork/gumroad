@@ -31,6 +31,35 @@ describe AlertOnBlockedEstablishedBuyersJob do
     allow(InternalNotificationWorker).to receive(:perform_async)
   end
 
+  # RecoverStrandedBuyersJob scans this same population on a schedule and reports its own
+  # outcomes, so this alert is duplicate noise while the flag is live; the flag being off restores
+  # it as the only dry-run signal.
+  describe "when auto_recover_stranded_buyers is live" do
+    after { Feature.deactivate(:auto_recover_stranded_buyers) }
+
+    it "does not report stranded buyers the recovery job already covers" do
+      Feature.activate(:auto_recover_stranded_buyers)
+      allow(Risk::StrandedBuyerScanService).to receive(:call)
+        .and_return(stranded: [{ email:, settled_purchases: established_count }], truncated: false)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    end
+
+    it "still reports the truncation-only edge the recovery job's empty-scan guard cannot see" do
+      # The recovery job returns early on empty scan[:stranded]; this alert's truncation-with-no-
+      # qualifying-buyers line is the one case the recovery job never emits, so it must survive
+      # suppression.
+      Feature.activate(:auto_recover_stranded_buyers)
+      allow(Risk::StrandedBuyerScanService).to receive(:call).and_return(stranded: [], truncated: true)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async)
+    end
+  end
+
   it "alerts on a buyer with settled history, naming the date the block was written" do
     settled_purchases(established_count)
     blocked_attempt

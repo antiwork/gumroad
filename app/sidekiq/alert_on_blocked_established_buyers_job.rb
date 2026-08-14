@@ -20,6 +20,14 @@ class AlertOnBlockedEstablishedBuyersJob
 
   def perform
     scan = Risk::StrandedBuyerScanService.call
+
+    # With the recovery flag live, RecoverStrandedBuyersJob scans this same population on a
+    # schedule and emits its own outcomes report, so a per-buyer alert listing the same people is
+    # duplicate noise. Suppress only that per-buyer case: the truncation-with-nothing-qualifying
+    # line below still goes out, because the recovery job returns early on an empty scan and never
+    # emits it (gumroad-private#2106).
+    return if Feature.active?(:auto_recover_stranded_buyers) && scan[:stranded].any?
+
     # Truncation with nothing qualifying still has to go out: it means the scan bound, not the
     # platform, decided the report was empty.
     return if scan[:stranded].empty? && !scan[:truncated]
