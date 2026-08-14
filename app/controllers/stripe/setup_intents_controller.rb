@@ -75,7 +75,7 @@ class Stripe::SetupIntentsController < ApplicationController
           end
           return if mandate_amount <= 0
 
-          interval, interval_count = mandate_interval(product_params["recurrence"].presence || subscription.recurrence)
+          interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(product_params["recurrence"].presence || subscription.recurrence)
           return {
             metadata: { gumroad_subscription_id: subscription.external_id },
             payment_method_options: {
@@ -139,22 +139,5 @@ class Stripe::SetupIntentsController < ApplicationController
       @product_params_list ||= params.permit(products: [:price, :renewalPriceCents, :recurrence, :subscription_id])
                                      .to_h
                                      .fetch("products", [])
-    end
-
-    def mandate_interval(recurrence)
-      case recurrence
-      when "every_two_years"
-        ["year", 2]
-      when "yearly"
-        ["year", 1]
-      when "quarterly"
-        ["month", 3]
-      when "biannually"
-        ["month", 6]
-      when "monthly"
-        ["month", 1]
-      else
-        ["sporadic", nil]
-      end
     end
 end

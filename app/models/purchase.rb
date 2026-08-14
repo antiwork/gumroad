@@ -3803,20 +3803,25 @@ class Purchase < ApplicationRecord
   end
 
   def retrieve_indian_card_mandate
+    source_payment_method_id = nil
     mandate_id = if processor_setup_intent_id.present?
       setup_intent = ChargeProcessor.get_setup_intent(merchant_account, processor_setup_intent_id)
       raise "Indian card mandate check found an incomplete SetupIntent" unless setup_intent&.succeeded?
 
+      source_payment_method_id = setup_intent.payment_method_id
       setup_intent.mandate
     elsif stripe_transaction_id.present?
-      ChargeProcessor.get_charge(charge_processor_id, stripe_transaction_id, merchant_account:).card_mandate
+      processor_charge = ChargeProcessor.get_charge(charge_processor_id, stripe_transaction_id, merchant_account:)
+      source_payment_method_id = processor_charge.card_instance_id
+      processor_charge.card_mandate
     end
 
     mandate = ChargeProcessor.get_mandate(merchant_account, mandate_id) if mandate_id.present?
     status = mandate&.status || "missing"
     raise "Unknown Stripe mandate status: #{status}" unless status.in?(%w[active inactive pending missing])
 
-    unless StripeChargeProcessor.mandate_matches_payment_method?(mandate, credit_card.processor_payment_method_id)
+    payment_method_id = credit_card.processor_payment_method_id.presence || source_payment_method_id
+    unless StripeChargeProcessor.mandate_matches_payment_method?(mandate, payment_method_id)
       ErrorNotifier.notify(
         "Indian card mandate does not match the purchase payment method",
         purchase: external_id
@@ -3932,28 +3937,8 @@ class Purchase < ApplicationRecord
     # Ref: Stripe::SetupIntentsController#create
     return if is_multi_buy?
 
-    interval = "sporadic"
-    interval_count = 1
-
-    if is_original_subscription_purchase? || is_upgrade_purchase?
-      case subscription_duration
-      when "every_two_years"
-        interval = "year"
-        interval_count = 2
-      when "yearly"
-        interval = "year"
-        interval_count = 1
-      when "monthly"
-        interval = "month"
-        interval_count = 1
-      when "quarterly"
-        interval = "month"
-        interval_count = 3
-      when "biannually"
-        interval = "month"
-        interval_count = 6
-      end
-    end
+    recurrence = subscription_duration if is_original_subscription_purchase? || is_upgrade_purchase?
+    interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(recurrence)
 
     mandate_options = {
       payment_method_options: {

@@ -157,6 +157,22 @@ describe "Indian card mandate reliability" do
     expect(subscription.indian_card_mandate_source_purchase(card.id)).to eq(registration)
   end
 
+  it "uses the source charge payment method for a legacy card" do
+    registration = create_registration
+    registration.mark_indian_card_mandate_registration!
+    card.update_column(:processor_payment_method_id, nil)
+    mandate = Stripe::Mandate.construct_from(id: "mandate_legacy", status: "active", payment_method: "pm_shared")
+    processor_charge = instance_double(
+      BaseProcessorCharge,
+      card_mandate: "mandate_legacy",
+      card_instance_id: "pm_shared"
+    )
+    allow(ChargeProcessor).to receive(:get_charge).and_return(processor_charge)
+    allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+    expect(registration.retrieve_indian_card_mandate).to eq([mandate, "active"])
+  end
+
   it "keeps the registration check when another save follows the success transition" do
     registration = create_registration
     registration.update_column(:purchase_state, "in_progress")
@@ -334,5 +350,13 @@ describe "Indian card mandate reliability" do
     registration.subscription.update!(cancelled_at: 1.day.from_now)
 
     expect(registration.subscription.status).to eq("pending_cancellation")
+  end
+
+  it "does not load route data when the mandate stop is clear" do
+    subscription = create_registration.subscription
+    allow(subscription).to receive(:pending_failure?).and_return(false)
+    expect(subscription).not_to receive(:india_card_mandate_reliability_enabled?)
+
+    expect(subscription.status).to eq("alive")
   end
 end

@@ -58,6 +58,23 @@ class StripeChargeProcessor
     mandate_payment_method == payment_method_id
   end
 
+  def self.indian_card_mandate_interval(recurrence)
+    case recurrence
+    when "yearly"
+      ["year", 1]
+    when "quarterly"
+      ["month", 3]
+    when "biannually"
+      ["month", 6]
+    when "monthly"
+      ["month", 1]
+    when "every_two_years"
+      ["sporadic", nil]
+    else
+      ["sporadic", 1]
+    end
+  end
+
   # Gumroad stores some currencies in non-ISO minor units (e.g. KRW is stored as 1/100 won —
   # see config/initializers/money.rb) while Stripe charges KRW in whole won. Amounts are
   # passed to Stripe verbatim, so a charge is only safe when both conventions agree and

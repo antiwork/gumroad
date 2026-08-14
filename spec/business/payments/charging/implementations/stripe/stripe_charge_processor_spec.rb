@@ -13,6 +13,12 @@ describe StripeChargeProcessor, :vcr do
     end
   end
 
+  describe ".indian_card_mandate_interval" do
+    it "uses a sporadic mandate for a two-year recurrence" do
+      expect(described_class.indian_card_mandate_interval("every_two_years")).to eq(["sporadic", nil])
+    end
+  end
+
   describe ".charge_minor_units_compatible?" do
     it "allows currencies whose stored minor units match what Stripe charges" do
       expect(described_class.charge_minor_units_compatible?("usd")).to be(true)

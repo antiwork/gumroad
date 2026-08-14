@@ -337,20 +337,7 @@ class Subscription::UpdaterService
 
     def indian_card_mandate_interval
       recurrence = new_purchase&.price&.recurrence || subscription.recurrence
-      case recurrence
-      when "every_two_years"
-        ["year", 2]
-      when "yearly"
-        ["year", 1]
-      when "quarterly"
-        ["month", 3]
-      when "biannually"
-        ["month", 6]
-      when "monthly"
-        ["month", 1]
-      else
-        ["sporadic", nil]
-      end
+      StripeChargeProcessor.indian_card_mandate_interval(recurrence)
     end
 
     def update_subscription_credit_card!(credit_card, clear_mandate_stop: false, stripe_mandate_id: nil)
