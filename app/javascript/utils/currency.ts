@@ -108,7 +108,6 @@ export const formatMinorUnitPriceWithIntl = (
   subunitToUnit?: number | null,
 ): string => {
   const currency = currencyCode.toUpperCase();
-  const formatter = new Intl.NumberFormat("en-US", { style: "currency", currency });
   // Prefer the backend's authoritative subunit_to_unit (the Money gem's value, which is
   // the single source of truth and is non-ISO for some currencies, e.g. KRW/HUF/IDR use
   // 100). Only fall back to the currencies.json heuristic when the caller didn't pass it.
@@ -121,7 +120,17 @@ export const formatMinorUnitPriceWithIntl = (
           )?.[1];
           return configuredCurrency && "single_unit" in configuredCurrency && configuredCurrency.single_unit ? 1 : 100;
         })();
-  return formatter.format(amountMinorUnits / resolvedSubunitToUnit);
+  const units = amountMinorUnits / resolvedSubunitToUnit;
+  // Match USD checkout amounts: drop .00 on whole units so £0 and US$0
+  // don't use two different decimal rules. Fractional amounts keep two
+  // places. Zero-decimal currencies stay whole.
+  const fractionDigits = resolvedSubunitToUnit === 1 || Number.isInteger(units) ? 0 : 2;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(units);
 };
 
 export type BuyerLocalCurrencyContext = {

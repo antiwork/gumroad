@@ -238,6 +238,15 @@ describe("formatCheckoutPrice", () => {
   it("formats canonical USD when no buyer-currency display exists", () => {
     expect(formatCheckoutPrice(1_000, null)).toBe("US$10");
   });
+
+  it("drops .00 on whole buyer-currency amounts the same way USD does", () => {
+    expect(formatCheckoutPrice(0, { currencyCode: "gbp", rate: 1, subunitToUnit: 100 })).toBe("£0");
+    expect(formatCheckoutPrice(1_000, { currencyCode: "gbp", rate: 0.8, subunitToUnit: 100 })).toBe("£8");
+  });
+
+  it("keeps two decimals on fractional buyer-currency amounts", () => {
+    expect(formatCheckoutPrice(1_000, { currencyCode: "gbp", rate: 0.749, subunitToUnit: 100 })).toBe("£7.49");
+  });
 });
 
 describe("getCheckoutListedCurrencyDisplay", () => {

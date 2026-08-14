@@ -133,9 +133,11 @@ describe CustomerSurchargeController, :vcr do
       expect(response.parsed_body.fetch("buyer_currency_quote")).to include("currency" => Currency::GBP)
       expect(response.parsed_body.fetch("detected_buyer_currency")).to eq(Currency::CAD)
       expect(response.parsed_body.fetch("available_buyer_currencies")).to include(
-        include("code" => Currency::USD),
+        include("code" => Currency::USD, "label" => "$ (US Dollars)"),
         include("code" => Currency::CAD),
       )
+      gbp = response.parsed_body.fetch("available_buyer_currencies").find { |currency| currency["code"] == Currency::GBP }
+      expect(gbp).to include("label" => "£ (British Pounds)")
     end
 
     it "does not quote when the buyer asks for US dollars" do
