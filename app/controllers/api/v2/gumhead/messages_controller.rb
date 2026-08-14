@@ -74,10 +74,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # equal to them would let the outer layers cut the client before the
   # rescue can render its error envelope.
   BUFFERED_TIMEOUT = 90
-  # Beta features can change what a request may do and what usage reports
-  # (fallbacks being the sharpest example), so only vetted ones forward.
-  # Extend via GUMHEAD_ALLOWED_ANTHROPIC_BETAS without a deploy.
-  DEFAULT_ALLOWED_ANTHROPIC_BETAS = "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"
+  # Beta features forward except the ones that can move spend outside the
+  # ledger. An allowlist was tried first and broke the client on contact:
+  # the runtime sends eight betas today and gains more with every upgrade,
+  # and dropping one turns its body into "context_management: Extra inputs
+  # are not permitted". Enforcement belongs in the body validators above
+  # anyway — a beta header grants nothing on its own, and the fields it
+  # would unlock (fallbacks, speed, inference_geo, server-side tools) are
+  # each rejected there. Extend the denials via
+  # GUMHEAD_DENIED_ANTHROPIC_BETAS without a deploy.
+  DEFAULT_DENIED_ANTHROPIC_BETAS = "fallback"
 
   # One Gumhead turn is a whole tool loop of model calls, so the request
   # throttle is deliberately loose; the real spend control is the daily
@@ -548,16 +554,15 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       headers
     end
 
-    # Unvetted betas are dropped rather than rejected: a request whose body
-    # depends on a dropped beta gets Anthropic's own error naming the field,
-    # and harmless unknown betas from a runtime upgrade degrade instead of
-    # hard-failing every call.
+    # Denied betas are dropped rather than rejected: the matching body field
+    # is refused with a named error by the validators above, which reads
+    # better than a bare header complaint.
     def filtered_beta_features
       requested = request.headers["anthropic-beta"].to_s.split(",").map(&:strip).reject(&:blank?)
       return if requested.empty?
 
-      allowed = GlobalConfig.get("GUMHEAD_ALLOWED_ANTHROPIC_BETAS", DEFAULT_ALLOWED_ANTHROPIC_BETAS).to_s.split(",").map(&:strip).reject(&:blank?)
-      (requested & allowed).join(",")
+      denied = GlobalConfig.get("GUMHEAD_DENIED_ANTHROPIC_BETAS", DEFAULT_DENIED_ANTHROPIC_BETAS).to_s.split(",").map(&:strip).reject(&:blank?)
+      requested.reject { |feature| denied.any? { |pattern| feature.include?(pattern) } }.join(",")
     end
 
     def anthropic_api_key
