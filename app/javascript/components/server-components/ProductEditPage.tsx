@@ -513,8 +513,12 @@ const ProductEditPage = (props: Props) => {
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
   const lastSavedCurrencyTypeRef = React.useRef(props.currency_type);
   const automaticSaveRef = React.useRef(false);
+  // Bumped on every edit so a rejection from an automatic save that predates
+  // the edit cannot consume the new edit's retry budget.
+  const autosaveEditEpochRef = React.useRef(0);
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) => {
+    autosaveEditEpochRef.current += 1;
     setAutosaveRetryCount(0);
     setProduct((prevProduct) => {
       const updated = { ...prevProduct };
@@ -524,6 +528,7 @@ const ProductEditPage = (props: Props) => {
     });
   };
   const changeCurrencyType = (next: CurrencyCode) => {
+    autosaveEditEpochRef.current += 1;
     setAutosaveRetryCount(0);
     setCurrencyType(next);
   };
@@ -775,7 +780,9 @@ const ProductEditPage = (props: Props) => {
     !isEqual(product, lastSavedProductRef.current) || currencyType !== lastSavedCurrencyTypeRef.current;
   const uploadsInProgress =
     imagesUploading.size > 0 ||
-    product.description.includes("blob:") ||
+    // Matches only blob: object URLs in embed sources — a seller typing the
+    // literal text "blob:" into the description must not block autosave.
+    /\ssrc\s*=\s*["']blob:/iu.test(product.description) ||
     product.public_files.some(isFileUploading) ||
     product.files.some((file) => isFileUploading(file) || file.subtitle_files.some(isFileUploading));
   const pendingDeletionsByKind = findPendingDeletions(product, lastSavedProductRef.current);
@@ -819,18 +826,22 @@ const ProductEditPage = (props: Props) => {
 
     const timer = window.setTimeout(() => {
       automaticSaveRef.current = true;
+      // A failure only spends retry budget when no edit landed after this
+      // attempt started — otherwise a stale rejection would eat the fresh
+      // edit's attempts.
+      const editEpochAtDispatch = autosaveEditEpochRef.current;
+      const recordFailure = () => {
+        if (autosaveEditEpochRef.current === editEpochAtDispatch) setAutosaveRetryCount((count) => count + 1);
+        setAutosaveGeneration((generation) => generation + 1);
+      };
       void saveRef.current().then(
         (saved) => {
           automaticSaveRef.current = false;
-          if (!saved) {
-            setAutosaveRetryCount((count) => count + 1);
-            setAutosaveGeneration((generation) => generation + 1);
-          }
+          if (!saved) recordFailure();
         },
         () => {
           automaticSaveRef.current = false;
-          setAutosaveRetryCount((count) => count + 1);
-          setAutosaveGeneration((generation) => generation + 1);
+          recordFailure();
         },
       );
     }, 1_500);

@@ -884,6 +884,66 @@ it("stops retrying a failed autosave after three attempts", async () => {
   }
 });
 
+it("does not spend the new edit's retries on a stale in-flight failure", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    const { ResponseError } = await import("$app/utils/request");
+    let rejectFirstSave: (error: Error) => void = () => {};
+    saveProductMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectFirstSave = reject;
+          }),
+      )
+      .mockRejectedValue(new ResponseError("Save failed"));
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "First edit" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+
+    // Edit while the first automatic save is still in flight, then let that
+    // stale request fail: it must not consume the fresh edit's retry budget.
+    act(() => contextCapture.current?.updateProduct({ name: "Second edit" }));
+    await act(async () => {
+      rejectFirstSave(new ResponseError("Save failed"));
+      await Promise.resolve();
+    });
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await act(async () => void vi.advanceTimersByTime(1_500));
+      await act(async () => Promise.resolve());
+    }
+    expect(saveProductMock).toHaveBeenCalledTimes(4);
+    expect(saveProductMock.mock.calls[3]?.[2]).toMatchObject({ name: "Second edit" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("autosaves a description containing the literal text blob:", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() =>
+      contextCapture.current?.updateProduct({
+        description: "<p>Use a blob: URL for the preview</p>",
+      }),
+    );
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("does not open a conflict dialog when an automatic save hits a server conflict", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
