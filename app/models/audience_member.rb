@@ -339,6 +339,10 @@ class AudienceMember < ApplicationRecord
       had_sources = false
 
       seller.sales.where(email:).find_each do |purchase|
+        # In-progress / failed checkouts are not sources. Counting them as
+        # had_sources would tombstone every cart attempt.
+        next unless purchase.audience_member_source?
+
         had_sources = true
         self.details["purchases"] ||= []
         self.details["purchases"] << purchase.audience_member_details if purchase.should_be_audience_member?

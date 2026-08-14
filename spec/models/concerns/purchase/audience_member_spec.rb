@@ -302,6 +302,15 @@ RSpec.describe Purchase::AudienceMember, defer_audience_refresh: true do
       expect(member.details).to eq({})
     end
 
+    it "does not persist a tombstone for an in-progress purchase" do
+      purchase = create(:purchase_in_progress, link: create(:product, user: seller), seller:)
+      RefreshAudienceMemberJob.clear
+
+      expect do
+        RefreshAudienceMemberJob.new.perform(purchase.email, seller.id)
+      end.not_to change(AudienceMember, :count)
+    end
+
     it "locks only until execution so a mid-run change can enqueue a follow-up" do
       expect(RefreshAudienceMemberJob.get_sidekiq_options["lock"]).to eq(:until_executing)
       expect(RefreshAudienceMemberJob.get_sidekiq_options).not_to have_key("on_conflict")

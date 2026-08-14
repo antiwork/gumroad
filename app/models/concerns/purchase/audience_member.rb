@@ -14,11 +14,17 @@ module Purchase::AudienceMember
     after_rollback :clear_audience_member_refresh_trigger
   end
 
+  # A completed sale that can occupy (or later restore) the (seller, email) row.
+  # In-progress and failed checkouts are not sources — they must not create a tombstone.
+  def audience_member_source?
+    purchase_state.in?(%w[successful gift_receiver_purchase_successful not_charged]) &&
+      !is_gift_sender_purchase? &&
+      EmailFormatValidator.valid?(email)
+  end
+
   def should_be_audience_member?
     result = can_contact?
-    result &= purchase_state.in?(%w[successful gift_receiver_purchase_successful not_charged])
-    result &= !is_gift_sender_purchase?
-    result &= EmailFormatValidator.valid?(email)
+    result &= audience_member_source?
     if subscription_id.nil?
       result &= !stripe_refunded?
       result &= chargeback_date.blank? || chargeback_reversed?
