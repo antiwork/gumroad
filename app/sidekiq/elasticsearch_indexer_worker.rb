@@ -58,8 +58,17 @@ class ElasticsearchIndexerWorker
       client_params[:body] = {
         "doc" => record.as_indexed_json(only: fields)
       }
-      EsClient.update(client_params)
+      begin
+        EsClient.update(client_params)
+      rescue Elasticsearch::Transport::Transport::Errors::NotFound
+        # Soft-deleted rows keep their id; restore is an update of a missing document.
+        raise unless record.respond_to?(:search_indexable?) && record.search_indexable?
+        client_params[:body] = record.as_indexed_json
+        EsClient.index(client_params)
+      end
     when "delete"
+      live = klass.find_by(id: record_id) if params.key?("record_id")
+      return if live&.respond_to?(:search_indexable?) && live.search_indexable?
       client_params[:ignore] << 404
       EsClient.delete(client_params)
     end

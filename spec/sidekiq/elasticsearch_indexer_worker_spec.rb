@@ -172,6 +172,39 @@ describe ElasticsearchIndexerWorker, :elasticsearch_wait_for_refresh do
       end
     end
 
+    context "when an AudienceMember is restored after its document was deleted" do
+      before { recreate_model_index(AudienceMember) }
+
+      it "indexes the missing document instead of raising on update" do
+        member = create(:audience_member, purchases: [{ "id" => 1, "product_id" => 2, "price_cents" => 100, "created_at" => Time.current.iso8601 }])
+        EsClient.delete(index: AudienceMember.index_name, id: member.id, ignore: 404)
+
+        described_class.new.perform(
+          "update",
+          "class_name" => "AudienceMember",
+          "record_id" => member.id,
+          "fields" => ["purchases"]
+        )
+
+        expect(EsClient.get(index: AudienceMember.index_name, id: member.id).fetch("_source")).to include(
+          "email" => member.email,
+          "customer" => true
+        )
+      end
+
+      it "ignores a delayed delete after the row is live again" do
+        member = create(:audience_member)
+
+        expect(EsClient).not_to receive(:delete)
+
+        described_class.new.perform(
+          "delete",
+          "class_name" => "AudienceMember",
+          "record_id" => member.id
+        )
+      end
+    end
+
     context "when updating" do
       before do
         @record = @model.create!(name: "Drawing", country: "France")

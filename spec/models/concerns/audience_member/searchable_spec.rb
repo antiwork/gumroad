@@ -108,6 +108,19 @@ describe AudienceMember::Searchable, :freeze_time do
 
       expect(ElasticsearchIndexerWorker.jobs.last["args"]).to eq(["delete", { "record_id" => member.id, "class_name" => "AudienceMember" }])
     end
+
+    it "does not enqueue a delete when the surrounding transaction rolls back" do
+      member = create(:audience_member)
+
+      expect do
+        ActiveRecord::Base.transaction do
+          member.soft_delete!
+          raise ActiveRecord::Rollback
+        end
+      end.not_to change { ElasticsearchIndexerWorker.jobs.size }
+
+      expect(member.reload.deleted_at).to be_nil
+    end
   end
 
   describe ".count_for_seller", :sidekiq_inline, :elasticsearch_wait_for_refresh do
