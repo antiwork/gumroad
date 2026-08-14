@@ -186,5 +186,33 @@ RSpec.describe Purchase::AudienceMember, defer_audience_refresh: true do
         RefreshAudienceMemberJob.new.perform("nobody@example.com", seller.id)
       end.not_to change(AudienceMember, :count)
     end
+
+    it "locks only until execution so a mid-run change can enqueue a follow-up" do
+      expect(RefreshAudienceMemberJob.get_sidekiq_options["lock"]).to eq(:until_executing)
+      expect(RefreshAudienceMemberJob.get_sidekiq_options).not_to have_key("on_conflict")
+    end
+
+    it "does not enqueue a refresh for a rolled-back purchase" do
+      expect do
+        Purchase.transaction do
+          create(:purchase, link: create(:product, user: seller), seller:)
+          raise ActiveRecord::Rollback
+        end
+      end.not_to change { RefreshAudienceMemberJob.jobs.size }
+    end
+
+    it "enqueues a follow-up refresh when the buyer changes while a refresh is running" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      RefreshAudienceMemberJob.clear
+
+      allow(AudienceMember).to receive(:find_or_initialize_by).and_wrap_original do |orig, **kwargs|
+        purchase.update!(can_contact: false)
+        orig.call(**kwargs)
+      end
+
+      RefreshAudienceMemberJob.new.perform(purchase.email, seller.id)
+
+      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(purchase.email, seller.id)
+    end
   end
 end

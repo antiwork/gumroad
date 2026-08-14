@@ -9,7 +9,7 @@ RSpec.configure do |config|
   config.before(:each) do |example|
     next if example.metadata[:defer_audience_refresh]
 
-    allow(RefreshAudienceMemberJob).to receive(:perform_in) do |_delay, *args|
+    allow(RefreshAudienceMemberJob).to receive(:perform_async) do |*args|
       RefreshAudienceMemberJob.new.perform(*args)
     end
   end

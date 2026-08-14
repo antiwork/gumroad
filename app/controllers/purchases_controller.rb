@@ -122,8 +122,8 @@ class PurchasesController < ApplicationController
     # silently re-opt buyers back into a creator's emails after they unsubscribed.
     return unless request.post?
 
-    # Each save schedules RefreshAudienceMemberJob; its unique lock coalesces the loop into
-    # one rebuild per buyer.
+    # Each save schedules RefreshAudienceMemberJob after commit; until_executing coalesces
+    # queued refreshes for the same buyer without dropping a change that lands mid-run.
     Purchase.where(email: @purchase.email, seller_id: @purchase.seller_id, can_contact: false).find_each do |purchase|
       purchase.can_contact_reason = nil
       purchase.update!(can_contact: true)
