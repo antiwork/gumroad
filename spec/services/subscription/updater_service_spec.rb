@@ -3535,7 +3535,34 @@ describe Subscription::UpdaterService, :vcr do
       allow(service).to receive(:future_subscription_charge?).and_return(true)
       allow(subscription).to receive(:indian_card_mandate_terms).and_return(current_terms)
 
-      expect(service.send(:saved_card_plan_update_requires_reauthorization?, previous_terms)).to be(true)
+      expect(
+        service.send(
+          :saved_card_update_requires_reauthorization?,
+          previous_terms,
+          plan_or_price_changed: true,
+          mandate_billing_info_changed: false
+        )
+      ).to be(true)
+    end
+
+    it "requires reauthorization when saved-card billing details change the renewal terms" do
+      previous_terms = { amount: 10_00, currency: Currency::USD, interval: "month", interval_count: 1 }
+      current_terms = previous_terms.merge(amount: 10_75)
+      service.params[:contact_info] = { country: "United States", state: "CA", zip_code: "94107" }
+      allow(service).to receive(:future_subscription_charge?).and_return(true)
+      allow(service).to receive(:should_charge_user?).and_return(false)
+      expect(subscription).to receive(:indian_card_mandate_terms).with(
+        billing_info: service.params[:contact_info]
+      ).and_return(current_terms)
+
+      expect(
+        service.send(
+          :saved_card_update_requires_reauthorization?,
+          previous_terms,
+          plan_or_price_changed: false,
+          mandate_billing_info_changed: true
+        )
+      ).to be(true)
     end
 
     it "rejects a replacement mandate for a different payment method" do

@@ -516,40 +516,46 @@ class Subscription < ApplicationRecord
     return if purchase.nil?
 
     renewal_price_cents = current_subscription_price_cents
+    presentment = current_later_charge_presentment
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
+    canonical_price_cents = renewal_price_cents if canonical_price_cents.zero?
+    presentment_matches = presentment.present? && presentment.canonical_price_cents == canonical_price_cents
+    price_cap_cents = indian_card_mandate_price_cents(
+      purchase,
+      renewal_price_cents,
+      fixed_rate: (purchase.rate_converted_to_usd.presence if presentment_matches)
+    )
     canonical_cap_cents = if billing_info.present?
-      indian_card_mandate_amount_for_billing_info(purchase, billing_info, renewal_price_cents)
+      indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cap_cents)
     else
       purchase.mandate_maximum_amount_cents
     end
-    canonical_cap_cents = renewal_price_cents if canonical_cap_cents.zero?
+    canonical_cap_cents = price_cap_cents if canonical_cap_cents.zero?
     return unless canonical_cap_cents.positive?
 
     amount = canonical_cap_cents
     currency = Currency::USD
-    presentment = current_later_charge_presentment
-    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
-    canonical_price_cents = renewal_price_cents if canonical_price_cents.zero?
-    if presentment.present? && presentment.canonical_price_cents == canonical_price_cents
+    if presentment_matches
       currency = presentment.presentment_currency
-      amount = BigDecimal(canonical_cap_cents.to_s) * presentment.signup_currency_units_per_usd
-      amount /= 100 if is_currency_type_single_unit?(currency)
-      amount = amount.ceil
+      variable_cap_cents = [canonical_cap_cents - price_cap_cents, 0].max
+      amount = indian_card_presentment_cents(price_cap_cents, presentment.signup_currency_units_per_usd, currency) +
+        indian_card_presentment_cents(variable_cap_cents, get_rate(currency), currency)
     end
 
     interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(recurrence)
     { amount:, currency:, interval:, interval_count: }
   end
 
-  def indian_card_mandate_amount_for_billing_info(purchase, billing_info, renewal_price_cents)
-    info = billing_info.to_h.symbolize_keys
-    country = Compliance::Countries.find_by_name(info[:country])&.alpha2 || info[:country]
+  def indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: nil)
     displayed_price_cents = purchase.mandate_maximum_displayed_price_cents
     displayed_price_cents = renewal_price_cents if displayed_price_cents.zero?
     displayed_currency = purchase[:displayed_price_currency_type].presence || link.price_currency_type
-    presentment = current_later_charge_presentment
-    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
-    fixed_rate = purchase.rate_converted_to_usd.presence if presentment&.canonical_price_cents == canonical_price_cents
-    price_cents = get_usd_cents(displayed_currency, displayed_price_cents, rate: fixed_rate)
+    get_usd_cents(displayed_currency, displayed_price_cents, rate: fixed_rate)
+  end
+
+  def indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cents)
+    info = billing_info.to_h.symbolize_keys
+    country = Compliance::Countries.find_by_name(info[:country])&.alpha2 || info[:country]
     return 0 unless price_cents.positive?
 
     shipping_cents = purchase.shipping_cents.to_i
@@ -568,6 +574,12 @@ class Subscription < ApplicationRecord
       from_discover: purchase.was_discover_fee_charged?
     ).calculate
     price_cents + shipping_cents + tax.tax_cents.to_i
+  end
+
+  def indian_card_presentment_cents(canonical_cents, currency_units_per_usd, currency)
+    amount = BigDecimal(canonical_cents.to_s) * BigDecimal(currency_units_per_usd.to_s)
+    amount /= 100 if is_currency_type_single_unit?(currency)
+    amount.ceil
   end
 
   def renewal_merchant_account

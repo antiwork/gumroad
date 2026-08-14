@@ -371,6 +371,7 @@ describe "Indian card mandate reliability" do
     subscription = registration.subscription
     allow(subscription).to receive(:original_purchase).and_return(registration)
     allow(registration).to receive(:mandate_maximum_amount_cents).and_return(12_50)
+    allow(registration).to receive(:mandate_maximum_displayed_price_cents).and_return(12_50)
     canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(registration)
     create(
       :later_charge_presentment,
@@ -439,6 +440,7 @@ describe "Indian card mandate reliability" do
       rate_converted_to_usd: "0.8"
     )
     allow(source_purchase).to receive(:mandate_maximum_displayed_price_cents).and_return(10_00)
+    allow(subscription).to receive(:get_rate).with(Currency::EUR).and_return("1.0")
     canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(source_purchase)
     allow(subscription).to receive(:current_later_charge_presentment).and_return(
       instance_double(
@@ -468,7 +470,7 @@ describe "Indian card mandate reliability" do
       subscription.indian_card_mandate_terms(
         billing_info: { country: "United States", state: "CA", zip_code: "94107" }
       )
-    ).to include(amount: 11_00, currency: Currency::EUR)
+    ).to include(amount: 11_25, currency: Currency::EUR)
   end
 
   it "uses the current renewal rate when no later-charge presentment is fixed" do
