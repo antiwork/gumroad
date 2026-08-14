@@ -2690,7 +2690,19 @@ class PurchaseTest < ActiveSupport::TestCase
     assert purchase2.valid?
   end
 
+  test "not_double_charged purchasing physical products that are quantity-enabled requires confirmation just inside 2 hours" do
+    travel_to(Time.current)
+    product = create_physical_product
+    assert product.quantity_enabled
+    ip = unique_ip
+    create_physical_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first], created_at: 119.minutes.ago)
+    purchase2 = build_physical_purchase(link: product, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first])
+    assert_not purchase2.valid?
+    assert_equal PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED, purchase2.error_code
+  end
+
   test "not_double_charged purchasing physical products that are quantity-enabled allows double-charges after 2 hours" do
+    travel_to(Time.current)
     product = create_physical_product
     assert product.quantity_enabled
     ip = unique_ip

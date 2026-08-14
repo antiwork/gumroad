@@ -5409,7 +5409,7 @@ class Purchase < ApplicationRecord
       settling = settling.not_is_gift_sender_purchase unless is_gift_sender_purchase
 
       # Gift purchases are stored under the sender's email, so they only turn up via the gift
-      # record. The time-boxed check above deliberately ignores gifts older than a few minutes,
+      # record. The time-boxed check above ignores gifts older than the product-specific window,
       # which means an unresolved gift paid by bank debit would otherwise be invisible here — so
       # look it up explicitly, with no window, exactly like the non-gift settling lookup.
       #
