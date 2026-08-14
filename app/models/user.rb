@@ -1610,7 +1610,7 @@ class User < ApplicationRecord
       affiliate_of_seller_ids = DirectAffiliate.alive.where(affiliate_user: self).select(:seller_id).distinct.pluck(:seller_id)
 
       affiliate_of_seller_ids.each do |seller_id|
-        member = AudienceMember.find_by(seller_id:, email: email_previously_was, affiliate: true)
+        member = AudienceMember.active.find_by(seller_id:, email: email_previously_was, affiliate: true)
         next if member.nil?
         affiliate_details = member.details.delete("affiliates")
         member.valid? ? member.save! : member.soft_delete!

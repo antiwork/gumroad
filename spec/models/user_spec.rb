@@ -3574,6 +3574,26 @@ describe User, :vcr do
       expect(seller_3.audience_members.find_by(email: "original@example.com")).to be_blank # the missing member was ignored
       expect(seller_3.audience_members.find_by(email: "new@example.com")).to be_blank # no change
     end
+
+    it "skips a soft-deleted affiliate tombstone at the old email" do
+      user = create(:user, email: "original@example.com")
+      seller = create(:user)
+      affiliate = create(:direct_affiliate, seller:, affiliate_user: user)
+      affiliate.products << create(:product, user: seller)
+      member = seller.audience_members.find_by!(email: user.email, affiliate: true)
+      travel_to(Time.zone.parse("2026-01-01 12:00:00")) { member.soft_delete! }
+      deleted_at = member.reload.deleted_at
+
+      travel_to(Time.zone.parse("2026-01-02 12:00:00")) do
+        expect do
+          user.update!(email: "new@example.com")
+          user.confirm
+        end.not_to raise_error
+      end
+
+      expect(member.reload.deleted_at).to eq(deleted_at)
+      expect(seller.audience_members.find_by(email: "new@example.com")).to be_blank
+    end
   end
 
   describe "#purchasing_power_parity_excluded_product_external_ids" do
