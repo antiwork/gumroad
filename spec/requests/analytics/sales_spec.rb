@@ -18,25 +18,25 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
     expect(page).to have_text("You don't have any sales yet.")
   end
 
-  context "with the 366-day date range cap" do
+  context "with the date range picker" do
     let!(:product) { create(:product, user: seller) }
 
-    it "clamps the URL when the requested range exceeds 366 days" do
+    it "does not clamp the URL when the requested range exceeds 366 days" do
       visit sales_dashboard_path(from: "2020-01-01", to: "2024-06-01")
-      expect(page).to have_current_path(sales_dashboard_path(from: "2023-06-01", to: "2024-06-01"))
+      expect(page).to have_current_path(sales_dashboard_path(from: "2020-01-01", to: "2024-06-01"))
     end
 
-    it "hides All time and any preset wider than 366 days" do
+    it "offers the All time preset" do
       visit sales_dashboard_path
       initial = find('[aria-label="Date range selector"]').text
       select_disclosure initial do
-        expect(page).not_to have_content("All time")
+        expect(page).to have_content("All time")
         expect(page).to have_content("Last 30 days")
         expect(page).to have_content("Last year")
       end
     end
 
-    it "rejects a custom range wider than 366 days" do
+    it "accepts a custom range wider than 366 days" do
       visit sales_dashboard_path
       initial = find('[aria-label="Date range selector"]').text
       select_disclosure initial do
@@ -44,7 +44,8 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
         fill_in "From (including)", with: "01/01/2020"
         fill_in "To (including)", with: "01/01/2024"
       end
-      expect(page).to have_text("Range can be at most 366 days")
+      expect(page).not_to have_text("Range can be at most")
+      expect(page).to have_current_path(sales_dashboard_path(from: "2020-01-01", to: "2024-01-01"))
     end
 
     it "shows the export confirmation popover linking to the unfiltered export" do

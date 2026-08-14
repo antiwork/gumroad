@@ -28,9 +28,11 @@ import { Select } from "$app/components/ui/Select";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
-const MAX_DATE_RANGE_DAYS = 366;
 // Must match CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS on the backend.
 const MAX_HOURLY_DATE_RANGE_DAYS = 7;
+// Ranges wider than this are slow enough that a failed load is likely a timeout, so the
+// error steers the seller at the emailed full-history export instead of a bare retry.
+const EXPORT_HINT_RANGE_DAYS = 366;
 
 export type Product = {
   name: string;
@@ -123,7 +125,7 @@ const Analytics = ({
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
   const [aggregateBy, setAggregateBy] = React.useState<"hourly" | "daily" | "monthly">("daily");
-  const dateRange = useAnalyticsDateRange({ maxRangeDays: MAX_DATE_RANGE_DAYS });
+  const dateRange = useAnalyticsDateRange();
   // Hourly buckets are only available for short ranges (the backend rejects wider
   // ones). Compare calendar days, not exact times: the picked dates carry a
   // time-of-day, but only yyyy-MM-dd strings are sent to the backend.
@@ -162,11 +164,18 @@ const Analytics = ({
         activeRequests.current = null;
       } catch (e) {
         if (e instanceof AbortError) return;
-        showAlert("Sorry, something went wrong. Please try again.", "error");
+        if (rangeDays > EXPORT_HINT_RANGE_DAYS) {
+          showAlert(
+            'This range is too large to load right now. Use "Export all sales" to get your full history by email, or pick a shorter range.',
+            "error",
+          );
+        } else {
+          showAlert("Sorry, something went wrong. Please try again.", "error");
+        }
       }
     };
     void loadData();
-  }, [startTime, endTime, hourly]);
+  }, [startTime, endTime, hourly, rangeDays]);
 
   const selectedProducts = products.filter((product) => product.selected).map((product) => product.unique_permalink);
 
@@ -201,7 +210,7 @@ const Analytics = ({
             </Select>
             <ProductsPopover products={products} setProducts={setProducts} />
             <div className="col-span-2">
-              <DateRangePicker {...dateRange} maxRangeDays={MAX_DATE_RANGE_DAYS} />
+              <DateRangePicker {...dateRange} />
             </div>
             <ExportSalesPopover />
           </>
