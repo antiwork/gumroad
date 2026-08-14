@@ -1,6 +1,7 @@
 import { Link } from "@inertiajs/react";
 import * as React from "react";
 
+import { FooterCurrencySelector } from "$app/components/FooterCurrencySelector";
 import { Input } from "$app/components/ui/Input";
 
 import logoG from "$assets/images/logo-g.svg";
@@ -143,6 +144,7 @@ export const HomeFooter = () => (
           </svg>
         </SocialLink>
       </div>
+      <FooterCurrencySelector className="self-end" />
     </div>
   </div>
 );
