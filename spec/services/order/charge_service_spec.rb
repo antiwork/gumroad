@@ -1377,15 +1377,15 @@ describe Order::ChargeService, :vcr do
         requires_action?: false,
         mandate: "mandate_saved_indian_free_trial"
       )
-      expect(ChargeProcessor).to receive(:setup_future_charges!).with(
-        merchant_account,
-        kind_of(Chargeable),
-        mandate_options: hash_including(
-          payment_method_options: hash_including(
-            card: hash_including(mandate_options: hash_including(supported_types: ["india"]))
-          )
-        )
-      ).and_return(setup_intent)
+      mandate_amount = nil
+      expect(ChargeProcessor).to receive(:setup_future_charges!) do |account, chargeable, mandate_options:|
+        expect(account).to eq(merchant_account)
+        expect(chargeable).to be_a(Chargeable)
+        mandate = mandate_options.dig(:payment_method_options, :card, :mandate_options)
+        expect(mandate[:supported_types]).to eq(["india"])
+        mandate_amount = mandate[:amount]
+        setup_intent
+      end
       params = {
         line_items: [
           {
@@ -1411,6 +1411,8 @@ describe Order::ChargeService, :vcr do
       expect(purchase.processor_setup_intent_id).to eq("seti_saved_indian_free_trial")
       expect(purchase.charge.stripe_setup_intent_id).to eq("seti_saved_indian_free_trial")
       expect(purchase.subscription.indian_card_mandate_source_purchase(saved_card.id)).to eq(purchase)
+      expect(mandate_amount).to eq(purchase.mandate_maximum_amount_cents)
+      expect(mandate_amount).to be_positive
     ensure
       Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_2)
     end

@@ -4022,6 +4022,18 @@ class Purchase < ApplicationRecord
     # purchase (undersizing the cap so renewals fail).
     reference_purchase = is_upgrade_purchase? ? subscription.original_purchase : self
     base_cents = reference_purchase.total_transaction_cents
+    if base_cents.zero? && reference_purchase.is_free_trial_purchase? && reference_purchase.subscription.present?
+      renewal_price_cents = reference_purchase.subscription.current_subscription_price_cents
+      price_cents = reference_purchase.subscription.indian_card_mandate_price_cents(
+        reference_purchase,
+        renewal_price_cents
+      )
+      base_cents = reference_purchase.subscription.indian_card_mandate_amount_for_billing_info(
+        reference_purchase,
+        reference_purchase.slice(:country, :state, :zip_code),
+        price_cents
+      )
+    end
     discount = reference_purchase.purchase_offer_code_discount
     return base_cents if discount.blank? || discount.duration_in_billing_cycles.blank?
     return base_cents unless reference_purchase.displayed_price_cents.to_i.positive?

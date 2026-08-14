@@ -69,9 +69,23 @@ class Subscription::UpdaterService
     replacement_card = nil
     had_saved_card = false
     plan_or_price_changed = !same_plan_and_price?
+    original_discount = subscription.original_purchase.purchase_offer_code_discount
+    discount_changed = if params[:once_per_cart_discount_allocation].present?
+      true
+    elsif params[:clear_discount]
+      true
+    elsif params[:offer_code].present? && original_discount.present?
+      params[:offer_code] != original_discount.offer_code ||
+        params[:offer_code].amount != original_discount.offer_code_amount ||
+        params[:offer_code].is_percent? != original_discount.offer_code_is_percent ||
+        params[:offer_code].once_per_cart? != original_discount.once_per_cart? ||
+        params[:offer_code].duration_in_billing_cycles != original_discount.duration_in_billing_cycles
+    else
+      params[:offer_code].present?
+    end
     mandate_billing_info_changed = params[:contact_info].present? &&
       params[:contact_info].slice(:country, :state, :zip_code).values.any?(&:present?)
-    check_saved_card_mandate_terms_after_update = (plan_or_price_changed || mandate_billing_info_changed) && use_existing_card? &&
+    check_saved_card_mandate_terms_after_update = (plan_or_price_changed || discount_changed || mandate_billing_info_changed) && use_existing_card? &&
       subscription.india_card_mandate_reliability_enabled? &&
       subscription.credit_card_to_charge&.stripe_charge_processor? &&
       subscription.credit_card_to_charge.requires_mandate?
@@ -112,21 +126,6 @@ class Subscription::UpdaterService
             associate_replacement_card!(replacement_card, had_saved_card:, **validate_indian_card_mandate!(replacement_card))
             replacement_card = nil
           end
-        end
-
-        original_discount = subscription.original_purchase.purchase_offer_code_discount
-        discount_changed = if params[:once_per_cart_discount_allocation].present?
-          true
-        elsif params[:clear_discount]
-          true
-        elsif params[:offer_code].present? && original_discount.present?
-          params[:offer_code] != original_discount.offer_code ||
-            params[:offer_code].amount != original_discount.offer_code_amount ||
-            params[:offer_code].is_percent? != original_discount.offer_code_is_percent ||
-            params[:offer_code].once_per_cart? != original_discount.once_per_cart? ||
-            params[:offer_code].duration_in_billing_cycles != original_discount.duration_in_billing_cycles
-        else
-          params[:offer_code].present?
         end
 
         if !same_plan_and_price? || (is_resubscribing && (discount_changed || price_changed?))
@@ -203,7 +202,8 @@ class Subscription::UpdaterService
           saved_card_update_requires_reauthorization?(
             mandate_terms_before_update,
             plan_or_price_changed:,
-            mandate_billing_info_changed:
+            mandate_billing_info_changed:,
+            discount_changed:
           )
         if saved_card_mandate_terms_changed && !should_charge_user?
           subscription.require_indian_card_mandate_reauthorization!
@@ -418,9 +418,9 @@ class Subscription::UpdaterService
       subscription.future_subscription_charge?(authenticated_offer_code_buyer: logged_in_user)
     end
 
-    def saved_card_update_requires_reauthorization?(previous_terms, plan_or_price_changed:, mandate_billing_info_changed:)
+    def saved_card_update_requires_reauthorization?(previous_terms, plan_or_price_changed:, mandate_billing_info_changed:, discount_changed: false)
       return false unless future_subscription_charge?
-      return false unless mandate_billing_info_changed || (plan_or_price_changed && apply_plan_change_immediately?)
+      return false unless discount_changed || mandate_billing_info_changed || (plan_or_price_changed && apply_plan_change_immediately?)
 
       billing_info = params[:contact_info] if mandate_billing_info_changed
       subscription.indian_card_mandate_terms(billing_info:) != previous_terms

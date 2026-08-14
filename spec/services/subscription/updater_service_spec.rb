@@ -3127,6 +3127,44 @@ describe Subscription::UpdaterService, :vcr do
         expect(new_purchase.purchase_offer_code_discount).to be_nil
       end
 
+      it "requires new mandate terms when a restart clears the discount",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/inventory_counter_cache/does_not_double-count_when_resubscribing_with_a_tier_change" } do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)
+        @subscription.update!(stripe_mandate_id: "mandate_discounted_terms")
+        mandate = Stripe::Mandate.construct_from(
+          id: "mandate_discounted_terms",
+          status: "active",
+          payment_method: @credit_card.processor_payment_method_id
+        )
+        allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+        allow(@subscription).to receive(:send_restart_notifications!)
+        full_price = @product.price_cents + @original_tier_quarterly_price.price_cents
+        allow(@subscription).to receive(:indian_card_mandate_terms).and_return(
+          { amount: full_price * 75 / 100, currency: Currency::USD, interval: "month", interval_count: 3 },
+          { amount: full_price, currency: Currency::USD, interval: "month", interval_count: 3 }
+        )
+        service = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            clear_discount: true,
+            perceived_price_cents: full_price,
+            perceived_upgrade_price_cents: full_price,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        )
+        allow(service).to receive(:charge_user!).and_return(success: true)
+
+        expect(service.perform).to eq(success: true)
+        expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+        expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+        expect(@subscription.stripe_mandate_id).to be_nil
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
       it "updates the discount when the seller changed the offer code percentage" do
         original_discount = @subscription.original_purchase.purchase_offer_code_discount
         expect(original_discount.offer_code_amount).to eq(25)

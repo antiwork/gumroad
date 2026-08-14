@@ -1310,7 +1310,7 @@ class Subscription < ApplicationRecord
       else
         purchases.order(:created_at).last
       end
-    last_purchase&.failed?
+    last_purchase&.failed? && last_purchase.indian_card_mandate_error_status.blank?
   end
 
   def status

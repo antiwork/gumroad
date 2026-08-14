@@ -406,6 +406,7 @@ describe "Indian card mandate reliability" do
     expect(renewal.reload).to be_failed
     expect(subscription.reload).to be_alive
     expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription.status).to eq("payment_method_update_required")
   end
 
   it "converts the server-owned full renewal cap into the stored renewal currency" do
@@ -451,7 +452,7 @@ describe "Indian card mandate reliability" do
       signup_currency_units_per_usd: BigDecimal("80")
     )
 
-    expect(registration.mandate_maximum_amount_cents).to eq(0)
+    expect(registration.mandate_maximum_amount_cents).to eq(renewal_price_cents)
     expect(subscription.indian_card_mandate_terms).to include(
       amount: renewal_price_cents * 80,
       currency: Currency::INR
