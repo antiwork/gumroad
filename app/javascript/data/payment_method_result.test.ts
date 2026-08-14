@@ -8,12 +8,14 @@ import {
 } from "$app/data/card_payment_method_data";
 import {
   type CardPaymentMethodParams,
+  type PaymentRequestPaymentMethodParams,
   type ReusableCardPaymentMethodParams,
   type StripeErrorParams,
 } from "$app/data/payment_method_params";
 import {
   getPaymentMethodResult,
   getReusablePaymentMethodResult,
+  getReusablePaymentRequestPaymentMethodResult,
   type NewCardSelectedPaymentMethod,
   type NewPaymentElementSelectedPaymentMethod,
 } from "$app/data/payment_method_result";
@@ -208,5 +210,39 @@ describe("getReusablePaymentMethodResult", () => {
     });
     expect(prepareFutureCharges).not.toHaveBeenCalled();
     expect(confirmCardIfNeeded).not.toHaveBeenCalled();
+  });
+
+  it("uses the checkout email for Payment Request mandate setup", async () => {
+    const paymentRequestParams: PaymentRequestPaymentMethodParams = {
+      status: "success",
+      type: "payment-request",
+      reusable: false,
+      stripe_payment_method_id: "pm_wallet",
+      card_country: "IN",
+      card_country_source: "stripe",
+      wallet_type: "apple_pay",
+      email: "wallet@example.com",
+      zip_code: "10001",
+    };
+    vi.mocked(prepareFutureCharges).mockResolvedValue({
+      cardParams: {
+        ...paymentRequestParams,
+        reusable: true,
+        stripe_customer_id: "cus_wallet",
+        stripe_setup_intent_id: "seti_wallet",
+      },
+      requiresCardSetup: false,
+    });
+
+    await getReusablePaymentRequestPaymentMethodResult(paymentRequestParams, {
+      products: [product],
+      email: "checkout@example.com",
+    });
+
+    expect(prepareFutureCharges).toHaveBeenCalledWith({
+      products: [product],
+      cardParams: paymentRequestParams,
+      email: "checkout@example.com",
+    });
   });
 });

@@ -489,13 +489,16 @@ class Subscription < ApplicationRecord
     purchase = original_purchase
     return if purchase.nil?
 
+    renewal_price_cents = current_subscription_price_cents
     canonical_cap_cents = purchase.mandate_maximum_amount_cents
+    canonical_cap_cents = renewal_price_cents if canonical_cap_cents.zero?
     return unless canonical_cap_cents.positive?
 
     amount = canonical_cap_cents
     currency = Currency::USD
     presentment = current_later_charge_presentment
     canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
+    canonical_price_cents = renewal_price_cents if canonical_price_cents.zero?
     if presentment.present? && presentment.canonical_price_cents == canonical_price_cents
       currency = presentment.presentment_currency
       amount = BigDecimal(canonical_cap_cents.to_s) * presentment.signup_currency_units_per_usd

@@ -385,6 +385,34 @@ describe "Indian card mandate reliability" do
     )
   end
 
+  it "uses the future renewal amount when the signup transaction was free" do
+    product = create(:membership_product_with_preset_tiered_pricing, :with_free_trial_enabled)
+    registration = create(
+      :free_trial_membership_purchase,
+      link: product,
+      displayed_price_cents: 0,
+      price_cents: 0,
+      total_transaction_cents: 0
+    )
+    subscription = registration.subscription
+    renewal_price_cents = 10_00
+    allow(subscription).to receive(:current_subscription_price_cents).and_return(renewal_price_cents)
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: renewal_price_cents * 80,
+      canonical_price_cents: renewal_price_cents,
+      signup_currency_units_per_usd: BigDecimal("80")
+    )
+
+    expect(registration.mandate_maximum_amount_cents).to eq(0)
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: renewal_price_cents * 80,
+      currency: Currency::INR
+    )
+  end
+
   it "rejects a stored mandate for a different payment method" do
     registration = create_registration
     subscription = registration.subscription

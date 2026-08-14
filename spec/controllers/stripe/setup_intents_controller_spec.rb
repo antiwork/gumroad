@@ -129,6 +129,22 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(controller.send(:authenticated_subscription)).to be_nil
       end
 
+      it "does not bind a mixed restart and forced-new recurring cart" do
+        restart_product, new_product = create_list(:subscription_product, 2)
+        allow(controller).to receive(:params).and_return(
+          ActionController::Parameters.new(
+            email: "buyer@example.com",
+            products: [
+              { price: restart_product.price_cents, permalink: restart_product.unique_permalink },
+              { price: new_product.price_cents, permalink: new_product.unique_permalink, force_new_subscription: true }
+            ]
+          )
+        )
+        expect(Subscription).not_to receive(:restartable_for_product_and_email)
+
+        expect(controller.send(:authenticated_subscription)).to be_nil
+      end
+
       context "when setup intent succeeds" do
         it "renders a successful response" do
           post :create, params: StripePaymentMethodHelper.success_with_sca.to_stripejs_params

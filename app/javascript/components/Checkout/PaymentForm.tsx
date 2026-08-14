@@ -1530,7 +1530,10 @@ const useStripePaymentRequest = (disabled: boolean) => {
         dispatch({
           type: "set-payment-method",
           paymentMethod: requiresReusablePaymentMethod(state)
-            ? await getReusablePaymentRequestPaymentMethodResult(selectedPaymentMethod, { products: state.products })
+            ? await getReusablePaymentRequestPaymentMethodResult(selectedPaymentMethod, {
+                products: state.products,
+                email: state.email || e.payerEmail || null,
+              })
             : getPaymentRequestPaymentMethodResult(selectedPaymentMethod),
         });
       })().catch(fail),

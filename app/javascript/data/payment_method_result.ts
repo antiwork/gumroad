@@ -306,12 +306,12 @@ export const getPaymentRequestPaymentMethodResult = (
 
 export const getReusablePaymentRequestPaymentMethodResult = async (
   paymentRequestParams: PaymentRequestPaymentMethodParams,
-  { products }: { products: Product[] },
+  { products, email }: { products: Product[]; email: string | null },
 ): Promise<ReusablePaymentRequestPaymentMethodResult> => {
   const cardParams = await prepareFutureCharges({
     products,
     cardParams: paymentRequestParams,
-    email: paymentRequestParams.email,
+    email,
   }).then(confirmCardIfNeeded);
 
   if (cardParams.status === "success") {

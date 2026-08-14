@@ -132,17 +132,19 @@ class Stripe::SetupIntentsController < ApplicationController
     end
 
     def restartable_checkout_subscription
-      recurring_products = product_params_list.filter_map do |product_params|
-        next if ActiveModel::Type::Boolean.new.cast(product_params["force_new_subscription"])
+      recurring_product_params = product_params_list.filter_map do |product_params|
+        product = Link.find_by(unique_permalink: product_params["permalink"]) if product_params["permalink"].present?
+        [product, product_params] if product&.is_recurring_billing
+      end
+      return unless recurring_product_params.one?
 
-        Link.find_by(unique_permalink: product_params["permalink"]) if product_params["permalink"].present?
-      end.select(&:is_recurring_billing)
-      return unless recurring_products.one?
+      product, product_params = recurring_product_params.first
+      return if ActiveModel::Type::Boolean.new.cast(product_params["force_new_subscription"])
 
       subscription = if logged_in_user.present?
-        Subscription.restartable_for_product_and_buyer(product: recurring_products.first, buyer: logged_in_user)
+        Subscription.restartable_for_product_and_buyer(product:, buyer: logged_in_user)
       elsif params[:email].present?
-        Subscription.restartable_for_product_and_email(product: recurring_products.first, email: params[:email])
+        Subscription.restartable_for_product_and_email(product:, email: params[:email])
       end
       subscription if subscription&.india_card_mandate_reliability_enabled?
     end
