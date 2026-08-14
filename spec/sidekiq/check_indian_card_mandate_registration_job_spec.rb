@@ -11,7 +11,8 @@ describe CheckIndianCardMandateRegistrationJob do
       alive?: true,
       credit_card_to_charge: instance_double(CreditCard, id: 456),
       renewal_disabled_due_to_indian_card_mandate?: renewal_disabled,
-      overdue_for_charge?: overdue
+      overdue_for_charge?: overdue,
+      charges_completed?: false
     )
   end
 
@@ -110,6 +111,24 @@ describe CheckIndianCardMandateRegistrationJob do
     allow(Purchase).to receive(:find).with(123).and_return(purchase)
 
     expect(RecurringChargeWorker).to receive(:perform_async).with(789)
+
+    described_class.new.perform(123)
+  end
+
+  it "stops checks after all subscription charges are complete" do
+    subscription = applicable_subscription
+    allow(subscription).to receive(:charges_completed?).and_return(true)
+    purchase = instance_double(
+      Purchase,
+      id: 123,
+      credit_card_id: 456,
+      subscription:,
+      india_card_mandate_reliability_enabled?: true
+    )
+    allow(Purchase).to receive(:find).with(123).and_return(purchase)
+
+    expect(purchase).not_to receive(:verify_indian_card_mandate_registration!)
+    expect(described_class).not_to receive(:perform_in)
 
     described_class.new.perform(123)
   end

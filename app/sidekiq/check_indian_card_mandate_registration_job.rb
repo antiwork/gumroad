@@ -17,6 +17,7 @@ class CheckIndianCardMandateRegistrationJob
     subscription = purchase.subscription
     return unless subscription&.india_card_mandate_reliability_enabled?
     return unless subscription.alive?(include_pending_cancellation: false)
+    return if subscription.charges_completed?
     return unless subscription.credit_card_to_charge&.id == purchase.credit_card_id
     return if pending_recheck_count.positive? && !subscription.renewal_disabled_due_to_indian_card_mandate?
 
