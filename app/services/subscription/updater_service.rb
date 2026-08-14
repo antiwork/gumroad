@@ -388,7 +388,7 @@ class Subscription::UpdaterService
     end
 
     def future_subscription_charge?
-      !subscription.charges_completed? && current_subscription_price_cents.positive?
+      !subscription.charges_completed? && subscription.renewal_pre_discount_total_cents.positive?
     end
 
     def record_plan_change!

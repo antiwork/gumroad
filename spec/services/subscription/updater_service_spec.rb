@@ -3459,13 +3459,23 @@ describe Subscription::UpdaterService, :vcr do
     end
 
     it "does not require a replacement mandate when no future charge exists" do
-      allow(service).to receive(:current_subscription_price_cents).and_return(0)
+      allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(0)
       expect(ChargeProcessor).not_to receive(:get_setup_intent)
 
       expect(service.send(:validate_indian_card_mandate!, replacement_card)).to eq(
         clear_mandate_stop: true,
         stripe_mandate_id: nil
       )
+    end
+
+    it "requires a replacement mandate when a temporary discount makes the current price zero" do
+      allow(service).to receive(:current_subscription_price_cents).and_return(0)
+      allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(10_00)
+      expect(ChargeProcessor).to receive(:get_setup_intent).and_return(nil)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(Subscription::UpdateFailed)
     end
 
     it "rejects a replacement mandate for a different payment method" do
@@ -3590,7 +3600,7 @@ describe Subscription::UpdaterService, :vcr do
     it "clears the stop for a saved-card restart with no future charge" do
       subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
       allow(subscription).to receive(:credit_card_to_charge).and_return(replacement_card)
-      allow(service).to receive(:current_subscription_price_cents).and_return(0)
+      allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(0)
       expect(subscription).to receive(:update_renewal_for_indian_card_mandate!).with(
         "active",
         expected_credit_card_id: replacement_card.id
