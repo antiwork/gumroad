@@ -3409,6 +3409,7 @@ describe Subscription::UpdaterService, :vcr do
 
     it "accepts an active mandate and clears the renewal stop" do
       subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
       subscription.reload
       setup_intent = instance_double(
         StripeSetupIntent,
@@ -3434,6 +3435,7 @@ describe Subscription::UpdaterService, :vcr do
       expect(stripe_chargeable.validated_stripe_mandate_id).to eq("mandate_active")
       expect(subscription.reload.credit_card).to eq(replacement_card)
       expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
       expect(subscription.stripe_mandate_id).to eq("mandate_active")
     end
 
@@ -3563,6 +3565,21 @@ describe Subscription::UpdaterService, :vcr do
     it "rejects a saved-card restart without an active mandate" do
       allow(subscription).to receive(:credit_card_to_charge).and_return(replacement_card)
       allow(subscription).to receive(:indian_card_mandate_for).with(replacement_card.id).and_return([nil, "missing", original_purchase])
+
+      expect do
+        service.send(:validate_saved_indian_card_mandate!)
+      end.to raise_error(
+        Subscription::UpdateFailed,
+        "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+      )
+    end
+
+    it "does not reuse the old mandate after a scheduled plan changes its terms" do
+      subscription.update!(credit_card: replacement_card)
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      subscription.reload
+      expect(ChargeProcessor).not_to receive(:get_mandate)
 
       expect do
         service.send(:validate_saved_indian_card_mandate!)

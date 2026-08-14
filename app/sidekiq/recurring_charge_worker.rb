@@ -50,6 +50,12 @@ class RecurringChargeWorker
       # before charging.
       plan_changes = subscription.subscription_plan_changes.alive
       latest_applicable_plan_change = subscription.latest_applicable_plan_change
+      check_mandate_terms_after_plan_change = latest_applicable_plan_change.present? &&
+        subscription.india_card_mandate_reliability_enabled? &&
+        subscription.credit_card_to_charge&.requires_mandate?
+      mandate_terms_before_plan_change = if check_mandate_terms_after_plan_change
+        subscription.indian_card_mandate_terms
+      end
       override_params = {}
       if latest_applicable_plan_change.present?
         same_tier = latest_applicable_plan_change.tier == subscription.tier
@@ -74,6 +80,12 @@ class RecurringChargeWorker
         subscription.reload
 
         UpdateIntegrationsOnTierChangeWorker.perform_async(subscription.id) unless same_tier
+
+        if check_mandate_terms_after_plan_change &&
+           subscription.indian_card_mandate_terms != mandate_terms_before_plan_change
+          subscription.require_indian_card_mandate_reauthorization!
+          return
+        end
       end
 
       subscription.charge!(override_params:)

@@ -350,6 +350,7 @@ class Subscription::UpdaterService
       if clear_mandate_stop
         subscription.stripe_mandate_id = stripe_mandate_id
         subscription.renewal_disabled_due_to_indian_card_mandate = false
+        subscription.indian_card_mandate_requires_reauthorization = false
       end
       subscription.save!
     end

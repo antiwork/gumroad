@@ -327,6 +327,77 @@ describe RecurringChargeWorker, :vcr do
     end
   end
 
+  describe "Indian card subscription has a pending plan change" do
+    before do
+      seller = create(:user)
+      product = create(
+        :subscription_product,
+        user: seller,
+        subscription_duration: BasePrice::Recurrence::QUARTERLY,
+        price_cents: 10_00
+      )
+      quarterly_price = product.prices.find_by!(recurrence: BasePrice::Recurrence::QUARTERLY)
+      create(:price, link: product, recurrence: BasePrice::Recurrence::MONTHLY, price_cents: 5_00)
+      card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_plan_change",
+        processor_payment_method_id: "pm_plan_change",
+        stripe_fingerprint: "fingerprint_plan_change",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        card_country: Compliance::Countries::IND.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030
+      )
+      @subscription = create(:subscription, link: product, credit_card: card, price: quarterly_price)
+      merchant_account = create(
+        :merchant_account,
+        user: nil,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        charge_processor_merchant_id: nil
+      )
+      original_purchase = create(
+        :membership_purchase,
+        link: product,
+        subscription: @subscription,
+        price: quarterly_price,
+        price_cents: quarterly_price.price_cents,
+        is_original_subscription_purchase: true,
+        merchant_account:
+      )
+      original_purchase.update_columns(credit_card_id: card.id, created_at: 4.months.ago, succeeded_at: 4.months.ago)
+      @plan_change = create(
+        :subscription_plan_change,
+        subscription: @subscription,
+        tier: nil,
+        recurrence: BasePrice::Recurrence::MONTHLY,
+        perceived_price_cents: 5_00
+      )
+      @subscription.update!(stripe_mandate_id: "mandate_old_plan")
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+      allow_any_instance_of(Subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+      allow_any_instance_of(Subscription).to receive(:indian_card_mandate_terms) do |current_subscription|
+        { amount: 10_00, currency: Currency::USD, interval: current_subscription.recurrence, interval_count: 1 }
+      end
+    end
+
+    after do
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @subscription.seller)
+    end
+
+    it "requires a new mandate before it charges the new plan",
+       vcr: { cassette_name: "RecurringChargeWorker/subscription_has_a_pending_plan_change/updates_the_variants_and_prices_before_charging" } do
+      expect do
+        described_class.new.perform(@subscription.id)
+      end.not_to change { @subscription.purchases.not_is_original_subscription_purchase.not_is_archived_original_subscription_purchase.count }
+
+      expect(@plan_change.reload).to be_applied
+      expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+      expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+      expect(@subscription.stripe_mandate_id).to be_nil
+    end
+  end
+
   describe "non-tiered subscription has a pending plan change" do
     before do
       travel_to(4.months.ago) do

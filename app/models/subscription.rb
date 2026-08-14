@@ -53,6 +53,7 @@ class Subscription < ApplicationRecord
             6 => :mor_fee_applicable,
             7 => :is_installment_plan,
             8 => :renewal_disabled_due_to_indian_card_mandate,
+            9 => :indian_card_mandate_requires_reauthorization,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -461,6 +462,7 @@ class Subscription < ApplicationRecord
       if status == "active"
         self.stripe_mandate_id = mandate_id if mandate_id.present?
         self.renewal_disabled_due_to_indian_card_mandate = false
+        self.indian_card_mandate_requires_reauthorization = false
         notify_buyer = false
       else
         return unless status.in?(%w[inactive missing pending])
@@ -470,6 +472,29 @@ class Subscription < ApplicationRecord
         self.renewal_disabled_due_to_indian_card_mandate = true
       end
       save! if changed?
+    end
+
+    if notify_buyer
+      after_commit do
+        CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id).deliver_later(queue: "low")
+      end
+    end
+  end
+
+  def require_indian_card_mandate_reauthorization!
+    return unless india_card_mandate_reliability_enabled?
+
+    notify_buyer = false
+    with_lock do
+      card = credit_card_to_charge
+      return unless card&.requires_mandate?
+      return unless alive?(include_pending_cancellation: false)
+
+      notify_buyer = !renewal_disabled_due_to_indian_card_mandate?
+      self.stripe_mandate_id = nil
+      self.renewal_disabled_due_to_indian_card_mandate = true
+      self.indian_card_mandate_requires_reauthorization = true
+      save!
     end
 
     if notify_buyer
@@ -559,6 +584,8 @@ class Subscription < ApplicationRecord
   def indian_card_mandate_for(card_id)
     card = credit_card_to_charge
     return [nil, "missing", nil] unless card&.id == card_id
+    # An active mandate for the old plan cannot authorize the new renewal terms.
+    return [nil, "missing", nil] if indian_card_mandate_requires_reauthorization?
 
     merchant_account = renewal_merchant_account
     return [nil, "missing", nil] if merchant_account.nil?
