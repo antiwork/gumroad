@@ -318,6 +318,9 @@ class AudienceMember < ApplicationRecord
 
   # Admin method: refreshes the details of a specific audience member, or deletes record if no longer a member.
   def refresh!
+    # Serialize rebuilds so an older in-flight job cannot overwrite a newer one.
+    # :until_executing only prevents duplicate enqueue; it does not hold through perform.
+    lock! if persisted?
     self.details = {}
     seller.sales.where(email:).find_each do |purchase|
       self.details["purchases"] ||= []

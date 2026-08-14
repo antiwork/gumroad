@@ -39,6 +39,34 @@ RSpec.describe Purchase::AudienceMember, defer_audience_refresh: true do
       expect(RefreshAudienceMemberJob.jobs).to be_empty
     end
 
+    it "schedules a refresh when a watched change is followed by an unwatched save in one transaction" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      drain_audience_refreshes
+      RefreshAudienceMemberJob.clear
+
+      Purchase.transaction do
+        purchase.update!(can_contact: false)
+        purchase.update!(referrer: "https://example.com")
+      end
+
+      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(purchase.email, seller.id)
+    end
+
+    it "refreshes the old email when an email change is followed by another save in one transaction" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      drain_audience_refreshes
+      old_email = purchase.email
+      RefreshAudienceMemberJob.clear
+
+      Purchase.transaction do
+        purchase.update!(email: "new-address@example.com")
+        purchase.update!(referrer: "https://example.com")
+      end
+
+      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(old_email, seller.id)
+      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job("new-address@example.com", seller.id)
+    end
+
     it "schedules refreshes for both emails when the purchase email changes" do
       purchase = create(:purchase, link: create(:product, user: seller), seller:)
       drain_audience_refreshes
@@ -176,6 +204,21 @@ RSpec.describe Purchase::AudienceMember, defer_audience_refresh: true do
       expect(audience_member_for(purchase)).to be_present
 
       purchase.update_columns(stripe_refunded: true)
+      RefreshAudienceMemberJob.new.perform(purchase.email, seller.id)
+
+      expect(audience_member_for(purchase)).to be_nil
+    end
+
+    it "rebuilds from live source state taken after locking the projection row" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      drain_audience_refreshes
+      expect(audience_member_for(purchase)).to be_present
+
+      allow_any_instance_of(AudienceMember).to receive(:lock!).and_wrap_original do |orig|
+        purchase.update_columns(stripe_refunded: true)
+        orig.call
+      end
+
       RefreshAudienceMemberJob.new.perform(purchase.email, seller.id)
 
       expect(audience_member_for(purchase)).to be_nil

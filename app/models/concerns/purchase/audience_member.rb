@@ -8,8 +8,10 @@ module Purchase::AudienceMember
   AUDIENCE_MEMBER_WATCHED_ATTRIBUTES = %w[can_contact purchase_state stripe_refunded flags chargeback_date email].freeze
 
   included do
+    after_save :record_audience_member_refresh_trigger
     after_commit :schedule_audience_member_refresh_if_changed, on: [:create, :update]
     after_commit :schedule_audience_member_refresh, on: :destroy
+    after_rollback :clear_audience_member_refresh_trigger
   end
 
   def should_be_audience_member?
@@ -61,10 +63,26 @@ module Purchase::AudienceMember
   end
 
   private
-    def schedule_audience_member_refresh_if_changed
-      return if !previous_changes.keys.intersect?(AUDIENCE_MEMBER_WATCHED_ATTRIBUTES)
+    def record_audience_member_refresh_trigger
+      return unless previous_changes.keys.intersect?(AUDIENCE_MEMBER_WATCHED_ATTRIBUTES)
 
-      schedule_audience_member_refresh(email_previously_was) if email_previously_changed? && !previously_new_record?
+      @audience_member_refresh_needed = true
+      if email_previously_changed? && !previously_new_record?
+        @audience_member_refresh_old_email ||= email_previously_was
+      end
+    end
+
+    def schedule_audience_member_refresh_if_changed
+      return unless @audience_member_refresh_needed
+
+      old_email = @audience_member_refresh_old_email
+      clear_audience_member_refresh_trigger
+      schedule_audience_member_refresh(old_email) if old_email
       schedule_audience_member_refresh
+    end
+
+    def clear_audience_member_refresh_trigger
+      @audience_member_refresh_needed = false
+      @audience_member_refresh_old_email = nil
     end
 end
