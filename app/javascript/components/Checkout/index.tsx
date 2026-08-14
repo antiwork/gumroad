@@ -119,16 +119,6 @@ const CurrencyPicker = () => {
   const uid = React.useId();
   const loaded = state.surcharges.type === "loaded" ? state.surcharges.result : null;
   const options = loaded?.available_buyer_currencies ?? [];
-  // Wallet / PayPal / Payment Request charge canonical USD. Don't offer a currency
-  // the charge path will not honor.
-  if (
-    options.length < 2 ||
-    state.paymentMethod !== "card" ||
-    state.willSaveCard ||
-    isWalletPaymentElementType(state.paymentElementType)
-  ) {
-    return null;
-  }
   const detected = loaded?.detected_buyer_currency ?? null;
   const preferred = state.buyerCurrency ?? detected ?? "usd";
   const value = options.some((option) => option.code === preferred)
@@ -136,6 +126,21 @@ const CurrencyPicker = () => {
     : detected && options.some((option) => option.code === detected)
       ? detected
       : (options[0]?.code ?? "usd");
+  const canChooseCurrency =
+    options.length >= 2 &&
+    state.paymentMethod === "card" &&
+    !state.willSaveCard &&
+    !isWalletPaymentElementType(state.paymentElementType);
+
+  React.useEffect(() => {
+    if (!canChooseCurrency || state.buyerCurrency == null || state.buyerCurrency === value) return;
+
+    dispatch({ type: "set-value", buyerCurrency: value });
+  }, [canChooseCurrency, dispatch, state.buyerCurrency, value]);
+
+  // Wallet, non-card, and save-card paths do not honor a buyer-selected FX quote.
+  if (!canChooseCurrency) return null;
+
   return (
     // Carries its own cell chrome so the summary box shows no stray divider when this returns null.
     <div className="border-b border-border p-4 sm:p-5">

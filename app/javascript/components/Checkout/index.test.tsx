@@ -174,9 +174,9 @@ const buildState = (overrides: Partial<State> = {}): State => ({
   ...overrides,
 });
 
-const renderCheckout = (state: State, cart: CartState) =>
+const renderCheckout = (state: State, cart: CartState, dispatch = vi.fn()) =>
   render(
-    <StateContext.Provider value={[state, vi.fn()]}>
+    <StateContext.Provider value={[state, dispatch]}>
       <Checkout discoverUrl="#" cart={cart} updateCart={vi.fn()} />
     </StateContext.Provider>,
   );
@@ -777,5 +777,20 @@ describe("Checkout currency picker", () => {
     );
 
     expect(queryByLabelText("Currency")).toBeNull();
+  });
+
+  it("replaces an unavailable saved currency with the resolved picker value", () => {
+    const dispatch = vi.fn();
+    const { getByLabelText } = renderCheckout(
+      buildState({
+        buyerCurrency: "gbp",
+        surcharges: { type: "loaded", result: quotedSurcharges },
+      }),
+      cart,
+      dispatch,
+    );
+
+    expect(getByLabelText("Currency")).toBeTruthy();
+    expect(dispatch).toHaveBeenCalledWith({ type: "set-value", buyerCurrency: "cad" });
   });
 });
