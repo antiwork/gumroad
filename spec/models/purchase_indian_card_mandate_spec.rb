@@ -363,6 +363,27 @@ describe "Indian card mandate reliability" do
     expect(subscription).to be_alive
   end
 
+  it "clears the pause when the effective payment method is not an Indian card" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update!(renewal_disabled_due_to_indian_card_mandate: true, credit_card: nil)
+    non_indian_card = CreditCard.create!(
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      stripe_customer_id: "cus_non_indian",
+      processor_payment_method_id: "pm_non_indian",
+      stripe_fingerprint: "fingerprint_non_indian",
+      visual: "**** **** **** 4242",
+      card_type: CardType::VISA,
+      card_country: Compliance::Countries::USA.alpha2,
+      expiry_month: 12,
+      expiry_year: 2030
+    )
+    buyer.update!(credit_card: non_indian_card)
+
+    expect(subscription.reload.refresh_indian_card_mandate!).to eq("active")
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+  end
+
 
   it "shows pending cancellation instead of the mandate stop" do
     registration = create_registration

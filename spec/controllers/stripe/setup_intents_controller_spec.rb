@@ -65,6 +65,7 @@ describe Stripe::SetupIntentsController, :vcr do
         subscription = create(:subscription)
         chargeable = double(requires_mandate?: true)
         allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 1, subscription_id: subscription.external_id }]))
+        allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
         expect(subscription).to receive(:indian_card_mandate_terms).and_return(
           amount: 12_34,
           currency: Currency::INR,
@@ -83,6 +84,49 @@ describe Stripe::SetupIntentsController, :vcr do
           interval_count: 3,
           reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id
         )
+      end
+
+      it "uses a restartable checkout subscription for server-owned mandate terms" do
+        product = create(:subscription_product)
+        subscription = create(:subscription, link: product)
+        allow(controller).to receive(:params).and_return(
+          ActionController::Parameters.new(
+            email: "buyer@example.com",
+            products: [{ price: product.price_cents, permalink: product.unique_permalink }]
+          )
+        )
+        allow(Subscription).to receive(:restartable_for_product_and_email)
+          .with(product:, email: "buyer@example.com")
+          .and_return(subscription)
+        allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+
+        expect(controller.send(:authenticated_subscription)).to eq(subscription)
+      end
+
+      it "does not bind one setup intent to multiple recurring products" do
+        products = create_list(:subscription_product, 2)
+        allow(controller).to receive(:params).and_return(
+          ActionController::Parameters.new(
+            email: "buyer@example.com",
+            products: products.map { { price: _1.price_cents, permalink: _1.unique_permalink } }
+          )
+        )
+        expect(Subscription).not_to receive(:restartable_for_product_and_email)
+
+        expect(controller.send(:authenticated_subscription)).to be_nil
+      end
+
+      it "does not bind a forced new subscription to an old subscription" do
+        product = create(:subscription_product)
+        allow(controller).to receive(:params).and_return(
+          ActionController::Parameters.new(
+            email: "buyer@example.com",
+            products: [{ price: product.price_cents, permalink: product.unique_permalink, force_new_subscription: true }]
+          )
+        )
+        expect(Subscription).not_to receive(:restartable_for_product_and_email)
+
+        expect(controller.send(:authenticated_subscription)).to be_nil
       end
 
       context "when setup intent succeeds" do

@@ -65,7 +65,7 @@ class Stripe::SetupIntentsController < ApplicationController
 
     def mandate_options_for_stripe(chargeable, subscription: nil)
       if chargeable.requires_mandate?
-        if subscription.present?
+        if subscription&.india_card_mandate_reliability_enabled?
           terms = subscription.indian_card_mandate_terms
           return if terms.blank?
 
@@ -91,15 +91,22 @@ class Stripe::SetupIntentsController < ApplicationController
         # In case of checkout, create mandate with max product price,
         # as that is what we'd create an off-session charge for at max
         max_product_price = product_params_list.max_by { _1["price"].to_i }&.fetch("price", 0).to_i
+        mandate_amount = if max_product_price.positive?
+          max_product_price
+        elsif subscription.present?
+          subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user)
+        else
+          0
+        end
 
-        max_product_price > 0 ?
+        mandate_amount > 0 ?
           {
             payment_method_options: {
               card: {
                 mandate_options: {
                   reference: StripeChargeProcessor::MANDATE_PREFIX + SecureRandom.hex,
                   amount_type: "maximum",
-                  amount: max_product_price,
+                  amount: mandate_amount,
                   currency: "usd",
                   start_date: Time.current.to_i,
                   interval: "sporadic",
@@ -113,7 +120,7 @@ class Stripe::SetupIntentsController < ApplicationController
 
     def authenticated_subscription
       subscription_id = product_params["subscription_id"]
-      return if subscription_id.blank?
+      return restartable_checkout_subscription if subscription_id.blank?
 
       subscription = Subscription.find_by_external_id(subscription_id)
       unless subscription.present? && cookies.encrypted[subscription.cookie_key] == subscription.external_id
@@ -124,12 +131,28 @@ class Stripe::SetupIntentsController < ApplicationController
       subscription
     end
 
+    def restartable_checkout_subscription
+      recurring_products = product_params_list.filter_map do |product_params|
+        next if ActiveModel::Type::Boolean.new.cast(product_params["force_new_subscription"])
+
+        Link.find_by(unique_permalink: product_params["permalink"]) if product_params["permalink"].present?
+      end.select(&:is_recurring_billing)
+      return unless recurring_products.one?
+
+      subscription = if logged_in_user.present?
+        Subscription.restartable_for_product_and_buyer(product: recurring_products.first, buyer: logged_in_user)
+      elsif params[:email].present?
+        Subscription.restartable_for_product_and_email(product: recurring_products.first, email: params[:email])
+      end
+      subscription if subscription&.india_card_mandate_reliability_enabled?
+    end
+
     def product_params
       product_params_list.first || {}
     end
 
     def product_params_list
-      @product_params_list ||= params.permit(products: [:price, :subscription_id])
+      @product_params_list ||= params.permit(products: [:price, :subscription_id, :permalink, :force_new_subscription])
                                      .to_h
                                      .fetch("products", [])
     end

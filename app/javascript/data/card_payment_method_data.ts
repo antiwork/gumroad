@@ -375,6 +375,7 @@ export const confirmCardIfNeeded = async <
 type PrepareFutureChargesRequest<CardParams extends CardPaymentMethodParams | PaymentRequestPaymentMethodParams> = {
   products: Product[];
   cardParams: CardParams;
+  email?: string | null;
 };
 type PrepareFutureChargesResponse<CardParams extends CardPaymentMethodParams | PaymentRequestPaymentMethodParams> =
   | {
@@ -404,7 +405,16 @@ export const prepareFutureCharges = async <
     method: "POST",
     url: Routes.stripe_setup_intents_path(),
     accept: "json",
-    data: { ...setupIntentCardParams, products: data.products },
+    data: {
+      ...setupIntentCardParams,
+      email: data.email ?? null,
+      products: data.products.map((product) => ({
+        price: product.price,
+        subscription_id: product.subscription_id,
+        permalink: product.permalink,
+        force_new_subscription: product.forceNewSubscription ?? false,
+      })),
+    },
   });
 
   if (response.ok) {

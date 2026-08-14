@@ -276,6 +276,7 @@ export async function getReusablePaymentMethodResult(
       const cardParams = await prepareFutureCharges({
         products,
         cardParams: data.cardParamsResult.cardParams,
+        email: "email" in selected ? selected.email : null,
       }).then(confirmCardIfNeeded);
       if (cardParams.status === "success") {
         return {
@@ -310,6 +311,7 @@ export const getReusablePaymentRequestPaymentMethodResult = async (
   const cardParams = await prepareFutureCharges({
     products,
     cardParams: paymentRequestParams,
+    email: paymentRequestParams.email,
   }).then(confirmCardIfNeeded);
 
   if (cardParams.status === "success") {

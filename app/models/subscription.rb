@@ -545,7 +545,11 @@ class Subscription < ApplicationRecord
 
   def refresh_indian_card_mandate!
     card = credit_card_to_charge
-    return "missing" unless card&.requires_mandate?
+    return "missing" if card.nil?
+    unless card.requires_mandate?
+      update_renewal_for_indian_card_mandate!("active", expected_credit_card_id: card.id)
+      return "active"
+    end
 
     mandate, status, source = indian_card_mandate_for(card.id)
     if source.present?

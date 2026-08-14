@@ -454,6 +454,7 @@ const CheckoutIndexPage = () => {
           : null,
         durationInMonths: item.product.duration_in_months,
         recurrence: item.recurrence,
+        forceNewSubscription: item.force_new_subscription,
         recommended_by: item.recommended_by,
         shippableCountryCodes: item.product.shippable_country_codes,
         nativeType: item.product.native_type,

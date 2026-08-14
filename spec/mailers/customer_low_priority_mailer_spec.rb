@@ -164,7 +164,7 @@ describe CustomerLowPriorityMailer do
       expect(mail.subject).to eq("Update your payment method to keep automatic renewals active.")
       expect(mail.body.encoded).to include("paused automatic renewals")
       expect(mail.body.encoded).to include("did not retry the payment")
-      expect(mail.body.encoded).to include("current paid period")
+      expect(mail.body.encoded).to include("keep access while renewals are paused")
       expect(mail.body.encoded).to include("/subscriptions/#{subscription.external_id}/manage")
     end
   end

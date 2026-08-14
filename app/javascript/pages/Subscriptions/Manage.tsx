@@ -450,8 +450,8 @@ export default function SubscriptionsManage() {
       {subscription.payment_method_update_required ? (
         <CardContent>
           <Alert variant="warning" className="grow">
-            Automatic renewals are paused because your payment method needs an update. You keep access through your
-            current paid period. Update your payment method below to restore renewals.
+            Automatic renewals are paused because your payment method needs an update. You keep access while renewals
+            are paused. Update your payment method below to restore renewals.
           </Alert>
         </CardContent>
       ) : null}

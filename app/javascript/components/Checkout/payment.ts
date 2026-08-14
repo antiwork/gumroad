@@ -175,6 +175,7 @@ export type Product = {
   nativeType: ProductNativeType;
   recurrence: RecurrenceId | null;
   subscription_id?: string;
+  forceNewSubscription?: boolean;
   recommended_by?: string | null;
   shippableCountryCodes: string[];
 };

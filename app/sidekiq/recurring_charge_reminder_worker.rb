@@ -9,6 +9,7 @@ class RecurringChargeReminderWorker
     return if !subscription.alive?(include_pending_cancellation: false) ||
               subscription.in_free_trial? ||
               subscription.charges_completed? ||
+              (subscription.renewal_disabled_due_to_indian_card_mandate? && subscription.india_card_mandate_reliability_enabled?) ||
               !subscription.send_renewal_reminders?
 
     CustomerLowPriorityMailer.subscription_renewal_reminder(subscription_id).deliver_later(queue: "low")

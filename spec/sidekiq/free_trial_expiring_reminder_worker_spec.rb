@@ -59,4 +59,13 @@ describe FreeTrialExpiringReminderWorker, :vcr do
       described_class.new.perform(subscription.id)
     end.to have_enqueued_mail(CustomerLowPriorityMailer, :free_trial_expiring_soon).with(subscription.id).once
   end
+
+  it "doesn't send email while an Indian card mandate update is required" do
+    subscription.update!(renewal_disabled_due_to_indian_card_mandate: true)
+    allow_any_instance_of(Subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+
+    expect do
+      described_class.new.perform(subscription.id)
+    end.to_not have_enqueued_mail(CustomerLowPriorityMailer, :free_trial_expiring_soon).with(subscription.id)
+  end
 end

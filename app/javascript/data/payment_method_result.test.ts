@@ -177,7 +177,7 @@ describe("getReusablePaymentMethodResult", () => {
       billingDetailsCollection: "form",
       pendingSubmit: null,
     });
-    expect(prepareFutureCharges).toHaveBeenCalledWith({ products: [product], cardParams });
+    expect(prepareFutureCharges).toHaveBeenCalledWith({ products: [product], cardParams, email: "buyer@example.com" });
     expect(confirmCardIfNeeded).toHaveBeenCalledWith({ cardParams: reusableCardParams, requiresCardSetup: false });
   });
 
