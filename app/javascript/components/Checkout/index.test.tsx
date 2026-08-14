@@ -734,6 +734,16 @@ describe("Checkout currency picker", () => {
     expect(getByLabelText("Currency")).toBeTruthy();
   });
 
+  it("renders the picker above the summary amounts it reprices", () => {
+    const { getByLabelText, getByText } = renderCheckout(
+      buildState({ surcharges: { type: "loaded", result: quotedSurcharges } }),
+      cart,
+    );
+    const picker = getByLabelText("Currency");
+    const subtotal = getByText("Subtotal");
+    expect(picker.compareDocumentPosition(subtotal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("hides the picker and keeps USD totals when Apple Pay is selected", () => {
     const { queryByLabelText, getAllByText } = renderCheckout(
       buildState({

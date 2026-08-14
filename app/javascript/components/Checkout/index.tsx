@@ -132,24 +132,27 @@ const CurrencyPicker = () => {
       ? detected
       : (options[0]?.code ?? "usd");
   return (
-    <Fieldset>
-      <FieldsetTitle>
-        <Label htmlFor={uid}>Currency</Label>
-      </FieldsetTitle>
-      <Select
-        id={uid}
-        value={value}
-        disabled={isProcessing(state)}
-        onChange={(e) => dispatch({ type: "set-value", buyerCurrency: e.target.value })}
-      >
-        {options.map((option) => (
-          <option key={option.code} value={option.code}>
-            {option.label}
-            {option.code === detected ? " — detected" : ""}
-          </option>
-        ))}
-      </Select>
-    </Fieldset>
+    // Carries its own cell chrome so the summary box shows no stray divider when this returns null.
+    <div className="border-b border-border p-4 sm:p-5">
+      <Fieldset>
+        <FieldsetTitle>
+          <Label htmlFor={uid}>Currency</Label>
+        </FieldsetTitle>
+        <Select
+          id={uid}
+          value={value}
+          disabled={isProcessing(state)}
+          onChange={(e) => dispatch({ type: "set-value", buyerCurrency: e.target.value })}
+        >
+          {options.map((option) => (
+            <option key={option.code} value={option.code}>
+              {option.label}
+              {option.code === detected ? " — detected" : ""}
+            </option>
+          ))}
+        </Select>
+      </Fieldset>
+    </div>
   );
 };
 
@@ -393,6 +396,7 @@ export const Checkout = ({
                 ) : null}
               </CartItemList>
               <CartItemList>
+                <CurrencyPicker />
                 {displayTipSelector ? (
                   <div className="p-4 sm:p-5">
                     <TipSelector
@@ -514,7 +518,6 @@ export const Checkout = ({
                 {total != null ? (
                   <>
                     <footer className="grid gap-4 border-t border-border p-4 sm:px-5">
-                      <CurrencyPicker />
                       <CartPriceItem
                         title="Total"
                         price={
