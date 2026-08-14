@@ -3562,6 +3562,31 @@ describe Subscription::UpdaterService, :vcr do
       )
     end
 
+    it "validates the saved card when an active subscription has a mandate stop" do
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      service = described_class.new(
+        subscription:,
+        params: { use_existing_card: true },
+        logged_in_user: nil,
+        gumroad_guid: "guid",
+        remote_ip: "127.0.0.1"
+      )
+      allow(service).to receive(:validate_params)
+      allow(service).to receive(:same_plan_and_price?).and_return(true)
+      allow(service).to receive(:success_message).and_return("Your membership has been updated.")
+      expect(service).to receive(:validate_saved_indian_card_mandate!).and_raise(
+        Subscription::UpdateFailed,
+        "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+      )
+
+      result = service.perform
+
+      expect(result).to include(
+        success: false,
+        error_message: "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+      )
+    end
+
     it "clears the stop for a saved-card restart with no future charge" do
       subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
       allow(subscription).to receive(:credit_card_to_charge).and_return(replacement_card)

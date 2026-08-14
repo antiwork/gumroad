@@ -61,11 +61,13 @@ describe "Indian card mandate reliability" do
     expect(registration.subscription.india_card_mandate_reliability_enabled?).to be(false)
   end
 
-  it "maps Stripe's canceled-mandate failure only when enforcement is on" do
+  it "maps Stripe's inactive-mandate failures only when enforcement is on" do
     registration = create_registration
-    registration.stripe_error_code = "india_recurring_payment_mandate_canceled"
 
-    expect(registration.indian_card_mandate_error_status).to eq("inactive")
+    ["payment_intent_mandate_invalid", "india_recurring_payment_mandate_canceled"].each do |error_code|
+      registration.stripe_error_code = error_code
+      expect(registration.indian_card_mandate_error_status).to eq("inactive")
+    end
 
     Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
     expect(registration.indian_card_mandate_error_status).to be_nil
@@ -338,7 +340,7 @@ describe "Indian card mandate reliability" do
     expect(subscription.indian_card_mandate_for(card.id)).to eq([mandate, "active", registration])
   end
 
-  it "preserves access after an asynchronous canceled-mandate failure" do
+  it "preserves access after Stripe rejects an inactive mandate" do
     registration = create_registration
     subscription = registration.subscription
     renewal = create(
@@ -351,7 +353,7 @@ describe "Indian card mandate reliability" do
       merchant_account:,
       card_country: Compliance::Countries::IND.alpha2,
       purchase_state: "in_progress",
-      stripe_error_code: "india_recurring_payment_mandate_canceled"
+      stripe_error_code: "payment_intent_mandate_invalid"
     )
     mail = instance_double(ActionMailer::MessageDelivery, deliver_later: true)
     allow(CustomerLowPriorityMailer).to receive(:subscription_indian_card_mandate_invalid).with(subscription.id).and_return(mail)

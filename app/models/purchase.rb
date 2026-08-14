@@ -3500,6 +3500,7 @@ class Purchase < ApplicationRecord
                   PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
                   PurchaseErrorCode::INDIA_CARD_MANDATE_INACTIVE,
                   PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING,
+                  "payment_intent_mandate_invalid",
                   "india_recurring_payment_mandate_canceled",
                 ])
     end
@@ -3507,6 +3508,7 @@ class Purchase < ApplicationRecord
       PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING => "missing",
       PurchaseErrorCode::INDIA_CARD_MANDATE_INACTIVE => "inactive",
       PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING => "pending",
+      "payment_intent_mandate_invalid" => "inactive",
       "india_recurring_payment_mandate_canceled" => "inactive",
     }[code]
   end

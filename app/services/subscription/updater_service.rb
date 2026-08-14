@@ -148,11 +148,8 @@ class Subscription::UpdaterService
           associate_replacement_card!(replacement_card, had_saved_card:, **mandate_validation)
         end
 
-        # Do not allow restarting a subscription when the payment method that
-        # future charges will actually use is no longer supported by the product
-        # creator. It's possible that the creator has disconnected their PayPal
-        # account, and if the subscription would be charged via PayPal, future
-        # charges will fail.
+        # Do not allow a restart or renewal resume when the payment method that
+        # future charges will use is no longer supported by the product creator.
         #
         # We check `Subscription#credit_card_to_charge` — the same card recurring
         # charges use (it prefers the subscription's own card over the user's
@@ -161,7 +158,7 @@ class Subscription::UpdaterService
         # no chargeable card (e.g. free memberships) have nothing to reject, and
         # a new payment method supplied at checkout has already been validated
         # and associated with the subscription above, so it is covered here too.
-        if is_resubscribing
+        if is_resubscribing || subscription.renewal_disabled_due_to_indian_card_mandate?
           card_to_charge = subscription.credit_card_to_charge
           if card_to_charge.present? && !subscription.link.user.supports_card?(card_to_charge.as_json)
             error_message = if card_to_charge.charge_processor_id == PaypalChargeProcessor.charge_processor_id
