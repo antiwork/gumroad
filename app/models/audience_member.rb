@@ -324,7 +324,6 @@ class AudienceMember < ApplicationRecord
   end
 
   private
-
     def apply_refresh
       self.details = {}
       seller.sales.where(email:).find_each do |purchase|
