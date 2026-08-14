@@ -184,6 +184,19 @@ RSpec.describe Purchase::AudienceMember, defer_audience_refresh: true do
         .to eq([original_purchase.email])
     end
 
+    it "rolls back a callback-free re-enable when the audience rebuild fails" do
+      original_purchase.unsubscribe_buyer
+      drain_audience_refreshes
+      allow_any_instance_of(AudienceMember).to receive(:refresh!).and_raise("audience rebuild failed")
+
+      expect do
+        original_purchase.reload.update_columns(can_contact: true)
+      end.to raise_error("audience rebuild failed")
+
+      expect(original_purchase.reload.can_contact?).to be(false)
+      expect(audience_member_for(original_purchase).deleted_at).to be_present
+    end
+
     it "restores purchase details when another audience source kept the row active" do
       affiliate_user = create(:affiliate_user, email: original_purchase.email)
       affiliate = create(:direct_affiliate, affiliate_user:, seller:)

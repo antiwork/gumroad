@@ -62,7 +62,11 @@ class ElasticsearchIndexerWorker
         EsClient.update(client_params)
       rescue Elasticsearch::Transport::Transport::Errors::NotFound
         # Soft-deleted rows keep their id; restore is an update of a missing document.
-        raise unless record.respond_to?(:search_indexable?) && record.search_indexable?
+        raise unless record.respond_to?(:search_indexable?)
+        # Reload before reindexing: a concurrent soft-delete can remove the document
+        # after this job loaded a live row, and indexing the stale copy would resurrect it.
+        record = klass.find(record_id)
+        return unless record.search_indexable?
         client_params[:body] = record.as_indexed_json
         EsClient.index(client_params)
       end

@@ -62,12 +62,19 @@ module Purchase::AudienceMember
   end
 
   # Support restores deliberately bypass callbacks. Rebuild while a tombstone exists so a
-  # callback-free re-enable cannot leave a paying buyer hidden.
+  # callback-free re-enable cannot leave a paying buyer hidden. Atomic with the column
+  # write: a failed rebuild rolls back the re-enable rather than leaving the purchase
+  # contactable while its audience row stays tombstoned.
   def update_columns(attributes)
     can_contact = attributes.stringify_keys["can_contact"]
     restore_audience = self.class.type_for_attribute("can_contact").cast(can_contact)
-    result = super
-    rebuild_audience_member_details if result && restore_audience
+    return super unless restore_audience
+
+    result = nil
+    self.class.transaction do
+      result = super
+      rebuild_audience_member_details if result
+    end
     result
   end
 

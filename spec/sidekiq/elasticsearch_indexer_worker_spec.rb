@@ -170,6 +170,22 @@ describe ElasticsearchIndexerWorker, :elasticsearch_wait_for_refresh do
           "record_id" => member.id
         )
       end
+
+      it "does not reindex a member soft-deleted while an update was in flight" do
+        member = create(:audience_member)
+        allow(EsClient).to receive(:update) do
+          member.update_columns(deleted_at: Time.current, details: {})
+          raise Elasticsearch::Transport::Transport::Errors::NotFound
+        end
+        expect(EsClient).not_to receive(:index)
+
+        described_class.new.perform(
+          "update",
+          "class_name" => "AudienceMember",
+          "record_id" => member.id,
+          "fields" => ["purchases"]
+        )
+      end
     end
 
     context "when an AudienceMember is restored after its document was deleted" do
