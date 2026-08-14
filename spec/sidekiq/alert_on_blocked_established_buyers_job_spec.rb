@@ -41,7 +41,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |room, sender, message|
-      expect(room).to eq("risk")
+      expect(room).to eq("agent_reports")
       expect(sender).to eq("Blocked established buyers")
       expect(message).to include(email)
       expect(message).to include("#{established_count} settled purchases")
@@ -677,7 +677,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
   # InternalNotificationMailer#notify returns silently when the room has no recipient, which would
   # leave the job permanently dark with all specs green.
   it "sends to a room that resolves to a real recipient" do
-    mail = InternalNotificationMailer.notify(room_name: "risk", sender: "spec", message_text: "hello")
+    mail = InternalNotificationMailer.notify(room_name: "agent_reports", sender: "spec", message_text: "hello")
 
     expect(mail.to).to be_present
   end

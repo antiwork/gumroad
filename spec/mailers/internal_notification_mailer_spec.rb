@@ -53,6 +53,24 @@ describe InternalNotificationMailer do
       end
     end
 
+    context "for the agent_reports room" do
+      subject(:mail) do
+        described_class.notify(
+          room_name: "agent_reports",
+          sender: "Blocked established buyers",
+          message_text: "report"
+        )
+      end
+
+      # The room exists to keep autonomously-worked reports out of human inboxes
+      # (gumroad-private#2106); pointing it at a human recipient regresses that silently.
+      it "delivers to the agent inbox only" do
+        expect(mail.to).to eq([INTERNAL_NOTIFICATION_ALWAYS_CC])
+        expect(mail.to).not_to include(INTERNAL_NOTIFICATION_EMAIL)
+        expect(mail.cc).to be_nil
+      end
+    end
+
     context "when room has no email configured" do
       subject(:mail) do
         described_class.notify(
