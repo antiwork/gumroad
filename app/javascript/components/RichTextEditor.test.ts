@@ -347,4 +347,28 @@ describe("useRichTextEditor", () => {
     expect(lastContentResetFailed(getEditor())).toBe(false);
     consoleError.mockRestore();
   });
+
+  it("includes the upsell card node by default so product/email/profile editors keep Insert Upsell", () => {
+    const initialValue = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "x" }] }] };
+    let editor: Editor | null = null;
+    const Harness = () => {
+      editor = useRichTextEditor({ initialValue });
+      return null;
+    };
+    render(React.createElement(Harness));
+    if (!editor) throw new Error("editor did not mount");
+    expect(editor.schema.nodes.upsellCard).toBeDefined();
+  });
+
+  it("omits the upsell card node when allowUpsells is false", () => {
+    const initialValue = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "x" }] }] };
+    let editor: Editor | null = null;
+    const Harness = () => {
+      editor = useRichTextEditor({ initialValue, allowUpsells: false });
+      return null;
+    };
+    render(React.createElement(Harness));
+    if (!editor) throw new Error("editor did not mount");
+    expect(editor.schema.nodes.upsellCard).toBeUndefined();
+  });
 });
