@@ -82,12 +82,15 @@ class CustomerSurchargeController < ApplicationController
       )
     end
 
+    detected_buyer_currency = buyer_currency_for_ip(request.remote_ip)
+    requested_buyer_currency = Checkout::BuyerCurrencyQuote.normalize_requested_currency(params[:buyer_currency])
+    quote_currency = requested_buyer_currency || detected_buyer_currency
     quote_props = buyer_currency_quote_props(
       line_items: all_lines_quotable ? quote_line_items : nil,
       # Sum the per-line integers: rounding the running totals once can disagree
       # with charge-time line totals, and a quote that does not reconcile is refused.
       canonical_total_cents: quote_line_items.sum(&:canonical_total_cents),
-      currency: params[:buyer_currency]
+      currency: quote_currency
     )
     # create() refuses a mixed/unquotable cart. Advertising those currencies would
     # let the picker claim a presentment the charge will never honor.
@@ -96,11 +99,10 @@ class CustomerSurchargeController < ApplicationController
     else
       available_buyer_currencies([])
     end
-    requested = Checkout::BuyerCurrencyQuote.normalize_requested_currency(params[:buyer_currency])
     # Settlement can list a currency that create() then refuses (cart-wide seller /
-    # mixed-shape gates). Don't advertise the currency we just failed to quote.
-    if requested.present? && requested != Currency::USD && quote_props.nil?
-      available = available.reject { |entry| entry[:code] == requested }
+    # mixed-shape gates). Don't advertise the currency we just attempted to quote.
+    if quote_currency.present? && quote_currency != Currency::USD && quote_props.nil?
+      available = available.reject { |entry| entry[:code] == quote_currency }
     end
 
     render json: {
@@ -114,7 +116,7 @@ class CustomerSurchargeController < ApplicationController
       # first payment. Payment surfaces must use the amount the charge path will create now.
       charge_canonical_total_cents: all_lines_quotable ? quote_line_items.sum(&:charge_canonical_total_cents) : nil,
       buyer_currency_quote: quote_props,
-      detected_buyer_currency: buyer_currency_for_ip(request.remote_ip),
+      detected_buyer_currency:,
       available_buyer_currencies: available
     }
   end

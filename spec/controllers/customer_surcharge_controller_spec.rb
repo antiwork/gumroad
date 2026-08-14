@@ -169,6 +169,18 @@ describe CustomerSurchargeController, :vcr do
       expect(codes).not_to include(Currency::GBP)
     end
 
+    it "omits a detected currency that failed to quote" do
+      allow(Checkout::BuyerCurrencyQuote).to receive(:create).and_return(nil)
+
+      post "calculate_all", params: {
+        products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }],
+      }, as: :json
+
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).to include(Currency::USD)
+      expect(codes).not_to include(Currency::CAD)
+    end
+
     it "does not advertise non-USD currencies when a cart line cannot be quoted" do
       post "calculate_all", params: {
         products: [
