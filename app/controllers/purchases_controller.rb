@@ -122,22 +122,21 @@ class PurchasesController < ApplicationController
     # silently re-opt buyers back into a creator's emails after they unsubscribed.
     return unless request.post?
 
-    # One rebuild per buyer at the end of the loop rather than one per purchase row.
-    Purchase.deferring_audience_member_rebuilds do
-      Purchase.where(email: @purchase.email, seller_id: @purchase.seller_id, can_contact: false).find_each do |purchase|
-        purchase.can_contact_reason = nil
-        purchase.update!(can_contact: true)
-      rescue ActiveRecord::RecordInvalid
-        # Mirrors `Purchase#unsubscribe_buyer`. Some old purchase rows no longer pass today's
-        # validations, and letting one of them raise here would abort the loop and leave the
-        # buyer's remaining rows marked uncontactable — a half-resubscribed state that keeps
-        # them out of the creator's audience.
-        Rails.logger.info "Could not update purchase (#{purchase.id}) with validations turned on. Re-subscribing the buyer without running validations."
+    # Each save schedules RefreshAudienceMemberJob after commit; until_executing coalesces
+    # queued refreshes for the same buyer without dropping a change that lands mid-run.
+    Purchase.where(email: @purchase.email, seller_id: @purchase.seller_id, can_contact: false).find_each do |purchase|
+      purchase.can_contact_reason = nil
+      purchase.update!(can_contact: true)
+    rescue ActiveRecord::RecordInvalid
+      # Mirrors `Purchase#unsubscribe_buyer`. Some old purchase rows no longer pass today's
+      # validations, and letting one of them raise here would abort the loop and leave the
+      # buyer's remaining rows marked uncontactable — a half-resubscribed state that keeps
+      # them out of the creator's audience.
+      Rails.logger.info "Could not update purchase (#{purchase.id}) with validations turned on. Re-subscribing the buyer without running validations."
 
-        purchase.can_contact = true
-        purchase.can_contact_reason = nil
-        purchase.save(validate: false)
-      end
+      purchase.can_contact = true
+      purchase.can_contact_reason = nil
+      purchase.save(validate: false)
     end
     @subscribed = true
   end

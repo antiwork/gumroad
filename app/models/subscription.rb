@@ -494,7 +494,7 @@ class Subscription < ApplicationRecord
   def deactivate!
     self.deactivated_at = Time.current
     save!
-    original_purchase&.remove_from_audience_member_details
+    original_purchase&.schedule_audience_member_refresh
 
     after_commit do
       DeactivateIntegrationsWorker.perform_async(original_purchase.id)
@@ -862,7 +862,7 @@ class Subscription < ApplicationRecord
       self.cancelled_by_buyer = false
       self.failed_at = nil unless pending_cancellation
       save!
-      original_purchase&.add_to_audience_member_details
+      original_purchase&.schedule_audience_member_refresh
 
       if is_deactivated
         # Calculate by how much time do we need to delay the workflow installments
@@ -1347,7 +1347,7 @@ class Subscription < ApplicationRecord
     end
 
     def update_original_purchase_audience_member_details
-      original_purchase&.add_to_audience_member_details
+      original_purchase&.schedule_audience_member_refresh
     end
 
     def sync_inventory_counter_caches_for_purchases
