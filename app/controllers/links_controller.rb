@@ -8,6 +8,9 @@ class LinksController < ApplicationController
   include PageMeta::Favicon, PageMeta::Product
   include RequireAccountEmail
   include RendersCustomHtmlPages
+  include MobileAppWebView
+
+  enable_mobile_app_web_view only: %i[new create edit]
 
   DEFAULT_PRICE = 500
   PRICE_INPUT_MAX_LENGTH = 64
