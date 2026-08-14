@@ -874,6 +874,11 @@ it("stops retrying a failed autosave after three attempts", async () => {
     await act(async () => Promise.resolve());
     expect(saveProductMock).toHaveBeenCalledTimes(3);
     expect(contextCapture.current?.saveStatus).toBe("unsaved");
+
+    act(() => contextCapture.current?.updateProduct({ name: "Try again" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    await act(async () => Promise.resolve());
+    expect(saveProductMock).toHaveBeenCalledTimes(4);
   } finally {
     vi.useRealTimers();
   }

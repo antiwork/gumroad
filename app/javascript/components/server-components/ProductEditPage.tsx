@@ -509,23 +509,29 @@ const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
+  const [autosaveRetryCount, setAutosaveRetryCount] = React.useState(0);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
   const lastSavedCurrencyTypeRef = React.useRef(props.currency_type);
   const automaticSaveRef = React.useRef(false);
 
-  const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
+  const updateProduct = (update: Partial<Product> | ((product: Product) => void)) => {
+    setAutosaveRetryCount(0);
     setProduct((prevProduct) => {
       const updated = { ...prevProduct };
       if (typeof update === "function") update(updated);
       else Object.assign(updated, update);
       return updated;
     });
+  };
+  const changeCurrencyType = (next: CurrencyCode) => {
+    setAutosaveRetryCount(0);
+    setCurrencyType(next);
+  };
   const [existingFiles, setExistingFiles] = React.useState(props.existing_files);
   const [router] = React.useState(() => createBrowserRouter(routes));
 
   const [saving, setSaving] = React.useState(false);
   const [autosaveGeneration, setAutosaveGeneration] = React.useState(0);
-  const [autosaveRetryCount, setAutosaveRetryCount] = React.useState(0);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
   // Deletions awaiting the seller's final confirmation in the save-time summary
   // modal. Non-null while the modal is open; the ref holds the resolver of the
@@ -799,10 +805,6 @@ const ProductEditPage = (props: Props) => {
   }, [hasUnsavedChanges, props.autosave_enabled]);
 
   React.useEffect(() => {
-    setAutosaveRetryCount(0);
-  }, [product, currencyType]);
-
-  React.useEffect(() => {
     if (
       !hasUnsavedChanges ||
       uploadsInProgress ||
@@ -869,7 +871,7 @@ const ProductEditPage = (props: Props) => {
   const contextValue = React.useMemo(
     () => ({
       ...createContextValue({ ...props, product }),
-      setCurrencyType,
+      setCurrencyType: changeCurrencyType,
       currencyType,
       existingFiles,
       setExistingFiles,

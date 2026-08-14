@@ -227,7 +227,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
       expect(variant2_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
 
       # Select the first variant
-      select_combo_box_option search: "Sample product (#{variant1.name})", from: "Product"
+      find("[role='option']", text: "Sample product (#{variant1.name})").click
       check "Add a discount to the offered product"
       choose "Fixed amount"
       fill_in "Fixed amount", with: discount_amount
