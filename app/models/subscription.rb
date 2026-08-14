@@ -517,8 +517,10 @@ class Subscription < ApplicationRecord
   def indian_card_mandate_amount_for_billing_info(purchase, billing_info, renewal_price_cents)
     info = billing_info.to_h.symbolize_keys
     country = Compliance::Countries.find_by_name(info[:country])&.alpha2 || info[:country]
-    price_cents = purchase.mandate_maximum_price_cents
-    price_cents = renewal_price_cents if price_cents.zero?
+    displayed_price_cents = purchase.mandate_maximum_displayed_price_cents
+    displayed_price_cents = renewal_price_cents if displayed_price_cents.zero?
+    displayed_currency = purchase[:displayed_price_currency_type].presence || link.price_currency_type
+    price_cents = get_usd_cents(displayed_currency, displayed_price_cents, rate: purchase.rate_converted_to_usd.presence)
     return 0 unless price_cents.positive?
 
     shipping_cents = purchase.shipping_cents.to_i

@@ -426,18 +426,23 @@ describe "Indian card mandate reliability" do
       duration_in_billing_cycles: 1
     )
 
-    expect(registration.mandate_maximum_price_cents).to eq(10_00)
+    expect(registration.mandate_maximum_displayed_price_cents).to eq(10_00)
   end
 
-  it "recomputes the mandate cap for the submitted billing location" do
+  it "recomputes the canonical mandate cap for the submitted billing location" do
     registration = create_registration
     subscription = registration.subscription
     source_purchase = subscription.original_purchase
-    allow(source_purchase).to receive(:mandate_maximum_price_cents).and_return(10_00)
+    product.update_column(:price_currency_type, Currency::EUR)
+    source_purchase.update_columns(
+      displayed_price_currency_type: Currency::EUR,
+      rate_converted_to_usd: "0.8"
+    )
+    allow(source_purchase).to receive(:mandate_maximum_displayed_price_cents).and_return(10_00)
     tax_calculation = instance_double(SalesTaxCalculation, tax_cents: 1_25)
     expect(SalesTaxCalculator).to receive(:new).with(
       product:,
-      price_cents: 10_00,
+      price_cents: 12_50,
       shipping_cents: 0,
       quantity: source_purchase.quantity,
       buyer_location: {
@@ -454,7 +459,7 @@ describe "Indian card mandate reliability" do
       subscription.indian_card_mandate_terms(
         billing_info: { country: "United States", state: "CA", zip_code: "94107" }
       )
-    ).to include(amount: 11_25, currency: Currency::USD)
+    ).to include(amount: 13_75, currency: Currency::USD)
   end
 
   it "rejects a stored mandate for a different payment method" do

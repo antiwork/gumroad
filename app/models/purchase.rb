@@ -3975,7 +3975,7 @@ class Purchase < ApplicationRecord
   # re-authenticate manually. Size the cap to the largest charge this subscription can
   # legitimately make: the undiscounted equivalent of today's total when the discount is
   # temporary, today's total otherwise.
-  def mandate_maximum_price_cents
+  def mandate_maximum_displayed_price_cents
     reference_purchase = is_upgrade_purchase? ? subscription.original_purchase : self
     displayed_price_cents = reference_purchase.displayed_price_cents.to_i
     discount = reference_purchase.purchase_offer_code_discount
