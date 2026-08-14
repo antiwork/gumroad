@@ -224,6 +224,22 @@ RSpec.describe Purchase::AudienceMember, defer_audience_refresh: true do
       expect(audience_member_for(purchase)).to be_nil
     end
 
+    it "holds the projection lock through the rebuild via with_lock" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      drain_audience_refreshes
+      expect(audience_member_for(purchase)).to be_present
+
+      held = false
+      allow_any_instance_of(AudienceMember).to receive(:with_lock).and_wrap_original do |orig, &block|
+        held = true
+        orig.call(&block)
+      end
+
+      RefreshAudienceMemberJob.new.perform(purchase.email, seller.id)
+
+      expect(held).to be(true)
+    end
+
     it "is a no-op for an email with no qualifying records and no existing row" do
       expect do
         RefreshAudienceMemberJob.new.perform("nobody@example.com", seller.id)

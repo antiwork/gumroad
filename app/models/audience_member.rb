@@ -318,34 +318,38 @@ class AudienceMember < ApplicationRecord
 
   # Admin method: refreshes the details of a specific audience member, or deletes record if no longer a member.
   def refresh!
-    # Serialize rebuilds so an older in-flight job cannot overwrite a newer one.
-    # :until_executing only prevents duplicate enqueue; it does not hold through perform.
-    lock! if persisted?
-    self.details = {}
-    seller.sales.where(email:).find_each do |purchase|
-      self.details["purchases"] ||= []
-      self.details["purchases"] << purchase.audience_member_details if purchase.should_be_audience_member?
-    end
-
-    follower = seller.followers.find_by(email:)
-    self.details["follower"] = follower.audience_member_details if follower&.should_be_audience_member?
-
-    seller.direct_affiliates.includes(:affiliate_user).where(users: { email: }).find_each do |affiliate|
-      next unless affiliate.should_be_audience_member?
-      self.details["affiliates"] ||= []
-      affiliate.product_affiliates.each do |product_affiliate|
-        self.details["affiliates"] << affiliate.audience_member_details(product_id: product_affiliate.link_id)
-      end
-    end
-
-    if valid?
-      save!
-    elsif persisted?
-      destroy!
-    end
+    # with_lock (not bare lock!) so the FOR UPDATE holds through the source reads and
+    # save. Bare lock! under autocommit is released at the end of the SELECT.
+    persisted? ? with_lock { apply_refresh } : apply_refresh
   end
 
   private
+
+    def apply_refresh
+      self.details = {}
+      seller.sales.where(email:).find_each do |purchase|
+        self.details["purchases"] ||= []
+        self.details["purchases"] << purchase.audience_member_details if purchase.should_be_audience_member?
+      end
+
+      follower = seller.followers.find_by(email:)
+      self.details["follower"] = follower.audience_member_details if follower&.should_be_audience_member?
+
+      seller.direct_affiliates.includes(:affiliate_user).where(users: { email: }).find_each do |affiliate|
+        next unless affiliate.should_be_audience_member?
+        self.details["affiliates"] ||= []
+        affiliate.product_affiliates.each do |product_affiliate|
+          self.details["affiliates"] << affiliate.audience_member_details(product_id: product_affiliate.link_id)
+        end
+      end
+
+      if valid?
+        save!
+      elsif persisted?
+        destroy!
+      end
+    end
+
     def assign_default_details_value
       return if persisted?
       self.details ||= {}

@@ -8,8 +8,8 @@
 #
 # lock: :until_executing (not :until_executed) so a purchase that commits while a refresh
 # is already running can enqueue a follow-up. :until_executed + on_conflict: :replace
-# dropped that follow-up and left the projection stale. refresh! locks the projection
-# row before reading sources so overlapping performs cannot commit out of order.
+# dropped that follow-up and left the projection stale. refresh! uses with_lock so
+# the row lock holds through the source reads and save.
 class RefreshAudienceMemberJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low, lock: :until_executing
