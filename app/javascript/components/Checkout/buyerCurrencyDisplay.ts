@@ -20,6 +20,10 @@ type CheckoutBuyerCurrencyOptions = {
   paymentElementType?: string;
 };
 
+type CheckoutBuyerCurrencyQuoteTokenOptions = CheckoutBuyerCurrencyOptions & {
+  paymentElementType: string;
+};
+
 export type CheckoutBuyerCurrencyDisplay = {
   currencyCode: CurrencyCode;
   rate: number;
@@ -133,7 +137,7 @@ export const getCheckoutBuyerCurrencyDisplay = (
 // display (or vice versa) lets the charged amount diverge from what the buyer confirmed.
 export const getCheckoutBuyerCurrencyQuoteToken = (
   surcharges: SurchargesResponse | null,
-  options: CheckoutBuyerCurrencyOptions,
+  options: CheckoutBuyerCurrencyQuoteTokenOptions,
 ): string | null =>
   getCheckoutBuyerCurrencyDisplay(surcharges, options) ? (surcharges?.buyer_currency_quote?.token ?? null) : null;
 

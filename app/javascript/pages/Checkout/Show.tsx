@@ -556,6 +556,7 @@ const CheckoutIndexPage = () => {
             cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
             willSaveCard: state.willSaveCard,
             paymentMethod: state.paymentMethod,
+            paymentElementType: state.paymentElementType,
           },
         ),
         lineItems: (() => {

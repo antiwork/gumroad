@@ -39,7 +39,7 @@ const surcharges = (overrides: Partial<SurchargesResponse> = {}): SurchargesResp
   ...overrides,
 });
 
-const cartOptions = { cartPermalinks: ["prod"] };
+const cartOptions = { cartPermalinks: ["prod"], paymentElementType: "card" };
 
 describe("getCheckoutBuyerCurrencyDisplay", () => {
   it("uses the locked surcharge quote as the checkout display rate", () => {
@@ -219,6 +219,12 @@ describe("getCheckoutBuyerCurrencyQuoteToken", () => {
     // A non-card method (PayPal) also charges canonically; sending the token with it would
     // make the charge fail closed on every attempt instead of completing in USD.
     expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { ...cartOptions, paymentMethod: "paypal" })).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyQuoteToken(surcharges(), { ...cartOptions, paymentElementType: "apple_pay" }),
+    ).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyQuoteToken(surcharges(), { ...cartOptions, paymentElementType: "google_pay" }),
+    ).toBeNull();
     expect(getCheckoutBuyerCurrencyQuoteToken(surcharges({ buyer_currency_quote: null }), cartOptions)).toBeNull();
     expect(getCheckoutBuyerCurrencyQuoteToken(null, cartOptions)).toBeNull();
   });
@@ -228,7 +234,9 @@ describe("getCheckoutBuyerCurrencyQuoteToken", () => {
     if (response.buyer_currency_quote) delete response.buyer_currency_quote.line_allocations;
 
     expect(getCheckoutBuyerCurrencyQuoteToken(response, cartOptions)).toBeNull();
-    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { cartPermalinks: ["other"] })).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyQuoteToken(surcharges(), { cartPermalinks: ["other"], paymentElementType: "card" }),
+    ).toBeNull();
   });
 });
 
