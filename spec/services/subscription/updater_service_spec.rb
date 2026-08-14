@@ -3597,6 +3597,29 @@ describe Subscription::UpdaterService, :vcr do
       )
     end
 
+    it "rejects an unsupported replacement before it clears an existing mandate stop" do
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      service.params[:use_existing_card] = false
+      allow(service).to receive(:validate_params)
+      allow(service).to receive(:get_chargeable)
+      allow(CreditCard).to receive(:create).and_return(replacement_card)
+      allow(service).to receive(:indian_card_mandate_validation_required?).and_return(false)
+      allow(service).to receive(:validate_indian_card_mandate!).and_return(
+        clear_mandate_stop: true,
+        stripe_mandate_id: nil
+      )
+      allow(service).to receive(:same_plan_and_price?).and_return(true)
+      allow(seller).to receive(:supports_card?).and_return(false)
+
+      result = service.perform
+
+      expect(result).to include(
+        success: false,
+        error_message: "The payment method saved on this membership is no longer supported by the creator. Please use a different payment method (your card was not charged)."
+      )
+      expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+    end
+
     it "clears the stop for a saved-card restart with no future charge" do
       subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
       allow(subscription).to receive(:credit_card_to_charge).and_return(replacement_card)

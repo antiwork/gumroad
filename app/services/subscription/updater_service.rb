@@ -65,6 +65,7 @@ class Subscription::UpdaterService
 
     result = nil
     terminated_or_scheduled_for_termination = subscription.termination_date.present?
+    had_indian_card_mandate_stop = subscription.renewal_disabled_due_to_indian_card_mandate?
     replacement_card = nil
     had_saved_card = false
 
@@ -158,7 +159,7 @@ class Subscription::UpdaterService
         # no chargeable card (e.g. free memberships) have nothing to reject, and
         # a new payment method supplied at checkout has already been validated
         # and associated with the subscription above, so it is covered here too.
-        if is_resubscribing || subscription.renewal_disabled_due_to_indian_card_mandate?
+        if is_resubscribing || had_indian_card_mandate_stop
           card_to_charge = subscription.credit_card_to_charge
           if card_to_charge.present? && !subscription.link.user.supports_card?(card_to_charge.as_json)
             error_message = if card_to_charge.charge_processor_id == PaypalChargeProcessor.charge_processor_id
@@ -332,7 +333,7 @@ class Subscription::UpdaterService
       mandate_options = setup_intent.card_mandate_options
       return false if mandate_options.blank?
 
-      expected_terms = subscription.indian_card_mandate_terms
+      expected_terms = subscription.indian_card_mandate_terms(billing_info: params[:contact_info])
       return false if expected_terms.blank?
 
       mandate_options.amount_type == "maximum" &&

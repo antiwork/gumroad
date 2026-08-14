@@ -66,7 +66,7 @@ describe Stripe::SetupIntentsController, :vcr do
         chargeable = double(requires_mandate?: true)
         allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 1, subscription_id: subscription.external_id }]))
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
-        expect(subscription).to receive(:indian_card_mandate_terms).and_return(
+        expect(subscription).to receive(:indian_card_mandate_terms).with(billing_info: nil).and_return(
           amount: 12_34,
           currency: Currency::INR,
           interval: "month",
@@ -84,6 +84,27 @@ describe Stripe::SetupIntentsController, :vcr do
           interval_count: 3,
           reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id
         )
+      end
+
+      it "uses the submitted billing location for subscription mandate terms" do
+        subscription = create(:subscription)
+        chargeable = double(requires_mandate?: true)
+        billing_info = { "country" => "US", "state" => "CA", "postal_code" => "94107" }
+        allow(controller).to receive(:params).and_return(
+          ActionController::Parameters.new(
+            billing_info:,
+            products: [{ subscription_id: subscription.external_id }]
+          )
+        )
+        allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+        expect(subscription).to receive(:indian_card_mandate_terms).with(billing_info:).and_return(
+          amount: 12_34,
+          currency: Currency::INR,
+          interval: "month",
+          interval_count: 1
+        )
+
+        controller.send(:mandate_options_for_stripe, chargeable, subscription:)
       end
 
       it "uses a restartable checkout subscription for server-owned mandate terms" do

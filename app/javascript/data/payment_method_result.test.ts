@@ -179,7 +179,12 @@ describe("getReusablePaymentMethodResult", () => {
       billingDetailsCollection: "form",
       pendingSubmit: null,
     });
-    expect(prepareFutureCharges).toHaveBeenCalledWith({ products: [product], cardParams, email: "buyer@example.com" });
+    expect(prepareFutureCharges).toHaveBeenCalledWith({
+      products: [product],
+      cardParams,
+      email: "buyer@example.com",
+      billingInfo: null,
+    });
     expect(confirmCardIfNeeded).toHaveBeenCalledWith({ cardParams: reusableCardParams, requiresCardSetup: false });
   });
 
@@ -237,12 +242,14 @@ describe("getReusablePaymentMethodResult", () => {
     await getReusablePaymentRequestPaymentMethodResult(paymentRequestParams, {
       products: [product],
       email: "checkout@example.com",
+      billingInfo: { country: "IN", state: "KA", postal_code: "560001" },
     });
 
     expect(prepareFutureCharges).toHaveBeenCalledWith({
       products: [product],
       cardParams: paymentRequestParams,
       email: "checkout@example.com",
+      billingInfo: { country: "IN", state: "KA", postal_code: "560001" },
     });
   });
 });

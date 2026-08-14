@@ -485,12 +485,16 @@ class Subscription < ApplicationRecord
       merchant_account.present? && !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
   end
 
-  def indian_card_mandate_terms
+  def indian_card_mandate_terms(billing_info: nil)
     purchase = original_purchase
     return if purchase.nil?
 
     renewal_price_cents = current_subscription_price_cents
-    canonical_cap_cents = purchase.mandate_maximum_amount_cents
+    canonical_cap_cents = if billing_info.present?
+      indian_card_mandate_amount_for_billing_info(purchase, billing_info, renewal_price_cents)
+    else
+      purchase.mandate_maximum_amount_cents
+    end
     canonical_cap_cents = renewal_price_cents if canonical_cap_cents.zero?
     return unless canonical_cap_cents.positive?
 
@@ -508,6 +512,31 @@ class Subscription < ApplicationRecord
 
     interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(recurrence)
     { amount:, currency:, interval:, interval_count: }
+  end
+
+  def indian_card_mandate_amount_for_billing_info(purchase, billing_info, renewal_price_cents)
+    info = billing_info.to_h.symbolize_keys
+    country = Compliance::Countries.find_by_name(info[:country])&.alpha2 || info[:country]
+    price_cents = purchase.mandate_maximum_price_cents
+    price_cents = renewal_price_cents if price_cents.zero?
+    return 0 unless price_cents.positive?
+
+    shipping_cents = purchase.shipping_cents.to_i
+    tax = SalesTaxCalculator.new(
+      product: link,
+      price_cents:,
+      shipping_cents:,
+      quantity: purchase.quantity,
+      buyer_location: {
+        postal_code: info[:zip_code] || info[:postal_code],
+        country:,
+        state: info[:state],
+        ip_address: purchase.ip_address,
+      },
+      buyer_vat_id: business_vat_id,
+      from_discover: purchase.was_discover_fee_charged?
+    ).calculate
+    price_cents + shipping_cents + tax.tax_cents.to_i
   end
 
   def renewal_merchant_account

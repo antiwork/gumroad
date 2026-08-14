@@ -66,7 +66,7 @@ class Stripe::SetupIntentsController < ApplicationController
     def mandate_options_for_stripe(chargeable, subscription: nil)
       if chargeable.requires_mandate?
         if subscription&.india_card_mandate_reliability_enabled?
-          terms = subscription.indian_card_mandate_terms
+          terms = subscription.indian_card_mandate_terms(billing_info: billing_info_params)
           return if terms.blank?
 
           return {
@@ -151,6 +151,12 @@ class Stripe::SetupIntentsController < ApplicationController
 
     def product_params
       product_params_list.first || {}
+    end
+
+    def billing_info_params
+      params.permit(billing_info: [:country, :state, :postal_code])
+            .to_h
+            .fetch("billing_info", nil)
     end
 
     def product_params_list

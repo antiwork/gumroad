@@ -3975,6 +3975,17 @@ class Purchase < ApplicationRecord
   # re-authenticate manually. Size the cap to the largest charge this subscription can
   # legitimately make: the undiscounted equivalent of today's total when the discount is
   # temporary, today's total otherwise.
+  def mandate_maximum_price_cents
+    reference_purchase = is_upgrade_purchase? ? subscription.original_purchase : self
+    displayed_price_cents = reference_purchase.displayed_price_cents.to_i
+    discount = reference_purchase.purchase_offer_code_discount
+    return displayed_price_cents if discount.blank? || discount.duration_in_billing_cycles.blank?
+
+    pre_discount_cents = discount.pre_discount_displayed_price_cents ||
+      discount.pre_discount_minimum_price_cents * reference_purchase.quantity
+    [pre_discount_cents, displayed_price_cents].max
+  end
+
   def mandate_maximum_amount_cents
     # An upgrade purchase only charges the prorated difference today, and any active
     # discount record lives on the subscription's original purchase rather than on the

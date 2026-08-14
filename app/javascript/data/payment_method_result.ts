@@ -3,6 +3,7 @@ import { Stripe, StripeCardElement, StripeElements } from "@stripe/stripe-js";
 import { prepareBraintreePaymentMethodData } from "$app/data/braintree_payment_method_data";
 import {
   confirmCardIfNeeded,
+  type FutureChargesBillingInfo,
   type PaymentElementBillingDetailsCollection,
   prepareCardPaymentMethodData,
   preparePaymentElementPaymentMethodData,
@@ -235,7 +236,7 @@ export async function getPaymentMethodResult(
 }
 
 // FIXME: see above
-type ReusableOptions = { products: Product[] };
+type ReusableOptions = { products: Product[]; billingInfo?: FutureChargesBillingInfo | null };
 export async function getReusablePaymentMethodResult(
   selected: SavedSelectedPaymentMethod,
   options: ReusableOptions,
@@ -256,7 +257,7 @@ export async function getReusablePaymentMethodResult(
 
 export async function getReusablePaymentMethodResult(
   selected: SelectedPaymentMethod,
-  { products }: ReusableOptions,
+  { products, billingInfo }: ReusableOptions,
 ): Promise<SavedPaymentMethodResult | PayPalPaymentMethodResult | ReusableNewCardPaymentMethodResult> {
   const data = await getPaymentMethodResult(selected);
 
@@ -273,10 +274,16 @@ export async function getReusablePaymentMethodResult(
         return { type: "new", cardParamsResult: data.cardParamsResult };
       }
       const { cardParamsResult } = data;
+      const paymentMethodBillingInfo = products.some((product) => product.requireShipping)
+        ? billingInfo
+        : (cardParamsResult.cardParams.elementBillingAddress ??
+          cardParamsResult.cardParams.wallet?.billingAddress ??
+          billingInfo);
       const cardParams = await prepareFutureCharges({
         products,
         cardParams: data.cardParamsResult.cardParams,
         email: "email" in selected ? selected.email : null,
+        billingInfo: paymentMethodBillingInfo ?? null,
       }).then(confirmCardIfNeeded);
       if (cardParams.status === "success") {
         return {
@@ -306,12 +313,17 @@ export const getPaymentRequestPaymentMethodResult = (
 
 export const getReusablePaymentRequestPaymentMethodResult = async (
   paymentRequestParams: PaymentRequestPaymentMethodParams,
-  { products, email }: { products: Product[]; email: string | null },
+  {
+    products,
+    email,
+    billingInfo = null,
+  }: { products: Product[]; email: string | null; billingInfo?: FutureChargesBillingInfo | null },
 ): Promise<ReusablePaymentRequestPaymentMethodResult> => {
   const cardParams = await prepareFutureCharges({
     products,
     cardParams: paymentRequestParams,
     email,
+    billingInfo,
   }).then(confirmCardIfNeeded);
 
   if (cardParams.status === "success") {

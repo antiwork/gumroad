@@ -376,6 +376,12 @@ type PrepareFutureChargesRequest<CardParams extends CardPaymentMethodParams | Pa
   products: Product[];
   cardParams: CardParams;
   email?: string | null;
+  billingInfo?: FutureChargesBillingInfo | null;
+};
+export type FutureChargesBillingInfo = {
+  country: string | null;
+  state: string | null;
+  postal_code: string | null;
 };
 type PrepareFutureChargesResponse<CardParams extends CardPaymentMethodParams | PaymentRequestPaymentMethodParams> =
   | {
@@ -391,10 +397,8 @@ export const prepareFutureCharges = async <
 >(
   data: PrepareFutureChargesRequest<CardParams>,
 ): Promise<PrepareFutureChargesResponse<CardParams>> => {
-  // The wallet details and element-collected billing details on the card params are client-side
-  // context (checkout's buyer/tax details and the wallet_type reported with the purchase). The
-  // setup-intent endpoint has no contract for them, so keep them out of the request body while
-  // preserving them on the returned reusable params, which purchase submission still needs.
+  // Keep payment-method context out of the SetupIntent request. The caller sends the effective
+  // billing location through the narrow billing_info contract below.
   const {
     wallet: _wallet,
     elementBillingAddress: _elementBillingAddress,
@@ -408,6 +412,7 @@ export const prepareFutureCharges = async <
     data: {
       ...setupIntentCardParams,
       email: data.email ?? null,
+      billing_info: data.billingInfo ?? null,
       products: data.products.map((product) => ({
         price: product.price,
         subscription_id: product.subscription_id,

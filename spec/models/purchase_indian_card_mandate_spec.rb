@@ -415,6 +415,48 @@ describe "Indian card mandate reliability" do
     )
   end
 
+  it "uses the pre-discount price for a temporary full discount" do
+    registration = create_registration
+    registration.update!(displayed_price_cents: 0)
+    registration.create_purchase_offer_code_discount!(
+      offer_code: create(:offer_code, products: [product]),
+      offer_code_amount: 100,
+      offer_code_is_percent: true,
+      pre_discount_minimum_price_cents: 10_00,
+      duration_in_billing_cycles: 1
+    )
+
+    expect(registration.mandate_maximum_price_cents).to eq(10_00)
+  end
+
+  it "recomputes the mandate cap for the submitted billing location" do
+    registration = create_registration
+    subscription = registration.subscription
+    source_purchase = subscription.original_purchase
+    allow(source_purchase).to receive(:mandate_maximum_price_cents).and_return(10_00)
+    tax_calculation = instance_double(SalesTaxCalculation, tax_cents: 1_25)
+    expect(SalesTaxCalculator).to receive(:new).with(
+      product:,
+      price_cents: 10_00,
+      shipping_cents: 0,
+      quantity: source_purchase.quantity,
+      buyer_location: {
+        postal_code: "94107",
+        country: Compliance::Countries::USA.alpha2,
+        state: "CA",
+        ip_address: source_purchase.ip_address,
+      },
+      buyer_vat_id: nil,
+      from_discover: false
+    ).and_return(instance_double(SalesTaxCalculator, calculate: tax_calculation))
+
+    expect(
+      subscription.indian_card_mandate_terms(
+        billing_info: { country: "United States", state: "CA", zip_code: "94107" }
+      )
+    ).to include(amount: 11_25, currency: Currency::USD)
+  end
+
   it "rejects a stored mandate for a different payment method" do
     registration = create_registration
     subscription = registration.subscription
