@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CartItem, CartState, Product as CartProduct } from "$app/components/Checkout/cartState";
 import { Checkout } from "$app/components/Checkout/index";
 import { StateContext, type CheckoutPaymentConfig, type State } from "$app/components/Checkout/payment";
+import type { SurchargesResponse } from "$app/data/customer_surcharge";
 
 vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
 
@@ -689,7 +690,7 @@ describe("Checkout method-forced listed-currency amounts", () => {
 });
 
 describe("Checkout currency picker", () => {
-  const quotedSurcharges = {
+  const quotedSurcharges: SurchargesResponse = {
     vat_id_valid: false,
     has_vat_id_input: false,
     shipping_rate_cents: 0,
