@@ -170,6 +170,8 @@ class Subscription::UpdaterService
             end
             raise Subscription::UpdateFailed, error_message
           end
+
+          validate_saved_indian_card_mandate! if use_existing_card?
         end
 
         if !apply_plan_change_immediately?
@@ -325,19 +327,16 @@ class Subscription::UpdaterService
       mandate_options = setup_intent.card_mandate_options
       return false if mandate_options.blank?
 
-      interval, interval_count = indian_card_mandate_interval
-      mandate_options.amount_type == "maximum" &&
-        mandate_options.amount.to_i == get_usd_cents(product.price_currency_type, new_price_cents) &&
-        mandate_options.currency.to_s.downcase == Currency::USD &&
-        mandate_options.reference == StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id &&
-        mandate_options.interval == interval &&
-        mandate_options.interval_count == interval_count &&
-        Array(mandate_options.supported_types).include?("india")
-    end
+      expected_terms = subscription.indian_card_mandate_terms
+      return false if expected_terms.blank?
 
-    def indian_card_mandate_interval
-      recurrence = new_purchase&.price&.recurrence || subscription.recurrence
-      StripeChargeProcessor.indian_card_mandate_interval(recurrence)
+      mandate_options.amount_type == "maximum" &&
+        mandate_options.amount.to_i == expected_terms[:amount] &&
+        mandate_options.currency.to_s.downcase == expected_terms[:currency] &&
+        mandate_options.reference == StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id &&
+        mandate_options.interval == expected_terms[:interval] &&
+        mandate_options.interval_count == expected_terms[:interval_count] &&
+        Array(mandate_options.supported_types).include?("india")
     end
 
     def update_subscription_credit_card!(credit_card, clear_mandate_stop: false, stripe_mandate_id: nil)
@@ -347,6 +346,28 @@ class Subscription::UpdaterService
         subscription.renewal_disabled_due_to_indian_card_mandate = false
       end
       subscription.save!
+    end
+
+    def validate_saved_indian_card_mandate!
+      return unless subscription.india_card_mandate_reliability_enabled?
+
+      credit_card = subscription.credit_card_to_charge
+      return unless credit_card&.stripe_charge_processor?
+      return unless credit_card.requires_mandate?
+
+      mandate, status, = subscription.indian_card_mandate_for(credit_card.id)
+      unless status == "active"
+        raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+      end
+
+      subscription.update_renewal_for_indian_card_mandate!(
+        "active",
+        expected_credit_card_id: credit_card.id,
+        mandate_id: mandate.id
+      )
+    rescue ChargeProcessorError => e
+      ErrorNotifier.notify(e, subscription: subscription.external_id)
+      raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
     end
 
     def record_plan_change!

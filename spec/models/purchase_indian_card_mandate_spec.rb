@@ -309,6 +309,27 @@ describe "Indian card mandate reliability" do
     expect(subscription.indian_card_mandate_for(card.id)).to eq([mandate, "active", nil])
   end
 
+  it "converts the server-owned full renewal cap into the stored renewal currency" do
+    registration = create_registration
+    subscription = registration.subscription
+    allow(subscription).to receive(:original_purchase).and_return(registration)
+    allow(registration).to receive(:mandate_maximum_amount_cents).and_return(12_50)
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(registration)
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 49_950,
+      canonical_price_cents:,
+      signup_currency_units_per_usd: BigDecimal("83.25")
+    )
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 104_063,
+      currency: Currency::INR
+    )
+  end
+
   it "rejects a stored mandate for a different payment method" do
     registration = create_registration
     subscription = registration.subscription

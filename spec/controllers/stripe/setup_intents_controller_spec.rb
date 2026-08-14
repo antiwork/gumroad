@@ -61,13 +61,16 @@ describe Stripe::SetupIntentsController, :vcr do
         post :create, params: card_with_sca.to_stripejs_params.merge!(products: [{ price: 10_00 }, { price: 5_00 }, { price: 7_00 }])
       end
 
-      it "uses the logged in user when deriving a subscription update mandate amount" do
-        logged_in_user = create(:user)
+      it "uses server-owned subscription terms for a subscription mandate" do
         subscription = create(:subscription)
         chargeable = double(requires_mandate?: true)
-        allow(controller).to receive(:logged_in_user).and_return(logged_in_user)
-        allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 0, subscription_id: subscription.external_id, recurrence: "quarterly" }]))
-        expect(subscription).to receive(:current_subscription_price_cents).with(authenticated_offer_code_buyer: logged_in_user).and_return(12_34)
+        allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 1, subscription_id: subscription.external_id }]))
+        expect(subscription).to receive(:indian_card_mandate_terms).and_return(
+          amount: 12_34,
+          currency: Currency::INR,
+          interval: "month",
+          interval_count: 3
+        )
 
         mandate_options = controller.send(:mandate_options_for_stripe, chargeable, subscription:)
         mandate_terms = mandate_options.dig(:payment_method_options, :card, :mandate_options)
@@ -75,7 +78,7 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(mandate_options[:metadata]).to eq(gumroad_subscription_id: subscription.external_id)
         expect(mandate_terms).to include(
           amount: 12_34,
-          currency: Currency::USD,
+          currency: Currency::INR,
           interval: "month",
           interval_count: 3,
           reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id

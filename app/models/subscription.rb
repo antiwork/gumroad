@@ -11,6 +11,7 @@ class Subscription < ApplicationRecord
 
   has_paper_trail
   include ExternalId
+  include CurrencyHelper
   include FlagShihTzu
   include Subscription::PingNotification
   include Purchase::Searchable::SubscriptionCallbacks
@@ -473,6 +474,28 @@ class Subscription < ApplicationRecord
     merchant_account = renewal_merchant_account
     Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) &&
       merchant_account.present? && !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
+  end
+
+  def indian_card_mandate_terms
+    purchase = original_purchase
+    return if purchase.nil?
+
+    canonical_cap_cents = purchase.mandate_maximum_amount_cents
+    return unless canonical_cap_cents.positive?
+
+    amount = canonical_cap_cents
+    currency = Currency::USD
+    presentment = current_later_charge_presentment
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
+    if presentment.present? && presentment.canonical_price_cents == canonical_price_cents
+      currency = presentment.presentment_currency
+      amount = BigDecimal(canonical_cap_cents.to_s) * presentment.signup_currency_units_per_usd
+      amount /= 100 if is_currency_type_single_unit?(currency)
+      amount = amount.ceil
+    end
+
+    interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(recurrence)
+    { amount:, currency:, interval:, interval_count: }
   end
 
   def renewal_merchant_account

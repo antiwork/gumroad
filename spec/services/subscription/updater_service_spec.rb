@@ -3372,14 +3372,14 @@ describe Subscription::UpdaterService, :vcr do
       )
     end
     let(:mandate_options) do
-      interval, interval_count = service.send(:indian_card_mandate_interval)
+      terms = subscription.indian_card_mandate_terms
       Stripe::StripeObject.construct_from(
         amount_type: "maximum",
-        amount: service.send(:get_usd_cents, product.price_currency_type, service.send(:new_price_cents)),
-        currency: Currency::USD,
+        amount: terms[:amount],
+        currency: terms[:currency],
         reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id,
-        interval:,
-        interval_count:,
+        interval: terms[:interval],
+        interval_count: terms[:interval_count],
         supported_types: ["india"]
       )
     end
@@ -3538,6 +3538,31 @@ describe Subscription::UpdaterService, :vcr do
         clear_mandate_stop: true,
         stripe_mandate_id: nil
       )
+    end
+
+    it "rejects a saved-card restart without an active mandate" do
+      allow(subscription).to receive(:credit_card_to_charge).and_return(replacement_card)
+      allow(subscription).to receive(:indian_card_mandate_for).with(replacement_card.id).and_return([nil, "missing", original_purchase])
+
+      expect do
+        service.send(:validate_saved_indian_card_mandate!)
+      end.to raise_error(
+        Subscription::UpdateFailed,
+        "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+      )
+    end
+
+    it "clears the stop when a saved-card restart has an active mandate" do
+      mandate = Stripe::Mandate.construct_from(id: "mandate_active", status: "active", payment_method: "pm_replacement")
+      allow(subscription).to receive(:credit_card_to_charge).and_return(replacement_card)
+      allow(subscription).to receive(:indian_card_mandate_for).with(replacement_card.id).and_return([mandate, "active", original_purchase])
+      expect(subscription).to receive(:update_renewal_for_indian_card_mandate!).with(
+        "active",
+        expected_credit_card_id: replacement_card.id,
+        mandate_id: "mandate_active"
+      )
+
+      service.send(:validate_saved_indian_card_mandate!)
     end
 
     it "returns an update error when Stripe cannot retrieve the mandate" do

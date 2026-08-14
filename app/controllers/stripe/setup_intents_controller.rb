@@ -3,8 +3,6 @@
 # Stateless API calls we need to make for the frontend to setup future charges for given CC, before passing this
 # CC data to be saved/charged along with the preorder, subscription, or bundle payment.
 class Stripe::SetupIntentsController < ApplicationController
-  include CurrencyHelper
-
   before_action :validate_card_params, only: %i[create]
 
   def create
@@ -68,14 +66,9 @@ class Stripe::SetupIntentsController < ApplicationController
     def mandate_options_for_stripe(chargeable, subscription: nil)
       if chargeable.requires_mandate?
         if subscription.present?
-          mandate_amount = product_params["renewalPriceCents"].to_i
-          unless mandate_amount.positive?
-            current_price = subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user)
-            mandate_amount = get_usd_cents(subscription.link.price_currency_type, current_price)
-          end
-          return if mandate_amount <= 0
+          terms = subscription.indian_card_mandate_terms
+          return if terms.blank?
 
-          interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(product_params["recurrence"].presence || subscription.recurrence)
           return {
             metadata: { gumroad_subscription_id: subscription.external_id },
             payment_method_options: {
@@ -83,11 +76,11 @@ class Stripe::SetupIntentsController < ApplicationController
                 mandate_options: {
                   reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id,
                   amount_type: "maximum",
-                  amount: mandate_amount,
-                  currency: Currency::USD,
+                  amount: terms[:amount],
+                  currency: terms[:currency],
                   start_date: Time.current.to_i,
-                  interval:,
-                  interval_count:,
+                  interval: terms[:interval],
+                  interval_count: terms[:interval_count],
                   supported_types: ["india"]
                 }
               }
@@ -136,7 +129,7 @@ class Stripe::SetupIntentsController < ApplicationController
     end
 
     def product_params_list
-      @product_params_list ||= params.permit(products: [:price, :renewalPriceCents, :recurrence, :subscription_id])
+      @product_params_list ||= params.permit(products: [:price, :subscription_id])
                                      .to_h
                                      .fetch("products", [])
     end
