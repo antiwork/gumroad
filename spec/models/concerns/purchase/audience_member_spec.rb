@@ -201,6 +201,33 @@ RSpec.describe Purchase::AudienceMember, defer_audience_refresh: true do
       end.not_to change { RefreshAudienceMemberJob.jobs.size }
     end
 
+    # Direct callers (e.g. Subscription#deactivate!) invoke schedule_audience_member_refresh
+    # mid-transaction. Enqueueing right there lets the job race the commit and rebuild from
+    # pre-commit state, so the enqueue must be deferred to the transaction's commit.
+    it "defers a mid-transaction schedule call until the transaction commits" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      RefreshAudienceMemberJob.clear
+
+      Purchase.transaction do
+        purchase.schedule_audience_member_refresh
+        expect(RefreshAudienceMemberJob.jobs).to be_empty
+      end
+
+      expect(RefreshAudienceMemberJob).to have_enqueued_sidekiq_job(purchase.email, seller.id)
+    end
+
+    it "drops a mid-transaction schedule call when the transaction rolls back" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      RefreshAudienceMemberJob.clear
+
+      Purchase.transaction do
+        purchase.schedule_audience_member_refresh
+        raise ActiveRecord::Rollback
+      end
+
+      expect(RefreshAudienceMemberJob.jobs).to be_empty
+    end
+
     it "enqueues a follow-up refresh when the buyer changes while a refresh is running" do
       purchase = create(:purchase, link: create(:product, user: seller), seller:)
       RefreshAudienceMemberJob.clear

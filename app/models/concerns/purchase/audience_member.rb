@@ -44,11 +44,13 @@ module Purchase::AudienceMember
 
   # The audience_members projection is rebuilt out of band: writing it inline made checkout and
   # unsubscribe wait on the buyer's row lock (up to innodb_lock_wait_timeout) whenever two
-  # requests touched the same (email, seller) pair. Enqueue after commit so a rolled-back
-  # save never schedules a refresh, and so a change that lands while a refresh is running
-  # can still enqueue a follow-up (see RefreshAudienceMemberJob).
+  # requests touched the same (email, seller) pair. Deferred to commit because callers like
+  # Subscription#deactivate! invoke this mid-transaction; enqueueing there lets the job rebuild
+  # from pre-commit state and drops the refresh entirely on rollback (see RefreshAudienceMemberJob).
   def schedule_audience_member_refresh(email = self.email)
-    RefreshAudienceMemberJob.perform_async(email, seller_id)
+    AfterCommitEverywhere.after_commit do
+      RefreshAudienceMemberJob.perform_async(email, seller_id)
+    end
   end
 
   # Synchronous rebuild for console/repair use (see
