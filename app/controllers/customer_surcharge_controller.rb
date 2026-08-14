@@ -266,9 +266,13 @@ class CustomerSurchargeController < ApplicationController
     end
 
     def available_buyer_currencies(products)
+      unless products.present? && products.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1.user) }
+        return [{ code: Currency::USD, label: CURRENCY_CHOICES.dig(Currency::USD, :display_format) || Currency::USD.upcase }]
+      end
+
       codes = [Currency::USD] + CURRENCY_CHOICES.keys.map(&:to_s)
       codes.uniq.filter_map do |code|
-        next unless products.present? ? products.all? { |product| currency_offered_for?(product, code) } : code == Currency::USD
+        next unless products.all? { |product| currency_offered_for?(product, code) }
 
         { code:, label: (CURRENCY_CHOICES.dig(code, :display_format) || code.upcase) }
       end

@@ -64,6 +64,13 @@ describe CustomerSurchargeController, :vcr do
     expect(response.parsed_body).to include(expected_surcharge_response(tax_cents: 12, subtotal: 100))
   end
 
+  it "offers only USD until every seller is in the buyer-currency charging rollout" do
+    post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }] }, as: :json
+
+    expected_currencies = [{ "code" => Currency::USD, "label" => "$ (US Dollars)" }]
+    expect(response.parsed_body.fetch("available_buyer_currencies")).to eq(expected_currencies)
+  end
+
   it "returns tax as 0 when buyer location is EU and a valid VAT ID is provided" do
     create(:zip_tax_rate, combined_rate: 0.19, country: "DE", state: nil, zip_code: nil)
 
