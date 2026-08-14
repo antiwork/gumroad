@@ -26,6 +26,7 @@ class AssetPreview < ApplicationRecord
   # Shrink too-large image covers in the background so variant generation on
   # later renders stays fast.
   after_create_commit :enqueue_oversized_image_resize
+  after_create_commit :enqueue_retina_variant_process
 
   # Update updated_at of product to regenerate the sitemap in RefreshSitemapMonthlyWorker
   belongs_to :link, touch: true, optional: true
@@ -112,9 +113,25 @@ class AssetPreview < ApplicationRecord
 
   def retina_variant
     return unless file.attached?
-    Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
-      file.variant(resize_to_limit: [retina_width, nil]).processed
+
+    file.variant(resize_to_limit: [retina_width, nil])
+  end
+
+  # Worker-only. `.processed` runs ImageMagick; request paths must not call this.
+  def generate_retina_variant!
+    return unless file.attached? && should_post_process?
+
+    variant = retina_variant
+    return variant.processed.url if variant_processed?(variant)
+
+    url = Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
+      variant.processed.url
     end
+    Rails.cache.write("attachment_#{file.id}_retina_url", url)
+    url
+  rescue StandardError => e
+    Rails.logger.warn("AssetPreview#generate_retina_variant! failed for asset_preview #{id}: #{e.message}")
+    nil
   end
 
   # True when the attached image is larger than covers ever render and should
@@ -390,12 +407,16 @@ class AssetPreview < ApplicationRecord
 
     style ||= default_style
 
-    Rails.cache.fetch("attachment_#{file.id}_#{style}_url") do
-      if style == :retina
-        retina_variant.url
+    if style == :retina
+      variant = retina_variant
+      if variant && variant_processed?(variant)
+        Rails.cache.fetch("attachment_#{file.id}_retina_url") { variant.url }
       else
+        enqueue_retina_variant_process
         file.url
       end
+    else
+      Rails.cache.fetch("attachment_#{file.id}_#{style}_url") { file.url }
     end
   rescue
     file.url
@@ -460,16 +481,23 @@ class AssetPreview < ApplicationRecord
     # "no poster yet", which enqueues GenerateVideoPosterWorker unless the
     # failure sentinel is still live, and the worker makes the resized copy off
     # the request path.
-    def resized_poster_exists?(variant)
+    def variant_processed?(variant)
       return false unless ActiveStorage.track_variants
 
       variant.blob.variant_records.exists?(variation_digest: variant.variation.digest)
     end
+    alias_method :resized_poster_exists?, :variant_processed?
 
     def enqueue_video_poster_generation
       return unless file.attached? && file.video?
 
       GenerateVideoPosterWorker.perform_async(id)
+    end
+
+    def enqueue_retina_variant_process
+      return unless file.attached? && should_post_process?
+
+      ProcessAssetPreviewRetinaWorker.perform_async(id)
     end
 
     def enqueue_oversized_image_resize

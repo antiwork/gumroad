@@ -341,10 +341,33 @@ class AssetPreviewTest < ActiveSupport::TestCase
     assert_equal 210, asset_preview.display_height
   end
 
-  test "retina_variant falls back to the original file URL when image processing times out" do
+  test "url_from_file serves the original and enqueues processing when the retina variant is not ready" do
     asset_preview = create_asset_preview
-    asset_preview.file.stubs(:variant).raises(Timeout::Error)
+    ProcessAssetPreviewRetinaWorker.jobs.clear
+
     assert_equal asset_preview.file.url, asset_preview.url_from_file(style: :retina)
+    assert_includes ProcessAssetPreviewRetinaWorker.jobs.map { _1["args"] }, [asset_preview.id]
+  end
+
+  test "url_from_file serves the processed retina variant once it exists" do
+    asset_preview = create_asset_preview
+    asset_preview.generate_retina_variant!
+
+    assert_equal asset_preview.retina_variant.url, asset_preview.url_from_file(style: :retina)
+  end
+
+  test "creating an image cover enqueues retina variant processing" do
+    ProcessAssetPreviewRetinaWorker.jobs.clear
+    preview = create_asset_preview
+
+    assert_includes ProcessAssetPreviewRetinaWorker.jobs.map { _1["args"] }, [preview.id]
+  end
+
+  test "creating a gif cover does not enqueue retina variant processing" do
+    ProcessAssetPreviewRetinaWorker.jobs.clear
+    create_asset_preview_gif
+
+    assert_equal 0, ProcessAssetPreviewRetinaWorker.jobs.size
   end
 
   test "url returns the retina variant for image covers" do
