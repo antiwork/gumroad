@@ -14,8 +14,8 @@ describe "Sentry configuration" do
   describe "before_send" do
     subject(:before_send) { Sentry.configuration.before_send }
 
-    def build_event(tags:)
-      instance_double(Sentry::ErrorEvent, tags:)
+    def build_event(tags:, request: nil)
+      instance_double(Sentry::ErrorEvent, tags:, request:)
     end
 
     def build_exception(backtrace)
@@ -75,6 +75,50 @@ describe "Sentry configuration" do
       event = build_event(tags: { source: "runner" })
 
       expect(before_send.call(event, exception: StandardError.new("boom"))).to eq(event)
+    end
+  end
+
+  describe "Gumhead gateway request scrubbing" do
+    def build_request(url)
+      Sentry::RequestInterface.allocate.tap do |request|
+        request.url = url
+        request.data = { "messages" => "seller prompt" }
+        request.headers = { "Authorization" => "Bearer secret" }
+        request.cookies = "session=abc"
+        request.query_string = "a=1"
+        request.env = { "REMOTE_ADDR" => "1.2.3.4" }
+      end
+    end
+
+    it "empties the request interface for gateway URLs in before_send" do
+      request = build_request("https://api.gumroad.com/v2/gumhead/v1/messages")
+      event = instance_double(Sentry::ErrorEvent, tags: {}, request:)
+
+      expect(Sentry.configuration.before_send.call(event, nil)).to eq(event)
+      expect(request.data).to be_nil
+      expect(request.headers).to eq({})
+      expect(request.cookies).to be_nil
+      expect(request.query_string).to be_nil
+      expect(request.env).to be_nil
+    end
+
+    it "empties the request interface for gateway URLs in before_send_transaction" do
+      request = build_request("https://gumroad.com/api/v2/gumhead/v1/messages")
+      event = instance_double(Sentry::TransactionEvent, request:)
+
+      expect(Sentry.configuration.before_send_transaction.call(event, nil)).to eq(event)
+      expect(request.data).to be_nil
+      expect(request.headers).to eq({})
+    end
+
+    it "leaves other routes' request data untouched" do
+      request = build_request("https://gumroad.com/purchases")
+      event = instance_double(Sentry::ErrorEvent, tags: {}, request:)
+
+      Sentry.configuration.before_send.call(event, nil)
+
+      expect(request.data).to eq({ "messages" => "seller prompt" })
+      expect(request.headers).to eq({ "Authorization" => "Bearer secret" })
     end
   end
 end
