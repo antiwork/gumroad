@@ -73,9 +73,26 @@ vi.mock("$app/components/ReviewForm", () => ({ ReviewForm: () => null }));
 vi.mock("$app/components/UpsellSelectModal", () => ({ UpsellSelectModal: () => null }));
 vi.mock("$app/components/TestimonialSelectModal", () => ({ TestimonialSelectModal: () => null }));
 vi.mock("$app/components/ProductEdit/ContentTab/EpubNudge", () => ({ EpubNudge: () => null }));
+const sortable = vi.hoisted(() => ({ echoList: false }));
 vi.mock("react-sortablejs", () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
-  ReactSortable: ({ children }: { children: React.ReactNode }) => children,
+  // Production Sortable writes `list` back through setList during layout.
+  // Off by default so other tests keep a silent stub; the switch-overwrite
+  // case turns it on to reproduce that write.
+  ReactSortable: ({
+    children,
+    list,
+    setList,
+  }: {
+    children: React.ReactNode;
+    list: unknown[];
+    setList: (next: unknown[]) => void;
+  }) => {
+    React.useLayoutEffect(() => {
+      if (sortable.echoList) setList(list);
+    }, [list, setList]);
+    return children;
+  },
 }));
 const alerts = vi.hoisted((): { message: string; level: string }[] => []);
 vi.mock("$app/components/server-components/Alert", () => ({
@@ -86,6 +103,7 @@ afterEach(() => {
   cleanup();
   mountedEditor = null;
   alerts.length = 0;
+  sortable.echoList = false;
 });
 
 const getMountedEditor = () => {
@@ -507,4 +525,44 @@ it("skips recording a deleted page's id while another page still carries it", as
   await deletePageAt(0);
   expect(product.confirmed_removed_rich_content_ids).toEqual(["unique-id"]);
   expect(paidVariant.rich_content).toEqual([]);
+});
+
+// Sortable's layout-time setList runs before useRefToLatest's effect flushes
+// pagesRef. Without a current-pages write, that report is the previous
+// variant's membership and overwrites the newly selected tier (gp#2023).
+it("keeps the newly selected variant's pages when Sortable reports during the switch", async () => {
+  const freePage = makePage("page-free", "FREE DOC", "Freepass");
+  const paidMag = makePage("page-paid-mag", "ISSUE 40", "TischLog Mag");
+  const paidExtras = makePage("page-paid-extras", "BONUS", "Extras");
+  const freeVariant: VariantFixture = { id: "variant-free", name: "Creator Freepass", rich_content: [freePage] };
+  const paidVariant: VariantFixture = {
+    id: "variant-paid",
+    name: "Insight Collector",
+    rich_content: [paidMag, paidExtras],
+  };
+  const product = buildProduct([freeVariant, paidVariant]);
+
+  sortable.echoList = true;
+  context.product = product;
+  context.updateProduct = (update: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- narrowing the update union for the fixture
+    if (typeof update === "function") (update as (p: Product) => void)(product);
+    else Object.assign(product, update);
+  };
+
+  const { rerender } = render(<ContentTabContent selectedVariantId="variant-free" />);
+  await act(async () => {});
+  expect(paidVariant.rich_content.map(({ id, title }) => ({ id, title }))).toEqual([
+    { id: "page-paid-mag", title: "TischLog Mag" },
+    { id: "page-paid-extras", title: "Extras" },
+  ]);
+
+  rerender(<ContentTabContent selectedVariantId="variant-paid" />);
+  await act(async () => {});
+
+  expect(paidVariant.rich_content.map(({ id, title }) => ({ id, title }))).toEqual([
+    { id: "page-paid-mag", title: "TischLog Mag" },
+    { id: "page-paid-extras", title: "Extras" },
+  ]);
+  expect(freeVariant.rich_content.map(({ id }) => id)).toEqual(["page-free"]);
 });
