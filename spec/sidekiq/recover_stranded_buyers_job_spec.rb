@@ -145,6 +145,38 @@ describe RecoverStrandedBuyersJob do
     end
   end
 
+  it "names withheld buyers so a human can act on shared-radius blocks the detail report no longer reaches them for" do
+    allow(Risk::StrandedBuyerScanService).to receive(:call)
+      .and_return(stranded: [candidate.merge(email: "held@example.com")], truncated: false)
+    withheld_blocks = [
+      [PlatformBlock.new(object_type: PlatformBlock::TYPES[:email_domain]), :shared_identifier_needs_human_review],
+      [PlatformBlock.new(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint]), :card_still_declining_at_issuer],
+    ]
+    allow(Risk::StrandedBuyerRecoveryService).to receive(:call)
+      .and_return(recovery_result(:cleared, :single_decline_auto_block, cleared: [PlatformBlock.new], skipped: withheld_blocks))
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      # Only the shared-radius hold is a human decision; a still-declining card is the issuer's, so
+      # the line must count 1, not 2.
+      expect(message).to include("WITHHELD held@example.com — 1 shared-radius block(s)")
+    end
+  end
+
+  it "prints no WITHHELD line when nothing was held for a human" do
+    allow(Risk::StrandedBuyerScanService).to receive(:call)
+      .and_return(stranded: [candidate], truncated: false)
+    allow(Risk::StrandedBuyerRecoveryService).to receive(:call)
+      .and_return(recovery_result(:cleared, :single_decline_auto_block, cleared: [PlatformBlock.new]))
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).not_to include("WITHHELD")
+    end
+  end
+
   it "stops starting recoveries once the run budget elapses and reports the remainder as unprocessed" do
     candidates = 3.times.map { |i| candidate.merge(email: "slow#{i}@example.com") }
     allow(Risk::StrandedBuyerScanService).to receive(:call).and_return(stranded: candidates, truncated: false)
