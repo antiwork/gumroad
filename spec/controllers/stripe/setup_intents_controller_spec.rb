@@ -3,6 +3,11 @@
 require "spec_helper"
 
 describe Stripe::SetupIntentsController, :vcr do
+  let!(:merchant_account) do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+  end
+
   describe "POST create" do
     context "when card params are invalid" do
       it "responds with an error" do
@@ -22,6 +27,16 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(response.parsed_body["success"]).to eq(false)
         expect(response.parsed_body["error_message"]).to eq("Your card was declined.")
       end
+    end
+
+    it "rejects an unauthenticated subscription mandate request before creating Stripe objects" do
+      subscription = create(:subscription)
+      expect(CardParamsHelper).not_to receive(:build_chargeable)
+
+      post :create, params: { products: [{ subscription_id: subscription.external_id }] }
+
+      expect(response).to be_not_found
+      expect(response.parsed_body["success"]).to eq(false)
     end
 
     context "when card params are valid" do
@@ -51,13 +66,20 @@ describe Stripe::SetupIntentsController, :vcr do
         subscription = create(:subscription)
         chargeable = double(requires_mandate?: true)
         allow(controller).to receive(:logged_in_user).and_return(logged_in_user)
-        allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 0, subscription_id: subscription.external_id }]))
-        allow(Subscription).to receive(:find_by_external_id).with(subscription.external_id).and_return(subscription)
+        allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 0, subscription_id: subscription.external_id, recurrence: "quarterly" }]))
         expect(subscription).to receive(:current_subscription_price_cents).with(authenticated_offer_code_buyer: logged_in_user).and_return(12_34)
 
-        mandate_options = controller.send(:mandate_options_for_stripe, chargeable)
+        mandate_options = controller.send(:mandate_options_for_stripe, chargeable, subscription:)
+        mandate_terms = mandate_options.dig(:payment_method_options, :card, :mandate_options)
 
-        expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(12_34)
+        expect(mandate_options[:metadata]).to eq(gumroad_subscription_id: subscription.external_id)
+        expect(mandate_terms).to include(
+          amount: 12_34,
+          currency: Currency::USD,
+          interval: "month",
+          interval_count: 3,
+          reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id
+        )
       end
 
       context "when setup intent succeeds" do

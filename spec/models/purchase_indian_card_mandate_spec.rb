@@ -157,6 +157,18 @@ describe "Indian card mandate reliability" do
     expect(subscription.indian_card_mandate_source_purchase(card.id)).to eq(registration)
   end
 
+  it "keeps the registration check when another save follows the success transition" do
+    registration = create_registration
+    registration.update_column(:purchase_state, "in_progress")
+    registration.reload.mark_indian_card_mandate_registration!
+    expect(CheckIndianCardMandateRegistrationJob).to receive(:perform_async).with(registration.id)
+
+    ActiveRecord::Base.transaction do
+      registration.mark_successful!
+      registration.save!
+    end
+  end
+
   it "binds an active mandate from the subscription purchase to the renewal" do
     registration = create_registration
     subscription = registration.subscription

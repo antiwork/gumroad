@@ -3,9 +3,14 @@
 # Stateless API calls we need to make for the frontend to setup future charges for given CC, before passing this
 # CC data to be saved/charged along with the preorder, subscription, or bundle payment.
 class Stripe::SetupIntentsController < ApplicationController
+  include CurrencyHelper
+
   before_action :validate_card_params, only: %i[create]
 
   def create
+    subscription = authenticated_subscription
+    return if performed?
+
     chargeable = CardParamsHelper.build_chargeable(params)
 
     if chargeable.nil?
@@ -17,7 +22,7 @@ class Stripe::SetupIntentsController < ApplicationController
     chargeable.prepare!
     reusable_token = chargeable.reusable_token_for!(StripeChargeProcessor.charge_processor_id, logged_in_user)
 
-    mandate_options = mandate_options_for_stripe(chargeable)
+    mandate_options = mandate_options_for_stripe(chargeable, subscription:)
 
     setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
 
@@ -60,27 +65,48 @@ class Stripe::SetupIntentsController < ApplicationController
       end
     end
 
-    def mandate_options_for_stripe(chargeable)
+    def mandate_options_for_stripe(chargeable, subscription: nil)
       if chargeable.requires_mandate?
+        if subscription.present?
+          mandate_amount = product_params["renewalPriceCents"].to_i
+          unless mandate_amount.positive?
+            current_price = subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user)
+            mandate_amount = get_usd_cents(subscription.link.price_currency_type, current_price)
+          end
+          return if mandate_amount <= 0
+
+          interval, interval_count = mandate_interval(product_params["recurrence"].presence || subscription.recurrence)
+          return {
+            metadata: { gumroad_subscription_id: subscription.external_id },
+            payment_method_options: {
+              card: {
+                mandate_options: {
+                  reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id,
+                  amount_type: "maximum",
+                  amount: mandate_amount,
+                  currency: Currency::USD,
+                  start_date: Time.current.to_i,
+                  interval:,
+                  interval_count:,
+                  supported_types: ["india"]
+                }
+              }
+            }
+          }
+        end
+
         # In case of checkout, create mandate with max product price,
         # as that is what we'd create an off-session charge for at max
-        max_product_price = params.permit(products: [:price]).to_h.values.first.max_by { _1["price"].to_i }["price"].to_i rescue 0
+        max_product_price = product_params_list.max_by { _1["price"].to_i }&.fetch("price", 0).to_i
 
-        # In case of subscription update, create mandate with current subscription price,
-        # as price in params is 0 if there's no change in price
-        subscription_id = params.permit(products: [:subscription_id]).to_h.values.first[0]["subscription_id"] rescue nil
-        subscription_current_amount = subscription_id.present? ? Subscription.find_by_external_id(subscription_id).current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user) : 0
-
-        mandate_amount = max_product_price > 0 ? max_product_price : subscription_current_amount
-
-        mandate_amount > 0 ?
+        max_product_price > 0 ?
           {
             payment_method_options: {
               card: {
                 mandate_options: {
                   reference: StripeChargeProcessor::MANDATE_PREFIX + SecureRandom.hex,
                   amount_type: "maximum",
-                  amount: mandate_amount,
+                  amount: max_product_price,
                   currency: "usd",
                   start_date: Time.current.to_i,
                   interval: "sporadic",
@@ -89,6 +115,46 @@ class Stripe::SetupIntentsController < ApplicationController
               }
             }
           } : nil
+      end
+    end
+
+    def authenticated_subscription
+      subscription_id = product_params["subscription_id"]
+      return if subscription_id.blank?
+
+      subscription = Subscription.find_by_external_id(subscription_id)
+      unless subscription.present? && cookies.encrypted[subscription.cookie_key] == subscription.external_id
+        render json: { success: false, error_message: "We could not verify this subscription." }, status: :not_found
+        return
+      end
+
+      subscription
+    end
+
+    def product_params
+      product_params_list.first || {}
+    end
+
+    def product_params_list
+      @product_params_list ||= params.permit(products: [:price, :renewalPriceCents, :recurrence, :subscription_id])
+                                     .to_h
+                                     .fetch("products", [])
+    end
+
+    def mandate_interval(recurrence)
+      case recurrence
+      when "every_two_years"
+        ["year", 2]
+      when "yearly"
+        ["year", 1]
+      when "quarterly"
+        ["month", 3]
+      when "biannually"
+        ["month", 6]
+      when "monthly"
+        ["month", 1]
+      else
+        ["sporadic", nil]
       end
     end
 end

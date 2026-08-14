@@ -65,6 +65,8 @@ class Subscription::UpdaterService
 
     result = nil
     terminated_or_scheduled_for_termination = subscription.termination_date.present?
+    replacement_card = nil
+    had_saved_card = false
 
     begin
       ActiveRecord::Base.transaction do
@@ -87,21 +89,11 @@ class Subscription::UpdaterService
           end
 
           # (b) Create new credit card. Return if error.
-          credit_card = CreditCard.create(chargeable, card_data_handling_mode, logged_in_user)
+          replacement_card = CreditCard.create(chargeable, card_data_handling_mode, logged_in_user)
 
-          unless credit_card.errors.empty?
-            logger.info("SubscriptionUpdater: Error creating new credit card for subscription #{subscription.external_id}: #{credit_card.errors.full_messages} ; params: #{params}")
-            raise Subscription::UpdateFailed, credit_card.errors.messages[:base].first
-          end
-
-          mandate_validation = validate_indian_card_mandate!(credit_card)
-
-          # (c) Associate the new card with the subscription
-          update_subscription_credit_card!(credit_card, **mandate_validation)
-
-          # (d) Send email for giftee adding their first card
-          if !had_saved_card && subscription.gift? && !is_resubscribing
-            CustomerLowPriorityMailer.subscription_giftee_added_card(subscription.id).deliver_later
+          unless replacement_card.errors.empty?
+            logger.info("SubscriptionUpdater: Error creating new credit card for subscription #{subscription.external_id}: #{replacement_card.errors.full_messages} ; params: #{params}")
+            raise Subscription::UpdateFailed, replacement_card.errors.messages[:base].first
           end
         end
 
@@ -144,6 +136,15 @@ class Subscription::UpdaterService
 
           # delete pending plan changes
           subscription.subscription_plan_changes.alive.update_all(deleted_at: Time.current)
+        end
+
+        if replacement_card.present?
+          mandate_validation = validate_indian_card_mandate!(replacement_card)
+          update_subscription_credit_card!(replacement_card, **mandate_validation)
+
+          if !had_saved_card && subscription.gift? && !is_resubscribing
+            CustomerLowPriorityMailer.subscription_giftee_added_card(subscription.id).deliver_later
+          end
         end
 
         # Do not allow restarting a subscription when the payment method that
@@ -285,6 +286,7 @@ class Subscription::UpdaterService
 
     def validate_indian_card_mandate!(credit_card)
       return { clear_mandate_stop: true, stripe_mandate_id: nil } unless subscription.india_card_mandate_reliability_enabled?
+      return { clear_mandate_stop: true, stripe_mandate_id: nil } unless credit_card.stripe_charge_processor?
       return { clear_mandate_stop: true, stripe_mandate_id: nil } unless credit_card.requires_mandate?
 
       merchant_account = subscription.renewal_merchant_account
@@ -294,10 +296,12 @@ class Subscription::UpdaterService
       mandate = ChargeProcessor.get_mandate(merchant_account, mandate_id) if mandate_id.present?
       status = mandate&.status || "missing"
       payment_method_id = credit_card.processor_payment_method_id
+      customer_matches = setup_intent&.customer_id == credit_card.stripe_customer_id
       binding_matches = setup_intent&.payment_method_id == payment_method_id &&
         StripeChargeProcessor.mandate_matches_payment_method?(mandate, payment_method_id)
+      terms_match = indian_card_setup_intent_terms_match?(setup_intent)
 
-      unless status == "active" && binding_matches
+      unless status == "active" && customer_matches && binding_matches && terms_match
         ErrorNotifier.notify(
           "Indian card update rejected without an active e-mandate",
           subscription: subscription.external_id,
@@ -312,6 +316,41 @@ class Subscription::UpdaterService
     rescue ChargeProcessorError => e
       ErrorNotifier.notify(e, subscription: subscription.external_id)
       raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+    end
+
+    def indian_card_setup_intent_terms_match?(setup_intent)
+      return false unless setup_intent&.usage == "off_session"
+      return false unless setup_intent.metadata["gumroad_subscription_id"] == subscription.external_id
+
+      mandate_options = setup_intent.card_mandate_options
+      return false if mandate_options.blank?
+
+      interval, interval_count = indian_card_mandate_interval
+      mandate_options.amount_type == "maximum" &&
+        mandate_options.amount.to_i == get_usd_cents(product.price_currency_type, new_price_cents) &&
+        mandate_options.currency.to_s.downcase == Currency::USD &&
+        mandate_options.reference == StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id &&
+        mandate_options.interval == interval &&
+        mandate_options.interval_count == interval_count &&
+        Array(mandate_options.supported_types).include?("india")
+    end
+
+    def indian_card_mandate_interval
+      recurrence = new_purchase&.price&.recurrence || subscription.recurrence
+      case recurrence
+      when "every_two_years"
+        ["year", 2]
+      when "yearly"
+        ["year", 1]
+      when "quarterly"
+        ["month", 3]
+      when "biannually"
+        ["month", 6]
+      when "monthly"
+        ["month", 1]
+      else
+        ["sporadic", nil]
+      end
     end
 
     def update_subscription_credit_card!(credit_card, clear_mandate_stop: false, stripe_mandate_id: nil)

@@ -33,6 +33,23 @@ class StripeSetupIntent < SetupIntent
     payment_method.respond_to?(:id) ? payment_method.id : payment_method
   end
 
+  def customer_id
+    customer = setup_intent.try(:customer)
+    customer.respond_to?(:id) ? customer.id : customer
+  end
+
+  def usage
+    setup_intent.try(:usage)
+  end
+
+  def metadata
+    setup_intent.try(:metadata)&.to_h || {}
+  end
+
+  def card_mandate_options
+    setup_intent.try(:payment_method_options)&.try(:card)&.try(:mandate_options)
+  end
+
   private
     def validate_next_action
       return unless setup_intent.status == StripeIntentStatus::REQUIRES_ACTION

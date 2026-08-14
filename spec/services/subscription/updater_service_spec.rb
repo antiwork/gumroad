@@ -3371,6 +3371,18 @@ describe Subscription::UpdaterService, :vcr do
         product_permalink: product.unique_permalink
       )
     end
+    let(:mandate_options) do
+      interval, interval_count = service.send(:indian_card_mandate_interval)
+      Stripe::StripeObject.construct_from(
+        amount_type: "maximum",
+        amount: service.send(:get_usd_cents, product.price_currency_type, service.send(:new_price_cents)),
+        currency: Currency::USD,
+        reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id,
+        interval:,
+        interval_count:,
+        supported_types: ["india"]
+      )
+    end
     let(:service) do
       described_class.new(
         subscription:,
@@ -3402,7 +3414,11 @@ describe Subscription::UpdaterService, :vcr do
         StripeSetupIntent,
         succeeded?: true,
         mandate: "mandate_active",
-        payment_method_id: "pm_replacement"
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { "gumroad_subscription_id" => subscription.external_id },
+        card_mandate_options: mandate_options
       )
       mandate = Stripe::Mandate.construct_from(
         id: "mandate_active",
@@ -3426,7 +3442,11 @@ describe Subscription::UpdaterService, :vcr do
         StripeSetupIntent,
         succeeded?: true,
         mandate: nil,
-        payment_method_id: "pm_replacement"
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { "gumroad_subscription_id" => subscription.external_id },
+        card_mandate_options: mandate_options
       )
       allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
 
@@ -3443,7 +3463,11 @@ describe Subscription::UpdaterService, :vcr do
         StripeSetupIntent,
         succeeded?: true,
         mandate: "mandate_other_card",
-        payment_method_id: "pm_other"
+        payment_method_id: "pm_other",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { "gumroad_subscription_id" => subscription.external_id },
+        card_mandate_options: mandate_options
       )
       mandate = Stripe::Mandate.construct_from(
         id: "mandate_other_card",
@@ -3456,6 +3480,64 @@ describe Subscription::UpdaterService, :vcr do
       expect do
         service.send(:validate_indian_card_mandate!, replacement_card)
       end.to raise_error(Subscription::UpdateFailed)
+    end
+
+    it "rejects a replacement SetupIntent for a different customer" do
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_active",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_other",
+        usage: "off_session",
+        metadata: { "gumroad_subscription_id" => subscription.external_id },
+        card_mandate_options: mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_active",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(Subscription::UpdateFailed)
+    end
+
+    it "rejects mandate terms that do not match the subscription" do
+      mismatched_options = Stripe::StripeObject.construct_from(mandate_options.to_h.merge(amount: mandate_options.amount + 1))
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_active",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { "gumroad_subscription_id" => subscription.external_id },
+        card_mandate_options: mismatched_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_active",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(Subscription::UpdateFailed)
+    end
+
+    it "does not apply Stripe mandate checks to a non-Stripe card" do
+      braintree_card = instance_double(CreditCard, stripe_charge_processor?: false)
+
+      expect(service.send(:validate_indian_card_mandate!, braintree_card)).to eq(
+        clear_mandate_stop: true,
+        stripe_mandate_id: nil
+      )
     end
 
     it "returns an update error when Stripe cannot retrieve the mandate" do

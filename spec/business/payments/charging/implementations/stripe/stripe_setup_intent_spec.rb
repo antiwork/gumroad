@@ -5,6 +5,11 @@ require "spec_helper"
 describe StripeSetupIntent, :vcr do
   include StripeChargesHelper
 
+  let!(:merchant_account) do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+  end
+
   let(:processor_setup_intent) { create_stripe_setup_intent(StripePaymentMethodHelper.success.to_stripejs_payment_method_id) }
 
   subject (:stripe_setup_intent) { described_class.new(processor_setup_intent) }

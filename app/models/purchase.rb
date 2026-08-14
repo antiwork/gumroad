@@ -299,6 +299,7 @@ class Purchase < ApplicationRecord
                                                                                                                                  }
     after_transition any => :successful, :do => :block_fraudulent_free_purchases!
     after_transition any => %i[successful not_charged gift_receiver_purchase_successful], :do => :schedule_order_review_reminder
+    after_transition any => NON_GIFT_SUCCESS_STATES.map(&:to_sym), :do => :schedule_indian_card_mandate_registration_check
     after_transition any => any, :do => :log_transition
 
     # normal purchase transitions:
@@ -415,13 +416,6 @@ class Purchase < ApplicationRecord
   after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) {
     purchase.purchase_state_previously_changed? &&
       ORDER_OUTCOME_STATES.include?(purchase.purchase_state)
-  }
-
-  after_commit :enqueue_indian_card_mandate_registration_check, if: -> (purchase) {
-    purchase.purchase_state_previously_changed? &&
-      NON_GIFT_SUCCESS_STATES.include?(purchase.purchase_state) &&
-      purchase.is_indian_card_mandate_registration? &&
-      purchase.india_card_mandate_reliability_enabled?
   }
 
   after_create :mark_inventory_new_in_txn
@@ -4120,8 +4114,13 @@ class Purchase < ApplicationRecord
     RecordOrderChargeOutcomeJob.perform_async(order_id) if order_id.present?
   end
 
-  def enqueue_indian_card_mandate_registration_check
-    CheckIndianCardMandateRegistrationJob.perform_async(id)
+  def schedule_indian_card_mandate_registration_check
+    return unless is_indian_card_mandate_registration?
+    return unless india_card_mandate_reliability_enabled?
+
+    after_commit do
+      CheckIndianCardMandateRegistrationJob.perform_async(id)
+    end
   end
 
   def check_for_blocked_customer_emails
