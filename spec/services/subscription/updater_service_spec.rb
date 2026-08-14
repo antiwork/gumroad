@@ -992,6 +992,34 @@ describe Subscription::UpdaterService, :vcr do
               expect(Purchase.find_by_secure_external_id(response[:purchase][:id], scope: "confirm")).to eq(@subscription.purchases.in_progress.last)
               expect(PostToPingEndpointsWorker.jobs.size).to eq(0)
             end
+
+            it "rolls back a paid plan change until the buyer re-enters the card",
+               vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/changing_the_price_on_a_PWYW_tier/to_a_price_that_is_higher/when_the_card_requires_e-mandate/charges_the_difference_and_returns_proper_SCA_response" } do
+              Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+              params = @params.merge(
+                price_range: 7_99,
+                perceived_price_cents: 7_99,
+                perceived_upgrade_price_cents: 3_38,
+              )
+
+              response = Subscription::UpdaterService.new(
+                subscription: @subscription,
+                gumroad_guid: @gumroad_guid,
+                params:,
+                logged_in_user: @user,
+                remote_ip: @remote_ip,
+              ).perform
+
+              expect(response).to eq(
+                success: false,
+                error_message: "This plan change needs a new recurring payment authorization. Re-enter your card to continue."
+              )
+              expect(@subscription.reload.original_purchase).to eq(@original_purchase)
+              expect(@original_purchase.reload.is_archived_original_subscription_purchase).to be(false)
+              expect(@subscription.purchases.is_upgrade_purchase).to be_empty
+            ensure
+              Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+            end
           end
         end
 

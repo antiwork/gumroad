@@ -203,6 +203,10 @@ class Subscription::UpdaterService
           plan_or_price_changed:,
           mandate_billing_info_changed:
         )
+          if should_charge_user?
+            raise Subscription::UpdateFailed, "This plan change needs a new recurring payment authorization. Re-enter your card to continue."
+          end
+
           subscription.require_indian_card_mandate_reauthorization!
         end
 
@@ -414,7 +418,6 @@ class Subscription::UpdaterService
 
     def saved_card_update_requires_reauthorization?(previous_terms, plan_or_price_changed:, mandate_billing_info_changed:)
       return false unless future_subscription_charge?
-      return false if should_charge_user?
       return false unless mandate_billing_info_changed || (plan_or_price_changed && apply_plan_change_immediately?)
 
       billing_info = params[:contact_info] if mandate_billing_info_changed
