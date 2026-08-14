@@ -373,10 +373,11 @@ describe CustomerSurchargeController, :vcr do
     end
 
     it "returns no quote props for buyer currencies Gumroad stores in different minor units than Stripe charges" do
-      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
+      allow_any_instance_of(CustomerSurchargeController).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
 
       post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }] }, as: :json
 
+      expect(response.parsed_body.fetch("detected_buyer_currency")).to eq(Currency::KRW)
       expect(response.parsed_body["buyer_currency_quote"]).to be_nil
     end
 
