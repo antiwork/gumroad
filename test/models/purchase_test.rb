@@ -2723,6 +2723,25 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED, purchase2.error_code
   end
 
+  test "not_double_charged upgrading a physical subscription allows the upgrade after 10 seconds" do
+    product = create_physical_product
+    ip = unique_ip
+    create_physical_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first], created_at: 90.minutes.ago)
+    purchase2 = build_physical_purchase(link: product, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first])
+    purchase2.is_upgrade_purchase = true
+    assert purchase2.valid?
+  end
+
+  test "not_double_charged upgrading a physical subscription prohibits double-charges within 10 seconds" do
+    product = create_physical_product
+    ip = unique_ip
+    create_physical_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first], created_at: 5.seconds.ago)
+    purchase2 = build_physical_purchase(link: product, ip_address: ip, email: "bob@gumroad.com", variant_attributes: [product.skus.is_default_sku.first])
+    purchase2.is_upgrade_purchase = true
+    assert_not purchase2.valid?
+    assert_equal PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED, purchase2.error_code
+  end
+
   # context "purchasing licensed products"
   test "not_double_charged purchasing licensed products prohibits double-charges within 10 seconds" do
     product = create_product(is_licensed: true)
