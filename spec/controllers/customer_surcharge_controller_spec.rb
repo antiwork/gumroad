@@ -149,6 +149,19 @@ describe CustomerSurchargeController, :vcr do
       expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
     end
 
+    it "omits a requested currency that failed to quote" do
+      allow(Checkout::BuyerCurrencyQuote).to receive(:create).and_return(nil)
+
+      post "calculate_all", params: {
+        products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }],
+        buyer_currency: Currency::GBP,
+      }, as: :json
+
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).to include(Currency::USD)
+      expect(codes).not_to include(Currency::GBP)
+    end
+
     it "returns the locked quote props including the currency's minor-unit scale" do
       post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }] }, as: :json
 

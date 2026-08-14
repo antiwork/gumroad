@@ -82,6 +82,21 @@ class CustomerSurchargeController < ApplicationController
       )
     end
 
+    quote_props = buyer_currency_quote_props(
+      line_items: all_lines_quotable ? quote_line_items : nil,
+      # Sum the per-line integers: rounding the running totals once can disagree
+      # with charge-time line totals, and a quote that does not reconcile is refused.
+      canonical_total_cents: quote_line_items.sum(&:canonical_total_cents),
+      currency: params[:buyer_currency]
+    )
+    available = available_buyer_currencies(quote_line_items.filter_map(&:product).uniq)
+    requested = Checkout::BuyerCurrencyQuote.normalize_requested_currency(params[:buyer_currency])
+    # Settlement can list a currency that create() then refuses (cart-wide seller /
+    # mixed-shape gates). Don't advertise the currency we just failed to quote.
+    if requested.present? && requested != Currency::USD && quote_props.nil?
+      available = available.reject { |entry| entry[:code] == requested }
+    end
+
     render json: {
       vat_id_valid:,
       has_vat_id_input:,
@@ -92,15 +107,9 @@ class CustomerSurchargeController < ApplicationController
       # Unlike the agreement total above, this includes only the tax due on an installment's
       # first payment. Payment surfaces must use the amount the charge path will create now.
       charge_canonical_total_cents: all_lines_quotable ? quote_line_items.sum(&:charge_canonical_total_cents) : nil,
-      buyer_currency_quote: buyer_currency_quote_props(
-        line_items: all_lines_quotable ? quote_line_items : nil,
-        # Sum the per-line integers: rounding the running totals once can disagree
-        # with charge-time line totals, and a quote that does not reconcile is refused.
-        canonical_total_cents: quote_line_items.sum(&:canonical_total_cents),
-        currency: params[:buyer_currency]
-      ),
+      buyer_currency_quote: quote_props,
       detected_buyer_currency: buyer_currency_for_ip(request.remote_ip),
-      available_buyer_currencies: available_buyer_currencies(quote_line_items.filter_map(&:product).uniq)
+      available_buyer_currencies: available
     }
   end
 

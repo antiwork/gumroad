@@ -8,6 +8,7 @@ import { PurchasePaymentMethod } from "$app/data/purchase";
 import { SavedCreditCard } from "$app/parsers/card";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
+import { currencyCodeList, type CurrencyCode } from "$app/utils/currency";
 import { isValidEmail } from "$app/utils/email";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
@@ -203,15 +204,21 @@ export type Tip =
       listedAmount?: number | null;
     };
 
-
 const BUYER_CURRENCY_COOKIE = "gumroad_buyer_currency";
+
+const isKnownCurrencyCode = (code: string): code is CurrencyCode => currencyCodeList.some((known) => known === code);
 
 export function readBuyerCurrencyPreference(): string | null {
   if (typeof window === "undefined") return null;
   const fromUrl = new URL(window.location.href).searchParams.get("currency");
-  if (fromUrl) return fromUrl.toLowerCase();
-  const match = document.cookie.match(/(?:^|; )gumroad_buyer_currency=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
+  const raw = fromUrl
+    ? fromUrl.toLowerCase()
+    : (() => {
+        const match = document.cookie.match(/(?:^|; )gumroad_buyer_currency=([^;]*)/u);
+        const value = match?.[1];
+        return value ? decodeURIComponent(value).toLowerCase() : null;
+      })();
+  return raw && isKnownCurrencyCode(raw) ? raw : null;
 }
 
 export function writeBuyerCurrencyPreference(code: string | null) {
@@ -844,7 +851,7 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       state: state.state,
       vat_id: state.vatId,
       postal_code: state.zipCode,
-      buyer_currency: state.buyerCurrency ?? undefined,
+      ...(state.buyerCurrency ? { buyer_currency: state.buyerCurrency } : {}),
     },
     abortSignal,
   );

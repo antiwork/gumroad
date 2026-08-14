@@ -44,11 +44,11 @@ import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
-import { Select } from "$app/components/ui/Select";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -120,7 +120,12 @@ const CurrencyPicker = () => {
   const options = loaded?.available_buyer_currencies ?? [];
   if (options.length < 2) return null;
   const detected = loaded?.detected_buyer_currency ?? null;
-  const value = state.buyerCurrency ?? detected ?? "usd";
+  const preferred = state.buyerCurrency ?? detected ?? "usd";
+  const value = options.some((option) => option.code === preferred)
+    ? preferred
+    : detected && options.some((option) => option.code === detected)
+      ? detected
+      : (options[0]?.code ?? "usd");
   return (
     <Fieldset>
       <FieldsetTitle>
@@ -154,7 +159,7 @@ export const Checkout = ({
   updateCart: (updated: Partial<CartState>) => void;
   recommendedProducts?: CardProduct[] | null;
 }) => {
-  const [state, dispatch] = useState();
+  const [state] = useState();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
   const [loadingDiscount, setLoadingDiscount] = React.useState(false);
 

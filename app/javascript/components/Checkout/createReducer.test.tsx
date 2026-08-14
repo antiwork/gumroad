@@ -218,7 +218,7 @@ describe("createReducer surcharge refetches", () => {
     const { result } = renderCheckout();
     await act(() => vi.advanceTimersByTimeAsync(300));
     expect(requests).toHaveLength(1);
-    expect((requests[0]?.payload as { buyer_currency?: string }).buyer_currency).toBeUndefined();
+    expect(requests[0]?.payload).not.toHaveProperty("buyer_currency");
 
     act(() => result.current[1]({ type: "set-value", buyerCurrency: "gbp" }));
     expect(result.current[0].surcharges.type).toBe("pending");
