@@ -20,6 +20,7 @@ RSpec.describe Purchase::AudienceMember do
       member = audience_member_for(original_purchase)
       expect(member).to be_present
       expect(member.deleted_at).to be_present
+      expect(member.details).to eq({})
 
       original_purchase.reload.update!(can_contact: true)
 
@@ -77,7 +78,7 @@ RSpec.describe Purchase::AudienceMember do
 
     it "restores a soft-deleted row when support bypasses callbacks to re-enable its purchase" do
       original_purchase.unsubscribe_buyer
-      expect(audience_member_for(original_purchase).deleted_at).to be_present
+      expect(audience_member_for(original_purchase)).to have_attributes(deleted_at: be_present, details: {})
 
       original_purchase.reload.update_columns(can_contact: true)
 
