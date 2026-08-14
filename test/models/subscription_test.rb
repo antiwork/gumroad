@@ -3240,6 +3240,15 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_equal "pending_failure", subscription.status
   end
 
+  test "#status keeps pending failure before pending cancellation" do
+    subscription = create_subscription(cancelled_at: 2.months.from_now)
+    create_purchase(link: subscription.link, subscription:, is_original_subscription_purchase: true, purchase_state: "successful")
+    travel_to 1.month.from_now
+    create_purchase(link: subscription.link, subscription:, purchase_state: "failed")
+
+    assert_equal "pending_failure", subscription.status
+  end
+
   test "#status returns 'pending_cancellation' for a subscription pending cancellation" do
     subscription = create_subscription(cancelled_at: 1.month.from_now)
     assert_equal "pending_cancellation", subscription.status

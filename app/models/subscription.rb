@@ -1316,13 +1316,13 @@ class Subscription < ApplicationRecord
   def status
     if deactivated_at.present?
       termination_reason
+    elsif pending_failure?
+      "pending_failure"
     elsif pending_cancellation?
       "pending_cancellation"
     elsif renewal_disabled_due_to_indian_card_mandate? && india_card_mandate_reliability_enabled? &&
           (original_purchase.nil? || future_subscription_charge?)
       "payment_method_update_required"
-    elsif pending_failure?
-      "pending_failure"
     else
       "alive"
     end

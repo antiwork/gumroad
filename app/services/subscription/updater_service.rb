@@ -231,7 +231,7 @@ class Subscription::UpdaterService
           # Charge user if necessary
           if should_charge_user?
             result = charge_user!
-            if saved_card_mandate_terms_changed && result[:requires_card_action]
+            if saved_card_mandate_terms_changed && result[:success]
               subscription.require_indian_card_mandate_reauthorization!
             end
           else

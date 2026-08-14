@@ -1025,6 +1025,34 @@ describe Subscription::UpdaterService, :vcr do
             ensure
               Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
             end
+
+            it "pauses renewal after a changed-terms charge succeeds without card action",
+               vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/changing_the_price_on_a_PWYW_tier/to_a_price_that_is_higher/when_the_card_requires_e-mandate/charges_the_difference_and_returns_proper_SCA_response" } do
+              Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+              @subscription.update!(stripe_mandate_id: "mandate_old_terms")
+              params = @params.merge(
+                price_range: 7_99,
+                perceived_price_cents: 7_99,
+                perceived_upgrade_price_cents: 3_38,
+              )
+              service = Subscription::UpdaterService.new(
+                subscription: @subscription,
+                gumroad_guid: @gumroad_guid,
+                params:,
+                logged_in_user: @user,
+                remote_ip: @remote_ip,
+              )
+              allow(service).to receive(:charge_user!).and_return(success: true)
+
+              response = service.perform
+
+              expect(response).to eq(success: true)
+              expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+              expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+              expect(@subscription.stripe_mandate_id).to be_nil
+            ensure
+              Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+            end
           end
         end
 
