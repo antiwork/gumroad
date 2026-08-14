@@ -1,11 +1,10 @@
 import * as React from "react";
 
-// Use to stash the latest `value` into a ref.
-// Useful to update hook consumer-supplied event handler without tearing down and setting up a new event listener.
+// Assign during render so layout-time children (Sortable setList) see this
+// paint's value. An effect-timed write left ContentTab holding the previous
+// variant for one frame and overwrote the newly selected tier's pages.
 export const useRefToLatest = <T>(value: T): React.MutableRefObject<T> => {
   const ref = React.useRef(value);
-  React.useEffect(() => {
-    ref.current = value;
-  }, [value]);
+  ref.current = value;
   return ref;
 };
