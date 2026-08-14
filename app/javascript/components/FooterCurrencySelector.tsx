@@ -21,7 +21,11 @@ export const FooterCurrencySelector = ({ className }: { className?: string }) =>
         const code = e.target.value;
         setValue(code);
         writeBuyerCurrencyPreference(code || null);
-        window.location.reload();
+        // A ?currency= link outranks the cookie on both client and server, so a plain
+        // reload would silently discard this choice. Drop the param and let the cookie carry it.
+        const url = new URL(window.location.href);
+        url.searchParams.delete("currency");
+        window.location.assign(url.toString());
       }}
     >
       <option value="">Detected currency</option>
