@@ -18,8 +18,8 @@
 class Pages::ProductPrices
   include CurrencyHelper
 
-  def self.build(seller, ip:, offset: 0, limit: Pages::ProfileData::MAX_ITEMS)
-    new(seller, ip:, offset:, limit:).build
+  def self.build(seller, ip:, preferred_currency: nil, offset: 0, limit: Pages::ProfileData::MAX_ITEMS)
+    new(seller, ip:, preferred_currency:, offset:, limit:).build
   end
 
   # Whether a page can consume this payload at all. Its only consumers live inside the page's
@@ -30,9 +30,10 @@ class Pages::ProductPrices
     html.to_s.match?(/data-gumroad-product|gumroad-prices/)
   end
 
-  def initialize(seller, ip:, offset: 0, limit: Pages::ProfileData::MAX_ITEMS)
+  def initialize(seller, ip:, preferred_currency: nil, offset: 0, limit: Pages::ProfileData::MAX_ITEMS)
     @seller = seller
     @ip = ip
+    @preferred_currency = preferred_currency
     @offset = offset
     @limit = limit
   end
@@ -46,7 +47,7 @@ class Pages::ProductPrices
   end
 
   private
-    attr_reader :seller, :ip, :offset, :limit
+    attr_reader :seller, :ip, :preferred_currency, :offset, :limit
 
     # Same scope, ordering and slice as Pages::ProfileData#products so the two payloads describe
     # the same set of products in the same order — a paged product array whose price map covers a
@@ -93,7 +94,7 @@ class Pages::ProductPrices
       # Re-gating on product shape here made this blob keep a membership in GBP while the grid
       # alongside it showed the visitor's currency. Recurring shapes keep their wording:
       # localized_price_formatted composes the recurrence suffix back in.
-      display = buyer_currency_display_props(product:, price_cents:, ip:)
+      display = buyer_currency_display_props(product:, price_cents:, ip:, preferred_currency:)
 
       if display[:display_mode] == "buyer_local" && display[:buyer_local_price_cents].present?
         localized_entry(product, display, base_price_cents:, price_cents:)

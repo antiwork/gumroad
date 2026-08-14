@@ -28,7 +28,7 @@ class ProductPresenter::Card
     base_price_cents = product.display_price_cents(for_default_duration: true)
     price_cents = product.discounted_price_cents(base_price_cents)
     original_price_cents = price_cents < base_price_cents ? base_price_cents : nil
-    buyer_currency_display = request.present? ? buyer_currency_display_props(product:, price_cents:, ip: request.remote_ip) : nil
+    buyer_currency_display = request.present? ? buyer_currency_display_props(product:, price_cents:, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request)) : nil
 
     props = {
       id: product.external_id,
