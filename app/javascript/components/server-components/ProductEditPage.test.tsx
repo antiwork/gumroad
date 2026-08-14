@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as React from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { type SaveProductResponse } from "$app/data/product_edit";
+import { StaleContentConflictError, type SaveProductResponse } from "$app/data/product_edit";
 import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 
 import { ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
@@ -848,6 +848,54 @@ it("retries a failed autosave without waiting for another edit", async () => {
     await act(async () => void vi.advanceTimersByTime(1_500));
     expect(saveProductMock).toHaveBeenCalledTimes(2);
     expect(saveProductMock.mock.calls[1]?.[2]).toMatchObject({ name: "Needs retry" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("stops retrying a failed autosave after three attempts", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    const { ResponseError } = await import("$app/utils/request");
+    saveProductMock.mockRejectedValue(new ResponseError("Save failed"));
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Keeps failing" }));
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await act(async () => void vi.advanceTimersByTime(1_500));
+      await act(async () => Promise.resolve());
+    }
+    expect(saveProductMock).toHaveBeenCalledTimes(3);
+
+    await act(async () => void vi.advanceTimersByTime(5_000));
+    await act(async () => Promise.resolve());
+    expect(saveProductMock).toHaveBeenCalledTimes(3);
+    expect(contextCapture.current?.saveStatus).toBe("unsaved");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("does not open a conflict dialog when an automatic save hits a server conflict", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockRejectedValue(
+      new StaleContentConflictError("Stale snapshot", [{ type: "page", id: "page-a", name: "Buyer page" }]),
+    );
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Conflicts" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    await act(async () => Promise.resolve());
+
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(contextCapture.current?.saveStatus).toBe("unsaved");
   } finally {
     vi.useRealTimers();
   }

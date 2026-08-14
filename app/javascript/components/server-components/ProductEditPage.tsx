@@ -498,6 +498,13 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
   };
 };
 
+const AUTOSAVE_RETRY_LIMIT = 3;
+
+const isSaveConflictError = (error: unknown) =>
+  error instanceof HiddenVariantContentConflictError ||
+  error instanceof StaleContentConflictError ||
+  error instanceof StaleDeletionConflictError;
+
 const ProductEditPage = (props: Props) => {
   const [product, setProduct] = React.useState(props.product);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
@@ -518,6 +525,7 @@ const ProductEditPage = (props: Props) => {
 
   const [saving, setSaving] = React.useState(false);
   const [autosaveGeneration, setAutosaveGeneration] = React.useState(0);
+  const [autosaveRetryCount, setAutosaveRetryCount] = React.useState(0);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
   // Deletions awaiting the seller's final confirmation in the save-time summary
   // modal. Non-null while the modal is open; the ref holds the resolver of the
@@ -711,7 +719,9 @@ const ProductEditPage = (props: Props) => {
         }
       }
     } catch (e) {
-      if (e instanceof HiddenVariantContentConflictError) {
+      if (isAutomaticSave && isSaveConflictError(e)) {
+        // Leave the editor dirty. A seller-initiated save surfaces the dialog.
+      } else if (e instanceof HiddenVariantContentConflictError) {
         setHiddenContentConflict(e.hiddenPages);
       } else if (e instanceof StaleContentConflictError) {
         setStaleContentConflict(e.staleRecords);
@@ -736,6 +746,7 @@ const ProductEditPage = (props: Props) => {
     // Content missing without recorded intent means the session lost state:
     // fail closed and ask for a reload instead of offering it as a deletion.
     if (unexpected.variants.length + unexpected.pages.length > 0) {
+      if (automaticSaveRef.current) return Promise.resolve(false);
       setMissingContentConflict(unexpected);
       return Promise.resolve(false);
     }
@@ -788,13 +799,18 @@ const ProductEditPage = (props: Props) => {
   }, [hasUnsavedChanges, props.autosave_enabled]);
 
   React.useEffect(() => {
+    setAutosaveRetryCount(0);
+  }, [product, currencyType]);
+
+  React.useEffect(() => {
     if (
       !hasUnsavedChanges ||
       uploadsInProgress ||
       saving ||
       deletionsNeedAttention ||
       saveBlockedByModal ||
-      !props.autosave_enabled
+      !props.autosave_enabled ||
+      autosaveRetryCount >= AUTOSAVE_RETRY_LIMIT
     ) {
       return;
     }
@@ -804,10 +820,14 @@ const ProductEditPage = (props: Props) => {
       void saveRef.current().then(
         (saved) => {
           automaticSaveRef.current = false;
-          if (!saved) setAutosaveGeneration((generation) => generation + 1);
+          if (!saved) {
+            setAutosaveRetryCount((count) => count + 1);
+            setAutosaveGeneration((generation) => generation + 1);
+          }
         },
         () => {
           automaticSaveRef.current = false;
+          setAutosaveRetryCount((count) => count + 1);
           setAutosaveGeneration((generation) => generation + 1);
         },
       );
@@ -822,6 +842,7 @@ const ProductEditPage = (props: Props) => {
     deletionsNeedAttention,
     saveBlockedByModal,
     autosaveGeneration,
+    autosaveRetryCount,
     props.autosave_enabled,
   ]);
 
