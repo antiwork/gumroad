@@ -16,7 +16,7 @@ export const FooterCurrencySelector = ({ className }: { className?: string }) =>
     <Select
       aria-label="Currency"
       value={value}
-      wrapperClassName={className}
+      {...(className === undefined ? {} : { wrapperClassName: className })}
       onChange={(e) => {
         const code = e.target.value;
         setValue(code);
