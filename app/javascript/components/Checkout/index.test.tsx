@@ -3,10 +3,11 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { SurchargesResponse } from "$app/data/customer_surcharge";
+
 import type { CartItem, CartState, Product as CartProduct } from "$app/components/Checkout/cartState";
 import { Checkout } from "$app/components/Checkout/index";
 import { StateContext, type CheckoutPaymentConfig, type State } from "$app/components/Checkout/payment";
-import type { SurchargesResponse } from "$app/data/customer_surcharge";
 
 vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
 
