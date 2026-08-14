@@ -36,6 +36,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
+import gumheadAnimation from "$assets/images/gumhead-idle.webp";
 import gumheadImage from "$assets/images/gumhead.png";
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
 
@@ -427,13 +428,16 @@ export const DashboardPage = ({
         <div className="grid gap-4 p-4 md:p-8">
           <Card className="shadow-[0.25rem_0.25rem_0_var(--color-pink)]">
             <CardContent className="items-center sm:flex-nowrap">
-              <img
-                src={gumheadImage}
-                alt=""
-                width={380}
-                height={363}
-                className="h-28 w-auto shrink-0 -rotate-3 object-contain drop-shadow-[0.25rem_0.25rem_0_rgb(0_0_0/0.25)] transition-transform duration-200 hover:rotate-3 md:-mt-12 md:h-32"
-              />
+              <picture className="shrink-0">
+                <source srcSet={gumheadImage} media="(prefers-reduced-motion: reduce)" />
+                <img
+                  src={gumheadAnimation}
+                  alt=""
+                  width={380}
+                  height={363}
+                  className="h-28 w-auto -rotate-3 object-contain drop-shadow-[0.25rem_0.25rem_0_rgb(0_0_0/0.25)] transition-transform duration-200 hover:rotate-3 md:-mt-12 md:h-32"
+                />
+              </picture>
               <div className="grid min-w-0 flex-1 gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl">Meet Gumhead</h2>
