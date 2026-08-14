@@ -3457,5 +3457,31 @@ describe Subscription::UpdaterService, :vcr do
         service.send(:validate_indian_card_mandate!, replacement_card)
       end.to raise_error(Subscription::UpdateFailed)
     end
+
+    it "returns an update error when Stripe cannot retrieve the mandate" do
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(ChargeProcessorUnavailableError.new("Stripe unavailable"))
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ChargeProcessorUnavailableError), subscription: subscription.external_id)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(
+        Subscription::UpdateFailed,
+        "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+      )
+    end
+
+    it "clears stale mandate state when validation is disabled" do
+      subscription.update!(stripe_mandate_id: "mandate_old")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.reload
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      expect(subscription.reload.credit_card).to eq(replacement_card)
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription.stripe_mandate_id).to be_nil
+    end
   end
 end

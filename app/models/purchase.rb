@@ -4725,6 +4725,8 @@ class Purchase < ApplicationRecord
     end
 
     def validate_indian_card_mandate_for_rebill!(chargeable)
+      return unless stripe_charge_processor?
+      return if subscription.blank?
       return unless india_card_mandate_reliability_enabled?
       return unless credit_card&.requires_mandate?
 

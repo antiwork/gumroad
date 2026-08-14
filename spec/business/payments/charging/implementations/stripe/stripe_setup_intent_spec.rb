@@ -22,7 +22,8 @@ describe StripeSetupIntent, :vcr do
   end
 
   describe "#payment_method_id" do
-    it "returns the attached payment method ID" do
+    it "returns the attached payment method ID",
+       vcr: { cassette_name: "StripeSetupIntent/_id/returns_the_ID_of_Stripe_setup_intent" } do
       payment_method = processor_setup_intent.payment_method
       expected_id = payment_method.respond_to?(:id) ? payment_method.id : payment_method
 

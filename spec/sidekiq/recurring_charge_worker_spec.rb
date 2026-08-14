@@ -30,7 +30,8 @@ describe RecurringChargeWorker, :vcr do
     described_class.new.perform(subscription.id)
   end
 
-  it "does not charge while an Indian card mandate update is required" do
+  it "does not charge while an Indian card mandate update is required",
+     vcr: { cassette_name: "RecurringChargeWorker/doesn_t_call_charge_if_there_was_a_purchase_made_the_period_for_a_monthly_subscription" } do
     Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
     @subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
 

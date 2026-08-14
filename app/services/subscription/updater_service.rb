@@ -284,7 +284,7 @@ class Subscription::UpdaterService
     end
 
     def validate_indian_card_mandate!(credit_card)
-      return { clear_mandate_stop: false, stripe_mandate_id: nil } unless subscription.india_card_mandate_reliability_enabled?
+      return { clear_mandate_stop: true, stripe_mandate_id: nil } unless subscription.india_card_mandate_reliability_enabled?
       return { clear_mandate_stop: true, stripe_mandate_id: nil } unless credit_card.requires_mandate?
 
       merchant_account = subscription.renewal_merchant_account
@@ -309,6 +309,9 @@ class Subscription::UpdaterService
       stripe_chargeable = chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id)
       stripe_chargeable.validated_stripe_mandate_id = mandate.id if stripe_chargeable.respond_to?(:validated_stripe_mandate_id=)
       { clear_mandate_stop: true, stripe_mandate_id: mandate.id }
+    rescue ChargeProcessorError => e
+      ErrorNotifier.notify(e, subscription: subscription.external_id)
+      raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
     end
 
     def update_subscription_credit_card!(credit_card, clear_mandate_stop: false, stripe_mandate_id: nil)

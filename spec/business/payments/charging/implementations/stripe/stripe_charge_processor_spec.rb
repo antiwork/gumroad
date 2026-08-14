@@ -1080,7 +1080,8 @@ describe StripeChargeProcessor, :vcr do
               expect(charge_intent).to be_a(StripeChargeIntent)
             end
 
-            it "prefers the mandate validated for this subscription" do
+            it "prefers the mandate validated for this subscription",
+               vcr: { cassette_name: "StripeChargeProcessor/_create_payment_intent_or_charge_/Support_for_RBI_regulations_for_Indian_cards/when_off-session/for_an_Indian_card_with_SCA_support/when_the_saved_card_has_a_registered_e-mandate/references_the_mandate_on_the_payment_intent" } do
               chargeable.validated_stripe_mandate_id = "mandate_subscription"
               expect(subject).not_to receive(:get_mandate_id_from_chargeable)
               payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_renewal", status: StripeIntentStatus::PROCESSING, client_secret: "secret")

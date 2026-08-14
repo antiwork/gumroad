@@ -61,6 +61,41 @@ describe "Indian card mandate reliability" do
     expect(registration.subscription.india_card_mandate_reliability_enabled?).to be(false)
   end
 
+  it "does not validate mandates for non-Stripe rebills" do
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      credit_card: card,
+      charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
+      stripe_transaction_id: nil,
+      merchant_account: nil
+    )
+
+    expect do
+      renewal.send(:validate_indian_card_mandate_for_rebill!, instance_double(Chargeable))
+    end.not_to raise_error
+  end
+
+  it "does not apply subscription mandate validation to preorder releases" do
+    release = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      credit_card: card,
+      merchant_account:,
+      stripe_transaction_id: nil,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id
+    )
+    allow(release).to receive(:preorder).and_return(instance_double(Preorder))
+
+    expect do
+      release.send(:validate_indian_card_mandate_for_rebill!, instance_double(Chargeable))
+    end.not_to raise_error
+  end
+
   it "does not enforce mandates for direct Connect charges" do
     direct_account = create(:merchant_account_stripe_connect, user: seller)
     registration = create(
