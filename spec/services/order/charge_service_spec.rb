@@ -1349,6 +1349,72 @@ describe Order::ChargeService, :vcr do
       expect(charge_responses[charge_responses.keys[0]]).to eq(order.purchases.last.purchase_response)
     end
 
+    it "creates an exact mandate source for a saved Indian card on a free trial" do
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_2)
+      merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(
+          :merchant_account,
+          user: nil,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          charge_processor_merchant_id: nil
+        )
+      saved_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_saved_indian_card",
+        processor_payment_method_id: "pm_saved_indian_card",
+        stripe_fingerprint: "saved_indian_card_fingerprint",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        card_country: Compliance::Countries::IND.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030
+      )
+      buyer = create(:user, credit_card: saved_card)
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        id: "seti_saved_indian_free_trial",
+        succeeded?: true,
+        requires_action?: false,
+        mandate: "mandate_saved_indian_free_trial"
+      )
+      expect(ChargeProcessor).to receive(:setup_future_charges!).with(
+        merchant_account,
+        kind_of(Chargeable),
+        mandate_options: hash_including(
+          payment_method_options: hash_including(
+            card: hash_including(mandate_options: hash_including(supported_types: ["india"]))
+          )
+        )
+      ).and_return(setup_intent)
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: free_trial_membership_product.unique_permalink,
+            perceived_price_cents: 100_00,
+            is_free_trial_purchase: true,
+            perceived_free_trial_duration: {
+              amount: free_trial_membership_product.free_trial_duration_amount,
+              unit: free_trial_membership_product.free_trial_duration_unit
+            },
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment)
+      order, = Order::CreateService.new(params:, buyer:).perform
+
+      Order::ChargeService.new(order:, params:).perform
+
+      purchase = order.reload.purchases.sole
+      expect(purchase).to be_not_charged
+      expect(purchase).to be_is_indian_card_mandate_registration
+      expect(purchase.processor_setup_intent_id).to eq("seti_saved_indian_free_trial")
+      expect(purchase.charge.stripe_setup_intent_id).to eq("seti_saved_indian_free_trial")
+      expect(purchase.subscription.indian_card_mandate_source_purchase(saved_card.id)).to eq(purchase)
+    ensure
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_2)
+    end
+
     it "does not read a missing payment intent when a mandate card's processor outcome is already handled" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)

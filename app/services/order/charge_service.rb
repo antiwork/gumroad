@@ -149,7 +149,9 @@ class Order::ChargeService
     locked_quote = locked_setup_buyer_currency_quote(purchases:, merchant_account:, chargeable:)
     return if locked_quote == false
 
-    if merchant_account.stripe_charge_processor? && !card_already_saved
+    saved_card_needs_indian_mandate = card_already_saved && chargeable&.requires_mandate? &&
+      purchases.any?(&:india_card_mandate_reliability_enabled?)
+    if merchant_account.stripe_charge_processor? && (!card_already_saved || saved_card_needs_indian_mandate)
       mandate_options = mandate_options_for_stripe(purchases:, with_currency: true)
       mandate_options = mandate_options_in_setup_currency(mandate_options, locked_quote)
       self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)

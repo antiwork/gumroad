@@ -654,7 +654,7 @@ class Subscription < ApplicationRecord
     card = credit_card_to_charge
     return "missing" if card.nil?
     unless card.requires_mandate?
-      update_renewal_for_indian_card_mandate!("active", expected_credit_card_id: card.id)
+      clear_indian_card_mandate_state!(expected_credit_card_id: card.id)
       return "active"
     end
 

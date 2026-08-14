@@ -690,7 +690,12 @@ describe "Indian card mandate reliability" do
   it "clears the pause when the effective payment method is not an Indian card" do
     registration = create_registration
     subscription = registration.subscription
-    subscription.update!(renewal_disabled_due_to_indian_card_mandate: true, credit_card: nil)
+    subscription.update!(
+      stripe_mandate_id: "mandate_old_card",
+      renewal_disabled_due_to_indian_card_mandate: true,
+      indian_card_mandate_requires_reauthorization: true,
+      credit_card: nil
+    )
     non_indian_card = CreditCard.create!(
       charge_processor_id: StripeChargeProcessor.charge_processor_id,
       stripe_customer_id: "cus_non_indian",
@@ -705,7 +710,11 @@ describe "Indian card mandate reliability" do
     buyer.update!(credit_card: non_indian_card)
 
     expect(subscription.reload.refresh_indian_card_mandate!).to eq("active")
-    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription.reload).to have_attributes(
+      stripe_mandate_id: nil,
+      renewal_disabled_due_to_indian_card_mandate: false,
+      indian_card_mandate_requires_reauthorization: false
+    )
   end
 
 
