@@ -1221,6 +1221,28 @@ describe Subscription::UpdaterService, :vcr do
 
             expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(nil, nil, ResourceSubscription::SUBSCRIPTION_UPDATED_RESOURCE_NAME, @subscription.id, params)
           end
+
+          it "requires a new Indian card mandate when the free-trial plan changes its terms",
+             vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/updating_during_a_free_trial/upgrading/upgrades_the_user_immediately_and_does_not_charge_them" } do
+            @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)
+            allow(@subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+            allow(@subscription).to receive(:indian_card_mandate_terms).and_return(
+              { amount: 6_00, currency: Currency::USD, interval: "month", interval_count: 3 },
+              { amount: 10_50, currency: Currency::USD, interval: "month", interval_count: 3 }
+            )
+
+            result = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: upgrade_tier_params.merge(perceived_upgrade_price_cents: 0),
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+
+            expect(result[:success]).to be(true)
+            expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+          end
         end
 
         context "downgrade" do

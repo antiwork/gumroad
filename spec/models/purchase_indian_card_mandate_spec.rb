@@ -526,6 +526,25 @@ describe "Indian card mandate reliability" do
     expect(subscription).to be_alive
   end
 
+  it "does not let an old active registration clear a plan reauthorization" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update!(stripe_mandate_id: nil)
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_old_plan"
+    )
+
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to be_nil
+  end
+
   it "clears the pause when the effective payment method is not an Indian card" do
     registration = create_registration
     subscription = registration.subscription

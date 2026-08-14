@@ -460,9 +460,10 @@ class Subscription < ApplicationRecord
       return if expected_credit_card_id.present? && credit_card_to_charge&.id != expected_credit_card_id
 
       if status == "active"
+        return if indian_card_mandate_requires_reauthorization?
+
         self.stripe_mandate_id = mandate_id if mandate_id.present?
         self.renewal_disabled_due_to_indian_card_mandate = false
-        self.indian_card_mandate_requires_reauthorization = false
         notify_buyer = false
       else
         return unless status.in?(%w[inactive missing pending])

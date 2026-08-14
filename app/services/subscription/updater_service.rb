@@ -68,6 +68,13 @@ class Subscription::UpdaterService
     had_indian_card_mandate_stop = subscription.renewal_disabled_due_to_indian_card_mandate?
     replacement_card = nil
     had_saved_card = false
+    check_saved_card_mandate_terms_after_plan_update = subscription.in_free_trial? &&
+      !same_plan_and_price? && use_existing_card? &&
+      subscription.india_card_mandate_reliability_enabled? &&
+      subscription.credit_card_to_charge&.requires_mandate?
+    mandate_terms_before_plan_update = if check_saved_card_mandate_terms_after_plan_update
+      subscription.indian_card_mandate_terms
+    end
 
     begin
       ActiveRecord::Base.transaction do
@@ -132,6 +139,11 @@ class Subscription::UpdaterService
             once_per_cart_discount_allocation: params[:once_per_cart_discount_allocation],
           )
           subscription.reload
+
+          if check_saved_card_mandate_terms_after_plan_update &&
+             subscription.indian_card_mandate_terms != mandate_terms_before_plan_update
+            subscription.require_indian_card_mandate_reauthorization!
+          end
         end
 
         if !same_plan_and_price? || overdue_for_charge
