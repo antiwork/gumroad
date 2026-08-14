@@ -25,7 +25,7 @@ import { useDedupeInFlight } from "$app/utils/dedupeInFlight";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
-import { assertResponseError, request } from "$app/utils/request";
+import { assertResponseError, RateLimitError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -44,6 +44,7 @@ import {
   Product,
   ProductEditContext,
   ProfileSection,
+  SaveStatus,
   ShippingCountry,
   TaxonomyAttribute,
 } from "$app/components/ProductEdit/state";
@@ -499,6 +500,17 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
 };
 
 const AUTOSAVE_RETRY_LIMIT = 3;
+const AUTOSAVE_DEBOUNCE_MS = 1_500;
+
+// A save serializing an in-flight upload would persist a blob: placeholder a
+// buyer can never load. The description regex matches only blob: object URLs
+// in embed sources — a seller typing the literal text "blob:" must not block
+// autosave.
+const productUploadsInProgress = (product: Product, imagesUploading: Set<File>) =>
+  imagesUploading.size > 0 ||
+  /\ssrc\s*=\s*["']blob:/iu.test(product.description) ||
+  product.public_files.some(isFileUploading) ||
+  product.files.some((file) => isFileUploading(file) || file.subtitle_files.some(isFileUploading));
 
 const isSaveConflictError = (error: unknown) =>
   error instanceof HiddenVariantContentConflictError ||
@@ -516,6 +528,18 @@ const ProductEditPage = (props: Props) => {
   // Bumped on every edit so a rejection from an automatic save that predates
   // the edit cannot consume the new edit's retry budget.
   const autosaveEditEpochRef = React.useRef(0);
+  // Earliest wall-clock time (ms epoch) the next automatic attempt may run,
+  // set from a rate-limited save's Retry-After. An absolute deadline, not a
+  // one-shot delay: edits re-run the scheduling effect and cancel its timer,
+  // and the server's wait must survive that.
+  const autosaveRetryNotBeforeRef = React.useRef(0);
+  // Content-updated targets accumulated across automatic saves. The notify
+  // prompt was designed for one explicit save per editing pass; with autosave
+  // it must not reappear on every pause. Targets never leave the set within a
+  // session — an over-broad `bought` preselection is safer than dropping
+  // buyers of a tier whose prompt the seller dismissed earlier.
+  const pendingNotifyIdsRef = React.useRef<Set<string>>(new Set());
+  const shownNotifyIdsRef = React.useRef<Set<string>>(new Set());
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) => {
     autosaveEditEpochRef.current += 1;
@@ -722,9 +746,34 @@ const ProductEditPage = (props: Props) => {
             : // Report canonical ids for variants created by this very save.
               contentUpdatedVariantIds.map((id) => response.variant_id_mappings?.[id] ?? id);
 
-          setContentUpdates({
-            uniquePermalinkOrVariantIds,
-          });
+          if (isAutomaticSave) {
+            // Prompt only when this save touched a target the seller has not
+            // been prompted about yet, and always with the full accumulated
+            // set — otherwise autosave would re-open the prompt on every
+            // pause while the seller types.
+            for (const id of uniquePermalinkOrVariantIds) pendingNotifyIdsRef.current.add(id);
+            const accumulated = [...pendingNotifyIdsRef.current];
+            if (accumulated.some((id) => !shownNotifyIdsRef.current.has(id))) {
+              for (const id of accumulated) shownNotifyIdsRef.current.add(id);
+              setContentUpdates({ uniquePermalinkOrVariantIds: accumulated });
+            }
+          } else if (props.autosave_enabled) {
+            // An explicit save prompts like it always has, folding in targets
+            // that automatic saves persisted quietly. Its targets join the
+            // accumulator too, so a later automatic prompt replaces the alert
+            // with a superset — never with a list that drops a target the
+            // seller was just offered.
+            const merged = [...new Set([...pendingNotifyIdsRef.current, ...uniquePermalinkOrVariantIds])];
+            for (const id of merged) {
+              pendingNotifyIdsRef.current.add(id);
+              shownNotifyIdsRef.current.add(id);
+            }
+            setContentUpdates({ uniquePermalinkOrVariantIds: merged });
+          } else {
+            // Kill switch: with the flag off, each explicit save preselects
+            // exactly its own changed targets, as before autosave existed.
+            setContentUpdates({ uniquePermalinkOrVariantIds });
+          }
         } else if (!isAutomaticSave) {
           showAlert("Changes saved!", "success");
         }
@@ -746,7 +795,14 @@ const ProductEditPage = (props: Props) => {
         setStaleDeletionConflict(e.message);
       } else {
         assertResponseError(e);
-        showAlert(e.message, "error");
+        // Every rate-limited save moves the deadline — a manual save's 429
+        // must also hold the next automatic attempt back.
+        if (e instanceof RateLimitError && e.retryAfter != null) {
+          autosaveRetryNotBeforeRef.current = Date.now() + e.retryAfter * 1_000;
+        }
+        // Background failures report through the header status once retries
+        // run out; a toast per attempt would spam the seller while they type.
+        if (!isAutomaticSave) showAlert(e.message, "error");
       }
     }
     setSaving(false);
@@ -767,6 +823,10 @@ const ProductEditPage = (props: Props) => {
     // the last chance to notice an accumulated (possibly large) wipe before
     // it becomes permanent.
     if (confirmed.variants.length + confirmed.pages.length > 0) {
+      // The scheduling effect already gates on pending deletions, but it
+      // reads a deferred scan — this live check is the authority that keeps
+      // an automatic save from ever opening the confirmation dialog.
+      if (automaticSaveRef.current) return Promise.resolve(false);
       setPendingDeletions(confirmed);
       return new Promise<boolean>((resolve) => {
         pendingSaveRef.current = resolve;
@@ -776,40 +836,80 @@ const ProductEditPage = (props: Props) => {
   };
   const saveKey = React.useMemo(() => ({ product, currencyType }), [product, currencyType]);
   const save = useDedupeInFlight(saveKey, runSave, (saved) => saved);
-  const hasUnsavedChanges =
-    !isEqual(product, lastSavedProductRef.current) || currencyType !== lastSavedCurrencyTypeRef.current;
-  const uploadsInProgress =
-    imagesUploading.size > 0 ||
-    // Matches only blob: object URLs in embed sources — a seller typing the
-    // literal text "blob:" into the description must not block autosave.
-    /\ssrc\s*=\s*["']blob:/iu.test(product.description) ||
-    product.public_files.some(isFileUploading) ||
-    product.files.some((file) => isFileUploading(file) || file.subtitle_files.some(isFileUploading));
-  const pendingDeletionsByKind = findPendingDeletions(product, lastSavedProductRef.current);
-  const deletionsNeedAttention =
-    pendingDeletionsByKind.confirmed.variants.length +
-      pendingDeletionsByKind.confirmed.pages.length +
-      pendingDeletionsByKind.unexpected.variants.length +
-      pendingDeletionsByKind.unexpected.pages.length >
-    0;
+  // These full-product scans are too heavy for the urgent render path — the
+  // content editor commits a new `product` per keystroke. Deferred values
+  // move them to a low-priority follow-up render and coalesce during typing
+  // bursts. Everything they feed tolerates that one-frame lag: the autosave
+  // debounce is three orders of magnitude longer, and runSave re-checks
+  // deletions on live state. `saving` stands in for the saved-baseline refs:
+  // they move only inside the save lifecycle, which always ends in a
+  // setSaving(false) render.
+  const scannedProduct = React.useDeferredValue(product);
+  const scannedCurrencyType = React.useDeferredValue(currencyType);
+  const hasUnsavedChanges = React.useMemo(
+    () =>
+      !isEqual(scannedProduct, lastSavedProductRef.current) || scannedCurrencyType !== lastSavedCurrencyTypeRef.current,
+    [scannedProduct, scannedCurrencyType, saving],
+  );
+  const uploadsInProgress = React.useMemo(
+    () => productUploadsInProgress(scannedProduct, imagesUploading),
+    [scannedProduct, imagesUploading],
+  );
+  // The deferred scans lag the live state by a render. That gap is fine for
+  // labels and scheduling, but not for correctness guards: the dispatch
+  // callback re-checks uploads against this live snapshot, and the unload
+  // guard below treats a pending scan as possibly-dirty.
+  const liveStateRef = React.useRef({ product, imagesUploading });
+  liveStateRef.current = { product, imagesUploading };
+  const scansPending = scannedProduct !== product || scannedCurrencyType !== currencyType;
+  const deletionsNeedAttention = React.useMemo(() => {
+    const pendingDeletionsByKind = findPendingDeletions(scannedProduct, lastSavedProductRef.current);
+    return (
+      pendingDeletionsByKind.confirmed.variants.length +
+        pendingDeletionsByKind.confirmed.pages.length +
+        pendingDeletionsByKind.unexpected.variants.length +
+        pendingDeletionsByKind.unexpected.pages.length >
+      0
+    );
+  }, [scannedProduct, saving]);
   const saveBlockedByModal =
     pendingDeletions !== null ||
     missingContentConflict !== null ||
     hiddenContentConflict !== null ||
     staleContentConflict !== null ||
     staleDeletionConflict !== null;
-  const saveStatus: "saved" | "unsaved" | "saving" = saving ? "saving" : hasUnsavedChanges ? "unsaved" : "saved";
+  // Ordered by what the seller can act on: a gated autosave ("review
+  // deletions", "uploading") beats a generic "unsaved", and "failed" appears
+  // only once the retry budget is spent — edits reset the budget, so the
+  // label self-clears on the next keystroke. A pending scan cannot report
+  // "saved": the lagging comparison would show a clean state (and disable
+  // Save) in the middle of a typing burst.
+  const saveStatus: SaveStatus = saving
+    ? "saving"
+    : !hasUnsavedChanges && !scansPending
+      ? "saved"
+      : deletionsNeedAttention
+        ? "review_deletions"
+        : uploadsInProgress
+          ? "uploading"
+          : autosaveRetryCount >= AUTOSAVE_RETRY_LIMIT
+            ? "failed"
+            : "unsaved";
   const saveRef = React.useRef(save);
   saveRef.current = save;
 
+  // Data-loss guard, so it cannot trust the lagging scan alone: while a scan
+  // is pending the state is treated as dirty, and the precise value takes
+  // over once the deferred render lands.
+  const unloadGuardNeeded = hasUnsavedChanges || scansPending;
   React.useEffect(() => {
     // Kill switch: flag off must match main (editor specs navigate away dirty).
-    if (!props.autosave_enabled || !hasUnsavedChanges) return;
+    if (!props.autosave_enabled || !unloadGuardNeeded) return;
 
     const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, [hasUnsavedChanges, props.autosave_enabled]);
+  }, [unloadGuardNeeded, props.autosave_enabled]);
 
   React.useEffect(() => {
     if (
@@ -824,7 +924,35 @@ const ProductEditPage = (props: Props) => {
       return;
     }
 
+    // Retries back off (1.5s, 3s, 6s) so a struggling server is not hit on
+    // the plain debounce cadence; a rate-limited response can stretch the
+    // wait further via its own Retry-After deadline, which expires on its own.
+    const delay = Math.max(
+      AUTOSAVE_DEBOUNCE_MS * 2 ** autosaveRetryCount,
+      autosaveRetryNotBeforeRef.current - Date.now(),
+    );
     const timer = window.setTimeout(() => {
+      // A focused price field can hold a transient value — an empty field
+      // reads as 0 — so wait for blur rather than persist a half-typed price
+      // on a live product.
+      if (document.activeElement instanceof Element && document.activeElement.closest("[data-price-input]")) {
+        setAutosaveGeneration((generation) => generation + 1);
+        return;
+      }
+      // The scheduling gate above read a deferred scan; re-check uploads on
+      // live state so a just-started upload cannot slip into this dispatch.
+      const live = liveStateRef.current;
+      if (productUploadsInProgress(live.product, live.imagesUploading)) {
+        setAutosaveGeneration((generation) => generation + 1);
+        return;
+      }
+      // Live deadline check: a manual save can record a Retry-After while
+      // this timer is already pending, and React can batch that save's
+      // saving-state round trip into one render that never rescheduled it.
+      if (Date.now() < autosaveRetryNotBeforeRef.current) {
+        setAutosaveGeneration((generation) => generation + 1);
+        return;
+      }
       automaticSaveRef.current = true;
       // A failure only spends retry budget when no edit landed after this
       // attempt started — otherwise a stale rejection would eat the fresh
@@ -844,7 +972,7 @@ const ProductEditPage = (props: Props) => {
           recordFailure();
         },
       );
-    }, 1_500);
+    }, delay);
     return () => window.clearTimeout(timer);
   }, [
     product,

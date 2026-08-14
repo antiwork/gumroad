@@ -98,6 +98,10 @@ export const PriceInput = React.forwardRef<
         <Input
           type="text"
           inputMode="decimal"
+          // The product editor's autosave holds off while a price field has
+          // focus: an empty or half-typed price parses to a real amount, and
+          // persisting it would change what buyers pay mid-edit.
+          data-price-input=""
           id={id}
           name={name}
           value={value}

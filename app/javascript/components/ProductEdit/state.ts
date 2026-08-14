@@ -248,6 +248,12 @@ export type DeletionOperations = {
 };
 
 export type ProfileSection = { id: string; header: string | null; product_names: string[]; default: boolean };
+
+// What the header's save indicator reports. Beyond the base three,
+// "uploading" and "review_deletions" name the states where autosave is
+// deliberately waiting on the seller, and "failed" appears once an automatic
+// save has spent its retry budget.
+export type SaveStatus = "saved" | "unsaved" | "saving" | "uploading" | "review_deletions" | "failed";
 export type ShippingCountry = { code: string; name: string };
 
 export type ContentUpdates = {
@@ -280,7 +286,7 @@ export const ProductEditContext = React.createContext<{
   s3Url: string;
   availableCountries: ShippingCountry[];
   saving: boolean;
-  saveStatus: "saved" | "unsaved" | "saving";
+  saveStatus: SaveStatus;
   autosaveEnabled: boolean;
   // Resolves true only when the save request actually succeeded (false on
   // request failure or when the seller cancels the deletion confirmation) —

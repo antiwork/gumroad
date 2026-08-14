@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { StaleContentConflictError, type SaveProductResponse } from "$app/data/product_edit";
 import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 
+import { PriceInput } from "$app/components/PriceInput";
 import { ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProductEditPage, type ProductEditPageProps } from "$app/components/server-components/ProductEditPage";
@@ -758,6 +759,7 @@ it("waits for file uploads to finish before autosaving", async () => {
     act(() => contextCapture.current?.updateProduct({ name: "Changed during upload" }));
     await act(async () => void vi.advanceTimersByTime(1_500));
     expect(saveProductMock).not.toHaveBeenCalled();
+    expect(contextCapture.current?.saveStatus).toBe("uploading");
 
     act(() =>
       contextCapture.current?.updateProduct((current) => {
@@ -871,8 +873,9 @@ it("retries a failed autosave without waiting for another edit", async () => {
     await act(async () => void vi.advanceTimersByTime(1_500));
     expect(saveProductMock).toHaveBeenCalledOnce();
 
+    // The first retry backs off to twice the debounce.
     await act(async () => Promise.resolve());
-    await act(async () => void vi.advanceTimersByTime(1_500));
+    await act(async () => void vi.advanceTimersByTime(3_000));
     expect(saveProductMock).toHaveBeenCalledTimes(2);
     expect(saveProductMock.mock.calls[1]?.[2]).toMatchObject({ name: "Needs retry" });
   } finally {
@@ -887,25 +890,36 @@ it("stops retrying a failed autosave after three attempts", async () => {
     const props = buildTieredProps(product);
     const { ResponseError } = await import("$app/utils/request");
     saveProductMock.mockRejectedValue(new ResponseError("Save failed"));
+    vi.mocked(showAlert).mockClear();
 
     render(<ProductEditPage {...props} />);
     act(() => contextCapture.current?.updateProduct({ name: "Keeps failing" }));
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await act(async () => void vi.advanceTimersByTime(1_500));
+    // Attempts run on a backoff schedule: debounce, then 2× and 4×.
+    for (const delay of [1_500, 3_000, 6_000]) {
+      await act(async () => void vi.advanceTimersByTime(delay));
       await act(async () => Promise.resolve());
     }
     expect(saveProductMock).toHaveBeenCalledTimes(3);
+    expect(showAlert).not.toHaveBeenCalled();
 
-    await act(async () => void vi.advanceTimersByTime(5_000));
+    await act(async () => void vi.advanceTimersByTime(60_000));
     await act(async () => Promise.resolve());
     expect(saveProductMock).toHaveBeenCalledTimes(3);
-    expect(contextCapture.current?.saveStatus).toBe("unsaved");
+    expect(contextCapture.current?.saveStatus).toBe("failed");
+
+    // A seller-initiated save still reports its failure out loud.
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    expect(saveProductMock).toHaveBeenCalledTimes(4);
+    expect(showAlert).toHaveBeenCalledWith("Save failed", "error");
 
     act(() => contextCapture.current?.updateProduct({ name: "Try again" }));
+    expect(contextCapture.current?.saveStatus).toBe("unsaved");
     await act(async () => void vi.advanceTimersByTime(1_500));
     await act(async () => Promise.resolve());
-    expect(saveProductMock).toHaveBeenCalledTimes(4);
+    expect(saveProductMock).toHaveBeenCalledTimes(5);
   } finally {
     vi.useRealTimers();
   }
@@ -940,8 +954,9 @@ it("does not spend the new edit's retries on a stale in-flight failure", async (
       await Promise.resolve();
     });
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await act(async () => void vi.advanceTimersByTime(1_500));
+    // The fresh edit gets its full budget on the backoff schedule.
+    for (const delay of [1_500, 3_000, 6_000]) {
+      await act(async () => void vi.advanceTimersByTime(delay));
       await act(async () => Promise.resolve());
     }
     expect(saveProductMock).toHaveBeenCalledTimes(4);
@@ -988,6 +1003,218 @@ it("does not open a conflict dialog when an automatic save hits a server conflic
     expect(saveProductMock).toHaveBeenCalledOnce();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(contextCapture.current?.saveStatus).toBe("unsaved");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("honors the server's retry-after before the next automatic attempt", async () => {
+  // Date is faked too: the Retry-After deadline compares Date.now() against
+  // the timer clock, and the two must advance together.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    const { RateLimitError } = await import("$app/utils/request");
+    saveProductMock
+      .mockRejectedValueOnce(new RateLimitError("Too many requests", 30))
+      .mockResolvedValueOnce({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Rate limited" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    await act(async () => Promise.resolve());
+
+    // An edit reschedules the timer and resets the retry budget, but the
+    // server's deadline is absolute and must survive the rescheduling.
+    act(() => contextCapture.current?.updateProduct({ name: "Rate limited again" }));
+
+    // Backoff or debounce alone would retry within 3 seconds; the server
+    // asked for 30.
+    await act(async () => void vi.advanceTimersByTime(3_000));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    await act(async () => void vi.advanceTimersByTime(27_000));
+    expect(saveProductMock).toHaveBeenCalledTimes(2);
+    expect(saveProductMock.mock.calls[1]?.[2]).toMatchObject({ name: "Rate limited again" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("waits for a focused price field to blur before autosaving", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    // The real PriceInput carries the data-price-input marker the autosave
+    // guard keys on; a hand-built element would keep passing if the
+    // production attribute were removed.
+    render(<PriceInput currencyCode="usd" cents={100} ariaLabel="Amount" />);
+    const priceField = screen.getByLabelText("Amount");
+    act(() => priceField.focus());
+
+    // An empty price field reads as 0 — autosave must not persist it while
+    // the seller is still in the field.
+    act(() => contextCapture.current?.updateProduct({ price_cents: 0 }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).not.toHaveBeenCalled();
+
+    act(() => priceField.blur());
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    expect(saveProductMock.mock.calls[0]?.[2]).toMatchObject({ price_cents: 0 });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("prompts to notify customers once per target across automatic saves", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", []), buildTier("tier-b", "Tier B", [])]);
+    const props = { ...buildTieredProps(product), successful_sales_count: 5 };
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    const addPage = (tierIndex: number, id: string) =>
+      act(() =>
+        contextCapture.current?.updateProduct((current) => {
+          const tier = current.variants[tierIndex];
+          if (!tier) throw new Error("expected tier");
+          tier.rich_content = [
+            ...tier.rich_content,
+            { id, newlyAdded: true, title: "Page", description: {}, updated_at: "2026-01-01T00:00:00Z" },
+          ];
+        }),
+      );
+
+    addPage(0, "page-a");
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(contextCapture.current?.contentUpdates).toEqual({ uniquePermalinkOrVariantIds: ["tier-a"] });
+
+    // The seller dismisses the prompt; more edits to the same tier stay quiet.
+    act(() => contextCapture.current?.setContentUpdates(null));
+    addPage(0, "page-a2");
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledTimes(2);
+    expect(contextCapture.current?.contentUpdates).toBeNull();
+
+    // A tier the seller has not been prompted about re-prompts, carrying the
+    // full accumulated target set.
+    addPage(1, "page-b");
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledTimes(3);
+    expect(contextCapture.current?.contentUpdates?.uniquePermalinkOrVariantIds.sort()).toEqual(["tier-a", "tier-b"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("preselects only the current save's targets when autosave is off", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", []), buildTier("tier-b", "Tier B", [])]);
+    const props = { ...buildTieredProps(product), autosave_enabled: false, successful_sales_count: 5 };
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    const addPageAndSave = async (tierIndex: number, id: string) => {
+      act(() =>
+        contextCapture.current?.updateProduct((current) => {
+          const tier = current.variants[tierIndex];
+          if (!tier) throw new Error("expected tier");
+          tier.rich_content = [
+            { id, newlyAdded: true, title: "Page", description: {}, updated_at: "2026-01-01T00:00:00Z" },
+          ];
+        }),
+      );
+      await act(async () => {
+        await contextCapture.current?.save();
+      });
+    };
+
+    // With the kill switch off, each explicit save prompts for exactly its
+    // own changed targets — no accumulation across saves.
+    await addPageAndSave(0, "page-a");
+    expect(contextCapture.current?.contentUpdates).toEqual({ uniquePermalinkOrVariantIds: ["tier-a"] });
+    await addPageAndSave(1, "page-b");
+    expect(contextCapture.current?.contentUpdates).toEqual({ uniquePermalinkOrVariantIds: ["tier-b"] });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("holds autosave for a rate limit reported by a manual save", async () => {
+  // Date is faked too: the Retry-After deadline compares Date.now() against
+  // the timer clock, and the two must advance together.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    const { RateLimitError } = await import("$app/utils/request");
+    saveProductMock
+      .mockRejectedValueOnce(new RateLimitError("Too many requests", 30))
+      .mockResolvedValueOnce({} satisfies SaveProductResponse);
+    vi.mocked(showAlert).mockClear();
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Manual limited" }));
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    expect(showAlert).toHaveBeenCalledWith("Too many requests", "error");
+
+    // The manual 429's deadline holds the next automatic attempt back too.
+    await act(async () => void vi.advanceTimersByTime(3_000));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    await act(async () => void vi.advanceTimersByTime(27_000));
+    expect(saveProductMock).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("keeps explicit-save targets in the prompt when autosave adds another", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", []), buildTier("tier-b", "Tier B", [])]);
+    const props = { ...buildTieredProps(product), successful_sales_count: 5 };
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        const tier = current.variants[0];
+        if (!tier) throw new Error("expected tier");
+        tier.rich_content = [
+          { id: "page-a", newlyAdded: true, title: "Page", description: {}, updated_at: "2026-01-01T00:00:00Z" },
+        ];
+      }),
+    );
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    expect(contextCapture.current?.contentUpdates).toEqual({ uniquePermalinkOrVariantIds: ["tier-a"] });
+
+    // The automatic prompt for tier B must replace the visible alert with a
+    // superset that still carries the explicitly saved tier A.
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        const tier = current.variants[1];
+        if (!tier) throw new Error("expected tier");
+        tier.rich_content = [
+          { id: "page-b", newlyAdded: true, title: "Page", description: {}, updated_at: "2026-01-01T00:00:00Z" },
+        ];
+      }),
+    );
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledTimes(2);
+    expect(contextCapture.current?.contentUpdates?.uniquePermalinkOrVariantIds.sort()).toEqual(["tier-a", "tier-b"]);
   } finally {
     vi.useRealTimers();
   }
@@ -1052,6 +1279,9 @@ it("does not autosave a deletion that still needs seller confirmation", async ()
     await act(async () => void vi.advanceTimersByTime(1_500));
     expect(saveProductMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
+    // The label sends the seller to the Save button, which opens the
+    // deletion confirmation autosave refuses to trigger.
+    expect(contextCapture.current?.saveStatus).toBe("review_deletions");
   } finally {
     vi.useRealTimers();
   }

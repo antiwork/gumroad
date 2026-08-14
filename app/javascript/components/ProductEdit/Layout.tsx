@@ -35,8 +35,10 @@ export const useProductUrl = (params = {}) => {
 };
 
 const NotifyAboutProductUpdatesAlert = () => {
-  const { uniquePermalink, contentUpdates, setContentUpdates } = useProductEditContext();
+  const { uniquePermalink, contentUpdates, setContentUpdates, autosaveEnabled } = useProductEditContext();
   const timerRef = React.useRef<number | null>(null);
+  const hoveredRef = React.useRef(false);
+  const latestContentUpdatesRef = useRefToLatest(contentUpdates);
   const isVisible = !!contentUpdates;
 
   const clearTimer = () => {
@@ -47,6 +49,9 @@ const NotifyAboutProductUpdatesAlert = () => {
   };
 
   const startTimer = () => {
+    // Hovering pauses auto-dismiss; a timer (re)start while the pointer is
+    // still on the alert would close it under the seller's cursor.
+    if (hoveredRef.current) return;
     clearTimer();
     timerRef.current = window.setTimeout(() => {
       close();
@@ -58,19 +63,26 @@ const NotifyAboutProductUpdatesAlert = () => {
     setContentUpdates(null);
   };
 
+  // With autosave, a new notification target can land while the alert is
+  // already showing, and it deserves a full auto-dismiss window — so the
+  // timer keys on the updates object. Without autosave the key stays bare
+  // visibility, matching the pre-autosave behavior exactly.
+  const autoDismissKey = autosaveEnabled ? contentUpdates : isVisible;
   React.useEffect(() => {
     if (isVisible) {
       startTimer();
     }
 
     return clearTimer;
-  }, [isVisible]);
+  }, [autoDismissKey]);
 
   const handleMouseEnter = () => {
+    hoveredRef.current = true;
     clearTimer();
   };
 
   const handleMouseLeave = () => {
+    hoveredRef.current = false;
     startTimer();
   };
 
@@ -103,7 +115,14 @@ const NotifyAboutProductUpdatesAlert = () => {
               onClick={() => {
                 // NOTE: this is a workaround to make sure the alert closes after the tab is opened
                 // with correct URL params. Otherwise `bought` won't be set correctly.
-                setTimeout(() => close(), 100);
+                // With autosave, close only what was clicked: an autosave can
+                // replace the updates object within the delay, and that new
+                // prompt must not be dismissed by this stale click. With the
+                // flag off the close stays unconditional, matching main.
+                const updatesAtClick = contentUpdates;
+                setTimeout(() => {
+                  if (!autosaveEnabled || latestContentUpdatesRef.current === updatesAtClick) close();
+                }, 100);
               }}
               target="_blank"
               rel="noreferrer"
@@ -235,8 +254,16 @@ export const Layout = ({
       </Button>
     </WithTooltip>
   );
-  const saveStatusLabel =
-    saveStatus === "saving" ? "Saving..." : saveStatus === "unsaved" ? "Unsaved changes" : "All changes saved";
+  const saveStatusLabel = {
+    saved: "All changes saved",
+    unsaved: "Unsaved changes",
+    saving: "Saving...",
+    uploading: "Waiting for uploads...",
+    // Autosave never confirms a deletion on the seller's behalf; the label
+    // points at the Save button, which opens the confirmation.
+    review_deletions: "Save to review deletions",
+    failed: "Couldn't save changes",
+  }[saveStatus];
   const saveStatusIndicator = autosaveEnabled ? (
     <span className="text-sm text-muted" aria-live="polite">
       {saveStatusLabel}
