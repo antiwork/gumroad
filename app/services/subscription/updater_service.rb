@@ -95,6 +95,11 @@ class Subscription::UpdaterService
             logger.info("SubscriptionUpdater: Error creating new credit card for subscription #{subscription.external_id}: #{replacement_card.errors.full_messages} ; params: #{params}")
             raise Subscription::UpdateFailed, replacement_card.errors.messages[:base].first
           end
+
+          unless indian_card_mandate_validation_required?(replacement_card)
+            associate_replacement_card!(replacement_card, had_saved_card:, **validate_indian_card_mandate!(replacement_card))
+            replacement_card = nil
+          end
         end
 
         original_discount = subscription.original_purchase.purchase_offer_code_discount
@@ -140,11 +145,7 @@ class Subscription::UpdaterService
 
         if replacement_card.present?
           mandate_validation = validate_indian_card_mandate!(replacement_card)
-          update_subscription_credit_card!(replacement_card, **mandate_validation)
-
-          if !had_saved_card && subscription.gift? && !is_resubscribing
-            CustomerLowPriorityMailer.subscription_giftee_added_card(subscription.id).deliver_later
-          end
+          associate_replacement_card!(replacement_card, had_saved_card:, **mandate_validation)
         end
 
         # Do not allow restarting a subscription when the payment method that
@@ -320,9 +321,15 @@ class Subscription::UpdaterService
       raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
     end
 
+    def indian_card_mandate_validation_required?(credit_card)
+      subscription.india_card_mandate_reliability_enabled? &&
+        credit_card.stripe_charge_processor? &&
+        credit_card.requires_mandate?
+    end
+
     def indian_card_setup_intent_terms_match?(setup_intent)
       return false unless setup_intent&.usage == "off_session"
-      return false unless setup_intent.metadata["gumroad_subscription_id"] == subscription.external_id
+      return false unless setup_intent.metadata[:gumroad_subscription_id] == subscription.external_id
 
       mandate_options = setup_intent.card_mandate_options
       return false if mandate_options.blank?
@@ -346,6 +353,14 @@ class Subscription::UpdaterService
         subscription.renewal_disabled_due_to_indian_card_mandate = false
       end
       subscription.save!
+    end
+
+    def associate_replacement_card!(credit_card, had_saved_card:, **mandate_validation)
+      update_subscription_credit_card!(credit_card, **mandate_validation)
+
+      if !had_saved_card && subscription.gift? && !is_resubscribing
+        CustomerLowPriorityMailer.subscription_giftee_added_card(subscription.id).deliver_later
+      end
     end
 
     def validate_saved_indian_card_mandate!

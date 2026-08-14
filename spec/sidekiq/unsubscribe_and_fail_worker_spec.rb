@@ -35,6 +35,22 @@ describe UnsubscribeAndFailWorker, :vcr do
     end
   end
 
+  it "keeps access active when an Indian card mandate update is required",
+     vcr: { cassette_name: "UnsubscribeAndFailWorker/calls_unsubscribe_and_fail_when_the_subscription_is_overdue_for_a_charge" } do
+    Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+    @subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+
+    travel_to @subscription.end_time_of_subscription + 1.hour do
+      expect_any_instance_of(Subscription).to receive(:unsubscribe_and_fail!).and_call_original
+      described_class.new.perform(@subscription.id)
+    end
+
+    expect(@subscription.reload).to be_alive
+    expect(@subscription.failed_at).to be_nil
+  ensure
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+  end
+
   it "does not call unsubscribe_and_fail when the subscription is NOT overdue for a charge" do
     travel_to @subscription.end_time_of_subscription - 1.hour do
       expect_any_instance_of(Subscription).not_to receive(:unsubscribe_and_fail!)

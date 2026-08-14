@@ -3417,7 +3417,7 @@ describe Subscription::UpdaterService, :vcr do
         payment_method_id: "pm_replacement",
         customer_id: "cus_replacement",
         usage: "off_session",
-        metadata: { "gumroad_subscription_id" => subscription.external_id },
+        metadata: { gumroad_subscription_id: subscription.external_id },
         card_mandate_options: mandate_options
       )
       mandate = Stripe::Mandate.construct_from(
@@ -3445,7 +3445,7 @@ describe Subscription::UpdaterService, :vcr do
         payment_method_id: "pm_replacement",
         customer_id: "cus_replacement",
         usage: "off_session",
-        metadata: { "gumroad_subscription_id" => subscription.external_id },
+        metadata: { gumroad_subscription_id: subscription.external_id },
         card_mandate_options: mandate_options
       )
       allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
@@ -3466,7 +3466,7 @@ describe Subscription::UpdaterService, :vcr do
         payment_method_id: "pm_other",
         customer_id: "cus_replacement",
         usage: "off_session",
-        metadata: { "gumroad_subscription_id" => subscription.external_id },
+        metadata: { gumroad_subscription_id: subscription.external_id },
         card_mandate_options: mandate_options
       )
       mandate = Stripe::Mandate.construct_from(
@@ -3490,7 +3490,7 @@ describe Subscription::UpdaterService, :vcr do
         payment_method_id: "pm_replacement",
         customer_id: "cus_other",
         usage: "off_session",
-        metadata: { "gumroad_subscription_id" => subscription.external_id },
+        metadata: { gumroad_subscription_id: subscription.external_id },
         card_mandate_options: mandate_options
       )
       mandate = Stripe::Mandate.construct_from(
@@ -3515,7 +3515,7 @@ describe Subscription::UpdaterService, :vcr do
         payment_method_id: "pm_replacement",
         customer_id: "cus_replacement",
         usage: "off_session",
-        metadata: { "gumroad_subscription_id" => subscription.external_id },
+        metadata: { gumroad_subscription_id: subscription.external_id },
         card_mandate_options: mismatched_options
       )
       mandate = Stripe::Mandate.construct_from(

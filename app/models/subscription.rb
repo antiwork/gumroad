@@ -584,6 +584,7 @@ class Subscription < ApplicationRecord
   def unsubscribe_and_fail!
     with_lock do
       return if failed_at.present?
+      return if india_card_mandate_reliability_enabled? && renewal_disabled_due_to_indian_card_mandate?
 
       was_recently_failed = purchases.failed.where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago).exists?
 

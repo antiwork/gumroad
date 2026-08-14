@@ -1705,6 +1705,13 @@ describe Order::ChargeService, :vcr do
         allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::INR)
         allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::INR)
         create(:merchant_account, user: nil, charge_processor_merchant_id: nil, currency: Currency::USD)
+        allow(StripeFxQuote).to receive(:create).and_return(
+          StripeFxQuote::Quote.new(
+            id: "fxq_1U4M5cIBOqvOFDrfTPo6y5Y7",
+            expires_at: 30.minutes.from_now,
+            fx_rate: BigDecimal("0.0103528")
+          )
+        )
 
         buyer = create(:user)
         saved_card_params = indian_mandate_payment_params.merge(product_permalink: membership_product_2.unique_permalink)

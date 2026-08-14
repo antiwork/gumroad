@@ -6,7 +6,6 @@ class UnsubscribeAndFailWorker
 
   def perform(subscription_id)
     subscription = Subscription.find(subscription_id)
-    return if subscription.india_card_mandate_reliability_enabled? && subscription.renewal_disabled_due_to_indian_card_mandate?
     return if !subscription.alive?(include_pending_cancellation: false) ||
               subscription.is_test_subscription ||
               !subscription.overdue_for_charge?
