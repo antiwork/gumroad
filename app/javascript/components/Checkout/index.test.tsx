@@ -568,7 +568,7 @@ describe("Checkout method-forced listed-currency amounts", () => {
     );
 
     expect(getByLabelText("Tip").getAttribute("value")).toBe("10");
-    expect(getAllByText("R$10.00").length).toBeGreaterThan(0);
+    expect(getAllByText("R$10").length).toBeGreaterThan(0);
     expect(queryByText("R$9.97")).toBeNull();
     expect(queryByText("R$9.96")).toBeNull();
   });

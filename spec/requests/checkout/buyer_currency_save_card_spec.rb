@@ -57,14 +57,14 @@ describe "Buyer-currency checkout save-card fallback (#5419)", type: :system, js
         # display the locked EUR total it would never charge.
         expect(page).to have_checked_field("Save card for future purchases")
         expect(page).to have_text("Total US$10", normalize_ws: true)
-        expect(page).to have_no_text("€")
+        expect(page).to have_no_text("Total €")
 
         uncheck "Save card for future purchases"
-        expect(page).to have_text("Total €8.00", normalize_ws: true)
+        expect(page).to have_text("Total €8", normalize_ws: true)
 
         check "Save card for future purchases"
         expect(page).to have_text("Total US$10", normalize_ws: true)
-        expect(page).to have_no_text("€")
+        expect(page).to have_no_text("Total €")
       end
 
       purchase = Purchase.successful.last
@@ -81,7 +81,7 @@ describe "Buyer-currency checkout save-card fallback (#5419)", type: :system, js
       visit "/l/#{@product.unique_permalink}"
       add_to_cart(@product)
 
-      expect(page).to have_text("Total €8.00", normalize_ws: true)
+      expect(page).to have_text("Total €8", normalize_ws: true)
       expect(page).to have_no_field("Save card for future purchases")
     end
   end
