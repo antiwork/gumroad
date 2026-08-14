@@ -829,6 +829,33 @@ it("reports whether edits are saved without waiting for another change", async (
   }
 });
 
+it("exposes the in-flight saving state through the editor context", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    let resolveSave: (value: SaveProductResponse) => void = () => {};
+    saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => (resolveSave = resolve)));
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Mid-flight" }));
+
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    expect(contextCapture.current?.saveStatus).toBe("saving");
+    expect(contextCapture.current?.saving).toBe(true);
+
+    await act(async () => {
+      resolveSave({} satisfies SaveProductResponse);
+      await Promise.resolve();
+    });
+    expect(contextCapture.current?.saveStatus).toBe("saved");
+    expect(contextCapture.current?.saving).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("retries a failed autosave without waiting for another edit", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {

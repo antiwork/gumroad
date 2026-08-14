@@ -905,6 +905,8 @@ const ProductEditPage = (props: Props) => {
       existingFiles,
       setExistingFiles,
       filesById,
+      saving,
+      saveStatus,
       variantIdMappings,
       richContentIdMappings,
       fileIdMappings,
