@@ -32,12 +32,14 @@ describe AlertOnBlockedEstablishedBuyersJob do
   end
 
   # RecoverStrandedBuyersJob scans this same population on a schedule and reports its own
-  # outcomes, so this alert is duplicate noise while the flag is live; the flag being off restores
-  # it as the only dry-run signal.
+  # outcomes, so this alert is duplicate noise while the flag is live — but only when that job can
+  # cover the whole population in one run. It rotates oversized populations across buckets and only
+  # processes/reports today's bucket, so a population bigger than one run's budget keeps echoing
+  # here. The flag being off restores the alert entirely as the only dry-run signal.
   describe "when auto_recover_stranded_buyers is live" do
     after { Feature.deactivate(:auto_recover_stranded_buyers) }
 
-    it "does not report stranded buyers the recovery job already covers" do
+    it "does not report stranded buyers the recovery job can cover in one run" do
       Feature.activate(:auto_recover_stranded_buyers)
       allow(Risk::StrandedBuyerScanService).to receive(:call)
         .and_return(stranded: [{ email:, settled_purchases: established_count }], truncated: false)
@@ -45,6 +47,22 @@ describe AlertOnBlockedEstablishedBuyersJob do
       described_class.new.perform
 
       expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    end
+
+    it "still reports a stranded population too large for one recovery run, so un-due buyers stay visible" do
+      # Greptile P1 (#7231): the recovery job buckets oversized populations and only processes
+      # today's ~10% — suppressing the alert for the rest would make them invisible for days.
+      Feature.activate(:auto_recover_stranded_buyers)
+      large = (RecoverStrandedBuyersJob::MAX_RECOVERIES_PER_RUN + 1).times.map do |i|
+        { email: "buyer#{i}@example.com", settled_purchases: established_count,
+          failed_at: 1.hour.ago, block_type: PlatformBlock::TYPES[:browser_guid],
+          blocked_at: 2.months.ago, attempts: 1 }
+      end
+      allow(Risk::StrandedBuyerScanService).to receive(:call).and_return(stranded: large, truncated: false)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async)
     end
 
     it "still reports the truncation-only edge the recovery job's empty-scan guard cannot see" do
