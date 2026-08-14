@@ -74,15 +74,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # equal to them would let the outer layers cut the client before the
   # rescue can render its error envelope.
   BUFFERED_TIMEOUT = 90
-  # Beta features forward except the ones that can move spend outside the
-  # ledger. An allowlist was tried first and broke the client on contact:
-  # the runtime sends eight betas today and gains more with every upgrade,
-  # and dropping one turns its body into "context_management: Extra inputs
-  # are not permitted". Enforcement belongs in the body validators above
-  # anyway — a beta header grants nothing on its own, and the fields it
-  # would unlock (fallbacks, speed, inference_geo, server-side tools) are
-  # each rejected there. Extend the denials via
-  # GUMHEAD_DENIED_ANTHROPIC_BETAS without a deploy.
+  # Client feature flags forward as sent: the spend boundary is the body
+  # validators above, not this header, and dropping a flag the body relies
+  # on fails the request. `fallback` is denied because it runs extra models
+  # server-side, outside the ledger. Tune with GUMHEAD_DENIED_ANTHROPIC_BETAS.
   DEFAULT_DENIED_ANTHROPIC_BETAS = "fallback"
 
   # One Gumhead turn is a whole tool loop of model calls, so the request
@@ -554,9 +549,8 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       headers
     end
 
-    # Denied betas are dropped rather than rejected: the matching body field
-    # is refused with a named error by the validators above, which reads
-    # better than a bare header complaint.
+    # Dropped, not rejected: the body field a denied beta would unlock gets
+    # a named error from the validators above.
     def filtered_beta_features
       requested = request.headers["anthropic-beta"].to_s.split(",").map(&:strip).reject(&:blank?)
       return if requested.empty?
