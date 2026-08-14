@@ -25,6 +25,10 @@ module Affiliate::AudienceMember
     raise if retried
     retried = true
     retry
+  rescue ActiveRecord::LockWaitTimeout => e
+    # See Purchase::AudienceMember#add_to_audience_member_details — do not retry.
+    ErrorNotifier.notify(e)
+    AfterCommitEverywhere.after_commit { RefreshAudienceMemberJob.perform_async(affiliate_user.email, seller_id) }
   end
 
   def update_audience_member_with_removed_product(product_or_id)
@@ -36,6 +40,9 @@ module Affiliate::AudienceMember
 
     member.details["affiliates"]&.delete_if { _1["id"] == id && _1["product_id"] == product_id }
     member.valid? ? member.save! : member.destroy!
+  rescue ActiveRecord::LockWaitTimeout => e
+    ErrorNotifier.notify(e)
+    AfterCommitEverywhere.after_commit { RefreshAudienceMemberJob.perform_async(affiliate_user.email, seller_id) }
   end
 
   def should_be_audience_member?
@@ -67,6 +74,9 @@ module Affiliate::AudienceMember
       raise if retried
       retried = true
       retry
+    rescue ActiveRecord::LockWaitTimeout => e
+      ErrorNotifier.notify(e)
+      AfterCommitEverywhere.after_commit { RefreshAudienceMemberJob.perform_async(affiliate_user.email, seller_id) }
     end
 
     def remove_from_audience_member_details
@@ -76,5 +86,8 @@ module Affiliate::AudienceMember
 
       member.details["affiliates"]&.delete_if { _1["id"] == id }
       member.valid? ? member.save! : member.destroy!
+    rescue ActiveRecord::LockWaitTimeout => e
+      ErrorNotifier.notify(e)
+      AfterCommitEverywhere.after_commit { RefreshAudienceMemberJob.perform_async(affiliate_user.email, seller_id) }
     end
 end

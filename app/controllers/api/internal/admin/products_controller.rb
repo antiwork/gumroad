@@ -3,6 +3,11 @@
 class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseController
   include Pagy::Backend
 
+  # Serving a signed URL for a seller's actual file bytes is more sensitive
+  # than the metadata-only reads in this controller, so it is audited like a
+  # write and refuses legacy shared tokens.
+  before_action :require_per_actor_token!, only: :file_download
+
   # Inlined from the deleted admin web UI concern (Admin::Users::ListPaginatedProducts):
   # live products first, newest first.
   PRODUCTS_ORDER = Arel.sql("ISNULL(COALESCE(purchase_disabled_at, banned_at, links.deleted_at)) DESC, created_at DESC")
@@ -52,6 +57,35 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
     ancestry_paths = taxonomy_ancestry_paths_for([product])
 
     render json: { success: true, product: serialize_product(product, with_fraud_context: true, ancestry_paths:) }
+  end
+
+  def file_download
+    product = Link.find_by_external_id(params[:id])
+    # Reviewed content is often the soft-deleted prior version of a file, so
+    # this deliberately does not filter to alive files.
+    product_file = product&.product_files&.find_by_external_id(params[:file_id])
+
+    # Failed lookups are audited too (nil target, 404 in response_status) —
+    # attempted access to seller file bytes must stay attributable.
+    record_admin_write(action: "products.file_download_url", target: product_file) do
+      if product.blank?
+        render json: { success: false, message: "Product not found" }, status: :not_found
+      elsif product_file.blank?
+        render json: { success: false, message: "File not found" }, status: :not_found
+      else
+        signed_url = product_file.signed_url
+        if signed_url.blank?
+          render json: { success: false, message: "File is not available in storage" }, status: :not_found
+        else
+          render json: {
+            success: true,
+            signed_url:,
+            external_link: product_file.external_link?,
+            file: serialize_file(product_file)
+          }
+        end
+      end
+    end
   end
 
   private

@@ -447,6 +447,35 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
       expect(@seller.reload.unpaid_balance_cents).to eq(@initial_balance)
     end
 
+    it "synthesizes a flow of funds and heals a combined-charge PayPal purchase whose success callback was missed" do
+      merchant_account = create(:merchant_account_paypal, user: @product.user,
+                                                          charge_processor_merchant_id: "CJS32DZ7NDN5L", currency: "gbp")
+      purchase = create(:purchase, link: @product, purchase_state: "in_progress",
+                                   charge_processor_id: PaypalChargeProcessor.charge_processor_id,
+                                   merchant_account:, stripe_transaction_id: "8XC12345AB678901C")
+      purchase.is_part_of_combined_charge = true
+      purchase.save!
+      charge = create(:charge, order: create(:order), seller: @seller, merchant_account:,
+                               processor: PaypalChargeProcessor.charge_processor_id,
+                               processor_transaction_id: nil,
+                               amount_cents: purchase.total_transaction_cents,
+                               gumroad_amount_cents: purchase.total_transaction_amount_for_gumroad_cents)
+      charge.purchases << purchase
+
+      paypal_charge = BaseProcessorCharge.new
+      paypal_charge.id = purchase.stripe_transaction_id
+      paypal_charge.status = "completed"
+      paypal_charge.charge_processor_id = PaypalChargeProcessor.charge_processor_id
+      paypal_charge.flow_of_funds = nil
+      allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(paypal_charge)
+
+      expect(Purchase::SyncStatusWithChargeProcessorService.new(purchase).perform).to be(true)
+
+      expect(purchase.reload.successful?).to be(true)
+      expect(purchase.flow_of_funds).to be_present
+      expect(purchase.flow_of_funds.gumroad_amount.currency).to eq(Currency::USD)
+    end
+
     it "marks the purchase as failed and returns false if purchase's charge has been refunded" do
       merchant_account = create(:merchant_account_paypal, user: @product.user,
                                                           charge_processor_merchant_id: "CJS32DZ7NDN5L", currency: "gbp")

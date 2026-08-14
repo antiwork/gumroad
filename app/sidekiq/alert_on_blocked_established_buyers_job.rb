@@ -20,11 +20,19 @@ class AlertOnBlockedEstablishedBuyersJob
 
   def perform
     scan = Risk::StrandedBuyerScanService.call
+
+    # Suppress only when recovery can cover this exact scan in one run. Oversized
+    # populations rotate; a truncated scan never reaches RecoverStrandedBuyersJob's
+    # report (it ignores scan[:truncated]), so both still alert.
+    return if Feature.active?(:auto_recover_stranded_buyers) && scan[:stranded].any? && !scan[:truncated] && scan[:stranded].size <= RecoverStrandedBuyersJob::MAX_RECOVERIES_PER_RUN
+
     # Truncation with nothing qualifying still has to go out: it means the scan bound, not the
     # platform, decided the report was empty.
     return if scan[:stranded].empty? && !scan[:truncated]
 
-    InternalNotificationWorker.perform_async("risk", "Blocked established buyers", message_for(scan))
+    # agent_reports, not risk: RecoverStrandedBuyersJob works this same population autonomously
+    # and escalates the ambiguous cases itself, so humans only need its report (gumroad-private#2106).
+    InternalNotificationWorker.perform_async("agent_reports", "Blocked established buyers", message_for(scan))
   end
 
   private

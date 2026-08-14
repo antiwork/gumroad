@@ -21,12 +21,15 @@ describe "Multi-item receipt", :js, type: :system do
     add_to_cart(product_three)
   end
 
-  it "sends one receipt per seller", :sidekiq_inline do
-    allow(CustomerMailer).to receive(:receipt).with(nil, anything).exactly(2).times.and_call_original
-    # It doesn't matter which product is being passed, it works with multiple products
+  it "sends one receipt per seller, and per purchase for a two-item order", :sidekiq_inline do
+    allow(CustomerMailer).to receive(:receipt).and_call_original
+    # Seller one has a single-item charge (one combined receipt); seller two has a
+    # two-item charge which is split into one receipt per purchase (gp#2025).
     check_out(product_one)
 
     expect(CustomerMailer).to have_received(:receipt).with(nil, product_one.sales.first.charge.id)
-    expect(CustomerMailer).to have_received(:receipt).with(nil, product_two.sales.first.charge.id)
+    expect(CustomerMailer).to have_received(:receipt).with(product_two.sales.first.id, single_purchase: true)
+    expect(CustomerMailer).to have_received(:receipt).with(product_three.sales.first.id, single_purchase: true)
+    expect(CustomerMailer).not_to have_received(:receipt).with(nil, product_two.sales.first.charge.id)
   end
 end

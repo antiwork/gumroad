@@ -11,7 +11,7 @@ describe PostToIndividualPingEndpointWorker do
     {
       body:,
       headers: { "Content-Type" => content_type },
-      max_redirects: 0,
+      max_redirects: PostToIndividualPingEndpointWorker::MAX_REDIRECTS,
       allow_unfollowed_redirects: true,
       http_options: { open_timeout: 5, read_timeout: 5 }
     }
@@ -78,13 +78,44 @@ describe PostToIndividualPingEndpointWorker do
     end.to raise_error(StandardError)
   end
 
-  it "does not follow redirects" do
-    expect(SsrfFilter).to receive(:post).with("http://notification.com", hash_including(max_redirects: 0, allow_unfollowed_redirects: true)).and_return(@ok_response)
+  it "follows a bounded number of redirects, validated by SsrfFilter" do
+    expect(SsrfFilter).to receive(:post).with("http://notification.com", hash_including(max_redirects: 3, allow_unfollowed_redirects: true)).and_return(@ok_response)
 
     PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
   end
 
-  it "logs and drops the delivery without raising or retrying when the endpoint responds with a redirect" do
+  it "follows a trailing-slash redirect and re-sends the payload to the redirect target", :skip_ssrf_stub do
+    allow(Resolv).to receive(:getaddresses).with("example.com").and_return(["93.184.216.34"])
+    stub_request(:post, "http://example.com/hook/")
+      .to_return(status: 308, headers: { "Location" => "http://example.com/hook" })
+    delivered = stub_request(:post, "http://example.com/hook")
+      .with(body: "a=1", headers: { "Content-Type" => Mime[:url_encoded_form].to_s })
+      .to_return(status: 200)
+
+    expect do
+      PostToIndividualPingEndpointWorker.new.perform("http://example.com/hook/", { "a" => 1 })
+    end.to_not raise_error
+
+    expect(delivered).to have_been_requested
+  end
+
+  it "logs and drops the delivery when a redirect points at a private address", :skip_ssrf_stub do
+    allow(Resolv).to receive(:getaddresses).with("example.com").and_return(["93.184.216.34"])
+    allow(Resolv).to receive(:getaddresses).with("internal.example.net").and_return(["10.0.0.5"])
+    stub_request(:post, "http://example.com/hook")
+      .to_return(status: 302, headers: { "Location" => "http://internal.example.net/" })
+    messages = []
+    allow(Rails.logger).to receive(:info) { |message| messages << message }
+
+    expect do
+      PostToIndividualPingEndpointWorker.new.perform("http://example.com/hook", { "a" => 1 })
+    end.to_not raise_error
+
+    expect(messages).to include("[SsrfFilter::PrivateIPAddress] PostToIndividualPingEndpointWorker error content_type=#{Mime[:url_encoded_form]} user_id=")
+    expect(a_request(:post, "http://internal.example.net/")).not_to have_been_made
+  end
+
+  it "logs and drops the delivery without raising or retrying when the endpoint still redirects past the limit" do
     redirect_response = Net::HTTPFound.new("1.1", "302", "Found")
     allow(SsrfFilter).to receive(:post).and_return(redirect_response)
     messages = []
@@ -94,7 +125,7 @@ describe PostToIndividualPingEndpointWorker do
       PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
     end.to_not raise_error
 
-    expect(messages).to include("PostToIndividualPingEndpointWorker refused redirect response=302 content_type=#{Mime[:url_encoded_form]} user_id=")
+    expect(messages).to include("PostToIndividualPingEndpointWorker exhausted redirect limit response=302 content_type=#{Mime[:url_encoded_form]} user_id=")
     expect(PostToIndividualPingEndpointWorker.jobs.size).to eq(0)
   end
 
