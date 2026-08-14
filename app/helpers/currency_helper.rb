@@ -72,12 +72,23 @@ module CurrencyHelper
   # validated against the currencies we support. Same cookie the checkout picker writes, so
   # the product page and the checkout can never disagree about what the buyer asked for.
   def buyer_currency_preference(request)
-    raw = request.params[:currency].presence || request.cookie_jar[:gumroad_buyer_currency].presence
+    raw = request_hash_value(request, :params, :currency).presence ||
+      request_hash_value(request, :cookie_jar, :gumroad_buyer_currency).presence
     code = raw.to_s.downcase
     code if CURRENCY_CHOICES.key?(code)
-  rescue StandardError
+  end
+
+  # Product-page render must tolerate a request-like object that has no params
+  # or cookie jar (presenter specs, mailer previews).
+  def request_hash_value(request, method_name, key)
+    return unless request.respond_to?(method_name)
+
+    source = request.public_send(method_name)
+    source[key] if source.respond_to?(:[])
+  rescue NoMethodError, TypeError
     nil
   end
+  private :request_hash_value
 
   def buyer_currency_for_country(country_code)
     return if country_code.blank?

@@ -80,7 +80,9 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       visit "/l/#{@product.unique_permalink}"
 
       expect(page).to have_text("$10", normalize_ws: true)
-      expect(page).to have_no_text("€")
+      # Footer selector lists every supported currency (including €). The product
+      # price itself must stay in the seller's set currency.
+      expect(page).to have_no_text("€8")
     end
   end
 
@@ -184,7 +186,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       visit "/l/#{@product.unique_permalink}"
 
       expect(page).to have_text("$10", normalize_ws: true)
-      expect(page).to have_no_text("€")
+      expect(page).to have_no_text("€8")
     end
 
     it "does not fire the buyer_currency_display_view GA event for a US buyer" do
@@ -212,7 +214,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       visit "/l/#{@product.unique_permalink}"
 
       expect(page).to have_text("$10", normalize_ws: true)
-      expect(page).to have_no_text("€")
+      expect(page).to have_no_text("€8")
     end
   end
 
@@ -228,7 +230,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       visit "/l/#{@product.unique_permalink}"
 
       expect(page).to have_text("$10", normalize_ws: true)
-      expect(page).to have_no_text("€")
+      expect(page).to have_no_text("€8")
     end
   end
 
