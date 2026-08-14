@@ -54,6 +54,10 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
         fill_in "From (including)", with: "01/01/2020"
         fill_in "To (including)", with: "01/01/2024"
       end
+      # DateInput only commits on blur. Filling From then To blurs From (so `from`
+      # lands in the URL) but leaves To focused — without this click, `to` stays
+      # at today. Same pattern as the "calculates total stats" custom-range step.
+      find("body").click
       expect(page).not_to have_text("Range can be at most")
       expect(page).to have_current_path(sales_dashboard_path(from: "2020-01-01", to: "2024-01-01"))
     end
