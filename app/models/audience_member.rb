@@ -336,15 +336,22 @@ class AudienceMember < ApplicationRecord
   private
     def apply_refresh
       self.details = {}
+      had_sources = false
+
       seller.sales.where(email:).find_each do |purchase|
+        had_sources = true
         self.details["purchases"] ||= []
         self.details["purchases"] << purchase.audience_member_details if purchase.should_be_audience_member?
       end
 
       follower = seller.followers.find_by(email:)
-      self.details["follower"] = follower.audience_member_details if follower&.should_be_audience_member?
+      if follower
+        had_sources = true
+        self.details["follower"] = follower.audience_member_details if follower.should_be_audience_member?
+      end
 
       seller.direct_affiliates.includes(:affiliate_user).where(users: { email: }).find_each do |affiliate|
+        had_sources = true
         next unless affiliate.should_be_audience_member?
         self.details["affiliates"] ||= []
         affiliate.product_affiliates.each do |product_affiliate|
@@ -355,6 +362,12 @@ class AudienceMember < ApplicationRecord
       if valid?
         save!
       elsif persisted?
+        soft_delete!
+      elsif had_sources
+        # Create+unsubscribe can coalesce into one refresh that never saw a live
+        # row. Persist the tombstone so restore-in-place still has something to
+        # revive. Emails with no sources stay a no-op (see RefreshAudienceMemberJob).
+        save!(validate: false)
         soft_delete!
       end
     end

@@ -288,6 +288,20 @@ RSpec.describe Purchase::AudienceMember, defer_audience_refresh: true do
       end.not_to change(AudienceMember, :count)
     end
 
+    it "persists a tombstone when the first refresh sees only uncontactable sources" do
+      purchase = create(:purchase, link: create(:product, user: seller), seller:)
+      purchase.update_columns(can_contact: false)
+      RefreshAudienceMemberJob.clear
+
+      expect do
+        RefreshAudienceMemberJob.new.perform(purchase.email, seller.id)
+      end.to change(AudienceMember, :count).by(1)
+
+      member = audience_member_for(purchase)
+      expect(member.deleted_at).to be_present
+      expect(member.details).to eq({})
+    end
+
     it "locks only until execution so a mid-run change can enqueue a follow-up" do
       expect(RefreshAudienceMemberJob.get_sidekiq_options["lock"]).to eq(:until_executing)
       expect(RefreshAudienceMemberJob.get_sidekiq_options).not_to have_key("on_conflict")
