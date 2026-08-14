@@ -8,7 +8,8 @@ import { Select } from "$app/components/ui/Select";
 // The buyer-facing presentment currency selector that lives in page footers (product pages,
 // profile pages, discover). Writes the same cookie the checkout picker reads, then reloads so
 // the server re-renders every price through buyer_currency_display_props with the preference.
-// An empty value clears the cookie and returns to IP detection.
+// An empty value clears the cookie and returns to IP detection. Deliberately shows the raw
+// preference, not the per-seller resolved currency — settleability is enforced only at checkout.
 export const FooterCurrencySelector = ({ className }: { className?: string }) => {
   const [value, setValue] = React.useState(() => readBuyerCurrencyPreference() ?? "");
 
