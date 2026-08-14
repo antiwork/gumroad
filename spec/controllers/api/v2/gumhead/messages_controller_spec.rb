@@ -266,16 +266,33 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(400)
     end
 
-    it "forwards only allowlisted anthropic-beta features" do
+    # The runtime's real header, verbatim: every one of these must survive,
+    # or its body fields come back as "Extra inputs are not permitted".
+    it "forwards the runtime's beta features untouched" do
       stub_request(:post, messages_url)
         .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
-      request.headers["anthropic-beta"] = "interleaved-thinking-2025-05-14, server-side-fallback-2026-07-01"
+      runtime_betas = "claude-code-20250219,interleaved-thinking-2025-05-14,thinking-token-count-2026-05-13," \
+                      "context-management-2025-06-27,prompt-caching-scope-2026-01-05," \
+                      "mid-conversation-system-2026-04-07,advisor-tool-2026-03-01,effort-2025-11-24"
+      request.headers["anthropic-beta"] = runtime_betas
 
       post_messages
 
       expect(response.status).to eq(200)
       expect(WebMock).to have_requested(:post, messages_url).with { |req|
-        req.headers["Anthropic-Beta"] == "interleaved-thinking-2025-05-14"
+        req.headers["Anthropic-Beta"] == runtime_betas
+      }
+    end
+
+    it "drops beta features that could move spend outside the ledger" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+      request.headers["anthropic-beta"] = "context-management-2025-06-27, server-side-fallback-2026-07-01"
+
+      post_messages
+
+      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+        req.headers["Anthropic-Beta"] == "context-management-2025-06-27"
       }
     end
   end
