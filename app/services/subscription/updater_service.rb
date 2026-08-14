@@ -78,6 +78,7 @@ class Subscription::UpdaterService
     mandate_terms_before_update = if check_saved_card_mandate_terms_after_update
       subscription.indian_card_mandate_terms
     end
+    saved_card_mandate_terms_changed = false
 
     begin
       ActiveRecord::Base.transaction do
@@ -198,15 +199,13 @@ class Subscription::UpdaterService
           end
         end
 
-        if check_saved_card_mandate_terms_after_update && saved_card_update_requires_reauthorization?(
-          mandate_terms_before_update,
-          plan_or_price_changed:,
-          mandate_billing_info_changed:
-        )
-          if should_charge_user?
-            raise Subscription::UpdateFailed, "This plan change needs a new recurring payment authorization. Re-enter your card to continue."
-          end
-
+        saved_card_mandate_terms_changed = check_saved_card_mandate_terms_after_update &&
+          saved_card_update_requires_reauthorization?(
+            mandate_terms_before_update,
+            plan_or_price_changed:,
+            mandate_billing_info_changed:
+          )
+        if saved_card_mandate_terms_changed && !should_charge_user?
           subscription.require_indian_card_mandate_reauthorization!
         end
 
@@ -232,6 +231,9 @@ class Subscription::UpdaterService
           # Charge user if necessary
           if should_charge_user?
             result = charge_user!
+            if saved_card_mandate_terms_changed && result[:requires_card_action]
+              subscription.require_indian_card_mandate_reauthorization!
+            end
           else
             result = { success: true, success_message: }
           end
@@ -390,12 +392,12 @@ class Subscription::UpdaterService
       return unless subscription.india_card_mandate_reliability_enabled?
 
       credit_card = subscription.credit_card_to_charge
-      unless future_subscription_charge?
-        subscription.update_renewal_for_indian_card_mandate!("active", expected_credit_card_id: credit_card&.id)
+      return if credit_card.nil?
+
+      unless future_subscription_charge? && credit_card.stripe_charge_processor? && credit_card.requires_mandate?
+        subscription.clear_indian_card_mandate_state!(expected_credit_card_id: credit_card.id)
         return
       end
-      return unless credit_card&.stripe_charge_processor?
-      return unless credit_card.requires_mandate?
 
       mandate, status, = subscription.indian_card_mandate_for(credit_card.id)
       unless status == "active"

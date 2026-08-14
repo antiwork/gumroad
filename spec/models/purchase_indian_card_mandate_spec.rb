@@ -90,6 +90,48 @@ describe "Indian card mandate reliability" do
     end.not_to raise_error
   end
 
+  it "requires the INR mandate currency for renewal presentment" do
+    registration = create_registration
+    subscription = registration.subscription
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      is_original_subscription_purchase: false,
+      total_transaction_cents: 10_00
+    )
+    allow(subscription).to receive(:indian_card_mandate_terms).and_return(
+      amount: 80_000,
+      currency: Currency::INR,
+      interval: "month",
+      interval_count: 1
+    )
+    presentment = Purchase::LaterChargePresentmentService::Result.new(
+      processor_amount_cents: 80_000,
+      processor_currency: Currency::INR,
+      processor_gumroad_amount_cents: 8_000,
+      stripe_fx_quote_id: "fxq_renewal"
+    )
+    presentment_service = instance_double(Purchase::LaterChargePresentmentService, perform: presentment)
+    expect(Purchase::LaterChargePresentmentService).to receive(:new).with(
+      hash_including(
+        purchases: [renewal],
+        required_currency: Currency::INR,
+        required_currency_error_code: PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING
+      )
+    ).and_return(presentment_service)
+
+    expect(renewal.send(:later_charge_presentment_processor_args, off_session: true)).to include(
+      processor_currency: Currency::INR,
+      stripe_fx_quote_id: "fxq_renewal"
+    )
+  end
+
   it "does not apply subscription mandate validation to preorder releases" do
     release = build(
       :purchase,
@@ -559,6 +601,72 @@ describe "Indian card mandate reliability" do
       expected_credit_card_id: card.id,
       mandate_id: "mandate_old_plan"
     )
+
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to be_nil
+  end
+
+  it "clears plan reauthorization after a confirmed charge registers matching terms" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    registration.mark_indian_card_mandate_registration!
+    allow(registration).to receive(:processor_payment_intent_id).and_return("pi_matching_terms")
+    terms = subscription.indian_card_mandate_terms
+    mandate_options = Stripe::StripeObject.construct_from(
+      amount: terms[:amount],
+      amount_type: "maximum",
+      interval: terms[:interval],
+      interval_count: terms[:interval_count],
+      supported_types: ["india"]
+    )
+    intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      payment_method_id: card.processor_payment_method_id,
+      customer_id: card.stripe_customer_id,
+      setup_future_usage: "off_session",
+      currency: terms[:currency],
+      card_mandate_options: mandate_options
+    )
+    allow(ChargeProcessor).to receive(:get_charge_intent).with(merchant_account, "pi_matching_terms").and_return(intent)
+
+    registration.record_indian_card_mandate_status!("active", mandate_id: "mandate_matching_terms")
+
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to eq("mandate_matching_terms")
+  end
+
+  it "keeps plan reauthorization when a confirmed charge has different terms" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    registration.mark_indian_card_mandate_registration!
+    allow(registration).to receive(:processor_payment_intent_id).and_return("pi_old_terms")
+    terms = subscription.indian_card_mandate_terms
+    mandate_options = Stripe::StripeObject.construct_from(
+      amount: terms[:amount] - 1,
+      amount_type: "maximum",
+      interval: terms[:interval],
+      interval_count: terms[:interval_count],
+      supported_types: ["india"]
+    )
+    intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      payment_method_id: card.processor_payment_method_id,
+      customer_id: card.stripe_customer_id,
+      setup_future_usage: "off_session",
+      currency: terms[:currency],
+      card_mandate_options: mandate_options
+    )
+    allow(ChargeProcessor).to receive(:get_charge_intent).with(merchant_account, "pi_old_terms").and_return(intent)
+
+    registration.record_indian_card_mandate_status!("active", mandate_id: "mandate_old_terms")
 
     expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
     expect(subscription).to be_indian_card_mandate_requires_reauthorization

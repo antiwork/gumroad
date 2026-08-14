@@ -3851,6 +3851,7 @@ class Purchase < ApplicationRecord
       status,
       expected_credit_card_id: credit_card_id,
       mandate_id: stored_mandate_id,
+      clear_reauthorization: status == "active" && indian_card_charge_intent_matches_subscription_terms?,
       notify_buyer: status.in?(%w[inactive missing]),
       notify_buyer_if_already_disabled: previous_status == "pending" && status.in?(%w[inactive missing])
     )
@@ -3861,6 +3862,29 @@ class Purchase < ApplicationRecord
       purchase: external_id,
       mandate_status: status
     )
+  end
+
+  def indian_card_charge_intent_matches_subscription_terms?
+    return false unless subscription&.indian_card_mandate_requires_reauthorization?
+    return false if processor_payment_intent_id.blank?
+
+    intent = ChargeProcessor.get_charge_intent(merchant_account, processor_payment_intent_id)
+    return false unless intent&.succeeded?
+
+    card = credit_card
+    expected_terms = subscription.indian_card_mandate_terms
+    mandate_options = intent.card_mandate_options
+    return false if card.nil? || expected_terms.blank? || mandate_options.blank?
+
+    intent.payment_method_id == card.processor_payment_method_id &&
+      intent.customer_id == card.stripe_customer_id &&
+      intent.setup_future_usage == "off_session" &&
+      intent.currency.to_s.downcase == expected_terms[:currency] &&
+      mandate_options.amount.to_i == expected_terms[:amount] &&
+      mandate_options.amount_type == "maximum" &&
+      mandate_options.interval == expected_terms[:interval] &&
+      mandate_options.interval_count.to_i == expected_terms[:interval_count].to_i &&
+      Array(mandate_options.supported_types).include?("india")
   end
 
   def indian_card_mandate_status
@@ -4655,6 +4679,15 @@ class Purchase < ApplicationRecord
       return {} unless off_session
 
       upi_autopay = credit_card&.recurring_upi?
+      indian_card_mandate_currency = if !upi_autopay && subscription&.india_card_mandate_reliability_enabled? &&
+                                        credit_card&.requires_mandate?
+        subscription.indian_card_mandate_terms&.dig(:currency)
+      end
+      required_currency = if upi_autopay
+        Currency::INR
+      elsif indian_card_mandate_currency.present? && indian_card_mandate_currency != Currency::USD
+        indian_card_mandate_currency
+      end
       if upi_autopay
         if Feature.inactive?(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
           defer_upi_recurring_renewal!("servicing flag inactive")
@@ -4665,15 +4698,24 @@ class Purchase < ApplicationRecord
       else
         return {} unless charge_processor_id == StripeChargeProcessor.charge_processor_id
         return {} unless merchant_account&.stripe_charge_processor?
-        return {} unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+        return {} unless required_currency.present? || Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       end
 
+      required_currency_errors = if required_currency.present? && !upi_autopay
+        {
+          required_currency_error_code: PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
+          required_currency_error_message: "Your card's recurring payment authorization is not active. Please update your payment method to continue."
+        }
+      else
+        {}
+      end
       result = Purchase::LaterChargePresentmentService.new(
         merchant_account:,
         purchases: [self],
         amount_cents: total_transaction_cents,
         gumroad_amount_cents: total_transaction_amount_for_gumroad_cents,
-        required_currency: (Currency::INR if upi_autopay)
+        required_currency:,
+        **required_currency_errors
       ).perform
       return {} if result.blank?
 

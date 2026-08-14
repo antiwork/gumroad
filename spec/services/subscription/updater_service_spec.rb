@@ -993,9 +993,16 @@ describe Subscription::UpdaterService, :vcr do
               expect(PostToPingEndpointsWorker.jobs.size).to eq(0)
             end
 
-            it "rolls back a paid plan change until the buyer re-enters the card",
+            it "pauses renewal while a paid plan change waits for card confirmation",
                vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/changing_the_price_on_a_PWYW_tier/to_a_price_that_is_higher/when_the_card_requires_e-mandate/charges_the_difference_and_returns_proper_SCA_response" } do
               Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+              mandate = Stripe::Mandate.construct_from(
+                id: "mandate_old_terms",
+                status: "active",
+                payment_method: @subscription.credit_card.processor_payment_method_id
+              )
+              @subscription.update!(stripe_mandate_id: mandate.id)
+              allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
               params = @params.merge(
                 price_range: 7_99,
                 perceived_price_cents: 7_99,
@@ -1010,13 +1017,11 @@ describe Subscription::UpdaterService, :vcr do
                 remote_ip: @remote_ip,
               ).perform
 
-              expect(response).to eq(
-                success: false,
-                error_message: "This plan change needs a new recurring payment authorization. Re-enter your card to continue."
-              )
-              expect(@subscription.reload.original_purchase).to eq(@original_purchase)
-              expect(@original_purchase.reload.is_archived_original_subscription_purchase).to be(false)
-              expect(@subscription.purchases.is_upgrade_purchase).to be_empty
+              expect(response).to include(success: true, requires_card_action: true)
+              expect(@subscription.reload.original_purchase).not_to eq(@original_purchase)
+              expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+              expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+              expect(@subscription.purchases.is_upgrade_purchase.in_progress).to exist
             ensure
               Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
             end
@@ -3754,13 +3759,24 @@ describe Subscription::UpdaterService, :vcr do
       subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
       allow(subscription).to receive(:credit_card_to_charge).and_return(replacement_card)
       allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(0)
-      expect(subscription).to receive(:update_renewal_for_indian_card_mandate!).with(
-        "active",
-        expected_credit_card_id: replacement_card.id
-      )
+      allow(subscription).to receive(:current_subscription_price_cents).and_return(0)
+      expect(subscription).to receive(:clear_indian_card_mandate_state!).with(expected_credit_card_id: replacement_card.id)
       expect(subscription).not_to receive(:indian_card_mandate_for)
 
       service.send(:validate_saved_indian_card_mandate!)
+    end
+
+    it "clears the stop when the effective saved card needs no India mandate" do
+      replacement_card.update!(card_country: Compliance::Countries::USA.alpha2)
+      subscription.update!(credit_card: replacement_card, stripe_mandate_id: "mandate_old_card")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+
+      service.send(:validate_saved_indian_card_mandate!)
+
+      expect(subscription.reload.stripe_mandate_id).to be_nil
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
     end
 
     it "clears the stop when a saved-card restart has an active mandate" do

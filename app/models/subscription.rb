@@ -421,7 +421,7 @@ class Subscription < ApplicationRecord
     original_purchase.update!(should_exclude_product_review: false) if original_purchase.should_exclude_product_review?
     self.stripe_mandate_id = nil if credit_card_id != purchase.credit_card_id
     self.credit_card_id = purchase.credit_card_id
-    self.renewal_disabled_due_to_indian_card_mandate = false
+    self.renewal_disabled_due_to_indian_card_mandate = false unless indian_card_mandate_requires_reauthorization?
     save!
     create_purchase_event(purchase)
     if purchase.was_product_recommended
@@ -453,17 +453,18 @@ class Subscription < ApplicationRecord
     purchase.mark_failed!
   end
 
-  def update_renewal_for_indian_card_mandate!(status, expected_credit_card_id: nil, mandate_id: nil, notify_buyer: false, notify_buyer_if_already_disabled: false)
+  def update_renewal_for_indian_card_mandate!(status, expected_credit_card_id: nil, mandate_id: nil, clear_reauthorization: false, notify_buyer: false, notify_buyer_if_already_disabled: false)
     return unless india_card_mandate_reliability_enabled?
 
     with_lock do
       return if expected_credit_card_id.present? && credit_card_to_charge&.id != expected_credit_card_id
 
       if status == "active"
-        return if indian_card_mandate_requires_reauthorization?
+        return if indian_card_mandate_requires_reauthorization? && !clear_reauthorization
 
         self.stripe_mandate_id = mandate_id if mandate_id.present?
         self.renewal_disabled_due_to_indian_card_mandate = false
+        self.indian_card_mandate_requires_reauthorization = false if clear_reauthorization
         notify_buyer = false
       else
         return unless status.in?(%w[inactive missing pending])
@@ -502,6 +503,18 @@ class Subscription < ApplicationRecord
       after_commit do
         CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id).deliver_later(queue: "low")
       end
+    end
+  end
+
+  def clear_indian_card_mandate_state!(expected_credit_card_id:)
+    save! if changed?
+    with_lock do
+      return unless credit_card_to_charge&.id == expected_credit_card_id
+
+      self.stripe_mandate_id = nil
+      self.renewal_disabled_due_to_indian_card_mandate = false
+      self.indian_card_mandate_requires_reauthorization = false
+      save! if changed?
     end
   end
 
