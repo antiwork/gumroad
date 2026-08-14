@@ -30,6 +30,7 @@ class AssetPreviewTest < ActiveSupport::TestCase
 
   test "scales down a big image and keeps the original" do
     asset_preview = create_asset_preview
+    asset_preview.generate_retina_variant!
     assert asset_preview.file.attached?
     assert asset_preview.retina_variant.key.present?
     assert_equal 1633, asset_preview.width
@@ -258,6 +259,7 @@ class AssetPreviewTest < ActiveSupport::TestCase
       end
 
       assert_match "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/#{asset_preview.file.key}", asset_preview.file.url
+      asset_preview.generate_retina_variant!
       assert_match "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/#{asset_preview.retina_variant.key}", asset_preview.retina_variant.url
     end
   end
@@ -279,6 +281,7 @@ class AssetPreviewTest < ActiveSupport::TestCase
       end
 
       assert_match "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/#{asset_preview.file.key}", asset_preview.file.url
+      asset_preview.generate_retina_variant!
       assert_match "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/#{asset_preview.retina_variant.key}", asset_preview.retina_variant.url
     end
   end
