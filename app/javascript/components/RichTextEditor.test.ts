@@ -355,9 +355,12 @@ describe("useRichTextEditor", () => {
       editor = useRichTextEditor({ initialValue });
       return null;
     };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
     render(React.createElement(Harness));
-    if (!editor) throw new Error("editor did not mount");
-    expect(editor.schema.nodes.upsellCard).toBeDefined();
+    expect(getEditor().schema.nodes.upsellCard).toBeDefined();
   });
 
   it("omits the upsell card node when allowUpsells is false", () => {
@@ -367,8 +370,11 @@ describe("useRichTextEditor", () => {
       editor = useRichTextEditor({ initialValue, allowUpsells: false });
       return null;
     };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
     render(React.createElement(Harness));
-    if (!editor) throw new Error("editor did not mount");
-    expect(editor.schema.nodes.upsellCard).toBeUndefined();
+    expect(getEditor().schema.nodes.upsellCard).toBeUndefined();
   });
 });
