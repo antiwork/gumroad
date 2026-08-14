@@ -114,6 +114,7 @@ const MEMBERSHIP_STATUS_LABELS = {
   cancelled: "Cancelled",
   failed_payment: "Failed payment",
   fixed_subscription_period_ended: "Ended",
+  payment_method_update_required: "Payment method update required",
   pending_cancellation: "Cancellation pending",
   pending_failure: "Failure pending",
 };
@@ -123,6 +124,7 @@ const INSTALLMENT_PLAN_STATUS_LABELS = {
   cancelled: "Cancelled",
   failed_payment: "Payment failed",
   fixed_subscription_period_ended: "Paid in full",
+  payment_method_update_required: "Payment method update required",
   pending_cancellation: "Cancellation pending",
   pending_failure: "Failure pending",
 };
@@ -211,7 +213,9 @@ const CustomerDetailPage = ({
       {customer.is_bundle_purchase ? <Pill size="small">Bundle</Pill> : null}
       {subscription?.is_installment_plan ? <Pill size="small">Installments</Pill> : null}
       {subscription && !subscription.is_installment_plan && subscription.status !== "alive" ? (
-        <Pill size="small">Inactive</Pill>
+        <Pill size="small">
+          {subscription.status === "payment_method_update_required" ? "Payment update required" : "Inactive"}
+        </Pill>
       ) : null}
     </>
   );
@@ -703,7 +707,7 @@ const CustomerDetailPage = ({
             </section>
           </Card>
         ) : null}
-        {subscription?.status === "alive" ? (
+        {subscription?.status === "alive" || subscription?.status === "payment_method_update_required" ? (
           <div className="break-inside-avoid">
             <SubscriptionCancellationSection
               isInstallmentPlan={subscription.is_installment_plan}

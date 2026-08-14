@@ -23,6 +23,7 @@ class StripeChargeProcessor
   REFUND_REASON_FRAUDULENT = "fraudulent"
 
   MANDATE_PREFIX = "Mandate-"
+  INDIA_CARD_MANDATE_RELIABILITY_FEATURE = :india_card_mandate_reliability
   UPI_PAYMENT_METHOD_UPDATE_MESSAGE = "Your saved UPI payment method can no longer be used. Please update your payment method to continue your membership."
   # Stripe does not echo UPI mandate_options, so finalization validates this server-authored copy.
   UPI_RECURRING_MAX_AMOUNT_METADATA_KEY = "gumroad_upi_max_amount_cents"
@@ -47,6 +48,14 @@ class StripeChargeProcessor
 
   def self.charge_processor_id
     "stripe"
+  end
+
+  def self.mandate_matches_payment_method?(mandate, payment_method_id)
+    return false if mandate.blank? || payment_method_id.blank?
+
+    mandate_payment_method = mandate.payment_method
+    mandate_payment_method = mandate_payment_method.id if mandate_payment_method.respond_to?(:id)
+    mandate_payment_method == payment_method_id
   end
 
   # Gumroad stores some currencies in non-ISO minor units (e.g. KRW is stored as 1/100 won —
@@ -239,6 +248,16 @@ class StripeChargeProcessor
     end
   end
 
+  def get_mandate(mandate_id, merchant_account: nil)
+    with_stripe_error_handler do
+      if merchant_migrated?(merchant_account)
+        Stripe::Mandate.retrieve(mandate_id, { stripe_account: merchant_account.charge_processor_merchant_id })
+      else
+        Stripe::Mandate.retrieve(mandate_id)
+      end
+    end
+  end
+
   def setup_future_charges!(merchant_account, chargeable, mandate_options: nil)
     params = {
       payment_method_types: ["card"],
@@ -312,7 +331,11 @@ class StripeChargeProcessor
     # Off-session recurring charges on Indian cards use e-mandates:
     # https://stripe.com/docs/india-recurring-payments?integration=paymentIntents-setupIntents
     if off_session && chargeable.requires_mandate? && !upi_autopay
-      mandate = get_mandate_id_from_chargeable(chargeable, merchant_account)
+      mandate = if chargeable.respond_to?(:validated_stripe_mandate_id) && chargeable.validated_stripe_mandate_id.present?
+        chargeable.validated_stripe_mandate_id
+      else
+        get_mandate_id_from_chargeable(chargeable, merchant_account)
+      end
       if mandate.present?
         params.merge!(mandate:)
       elsif mandate_expected

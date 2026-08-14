@@ -30,6 +30,19 @@ describe RecurringChargeWorker, :vcr do
     described_class.new.perform(subscription.id)
   end
 
+  it "does not charge while an Indian card mandate update is required" do
+    Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+    @subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+
+    expect_any_instance_of(Subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+    expect_any_instance_of(Subscription).to receive(:refresh_indian_card_mandate!).and_return("missing")
+    expect_any_instance_of(Subscription).not_to receive(:charge!)
+    described_class.new.perform(@subscription.id)
+    expect(@subscription.reload).to be_alive
+  ensure
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+  end
+
   it "doesn't call charge if there was a purchase made the period for a monthly subscription" do
     link = create(:product, user: create(:user), subscription_duration: "monthly")
     subscription = create(:subscription, user: create(:user), link:)

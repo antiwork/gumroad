@@ -21,6 +21,15 @@ describe StripeSetupIntent, :vcr do
     end
   end
 
+  describe "#payment_method_id" do
+    it "returns the attached payment method ID" do
+      payment_method = processor_setup_intent.payment_method
+      expected_id = payment_method.respond_to?(:id) ? payment_method.id : payment_method
+
+      expect(stripe_setup_intent.payment_method_id).to eq(expected_id)
+    end
+  end
+
   context "when Stripe setup intent is successful" do
     let(:processor_setup_intent) do
       create_stripe_setup_intent(StripePaymentMethodHelper.success.to_stripejs_payment_method_id)

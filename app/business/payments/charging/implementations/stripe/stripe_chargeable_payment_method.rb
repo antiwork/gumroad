@@ -3,6 +3,8 @@
 class StripeChargeablePaymentMethod
   include StripeErrorHandler
 
+  attr_accessor :validated_stripe_mandate_id
+
   attr_reader :payment_method_id, :stripe_setup_intent_id, :stripe_payment_intent_id
 
   def initialize(payment_method_id, customer_id: nil,

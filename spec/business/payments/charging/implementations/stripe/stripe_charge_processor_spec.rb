@@ -1079,6 +1079,15 @@ describe StripeChargeProcessor, :vcr do
               charge_intent = subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: true)
               expect(charge_intent).to be_a(StripeChargeIntent)
             end
+
+            it "prefers the mandate validated for this subscription" do
+              chargeable.validated_stripe_mandate_id = "mandate_subscription"
+              expect(subject).not_to receive(:get_mandate_id_from_chargeable)
+              payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_renewal", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
+
+              expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(mandate: "mandate_subscription")).and_return(payment_intent)
+              subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: true)
+            end
           end
 
           context "when the saved card has no registered e-mandate" do

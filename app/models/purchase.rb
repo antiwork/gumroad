@@ -417,6 +417,13 @@ class Purchase < ApplicationRecord
       ORDER_OUTCOME_STATES.include?(purchase.purchase_state)
   }
 
+  after_commit :enqueue_indian_card_mandate_registration_check, if: -> (purchase) {
+    purchase.purchase_state_previously_changed? &&
+      NON_GIFT_SUCCESS_STATES.include?(purchase.purchase_state) &&
+      purchase.is_indian_card_mandate_registration? &&
+      purchase.india_card_mandate_reliability_enabled?
+  }
+
   after_create :mark_inventory_new_in_txn
   before_save :snapshot_inventory_pre_save_state
   after_commit :sync_inventory_counter_caches_on_create, on: :create
@@ -636,6 +643,10 @@ class Purchase < ApplicationRecord
             # UsersController#add_purchase_to_library), and #attach_to_user_and_card.
             # Not a buyer-level block (see is_buyer_blocked_by_admin).
             32 => :is_reassignment_locked,
+            33 => :is_indian_card_mandate_registration,
+            34 => :indian_card_mandate_missing,
+            35 => :indian_card_mandate_inactive,
+            36 => :indian_card_mandate_pending,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -3487,6 +3498,21 @@ class Purchase < ApplicationRecord
     purchase_state == "failed" || stripe_error_code.present? || (error_code.present? && PurchaseErrorCode::PAYMENT_ERROR_CODES.include?(error_code))
   end
 
+  def indian_card_mandate_error_status
+    code = [error_code, stripe_error_code].compact.find do |value|
+      value.in?([
+                  PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
+                  PurchaseErrorCode::INDIA_CARD_MANDATE_INACTIVE,
+                  PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING,
+                ])
+    end
+    {
+      PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING => "missing",
+      PurchaseErrorCode::INDIA_CARD_MANDATE_INACTIVE => "inactive",
+      PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING => "pending",
+    }[code]
+  end
+
   def has_retryable_payment_error?
     PurchaseErrorCode.is_error_retryable?(error_code) ||
       PurchaseErrorCode.is_error_retryable?(stripe_error_code)
@@ -3745,6 +3771,7 @@ class Purchase < ApplicationRecord
   # only surfaces a year later as an unexplainable renewal decline. Report it at
   # registration time instead, so the affected subscriptions are visible immediately.
   def check_indian_card_mandate_was_registered(processor_charge)
+    return if india_card_mandate_reliability_enabled?
     return unless stripe_charge_processor?
     return unless credit_card&.requires_mandate?
     # Only the purchase that registers the recurring payment is expected to carry a mandate.
@@ -3761,6 +3788,85 @@ class Purchase < ApplicationRecord
   rescue => e
     # This check is observability only; never let it break charge processing.
     ErrorNotifier.notify(e, purchase: external_id)
+  end
+
+  def mark_indian_card_mandate_registration!
+    return unless india_card_mandate_reliability_enabled?
+    return if is_indian_card_mandate_registration?
+
+    update_flag!(:is_indian_card_mandate_registration, true, true)
+    clear_flags_change
+  end
+
+  def verify_indian_card_mandate_registration!
+    return unless india_card_mandate_reliability_enabled?
+    return unless is_indian_card_mandate_registration?
+    return unless credit_card&.requires_mandate?
+
+    mandate, status = retrieve_indian_card_mandate
+    record_indian_card_mandate_status!(status, mandate_id: mandate&.id)
+    mandate
+  end
+
+  def retrieve_indian_card_mandate
+    mandate_id = if processor_setup_intent_id.present?
+      setup_intent = ChargeProcessor.get_setup_intent(merchant_account, processor_setup_intent_id)
+      raise "Indian card mandate check found an incomplete SetupIntent" unless setup_intent&.succeeded?
+
+      setup_intent.mandate
+    elsif stripe_transaction_id.present?
+      ChargeProcessor.get_charge(charge_processor_id, stripe_transaction_id, merchant_account:).card_mandate
+    end
+
+    mandate = ChargeProcessor.get_mandate(merchant_account, mandate_id) if mandate_id.present?
+    status = mandate&.status || "missing"
+    raise "Unknown Stripe mandate status: #{status}" unless status.in?(%w[active inactive pending missing])
+
+    unless StripeChargeProcessor.mandate_matches_payment_method?(mandate, credit_card.processor_payment_method_id)
+      ErrorNotifier.notify(
+        "Indian card mandate does not match the purchase payment method",
+        purchase: external_id
+      ) if mandate.present?
+      return [nil, "missing"]
+    end
+
+    [mandate, status]
+  end
+
+  def record_indian_card_mandate_status!(status, mandate_id: nil)
+    previous_status = indian_card_mandate_status
+    with_lock do
+      self.indian_card_mandate_missing = status == "missing"
+      self.indian_card_mandate_inactive = status == "inactive"
+      self.indian_card_mandate_pending = status == "pending"
+      save!
+    end
+    subscription&.update_renewal_for_indian_card_mandate!(
+      status,
+      expected_credit_card_id: credit_card_id,
+      mandate_id:,
+      notify_buyer: status.in?(%w[inactive missing]),
+      notify_buyer_if_already_disabled: previous_status == "pending" && status.in?(%w[inactive missing])
+    )
+    return if status == "active" || status == previous_status
+
+    ErrorNotifier.notify(
+      "Indian card recurring purchase completed without an active e-mandate",
+      purchase: external_id,
+      mandate_status: status
+    )
+  end
+
+  def indian_card_mandate_status
+    return "missing" if indian_card_mandate_missing?
+    return "inactive" if indian_card_mandate_inactive?
+    return "pending" if indian_card_mandate_pending?
+    "active" if is_indian_card_mandate_registration?
+  end
+
+  def india_card_mandate_reliability_enabled?
+    Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) &&
+      !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
   end
 
   # Same idea as check_indian_card_mandate_was_registered, but for purchases whose recurring
@@ -4012,6 +4118,10 @@ class Purchase < ApplicationRecord
   def enqueue_record_order_charge_outcome
     order_id = order_purchase&.order_id
     RecordOrderChargeOutcomeJob.perform_async(order_id) if order_id.present?
+  end
+
+  def enqueue_indian_card_mandate_registration_check
+    CheckIndianCardMandateRegistrationJob.perform_async(id)
   end
 
   def check_for_blocked_customer_emails
@@ -4521,8 +4631,10 @@ class Purchase < ApplicationRecord
 
     def create_setup_intent(chargeable)
       with_charge_processor_error_handler do
+        mandate_options = mandate_options_for_stripe(with_currency: true)
+        mark_indian_card_mandate_registration! if mandate_options.present?
         self.setup_intent = ChargeProcessor.setup_future_charges!(self.merchant_account, chargeable,
-                                                                  mandate_options: mandate_options_for_stripe(with_currency: true))
+                                                                  mandate_options:)
         return unless setup_intent.present?
 
         self.processor_setup_intent_id = setup_intent.id
@@ -4603,9 +4715,46 @@ class Purchase < ApplicationRecord
       presentment_cap_cents = [presentment_cap_cents, presentment_args[:processor_amount_cents].to_i].max
 
       inner = mandate_options[:payment_method_options][:card][:mandate_options]
-                .merge(amount: presentment_cap_cents, currency: presentment_currency)
+                .merge(amount: presentment_cap_cents)
+      unless india_card_mandate_reliability_enabled?
+        inner = inner.merge(currency: presentment_currency)
+      end
       mandate_options.deep_merge(
         payment_method_options: { card: { mandate_options: inner } }
+      )
+    end
+
+    def validate_indian_card_mandate_for_rebill!(chargeable)
+      return unless india_card_mandate_reliability_enabled?
+      return unless credit_card&.requires_mandate?
+
+      mandate, status, source = subscription&.indian_card_mandate_for(credit_card_id) || [nil, "missing", nil]
+      source&.record_indian_card_mandate_status!(status, mandate_id: mandate&.id)
+
+      if status == "active"
+        stripe_chargeable = chargeable.get_chargeable_for(StripeChargeProcessor.charge_processor_id)
+        stripe_chargeable.validated_stripe_mandate_id = mandate.id
+        return
+      end
+
+      if status == "pending" && source.present?
+        source.mark_indian_card_mandate_registration!
+        CheckIndianCardMandateRegistrationJob.perform_async(source.id)
+      end
+      ErrorNotifier.notify(
+        "Off-session charge on an Indian card has no active e-mandate to reference",
+        reference: external_id,
+        mandate_status: status,
+        fail_fast: true
+      )
+      error_code = {
+        "missing" => PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
+        "inactive" => PurchaseErrorCode::INDIA_CARD_MANDATE_INACTIVE,
+        "pending" => PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING,
+      }.fetch(status)
+      raise ChargeProcessorCardError.new(
+        error_code,
+        "Your card's recurring payment authorization is not active. Please update your payment method to continue."
       )
     end
 
@@ -4615,12 +4764,14 @@ class Purchase < ApplicationRecord
         amount_for_gumroad_cents = total_transaction_amount_for_gumroad_cents
         description = "You bought #{link.long_url}!"
         mandate_options = mandate_options_for_stripe
+        mark_indian_card_mandate_registration! if mandate_options.present?
 
         # Renewals and preorder releases rebill a saved card whose e-mandate (Indian cards)
         # was registered at the original purchase, so a missing mandate on those charges is
         # an anomaly worth reporting/failing on. First-time checkout charges can also run
         # off-session (multi-seller carts) but must not be treated that way.
         mandate_expected = is_a_saved_card_rebill?
+        validate_indian_card_mandate_for_rebill!(chargeable) if mandate_expected
 
         # Delayed product charges reuse the buyer-currency price fixed at checkout.
         #

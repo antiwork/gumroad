@@ -1696,6 +1696,73 @@ describe Order::ChargeService, :vcr do
         expect(mandate_options.interval_count).to eq(1)
       end
 
+      it "creates an INR mandate when a buyer uses a saved Indian card" do
+        configure_seller_1_for_presentment_charges
+        Feature.activate_user(:buyer_local_currency, seller_1)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller_1)
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
+        allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::INR)
+        allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::INR)
+        create(:merchant_account, user: nil, charge_processor_merchant_id: nil, currency: Currency::USD)
+
+        buyer = create(:user)
+        saved_card_params = indian_mandate_payment_params.merge(product_permalink: membership_product_2.unique_permalink)
+        saved_chargeable = CardParamsHelper.build_chargeable(saved_card_params, browser_guid)
+        saved_chargeable.prepare!
+        buyer.credit_card = CreditCard.create(
+          saved_chargeable,
+          CardDataHandlingMode::TOKENIZE_VIA_STRIPEJS,
+          buyer
+        )
+        buyer.save!
+
+        quote_line_item = Checkout::BuyerCurrencyQuote::LineItem.new(
+          permalink: membership_product_2.unique_permalink,
+          product: membership_product_2,
+          price_cents: 10_00,
+          tip_cents: 0,
+          seller_tax_cents: 0,
+          gumroad_tax_cents: 0,
+          shipping_cents: 0,
+          later_charge_kind: "subscription",
+          later_charge_price_cents: 10_00
+        )
+        quote_service = Checkout::BuyerCurrencyQuote.new(
+          line_items: [quote_line_item],
+          canonical_total_cents: 10_00,
+          ip: "103.48.196.103"
+        )
+        quote = quote_service.create
+        params = {
+          line_items: [
+            {
+              uid: "unique-id-0",
+              permalink: membership_product_2.unique_permalink,
+              perceived_price_cents: 10_00,
+              quantity: 1
+            }
+          ]
+        }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
+        order, = Order::CreateService.new(params:, buyer:).perform
+
+        Order::ChargeService.new(order:, params:).perform
+
+        charge = order.reload.charges.sole
+        stripe_payment_intent = Stripe::PaymentIntent.retrieve(charge.stripe_payment_intent_id)
+        mandate_options = stripe_payment_intent.payment_method_options.card.mandate_options
+        expect(stripe_payment_intent.currency).to eq(Currency::INR)
+        expect(mandate_options).to be_present
+        expect(mandate_options.amount).to eq(stripe_payment_intent.amount)
+        expect(mandate_options.interval).to eq("month")
+        expect(mandate_options.interval_count).to eq(1)
+      ensure
+        Feature.deactivate_user(:buyer_local_currency, seller_1)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller_1)
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
+      end
+
       it "creates a mandate for multiple membership purchases" do
         params = line_items_params_for_mandate.merge!(common_order_params_without_payment).merge!(indian_mandate_payment_params)
 

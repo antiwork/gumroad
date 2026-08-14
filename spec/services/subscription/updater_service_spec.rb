@@ -3328,4 +3328,134 @@ describe Subscription::UpdaterService, :vcr do
       end
     end
   end
+
+  describe "Indian card mandate validation" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:subscription_product, user: seller) }
+    let(:merchant_account) do
+      create(
+        :merchant_account,
+        user: nil,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        charge_processor_merchant_id: nil
+      )
+    end
+    let(:subscription) { create(:subscription, link: product) }
+    let!(:original_purchase) do
+      create(
+        :membership_purchase,
+        link: product,
+        subscription:,
+        is_original_subscription_purchase: true,
+        merchant_account:
+      )
+    end
+    let(:replacement_card) do
+      CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_replacement",
+        processor_payment_method_id: "pm_replacement",
+        stripe_fingerprint: "fingerprint_replacement",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        card_country: Compliance::Countries::IND.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030,
+        json_data: { stripe_setup_intent_id: "seti_replacement" }
+      )
+    end
+    let(:stripe_chargeable) do
+      StripeChargeablePaymentMethod.new(
+        "pm_replacement",
+        zip_code: "12345",
+        product_permalink: product.unique_permalink
+      )
+    end
+    let(:service) do
+      described_class.new(
+        subscription:,
+        params: {},
+        logged_in_user: nil,
+        gumroad_guid: "guid",
+        remote_ip: "127.0.0.1"
+      ).tap do |instance|
+        instance.original_purchase = original_purchase
+        instance.chargeable = instance_double(Chargeable, get_chargeable_for: stripe_chargeable)
+      end
+    end
+
+    before do
+      allow(MerchantAccount).to receive(:gumroad)
+        .with(StripeChargeProcessor.charge_processor_id)
+        .and_return(merchant_account)
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    end
+
+    after do
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    end
+
+    it "accepts an active mandate and clears the renewal stop" do
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.reload
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_active",
+        payment_method_id: "pm_replacement"
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_active",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      expect(stripe_chargeable.validated_stripe_mandate_id).to eq("mandate_active")
+      expect(subscription.reload.credit_card).to eq(replacement_card)
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription.stripe_mandate_id).to eq("mandate_active")
+    end
+
+    it "rejects a replacement card without an active mandate" do
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: nil,
+        payment_method_id: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(
+        Subscription::UpdateFailed,
+        "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+      )
+    end
+
+    it "rejects a replacement mandate for a different payment method" do
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_other_card",
+        payment_method_id: "pm_other"
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_other_card",
+        status: "active",
+        payment_method: "pm_other"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(Subscription::UpdateFailed)
+    end
+  end
 end

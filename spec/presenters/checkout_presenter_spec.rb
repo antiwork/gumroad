@@ -952,6 +952,7 @@ describe CheckoutPresenter do
                                  is_in_free_trial: false,
                                  is_test: false,
                                  is_overdue_for_charge: false,
+                                 payment_method_update_required: false,
                                  is_gift: false,
                                  is_installment_plan: false,
                                  current_recurrence_available: true,
@@ -966,6 +967,17 @@ describe CheckoutPresenter do
                                paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
                                request_apple_pay_merchant_tokens: false,
                              })
+      end
+
+      it "shows when the buyer must update the payment method" do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
+
+        expect(result[:subscription][:payment_method_update_required]).to be(true)
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end
 
       it "reports the charges still owed for a fixed-length subscription",

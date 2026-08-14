@@ -86,6 +86,7 @@ export type Customer = {
     id: string;
     status:
       | "alive"
+      | "payment_method_update_required"
       | "pending_failure"
       | "pending_cancellation"
       | "failed_payment"

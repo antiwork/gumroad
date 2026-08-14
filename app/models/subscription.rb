@@ -51,6 +51,7 @@ class Subscription < ApplicationRecord
             5 => :is_resubscription_pending_confirmation,
             6 => :mor_fee_applicable,
             7 => :is_installment_plan,
+            8 => :renewal_disabled_due_to_indian_card_mandate,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -357,7 +358,14 @@ class Subscription < ApplicationRecord
       purchase.process!(off_session:)
       error_messages = purchase.errors.messages.dup
       if purchase.errors.present? || purchase.error_code.present? || purchase.stripe_error_code.present?
-        unless from_failed_charge_email
+        mandate_status = purchase.indian_card_mandate_error_status
+        if mandate_status.present?
+          update_renewal_for_indian_card_mandate!(
+            mandate_status,
+            expected_credit_card_id: purchase.credit_card_id,
+            notify_buyer: mandate_status.in?(%w[inactive missing]) && !from_failed_charge_email
+          )
+        elsif !from_failed_charge_email
           if purchase.has_payment_network_error?
             schedule_charge(1.hour.from_now)
           else
@@ -376,8 +384,11 @@ class Subscription < ApplicationRecord
           end
         end
 
-        # schedule for termination 5 days after subscription is overdue for a charge
-        UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
+        # Product policy keeps access active until the buyer replaces the card.
+        unless mandate_status.present?
+          # schedule for termination 5 days after subscription is overdue for a charge
+          UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
+        end
         purchase.mark_failed!
       elsif purchase.pending_buyer_presentment_settlement?
         # FinalizeBuyerPresentmentPurchaseJob completes the renewal once Stripe settles it.
@@ -406,7 +417,9 @@ class Subscription < ApplicationRecord
     purchase.succeeded_at = succeeded_at if succeeded_at.present?
     purchase.update_balance_and_mark_successful!
     original_purchase.update!(should_exclude_product_review: false) if original_purchase.should_exclude_product_review?
+    self.stripe_mandate_id = nil if credit_card_id != purchase.credit_card_id
     self.credit_card_id = purchase.credit_card_id
+    self.renewal_disabled_due_to_indian_card_mandate = false
     save!
     create_purchase_event(purchase)
     if purchase.was_product_recommended
@@ -427,6 +440,101 @@ class Subscription < ApplicationRecord
     # schedule for termination 5 days after subscription is overdue for a charge
     UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
     purchase.mark_failed!
+  end
+
+  def update_renewal_for_indian_card_mandate!(status, expected_credit_card_id: nil, mandate_id: nil, notify_buyer: false, notify_buyer_if_already_disabled: false)
+    return unless india_card_mandate_reliability_enabled?
+
+    with_lock do
+      return if expected_credit_card_id.present? && credit_card_to_charge&.id != expected_credit_card_id
+
+      if status == "active"
+        self.stripe_mandate_id = mandate_id if mandate_id.present?
+        self.renewal_disabled_due_to_indian_card_mandate = false
+        notify_buyer = false
+      else
+        return unless status.in?(%w[inactive missing pending])
+        return unless alive?(include_pending_cancellation: false)
+
+        notify_buyer &&= !renewal_disabled_due_to_indian_card_mandate? || notify_buyer_if_already_disabled
+        self.renewal_disabled_due_to_indian_card_mandate = true
+      end
+      save! if changed?
+    end
+
+    if notify_buyer
+      after_commit do
+        CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id).deliver_later(queue: "low")
+      end
+    end
+  end
+
+  def india_card_mandate_reliability_enabled?
+    merchant_account = renewal_merchant_account
+    Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) &&
+      merchant_account.present? && !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
+  end
+
+  def renewal_merchant_account
+    seller&.merchant_account(StripeChargeProcessor.charge_processor_id) ||
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+  end
+
+  def indian_card_mandate_source_purchase(card_id)
+    scope = purchases.where(credit_card_id: card_id, purchase_state: Purchase::NON_GIFT_SUCCESS_STATES)
+                     .where.not(stripe_transaction_id: nil)
+                     .or(
+                       purchases.where(credit_card_id: card_id, purchase_state: Purchase::NON_GIFT_SUCCESS_STATES)
+                                .where.not(processor_setup_intent_id: nil)
+                     )
+    scope.is_indian_card_mandate_registration.order(created_at: :desc).first || scope.order(created_at: :desc).first
+  end
+
+  def indian_card_mandate_for(card_id)
+    card = credit_card_to_charge
+    return [nil, "missing", nil] unless card&.id == card_id
+
+    merchant_account = renewal_merchant_account
+    return [nil, "missing", nil] if merchant_account.nil?
+
+    if stripe_mandate_id.present?
+      mandate = ChargeProcessor.get_mandate(merchant_account, stripe_mandate_id)
+      status = mandate&.status || "missing"
+      raise "Unknown Stripe mandate status: #{status}" unless status.in?(%w[active inactive pending missing])
+
+      unless StripeChargeProcessor.mandate_matches_payment_method?(mandate, card.processor_payment_method_id)
+        ErrorNotifier.notify(
+          "Stored Indian card mandate does not match the subscription payment method",
+          subscription: external_id
+        ) if mandate.present?
+        return [nil, "missing", nil]
+      end
+
+      return [mandate, status, nil]
+    end
+
+    source = indian_card_mandate_source_purchase(card_id)
+    return [nil, "missing", nil] if source.nil? || StripeIntentChargeRouting.direct_charge_account?(source.merchant_account)
+
+    mandate, status = source&.retrieve_indian_card_mandate || [nil, "missing"]
+    [mandate, status, source]
+  end
+
+  def refresh_indian_card_mandate!
+    card = credit_card_to_charge
+    return "missing" unless card&.requires_mandate?
+
+    mandate, status, source = indian_card_mandate_for(card.id)
+    if source.present?
+      source.record_indian_card_mandate_status!(status, mandate_id: mandate&.id)
+    else
+      update_renewal_for_indian_card_mandate!(
+        status,
+        expected_credit_card_id: card.id,
+        mandate_id: mandate&.id
+      )
+    end
+    status
   end
 
   # Public: Charge the user and create a new purchase
@@ -1073,10 +1181,13 @@ class Subscription < ApplicationRecord
   def status
     if deactivated_at.present?
       termination_reason
-    elsif pending_failure?
-      "pending_failure"
     elsif pending_cancellation?
       "pending_cancellation"
+    elsif india_card_mandate_reliability_enabled? && renewal_disabled_due_to_indian_card_mandate? &&
+          (original_purchase.nil? || current_subscription_price_cents.positive?)
+      "payment_method_update_required"
+    elsif pending_failure?
+      "pending_failure"
     else
       "alive"
     end

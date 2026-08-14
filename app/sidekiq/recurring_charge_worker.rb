@@ -11,6 +11,10 @@ class RecurringChargeWorker
       subscription = Subscription.find(subscription_id)
       return if subscription.link.user.suspended?
       return unless subscription.alive?(include_pending_cancellation: false)
+      if subscription.india_card_mandate_reliability_enabled? && subscription.renewal_disabled_due_to_indian_card_mandate?
+        # Keep access active while the charge waits for a mandate that Stripe can use.
+        return unless subscription.refresh_indian_card_mandate! == "active"
+      end
       return if subscription.is_test_subscription || subscription.current_subscription_price_cents == 0
       return if subscription.charges_completed?
       # An installment plan whose every prior installment was charged back cannot be cancelled

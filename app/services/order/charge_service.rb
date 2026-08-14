@@ -132,6 +132,10 @@ class Order::ChargeService
       purchase.charge_processor_id ||= chargeable&.charge_processor_id
 
       chargeable = purchase.load_and_prepare_chargeable(credit_card) unless purchase.is_test_purchase?
+      if Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, purchase.seller) &&
+         !StripeIntentChargeRouting.direct_charge_account?(purchase.merchant_account)
+        purchase.chargeable = chargeable
+      end
 
       purchase.check_for_blocked_customer_emails
       purchase.validate_purchasing_power_parity
@@ -152,6 +156,7 @@ class Order::ChargeService
 
       if setup_intent.present?
         purchases.each do |purchase|
+          purchase.mark_indian_card_mandate_registration! if mandate_options.present? && purchase.credit_card&.requires_mandate?
           purchase.update!(processor_setup_intent_id: setup_intent.id)
           purchase.charge.update!(stripe_setup_intent_id: setup_intent.id)
           purchase.credit_card.update!(json_data: { stripe_setup_intent_id: setup_intent.id }) if purchase.credit_card&.requires_mandate?
@@ -283,6 +288,9 @@ class Order::ChargeService
       seller = User.find(purchases.first.seller_id)
       statement_description = seller.name_or_username
       mandate_options = mandate_options_for_stripe(purchases: purchases_to_charge)
+      if setup_future_charges && mandate_options.present? && chargeable&.requires_mandate?
+        purchases_to_charge.each(&:mark_indian_card_mandate_registration!)
+      end
 
       charge = Charge::CreateService.new(
         order:,

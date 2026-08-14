@@ -82,6 +82,7 @@ type Props = {
     is_in_free_trial: boolean;
     is_test: boolean;
     is_overdue_for_charge: boolean;
+    payment_method_update_required: boolean;
     is_gift: boolean;
     is_installment_plan: boolean;
     current_recurrence_available: boolean;
@@ -442,6 +443,15 @@ export default function SubscriptionsManage() {
           <Alert variant="warning" className="grow">
             Your {subscriptionEntity} is paid up until {formattedSubscriptionEndDate}. Add your own payment method below
             to ensure that your {subscriptionEntity} renews.
+          </Alert>
+        </CardContent>
+      ) : null}
+
+      {subscription.payment_method_update_required ? (
+        <CardContent>
+          <Alert variant="warning" className="grow">
+            Automatic renewals are paused because your payment method needs an update. You keep access through your
+            current paid period. Update your payment method below to restore renewals.
           </Alert>
         </CardContent>
       ) : null}

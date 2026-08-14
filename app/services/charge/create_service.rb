@@ -244,11 +244,15 @@ class Charge::CreateService
     deep_merged_mandate_options(presentment_cap_cents, presentment_currency)
   end
 
-  # Rebuild the nested mandate options with the converted cap and an explicit currency, without
-  # mutating the hash the caller passed in (it belongs to the Purchase that built it).
+  # Stripe uses the PaymentIntent currency for mandate options. Older code added an unsupported
+  # nested currency field, so preserve that behavior until the reliability flag is active.
   def deep_merged_mandate_options(cap_cents, currency)
     card_options = mandate_options[:payment_method_options][:card]
-    inner = card_options[:mandate_options].merge(amount: cap_cents, currency:)
+    inner = card_options[:mandate_options].merge(amount: cap_cents)
+    unless Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) &&
+           !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
+      inner = inner.merge(currency:)
+    end
 
     mandate_options.merge(
       payment_method_options: mandate_options[:payment_method_options].merge(

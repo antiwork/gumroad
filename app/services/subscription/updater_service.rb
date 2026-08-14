@@ -94,8 +94,10 @@ class Subscription::UpdaterService
             raise Subscription::UpdateFailed, credit_card.errors.messages[:base].first
           end
 
+          mandate_validation = validate_indian_card_mandate!(credit_card)
+
           # (c) Associate the new card with the subscription
-          update_subscription_credit_card!(credit_card)
+          update_subscription_credit_card!(credit_card, **mandate_validation)
 
           # (d) Send email for giftee adding their first card
           if !had_saved_card && subscription.gift? && !is_resubscribing
@@ -281,8 +283,40 @@ class Subscription::UpdaterService
       end
     end
 
-    def update_subscription_credit_card!(credit_card)
+    def validate_indian_card_mandate!(credit_card)
+      return { clear_mandate_stop: false, stripe_mandate_id: nil } unless subscription.india_card_mandate_reliability_enabled?
+      return { clear_mandate_stop: true, stripe_mandate_id: nil } unless credit_card.requires_mandate?
+
+      merchant_account = subscription.renewal_merchant_account
+      setup_intent_id = credit_card.stripe_setup_intent_id
+      setup_intent = ChargeProcessor.get_setup_intent(merchant_account, setup_intent_id) if setup_intent_id.present?
+      mandate_id = setup_intent&.mandate if setup_intent&.succeeded?
+      mandate = ChargeProcessor.get_mandate(merchant_account, mandate_id) if mandate_id.present?
+      status = mandate&.status || "missing"
+      payment_method_id = credit_card.processor_payment_method_id
+      binding_matches = setup_intent&.payment_method_id == payment_method_id &&
+        StripeChargeProcessor.mandate_matches_payment_method?(mandate, payment_method_id)
+
+      unless status == "active" && binding_matches
+        ErrorNotifier.notify(
+          "Indian card update rejected without an active e-mandate",
+          subscription: subscription.external_id,
+          mandate_status: status
+        )
+        raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+      end
+
+      stripe_chargeable = chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id)
+      stripe_chargeable.validated_stripe_mandate_id = mandate.id if stripe_chargeable.respond_to?(:validated_stripe_mandate_id=)
+      { clear_mandate_stop: true, stripe_mandate_id: mandate.id }
+    end
+
+    def update_subscription_credit_card!(credit_card, clear_mandate_stop: false, stripe_mandate_id: nil)
       subscription.credit_card = credit_card
+      if clear_mandate_stop
+        subscription.stripe_mandate_id = stripe_mandate_id
+        subscription.renewal_disabled_due_to_indian_card_mandate = false
+      end
       subscription.save!
     end
 
