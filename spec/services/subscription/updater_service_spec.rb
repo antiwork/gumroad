@@ -3527,6 +3527,17 @@ describe Subscription::UpdaterService, :vcr do
       )
     end
 
+    it "requires reauthorization for an immediate zero-charge plan update with a later paid renewal" do
+      previous_terms = { amount: 10_00, currency: Currency::USD, interval: "month", interval_count: 1 }
+      current_terms = previous_terms.merge(amount: 20_00)
+      allow(service).to receive(:apply_plan_change_immediately?).and_return(true)
+      allow(service).to receive(:should_charge_user?).and_return(false)
+      allow(service).to receive(:future_subscription_charge?).and_return(true)
+      allow(subscription).to receive(:indian_card_mandate_terms).and_return(current_terms)
+
+      expect(service.send(:saved_card_plan_update_requires_reauthorization?, previous_terms)).to be(true)
+    end
+
     it "rejects a replacement mandate for a different payment method" do
       setup_intent = instance_double(
         StripeSetupIntent,

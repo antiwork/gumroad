@@ -545,6 +545,20 @@ describe "Indian card mandate reliability" do
     expect(subscription.stripe_mandate_id).to be_nil
   end
 
+  it "does not require Stripe reauthorization for a non-Stripe Indian card" do
+    registration = create_registration
+    subscription = registration.subscription
+    card.update_columns(
+      charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
+      braintree_customer_id: "braintree_customer"
+    )
+
+    subscription.require_indian_card_mandate_reauthorization!
+
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+  end
+
   it "clears the pause when the effective payment method is not an Indian card" do
     registration = create_registration
     subscription = registration.subscription

@@ -52,7 +52,8 @@ class RecurringChargeWorker
       latest_applicable_plan_change = subscription.latest_applicable_plan_change
       check_mandate_terms_after_plan_change = latest_applicable_plan_change.present? &&
         subscription.india_card_mandate_reliability_enabled? &&
-        subscription.credit_card_to_charge&.requires_mandate?
+        subscription.credit_card_to_charge&.stripe_charge_processor? &&
+        subscription.credit_card_to_charge.requires_mandate?
       mandate_terms_before_plan_change = if check_mandate_terms_after_plan_change
         subscription.indian_card_mandate_terms
       end

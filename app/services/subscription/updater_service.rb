@@ -68,10 +68,10 @@ class Subscription::UpdaterService
     had_indian_card_mandate_stop = subscription.renewal_disabled_due_to_indian_card_mandate?
     replacement_card = nil
     had_saved_card = false
-    check_saved_card_mandate_terms_after_plan_update = subscription.in_free_trial? &&
-      !same_plan_and_price? && use_existing_card? &&
+    check_saved_card_mandate_terms_after_plan_update = !same_plan_and_price? && use_existing_card? &&
       subscription.india_card_mandate_reliability_enabled? &&
-      subscription.credit_card_to_charge&.requires_mandate?
+      subscription.credit_card_to_charge&.stripe_charge_processor? &&
+      subscription.credit_card_to_charge.requires_mandate?
     mandate_terms_before_plan_update = if check_saved_card_mandate_terms_after_plan_update
       subscription.indian_card_mandate_terms
     end
@@ -141,7 +141,7 @@ class Subscription::UpdaterService
           subscription.reload
 
           if check_saved_card_mandate_terms_after_plan_update &&
-             subscription.indian_card_mandate_terms != mandate_terms_before_plan_update
+             saved_card_plan_update_requires_reauthorization?(mandate_terms_before_plan_update)
             subscription.require_indian_card_mandate_reauthorization!
           end
         end
@@ -405,8 +405,13 @@ class Subscription::UpdaterService
       return false if subscription.charges_completed?
       return true if current_subscription_price_cents.positive?
 
-      discount = original_purchase.purchase_offer_code_discount
+      discount = subscription.original_purchase.purchase_offer_code_discount
       discount&.duration_in_billing_cycles.present? && subscription.renewal_pre_discount_total_cents.positive?
+    end
+
+    def saved_card_plan_update_requires_reauthorization?(previous_terms)
+      apply_plan_change_immediately? && !should_charge_user? && future_subscription_charge? &&
+        subscription.indian_card_mandate_terms != previous_terms
     end
 
     def record_plan_change!

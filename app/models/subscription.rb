@@ -488,7 +488,7 @@ class Subscription < ApplicationRecord
     notify_buyer = false
     with_lock do
       card = credit_card_to_charge
-      return unless card&.requires_mandate?
+      return unless card&.stripe_charge_processor? && card.requires_mandate?
       return unless alive?(include_pending_cancellation: false)
 
       notify_buyer = !renewal_disabled_due_to_indian_card_mandate?
