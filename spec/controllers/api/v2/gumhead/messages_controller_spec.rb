@@ -223,11 +223,15 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(400)
     end
 
-    it "requires streaming for outputs over the buffered ceiling" do
-      post_messages(request_payload.merge(max_tokens: described_class::MAX_BUFFERED_OUTPUT_TOKENS + 1))
+    # The runtime sends its full max_tokens ceiling on buffered calls too,
+    # so a buffered request with a large ceiling must pass.
+    it "allows a large max_tokens on a buffered call" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
 
-      expect(response.status).to eq(400)
-      expect(JSON.parse(response.body)["error"]["message"]).to include("stream")
+      post_messages(request_payload.merge(max_tokens: described_class::MAX_TOKENS_PER_REQUEST))
+
+      expect(response.status).to eq(200)
     end
 
     it "allows large outputs when streaming" do
@@ -356,6 +360,18 @@ describe Api::V2::Gumhead::MessagesController do
       event = GumheadUsageEvent.sole
       expect(event.output_tokens).to eq(request_payload[:max_tokens])
       expect(event.input_tokens).to eq(37)
+    end
+
+    # A large ceiling is charged at what the model could emit in the time
+    # the call actually had — here the stub fails instantly, so one second.
+    it "charges a timeout by elapsed time, not by the max_tokens ceiling" do
+      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 200, body: { input_tokens: 12 }.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages(request_payload.merge(max_tokens: described_class::MAX_TOKENS_PER_REQUEST))
+
+      expect(GumheadUsageEvent.sole.output_tokens).to eq(described_class::TIMEOUT_OUTPUT_TOKENS_PER_SECOND)
     end
 
     it "counts output_config in the timeout charge" do

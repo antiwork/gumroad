@@ -63,12 +63,9 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # document a limit requests can never reach.
   MAX_BODY_BYTES = 10.megabytes
   MAX_TOKENS_PER_REQUEST = 64_000
-  # A non-streaming response arrives only after the whole generation, so a
-  # large buffered generation and a network stall are indistinguishable at
-  # timeout — one must be charged, the other must not. Keeping buffered
-  # outputs small removes the ambiguity: big outputs must stream, and
-  # streams meter incrementally.
-  MAX_BUFFERED_OUTPUT_TOKENS = 8_192
+  # Above observed Claude throughput, so time-based charges stay upper
+  # bounds (see timed_out_output_tokens).
+  TIMEOUT_OUTPUT_TOKENS_PER_SECOND = 150
   # Below nginx's proxy_read_timeout and the Rack service timeout (both
   # 120s): those clocks start before this one, and an upstream deadline
   # equal to them would let the outer layers cut the client before the
@@ -280,11 +277,8 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       max_tokens = @body["max_tokens"]
       return if max_tokens.nil?
       unless max_tokens.is_a?(Integer) && max_tokens.positive? && max_tokens <= MAX_TOKENS_PER_REQUEST
-        return render json: anthropic_error("invalid_request_error", "max_tokens must be a positive integer no greater than #{MAX_TOKENS_PER_REQUEST} on the Gumhead gateway."), status: :bad_request
+        render json: anthropic_error("invalid_request_error", "max_tokens must be a positive integer no greater than #{MAX_TOKENS_PER_REQUEST} on the Gumhead gateway."), status: :bad_request
       end
-      return if @body["stream"] == true || max_tokens <= MAX_BUFFERED_OUTPUT_TOKENS
-
-      render json: anthropic_error("invalid_request_error", "Set stream: true for outputs larger than #{MAX_BUFFERED_OUTPUT_TOKENS} tokens on the Gumhead gateway."), status: :bad_request
     end
 
     def enforce_daily_token_caps
@@ -297,6 +291,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     def forward_buffered(url, meter:)
       upstream = nil
+      dispatched_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       upstream = HTTP.timeout(BUFFERED_TIMEOUT).headers(upstream_headers).post(url, body: @raw_body)
       body = upstream.body.to_s
       meter_buffered_usage(body) if meter && upstream.status.success?
@@ -312,14 +307,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
       # Past TCP connect, a timeout cannot distinguish a TLS/write stall
       # from a generation still running — and Anthropic bills generations
-      # whose client went away. A slow full-size buffered generation
-      # reliably outlives BUFFERED_TIMEOUT, so charging nothing here would
-      # be a repeatable unmetered-spend hole. Charge the exact prompt size
-      # plus max_tokens (capped by MAX_BUFFERED_OUTPUT_TOKENS): a false
-      # charge costs at most a few percent of the daily output cap per
-      # event.
+      # whose client went away. Charging nothing would be a repeatable
+      # unmetered-spend hole, so charge the exact prompt plus the most the
+      # model could have emitted in the time it had.
       if meter
-        record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => @body["max_tokens"].to_i))
+        record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => timed_out_output_tokens(dispatched_at)))
       end
       render json: anthropic_error("api_error", "The model service timed out."), status: :bad_gateway
     rescue HTTP::Error, OpenSSL::SSL::SSLError => e
@@ -330,9 +322,18 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # is nil (uncharged), during a body read the success headers are the
       # billing evidence, same as any lost body.
       if meter && upstream&.status&.success?
-        record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => @body["max_tokens"].to_i))
+        record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => timed_out_output_tokens(dispatched_at)))
       end
       render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
+    end
+
+    # The charge for a call that died without reporting usage: what the
+    # model could emit in the time it actually had, never more than the
+    # caller allowed. The floor of one second covers billing granularity.
+    def timed_out_output_tokens(dispatched_at)
+      elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - dispatched_at).ceil.clamp(1, BUFFERED_TIMEOUT)
+      requested = @body["max_tokens"].is_a?(Integer) ? @body["max_tokens"] : MAX_TOKENS_PER_REQUEST
+      [requested, elapsed * TIMEOUT_OUTPUT_TOKENS_PER_SECOND].min
     end
 
     # A synthetic charge cannot know how much of the prompt was a cache
