@@ -36,6 +36,16 @@ describe ProcessAssetPreviewRetinaWorker do
       expect(asset_preview.link).not_to have_received(:invalidate_cache)
     end
 
+    it "lets processing failures propagate so Sidekiq retries the job" do
+      asset_preview = create(:asset_preview)
+      allow(AssetPreview).to receive(:find_by).with(id: asset_preview.id).and_return(asset_preview)
+      allow(asset_preview).to receive(:generate_retina_variant!).and_raise(Timeout::Error)
+      allow(asset_preview.link).to receive(:invalidate_cache)
+
+      expect { described_class.new.perform(asset_preview.id) }.to raise_error(Timeout::Error)
+      expect(asset_preview.link).not_to have_received(:invalidate_cache)
+    end
+
     it "does nothing for a deleted or missing cover" do
       asset_preview = create(:asset_preview)
       asset_preview.mark_deleted!

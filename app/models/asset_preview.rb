@@ -130,8 +130,9 @@ class AssetPreview < ApplicationRecord
     Rails.cache.write("attachment_#{file.id}_retina_url", url)
     url
   rescue StandardError => e
+    # Re-raise so ProcessAssetPreviewRetinaWorker's retries fire on transient failures.
     Rails.logger.warn("AssetPreview#generate_retina_variant! failed for asset_preview #{id}: #{e.message}")
-    nil
+    raise
   end
 
   # True when the attached image is larger than covers ever render and should

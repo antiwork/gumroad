@@ -352,6 +352,13 @@ class AssetPreviewTest < ActiveSupport::TestCase
     assert_includes ProcessAssetPreviewRetinaWorker.jobs.map { _1["args"] }, [asset_preview.id]
   end
 
+  test "generate_retina_variant! re-raises processing failures so the worker can retry" do
+    asset_preview = create_asset_preview
+    asset_preview.file.stubs(:variant).raises(Timeout::Error)
+
+    assert_raises(Timeout::Error) { asset_preview.generate_retina_variant! }
+  end
+
   test "url_from_file serves the processed retina variant once it exists" do
     asset_preview = create_asset_preview
     asset_preview.generate_retina_variant!
