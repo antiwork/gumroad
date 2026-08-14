@@ -11,7 +11,8 @@ describe "ProductPresenter buyer local currency props" do
       remote_ip: "2.2.2.2",
       host: "example.com",
       host_with_port: "example.com",
-      cookie_jar: {}
+      cookie_jar: {},
+      params: {}
     )
   end
 

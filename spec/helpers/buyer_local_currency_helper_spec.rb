@@ -28,6 +28,10 @@ describe CurrencyHelper do
     it "returns nil with no preference set" do
       expect(helper.buyer_currency_preference(request_with)).to be_nil
     end
+
+    it "returns nil when the request does not expose params or cookies" do
+      expect(helper.buyer_currency_preference(Object.new)).to be_nil
+    end
   end
 
   describe "#buyer_currency_for_country" do
