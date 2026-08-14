@@ -26,6 +26,16 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
       expect(page).to have_current_path(sales_dashboard_path(from: "2020-01-01", to: "2024-06-01"))
     end
 
+    it "defaults to monthly aggregation for ranges wider than 366 days" do
+      visit sales_dashboard_path(from: "2020-01-01", to: "2024-06-01")
+      expect(page).to have_select("Aggregate by", selected: "Monthly")
+    end
+
+    it "keeps daily aggregation for ranges within 366 days" do
+      visit sales_dashboard_path(from: "2024-01-01", to: "2024-06-01")
+      expect(page).to have_select("Aggregate by", selected: "Daily")
+    end
+
     it "offers the All time preset" do
       visit sales_dashboard_path
       initial = find('[aria-label="Date range selector"]').text

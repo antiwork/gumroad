@@ -30,9 +30,10 @@ import placeholder from "$assets/images/placeholders/sales.png";
 
 // Must match CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS on the backend.
 const MAX_HOURLY_DATE_RANGE_DAYS = 7;
-// Ranges wider than this are slow enough that a failed load is likely a timeout, so the
-// error steers the seller at the emailed full-history export instead of a bare retry.
-const EXPORT_HINT_RANGE_DAYS = 366;
+// Past this width, daily rendering means thousands of chart points (so we default to
+// monthly), and a failed load is likely a timeout (so the error steers the seller at
+// the emailed full-history export instead of a bare retry).
+const WIDE_RANGE_DAYS = 366;
 
 export type Product = {
   name: string;
@@ -131,9 +132,15 @@ const Analytics = ({
   // time-of-day, but only yyyy-MM-dd strings are sent to the backend.
   const rangeDays = differenceInDays(startOfDay(dateRange.to), startOfDay(dateRange.from));
   const canAggregateHourly = rangeDays >= 0 && rangeDays <= MAX_HOURLY_DATE_RANGE_DAYS;
+  const isWideRange = rangeDays > WIDE_RANGE_DAYS;
   React.useEffect(() => {
     if (aggregateBy === "hourly" && !canAggregateHourly) setAggregateBy("daily");
   }, [aggregateBy, canAggregateHourly]);
+  // Depends only on isWideRange so it fires when the range crosses the threshold, not on
+  // every aggregateBy change — the seller can still switch back to Daily explicitly.
+  React.useEffect(() => {
+    if (isWideRange) setAggregateBy("monthly");
+  }, [isWideRange]);
   const hourly = aggregateBy === "hourly" && canAggregateHourly;
   const [data, setData] = React.useState<{
     byReferral: AnalyticsDataByReferral;
@@ -164,7 +171,7 @@ const Analytics = ({
         activeRequests.current = null;
       } catch (e) {
         if (e instanceof AbortError) return;
-        if (rangeDays > EXPORT_HINT_RANGE_DAYS) {
+        if (rangeDays > WIDE_RANGE_DAYS) {
           showAlert(
             'This range is too large to load right now. Use "Export all sales" to get your full history by email, or pick a shorter range.',
             "error",
