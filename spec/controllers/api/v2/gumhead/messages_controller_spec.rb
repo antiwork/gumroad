@@ -362,17 +362,16 @@ describe Api::V2::Gumhead::MessagesController do
       expect(event.input_tokens).to eq(37)
     end
 
-    # A ceiling far above what the deadline allows is charged at what the
-    # model could actually have emitted, not at the caller's ceiling.
-    it "charges a timeout by elapsed time when max_tokens is large" do
+    # A large ceiling is charged at what the model could emit in the time
+    # the call actually had — here the stub fails instantly, so one second.
+    it "charges a timeout by elapsed time, not by the max_tokens ceiling" do
       stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
       stub_request(:post, count_tokens_url)
         .to_return(status: 200, body: { input_tokens: 12 }.to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages(request_payload.merge(max_tokens: described_class::MAX_TOKENS_PER_REQUEST))
 
-      expect(GumheadUsageEvent.sole.output_tokens)
-        .to eq(described_class::BUFFERED_TIMEOUT * described_class::TIMEOUT_OUTPUT_TOKENS_PER_SECOND)
+      expect(GumheadUsageEvent.sole.output_tokens).to eq(described_class::TIMEOUT_OUTPUT_TOKENS_PER_SECOND)
     end
 
     it "counts output_config in the timeout charge" do
