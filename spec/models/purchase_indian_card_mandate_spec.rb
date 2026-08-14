@@ -439,6 +439,15 @@ describe "Indian card mandate reliability" do
       rate_converted_to_usd: "0.8"
     )
     allow(source_purchase).to receive(:mandate_maximum_displayed_price_cents).and_return(10_00)
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(source_purchase)
+    allow(subscription).to receive(:current_later_charge_presentment).and_return(
+      instance_double(
+        LaterChargePresentment,
+        canonical_price_cents:,
+        presentment_currency: Currency::EUR,
+        signup_currency_units_per_usd: BigDecimal("0.8")
+      )
+    )
     tax_calculation = instance_double(SalesTaxCalculation, tax_cents: 1_25)
     expect(SalesTaxCalculator).to receive(:new).with(
       product:,
@@ -459,7 +468,29 @@ describe "Indian card mandate reliability" do
       subscription.indian_card_mandate_terms(
         billing_info: { country: "United States", state: "CA", zip_code: "94107" }
       )
-    ).to include(amount: 13_75, currency: Currency::USD)
+    ).to include(amount: 11_00, currency: Currency::EUR)
+  end
+
+  it "uses the current renewal rate when no later-charge presentment is fixed" do
+    registration = create_registration
+    subscription = registration.subscription
+    source_purchase = subscription.original_purchase
+    product.update_column(:price_currency_type, Currency::EUR)
+    source_purchase.update_columns(
+      displayed_price_currency_type: Currency::EUR,
+      rate_converted_to_usd: "0.8"
+    )
+    allow(source_purchase).to receive(:mandate_maximum_displayed_price_cents).and_return(10_00)
+    allow(subscription).to receive(:get_rate).with(Currency::EUR).and_return("1.0")
+    allow(SalesTaxCalculator).to receive(:new).and_return(
+      instance_double(SalesTaxCalculator, calculate: instance_double(SalesTaxCalculation, tax_cents: 0))
+    )
+
+    expect(
+      subscription.indian_card_mandate_terms(
+        billing_info: { country: "United States", state: "CA", zip_code: "94107" }
+      )
+    ).to include(amount: 10_00, currency: Currency::USD)
   end
 
   it "rejects a stored mandate for a different payment method" do

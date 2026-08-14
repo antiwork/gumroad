@@ -390,7 +390,11 @@ class Subscription::UpdaterService
     end
 
     def future_subscription_charge?
-      !subscription.charges_completed? && subscription.renewal_pre_discount_total_cents.positive?
+      return false if subscription.charges_completed?
+      return true if current_subscription_price_cents.positive?
+
+      discount = original_purchase.purchase_offer_code_discount
+      discount&.duration_in_billing_cycles.present? && subscription.renewal_pre_discount_total_cents.positive?
     end
 
     def record_plan_change!

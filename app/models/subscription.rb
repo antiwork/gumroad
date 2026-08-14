@@ -545,7 +545,10 @@ class Subscription < ApplicationRecord
     displayed_price_cents = purchase.mandate_maximum_displayed_price_cents
     displayed_price_cents = renewal_price_cents if displayed_price_cents.zero?
     displayed_currency = purchase[:displayed_price_currency_type].presence || link.price_currency_type
-    price_cents = get_usd_cents(displayed_currency, displayed_price_cents, rate: purchase.rate_converted_to_usd.presence)
+    presentment = current_later_charge_presentment
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
+    fixed_rate = purchase.rate_converted_to_usd.presence if presentment&.canonical_price_cents == canonical_price_cents
+    price_cents = get_usd_cents(displayed_currency, displayed_price_cents, rate: fixed_rate)
     return 0 unless price_cents.positive?
 
     shipping_cents = purchase.shipping_cents.to_i

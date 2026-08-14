@@ -3473,11 +3473,36 @@ describe Subscription::UpdaterService, :vcr do
     it "requires a replacement mandate when a temporary discount makes the current price zero" do
       allow(service).to receive(:current_subscription_price_cents).and_return(0)
       allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(10_00)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: create(:offer_code, products: [product]),
+        offer_code_amount: 100,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 10_00,
+        duration_in_billing_cycles: 1
+      )
       expect(ChargeProcessor).to receive(:get_setup_intent).and_return(nil)
 
       expect do
         service.send(:validate_indian_card_mandate!, replacement_card)
       end.to raise_error(Subscription::UpdateFailed)
+    end
+
+    it "does not require a replacement mandate when a permanent discount makes every renewal free" do
+      allow(service).to receive(:current_subscription_price_cents).and_return(0)
+      allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(10_00)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: create(:offer_code, products: [product]),
+        offer_code_amount: 100,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 10_00,
+        duration_in_billing_cycles: nil
+      )
+      expect(ChargeProcessor).not_to receive(:get_setup_intent)
+
+      expect(service.send(:validate_indian_card_mandate!, replacement_card)).to eq(
+        clear_mandate_stop: true,
+        stripe_mandate_id: nil
+      )
     end
 
     it "rejects a replacement mandate for a different payment method" do
