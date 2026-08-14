@@ -76,6 +76,23 @@ describe AlertOnBlockedEstablishedBuyersJob do
 
       expect(InternalNotificationWorker).to have_received(:perform_async)
     end
+
+    it "still reports a nonempty truncated scan the recovery job never flags" do
+      # RecoverStrandedBuyersJob processes scan[:stranded] and never mentions scan[:truncated],
+      # so a 1..MAX qualifying page that hit the scan bound would otherwise lose the only
+      # bound-warning operators get.
+      Feature.activate(:auto_recover_stranded_buyers)
+      allow(Risk::StrandedBuyerScanService).to receive(:call).and_return(
+        stranded: [{ email:, settled_purchases: established_count,
+                     failed_at: 1.hour.ago, block_type: PlatformBlock::TYPES[:browser_guid],
+                     blocked_at: 2.months.ago, attempts: 1 }],
+        truncated: true
+      )
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async)
+    end
   end
 
   it "alerts on a buyer with settled history, naming the date the block was written" do

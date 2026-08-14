@@ -21,17 +21,10 @@ class AlertOnBlockedEstablishedBuyersJob
   def perform
     scan = Risk::StrandedBuyerScanService.call
 
-    # While the recovery flag is live, RecoverStrandedBuyersJob processes this same
-    # Risk::StrandedBuyerScanService population on its 11:40 schedule and reports its own
-    # outcomes, so a per-buyer alert listing the same people is duplicate noise — but only when the
-    # whole population fits in one run. The recovery job rotates oversized populations across
-    # buckets (ROTATION_BUCKETS=10) and only processes/reports today's bucket, so a population
-    # bigger than one run's budget leaves most buyers unreported for days; that larger case must
-    # still alert or the not-yet-due buyers are invisible to everyone (Greptile P1, #7231).
-    # The flag being off restores the alert entirely as the only dry-run signal (gp#2106).
-    # `.any?` keeps the empty-but-truncated edge flowing to the guard below: the recovery job
-    # returns early on an empty scan and never emits that line, so it must still go out.
-    return if Feature.active?(:auto_recover_stranded_buyers) && scan[:stranded].any? && scan[:stranded].size <= RecoverStrandedBuyersJob::MAX_RECOVERIES_PER_RUN
+    # Suppress only when recovery can cover this exact scan in one run. Oversized
+    # populations rotate; a truncated scan never reaches RecoverStrandedBuyersJob's
+    # report (it ignores scan[:truncated]), so both still alert.
+    return if Feature.active?(:auto_recover_stranded_buyers) && scan[:stranded].any? && !scan[:truncated] && scan[:stranded].size <= RecoverStrandedBuyersJob::MAX_RECOVERIES_PER_RUN
 
     # Truncation with nothing qualifying still has to go out: it means the scan bound, not the
     # platform, decided the report was empty.
