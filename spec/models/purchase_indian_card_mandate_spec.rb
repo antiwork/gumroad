@@ -61,6 +61,16 @@ describe "Indian card mandate reliability" do
     expect(registration.subscription.india_card_mandate_reliability_enabled?).to be(false)
   end
 
+  it "maps Stripe's canceled-mandate failure only when enforcement is on" do
+    registration = create_registration
+    registration.stripe_error_code = "india_recurring_payment_mandate_canceled"
+
+    expect(registration.indian_card_mandate_error_status).to eq("inactive")
+
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    expect(registration.indian_card_mandate_error_status).to be_nil
+  end
+
   it "does not validate mandates for non-Stripe rebills" do
     renewal = build(
       :purchase,
@@ -307,6 +317,51 @@ describe "Indian card mandate reliability" do
       .and_return(mandate)
 
     expect(subscription.indian_card_mandate_for(card.id)).to eq([mandate, "active", nil])
+  end
+
+  it "keeps using the source binding when a legacy card has no payment method ID" do
+    registration = create_registration
+    subscription = registration.subscription
+    card.update!(processor_payment_method_id: nil)
+    mandate = Stripe::Mandate.construct_from(
+      id: "mandate_legacy",
+      status: "active",
+      payment_method: "pm_legacy"
+    )
+    allow(subscription).to receive(:indian_card_mandate_source_purchase).with(card.id).and_return(registration)
+    allow(registration).to receive(:retrieve_indian_card_mandate).and_return([mandate, "active"])
+
+    expect(subscription.indian_card_mandate_for(card.id)).to eq([mandate, "active", registration])
+    registration.record_indian_card_mandate_status!("active", mandate_id: mandate.id)
+
+    expect(subscription.reload.stripe_mandate_id).to be_nil
+    expect(subscription.indian_card_mandate_for(card.id)).to eq([mandate, "active", registration])
+  end
+
+  it "preserves access after an asynchronous canceled-mandate failure" do
+    registration = create_registration
+    subscription = registration.subscription
+    renewal = create(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      card_country: Compliance::Countries::IND.alpha2,
+      purchase_state: "in_progress",
+      stripe_error_code: "india_recurring_payment_mandate_canceled"
+    )
+    mail = instance_double(ActionMailer::MessageDelivery, deliver_later: true)
+    allow(CustomerLowPriorityMailer).to receive(:subscription_indian_card_mandate_invalid).with(subscription.id).and_return(mail)
+    expect(UnsubscribeAndFailWorker).not_to receive(:perform_in)
+
+    subscription.handle_purchase_failure(renewal)
+
+    expect(renewal.reload).to be_failed
+    expect(subscription.reload).to be_alive
+    expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
   end
 
   it "converts the server-owned full renewal cap into the stored renewal currency" do

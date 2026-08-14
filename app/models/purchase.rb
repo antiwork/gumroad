@@ -3493,17 +3493,21 @@ class Purchase < ApplicationRecord
   end
 
   def indian_card_mandate_error_status
+    return unless india_card_mandate_reliability_enabled?
+
     code = [error_code, stripe_error_code].compact.find do |value|
       value.in?([
                   PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
                   PurchaseErrorCode::INDIA_CARD_MANDATE_INACTIVE,
                   PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING,
+                  "india_recurring_payment_mandate_canceled",
                 ])
     end
     {
       PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING => "missing",
       PurchaseErrorCode::INDIA_CARD_MANDATE_INACTIVE => "inactive",
       PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING => "pending",
+      "india_recurring_payment_mandate_canceled" => "inactive",
     }[code]
   end
 
@@ -3840,10 +3844,11 @@ class Purchase < ApplicationRecord
       self.indian_card_mandate_pending = status == "pending"
       save!
     end
+    stored_mandate_id = mandate_id if credit_card&.processor_payment_method_id.present?
     subscription&.update_renewal_for_indian_card_mandate!(
       status,
       expected_credit_card_id: credit_card_id,
-      mandate_id:,
+      mandate_id: stored_mandate_id,
       notify_buyer: status.in?(%w[inactive missing]),
       notify_buyer_if_already_disabled: previous_status == "pending" && status.in?(%w[inactive missing])
     )

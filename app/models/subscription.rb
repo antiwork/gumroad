@@ -436,10 +436,19 @@ class Subscription < ApplicationRecord
   end
 
   def handle_purchase_failure(purchase)
-    CustomerLowPriorityMailer.subscription_card_declined(id).deliver_later(queue: "low")
-    ChargeDeclinedReminderWorker.perform_in(ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE - CHARGE_DECLINED_REMINDER_EMAIL, id)
-    # schedule for termination 5 days after subscription is overdue for a charge
-    UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
+    mandate_status = purchase.indian_card_mandate_error_status
+    if mandate_status.present?
+      update_renewal_for_indian_card_mandate!(
+        mandate_status,
+        expected_credit_card_id: purchase.credit_card_id,
+        notify_buyer: mandate_status.in?(%w[inactive missing])
+      )
+    else
+      CustomerLowPriorityMailer.subscription_card_declined(id).deliver_later(queue: "low")
+      ChargeDeclinedReminderWorker.perform_in(ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE - CHARGE_DECLINED_REMINDER_EMAIL, id)
+      # schedule for termination 5 days after subscription is overdue for a charge
+      UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
+    end
     purchase.mark_failed!
   end
 
@@ -520,7 +529,7 @@ class Subscription < ApplicationRecord
     merchant_account = renewal_merchant_account
     return [nil, "missing", nil] if merchant_account.nil?
 
-    if stripe_mandate_id.present?
+    if stripe_mandate_id.present? && card.processor_payment_method_id.present?
       mandate = ChargeProcessor.get_mandate(merchant_account, stripe_mandate_id)
       status = mandate&.status || "missing"
       raise "Unknown Stripe mandate status: #{status}" unless status.in?(%w[active inactive pending missing])
