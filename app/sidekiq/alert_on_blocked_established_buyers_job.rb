@@ -24,7 +24,9 @@ class AlertOnBlockedEstablishedBuyersJob
     # platform, decided the report was empty.
     return if scan[:stranded].empty? && !scan[:truncated]
 
-    InternalNotificationWorker.perform_async("risk", "Blocked established buyers", message_for(scan))
+    # agent_reports, not risk: RecoverStrandedBuyersJob works this same population autonomously
+    # and escalates the ambiguous cases itself, so humans only need its report (gumroad-private#2106).
+    InternalNotificationWorker.perform_async("agent_reports", "Blocked established buyers", message_for(scan))
   end
 
   private

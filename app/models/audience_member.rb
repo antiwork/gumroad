@@ -320,28 +320,9 @@ class AudienceMember < ApplicationRecord
 
   # Admin method: refreshes the details of a specific audience member, or soft-deletes it if empty.
   def refresh!
-    self.details = {}
-    seller.sales.where(email:).find_each do |purchase|
-      self.details["purchases"] ||= []
-      self.details["purchases"] << purchase.audience_member_details if purchase.should_be_audience_member?
-    end
-
-    follower = seller.followers.find_by(email:)
-    self.details["follower"] = follower.audience_member_details if follower&.should_be_audience_member?
-
-    seller.direct_affiliates.includes(:affiliate_user).where(users: { email: }).find_each do |affiliate|
-      next unless affiliate.should_be_audience_member?
-      self.details["affiliates"] ||= []
-      affiliate.product_affiliates.each do |product_affiliate|
-        self.details["affiliates"] << affiliate.audience_member_details(product_id: product_affiliate.link_id)
-      end
-    end
-
-    if valid?
-      save!
-    elsif persisted?
-      soft_delete!
-    end
+    # with_lock (not bare lock!) so the FOR UPDATE holds through the source reads and
+    # save. Bare lock! under autocommit is released at the end of the SELECT.
+    persisted? ? with_lock { apply_refresh } : apply_refresh
   end
 
   def soft_delete!
@@ -353,6 +334,31 @@ class AudienceMember < ApplicationRecord
   end
 
   private
+    def apply_refresh
+      self.details = {}
+      seller.sales.where(email:).find_each do |purchase|
+        self.details["purchases"] ||= []
+        self.details["purchases"] << purchase.audience_member_details if purchase.should_be_audience_member?
+      end
+
+      follower = seller.followers.find_by(email:)
+      self.details["follower"] = follower.audience_member_details if follower&.should_be_audience_member?
+
+      seller.direct_affiliates.includes(:affiliate_user).where(users: { email: }).find_each do |affiliate|
+        next unless affiliate.should_be_audience_member?
+        self.details["affiliates"] ||= []
+        affiliate.product_affiliates.each do |product_affiliate|
+          self.details["affiliates"] << affiliate.audience_member_details(product_id: product_affiliate.link_id)
+        end
+      end
+
+      if valid?
+        save!
+      elsif persisted?
+        soft_delete!
+      end
+    end
+
     def assign_default_details_value
       return if persisted?
       self.details ||= {}

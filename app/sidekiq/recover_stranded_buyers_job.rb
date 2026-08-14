@@ -179,18 +179,23 @@ class RecoverStrandedBuyersJob
         dry_run: !live,
       )
       { email: candidate[:email], verdict: result.verdict, reason: result.reason,
-        cleared: result.cleared.size, withheld: result.skipped.size }
+        cleared: result.cleared.size, withheld: result.skipped.size,
+        withheld_for_human: result.skipped.count { |_block, why| why == :shared_identifier_needs_human_review } }
     rescue => e
       # One buyer's failure must not strand the rest of the run or the report — anything the
       # service raises (its own guard errors, a deadlock on unblock!, RecordInvalid from the admin
       # comment) becomes a named ERROR line. A live clear that failed mid-transaction already
       # rolled its rows back inside the service.
-      { email: candidate[:email], verdict: :error, reason: "#{e.class}: #{e.message}", cleared: 0, withheld: 0 }
+      { email: candidate[:email], verdict: :error, reason: "#{e.class}: #{e.message}", cleared: 0, withheld: 0, withheld_for_human: 0 }
     end
 
     def message_for(outcomes, live:, total:, out_of_budget: 0)
       counts = outcomes.group_by { _1[:verdict] }.transform_values(&:size)
       escalations = outcomes.select { _1[:verdict] == :escalate }
+      # Named, not just counted: a shared-radius (domain/IP) block only ever clears when a human
+      # reads this line and decides — with the detail reports now agent-only (#7230), this is the
+      # sole human-facing surface that identifies who is waiting.
+      human_holds = outcomes.select { _1[:withheld_for_human].to_i.positive? }
       errors = outcomes.select { _1[:verdict] == :error }
       blocks_cleared = outcomes.sum { _1[:cleared] }
       withheld = outcomes.sum { _1[:withheld] }
@@ -204,6 +209,9 @@ class RecoverStrandedBuyersJob
         ("" if escalations.any?),
         *escalations.first(MAX_REPORTED_ESCALATIONS).map { |o| "• ESCALATE #{o[:email]} — authored block, needs a human decision" },
         (escalations.size > MAX_REPORTED_ESCALATIONS ? "…and #{escalations.size - MAX_REPORTED_ESCALATIONS} more escalations." : nil),
+        ("" if human_holds.any?),
+        *human_holds.first(MAX_REPORTED_ESCALATIONS).map { |o| "• WITHHELD #{o[:email]} — #{o[:withheld_for_human]} shared-radius block(s) (domain/IP), needs a human decision" },
+        (human_holds.size > MAX_REPORTED_ESCALATIONS ? "…and #{human_holds.size - MAX_REPORTED_ESCALATIONS} more withheld buyers." : nil),
         ("" if errors.any?),
         *errors.map { |o| "• ERROR #{o[:email]} — #{o[:reason]}" },
       ].compact.join("\n")

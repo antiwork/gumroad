@@ -32,6 +32,10 @@ module Follower::AudienceMember
       raise if retried
       retried = true
       retry
+    rescue ActiveRecord::LockWaitTimeout => e
+      # See Purchase::AudienceMember#add_to_audience_member_details — do not retry.
+      ErrorNotifier.notify(e)
+      AfterCommitEverywhere.after_commit { RefreshAudienceMemberJob.perform_async(email, followed_id) }
     end
 
     def remove_from_audience_member_details(email = attributes["email"])
@@ -40,5 +44,8 @@ module Follower::AudienceMember
 
       member.details.delete("follower")
       member.valid? ? member.save! : member.soft_delete!
+    rescue ActiveRecord::LockWaitTimeout => e
+      ErrorNotifier.notify(e)
+      AfterCommitEverywhere.after_commit { RefreshAudienceMemberJob.perform_async(email, followed_id) }
     end
 end
