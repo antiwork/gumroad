@@ -766,4 +766,16 @@ describe("Checkout currency picker", () => {
     );
     expect(queryByLabelText("Currency")).toBeNull();
   });
+
+  it("hides the picker when a new card will be saved", () => {
+    const { queryByLabelText } = renderCheckout(
+      buildState({
+        willSaveCard: true,
+        surcharges: { type: "loaded", result: quotedSurcharges },
+      }),
+      cart,
+    );
+
+    expect(queryByLabelText("Currency")).toBeNull();
+  });
 });

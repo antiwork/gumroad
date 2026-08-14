@@ -121,7 +121,12 @@ const CurrencyPicker = () => {
   const options = loaded?.available_buyer_currencies ?? [];
   // Wallet / PayPal / Payment Request charge canonical USD. Don't offer a currency
   // the charge path will not honor.
-  if (options.length < 2 || state.paymentMethod !== "card" || isWalletPaymentElementType(state.paymentElementType)) {
+  if (
+    options.length < 2 ||
+    state.paymentMethod !== "card" ||
+    state.willSaveCard ||
+    isWalletPaymentElementType(state.paymentElementType)
+  ) {
     return null;
   }
   const detected = loaded?.detected_buyer_currency ?? null;
