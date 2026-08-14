@@ -62,4 +62,8 @@ describe("formatMinorUnitPriceWithIntl", () => {
   it("never shows decimals for a 1-subunit currency", () => {
     expect(formatMinorUnitPriceWithIntl("jpy", 1441, 1)).toBe("¥1,441");
   });
+
+  it("uses the currency convention when an internal 100-subunit amount is fractional", () => {
+    expect(formatMinorUnitPriceWithIntl("krw", 1_343_250, 100)).toBe("₩13,433");
+  });
 });

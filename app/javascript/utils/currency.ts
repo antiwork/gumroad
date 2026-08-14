@@ -121,10 +121,11 @@ export const formatMinorUnitPriceWithIntl = (
           return configuredCurrency && "single_unit" in configuredCurrency && configuredCurrency.single_unit ? 1 : 100;
         })();
   const units = amountMinorUnits / resolvedSubunitToUnit;
-  // Match USD checkout amounts: drop .00 on whole units so £0 and US$0
-  // don't use two different decimal rules. Fractional amounts keep two
-  // places. Zero-decimal currencies stay whole.
-  const fractionDigits = resolvedSubunitToUnit === 1 || Number.isInteger(units) ? 0 : 2;
+  // Match USD checkout amounts by dropping .00 on whole units. Fractional values
+  // use the currency's own convention, so KRW stays whole even though Gumroad stores it in 100 subunits.
+  const currencyFractionDigits = new Intl.NumberFormat("en-US", { style: "currency", currency }).resolvedOptions()
+    .maximumFractionDigits;
+  const fractionDigits = Number.isInteger(units) ? 0 : currencyFractionDigits;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
