@@ -114,7 +114,7 @@ const nameOfSalesTaxForCountry = (countryCode: string) => {
   }
 };
 
-const CurrencyPicker = () => {
+const CurrencyPicker = ({ isListedCurrency }: { isListedCurrency: boolean }) => {
   const [state, dispatch] = useState();
   const uid = React.useId();
   const loaded = state.surcharges.type === "loaded" ? state.surcharges.result : null;
@@ -130,7 +130,8 @@ const CurrencyPicker = () => {
     options.length >= 2 &&
     state.paymentMethod === "card" &&
     !state.willSaveCard &&
-    !isWalletPaymentElementType(state.paymentElementType);
+    !isWalletPaymentElementType(state.paymentElementType) &&
+    !isListedCurrency;
 
   React.useEffect(() => {
     if (!canChooseCurrency || state.buyerCurrency == null || state.buyerCurrency === value) return;
@@ -138,7 +139,7 @@ const CurrencyPicker = () => {
     dispatch({ type: "set-value", buyerCurrency: value });
   }, [canChooseCurrency, dispatch, state.buyerCurrency, value]);
 
-  // Wallet, non-card, and save-card paths do not honor a buyer-selected FX quote.
+  // Wallet, non-card, save-card, and listed-currency paths do not honor a buyer-selected FX quote.
   if (!canChooseCurrency) return null;
 
   return (
@@ -406,7 +407,7 @@ export const Checkout = ({
                 ) : null}
               </CartItemList>
               <CartItemList>
-                <CurrencyPicker />
+                <CurrencyPicker isListedCurrency={listedCurrency != null} />
                 {displayTipSelector ? (
                   <div className="p-4 sm:p-5">
                     <TipSelector

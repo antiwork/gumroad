@@ -586,6 +586,23 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["R$49.90"]);
   });
 
+  it("hides the picker while checkout presents the listed currency", () => {
+    const state = brlState();
+    if (state.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+    state.surcharges.result = {
+      ...state.surcharges.result,
+      detected_buyer_currency: "brl",
+      available_buyer_currencies: [
+        { code: "usd", label: "$ (US Dollars)" },
+        { code: "eur", label: "€ (Euro)" },
+      ],
+    };
+
+    const { queryByLabelText } = renderCheckout(state, brlCart());
+
+    expect(queryByLabelText("Currency")).toBeNull();
+  });
+
   it("stays in canonical USD while a saved card is selected, because that charge is not in the listed currency", () => {
     // Saved cards stay on the server-confirm path, which never reaches
     // Charge::MethodForcedPresentment — and `usingSavedCard` defaults true for any buyer with a
