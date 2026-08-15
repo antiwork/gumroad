@@ -751,14 +751,14 @@ describe("Checkout currency picker", () => {
     expect(getByLabelText("Currency")).toBeTruthy();
   });
 
-  it("renders the picker above the summary amounts it reprices", () => {
+  it("renders the picker directly below the Total row (slavingia, 2026-08-15)", () => {
     const { getByLabelText, getByText } = renderCheckout(
       buildState({ surcharges: { type: "loaded", result: quotedSurcharges } }),
       cart,
     );
     const picker = getByLabelText("Currency");
-    const subtotal = getByText("Subtotal");
-    expect(picker.compareDocumentPosition(subtotal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const total = getByText("Total");
+    expect(total.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("hides the picker and keeps USD totals when Apple Pay is selected", () => {

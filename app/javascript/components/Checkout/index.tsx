@@ -144,7 +144,7 @@ const CurrencyPicker = ({ isListedCurrency }: { isListedCurrency: boolean }) => 
 
   return (
     // Carries its own cell chrome so the summary box shows no stray divider when this returns null.
-    <div className="border-b border-border p-4 sm:p-5">
+    <div className="border-t border-border p-4 sm:p-5">
       <Fieldset>
         <FieldsetTitle>
           <Label htmlFor={uid}>Currency</Label>
@@ -407,7 +407,6 @@ export const Checkout = ({
                 ) : null}
               </CartItemList>
               <CartItemList>
-                <CurrencyPicker isListedCurrency={listedCurrency != null} />
                 {displayTipSelector ? (
                   <div className="p-4 sm:p-5">
                     <TipSelector
@@ -542,6 +541,7 @@ export const Checkout = ({
                         variant="large"
                       />
                     </footer>
+                    <CurrencyPicker isListedCurrency={listedCurrency != null} />
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
                       <div className="grid gap-4 border-t border-border p-4">
                         <CartPriceItem
