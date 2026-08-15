@@ -7,8 +7,7 @@ class SellerRefundPolicy < RefundPolicy
 
   private
     def forbid_no_refunds_on_account_policy
-      return if max_refund_period_in_days.blank?
-      return if max_refund_period_in_days >= MINIMUM_DIGITAL_REFUND_PERIOD_IN_DAYS
+      return unless max_refund_period_in_days == NO_REFUNDS_PERIOD_IN_DAYS
 
       self.max_refund_period_in_days = MINIMUM_DIGITAL_REFUND_PERIOD_IN_DAYS
     end
