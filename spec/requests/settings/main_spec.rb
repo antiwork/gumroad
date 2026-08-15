@@ -261,11 +261,9 @@ describe("Main Settings Scenario", type: :system, js: true) do
 
       it "allows the user to update the refund policy" do
         visit settings_main_path
-        expect(page).to have_field("Add a fine print to your refund policy")
+        expect(page).not_to have_field("Add a fine print to your refund policy")
 
         select "30-day money back guarantee", from: "Refund period"
-        check "Add a fine print to your refund policy"
-        fill_in "Fine print", with: "This is a sample fine print"
 
         click_on "Update settings"
 
@@ -273,7 +271,6 @@ describe("Main Settings Scenario", type: :system, js: true) do
 
         refund_policy = user.refund_policy.reload
         expect(refund_policy.max_refund_period_in_days).to eq(30)
-        expect(refund_policy.fine_print).to eq("This is a sample fine print")
       end
     end
 

@@ -5,7 +5,6 @@ import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { Dropdown } from "$app/components/Dropdown";
-import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
@@ -13,14 +12,10 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Select as FormSelect } from "$app/components/ui/Select";
 import { Switch } from "$app/components/ui/Switch";
-import { Textarea } from "$app/components/ui/Textarea";
-import { useUserAgentInfo } from "$app/components/UserAgent";
 
 export type RefundPolicy = {
   allowed_refund_periods_in_days: { key: number; value: string }[];
   max_refund_period_in_days: number;
-  fine_print_enabled: boolean;
-  fine_print: string | null;
   title: string;
 };
 
@@ -30,14 +25,13 @@ export const RefundPolicySelector = ({
   refundPolicies,
   isEnabled,
   setIsEnabled,
-  setShowPreview,
 }: {
   refundPolicy: RefundPolicy;
   setRefundPolicy: (refundPolicy: RefundPolicy) => void;
   refundPolicies: OtherRefundPolicy[];
   isEnabled: boolean;
   setIsEnabled: (isEnabled: boolean) => void;
-  setShowPreview: (showingPreview: boolean) => void;
+  setShowPreview?: (showingPreview: boolean) => void;
 }) => {
   const [selectedRefundPolicyId, setSelectedRefundPolicyId] = React.useState<string | null>(null);
 
@@ -84,7 +78,6 @@ export const RefundPolicySelector = ({
                             setRefundPolicy({
                               ...refundPolicy,
                               title: otherRefundPolicy.title,
-                              fine_print: otherRefundPolicy.fine_print,
                               max_refund_period_in_days: otherRefundPolicy.max_refund_period_in_days,
                             });
                           }
@@ -120,36 +113,7 @@ export const RefundPolicySelector = ({
             ))}
           </FormSelect>
         </Fieldset>
-        <Fieldset>
-          <FieldsetTitle>
-            <Label htmlFor={`${uid}-refund-policy-fine-print`}>Fine print (optional)</Label>
-          </FieldsetTitle>
-          <Textarea
-            id={`${uid}-refund-policy-fine-print`}
-            maxLength={3000}
-            rows={10}
-            value={refundPolicy.fine_print || ""}
-            onChange={(evt) => setRefundPolicy({ ...refundPolicy, fine_print: evt.target.value })}
-            onMouseEnter={() => setShowPreview(true)}
-            onMouseLeave={() => setShowPreview(false)}
-          />
-        </Fieldset>
       </Dropdown>
     </Details>
-  );
-};
-
-export const RefundPolicyModalPreview = ({ refundPolicy, open }: { refundPolicy: RefundPolicy; open: boolean }) => {
-  const userAgentInfo = useUserAgentInfo();
-  return (
-    <Modal
-      open={!!refundPolicy.fine_print && open}
-      title={refundPolicy.title}
-      modal={false}
-      usePortal={false}
-      footer={`Last updated ${new Date().toLocaleString(userAgentInfo.locale, { dateStyle: "medium" })}`}
-    >
-      <div style={{ whiteSpace: "pre-wrap" }}>{refundPolicy.fine_print}</div>
-    </Modal>
   );
 };

@@ -188,7 +188,7 @@ class ProductPresenter::ProductProps
       if seller.account_level_refund_policy_enabled?
         {
           title: seller.refund_policy.title,
-          fine_print: seller.refund_policy.fine_print.present? ? ActionController::Base.helpers.simple_format(seller.refund_policy.fine_print) : nil,
+          fine_print: nil,
           updated_at: seller.refund_policy.updated_at.to_date,
         }
       elsif product.product_refund_policy_enabled? && product.product_refund_policy.present?
@@ -197,7 +197,7 @@ class ProductPresenter::ProductProps
         # never created. Product::AsJson applies the same presence guard for this reason.
         {
           title: product.product_refund_policy.title,
-          fine_print: product.product_refund_policy.fine_print.present? ? ActionController::Base.helpers.simple_format(product.product_refund_policy.fine_print) : nil,
+          fine_print: nil,
           updated_at: product.product_refund_policy.updated_at.to_date,
         }
       else

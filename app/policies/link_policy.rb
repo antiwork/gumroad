@@ -104,8 +104,7 @@ class LinkPolicy < ApplicationPolicy
       :default_offer_code_id,
       refund_policy: [
         :max_refund_period_in_days,
-        :title,
-        :fine_print
+        :title
       ],
       covers: [],
       custom_attributes: [
@@ -206,7 +205,7 @@ class LinkPolicy < ApplicationPolicy
       :is_epublication,
       :product_refund_policy_enabled,
       :seller_refund_policy_enabled,
-      refund_policy: [:max_refund_period_in_days, :title, :fine_print],
+      refund_policy: [:max_refund_period_in_days, :title],
       section_ids: [],
       tags: [],
       covers: [],

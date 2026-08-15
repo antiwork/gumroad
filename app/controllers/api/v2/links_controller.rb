@@ -174,7 +174,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
       @product.save_tags!(params[:tags]) if params.key?(:tags)
 
-      apply_product_refund_policy! if params.key?(:refund_period) || params.key?(:refund_fine_print)
+      apply_product_refund_policy! if params.key?(:refund_period)
 
       if params.key?(:files)
         rich_content_params = extract_rich_content_params
@@ -459,7 +459,7 @@ class Api::V2::LinksController < Api::V2::BaseController
           @product.json_data["custom_summary"] = params[:custom_summary]
         end
 
-        apply_product_refund_policy! if params.key?(:refund_period) || params.key?(:refund_fine_print)
+        apply_product_refund_policy! if params.key?(:refund_period)
 
         if params.key?(:custom_html)
           previous_custom_html = @product.custom_html
@@ -682,7 +682,7 @@ class Api::V2::LinksController < Api::V2::BaseController
     # Validates the product-level refund policy params shared by create and
     # update. Returns an error message string, or nil when the params are valid.
     def validate_product_refund_policy_params
-      return nil if !params.key?(:refund_period) && !params.key?(:refund_fine_print)
+      return nil unless params.key?(:refund_period)
 
       if current_resource_owner.account_level_refund_policy_enabled?
         return "Product-level refund policies are not available for this account; the account-level refund policy applies to all products. Use PUT /v2/refund_policy instead."
@@ -693,45 +693,28 @@ class Api::V2::LinksController < Api::V2::BaseController
         if !refund_period.is_a?(String) || PRODUCT_REFUND_PERIOD_ALLOWED_VALUES.exclude?(refund_period)
           return "refund_period must be one of: #{PRODUCT_REFUND_PERIOD_ALLOWED_VALUES.join(', ')}."
         end
-        if refund_period == "inherit" && params[:refund_fine_print].present?
-          return "refund_fine_print cannot be set when refund_period is 'inherit'; the account-level policy's fine print applies."
-        end
         if refund_period == "none" && !product_allows_no_refunds?
           return Api::V2::RefundPoliciesController::NO_REFUNDS_NOT_ALLOWED_MESSAGE
-        end
-      end
-
-      if params.key?(:refund_fine_print)
-        fine_print = params[:refund_fine_print]
-        if !fine_print.nil? && !fine_print.is_a?(String)
-          return "refund_fine_print must be a string."
-        end
-        if !params.key?(:refund_period) && !(@product.present? && @product.product_refund_policy_enabled?)
-          return "refund_fine_print requires refund_period, or an existing product-level refund policy."
         end
       end
 
       nil
     end
 
-    # Applies the already-validated refund_period / refund_fine_print params to
-    # @product. "inherit" switches the product back to the account default by
-    # disabling the override; any other period enables the override and updates
-    # the product's own policy record.
+    # Applies the already-validated refund_period param to @product. "inherit"
+    # switches the product back to the account default by disabling the
+    # override; any other period enables the override and updates the product's
+    # own policy record.
     def apply_product_refund_policy!
       if params[:refund_period] == "inherit"
         @product.update!(product_refund_policy_enabled: false)
         return
       end
 
-      policy_attributes = {}
-      if params.key?(:refund_period)
-        policy_attributes[:max_refund_period_in_days] = Api::V2::RefundPoliciesController::REFUND_PERIOD_VALUES[params[:refund_period]]
-      end
-      policy_attributes[:fine_print] = params[:refund_fine_print] if params.key?(:refund_fine_print)
-
       @product.update!(product_refund_policy_enabled: true) unless @product.product_refund_policy_enabled?
-      @product.find_or_initialize_product_refund_policy.update!(policy_attributes)
+      @product.find_or_initialize_product_refund_policy.update!(
+        max_refund_period_in_days: Api::V2::RefundPoliciesController::REFUND_PERIOD_VALUES[params[:refund_period]]
+      )
     end
 
     def error_with_product(product = nil)

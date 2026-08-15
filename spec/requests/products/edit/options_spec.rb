@@ -322,7 +322,6 @@ describe("ProductMoreOptionScenario", type: :system, js: true) do
       expect(page).not_to have_text("Copy from other products")
 
       select "7-day money back guarantee", from: "Refund period"
-      fill_in "Fine print (optional)", with: "This is the fine print"
 
       expect do
         save_change
@@ -330,7 +329,7 @@ describe("ProductMoreOptionScenario", type: :system, js: true) do
       refund_policy = product.product_refund_policy
 
       expect(refund_policy.title).to eq("7-day money back guarantee")
-      expect(refund_policy.fine_print).to eq("This is the fine print")
+      expect(page).not_to have_field("Fine print (optional)")
     end
 
     context "with other refund policies" do

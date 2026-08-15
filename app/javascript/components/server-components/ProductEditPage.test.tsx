@@ -83,7 +83,6 @@ it("saves changed state after the active save reconciles server ids", async () =
     refund_policy: {
       allowed_refund_periods_in_days: [],
       max_refund_period_in_days: 30,
-      fine_print_enabled: false,
       fine_print: null,
       title: "",
     },
@@ -249,7 +248,6 @@ it("reconciles same-id pages in different variant scopes using each variant's ow
     refund_policy: {
       allowed_refund_periods_in_days: [],
       max_refund_period_in_days: 30,
-      fine_print_enabled: false,
       fine_print: null,
       title: "",
     },
@@ -442,7 +440,6 @@ it("keeps a newly-created variant's move provenance after its own id is remapped
     refund_policy: {
       allowed_refund_periods_in_days: [],
       max_refund_period_in_days: 30,
-      fine_print_enabled: false,
       fine_print: null,
       title: "",
     },
@@ -613,7 +610,6 @@ const buildTieredProduct = (variants: Version[]): Product => ({
   refund_policy: {
     allowed_refund_periods_in_days: [],
     max_refund_period_in_days: 30,
-    fine_print_enabled: false,
     fine_print: null,
     title: "",
   },

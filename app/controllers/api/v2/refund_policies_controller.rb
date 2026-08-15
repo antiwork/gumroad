@@ -36,9 +36,7 @@ class Api::V2::RefundPoliciesController < Api::V2::BaseController
 
   private
     def refund_policy_params
-      permitted_params = { max_refund_period_in_days: REFUND_PERIOD_VALUES[params[:refund_period].to_s] }
-      permitted_params[:fine_print] = params[:fine_print] if params.key?(:fine_print)
-      permitted_params
+      { max_refund_period_in_days: REFUND_PERIOD_VALUES[params[:refund_period].to_s] }
     end
 
     def refund_policy_error_message(refund_policy)
@@ -52,7 +50,7 @@ class Api::V2::RefundPoliciesController < Api::V2::BaseController
       {
         refund_period: serialized_refund_period(refund_policy),
         title: refund_policy.title,
-        fine_print: refund_policy.fine_print,
+        fine_print: nil,
         in_effect: current_resource_owner.account_level_refund_policy_enabled?,
       }
     end

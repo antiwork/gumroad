@@ -283,8 +283,6 @@ class SettingsPresenter
       refund_policy_enforced: seller.refund_policy_enforced?,
       allowed_refund_periods_in_days: RefundPolicy.period_options,
       max_refund_period_in_days: seller.refund_policy.effective_max_refund_period_in_days,
-      fine_print: seller.refund_policy.fine_print,
-      fine_print_enabled: seller.refund_policy.fine_print.present?,
     }
   end
 

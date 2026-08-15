@@ -128,7 +128,7 @@ describe Purchase::CreateService, :vcr do
       expect(purchase.session_id).to eq "a107d0b7ab5ab3c1eeb7d3aaf9792977"
       expect(purchase.card_data_handling_mode).to eq CardDataHandlingMode::TOKENIZE_VIA_STRIPEJS
       expect(purchase.purchase_refund_policy.title).to eq(product.user.refund_policy.title)
-      expect(purchase.purchase_refund_policy.fine_print).to eq(product.user.refund_policy.fine_print)
+      expect(purchase.purchase_refund_policy.fine_print).to eq(nil)
     end.to change { Purchase.count }.by 1
   end
 
@@ -162,7 +162,7 @@ describe Purchase::CreateService, :vcr do
 
         expect(purchase.purchase_refund_policy.max_refund_period_in_days).to eq(30)
         expect(purchase.purchase_refund_policy.title).to eq("30-day money back guarantee")
-        expect(purchase.purchase_refund_policy.fine_print).to eq("This is a product-level refund policy")
+        expect(purchase.purchase_refund_policy.fine_print).to eq(nil)
       end
 
       context "when the account-level refund policy is enabled" do
@@ -180,7 +180,7 @@ describe Purchase::CreateService, :vcr do
 
           expect(purchase.purchase_refund_policy.max_refund_period_in_days).to eq(30)
           expect(purchase.purchase_refund_policy.title).to eq("30-day money back guarantee")
-          expect(purchase.purchase_refund_policy.fine_print).to eq("This is an account-level refund policy")
+          expect(purchase.purchase_refund_policy.fine_print).to eq(nil)
         end
 
         context "when seller_refund_policy_disabled_for_all feature flag is set to true" do
@@ -196,7 +196,7 @@ describe Purchase::CreateService, :vcr do
             ).perform
 
             expect(purchase.purchase_refund_policy.title).to eq("30-day money back guarantee")
-            expect(purchase.purchase_refund_policy.fine_print).to eq("This is a product-level refund policy")
+            expect(purchase.purchase_refund_policy.fine_print).to eq(nil)
           end
         end
       end

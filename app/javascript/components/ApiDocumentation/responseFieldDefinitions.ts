@@ -235,7 +235,7 @@ export const PRODUCT_FIELDS: FieldDefinition[] = [
       {
         name: "fine_print",
         type: "string | null",
-        description: "Fine print of the product-level policy; null when inherited",
+        description: "Always null. Fine print is no longer supported.",
       },
       {
         name: "inherited",

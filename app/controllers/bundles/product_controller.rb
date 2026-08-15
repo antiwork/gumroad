@@ -109,7 +109,7 @@ class Bundles::ProductController < Bundles::BaseController
         :product_refund_policy_enabled,
         :seller_refund_policy_enabled,
         :default_offer_code_id,
-        refund_policy: [:max_refund_period_in_days, :title, :fine_print],
+        refund_policy: [:max_refund_period_in_days, :title],
         covers: [],
         custom_attributes: [:name, :value],
         installment_plan: [:number_of_installments]

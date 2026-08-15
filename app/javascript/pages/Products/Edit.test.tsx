@@ -92,7 +92,6 @@ const makePageProps = (id: string): Record<string, unknown> => ({
     refund_policy: {
       allowed_refund_periods_in_days: [],
       max_refund_period_in_days: 30,
-      fine_print_enabled: false,
       fine_print: null,
       title: "",
     },

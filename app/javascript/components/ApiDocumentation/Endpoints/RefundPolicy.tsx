@@ -9,7 +9,7 @@ import { ApiResponseFields, FieldDefinition, renderFields } from "../ApiResponse
 const REFUND_POLICY_FIELDS: FieldDefinition[] = [
   { name: "refund_period", type: "string", description: 'One of "7", "14", "30", or "183"' },
   { name: "title", type: "string", description: "Display title derived from the refund period" },
-  { name: "fine_print", type: "string | null", description: "Optional fine print, with HTML stripped" },
+  { name: "fine_print", type: "string | null", description: "Always null. Fine print is no longer supported." },
   {
     name: "in_effect",
     type: "boolean",
@@ -41,7 +41,7 @@ export const GetRefundPolicy = () => (
   "refund_policy": {
     "refund_period": "30",
     "title": "30-day money back guarantee",
-    "fine_print": "Refund requests are reviewed within 2 business days.",
+    "fine_print": null,
     "in_effect": true
   }
 }`}
@@ -53,14 +53,10 @@ export const UpdateRefundPolicy = () => (
   <ApiEndpoint
     method="put"
     path="/refund_policy"
-    description="Update the account-level refund policy. Requires the edit_products scope. Updates are rejected when the account-level policy is not in effect for the seller; in that case, set product-level policies via the refund_period and refund_fine_print parameters on POST /v2/products and PUT /v2/products/:id."
+    description="Update the account-level refund policy. Requires the edit_products scope. Updates are rejected when the account-level policy is not in effect for the seller; in that case, set product-level policies via the refund_period parameter on POST /v2/products and PUT /v2/products/:id."
   >
     <ApiParameters>
       <ApiParameter name="refund_period" description='Required. One of "7", "14", "30", or "183". Digital products cannot use "none".' />
-      <ApiParameter
-        name="fine_print"
-        description="Optional. Max 3000 characters. HTML is stripped. Send an empty value to clear it."
-      />
     </ApiParameters>
     <ApiResponseFields>
       {renderFields([
@@ -77,7 +73,6 @@ export const UpdateRefundPolicy = () => (
       {`curl https://api.gumroad.com/v2/refund_policy \\
   -d "access_token=ACCESS_TOKEN" \\
   -d "refund_period=30" \\
-  -d "fine_print=Refund requests are reviewed within 2 business days." \\
   -X PUT`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
@@ -86,7 +81,7 @@ export const UpdateRefundPolicy = () => (
   "refund_policy": {
     "refund_period": "30",
     "title": "30-day money back guarantee",
-    "fine_print": "Refund requests are reviewed within 2 business days.",
+    "fine_print": null,
     "in_effect": true
   }
 }`}

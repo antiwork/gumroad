@@ -192,7 +192,7 @@ module Product::AsJson
         {
           "refund_period" => product_refund_policy.effective_max_refund_period_in_days.zero? ? "none" : product_refund_policy.effective_max_refund_period_in_days.to_s,
           "title" => product_refund_policy.title,
-          "fine_print" => product_refund_policy.fine_print,
+          "fine_print" => nil,
           "inherited" => false,
         }
       else

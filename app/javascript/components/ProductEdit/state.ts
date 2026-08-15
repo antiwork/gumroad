@@ -296,7 +296,7 @@ export const ProductEditContext = React.createContext<{
   richContentRemovedFileEmbedIds: Record<string, string[]>;
   googleClientId: string;
   seller_refund_policy_enabled: boolean;
-  seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
+  seller_refund_policy: Pick<RefundPolicy, "title">;
   cancellationDiscountsEnabled: boolean;
   // The sender line receipt emails actually go out with (mirrors CustomerMailer#receipt),
   // shown in the Receipt tab's email-style preview chrome.

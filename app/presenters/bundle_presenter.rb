@@ -25,7 +25,6 @@ class BundlePresenter
       seller_refund_policy_enabled: bundle.user.account_level_refund_policy_enabled?,
       seller_refund_policy: {
         title: bundle.user.refund_policy.title,
-        fine_print: bundle.user.refund_policy.fine_print,
       },
     )
   end
@@ -56,7 +55,6 @@ class BundlePresenter
       seller_refund_policy_enabled: bundle.user.account_level_refund_policy_enabled?,
       seller_refund_policy: {
         title: bundle.user.refund_policy.title,
-        fine_print: bundle.user.refund_policy.fine_print,
       },
     )
   end
@@ -93,8 +91,6 @@ class BundlePresenter
       {
         allowed_refund_periods_in_days: RefundPolicy.period_options,
         max_refund_period_in_days: refund_policy.effective_max_refund_period_in_days,
-        fine_print: refund_policy.fine_print,
-        fine_print_enabled: refund_policy.fine_print.present?,
         title: refund_policy.title,
       }
     end

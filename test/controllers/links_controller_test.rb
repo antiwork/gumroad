@@ -2609,7 +2609,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     @product.reload
     assert_equal true, @product.product_refund_policy_enabled
     assert_equal "7-day money back guarantee", @product.product_refund_policy.title
-    assert_equal "Sample fine print", @product.product_refund_policy.fine_print
+    assert_nil @product.product_refund_policy.fine_print
   ensure
     Feature.deactivate(:seller_refund_policy_disabled_for_all)
   end
@@ -2621,7 +2621,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     @product.reload
     assert_equal true, @product.product_refund_policy_enabled
     assert_equal "7-day money back guarantee", @product.product_refund_policy.title
-    assert_equal "Sample fine print", @product.product_refund_policy.fine_print
+    assert_nil @product.product_refund_policy.fine_print
   end
 
   test "PUT update disables the product refund policy when seller refund policy is disabled and the param is false" do

@@ -341,7 +341,7 @@ class Bundles::ProductControllerTest < ActionController::TestCase
     @bundle.reload
     assert @bundle.product_refund_policy_enabled
     assert_equal "30-day money back guarantee", @bundle.product_refund_policy.title
-    assert_equal "I really hate being small", @bundle.product_refund_policy.fine_print
+    assert_nil @bundle.product_refund_policy.fine_print
     assert_redirected_to edit_bundle_product_path(@bundle.external_id)
     assert_equal "Changes saved!", flash[:notice]
   ensure
@@ -355,7 +355,7 @@ class Bundles::ProductControllerTest < ActionController::TestCase
     @bundle.reload
     assert @bundle.product_refund_policy_enabled
     assert_equal "30-day money back guarantee", @bundle.product_refund_policy.title
-    assert_equal "I really hate being small", @bundle.product_refund_policy.fine_print
+    assert_nil @bundle.product_refund_policy.fine_print
     assert_redirected_to edit_bundle_product_path(@bundle.external_id)
     assert_equal "Changes saved!", flash[:notice]
   end

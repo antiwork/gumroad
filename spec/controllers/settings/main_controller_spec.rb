@@ -378,14 +378,14 @@ describe Settings::MainController, type: :controller, inertia: true do
           seller.refund_policy.update_columns(max_refund_period_in_days: 0)
         end
 
-        it "updates the seller refund policy fine print" do
+        it "updates the seller refund period and ignores fine print" do
           put :update, params: { user: { seller_refund_policy: { max_refund_period_in_days: "30", fine_print: "This is a fine print" } } }
           expect(response).to redirect_to(settings_main_path)
           expect(response).to have_http_status :see_other
           expect(flash[:notice]).to eq("Your account has been updated!")
 
           expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
-          expect(seller.refund_policy.fine_print).to eq("This is a fine print")
+          expect(seller.refund_policy.fine_print).to be_nil
         end
 
         context "when seller_refund_policy_disabled_for_all feature flag is set to true" do

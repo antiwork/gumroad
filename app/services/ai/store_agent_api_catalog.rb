@@ -159,7 +159,7 @@ module Ai::StoreAgentApiCatalog
     # (Settings::Main::UserPolicy#update?). Gate admin_only so a marketing member can't change refund
     # terms through the agent that they can't change in the dashboard.
     ep("update_refund_policy", :put, "/refund_policy", "Update the creator's account-level refund policy.", scope: "edit_products", admin_only: true,
-                                                                                                            params: %w[refund_period fine_print]),
+                                                                                                            params: %w[refund_period]),
 
     # ---- Products ----
     ep("list_products", :get, "/products", "List the creator's products with price, status, and stats. Returns 10 per page, newest first; when the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "view_sales",

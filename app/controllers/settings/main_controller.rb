@@ -20,7 +20,6 @@ class Settings::MainController < Settings::BaseController
     if current_seller.refund_policy_settings_editable?
       current_seller.refund_policy.update!(
         max_refund_period_in_days: seller_refund_policy_params[:max_refund_period_in_days],
-        fine_print: seller_refund_policy_params[:fine_print],
       )
     end
 
@@ -89,7 +88,7 @@ class Settings::MainController < Settings::BaseController
     end
 
     def seller_refund_policy_params
-      params[:user][:seller_refund_policy]&.permit(:max_refund_period_in_days, :fine_print)
+      params[:user][:seller_refund_policy]&.permit(:max_refund_period_in_days)
     end
 
     def product_level_support_emails_params
