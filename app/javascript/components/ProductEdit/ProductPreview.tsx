@@ -10,7 +10,11 @@ import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 
-export const ProductPreview = ({ showRefundPolicyModal: _showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {
+export const ProductPreview = ({
+  showRefundPolicyModal: _showRefundPolicyModal,
+}: {
+  showRefundPolicyModal?: boolean;
+}) => {
   const currentSeller = useCurrentSeller();
   const {
     product,
@@ -201,23 +205,21 @@ export const ProductPreview = ({ showRefundPolicyModal: _showRefundPolicyModal }
         />
       </ProfileLayout>
     ) : (
-      <>
-        <Product
-          product={serializedProduct}
-          purchase={null}
-          discountCode={defaultDiscountCode}
-          selection={{
-            quantity: 1,
-            optionId: serializedProduct.options[0]?.id ?? null,
-            recurrence: defaultRecurrence,
-            price: { value: null, error: false },
-            rent: false,
-            callStartTime: null,
-            payInInstallments: false,
-          }}
-          disableAnalytics
-        />
-      </>
+      <Product
+        product={serializedProduct}
+        purchase={null}
+        discountCode={defaultDiscountCode}
+        selection={{
+          quantity: 1,
+          optionId: serializedProduct.options[0]?.id ?? null,
+          recurrence: defaultRecurrence,
+          price: { value: null, error: false },
+          rent: false,
+          callStartTime: null,
+          payInInstallments: false,
+        }}
+        disableAnalytics
+      />
     );
 
   return customHtmlPagesEnabled && hasLandingPage ? (

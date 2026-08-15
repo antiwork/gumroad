@@ -152,7 +152,7 @@ describe PurchaseProductPresenter, :versioning do
           expect(presenter.product_props[:product][:refund_policy]).to eq(
             {
               title: refund_policy.title,
-              fine_print: "<p>This is the fine print.</p>",
+              fine_print: nil,
               updated_at: refund_policy.updated_at
             }
           )

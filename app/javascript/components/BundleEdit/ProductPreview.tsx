@@ -65,7 +65,6 @@ export const ProductPreview = ({
   if (!currentSeller) return null;
 
   return (
-    <>
       <Product
         product={{
           id,
@@ -158,6 +157,5 @@ export const ProductPreview = ({
         }}
         disableAnalytics
       />
-    </>
   );
 };
