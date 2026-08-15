@@ -489,6 +489,33 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(PostToIndividualPingEndpointWorker).to_not have_enqueued_sidekiq_job(@resource_subscription.post_url, anything, @resource_subscription.content_type, anything)
     end
 
+    it "retries when the only ping URL fails DNS instead of dropping the sale ping", :skip_resource_subscription_dns_stub do
+      allow(ResourceSubscription).to receive(:resolve_addresses).and_return([])
+      @user.update!(notification_endpoint: nil)
+      @resource_subscription.update!(post_url: "https://hooks.example.com/sale")
+      purchase = create(:purchase, link: @product)
+
+      expect do
+        PostToPingEndpointsWorker.new.perform(purchase.id, nil)
+      end.to raise_error(PostToPingEndpointsWorker::UnresolvedPingEndpoint)
+
+      expect(PostToIndividualPingEndpointWorker.jobs.size).to eq(0)
+    end
+
+    it "still posts a public sibling URL when another endpoint fails DNS", :skip_resource_subscription_dns_stub do
+      allow(ResourceSubscription).to receive(:resolve_addresses).with("hooks.example.com").and_return([])
+      allow(ResourceSubscription).to receive(:resolve_addresses).with("notification.com").and_return([IPAddr.new("93.184.216.34")])
+      @resource_subscription.update!(post_url: "https://hooks.example.com/sale")
+      purchase = create(:purchase, link: @product)
+
+      expect do
+        PostToPingEndpointsWorker.new.perform(purchase.id, nil)
+      end.not_to raise_error
+
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, anything, anything, @user.id)
+      expect(PostToIndividualPingEndpointWorker).to_not have_enqueued_sidekiq_job(@resource_subscription.post_url, anything, anything, anything)
+    end
+
     it "does not post to the app's post url if the user hasn't given view_sales permissions to the app" do
       another_app = create(:oauth_application, owner: create(:user), name: "another app")
       create("doorkeeper/access_token", application: another_app, resource_owner_id: @user.id, scopes: "edit_products")

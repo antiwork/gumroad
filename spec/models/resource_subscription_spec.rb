@@ -87,6 +87,16 @@ describe ResourceSubscription do
     it "rejects a hostname that fails to resolve" do
       stub_resolution("nonexistent.invalid")
       expect(ResourceSubscription.valid_post_url?("http://nonexistent.invalid/path")).to eq(false)
+      expect(ResourceSubscription.post_url_delivery_status("http://nonexistent.invalid/path")).to eq(:unresolved)
+    end
+
+    it "classifies reserved, invalid, and public URLs separately" do
+      stub_resolution("hooks.example.com", "93.184.216.34")
+      stub_resolution("internal.example.com", "10.0.0.5")
+      expect(ResourceSubscription.post_url_delivery_status("https://hooks.example.com/path")).to eq(:ok)
+      expect(ResourceSubscription.post_url_delivery_status("http://internal.example.com/path")).to eq(:reserved)
+      expect(ResourceSubscription.post_url_delivery_status("ftp://hooks.example.com/path")).to eq(:invalid)
+      expect(ResourceSubscription.post_url_delivery_status("foo bar")).to eq(:invalid)
     end
   end
 end
