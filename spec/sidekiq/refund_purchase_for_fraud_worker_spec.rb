@@ -39,7 +39,7 @@ describe RefundPurchaseForFraudWorker do
     expect(ErrorNotifier).not_to receive(:notify)
     expect do
       described_class.new.perform(purchase.id, admin_user.id, true)
-    end.not_to change { BlockedObject.count }
+    end.not_to change { PlatformBlock.count }
   end
 
   it "notifies and re-raises when the refund fails so Sidekiq retries" do
