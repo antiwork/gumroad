@@ -507,14 +507,14 @@ class Subscription < ApplicationRecord
     end
   end
 
-  def restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: nil, validated_replacement_mandate: false)
+  def restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: nil)
     return unless india_card_mandate_reliability_enabled?
 
     save! if changed?
     notify_buyer = false
     with_lock do
       card = credit_card_to_charge
-      if validated_replacement_mandate || (expected_credit_card_id.present? && card&.id != expected_credit_card_id)
+      if expected_credit_card_id.present? && card&.id != expected_credit_card_id
         self.stripe_mandate_id = nil
         if card&.stripe_charge_processor? && card.requires_mandate?
           notify_buyer = !renewal_disabled_due_to_indian_card_mandate?

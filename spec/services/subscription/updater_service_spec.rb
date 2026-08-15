@@ -3077,33 +3077,6 @@ describe Subscription::UpdaterService, :vcr do
         expect(service.send(:charge_user!)[:success]).to eq(true)
       end
 
-      it "records the validated replacement SetupIntent on the update purchase" do
-        service.params[:stripe_setup_intent_id] = "seti_replacement"
-        service.is_resubscribing = false
-        upgrade_purchase = instance_double(
-          Purchase,
-          persisted?: true,
-          successful?: true,
-          test_successful?: false,
-          in_progress?: false,
-          errors: double(full_messages: []),
-          error_code: nil,
-          external_id: "upgrade-purchase"
-        )
-        allow(service).to receive(:amount_owed).and_return(12_34)
-        allow(service).to receive(:prorated_discount_price_cents).and_return(0)
-        allow(service).to receive(:upgrade?).and_return(true)
-        allow(service).to receive(:use_existing_card?).and_return(true)
-        allow(service).to receive(:send_subscription_updated_api_notification)
-        allow(service).to receive(:same_variants?).and_return(true)
-        allow(service).to receive(:success_message).and_return("Your membership has been updated.")
-        allow(subscription).to receive(:credit_card_to_charge).and_return(nil)
-        allow(subscription).to receive(:charge!).and_return(upgrade_purchase)
-        expect(upgrade_purchase).to receive(:update!).with(processor_setup_intent_id: "seti_replacement")
-
-        expect(service.send(:charge_user!)[:success]).to eq(true)
-      end
-
       it "keeps a buyer-present update on-session when the saved payment method is recurring UPI" do
         service.is_resubscribing = false
         upgrade_purchase = instance_double(Purchase,

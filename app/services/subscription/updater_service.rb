@@ -505,9 +505,6 @@ class Subscription::UpdaterService
         off_session:,
         authenticated_offer_code_buyer: logged_in_user,
       )
-      if setup_intent_authenticated && upgrade_purchase.persisted?
-        upgrade_purchase.update!(processor_setup_intent_id: params[:stripe_setup_intent_id])
-      end
 
       subscription.unsubscribe_and_fail!(preserve_access_for_mandate_failure: false) if is_resubscribing && !(upgrade_purchase.successful? ||
           (upgrade_purchase.in_progress? && upgrade_purchase.charge_intent&.requires_action?))

@@ -825,10 +825,7 @@ describe "Indian card mandate reliability" do
       indian_card_mandate_requires_reauthorization: false
     )
 
-    subscription.restore_indian_card_mandate_after_failed_reauthorization!(
-      expected_credit_card_id: replacement_card.id,
-      validated_replacement_mandate: true
-    )
+    subscription.restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: card.id)
 
     expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
     expect(subscription).to be_indian_card_mandate_requires_reauthorization
