@@ -522,6 +522,22 @@ describe "Indian card mandate reliability" do
       amount: 12_50,
       currency: Currency::USD
     )
+
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      is_original_subscription_purchase: false,
+      total_transaction_cents: 12_50
+    )
+    expect(Purchase::LaterChargePresentmentService).not_to receive(:new)
+
+    expect(renewal.send(:later_charge_presentment_processor_args, off_session: true)).to eq({})
   end
 
   it "keeps a destination renewal mandate in the supported canonical currency" do

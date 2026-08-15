@@ -4706,9 +4706,11 @@ class Purchase < ApplicationRecord
                                         credit_card&.requires_mandate?
         subscription.indian_card_mandate_terms&.dig(:currency)
       end
+      return {} if indian_card_mandate_currency == Currency::USD
+
       required_currency = if upi_autopay
         Currency::INR
-      elsif indian_card_mandate_currency.present? && indian_card_mandate_currency != Currency::USD
+      elsif indian_card_mandate_currency.present?
         indian_card_mandate_currency
       end
       if upi_autopay
