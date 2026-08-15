@@ -3857,6 +3857,7 @@ class Purchase < ApplicationRecord
     subscription&.update_renewal_for_indian_card_mandate!(
       status,
       expected_credit_card_id: credit_card_id,
+      expected_registration_purchase_id: id,
       mandate_id: stored_mandate_id,
       clear_reauthorization: status == "active" && indian_card_charge_intent_matches_subscription_terms?,
       notify_buyer: status.in?(%w[inactive missing]),
@@ -4029,7 +4030,7 @@ class Purchase < ApplicationRecord
     # purchase (undersizing the cap so renewals fail).
     reference_purchase = is_upgrade_purchase? ? subscription.original_purchase : self
     base_cents = reference_purchase.total_transaction_cents
-    if base_cents.zero? && reference_purchase.is_free_trial_purchase? && reference_purchase.subscription.present?
+    if reference_purchase.is_free_trial_purchase? && reference_purchase.subscription.present?
       renewal_price_cents = reference_purchase.subscription.current_subscription_price_cents
       price_cents = reference_purchase.subscription.indian_card_mandate_price_cents(
         reference_purchase,

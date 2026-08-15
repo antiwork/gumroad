@@ -453,11 +453,12 @@ class Subscription < ApplicationRecord
     purchase.mark_failed!
   end
 
-  def update_renewal_for_indian_card_mandate!(status, expected_credit_card_id: nil, mandate_id: nil, clear_reauthorization: false, notify_buyer: false, notify_buyer_if_already_disabled: false)
+  def update_renewal_for_indian_card_mandate!(status, expected_credit_card_id: nil, expected_registration_purchase_id: nil, mandate_id: nil, clear_reauthorization: false, notify_buyer: false, notify_buyer_if_already_disabled: false)
     return unless india_card_mandate_reliability_enabled?
 
     with_lock do
       return if expected_credit_card_id.present? && credit_card_to_charge&.id != expected_credit_card_id
+      return if expected_registration_purchase_id.present? && indian_card_mandate_source_purchase(expected_credit_card_id)&.id != expected_registration_purchase_id
 
       if status == "active"
         return if indian_card_mandate_requires_reauthorization? && !clear_reauthorization
@@ -629,7 +630,7 @@ class Subscription < ApplicationRecord
                        "processor_payment_intents.id IS NOT NULL OR " \
                        "charges.stripe_payment_intent_id IS NOT NULL"
                      )
-    scope.is_indian_card_mandate_registration.order(created_at: :desc).first || scope.order(created_at: :desc).first
+    scope.is_indian_card_mandate_registration.order(created_at: :desc, id: :desc).first || scope.order(created_at: :desc, id: :desc).first
   end
 
   def indian_card_mandate_for(card_id)

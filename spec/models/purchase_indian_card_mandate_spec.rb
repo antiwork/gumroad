@@ -493,6 +493,21 @@ describe "Indian card mandate reliability" do
     )
   end
 
+  it "uses the paid renewal amount when a free trial charges shipping" do
+    product = create(:membership_product_with_preset_tiered_pricing, :with_free_trial_enabled)
+    registration = create(
+      :free_trial_membership_purchase,
+      link: product,
+      displayed_price_cents: 0,
+      price_cents: 0,
+      shipping_cents: 2_00,
+      total_transaction_cents: 2_00
+    )
+    allow(registration.subscription).to receive(:current_subscription_price_cents).and_return(10_00)
+
+    expect(registration.mandate_maximum_amount_cents).to eq(12_00)
+  end
+
   it "uses the pre-discount price for a temporary full discount" do
     registration = create_registration
     registration.update!(displayed_price_cents: 0)
@@ -640,6 +655,29 @@ describe "Indian card mandate reliability" do
     expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
     expect(subscription).to be_indian_card_mandate_requires_reauthorization
     expect(subscription.stripe_mandate_id).to be_nil
+  end
+
+  it "does not let an old registration replace a newer mandate" do
+    old_registration = create_registration
+    subscription = old_registration.subscription
+    old_registration.mark_indian_card_mandate_registration!
+    new_registration = create(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      stripe_transaction_id: "ch_new_registration",
+      created_at: old_registration.created_at + 1.second
+    )
+    new_registration.mark_indian_card_mandate_registration!
+    subscription.update!(stripe_mandate_id: "mandate_new")
+
+    old_registration.record_indian_card_mandate_status!("active", mandate_id: "mandate_old")
+
+    expect(subscription.reload.stripe_mandate_id).to eq("mandate_new")
   end
 
   it "restores the prior mandate after a changed-plan payment fails" do
