@@ -58,10 +58,11 @@ describe SellerRefundPolicy do
     end
 
     context "when the seller does not have an enforced refund policy" do
-      it "allows setting the refund period to 0 days" do
+      it "coerces a 0-day period to 7 days" do
         refund_policy.max_refund_period_in_days = 0
 
         expect(refund_policy.valid?).to be true
+        expect(refund_policy.max_refund_period_in_days).to eq(7)
       end
     end
   end

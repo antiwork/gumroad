@@ -245,8 +245,8 @@ describe Purchase::CreateService, :vcr do
             buyer:
           ).perform
 
-          expect(purchase.purchase_refund_policy.max_refund_period_in_days).to eq(0)
-          expect(purchase.purchase_refund_policy.title).to eq("No refunds allowed")
+          expect(purchase.purchase_refund_policy.max_refund_period_in_days).to eq(7)
+          expect(purchase.purchase_refund_policy.title).to eq("7-day money back guarantee")
           expect(purchase.purchase_refund_policy.fine_print).to eq(nil)
         end
       end

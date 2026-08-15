@@ -14,7 +14,7 @@ class Api::V2::LinksController < Api::V2::BaseController
   RESULTS_PER_PAGE = 10
   # Product-level refund policies accept the account-level periods plus "inherit",
   # which disables the product override and falls back to the account default.
-  PRODUCT_REFUND_PERIOD_ALLOWED_VALUES = (["inherit"] + Api::V2::RefundPoliciesController::REFUND_PERIOD_ALLOWED_VALUES).freeze
+  PRODUCT_REFUND_PERIOD_ALLOWED_VALUES = (%w[inherit none] + Api::V2::RefundPoliciesController::REFUND_PERIOD_ALLOWED_VALUES).freeze
   MISSING_BUY_AFFORDANCE_WARNING = "The custom landing page does not include a buy element, so buyers may not be able to purchase this product. " \
                                    'Add an element with data-gumroad-action="buy" or post a gumroad:checkout message.'
 
@@ -678,6 +678,12 @@ class Api::V2::LinksController < Api::V2::BaseController
       render_response(false, message: "You do not have access to custom HTML pages.")
     end
 
+    def product_allows_no_refunds?
+      return true if @product&.is_physical?
+
+      params[:native_type].to_s == Link::NATIVE_TYPE_PHYSICAL
+    end
+
     # Validates the product-level refund policy params shared by create and
     # update. Returns an error message string, or nil when the params are valid.
     def validate_product_refund_policy_params
@@ -694,6 +700,9 @@ class Api::V2::LinksController < Api::V2::BaseController
         end
         if refund_period == "inherit" && params[:refund_fine_print].present?
           return "refund_fine_print cannot be set when refund_period is 'inherit'; the account-level policy's fine print applies."
+        end
+        if refund_period == "none" && !product_allows_no_refunds?
+          return Api::V2::RefundPoliciesController::NO_REFUNDS_NOT_ALLOWED_MESSAGE
         end
       end
 
