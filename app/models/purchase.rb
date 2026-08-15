@@ -4021,6 +4021,35 @@ class Purchase < ApplicationRecord
     [pre_discount_cents, displayed_price_cents].max
   end
 
+  def indian_card_mandate_price_cents(renewal_price_cents, fixed_rate: nil)
+    displayed_price_cents = mandate_maximum_displayed_price_cents
+    displayed_price_cents = renewal_price_cents if displayed_price_cents.zero?
+    displayed_currency = self[:displayed_price_currency_type].presence || link.price_currency_type
+    get_usd_cents(displayed_currency, displayed_price_cents, rate: fixed_rate)
+  end
+
+  def indian_card_mandate_amount_for_billing_info(billing_info, price_cents, buyer_vat_id: business_vat_id)
+    info = billing_info.to_h.symbolize_keys
+    country = Compliance::Countries.find_by_name(info[:country])&.alpha2 || info[:country]
+    return 0 unless price_cents.positive?
+
+    tax = SalesTaxCalculator.new(
+      product: link,
+      price_cents:,
+      shipping_cents: shipping_cents.to_i,
+      quantity:,
+      buyer_location: {
+        postal_code: info[:zip_code] || info[:postal_code],
+        country:,
+        state: info[:state],
+        ip_address:,
+      },
+      buyer_vat_id:,
+      from_discover: was_discover_fee_charged?
+    ).calculate
+    price_cents + shipping_cents.to_i + tax.tax_cents.to_i
+  end
+
   def mandate_maximum_amount_cents
     # An upgrade purchase only charges the prorated difference today, and any active
     # discount record lives on the subscription's original purchase rather than on the
@@ -4033,14 +4062,24 @@ class Purchase < ApplicationRecord
     # purchase (undersizing the cap so renewals fail).
     reference_purchase = is_upgrade_purchase? ? subscription.original_purchase : self
     base_cents = reference_purchase.total_transaction_cents
-    if reference_purchase.is_free_trial_purchase? && reference_purchase.subscription.present?
-      renewal_price_cents = reference_purchase.subscription.current_subscription_price_cents
-      price_cents = reference_purchase.subscription.indian_card_mandate_price_cents(
-        reference_purchase,
-        renewal_price_cents
-      )
-      base_cents = reference_purchase.subscription.indian_card_mandate_amount_for_billing_info(
-        reference_purchase,
+    if reference_purchase.is_free_trial_purchase?
+      renewal_price_cents = if reference_purchase.subscription.present?
+        reference_purchase.subscription.current_subscription_price_cents
+      else
+        reference_purchase.mandate_maximum_displayed_price_cents
+      end
+      price_cents = if reference_purchase.subscription.present?
+        reference_purchase.subscription.indian_card_mandate_price_cents(
+          reference_purchase,
+          renewal_price_cents
+        )
+      else
+        reference_purchase.indian_card_mandate_price_cents(
+          renewal_price_cents,
+          fixed_rate: reference_purchase.rate_converted_to_usd.presence
+        )
+      end
+      base_cents = reference_purchase.indian_card_mandate_amount_for_billing_info(
         reference_purchase.slice(:country, :state, :zip_code),
         price_cents
       )

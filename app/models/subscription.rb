@@ -616,26 +616,11 @@ class Subscription < ApplicationRecord
   end
 
   def indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cents)
-    info = billing_info.to_h.symbolize_keys
-    country = Compliance::Countries.find_by_name(info[:country])&.alpha2 || info[:country]
-    return 0 unless price_cents.positive?
-
-    shipping_cents = purchase.shipping_cents.to_i
-    tax = SalesTaxCalculator.new(
-      product: link,
-      price_cents:,
-      shipping_cents:,
-      quantity: purchase.quantity,
-      buyer_location: {
-        postal_code: info[:zip_code] || info[:postal_code],
-        country:,
-        state: info[:state],
-        ip_address: purchase.ip_address,
-      },
-      buyer_vat_id: business_vat_id,
-      from_discover: purchase.was_discover_fee_charged?
-    ).calculate
-    price_cents + shipping_cents + tax.tax_cents.to_i
+    purchase.indian_card_mandate_amount_for_billing_info(
+      billing_info,
+      price_cents,
+      buyer_vat_id: business_vat_id
+    )
   end
 
   def indian_card_presentment_cents(canonical_cents, currency_units_per_usd, currency)

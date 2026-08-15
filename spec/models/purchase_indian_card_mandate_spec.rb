@@ -624,6 +624,30 @@ describe "Indian card mandate reliability" do
     expect(registration.mandate_maximum_amount_cents).to eq(12_00)
   end
 
+  it "sizes a temporarily free mandate before the subscription exists" do
+    product = create(:membership_product_with_preset_tiered_pricing, :with_free_trial_enabled)
+    registration = create(
+      :purchase_in_progress,
+      link: product,
+      is_original_subscription_purchase: true,
+      is_free_trial_purchase: true,
+      displayed_price_cents: 0,
+      price_cents: 0,
+      total_transaction_cents: 0,
+      variant_attributes: [product.default_tier]
+    )
+    registration.create_purchase_offer_code_discount!(
+      offer_code: create(:offer_code, products: [product]),
+      offer_code_amount: 10_00,
+      offer_code_is_percent: false,
+      pre_discount_minimum_price_cents: 10_00,
+      duration_in_billing_cycles: 1
+    )
+
+    expect(registration.subscription).to be_nil
+    expect(registration.mandate_maximum_amount_cents).to eq(10_00)
+  end
+
   it "uses the pre-discount price for a temporary full discount" do
     registration = create_registration
     registration.update!(displayed_price_cents: 0)
