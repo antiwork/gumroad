@@ -354,9 +354,15 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:off_session) if off_session && !multi_seller_order? && !subscription_renewal_with_stored_amount?
     return fallback(:missing_stripe_chargeable) if !client_confirm && chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
 
+    # The submitted quote token carries the currency the buyer actually confirmed — with the
+    # checkout picker that can differ from GeoIP's answer for this IP, and verify! holds the
+    # token to ITS currency, so gating on GeoIP here would reject the buyer's own valid token.
+    # A missing or tampered token falls back to GeoIP; verify! still rejects tampered tokens.
+    #
     # All purchases in an order come from the same checkout request, so any purchase's IP
     # identifies the buyer's location.
-    buyer_currency = buyer_currency_for_ip(purchases.first.ip_address)
+    buyer_currency = Checkout::BuyerCurrencyQuote.quoted_currency_hint(params[:buyer_currency_quote].presence) ||
+      buyer_currency_for_ip(purchases.first.ip_address)
     return fallback(:missing_buyer_currency) if buyer_currency.blank?
     return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
     return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)

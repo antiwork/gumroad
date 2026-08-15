@@ -316,6 +316,19 @@ class Checkout::BuyerCurrencyQuote
     nil
   end
 
+  # Signature-checked but non-authoritative, like listed_currency_rate_hint: the currency the
+  # buyer confirmed when this token was minted. The picker means it can differ from GeoIP's
+  # answer, and charge-time eligibility must gate on the confirmed one or verify! rejects the
+  # buyer's own valid token with "currency mismatch".
+  def self.quoted_currency_hint(token)
+    return if token.blank?
+
+    payload = verifier.verify(token)
+    normalize_requested_currency(payload["currency"])
+  rescue ActiveSupport::MessageVerifier::InvalidSignature, TypeError, ArgumentError
+    nil
+  end
+
   def self.verifier
     Rails.application.message_verifier(TOKEN_PURPOSE)
   end
