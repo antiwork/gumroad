@@ -98,6 +98,18 @@ describe "Indian card mandate reliability" do
     expect(renewal.indian_card_mandate_error_status).to be_nil
   end
 
+  it "omits the interval count for a two-year registration mandate" do
+    registration = create_registration
+    allow(registration).to receive(:subscription_duration).and_return("every_two_years")
+    allow(registration).to receive(:chargeable).and_return(double(requires_mandate?: true))
+
+    mandate_terms = registration.mandate_options_for_stripe
+      .dig(:payment_method_options, :card, :mandate_options)
+
+    expect(mandate_terms).to include(interval: "sporadic")
+    expect(mandate_terms).not_to have_key(:interval_count)
+  end
+
   it "does not validate mandates for non-Stripe rebills" do
     renewal = build(
       :purchase,

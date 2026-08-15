@@ -98,6 +98,25 @@ describe Stripe::SetupIntentsController, :vcr do
         )
       end
 
+      it "omits the interval count for a sporadic subscription mandate" do
+        subscription = create(:subscription)
+        chargeable = double(requires_mandate?: true)
+        allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ subscription_id: subscription.external_id }]))
+        allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+        allow(subscription).to receive(:indian_card_mandate_terms).and_return(
+          amount: 12_34,
+          currency: Currency::USD,
+          interval: "sporadic",
+          interval_count: nil
+        )
+
+        mandate_terms = controller.send(:mandate_options_for_stripe, chargeable, subscription:)
+          .dig(:payment_method_options, :card, :mandate_options)
+
+        expect(mandate_terms).to include(interval: "sporadic")
+        expect(mandate_terms).not_to have_key(:interval_count)
+      end
+
       it "uses the submitted billing location for subscription mandate terms" do
         subscription = create(:subscription)
         chargeable = double(requires_mandate?: true)

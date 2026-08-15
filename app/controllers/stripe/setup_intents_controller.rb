@@ -82,7 +82,7 @@ class Stripe::SetupIntentsController < ApplicationController
                   interval: terms[:interval],
                   interval_count: terms[:interval_count],
                   supported_types: ["india"]
-                }
+                }.compact
               }
             }
           }

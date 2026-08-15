@@ -3991,7 +3991,7 @@ class Purchase < ApplicationRecord
             interval:,
             interval_count:,
             supported_types: ["india"]
-          }
+          }.compact
         }
       }
     }
