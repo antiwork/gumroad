@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
 class AnalyticsController < Sellers::BaseController
-  # Web analytics endpoints run unclamped; this only bounds the public v2 Sales API.
-  MAX_DATE_RANGE_DAYS = 366
-
   before_action :set_time_range, only: %i[data_by_date data_by_state data_by_referral]
 
   after_action :set_dashboard_preference_to_sales, only: :index

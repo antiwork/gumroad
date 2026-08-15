@@ -122,7 +122,7 @@ describe AnalyticsController do
       let(:policy_method) { :index? }
     end
 
-    it "passes ranges wider than #{AnalyticsController::MAX_DATE_RANGE_DAYS} days through unclamped" do
+    it "passes ranges wider than 366 days through unclamped" do
       start_time = "Mon Jan 01 2024 00:00:00 GMT-0000"
       end_time = "Tue Dec 31 2025 00:00:00 GMT-0000"
       expect_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).with(
@@ -153,7 +153,7 @@ describe AnalyticsController do
       let(:policy_method) { :index? }
     end
 
-    it "passes ranges wider than #{AnalyticsController::MAX_DATE_RANGE_DAYS} days through unclamped" do
+    it "passes ranges wider than 366 days through unclamped" do
       start_time = "Mon Jan 01 2024 00:00:00 GMT-0000"
       end_time = "Tue Dec 31 2025 00:00:00 GMT-0000"
       expect_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).with(

@@ -9,7 +9,7 @@ import {
   fetchAnalyticsDataByState,
 } from "$app/data/analytics";
 import { assertDefined } from "$app/utils/assert";
-import { AbortError } from "$app/utils/request";
+import { AbortError, request } from "$app/utils/request";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { ExportSalesPopover } from "$app/components/Analytics/ExportSalesPopover";
@@ -30,9 +30,7 @@ import placeholder from "$assets/images/placeholders/sales.png";
 
 // Must match CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS on the backend.
 const MAX_HOURLY_DATE_RANGE_DAYS = 7;
-// Past this width, daily rendering means thousands of chart points (so we default to
-// monthly), and a failed load is likely a timeout (so the error steers the seller at
-// the emailed full-history export instead of a bare retry).
+// Past this width, daily rendering means thousands of chart points, so we default to monthly.
 const WIDE_RANGE_DAYS = 366;
 
 export type Product = {
@@ -152,6 +150,8 @@ const Analytics = ({
   const hasContent = products.length > 0;
 
   const activeRequests = React.useRef<AbortController[] | null>(null);
+  // One emailed export per failure streak, however many times the retry halves.
+  const exportEnqueuedRef = React.useRef(false);
   React.useEffect(() => {
     const loadData = async () => {
       if (!hasContent) return;
@@ -169,20 +169,31 @@ const Analytics = ({
         const [byState, byReferral] = await Promise.all([byStateRequest.response, byReferralRequest.response]);
         setData({ byState, byReferral });
         activeRequests.current = null;
+        exportEnqueuedRef.current = false;
       } catch (e) {
         if (e instanceof AbortError) return;
-        if (rangeDays > WIDE_RANGE_DAYS) {
+        if (rangeDays > 1) {
+          if (!exportEnqueuedRef.current) {
+            exportEnqueuedRef.current = true;
+            request({
+              method: "GET",
+              accept: "html",
+              url: Routes.export_purchases_path({ start_time: startTime, end_time: endTime, force_async: true }),
+            }).catch(() => {});
+          }
           showAlert(
-            'This range is too large to load right now. Use "Export all sales" to get your full history by email, or pick a shorter range.',
+            "This range couldn't load, so we're retrying with the most recent half. A CSV of the full range is on its way to your email.",
             "error",
           );
+          const midpoint = new Date((startOfDay(dateRange.from).getTime() + startOfDay(dateRange.to).getTime()) / 2);
+          dateRange.setFrom(midpoint);
         } else {
           showAlert("Sorry, something went wrong. Please try again.", "error");
         }
       }
     };
     void loadData();
-  }, [startTime, endTime, hourly, rangeDays]);
+  }, [startTime, endTime, hourly]);
 
   const selectedProducts = products.filter((product) => product.selected).map((product) => product.unique_permalink);
 

@@ -26,6 +26,26 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
       expect(page).to have_current_path(sales_dashboard_path(from: "2020-01-01", to: "2024-06-01"))
     end
 
+    it "halves the range on repeated failures and enqueues exactly one emailed export" do
+      allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).and_raise("boom")
+      # The stubbed 500s are the scenario under test, not incidental breakage.
+      Capybara.raise_server_errors = false
+
+      expect do
+        visit sales_dashboard_path(from: "2020-01-01", to: "2024-01-01")
+        # Every load fails, so the retry halves until the range is a single day and gives up.
+        expect(page).to have_text("Sorry, something went wrong. Please try again.", wait: 20)
+        expect(page).to have_current_path(/from=2023-12-31.*to=2024-01-01/, wait: 20)
+        # sidekiq_inline runs the export pipeline to completion, so assert on the delivered email.
+      end.to change { ActionMailer::Base.deliveries.size }.by(1)
+
+      expect(ActionMailer::Base.deliveries.last.to).to eq([user_with_role_for_seller.email])
+    ensure
+      # Clear the stored (intentional) server error before re-enabling raising, or teardown re-raises it.
+      Capybara.current_session.server&.reset_error!
+      Capybara.raise_server_errors = true
+    end
+
     it "defaults to monthly aggregation for ranges wider than 366 days" do
       visit sales_dashboard_path(from: "2020-01-01", to: "2024-06-01")
       expect(page).to have_select("Aggregate by", selected: "Monthly")
