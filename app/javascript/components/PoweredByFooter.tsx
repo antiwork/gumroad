@@ -19,7 +19,7 @@ export const PoweredByFooter = ({ className }: { className?: string }) => {
           <Logo />
         </a>
       </div>
-      <FooterCurrencySelector detectedCurrency={detectedCurrency} />
+      <FooterCurrencySelector detectedCurrency={detectedCurrency ?? null} />
     </footer>
   );
 };

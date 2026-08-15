@@ -5,8 +5,8 @@ import { currencyCodeList, findCurrencyByCode, type CurrencyCode } from "$app/ut
 
 import { Select } from "$app/components/ui/Select";
 
-const isCurrencyCode = (code: string): code is CurrencyCode =>
-  (currencyCodeList as readonly string[]).includes(code);
+const currencyCodes: readonly string[] = currencyCodeList;
+const isCurrencyCode = (code: string): code is CurrencyCode => currencyCodes.includes(code);
 
 const detectedOptionLabel = (detectedCurrency: string | null | undefined) => {
   const code = detectedCurrency?.toLowerCase();
