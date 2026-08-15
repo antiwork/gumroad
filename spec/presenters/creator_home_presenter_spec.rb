@@ -421,5 +421,17 @@ describe CreatorHomePresenter do
         expect(props[:tax_center_enabled]).to be(false)
       end
     end
+
+    it "omits gumhead when the rollout flag is off" do
+      expect(presenter.creator_home_props).not_to have_key(:gumhead)
+    end
+
+    it "features gumhead when the rollout flag is on for the seller" do
+      Feature.activate_user(:gumhead, seller)
+
+      expect(presenter.creator_home_props[:gumhead]).to eq(
+        { download_url: CreatorHomePresenter::GUMHEAD_DOWNLOAD_URL }
+      )
+    end
   end
 end
