@@ -684,7 +684,7 @@ describe("requiresReusablePaymentMethodForCardCollection", () => {
     const recurringState = state({ products: [product({ recurrence: "monthly" })] });
 
     expect(requiresReusablePaymentMethodForCardCollection(recurringState, true)).toBe(true);
-    expect(requiresReusablePaymentMethodForCardCollection(recurringState, false)).toBe(false);
+    expect(requiresReusablePaymentMethodForCardCollection(recurringState, false)).toBe(true);
   });
 
   it("does not create a reusable card before setup-mode Payment Element collection", () => {

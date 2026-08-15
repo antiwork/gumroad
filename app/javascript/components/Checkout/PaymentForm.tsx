@@ -59,6 +59,7 @@ import {
   isSubmitDisabled,
   PaymentMethodType,
   paymentElementCollectsFullBillingDetails,
+  requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
   requiresPayment,
   requiresReusablePaymentMethod,
@@ -1538,7 +1539,7 @@ const useStripePaymentRequest = (disabled: boolean) => {
         const billingAddress = e.paymentMethod.billing_details.address;
         dispatch({
           type: "set-payment-method",
-          paymentMethod: requiresReusablePaymentMethod(state)
+          paymentMethod: requiresPaymentElementReusablePaymentMethod(state)
             ? await getReusablePaymentRequestPaymentMethodResult(selectedPaymentMethod, {
                 products: state.products,
                 email: state.email || e.payerEmail || null,

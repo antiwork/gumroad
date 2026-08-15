@@ -401,7 +401,7 @@ export function requiresPaymentElementReusablePaymentMethod(state: State) {
 }
 
 export function requiresReusablePaymentMethodForCardCollection(state: State, useStripePaymentElement: boolean) {
-  if (!useStripePaymentElement) return requiresReusablePaymentMethod(state);
+  if (!useStripePaymentElement) return requiresPaymentElementReusablePaymentMethod(state);
   if (
     state.checkoutPayment.integration === "payment_element" &&
     state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
