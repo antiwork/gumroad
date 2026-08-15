@@ -484,7 +484,7 @@ class Subscription < ApplicationRecord
     end
   end
 
-  def require_indian_card_mandate_reauthorization!(notify_buyer: true)
+  def require_indian_card_mandate_reauthorization!(notify_buyer: true, clear_existing_mandate: false)
     return unless india_card_mandate_reliability_enabled?
 
     should_notify_buyer = false
@@ -494,6 +494,7 @@ class Subscription < ApplicationRecord
       return unless alive?(include_pending_cancellation: false)
 
       should_notify_buyer = notify_buyer && !renewal_disabled_due_to_indian_card_mandate?
+      self.stripe_mandate_id = nil if clear_existing_mandate
       self.renewal_disabled_due_to_indian_card_mandate = true
       self.indian_card_mandate_requires_reauthorization = true
       save!
@@ -708,6 +709,25 @@ class Subscription < ApplicationRecord
   end
 
   def unsubscribe_and_fail!
+    if india_card_mandate_reliability_enabled? && !renewal_disabled_due_to_indian_card_mandate?
+      card_id = credit_card_to_charge&.id
+      current_period_started_at = end_time_of_last_paid_period || created_at
+      mandate_failure = if card_id.present?
+        purchases.failed
+                 .where(credit_card_id: card_id)
+                 .where("created_at >= ?", current_period_started_at)
+                 .order(created_at: :desc, id: :desc)
+                 .detect { _1.indian_card_mandate_error_status.present? }
+      end
+      if mandate_failure.present?
+        update_renewal_for_indian_card_mandate!(
+          mandate_failure.indian_card_mandate_error_status,
+          expected_credit_card_id: card_id,
+          notify_buyer: true
+        )
+      end
+    end
+
     with_lock do
       return if failed_at.present?
       return if india_card_mandate_reliability_enabled? && renewal_disabled_due_to_indian_card_mandate?

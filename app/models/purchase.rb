@@ -3891,7 +3891,7 @@ class Purchase < ApplicationRecord
       mandate_options.amount.to_i == expected_terms[:amount] &&
       mandate_options.amount_type == "maximum" &&
       mandate_options.interval == expected_terms[:interval] &&
-      mandate_options.interval_count.to_i == expected_terms[:interval_count].to_i &&
+      mandate_options.interval_count&.to_i == expected_terms[:interval_count]&.to_i &&
       Array(mandate_options.supported_types).include?("india")
   end
 

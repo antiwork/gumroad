@@ -84,7 +84,7 @@ class RecurringChargeWorker
 
         if check_mandate_terms_after_plan_change &&
            subscription.indian_card_mandate_terms != mandate_terms_before_plan_change
-          subscription.require_indian_card_mandate_reauthorization!
+          subscription.require_indian_card_mandate_reauthorization!(clear_existing_mandate: true)
           return
         end
       end

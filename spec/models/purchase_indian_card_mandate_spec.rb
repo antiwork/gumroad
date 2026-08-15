@@ -731,6 +731,45 @@ describe "Indian card mandate reliability" do
     expect(subscription.stripe_mandate_id).to eq("mandate_matching_terms")
   end
 
+  it "clears plan reauthorization for matching sporadic terms" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    registration.mark_indian_card_mandate_registration!
+    allow(registration).to receive(:processor_payment_intent_id).and_return("pi_sporadic_terms")
+    terms = {
+      amount: 10_00,
+      currency: Currency::USD,
+      interval: "sporadic",
+      interval_count: nil
+    }
+    allow_any_instance_of(Subscription).to receive(:indian_card_mandate_terms).and_return(terms)
+    mandate_options = Stripe::StripeObject.construct_from(
+      amount: terms[:amount],
+      amount_type: "maximum",
+      interval: terms[:interval],
+      interval_count: nil,
+      supported_types: ["india"]
+    )
+    intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      payment_method_id: card.processor_payment_method_id,
+      customer_id: card.stripe_customer_id,
+      setup_future_usage: "off_session",
+      currency: terms[:currency],
+      card_mandate_options: mandate_options
+    )
+    allow(ChargeProcessor).to receive(:get_charge_intent).with(merchant_account, "pi_sporadic_terms").and_return(intent)
+
+    registration.record_indian_card_mandate_status!("active", mandate_id: "mandate_sporadic_terms")
+
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to eq("mandate_sporadic_terms")
+  end
+
   it "keeps plan reauthorization when a confirmed charge has different terms" do
     registration = create_registration
     subscription = registration.subscription
