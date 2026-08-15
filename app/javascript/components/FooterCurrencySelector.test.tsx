@@ -15,10 +15,11 @@ afterEach(() => {
 describe("FooterCurrencySelector", () => {
   it("defaults to detected and writes the cookie on change", () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
-    render(<FooterCurrencySelector />);
+    render(<FooterCurrencySelector detectedCurrency="usd" />);
 
     const select = screen.getByLabelText<HTMLSelectElement>("Currency");
     expect(select.value).toBe("");
+    expect(screen.getByRole("option", { name: "$ (US Dollars) — detected" })).toBeTruthy();
 
     fireEvent.change(select, { target: { value: "gbp" } });
 

@@ -1,4 +1,4 @@
-import { Link } from "@inertiajs/react";
+import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { FooterCurrencySelector } from "$app/components/FooterCurrencySelector";
@@ -40,7 +40,10 @@ const SocialLink = ({ href, children }: { href: string; children: React.ReactNod
   </a>
 );
 
-export const HomeFooter = () => (
+export const HomeFooter = () => {
+  const detectedCurrency = usePage<{ detected_buyer_currency?: string | null }>().props.detected_buyer_currency;
+
+  return (
   <div className="flex flex-col justify-between gap-16 bg-black px-8 py-16 leading-relaxed text-white lg:flex-row lg:px-[4vw] lg:py-24">
     <div className="flex w-full max-w-3xl flex-col gap-16">
       <div className="flex flex-col gap-8">
@@ -98,7 +101,7 @@ export const HomeFooter = () => (
           <FooterLink href={Routes.privacy_path()}>Privacy Policy</FooterLink>
         </div>
       </div>
-      <div className="flex justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <SocialLink href="https://x.com/gumroad">
           <svg width="24" height="24" viewBox="0 0 1200 1227" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path
@@ -143,8 +146,9 @@ export const HomeFooter = () => (
             />
           </svg>
         </SocialLink>
+        <FooterCurrencySelector className="shrink-0" detectedCurrency={detectedCurrency} />
       </div>
-      <FooterCurrencySelector className="self-end" />
     </div>
   </div>
-);
+  );
+};

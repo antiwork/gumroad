@@ -3,13 +3,16 @@
 module InertiaRendering
   extend ActiveSupport::Concern
   include ApplicationHelper
+  include CurrencyHelper
 
   included do
     inertia_share do
       RenderingExtension.custom_context(view_context).merge(
         authenticity_token: form_authenticity_token,
         flash: inertia_flash_props,
-        title: page_title
+        title: page_title,
+        # IP-detected presentment currency for the footer selector's closed-state label.
+        detected_buyer_currency: buyer_currency_for_ip(request.remote_ip),
       )
     end
 

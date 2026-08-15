@@ -1,16 +1,33 @@
 import * as React from "react";
 
 import { readBuyerCurrencyPreference, writeBuyerCurrencyPreference } from "$app/utils/buyerCurrencyPreference";
-import { currencyCodeList, findCurrencyByCode } from "$app/utils/currency";
+import { currencyCodeList, findCurrencyByCode, type CurrencyCode } from "$app/utils/currency";
 
 import { Select } from "$app/components/ui/Select";
+
+const isCurrencyCode = (code: string): code is CurrencyCode =>
+  (currencyCodeList as readonly string[]).includes(code);
+
+const detectedOptionLabel = (detectedCurrency: string | null | undefined) => {
+  const code = detectedCurrency?.toLowerCase();
+  if (!code || !isCurrencyCode(code)) return "Detected currency";
+  return `${findCurrencyByCode(code).displayFormat} — detected`;
+};
 
 // The buyer-facing presentment currency selector that lives in page footers (product pages,
 // profile pages, discover). Writes the same cookie the checkout picker reads, then reloads so
 // the server re-renders every price through buyer_currency_display_props with the preference.
 // An empty value clears the cookie and returns to IP detection. Deliberately shows the raw
 // preference, not the per-seller resolved currency — settleability is enforced only at checkout.
-export const FooterCurrencySelector = ({ className }: { className?: string }) => {
+// The closed-state empty option still names the IP-detected currency (checkout's
+// "$ (US Dollars) — detected" shape) so buyers can see what they are currently being shown.
+export const FooterCurrencySelector = ({
+  className,
+  detectedCurrency,
+}: {
+  className?: string;
+  detectedCurrency?: string | null;
+}) => {
   const [value, setValue] = React.useState(() => readBuyerCurrencyPreference() ?? "");
 
   return (
@@ -29,7 +46,7 @@ export const FooterCurrencySelector = ({ className }: { className?: string }) =>
         window.location.assign(url.toString());
       }}
     >
-      <option value="">Detected currency</option>
+      <option value="">{detectedOptionLabel(detectedCurrency)}</option>
       {currencyCodeList.map((code) => (
         <option key={code} value={code}>
           {findCurrencyByCode(code).displayFormat}
