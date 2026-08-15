@@ -224,6 +224,13 @@ class Charge::CreateService
 
     presentment_currency = processor_args[:processor_currency]
     return mandate_options if presentment_currency.blank? || presentment_currency == Currency::USD
+    unless Checkout::BuyerCurrencyEligibility.indian_card_mandate_presentment_supported?(
+      seller:,
+      merchant_account:,
+      currency: presentment_currency
+    )
+      raise BuyerCurrencyQuoteInvalid, "unsupported India card mandate currency: #{presentment_currency}"
+    end
 
     canonical_cap_cents = mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)
     # No cap to convert (amount_type is not "maximum", or the shape changed): leave the options

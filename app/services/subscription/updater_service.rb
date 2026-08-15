@@ -90,7 +90,10 @@ class Subscription::UpdaterService
       subscription.credit_card_to_charge&.stripe_charge_processor? &&
       subscription.credit_card_to_charge.requires_mandate?
     mandate_terms_before_update = if check_saved_card_mandate_terms_after_update
-      subscription.indian_card_mandate_terms(authenticated_offer_code_buyer: logged_in_user)
+      subscription.indian_card_mandate_terms(
+        billing_info: original_purchase.slice(:country, :state, :zip_code),
+        authenticated_offer_code_buyer: logged_in_user
+      )
     end
     saved_card_mandate_terms_changed = false
 

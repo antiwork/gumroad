@@ -1382,6 +1382,39 @@ describe Subscription::UpdaterService, :vcr do
           expect(@original_purchase.country).to eq "United States"
         end
 
+        it "compares saved-card mandate terms from the stored billing address",
+           vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/setting_contact_info/sets_the_contact_info_on_the_original_purchase" } do
+          @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)
+          @original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
+          Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+          previous_terms = { amount: 10_00, currency: Currency::USD, interval: "month", interval_count: 3 }
+          updated_terms = previous_terms.merge(amount: 10_75)
+          expect(@subscription).to receive(:indian_card_mandate_terms).with(
+            billing_info: hash_including("country" => "United States", "state" => "CA", "zip_code" => "94107"),
+            authenticated_offer_code_buyer: @user
+          ).ordered.and_return(previous_terms)
+          expect(@subscription).to receive(:indian_card_mandate_terms).with(
+            billing_info: hash_including(country: "United States", state: "NY", zip_code: "10001"),
+            authenticated_offer_code_buyer: @user
+          ).ordered.and_return(updated_terms)
+          params = update_contact_info_params.deep_merge(
+            contact_info: { state: "NY", zip_code: "10001" }
+          )
+
+          result = described_class.new(
+            subscription: @subscription,
+            gumroad_guid: @gumroad_guid,
+            params:,
+            logged_in_user: @user,
+            remote_ip: @remote_ip
+          ).perform
+
+          expect(result[:success]).to be(true)
+          expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+        ensure
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        end
+
         context "also updating plan" do
           it "sets the contact info on the new 'original' purchase as well" do
             result = Subscription::UpdaterService.new(

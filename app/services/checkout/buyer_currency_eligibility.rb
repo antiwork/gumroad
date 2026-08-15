@@ -145,6 +145,13 @@ class Checkout::BuyerCurrencyEligibility
       Feature.active?(SUBSCRIPTION_FEATURE_NAME, seller)
   end
 
+  def self.indian_card_mandate_presentment_supported?(seller:, merchant_account:, currency:)
+    return true unless seller.present? && Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    return true if StripeIntentChargeRouting.direct_charge_account?(merchant_account)
+
+    StripeChargeProcessor.indian_card_mandate_currency_supported?(currency)
+  end
+
   # Whether this seller's buyer-currency checkouts may take wallet payments at all. Seller must
   # be in the general Payment Element wallet rollout AND in this lane's own ramp; pulling either
   # flag stops wallets here, and pulling only the lane flag leaves every other checkout alone.
@@ -360,6 +367,10 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:missing_buyer_currency) if buyer_currency.blank?
     return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
     return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    if purchases.any? { _1.link.is_recurring_billing? } &&
+       !self.class.indian_card_mandate_presentment_supported?(seller:, merchant_account:, currency: buyer_currency)
+      return fallback(:unsupported_indian_card_mandate_currency)
+    end
 
     # The verified quote locked the cart total, so every purchase on the charge must
     # individually support presentment — one unsupported item invalidates the whole cart.
