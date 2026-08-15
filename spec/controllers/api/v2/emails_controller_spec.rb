@@ -815,6 +815,29 @@ describe Api::V2::EmailsController do
         expect(@installment.reload.installment_rule).to be_deleted
       end
 
+      it "cancels a schedule even when installment validations fail" do
+        @installment.update_column(:message, "<p><br></p>")
+        expect(@installment.reload).not_to be_valid
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+        expect(@installment.installment_rule).to be_deleted
+      end
+
+      it "does not delete the rule when the installment cannot be saved" do
+        allow_any_instance_of(Installment).to receive(:save!).and_raise(
+          ActiveRecord::RecordNotSaved.new("failed", @installment)
+        )
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(@installment.reload.ready_to_publish?).to be(true)
+        expect(@installment.installment_rule).to be_alive
+      end
+
       it "leaves a draft email alone" do
         draft = create(:audience_installment, seller: @user)
 

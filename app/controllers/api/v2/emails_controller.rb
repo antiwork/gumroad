@@ -122,13 +122,15 @@ class Api::V2::EmailsController < Api::V2::BaseController
   def unschedule
     return render_response(false, message: "This email is not scheduled.") unless @installment.ready_to_publish?
 
-    @installment.ready_to_publish = false
-    @installment.installment_rule&.mark_deleted!
-    if @installment.save
-      success_with_email(@installment)
-    else
-      error_with_email(@installment)
+    ActiveRecord::Base.transaction do
+      @installment.ready_to_publish = false
+      @installment.installment_rule&.mark_deleted!
+      # Skip content/audience validations — canceling a schedule is not a send.
+      @installment.save!(validate: false)
     end
+    success_with_email(@installment)
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved
+    error_with_email(@installment)
   end
 
   def destroy
