@@ -65,13 +65,11 @@ describe "Subscription restart at checkout", :js, type: :system do
       Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @seller)
     end
 
-    it "keeps the subscription stopped while Stripe reports the new mandate as pending" do
-      login_as @buyer
+    it "keeps a guest restart stopped while Stripe reports the new mandate as pending" do
       visit "/checkout?product=#{@product.unique_permalink}&option=#{@tier.external_id}&quantity=1"
 
       fill_checkout_form(
         @product,
-        logged_in_user: @buyer,
         email: @buyer.email,
         credit_card: { number: "4000003560000123" }
       )

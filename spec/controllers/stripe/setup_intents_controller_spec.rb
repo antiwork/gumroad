@@ -182,7 +182,7 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(controller.send(:authenticated_subscription)).to eq(subscription)
       end
 
-      it "does not use email-derived subscription terms without its cookie" do
+      it "uses the same email-derived restart as checkout without its cookie" do
         product = create(:subscription_product)
         subscription = create(:subscription, link: product)
         allow(controller).to receive(:params).and_return(
@@ -195,7 +195,9 @@ describe Stripe::SetupIntentsController, :vcr do
           .with(product:, email: "buyer@example.com")
           .and_return(subscription)
 
-        expect(controller.send(:authenticated_subscription)).to be_nil
+        allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+
+        expect(controller.send(:authenticated_subscription)).to eq(subscription)
       end
 
       it "does not bind one setup intent to multiple recurring products" do
