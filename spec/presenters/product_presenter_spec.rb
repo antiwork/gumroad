@@ -863,7 +863,6 @@ describe ProductPresenter do
             seller_refund_policy_enabled: true,
             seller_refund_policy: {
               title: "30-day money back guarantee",
-              fine_print: nil,
             },
             cancellation_discounts_enabled: true,
             receipt_email_from: "#{membership.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
@@ -1105,7 +1104,6 @@ describe ProductPresenter do
             seller_refund_policy_enabled: true,
             seller_refund_policy: {
               title: "30-day money back guarantee",
-              fine_print: nil,
             },
             cancellation_discounts_enabled: false,
             receipt_email_from: "#{new_product.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
