@@ -566,7 +566,9 @@ class Subscription < ApplicationRecord
     presentment = current_later_charge_presentment
     canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
     canonical_price_cents = renewal_price_cents if canonical_price_cents.zero?
-    presentment_matches = presentment.present? && presentment.canonical_price_cents == canonical_price_cents
+    presentment_matches = presentment.present? &&
+      presentment.canonical_price_cents == canonical_price_cents &&
+      indian_card_renewal_presentment_supported?(presentment.presentment_currency)
     price_cap_cents = indian_card_mandate_price_cents(
       purchase,
       renewal_price_cents,
@@ -635,6 +637,16 @@ class Subscription < ApplicationRecord
     amount = BigDecimal(canonical_cents.to_s) * BigDecimal(currency_units_per_usd.to_s)
     amount /= 100 if is_currency_type_single_unit?(currency)
     amount.ceil
+  end
+
+  def indian_card_renewal_presentment_supported?(currency)
+    merchant_account = renewal_merchant_account
+    StripeChargeProcessor.charge_minor_units_compatible?(currency) &&
+      Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account) &&
+      Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(
+        merchant_account,
+        presentment_currency: currency
+      )
   end
 
   def renewal_merchant_account

@@ -490,6 +490,35 @@ describe "Indian card mandate reliability" do
     )
   end
 
+  it "keeps a destination renewal mandate in the supported canonical currency" do
+    registration = create_registration
+    subscription = registration.subscription
+    destination_account = create(
+      :merchant_account,
+      user: seller,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      charge_processor_merchant_id: "acct_destination"
+    )
+    allow(subscription).to receive(:renewal_merchant_account).and_return(destination_account)
+    allow(subscription).to receive(:original_purchase).and_return(registration)
+    allow(registration).to receive(:mandate_maximum_amount_cents).and_return(12_50)
+    allow(registration).to receive(:mandate_maximum_displayed_price_cents).and_return(12_50)
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(registration)
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 49_950,
+      canonical_price_cents:,
+      signup_currency_units_per_usd: BigDecimal("83.25")
+    )
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 12_50,
+      currency: Currency::USD
+    )
+  end
+
   it "uses the future renewal amount when the signup transaction was free" do
     product = create(:membership_product_with_preset_tiered_pricing, :with_free_trial_enabled)
     registration = create(
