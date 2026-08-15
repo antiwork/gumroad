@@ -375,7 +375,7 @@ describe Settings::MainController, type: :controller, inertia: true do
     describe "seller refund policy" do
       context "when enabled" do
         before do
-          seller.refund_policy.update!(max_refund_period_in_days: 0)
+          seller.refund_policy.update_columns(max_refund_period_in_days: 0)
         end
 
         it "updates the seller refund policy fine print" do
@@ -407,7 +407,7 @@ describe Settings::MainController, type: :controller, inertia: true do
       context "when not enabled" do
         before do
           seller.update!(refund_policy_enabled: false)
-          seller.refund_policy.update!(max_refund_period_in_days: 0)
+          seller.refund_policy.update_columns(max_refund_period_in_days: 0)
         end
 
         it "does not update the seller refund policy" do

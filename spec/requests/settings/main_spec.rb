@@ -256,12 +256,12 @@ describe("Main Settings Scenario", type: :system, js: true) do
     context "when the refund policy is enabled" do
       before do
         user.update!(refund_policy_enabled: true)
-        user.refund_policy.update!(max_refund_period_in_days: 0)
+        user.refund_policy.update!(max_refund_period_in_days: 7)
       end
 
       it "allows the user to update the refund policy" do
         visit settings_main_path
-        expect(page).to have_field("Add a fine print to your refund policy", disabled: true)
+        expect(page).to have_field("Add a fine print to your refund policy")
 
         select "30-day money back guarantee", from: "Refund period"
         check "Add a fine print to your refund policy"

@@ -164,13 +164,8 @@ class ProductPresenter
         is_epublication: product.is_epublication?,
         product_refund_policy_enabled: product.product_refund_policy_enabled?,
         refund_policy: {
-          allowed_refund_periods_in_days: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.map do
-            {
-              key: _1,
-              value: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[_1]
-            }
-          end,
-          max_refund_period_in_days: refund_policy.max_refund_period_in_days,
+          allowed_refund_periods_in_days: RefundPolicy.period_options(allow_no_refunds: product.is_physical?),
+          max_refund_period_in_days: refund_policy.effective_max_refund_period_in_days,
           fine_print: refund_policy.fine_print,
           fine_print_enabled: refund_policy.fine_print.present?,
           title: refund_policy.title,

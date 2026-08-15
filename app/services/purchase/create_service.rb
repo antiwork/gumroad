@@ -50,20 +50,12 @@ class Purchase::CreateService < Purchase::BaseService
       validate_perceived_free_trial_params
 
       if @product.user.account_level_refund_policy_enabled?
-        purchase.build_purchase_refund_policy(
-          max_refund_period_in_days: @product.user.refund_policy.max_refund_period_in_days,
-          title: @product.user.refund_policy.title,
-          fine_print: @product.user.refund_policy.fine_print
-        )
+        attach_purchase_refund_policy(@product.user.refund_policy)
       elsif @product.product_refund_policy_enabled? && @product.product_refund_policy.present?
         # The enabled flag can be out of sync with the underlying record (the
         # ProductRefundPolicy row may have been deleted or never created), so we only
         # attach a purchase refund policy when the record actually exists.
-        purchase.build_purchase_refund_policy(
-          max_refund_period_in_days: @product.product_refund_policy.max_refund_period_in_days,
-          title: @product.product_refund_policy.title,
-          fine_print: @product.product_refund_policy.fine_print
-        )
+        attach_purchase_refund_policy(@product.product_refund_policy)
       end
 
       # build pre-order if purchase is for pre-order product & return
@@ -206,6 +198,15 @@ class Purchase::CreateService < Purchase::BaseService
   end
 
   private
+    def attach_purchase_refund_policy(policy)
+      days = policy.effective_max_refund_period_in_days
+      purchase.build_purchase_refund_policy(
+        max_refund_period_in_days: days,
+        title: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[days],
+        fine_print: policy.fine_print
+      )
+    end
+
     # Every processor may use this signature- and expiry-checked hint while building the purchase.
     # Stripe later performs the full amount verification; PayPal discards the token after the hint,
     # which makes expiry the only bound on its pricing use (gumroad-private#1958).
