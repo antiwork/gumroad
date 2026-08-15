@@ -1367,7 +1367,8 @@ describe Order::ChargeService, :vcr do
         card_type: CardType::VISA,
         card_country: Compliance::Countries::IND.alpha2,
         expiry_month: 12,
-        expiry_year: 2030
+        expiry_year: 2030,
+        json_data: { stripe_setup_intent_id: "seti_existing" }
       )
       buyer = create(:user, credit_card: saved_card)
       setup_intent = instance_double(
@@ -1411,6 +1412,7 @@ describe Order::ChargeService, :vcr do
       expect(purchase.processor_setup_intent_id).to eq("seti_saved_indian_free_trial")
       expect(purchase.charge.stripe_setup_intent_id).to eq("seti_saved_indian_free_trial")
       expect(purchase.subscription.indian_card_mandate_source_purchase(saved_card.id)).to eq(purchase)
+      expect(saved_card.reload.stripe_setup_intent_id).to eq("seti_existing")
       expect(mandate_amount).to eq(purchase.mandate_maximum_amount_cents)
       expect(mandate_amount).to be_positive
     ensure
@@ -1917,6 +1919,7 @@ describe Order::ChargeService, :vcr do
           buyer
         )
         buyer.save!
+        buyer.credit_card.update!(json_data: { stripe_setup_intent_id: "seti_old_terms" })
 
         quote_line_item = Checkout::BuyerCurrencyQuote::LineItem.new(
           permalink: membership_product_2.unique_permalink,
@@ -1950,6 +1953,7 @@ describe Order::ChargeService, :vcr do
         Order::ChargeService.new(order:, params:).perform
 
         charge = order.reload.charges.sole
+        expect(charge.credit_card.stripe_setup_intent_id).to be_nil
         stripe_payment_intent = Stripe::PaymentIntent.retrieve(charge.stripe_payment_intent_id)
         mandate_options = stripe_payment_intent.payment_method_options.card.mandate_options
         expect(stripe_payment_intent.currency).to eq(Currency::INR)
@@ -2672,6 +2676,22 @@ describe Order::ChargeService, :vcr do
         amount: 10_00,
         currency: Currency::USD
       )
+    end
+
+    it "keeps an unsupported setup currency in USD" do
+      order = create(:order)
+      service = described_class.new(order:, params: nil)
+      mandate_options = {
+        payment_method_options: {
+          card: { mandate_options: { amount: 10_00, currency: Currency::USD } }
+        }
+      }
+      locked_quote = Checkout::BuyerCurrencyQuote::Result.new(
+        currency: Currency::AUD,
+        fx_rate: BigDecimal("0.65")
+      )
+
+      expect(service.mandate_options_in_setup_currency(mandate_options, locked_quote)).to eq(mandate_options)
     end
   end
 

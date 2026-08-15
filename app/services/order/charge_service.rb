@@ -161,7 +161,9 @@ class Order::ChargeService
           purchase.mark_indian_card_mandate_registration! if mandate_options.present? && purchase.credit_card&.requires_mandate?
           purchase.update!(processor_setup_intent_id: setup_intent.id)
           purchase.charge.update!(stripe_setup_intent_id: setup_intent.id)
-          purchase.credit_card.update!(json_data: { stripe_setup_intent_id: setup_intent.id }) if purchase.credit_card&.requires_mandate?
+          if !card_already_saved && purchase.credit_card&.requires_mandate?
+            purchase.credit_card.update!(json_data: { stripe_setup_intent_id: setup_intent.id })
+          end
 
           if setup_intent.succeeded?
             fix_setup_later_charge_presentment(purchase, locked_quote)
@@ -242,6 +244,7 @@ class Order::ChargeService
 
   def mandate_options_in_setup_currency(mandate_options, locked_quote)
     return mandate_options if mandate_options.blank? || locked_quote.blank?
+    return mandate_options unless StripeChargeProcessor.indian_card_mandate_currency_supported?(locked_quote.currency)
 
     canonical_cap_cents = mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)
     return mandate_options if canonical_cap_cents.blank? || !locked_quote.fx_rate&.positive?
@@ -317,8 +320,9 @@ class Order::ChargeService
       # charge_intent is nil when the processor call was rescued (e.g. a quote/settlement
       # mismatch) — Charge::CreateService returns the charge with no intent attached in that case.
       if charge_intent.present? && charge.credit_card&.requires_mandate?
+        card_json_data = mandate_options.present? ? {} : charge.credit_card.json_data.to_h
         charge.credit_card.update!(
-          json_data: charge.credit_card.json_data.to_h.merge("stripe_payment_intent_id" => charge_intent.id)
+          json_data: card_json_data.merge("stripe_payment_intent_id" => charge_intent.id)
         )
       end
 
