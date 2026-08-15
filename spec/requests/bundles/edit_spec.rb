@@ -188,11 +188,7 @@ describe("Bundle edit page", type: :system, js: true) do
         click_on "Copy"
       end
       select "7-day money back guarantee", from: "Refund period"
-      find_field("Fine print (optional)", with: "This is a product-level refund policy").fill_in with: "I hate being small"
-      within "[role=dialog]" do
-        expect(page).to have_selector("h2", text: "7-day money back guarantee")
-        expect(page).to have_text("I hate being small")
-      end
+      expect(page).not_to have_field("Fine print (optional)")
 
       product_page = window_opened_by { click_on "Open in new tab" }
       expect(page).to have_alert(text: "Changes saved!")
@@ -202,7 +198,6 @@ describe("Bundle edit page", type: :system, js: true) do
       expect(bundle.product_refund_policy_enabled?).to eq(true)
       expect(bundle.product_refund_policy.max_refund_period_in_days).to eq(7)
       expect(bundle.product_refund_policy.title).to eq("7-day money back guarantee")
-      expect(bundle.product_refund_policy.fine_print).to eq("I hate being small")
     end
   end
 

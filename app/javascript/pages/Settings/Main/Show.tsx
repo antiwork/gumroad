@@ -27,7 +27,6 @@ import { Pill } from "$app/components/ui/Pill";
 import { Select } from "$app/components/ui/Select";
 import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import { Textarea } from "$app/components/ui/Textarea";
 
 type ProductLevelSupportEmail = {
   email: string;
@@ -73,8 +72,6 @@ type MainPageProps = {
       refund_policy_enforced: boolean;
       allowed_refund_periods_in_days: { key: number; value: string }[];
       max_refund_period_in_days: number;
-      fine_print_enabled: boolean;
-      fine_print: string | null;
     };
     product_level_support_emails: ProductLevelSupportEmail[];
   };
@@ -396,51 +393,6 @@ export default function MainPage() {
                 </option>
               ))}
             </Select>
-          </Fieldset>
-          <Fieldset>
-            <ToggleSettingRow
-              value={
-                form.data.user.seller_refund_policy.fine_print_enabled
-                  ? form.data.user.seller_refund_policy.max_refund_period_in_days > 0
-                  : false
-              }
-              onChange={(value) =>
-                updateUserSettings({
-                  seller_refund_policy: {
-                    ...form.data.user.seller_refund_policy,
-                    fine_print_enabled: value,
-                  },
-                })
-              }
-              disabled={
-                isFormDisabled ||
-                !props.user.seller_refund_policy.editable ||
-                form.data.user.seller_refund_policy.max_refund_period_in_days === 0
-              }
-              label="Add a fine print to your refund policy"
-              dropdown={
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor="seller-refund-policy-fine-print">Fine print</Label>
-                  </FieldsetTitle>
-                  <Textarea
-                    id="seller-refund-policy-fine-print"
-                    maxLength={3000}
-                    rows={10}
-                    value={form.data.user.seller_refund_policy.fine_print || ""}
-                    disabled={isFormDisabled || !props.user.seller_refund_policy.editable}
-                    onChange={(e) =>
-                      updateUserSettings({
-                        seller_refund_policy: {
-                          ...form.data.user.seller_refund_policy,
-                          fine_print: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </Fieldset>
-              }
-            />
           </Fieldset>
         </FormSection>
         <FormSection header={<h2>Local</h2>}>

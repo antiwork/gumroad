@@ -97,7 +97,7 @@ type Props = {
   available_countries: ShippingCountry[];
   google_client_id: string;
   seller_refund_policy_enabled: boolean;
-  seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
+  seller_refund_policy: Pick<RefundPolicy, "title">;
   cancellation_discounts_enabled: boolean;
   receipt_email_from: string;
   price_checker_enabled: boolean;

@@ -120,8 +120,6 @@ describe SettingsPresenter do
               }
             ],
             max_refund_period_in_days: 30,
-            fine_print: nil,
-            fine_print_enabled: false
           }
         }
       )

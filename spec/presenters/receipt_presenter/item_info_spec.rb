@@ -553,7 +553,7 @@ describe ReceiptPresenter::ItemInfo do
           expect(props[:general_attributes]).to eq(
             [
               { label: "Product price", value: "$14.99" },
-              { label: "30-day money back guarantee", value: "This is the fine print of the refund policy." },
+              { label: "30-day money back guarantee", value: nil },
             ]
           )
         end
@@ -577,7 +577,7 @@ describe ReceiptPresenter::ItemInfo do
           expect(props[:general_attributes]).to eq(
             [
               { label: "Product price", value: "$1" },
-              { label: "30-day money back guarantee", value: "This is the fine print of the refund policy." },
+              { label: "30-day money back guarantee", value: nil },
             ]
           )
         end
@@ -606,7 +606,7 @@ describe ReceiptPresenter::ItemInfo do
                 label: "Bundle",
                 value: link_to("Bundle product", bundle.long_url, target: "_blank")
               },
-              { label: "30-day money back guarantee", value: "Bundle fine print." },
+              { label: "30-day money back guarantee", value: nil },
             ]
           )
         end
@@ -678,7 +678,7 @@ describe ReceiptPresenter::ItemInfo do
                 label: "Bundle",
                 value: link_to("Bundle product", bundle.long_url, target: "_blank")
               },
-              { label: "30-day money back guarantee", value: "Bundle gift fine print." },
+              { label: "30-day money back guarantee", value: nil },
             ]
           )
         end
@@ -709,7 +709,7 @@ describe ReceiptPresenter::ItemInfo do
           expect(props[:general_attributes]).to eq(
             [
               { label: "Product price", value: "$14.99" },
-              { label: "30-day money back guarantee", value: "This is the fine print of the refund policy." },
+              { label: "30-day money back guarantee", value: nil },
             ]
           )
         end
@@ -733,7 +733,7 @@ describe ReceiptPresenter::ItemInfo do
           expect(props[:general_attributes]).to eq(
             [
               { label: "Product price", value: "$1" },
-              { label: "30-day money back guarantee", value: "This is the fine print of the refund policy." },
+              { label: "30-day money back guarantee", value: nil },
             ]
           )
         end

@@ -69,7 +69,7 @@ class PurchaseProductPresenter
         can_edit: false,
         refund_policy: purchase_refund_policy.present? ? {
           title: purchase_refund_policy.title,
-          fine_print: purchase_refund_policy.fine_print.present? ? ActionController::Base.helpers.simple_format(purchase_refund_policy.fine_print) : nil,
+          fine_print: nil,
           updated_at: purchase_refund_policy.updated_at,
         } : nil
       },

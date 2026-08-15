@@ -203,7 +203,7 @@ class Purchase::CreateService < Purchase::BaseService
       purchase.build_purchase_refund_policy(
         max_refund_period_in_days: days,
         title: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[days],
-        fine_print: policy.fine_print
+        fine_print: nil
       )
     end
 

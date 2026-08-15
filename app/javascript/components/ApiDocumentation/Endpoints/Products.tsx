@@ -437,10 +437,6 @@ export const CreateProduct = () => (
         description='(optional, "inherit", "none", "7", "14", "30", or "183") sets a product-level refund policy; "inherit" uses the account default. Only available when the account-level refund policy is not in effect; otherwise use PUT /v2/refund_policy'
       />
       <ApiParameter
-        name="refund_fine_print"
-        description='(optional) fine print for the product-level refund policy; requires refund_period unless the product already has one enabled, and cannot be combined with refund_period "inherit". Empty string clears it'
-      />
-      <ApiParameter
         name="rich_content"
         description="(optional) array of { id, title, description } pages; description is a ProseMirror doc"
       />
@@ -540,10 +536,6 @@ export const UpdateProduct = () => (
       <ApiParameter
         name="refund_period"
         description='(optional, "inherit", "none", "7", "14", "30", or "183") sets a product-level refund policy; "inherit" switches the product back to the account default. Only available when the account-level refund policy is not in effect; otherwise use PUT /v2/refund_policy'
-      />
-      <ApiParameter
-        name="refund_fine_print"
-        description='(optional) fine print for the product-level refund policy; requires refund_period unless the product already has one enabled, and cannot be combined with refund_period "inherit". Empty string clears it'
       />
       <ApiParameter
         name="custom_html"

@@ -27,7 +27,7 @@ describe Api::V2::RefundPoliciesController do
           "refund_policy" => {
             "refund_period" => "30",
             "title" => "30-day money back guarantee",
-            "fine_print" => "Refund requests are reviewed within 2 business days.",
+            "fine_print" => nil,
             "in_effect" => true,
           }
         )
@@ -64,20 +64,20 @@ describe Api::V2::RefundPoliciesController do
     context "with edit_products scope" do
       let(:token) { create("doorkeeper/access_token", application: app, resource_owner_id: seller.id, scopes: "edit_products") }
 
-      it "updates the refund period and fine print" do
+      it "updates the refund period and ignores fine print" do
         seller.refund_policy.update!(max_refund_period_in_days: 0)
 
         put :update, params: { access_token: token.token, refund_period: "30", fine_print: "Refund requests are reviewed within 2 business days." }
 
         refund_policy = seller.refund_policy.reload
         expect(refund_policy.max_refund_period_in_days).to eq(30)
-        expect(refund_policy.fine_print).to eq("Refund requests are reviewed within 2 business days.")
+        expect(refund_policy.fine_print).to be_nil
         expect(response.parsed_body).to eq(
           "success" => true,
           "refund_policy" => {
             "refund_period" => "30",
             "title" => "30-day money back guarantee",
-            "fine_print" => "Refund requests are reviewed within 2 business days.",
+            "fine_print" => nil,
             "in_effect" => true,
           }
         )
@@ -129,29 +129,6 @@ describe Api::V2::RefundPoliciesController do
           "message" => "Refund period is required."
         )
         expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
-      end
-
-      it "rejects fine print over 3000 characters" do
-        seller.refund_policy.update!(max_refund_period_in_days: 30, fine_print: "Existing fine print")
-
-        put :update, params: { access_token: token.token, refund_period: "14", fine_print: "a" * 3001 }
-
-        expect(response.parsed_body).to eq(
-          "success" => false,
-          "message" => "Fine print is too long (maximum is 3000 characters)"
-        )
-        refund_policy = seller.refund_policy.reload
-        expect(refund_policy.max_refund_period_in_days).to eq(30)
-        expect(refund_policy.fine_print).to eq("Existing fine print")
-      end
-
-      it "strips HTML from fine print" do
-        put :update, params: { access_token: token.token, refund_period: "14", fine_print: "<p>Refunds <strong>approved</strong></p>" }
-
-        refund_policy = seller.refund_policy.reload
-        expect(refund_policy.max_refund_period_in_days).to eq(14)
-        expect(refund_policy.fine_print).to eq("Refunds approved")
-        expect(response.parsed_body["refund_policy"]["fine_print"]).to eq("Refunds approved")
       end
 
       it "rejects updates when the account-level refund policy is not in effect" do

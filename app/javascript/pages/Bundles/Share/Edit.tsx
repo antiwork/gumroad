@@ -62,7 +62,7 @@ type SharePageProps = {
   sales_count_for_inventory: number;
   ratings: RatingsWithPercentages;
   seller_refund_policy_enabled: boolean;
-  seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
+  seller_refund_policy: Pick<RefundPolicy, "title">;
 };
 
 type ShareFormData = {

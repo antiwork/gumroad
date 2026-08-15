@@ -9,7 +9,7 @@ import { computeStandalonePrice } from "$app/components/BundleEdit/utils";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Product, Seller } from "$app/components/Product";
 import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
-import { RefundPolicy, RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
+import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
 
 type ProductPreviewBundle = {
@@ -44,7 +44,7 @@ type ProductPreviewProps = {
   salesCountForInventory: number;
   ratings: RatingsWithPercentages;
   sellerRefundPolicyEnabled: boolean;
-  sellerRefundPolicy: Pick<RefundPolicy, "title" | "fine_print">;
+  sellerRefundPolicy: Pick<RefundPolicy, "title">;
   showRefundPolicyModal?: boolean;
 };
 
@@ -57,7 +57,7 @@ export const ProductPreview = ({
   ratings,
   sellerRefundPolicyEnabled,
   sellerRefundPolicy,
-  showRefundPolicyModal,
+  showRefundPolicyModal: _showRefundPolicyModal,
 }: ProductPreviewProps) => {
   const currentSeller = useCurrentSeller();
   const url = useProductUrl(uniquePermalink, bundle.custom_permalink);
@@ -66,7 +66,6 @@ export const ProductPreview = ({
 
   return (
     <>
-      <RefundPolicyModalPreview open={showRefundPolicyModal ?? false} refundPolicy={bundle.refund_policy} />
       <Product
         product={{
           id,
@@ -128,7 +127,7 @@ export const ProductPreview = ({
           refund_policy: sellerRefundPolicyEnabled
             ? {
                 title: sellerRefundPolicy.title,
-                fine_print: sellerRefundPolicy.fine_print ?? "",
+                fine_print: null,
                 updated_at: "",
               }
             : {
@@ -136,7 +135,7 @@ export const ProductPreview = ({
                   bundle.refund_policy.allowed_refund_periods_in_days.find(
                     ({ key }) => key === bundle.refund_policy.max_refund_period_in_days,
                   )?.value ?? "",
-                fine_print: bundle.refund_policy.fine_print ?? "",
+                fine_print: null,
                 updated_at: "",
               },
           bundle_products: bundle.products.map((bundleProduct) => ({

@@ -166,8 +166,6 @@ class ProductPresenter
         refund_policy: {
           allowed_refund_periods_in_days: RefundPolicy.period_options(allow_no_refunds: product.is_physical?),
           max_refund_period_in_days: refund_policy.effective_max_refund_period_in_days,
-          fine_print: refund_policy.fine_print,
-          fine_print_enabled: refund_policy.fine_print.present?,
           title: refund_policy.title,
         },
         covers: product.display_asset_previews.as_json,
@@ -326,7 +324,6 @@ class ProductPresenter
       seller_refund_policy_enabled: product.user.account_level_refund_policy_enabled?,
       seller_refund_policy: {
         title: product.user.refund_policy.title,
-        fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
       # The sender line receipt emails actually go out with (CustomerMailer#receipt builds the

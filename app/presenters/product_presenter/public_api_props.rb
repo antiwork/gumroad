@@ -132,9 +132,7 @@ class ProductPresenter::PublicApiProps
 
       {
         title: policy.title,
-        # Mirror the rendered product page, which wraps the fine print with
-        # simple_format (ProductPresenter::ProductProps) and renders it as HTML.
-        fine_print: policy.fine_print.present? ? ActionController::Base.helpers.simple_format(policy.fine_print) : nil,
+        fine_print: nil,
         updated_at: policy.updated_at&.to_date&.iso8601,
       }
     end

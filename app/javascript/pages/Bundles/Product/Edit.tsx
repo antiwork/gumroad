@@ -77,7 +77,7 @@ type ProductPageProps = {
   ratings: RatingsWithPercentages;
   refund_policies: OtherRefundPolicy[];
   seller_refund_policy_enabled: boolean;
-  seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
+  seller_refund_policy: Pick<RefundPolicy, "title">;
 };
 
 type ProductFormData = {

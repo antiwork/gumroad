@@ -163,15 +163,9 @@ describe ProductPresenter::PublicApiProps do
         allow(product).to receive(:product_refund_policy).and_return(refund_policy)
       end
 
-      it "renders fine_print with simple_format (HTML) to mirror the product page" do
-        # ProductPresenter::ProductProps wraps fine_print with simple_format and
-        # the page renders it via dangerouslySetInnerHTML — the public API must
-        # ship the same HTML, not the raw text.
+      it "does not expose fine print" do
         expect(props[:refund_policy][:title]).to eq(refund_policy.title)
-        expect(props[:refund_policy][:fine_print]).to eq(
-          ActionController::Base.helpers.simple_format("Line one\nLine two")
-        )
-        expect(props[:refund_policy][:fine_print]).to include("<p>", "<br />")
+        expect(props[:refund_policy][:fine_print]).to be_nil
       end
     end
   end

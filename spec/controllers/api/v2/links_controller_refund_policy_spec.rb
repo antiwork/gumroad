@@ -14,80 +14,45 @@ describe Api::V2::LinksController do
 
   describe "PUT 'update' with refund policy params" do
     it "rejects no-refunds on a digital product" do
-      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_period: "none", refund_fine_print: "No refunds once downloaded." }
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_period: "none" }
 
       expect(response.parsed_body["success"]).to be(false)
       expect(response.parsed_body["message"]).to eq("refund_period \"none\" is only allowed for physical products.")
       expect(@product.reload.product_refund_policy_enabled).to be(false)
     end
 
-    it "enables a product-level refund policy with a period and fine print" do
-      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_period: "7", refund_fine_print: "Refunds within a week." }
+    it "enables a product-level refund policy with a period" do
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_period: "7" }
 
       expect(response).to have_http_status(:ok)
       @product.reload
       expect(@product.product_refund_policy_enabled).to be(true)
       expect(@product.product_refund_policy.max_refund_period_in_days).to eq(7)
-      expect(@product.product_refund_policy.fine_print).to eq("Refunds within a week.")
 
       body = response.parsed_body
       expect(body.dig("product", "refund_policy")).to eq(
         "refund_period" => "7",
         "title" => "7-day money back guarantee",
-        "fine_print" => "Refunds within a week.",
+        "fine_print" => nil,
         "inherited" => false,
       )
     end
 
     it "allows no-refunds on a physical product" do
       physical = create(:product, :is_physical, user: @user)
-      put :update, params: { format: :json, access_token: @token.token, id: physical.external_id, refund_period: "none", refund_fine_print: "No returns after shipping." }
+      put :update, params: { format: :json, access_token: @token.token, id: physical.external_id, refund_period: "none" }
 
       expect(response).to have_http_status(:ok)
       expect(physical.reload.product_refund_policy.max_refund_period_in_days).to eq(0)
       expect(response.parsed_body.dig("product", "refund_policy", "refund_period")).to eq("none")
     end
 
-    it "updates the period without touching existing fine print" do
-      @product.update!(product_refund_policy_enabled: true)
-      @product.find_or_initialize_product_refund_policy.update!(max_refund_period_in_days: 0, fine_print: "Existing fine print.")
-
-      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_period: "30" }
-
-      expect(response).to have_http_status(:ok)
-      policy = @product.reload.product_refund_policy
-      expect(policy.max_refund_period_in_days).to eq(30)
-      expect(policy.fine_print).to eq("Existing fine print.")
-    end
-
-    it "updates only the fine print when the product already has a policy" do
-      @product.update!(product_refund_policy_enabled: true)
-      @product.find_or_initialize_product_refund_policy.update!(max_refund_period_in_days: 14)
-
-      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_fine_print: "Updated fine print." }
-
-      expect(response).to have_http_status(:ok)
-      policy = @product.reload.product_refund_policy
-      expect(policy.max_refund_period_in_days).to eq(14)
-      expect(policy.fine_print).to eq("Updated fine print.")
-    end
-
-    it "rejects fine print alone when no product-level policy exists" do
-      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_fine_print: "Orphan fine print." }
-
-      expect(response.parsed_body["success"]).to be(false)
-      expect(response.parsed_body["message"]).to include("refund_fine_print requires refund_period")
-      expect(@product.reload.product_refund_policy_enabled).to be(false)
-    end
-
-    it "clears the fine print when passed an empty string" do
-      @product.update!(product_refund_policy_enabled: true)
-      @product.find_or_initialize_product_refund_policy.update!(max_refund_period_in_days: 7, fine_print: "Old fine print.")
-
-      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_fine_print: "" }
+    it "ignores refund_fine_print" do
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_period: "7", refund_fine_print: "Refunds within a week." }
 
       expect(response).to have_http_status(:ok)
       expect(@product.reload.product_refund_policy.fine_print).to be_nil
+      expect(response.parsed_body.dig("product", "refund_policy", "fine_print")).to be_nil
     end
 
     it "disables the product override when refund_period is inherit" do
@@ -104,13 +69,6 @@ describe Api::V2::LinksController do
         "fine_print" => nil,
         "inherited" => true,
       )
-    end
-
-    it "rejects fine print combined with inherit" do
-      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_period: "inherit", refund_fine_print: "Nope." }
-
-      expect(response.parsed_body["success"]).to be(false)
-      expect(response.parsed_body["message"]).to include("cannot be set when refund_period is 'inherit'")
     end
 
     it "rejects an invalid refund period" do
@@ -133,19 +91,19 @@ describe Api::V2::LinksController do
 
   describe "POST 'create' with refund policy params" do
     it "creates a product with a product-level refund policy" do
-      post :create, params: { format: :json, access_token: @token.token, name: "Seven Day Pack", price: 500, refund_period: "7", refund_fine_print: "Refunds within a week." }
+      post :create, params: { format: :json, access_token: @token.token, name: "Seven Day Pack", price: 500, refund_period: "7" }
 
       expect(response).to have_http_status(:ok)
       product = Link.last
       expect(product.product_refund_policy_enabled).to be(true)
       expect(product.product_refund_policy.max_refund_period_in_days).to eq(7)
-      expect(product.product_refund_policy.fine_print).to eq("Refunds within a week.")
       expect(response.parsed_body.dig("product", "refund_policy", "refund_period")).to eq("7")
+      expect(response.parsed_body.dig("product", "refund_policy", "fine_print")).to be_nil
     end
 
     it "rejects no-refunds when creating a digital product" do
       expect do
-        post :create, params: { format: :json, access_token: @token.token, name: "No Refunds Pack", price: 500, refund_period: "none", refund_fine_print: "All sales final." }
+        post :create, params: { format: :json, access_token: @token.token, name: "No Refunds Pack", price: 500, refund_period: "none" }
       end.not_to change(Link, :count)
 
       expect(response.parsed_body["success"]).to be(false)
@@ -195,7 +153,7 @@ describe Api::V2::LinksController do
       expect(response.parsed_body.dig("product", "refund_policy")).to eq(
         "refund_period" => "30",
         "title" => "30-day money back guarantee",
-        "fine_print" => "Reviewed within 2 business days.",
+        "fine_print" => nil,
         "inherited" => false,
       )
     end

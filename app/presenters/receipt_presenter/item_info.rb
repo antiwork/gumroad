@@ -247,7 +247,7 @@ class ReceiptPresenter::ItemInfo
 
       {
         label: refund_policy.title,
-        value: refund_policy.fine_print,
+        value: nil,
       }
     end
 
