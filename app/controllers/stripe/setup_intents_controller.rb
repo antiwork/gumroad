@@ -12,7 +12,7 @@ class Stripe::SetupIntentsController < ApplicationController
     chargeable = CardParamsHelper.build_chargeable(params)
 
     if chargeable.nil?
-      logger.error "Error while creating setup intent: failed to load chargeable for params: #{params}"
+      logger.error "Error while creating setup intent: failed to load chargeable"
       render json: { success: false, error_message: "We couldn't charge your card. Try again or use a different card." }, status: :unprocessable_entity
       return
     end
@@ -33,10 +33,10 @@ class Stripe::SetupIntentsController < ApplicationController
     end
 
   rescue ChargeProcessorInvalidRequestError, ChargeProcessorUnavailableError => e
-    logger.error "Error while creating setup intent: `#{e.message}` for params: #{params}"
+    logger.error "Error while creating setup intent: `#{e.message}`"
     render json: { success: false, error_message: "There is a temporary problem, please try again (your card was not charged)." }, status: :service_unavailable
   rescue ChargeProcessorCardError => e
-    logger.error "Error while creating setup intent: `#{e.message}` for params: #{params}"
+    logger.error "Error while creating setup intent: `#{e.message}`"
     render json: { success: false, error_message: PurchaseErrorCode.customer_error_message(e.message), error_code: e.error_code }, status: :unprocessable_entity
   end
 

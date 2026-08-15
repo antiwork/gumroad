@@ -17,6 +17,18 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(response.parsed_body["success"]).to eq(false)
         expect(response.parsed_body["error_message"]).to eq("We couldn't charge your card. Try again or use a different card.")
       end
+
+      it "does not log buyer contact or billing data", vcr: false do
+        allow(CardParamsHelper).to receive(:check_for_errors).and_return(nil)
+        allow(CardParamsHelper).to receive(:build_chargeable).and_return(nil)
+        expect(controller.logger).to receive(:error).with("Error while creating setup intent: failed to load chargeable")
+
+        post :create, params: {
+          stripe_payment_method_id: "pm_test",
+          email: "buyer@example.com",
+          billing_info: { country: "US", state: "CA", postal_code: "94107" },
+        }
+      end
     end
 
     context "when card handling error occurred" do

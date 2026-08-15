@@ -68,7 +68,8 @@ class Subscription::UpdaterService
     had_indian_card_mandate_stop = subscription.renewal_disabled_due_to_indian_card_mandate?
     replacement_card = nil
     had_saved_card = false
-    plan_or_price_changed = !same_plan_and_price?
+    seller_price_changed = is_resubscribing && price_changed?
+    plan_or_price_changed = !same_plan_and_price? || seller_price_changed
     original_discount = subscription.original_purchase.purchase_offer_code_discount
     discount_changed = if params[:once_per_cart_discount_allocation].present?
       true
@@ -128,7 +129,7 @@ class Subscription::UpdaterService
           end
         end
 
-        if !same_plan_and_price? || (is_resubscribing && (discount_changed || price_changed?))
+        if !same_plan_and_price? || (is_resubscribing && discount_changed) || seller_price_changed
           self.new_purchase = subscription.update_current_plan!(
             new_variants: variants,
             new_price: price,
@@ -203,7 +204,8 @@ class Subscription::UpdaterService
             mandate_terms_before_update,
             plan_or_price_changed:,
             mandate_billing_info_changed:,
-            discount_changed:
+            discount_changed:,
+            seller_price_changed:
           )
         # Restart subscription if necessary
         subscription.resubscribe! if is_resubscribing
@@ -418,9 +420,9 @@ class Subscription::UpdaterService
       subscription.future_subscription_charge?(authenticated_offer_code_buyer: logged_in_user)
     end
 
-    def saved_card_update_requires_reauthorization?(previous_terms, plan_or_price_changed:, mandate_billing_info_changed:, discount_changed: false)
+    def saved_card_update_requires_reauthorization?(previous_terms, plan_or_price_changed:, mandate_billing_info_changed:, discount_changed: false, seller_price_changed: false)
       return false unless future_subscription_charge?
-      return false unless discount_changed || mandate_billing_info_changed || (plan_or_price_changed && apply_plan_change_immediately?)
+      return false unless discount_changed || mandate_billing_info_changed || seller_price_changed || (plan_or_price_changed && apply_plan_change_immediately?)
 
       billing_info = params[:contact_info] if mandate_billing_info_changed
       subscription.indian_card_mandate_terms(billing_info:) != previous_terms

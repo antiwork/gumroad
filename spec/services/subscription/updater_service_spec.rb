@@ -2728,6 +2728,57 @@ describe Subscription::UpdaterService, :vcr do
           end
         end
       end
+
+      it "requires new mandate terms when a restart applies a seller price change",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)
+        @subscription.update!(
+          cancelled_at: @originally_subscribed_at + 3.months,
+          cancelled_by_buyer: true,
+          stripe_mandate_id: "mandate_old_price"
+        )
+        travel_to(@originally_subscribed_at + 4.months)
+        mandate = Stripe::Mandate.construct_from(
+          id: "mandate_old_price",
+          status: "active",
+          payment_method: @credit_card.processor_payment_method_id
+        )
+        allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+        allow(@subscription).to receive(:send_restart_notifications!)
+        new_price_cents = @original_tier_quarterly_price.price_cents + 1_00
+        @original_tier_quarterly_price.update!(price_cents: new_price_cents)
+        params = {
+          price_id: @quarterly_product_price.external_id,
+          variants: [@original_tier.external_id],
+          quantity: 1,
+          use_existing_card: true,
+          perceived_price_cents: new_price_cents,
+          perceived_upgrade_price_cents: new_price_cents,
+        }
+
+        service = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params:,
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        )
+        service.original_purchase = @subscription.original_purchase
+        expect(service.send(:price_changed?)).to be(true)
+        allow(service).to receive(:charge_user!).and_return(success: true)
+
+        expect do
+          result = service.perform
+
+          expect(result[:success]).to be(true)
+        end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
+        expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+        expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+        expect(@subscription.stripe_mandate_id).to eq("mandate_old_price")
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
     end
 
     context "non-tiered membership subscription" do
@@ -3642,6 +3693,24 @@ describe Subscription::UpdaterService, :vcr do
           previous_terms,
           plan_or_price_changed: true,
           mandate_billing_info_changed: false
+        )
+      ).to be(true)
+    end
+
+    it "requires reauthorization when a seller price change applies during restart", vcr: false do
+      previous_terms = { amount: 10_00, currency: Currency::USD, interval: "month", interval_count: 1 }
+      current_terms = previous_terms.merge(amount: 20_00)
+      allow(service).to receive(:apply_plan_change_immediately?).and_return(false)
+      allow(service).to receive(:future_subscription_charge?).and_return(true)
+      allow(subscription).to receive(:indian_card_mandate_terms).and_return(current_terms)
+
+      expect(
+        service.send(
+          :saved_card_update_requires_reauthorization?,
+          previous_terms,
+          plan_or_price_changed: true,
+          mandate_billing_info_changed: false,
+          seller_price_changed: true
         )
       ).to be(true)
     end
