@@ -71,7 +71,10 @@ class Stripe::SetupIntentsController < ApplicationController
     def mandate_options_for_stripe(chargeable, subscription: nil)
       if chargeable.requires_mandate?
         if subscription&.india_card_mandate_reliability_enabled?
-          terms = subscription.indian_card_mandate_terms(billing_info: billing_info_params)
+          terms = subscription.indian_card_mandate_terms(
+            billing_info: billing_info_params,
+            authenticated_offer_code_buyer: logged_in_user
+          )
           return if terms.blank?
 
           return {

@@ -560,11 +560,14 @@ class Subscription < ApplicationRecord
       merchant_account.present? && !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
   end
 
-  def indian_card_mandate_terms(billing_info: nil)
+  def indian_card_mandate_terms(
+    billing_info: nil,
+    authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED
+  )
     purchase = original_purchase
     return if purchase.nil?
 
-    renewal_price_cents = current_subscription_price_cents
+    renewal_price_cents = current_subscription_price_cents(authenticated_offer_code_buyer:)
     presentment = current_later_charge_presentment
     canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
     canonical_price_cents = renewal_price_cents if canonical_price_cents.zero?

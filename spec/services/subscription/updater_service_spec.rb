@@ -3602,6 +3602,10 @@ describe Subscription::UpdaterService, :vcr do
       )
       allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
       allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+      expect(subscription).to receive(:indian_card_mandate_terms).with(
+        billing_info: nil,
+        authenticated_offer_code_buyer: nil
+      ).and_call_original
 
       mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
       service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
@@ -3755,7 +3759,8 @@ describe Subscription::UpdaterService, :vcr do
       allow(service).to receive(:future_subscription_charge?).and_return(true)
       allow(service).to receive(:should_charge_user?).and_return(false)
       expect(subscription).to receive(:indian_card_mandate_terms).with(
-        billing_info: service.params[:contact_info]
+        billing_info: service.params[:contact_info],
+        authenticated_offer_code_buyer: nil
       ).and_return(current_terms)
 
       expect(

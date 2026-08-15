@@ -90,7 +90,7 @@ class Subscription::UpdaterService
       subscription.credit_card_to_charge&.stripe_charge_processor? &&
       subscription.credit_card_to_charge.requires_mandate?
     mandate_terms_before_update = if check_saved_card_mandate_terms_after_update
-      subscription.indian_card_mandate_terms
+      subscription.indian_card_mandate_terms(authenticated_offer_code_buyer: logged_in_user)
     end
     saved_card_mandate_terms_changed = false
 
@@ -363,7 +363,10 @@ class Subscription::UpdaterService
       mandate_options = setup_intent.card_mandate_options
       return false if mandate_options.blank?
 
-      expected_terms = subscription.indian_card_mandate_terms(billing_info: params[:contact_info])
+      expected_terms = subscription.indian_card_mandate_terms(
+        billing_info: params[:contact_info],
+        authenticated_offer_code_buyer: logged_in_user
+      )
       return false if expected_terms.blank?
 
       mandate_options.amount_type == "maximum" &&
@@ -439,7 +442,10 @@ class Subscription::UpdaterService
       return false unless discount_changed || mandate_billing_info_changed || seller_price_changed || (plan_or_price_changed && apply_plan_change_immediately?)
 
       billing_info = params[:contact_info] if mandate_billing_info_changed
-      subscription.indian_card_mandate_terms(billing_info:) != previous_terms
+      subscription.indian_card_mandate_terms(
+        billing_info:,
+        authenticated_offer_code_buyer: logged_in_user
+      ) != previous_terms
     end
 
     def record_plan_change!

@@ -502,6 +502,18 @@ describe "Indian card mandate reliability" do
     )
   end
 
+  it "uses the checkout buyer when it computes mandate terms" do
+    registration = create_registration
+    subscription = registration.subscription
+    expect(subscription).to receive(:current_subscription_price_cents).with(
+      authenticated_offer_code_buyer: nil
+    ).and_call_original
+
+    expect(
+      subscription.indian_card_mandate_terms(authenticated_offer_code_buyer: nil)
+    ).to be_present
+  end
+
   it "uses USD when the renewal currency cannot carry an India mandate" do
     registration = create_registration
     subscription = registration.subscription

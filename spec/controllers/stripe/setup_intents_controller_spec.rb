@@ -102,7 +102,10 @@ describe Stripe::SetupIntentsController, :vcr do
         chargeable = double(requires_mandate?: true)
         allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 1, subscription_id: subscription.external_id }]))
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
-        expect(subscription).to receive(:indian_card_mandate_terms).with(billing_info: nil).and_return(
+        expect(subscription).to receive(:indian_card_mandate_terms).with(
+          billing_info: nil,
+          authenticated_offer_code_buyer: nil
+        ).and_return(
           amount: 12_34,
           currency: Currency::INR,
           interval: "month",
@@ -152,7 +155,10 @@ describe Stripe::SetupIntentsController, :vcr do
           )
         )
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
-        expect(subscription).to receive(:indian_card_mandate_terms).with(billing_info:).and_return(
+        expect(subscription).to receive(:indian_card_mandate_terms).with(
+          billing_info:,
+          authenticated_offer_code_buyer: nil
+        ).and_return(
           amount: 12_34,
           currency: Currency::INR,
           interval: "month",
