@@ -95,8 +95,7 @@ class ProductRefundPolicy < RefundPolicy
   private
     def forbid_no_refunds_on_digital_products
       return if allows_no_refunds?
-      return if max_refund_period_in_days.blank?
-      return if max_refund_period_in_days >= MINIMUM_DIGITAL_REFUND_PERIOD_IN_DAYS
+      return unless max_refund_period_in_days == NO_REFUNDS_PERIOD_IN_DAYS
 
       self.max_refund_period_in_days = MINIMUM_DIGITAL_REFUND_PERIOD_IN_DAYS
     end

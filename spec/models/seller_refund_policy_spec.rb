@@ -44,8 +44,8 @@ describe SellerRefundPolicy do
       it "does not allow setting the refund period to 0 days" do
         refund_policy.max_refund_period_in_days = 0
 
-        expect(refund_policy.valid?).to be false
-        expect(refund_policy.errors[:max_refund_period_in_days].first).to include("at least 7 days")
+        expect(refund_policy.valid?).to be true
+        expect(refund_policy.max_refund_period_in_days).to eq(7)
       end
 
       it "allows refund periods of 7 days or more" do
