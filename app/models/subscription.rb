@@ -743,11 +743,19 @@ class Subscription < ApplicationRecord
                  .detect { _1.indian_card_mandate_error_status.present? }
       end
       if mandate_failure.present?
-        update_renewal_for_indian_card_mandate!(
-          mandate_failure.indian_card_mandate_error_status,
-          expected_credit_card_id: card_id,
-          notify_buyer: true
-        )
+        begin
+          current_status = refresh_indian_card_mandate!
+          reload
+          return :mandate_recovered if current_status == "active" && !renewal_disabled_due_to_indian_card_mandate?
+        rescue ChargeProcessorError => e
+          ErrorNotifier.notify(e, subscription: external_id)
+          update_renewal_for_indian_card_mandate!(
+            mandate_failure.indian_card_mandate_error_status,
+            expected_credit_card_id: card_id,
+            notify_buyer: true
+          )
+        end
+        return :mandate_invalid
       end
     end
 

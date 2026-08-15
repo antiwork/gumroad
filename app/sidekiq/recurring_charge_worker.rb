@@ -11,9 +11,13 @@ class RecurringChargeWorker
       subscription = Subscription.find(subscription_id)
       return if subscription.link.user.suspended?
       return unless subscription.alive?(include_pending_cancellation: false)
+      indian_card_mandate_recovered = false
       if subscription.india_card_mandate_reliability_enabled? && subscription.renewal_disabled_due_to_indian_card_mandate?
         # Keep access active while the charge waits for a mandate that Stripe can use.
         return unless subscription.refresh_indian_card_mandate! == "active"
+        subscription.reload
+        return if subscription.renewal_disabled_due_to_indian_card_mandate?
+        indian_card_mandate_recovered = true
       end
       return if subscription.is_test_subscription || subscription.current_subscription_price_cents == 0
       return if subscription.charges_completed?
@@ -37,7 +41,7 @@ class RecurringChargeWorker
 
       return if last_purchase.in_progress? && last_purchase.sync_status_with_charge_processor
       return if subscription.has_a_charge_in_progress?
-      if ignore_consecutive_failures && last_purchase.failed?
+      if ignore_consecutive_failures && last_purchase.failed? && !indian_card_mandate_recovered
         if subscription.seconds_overdue_for_charge > Subscription::ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE
           Rails.logger.info("RecurringChargeWorker#perform(#{subscription_id}): marking subscription failed")
           subscription.unsubscribe_and_fail!

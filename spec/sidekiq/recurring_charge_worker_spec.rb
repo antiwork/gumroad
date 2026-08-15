@@ -149,6 +149,25 @@ describe RecurringChargeWorker, :vcr do
           described_class.new.perform(@subscription.id, true)
         end
       end
+
+      it "charges after an Indian card mandate recovers",
+         vcr: { cassette_name: "RecurringChargeWorker/doesn_t_call_charge_if_there_was_a_purchase_made_the_period_for_a_monthly_subscription" } do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+        allow_any_instance_of(Subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+        allow_any_instance_of(Subscription).to receive(:refresh_indian_card_mandate!) do |subscription|
+          subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, false, true)
+          "active"
+        end
+
+        travel_to(@subscription.period.from_now + 5.days + 1.minute) do
+          expect_any_instance_of(Subscription).not_to receive(:unsubscribe_and_fail!)
+          expect_any_instance_of(Subscription).to receive(:charge!)
+          described_class.new.perform(@subscription.id, true)
+        end
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
     end
   end
 
