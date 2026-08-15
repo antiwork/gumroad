@@ -756,11 +756,11 @@ describe CustomerMailer do
         )
       end
 
-      it "includes the refund policy" do
+      it "includes the refund policy title without fine print" do
         mail = CustomerMailer.receipt(purchase.id)
 
         expect(mail.body.sanitized).to include("30-day money back guarantee")
-        expect(mail.body.sanitized).to include("This is the fine print.")
+        expect(mail.body.sanitized).not_to include("This is the fine print.")
       end
     end
 
