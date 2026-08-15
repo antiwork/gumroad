@@ -352,7 +352,7 @@ describe("ProductMoreOptionScenario", type: :system, js: true) do
 
         expect(refund_policy.max_refund_period_in_days).to eq(other_refund_policy.max_refund_period_in_days)
         expect(refund_policy.title).to eq(other_refund_policy.title)
-        expect(refund_policy.fine_print).to eq(other_refund_policy.fine_print)
+        expect(refund_policy.fine_print).to be_nil
       end
     end
   end

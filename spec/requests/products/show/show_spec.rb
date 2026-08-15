@@ -371,17 +371,11 @@ describe("ProductShowScenario", type: :system, js: true) do
       page.driver.browser.execute_cdp("Emulation.setTimezoneOverride", timezoneId: "")
     end
 
-    it "renders product-level refund policy" do
-      travel_to(Time.utc(2023, 4, 17)) do
-        product_refund_policy.update!(updated_at: Time.current)
-        visit product.long_url
+    it "renders the product-level refund period" do
+      visit product.long_url
 
-        click_on("7-day money back guarantee")
-        within_modal "7-day money back guarantee" do
-          expect(page).to have_text("Seriously, just email us and we'll refund you.")
-          expect(page).to have_text("Last updated Apr 17, 2023")
-        end
-      end
+      expect(page).to have_text("7-day money back guarantee")
+      expect(page).not_to have_text("Seriously, just email us and we'll refund you.")
     end
 
     context "when the account-level refund policy is enabled" do
@@ -389,50 +383,35 @@ describe("ProductShowScenario", type: :system, js: true) do
         seller.update!(refund_policy_enabled: true)
       end
 
-      it "renders account-level refund policy" do
-        travel_to(Time.utc(2023, 4, 17)) do
-          seller.refund_policy.update!(fine_print: "This is an account-level refund policy fine print")
-          visit product.long_url
+      it "renders the account-level refund period" do
+        seller.refund_policy.update!(fine_print: "This is an account-level refund policy fine print")
+        visit product.long_url
 
-          click_on("30-day money back guarantee")
-          within_modal "30-day money back guarantee" do
-            expect(page).to have_text("This is an account-level refund policy fine print")
-            expect(page).to have_text("Last updated Apr 17, 2023")
-          end
-        end
+        expect(page).to have_text("30-day money back guarantee")
+        expect(page).not_to have_text("This is an account-level refund policy fine print")
       end
 
       context "when the URL contains refund-policy anchor" do
-        it "renders with the modal open and creates event" do
+        it "does not open a fine-print modal or record a view event" do
           seller.refund_policy.update!(fine_print: "This is an account-level refund policy fine print")
           expect do
             visit "#{product.long_url}#refund-policy"
-          end.to change { Event.count }.by(1)
+          end.not_to change { Event.count }
 
-          within_modal "30-day money back guarantee" do
-            expect(page).to have_text("This is an account-level refund policy fine print")
-          end
-
-          event = Event.last
-          expect(event.event_name).to eq(Event::NAME_PRODUCT_REFUND_POLICY_FINE_PRINT_VIEW)
-          expect(event.link_id).to eq(product.id)
+          expect(page).to have_text("30-day money back guarantee")
+          expect(page).not_to have_selector("[role='dialog']")
         end
       end
     end
 
     context "when the URL contains refund-policy anchor" do
-      it "renders with the modal open and creates event" do
+      it "does not open a fine-print modal or record a view event" do
         expect do
           visit "#{product.long_url}#refund-policy"
-        end.to change { Event.count }.by(1)
+        end.not_to change { Event.count }
 
-        within_modal "7-day money back guarantee" do
-          expect(page).to have_text("Seriously, just email us and we'll refund you.")
-        end
-
-        event = Event.last
-        expect(event.event_name).to eq(Event::NAME_PRODUCT_REFUND_POLICY_FINE_PRINT_VIEW)
-        expect(event.link_id).to eq(product.id)
+        expect(page).to have_text("7-day money back guarantee")
+        expect(page).not_to have_selector("[role='dialog']")
       end
     end
   end

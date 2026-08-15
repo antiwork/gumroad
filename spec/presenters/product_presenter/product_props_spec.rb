@@ -201,7 +201,7 @@ describe ProductPresenter::ProductProps do
             expect(presenter.props(seller_custom_domain_url: nil, request:, pundit_user:)[:product][:refund_policy]).to eq(
               {
                 title: product_refund_policy.title,
-                fine_print: "<p>This is a product-level refund policy</p>",
+                fine_print: nil,
                 updated_at: product_refund_policy.updated_at.to_date
               }
             )
@@ -244,7 +244,7 @@ describe ProductPresenter::ProductProps do
               expect(presenter.props(seller_custom_domain_url: nil, request:, pundit_user:)[:product][:refund_policy]).to eq(
                 {
                   title: seller.refund_policy.title,
-                  fine_print: "<p>This is a seller-level refund policy</p>",
+                  fine_print: nil,
                   updated_at: seller.refund_policy.updated_at.to_date
                 }
               )
@@ -259,7 +259,7 @@ describe ProductPresenter::ProductProps do
                 expect(presenter.props(seller_custom_domain_url: nil, request:, pundit_user:)[:product][:refund_policy]).to eq(
                   {
                     title: product_refund_policy.title,
-                    fine_print: "<p>This is a product-level refund policy</p>",
+                    fine_print: nil,
                     updated_at: product_refund_policy.updated_at.to_date
                   }
                 )
