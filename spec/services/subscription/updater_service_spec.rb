@@ -3715,6 +3715,25 @@ describe Subscription::UpdaterService, :vcr do
       ).to be(true)
     end
 
+    it "does not log buyer contact data when prices do not match", vcr: false do
+      service.params.merge!(
+        contact_info: { email: "buyer@example.com", full_name: "Buyer Name" },
+        perceived_price_cents: 20_00,
+        perceived_upgrade_price_cents: 20_00
+      )
+      allow(service).to receive(:new_price_cents).and_return(10_00)
+      allow(service).to receive(:amount_owed).and_return(10_00)
+      test_logger = double
+      allow(service).to receive(:logger).and_return(test_logger)
+      expect(test_logger).to receive(:info).with(
+        "SubscriptionUpdater: Error updating subscription - perceived prices do not match: id: #{subscription.external_id} ; new_price_cents: 1000 ; amount_owed: 1000"
+      )
+
+      expect do
+        service.send(:validate_perceived_prices_match)
+      end.to raise_error(Subscription::UpdateFailed, "The price just changed! Refresh the page for the updated price.")
+    end
+
     it "requires reauthorization when saved-card billing details change the renewal terms" do
       previous_terms = { amount: 10_00, currency: Currency::USD, interval: "month", interval_count: 1 }
       current_terms = previous_terms.merge(amount: 10_75)

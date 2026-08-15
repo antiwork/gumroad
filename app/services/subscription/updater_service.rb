@@ -111,7 +111,7 @@ class Subscription::UpdaterService
           # (a) Get chargeable. Return if error
           error_message = get_chargeable
           if error_message.present?
-            logger.info("SubscriptionUpdater: Error fetching chargeable for subscription #{subscription.external_id}: #{error_message} ; params: #{params}")
+            logger.info("SubscriptionUpdater: Error fetching chargeable for subscription #{subscription.external_id}: #{error_message}")
             raise Subscription::UpdateFailed, error_message
           end
 
@@ -119,7 +119,7 @@ class Subscription::UpdaterService
           replacement_card = CreditCard.create(chargeable, card_data_handling_mode, logged_in_user)
 
           unless replacement_card.errors.empty?
-            logger.info("SubscriptionUpdater: Error creating new credit card for subscription #{subscription.external_id}: #{replacement_card.errors.full_messages} ; params: #{params}")
+            logger.info("SubscriptionUpdater: Error creating new credit card for subscription #{subscription.external_id}: #{replacement_card.errors.full_messages}")
             raise Subscription::UpdateFailed, replacement_card.errors.messages[:base].first
           end
 
@@ -242,7 +242,7 @@ class Subscription::UpdaterService
         end
       end
     rescue ActiveRecord::RecordInvalid, Subscription::UpdateFailed => e
-      logger.info("SubscriptionUpdater: Error updating subscription #{subscription.external_id}: #{e.message} ; params: #{params}")
+      logger.info("SubscriptionUpdater: Error updating subscription #{subscription.external_id}: #{e.message}")
       result = { success: false, error_message: e.message }
     end
 
@@ -266,7 +266,7 @@ class Subscription::UpdaterService
 
     def validate_perceived_prices_match
       unless new_price_cents == params[:perceived_price_cents] && amount_owed == params[:perceived_upgrade_price_cents]
-        logger.info("SubscriptionUpdater: Error updating subscription - perceived prices do not match: id: #{subscription.external_id} ; new_price_cents: #{new_price_cents} ; amount_owed: #{amount_owed} ; params: #{params}")
+        logger.info("SubscriptionUpdater: Error updating subscription - perceived prices do not match: id: #{subscription.external_id} ; new_price_cents: #{new_price_cents} ; amount_owed: #{amount_owed}")
         raise Subscription::UpdateFailed, "The price just changed! Refresh the page for the updated price."
       end
     end
@@ -303,7 +303,7 @@ class Subscription::UpdaterService
 
       # return error message if necessary
       if card_data_handling_error.present?
-        logger.info("SubscriptionUpdater: Error building chargeable for subscription #{subscription.external_id}: #{card_data_handling_error.error_message} #{card_data_handling_error.card_error_code} ; params: #{params}")
+        logger.info("SubscriptionUpdater: Error building chargeable for subscription #{subscription.external_id}: #{card_data_handling_error.error_message} #{card_data_handling_error.card_error_code}")
         Rails.logger.error("Card data handling error at update stored card: " \
                            "#{card_data_handling_error.error_message} #{card_data_handling_error.card_error_code}")
         card_data_handling_error.is_card_error? ? PurchaseErrorCode.customer_error_message(card_data_handling_error.error_message) : "There is a temporary problem, please try again (your card was not charged)."
@@ -515,7 +515,7 @@ class Subscription::UpdaterService
           }
         }
       else
-        logger.info("SubscriptionUpdater: Error charging user for subscription #{subscription.external_id}: #{error_message} ; params: #{params}")
+        logger.info("SubscriptionUpdater: Error charging user for subscription #{subscription.external_id}: #{error_message}")
         raise Subscription::UpdateFailed, error_message
       end
     end
