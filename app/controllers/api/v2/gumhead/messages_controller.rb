@@ -342,14 +342,6 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       [requested, MAX_BUFFERED_OUTPUT_TOKENS, elapsed * TIMEOUT_OUTPUT_TOKENS_PER_SECOND].min
     end
 
-    # What actually goes upstream on a metered buffered call. Anthropic
-    # keeps generating (and billing) up to max_tokens after this side gives
-    # up at BUFFERED_TIMEOUT, so a ceiling the timeout window can never
-    # reach would let every timed-out call spend more than the ledger
-    # records — repeatable, and invisible to the daily caps. Clamping the
-    # forwarded ceiling makes the upstream generation itself stop where the
-    # charge stops. count_tokens (meter: false) has nothing to clamp and
-    # forwards verbatim.
     def buffered_upstream_body(meter:)
       return @raw_body unless meter
 
