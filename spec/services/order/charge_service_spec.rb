@@ -1417,7 +1417,7 @@ describe Order::ChargeService, :vcr do
       Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_2)
     end
 
-    it "registers every recurring line on a mixed-cart PaymentIntent" do
+    it "keeps scoped mandate enforcement off for a mixed cart" do
       Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
       merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
         create(
@@ -1490,7 +1490,7 @@ describe Order::ChargeService, :vcr do
       Order::ChargeService.new(order:, params:).perform
 
       purchases = order.reload.purchases.order(:id).to_a
-      expect(purchases).to all(be_is_indian_card_mandate_registration)
+      expect(purchases).to all(satisfy { !_1.is_indian_card_mandate_registration? })
       mandate = mandate_options.dig(:payment_method_options, :card, :mandate_options)
       expect(mandate[:amount]).to eq(purchases.map(&:mandate_maximum_amount_cents).max)
       expect(mandate[:interval]).to eq("sporadic")
@@ -2597,28 +2597,6 @@ describe Order::ChargeService, :vcr do
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:interval_count]).to eq(6)
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(5_00)
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount_type]).to eq("maximum")
-    end
-
-    it "uses shared mandate options when one recurring purchase is in a multi-buy" do
-      order = create(:order)
-      recurring_purchase = create(
-        :purchase_in_progress,
-        link: membership_product,
-        is_original_subscription_purchase: true,
-        is_multi_buy: true,
-        total_transaction_cents: 10_00,
-        card_country: Compliance::Countries::IND.alpha2,
-        charge_processor_id: StripeChargeProcessor.charge_processor_id
-      )
-      order.purchases << recurring_purchase
-      order.purchases << create(:purchase_in_progress, link: create(:product, user: seller))
-
-      mandate_options = described_class.new(order:, params: nil)
-                                      .mandate_options_for_stripe(purchases: [recurring_purchase])
-      mandate = mandate_options.dig(:payment_method_options, :card, :mandate_options)
-
-      expect(mandate[:amount]).to eq(10_00)
-      expect(mandate[:interval]).to eq("sporadic")
     end
 
     it "returns mandate options with sporadic interval and amount as the largest single renewal the mandate can be asked to authorize" do

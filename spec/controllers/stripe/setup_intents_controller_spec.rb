@@ -54,6 +54,30 @@ describe Stripe::SetupIntentsController, :vcr do
     context "when card params are valid" do
       let(:card_with_sca) { StripePaymentMethodHelper.success_indian_card_mandate }
 
+      it "skips SetupIntent creation for a new flagged registration", vcr: false do
+        product = create(:subscription_product)
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, product.user)
+        chargeable = double(prepare!: nil, reusable_token_for!: "cus_test")
+        allow(CardParamsHelper).to receive(:check_for_errors).and_return(nil)
+        allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable)
+        expect(ChargeProcessor).not_to receive(:setup_future_charges!)
+
+        post :create, params: {
+          mandate_reliability_setup: true,
+          products: [{ price: product.price_cents, permalink: product.unique_permalink, force_new_subscription: true }]
+        }
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to include(
+          "success" => true,
+          "reusable_token" => "cus_test",
+          "setup_intent_skipped" => true
+        )
+        expect(response.parsed_body).not_to have_key("setup_intent_id")
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, product.user) if product
+      end
+
       it "creates a Stripe customer and sets up future usage" do
         expect(Stripe::Customer).to receive(:create).with(hash_including(payment_method: card_with_sca.to_stripejs_payment_method_id)).and_call_original
         expect(ChargeProcessor).to receive(:setup_future_charges!).with(anything, anything, mandate_options: {

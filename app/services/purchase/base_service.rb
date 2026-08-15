@@ -106,7 +106,7 @@ class Purchase::BaseService
 
       subscription = purchase.subscription
       if subscription&.is_resubscription_pending_confirmation?
-        subscription.unsubscribe_and_fail!
+        subscription.unsubscribe_and_fail!(preserve_access_for_mandate_failure: false)
         subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
       elsif purchase.is_upgrade_purchase?
         new_original_purchase = subscription.original_purchase

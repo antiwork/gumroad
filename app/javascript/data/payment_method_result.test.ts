@@ -157,7 +157,9 @@ describe("getReusablePaymentMethodResult", () => {
 
     const paymentMethod = selectedPaymentMethod();
 
-    await expect(getReusablePaymentMethodResult(paymentMethod, { products: [product] })).resolves.toEqual({
+    await expect(
+      getReusablePaymentMethodResult(paymentMethod, { products: [product], mandateReliabilitySetup: true }),
+    ).resolves.toEqual({
       type: "new",
       cardParamsResult: {
         type: "cc",
@@ -184,6 +186,7 @@ describe("getReusablePaymentMethodResult", () => {
       cardParams,
       email: "buyer@example.com",
       billingInfo: null,
+      mandateReliabilitySetup: true,
     });
     expect(confirmCardIfNeeded).toHaveBeenCalledWith({ cardParams: reusableCardParams, requiresCardSetup: false });
   });

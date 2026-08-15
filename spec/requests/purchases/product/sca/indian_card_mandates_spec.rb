@@ -46,6 +46,26 @@ describe("Successful purchases from a product page with SCA and mandate creation
     expect(stripe_charge.payment_method_details.card.mandate).to be_present
   end
 
+  it "uses the first PaymentIntent for a flagged membership registration" do
+    Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, creator)
+    visit membership_product.long_url
+    add_to_cart(membership_product, option: "Second Tier")
+
+    check_out(membership_product, credit_card: { number: "4000003560000123" }, sca: true)
+
+    purchase = Purchase.last
+    expect(purchase).to be_successful
+    expect(purchase).to be_is_indian_card_mandate_registration
+    expect(purchase.processor_setup_intent_id).to be_nil
+    expect(purchase.credit_card.stripe_setup_intent_id).to be_nil
+
+    stripe_payment_intent = Stripe::PaymentIntent.retrieve(purchase.credit_card.stripe_payment_intent_id)
+    stripe_charge = Stripe::Charge.retrieve(stripe_payment_intent.latest_charge)
+    expect(stripe_charge.payment_method_details.card.mandate).to be_present
+  ensure
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, creator)
+  end
+
   it "allows making a membership purchase and creates a mandate for future off-session charges with a card that cancels the mandate" do
     visit membership_product.long_url
     add_to_cart(membership_product, option: "Second Tier")

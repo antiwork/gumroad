@@ -3905,6 +3905,8 @@ class Purchase < ApplicationRecord
 
   def india_card_mandate_reliability_enabled?
     Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) &&
+      !is_multi_buy? &&
+      !order&.purchases&.many? &&
       !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
   end
 

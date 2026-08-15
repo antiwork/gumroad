@@ -555,6 +555,8 @@ class Subscription < ApplicationRecord
   def india_card_mandate_reliability_enabled?
     merchant_account = renewal_merchant_account
     Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) &&
+      !original_purchase&.is_multi_buy? &&
+      !original_purchase&.order&.purchases&.many? &&
       merchant_account.present? && !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
   end
 
@@ -641,7 +643,8 @@ class Subscription < ApplicationRecord
 
   def indian_card_renewal_presentment_supported?(currency)
     merchant_account = renewal_merchant_account
-    StripeChargeProcessor.charge_minor_units_compatible?(currency) &&
+    StripeChargeProcessor.indian_card_mandate_currency_supported?(currency) &&
+      StripeChargeProcessor.charge_minor_units_compatible?(currency) &&
       Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account) &&
       Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(
         merchant_account,
@@ -740,8 +743,8 @@ class Subscription < ApplicationRecord
     Feature.active?(:membership_renewal_reminders, seller)
   end
 
-  def unsubscribe_and_fail!
-    if india_card_mandate_reliability_enabled? && !renewal_disabled_due_to_indian_card_mandate?
+  def unsubscribe_and_fail!(preserve_access_for_mandate_failure: true)
+    if preserve_access_for_mandate_failure && india_card_mandate_reliability_enabled? && !renewal_disabled_due_to_indian_card_mandate?
       card_id = credit_card_to_charge&.id
       current_period_started_at = end_time_of_last_paid_period || created_at
       mandate_failure = if card_id.present?
@@ -762,7 +765,9 @@ class Subscription < ApplicationRecord
 
     with_lock do
       return if failed_at.present?
-      return if india_card_mandate_reliability_enabled? && renewal_disabled_due_to_indian_card_mandate?
+      if preserve_access_for_mandate_failure && india_card_mandate_reliability_enabled?
+        return if renewal_disabled_due_to_indian_card_mandate?
+      end
 
       was_recently_failed = purchases.failed.where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago).exists?
 

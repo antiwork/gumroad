@@ -20,6 +20,11 @@ class Stripe::SetupIntentsController < ApplicationController
     chargeable.prepare!
     reusable_token = chargeable.reusable_token_for!(StripeChargeProcessor.charge_processor_id, logged_in_user)
 
+    if skip_setup_intent_for_new_registration?(subscription)
+      render json: { success: true, reusable_token:, setup_intent_skipped: true }
+      return
+    end
+
     mandate_options = mandate_options_for_stripe(chargeable, subscription:)
 
     setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
@@ -161,6 +166,21 @@ class Stripe::SetupIntentsController < ApplicationController
         product.native_type == Link::NATIVE_TYPE_COMMISSION ||
         product.installment_plan.present?
       )
+    end
+
+    def skip_setup_intent_for_new_registration?(subscription)
+      return false if subscription.present?
+      return false unless ActiveModel::Type::Boolean.new.cast(params[:mandate_reliability_setup])
+      return false unless product_params_list.one?
+
+      product = Link.find_by(unique_permalink: product_params["permalink"])
+      return false unless product&.is_recurring_billing?
+
+      seller = product.user
+      account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+      Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) &&
+        !StripeIntentChargeRouting.direct_charge_account?(account)
     end
 
     def product_params

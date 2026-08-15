@@ -111,6 +111,7 @@ export type CheckoutPaymentConfig =
       fallback_reason: string;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      india_card_mandate_reliability?: boolean;
       payment_element_wallets: boolean;
       flat_payment_methods: boolean;
       elements_options: null;
@@ -120,6 +121,7 @@ export type CheckoutPaymentConfig =
       fallback_reason: null;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      india_card_mandate_reliability?: boolean;
       payment_element_wallets: boolean;
       flat_payment_methods: boolean;
       elements_options: PaymentElementConfig;
@@ -130,6 +132,7 @@ export type CheckoutPaymentConfig =
       recurring_upi_registration: boolean;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      india_card_mandate_reliability?: boolean;
       payment_element_wallets: boolean;
       flat_payment_methods: boolean;
       elements_options: PaymentElementClientConfirmConfig;
@@ -401,7 +404,11 @@ export function requiresPaymentElementReusablePaymentMethod(state: State) {
 }
 
 export function requiresReusablePaymentMethodForCardCollection(state: State, useStripePaymentElement: boolean) {
-  if (!useStripePaymentElement) return requiresPaymentElementReusablePaymentMethod(state);
+  if (!useStripePaymentElement) {
+    return state.checkoutPayment.india_card_mandate_reliability
+      ? requiresPaymentElementReusablePaymentMethod(state)
+      : requiresReusablePaymentMethod(state);
+  }
   if (
     state.checkoutPayment.integration === "payment_element" &&
     state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT

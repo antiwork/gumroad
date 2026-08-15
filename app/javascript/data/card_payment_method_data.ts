@@ -377,6 +377,7 @@ type PrepareFutureChargesRequest<CardParams extends CardPaymentMethodParams | Pa
   cardParams: CardParams;
   email?: string | null;
   billingInfo?: FutureChargesBillingInfo | null;
+  mandateReliabilitySetup?: boolean;
 };
 export type FutureChargesBillingInfo = {
   country: string | null;
@@ -413,6 +414,9 @@ export const prepareFutureCharges = async <
       ...setupIntentCardParams,
       email: data.email ?? null,
       billing_info: data.billingInfo ?? null,
+      ...(data.mandateReliabilitySetup === undefined
+        ? {}
+        : { mandate_reliability_setup: data.mandateReliabilitySetup }),
       products: data.products.map((product) => ({
         price: product.price,
         subscription_id: product.subscription_id,
@@ -428,7 +432,7 @@ export const prepareFutureCharges = async <
       cardParams: {
         ...data.cardParams,
         stripe_customer_id: responseData.reusable_token,
-        stripe_setup_intent_id: responseData.setup_intent_id,
+        ...("setup_intent_id" in responseData ? { stripe_setup_intent_id: responseData.setup_intent_id } : {}),
         status: "success",
         reusable: true,
       },
@@ -450,5 +454,6 @@ export const prepareFutureCharges = async <
 };
 type CreateSetupIntentSuccessResponse =
   | { success: true; reusable_token: string; setup_intent_id: string; requires_card_setup: true; client_secret: string }
-  | { success: true; reusable_token: string; setup_intent_id: string };
+  | { success: true; reusable_token: string; setup_intent_id: string }
+  | { success: true; reusable_token: string; setup_intent_skipped: true };
 type CreateSetupIntentErrorResponse = { success: false; error_message: string; error_code?: string };

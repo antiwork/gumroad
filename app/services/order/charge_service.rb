@@ -15,7 +15,7 @@ class Order::ChargeService
   def perform
     # We need to make off session charges if there are products from more than one seller
     # In such case we create a reusable payment method before initiating the order from front-end
-    off_session = order.purchases.non_free.pluck(:seller_id).uniq.count > 1
+    off_session = order.purchases.non_free.pluck(:seller_id).uniq.count > 1 || params[:stripe_setup_intent_id].present?
 
     # All remaining purchases need to be charged that are still in progress
     # Create a combined charge for all purchases belonging to the same seller
@@ -294,6 +294,12 @@ class Order::ChargeService
       seller = User.find(purchases.first.seller_id)
       statement_description = seller.name_or_username
       mandate_options = mandate_options_for_stripe(purchases: mandate_purchases) if mandate_purchases.present?
+      if params[:stripe_setup_intent_id].present?
+        mandate_purchases.each do |purchase|
+          purchase.mark_indian_card_mandate_registration!
+          purchase.update!(processor_setup_intent_id: params[:stripe_setup_intent_id]) if purchase.is_indian_card_mandate_registration?
+        end
+      end
       if setup_future_charges && mandate_options.present? && chargeable&.requires_mandate?
         mandate_purchases.each(&:mark_indian_card_mandate_registration!)
       end
@@ -316,7 +322,11 @@ class Order::ChargeService
       self.charge_intent = charge.charge_intent
       # charge_intent is nil when the processor call was rescued (e.g. a quote/settlement
       # mismatch) — Charge::CreateService returns the charge with no intent attached in that case.
-      charge.credit_card.update!(json_data: { stripe_payment_intent_id: charge_intent.id }) if charge_intent.present? && charge.credit_card&.requires_mandate?
+      if charge_intent.present? && charge.credit_card&.requires_mandate?
+        charge.credit_card.update!(
+          json_data: charge.credit_card.json_data.to_h.merge("stripe_payment_intent_id" => charge_intent.id)
+        )
+      end
 
       if charge_intent&.succeeded?
         charge_waiting_for_flow_of_funds = charge_intent_waiting_for_flow_of_funds?(charge)
@@ -488,9 +498,7 @@ class Order::ChargeService
   # decline. Single-purchase carts already get this headroom from
   # Purchase#mandate_options_for_stripe; this gives multi-item carts the same treatment.
   def mandate_options_for_stripe(purchases:, with_currency: false)
-    if purchases.one? && !purchases.first.is_multi_buy?
-      return purchases.first.mandate_options_for_stripe(with_currency:)
-    end
+    return purchases.first.mandate_options_for_stripe(with_currency:) if purchases.one?
 
     mandate_amount = purchases.map(&:mandate_maximum_amount_cents).max
 

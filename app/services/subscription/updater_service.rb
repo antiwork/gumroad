@@ -122,7 +122,11 @@ class Subscription::UpdaterService
             raise Subscription::UpdateFailed, replacement_card.errors.messages[:base].first
           end
 
-          unless indian_card_mandate_validation_required?(replacement_card)
+          if indian_card_mandate_validation_required?(replacement_card)
+            # A plan update builds its replacement purchase before mandate validation. Keep the
+            # new card available for that build, but persist it only after validation succeeds.
+            subscription.credit_card = replacement_card
+          else
             associate_replacement_card!(replacement_card, had_saved_card:, **validate_indian_card_mandate!(replacement_card))
             replacement_card = nil
           end
@@ -502,7 +506,7 @@ class Subscription::UpdaterService
         authenticated_offer_code_buyer: logged_in_user,
       )
 
-      subscription.unsubscribe_and_fail! if is_resubscribing && !(upgrade_purchase.successful? ||
+      subscription.unsubscribe_and_fail!(preserve_access_for_mandate_failure: false) if is_resubscribing && !(upgrade_purchase.successful? ||
           (upgrade_purchase.in_progress? && upgrade_purchase.charge_intent&.requires_action?))
       error_message = upgrade_purchase.errors.full_messages.first || upgrade_purchase.error_code
 

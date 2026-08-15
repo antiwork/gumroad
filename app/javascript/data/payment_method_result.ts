@@ -236,7 +236,11 @@ export async function getPaymentMethodResult(
 }
 
 // FIXME: see above
-type ReusableOptions = { products: Product[]; billingInfo?: FutureChargesBillingInfo | null };
+type ReusableOptions = {
+  products: Product[];
+  billingInfo?: FutureChargesBillingInfo | null;
+  mandateReliabilitySetup?: boolean;
+};
 export async function getReusablePaymentMethodResult(
   selected: SavedSelectedPaymentMethod,
   options: ReusableOptions,
@@ -257,7 +261,7 @@ export async function getReusablePaymentMethodResult(
 
 export async function getReusablePaymentMethodResult(
   selected: SelectedPaymentMethod,
-  { products, billingInfo }: ReusableOptions,
+  { products, billingInfo, mandateReliabilitySetup }: ReusableOptions,
 ): Promise<SavedPaymentMethodResult | PayPalPaymentMethodResult | ReusableNewCardPaymentMethodResult> {
   const data = await getPaymentMethodResult(selected);
 
@@ -284,6 +288,7 @@ export async function getReusablePaymentMethodResult(
         cardParams: data.cardParamsResult.cardParams,
         email: "email" in selected ? selected.email : null,
         billingInfo: paymentMethodBillingInfo ?? null,
+        ...(mandateReliabilitySetup === undefined ? {} : { mandateReliabilitySetup }),
       }).then(confirmCardIfNeeded);
       if (cardParams.status === "success") {
         return {
@@ -317,13 +322,20 @@ export const getReusablePaymentRequestPaymentMethodResult = async (
     products,
     email,
     billingInfo = null,
-  }: { products: Product[]; email: string | null; billingInfo?: FutureChargesBillingInfo | null },
+    mandateReliabilitySetup,
+  }: {
+    products: Product[];
+    email: string | null;
+    billingInfo?: FutureChargesBillingInfo | null;
+    mandateReliabilitySetup?: boolean;
+  },
 ): Promise<ReusablePaymentRequestPaymentMethodResult> => {
   const cardParams = await prepareFutureCharges({
     products,
     cardParams: paymentRequestParams,
     email,
     billingInfo,
+    ...(mandateReliabilitySetup === undefined ? {} : { mandateReliabilitySetup }),
   }).then(confirmCardIfNeeded);
 
   if (cardParams.status === "success") {

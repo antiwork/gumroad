@@ -24,6 +24,7 @@ class StripeChargeProcessor
 
   MANDATE_PREFIX = "Mandate-"
   INDIA_CARD_MANDATE_RELIABILITY_FEATURE = :india_card_mandate_reliability
+  INDIA_CARD_MANDATE_CURRENCIES = %w[inr usd eur gbp sgd cad chf sek aed jpy nok myr hkd].freeze
   UPI_PAYMENT_METHOD_UPDATE_MESSAGE = "Your saved UPI payment method can no longer be used. Please update your payment method to continue your membership."
   # Stripe does not echo UPI mandate_options, so finalization validates this server-authored copy.
   UPI_RECURRING_MAX_AMOUNT_METADATA_KEY = "gumroad_upi_max_amount_cents"
@@ -73,6 +74,10 @@ class StripeChargeProcessor
     else
       ["sporadic", 1]
     end
+  end
+
+  def self.indian_card_mandate_currency_supported?(currency)
+    INDIA_CARD_MANDATE_CURRENCIES.include?(currency.to_s.downcase)
   end
 
   # Gumroad stores some currencies in non-ISO minor units (e.g. KRW is stored as 1/100 won —
@@ -341,18 +346,22 @@ class StripeChargeProcessor
     params[:fx_quote] = stripe_fx_quote_id if stripe_fx_quote_id.present?
     params.merge!(confirm: true) if off_session
 
-    params.merge!(mandate_options) if mandate_options.present? && !upi_autopay
-
-    params.merge!(chargeable.stripe_charge_params)
-
     # Off-session recurring charges on Indian cards use e-mandates:
     # https://stripe.com/docs/india-recurring-payments?integration=paymentIntents-setupIntents
-    if off_session && chargeable.requires_mandate? && !upi_autopay
-      mandate = if chargeable.respond_to?(:validated_stripe_mandate_id) && chargeable.validated_stripe_mandate_id.present?
+    mandate = if off_session && chargeable.requires_mandate? && !upi_autopay
+      if chargeable.respond_to?(:validated_stripe_mandate_id) && chargeable.validated_stripe_mandate_id.present?
         chargeable.validated_stripe_mandate_id
       else
         get_mandate_id_from_chargeable(chargeable, merchant_account)
       end
+    end
+
+    # Stripe does not update a mandate. Use the mandate from a completed SetupIntent instead
+    # of asking the PaymentIntent to create different terms.
+    params.merge!(mandate_options) if mandate_options.present? && !upi_autopay && mandate.blank?
+    params.merge!(chargeable.stripe_charge_params)
+
+    if off_session && chargeable.requires_mandate? && !upi_autopay
       if mandate.present?
         params.merge!(mandate:)
       elsif mandate_expected
