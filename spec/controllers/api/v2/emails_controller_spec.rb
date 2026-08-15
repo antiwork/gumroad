@@ -744,6 +744,18 @@ describe Api::V2::EmailsController do
         }.as_json)
       end
 
+      it "returns an error for a profile-only post that is already published" do
+        @installment.update!(published_at: Time.current)
+
+        post @action, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The email has already been sent."
+        }.as_json)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+      end
+
       it "reschedules an already-scheduled email to a new time" do
         scheduled = create(
           :scheduled_installment,
