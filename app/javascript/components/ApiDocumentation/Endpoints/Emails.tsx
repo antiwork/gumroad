@@ -295,7 +295,7 @@ export const ScheduleEmail = () => (
     <ApiParameters>
       <ApiParameter
         name="to_be_published_at"
-        description={"Schedule date and time in the seller's timezone (e.g. 2026-07-01 14:00)"}
+        description="Schedule date and time in the seller's timezone (e.g. 2026-07-01 14:00)"
       />
     </ApiParameters>
     <EmailResponseFields />
