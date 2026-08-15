@@ -347,6 +347,40 @@ describe "Indian card mandate reliability" do
     end
   end
 
+  it "uses a shared charge PaymentIntent bound to the subscription purchase" do
+    registration = create_registration
+    registration.update_columns(stripe_transaction_id: nil)
+    registration.mark_indian_card_mandate_registration!
+    charge = create(
+      :charge,
+      order: create(:order),
+      seller:,
+      merchant_account:,
+      stripe_payment_intent_id: "pi_mixed_cart_mandate"
+    )
+    charge.purchases << registration
+    processor_charge = instance_double(StripeCharge, card_mandate: "mandate_mixed_cart")
+    charge_intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      payment_method_id: card.processor_payment_method_id,
+      charge: processor_charge
+    )
+    mandate = Stripe::Mandate.construct_from(
+      id: "mandate_mixed_cart",
+      status: "active",
+      payment_method: card.processor_payment_method_id
+    )
+    allow(ChargeProcessor).to receive(:get_charge_intent)
+      .with(merchant_account, "pi_mixed_cart_mandate")
+      .and_return(charge_intent)
+    allow(ChargeProcessor).to receive(:get_mandate)
+      .with(merchant_account, "mandate_mixed_cart")
+      .and_return(mandate)
+
+    expect(registration.subscription.indian_card_mandate_for(card.id)).to eq([mandate, "active", registration])
+  end
+
   it "uses the mandate stored for a replacement card" do
     registration = create_registration
     subscription = registration.subscription
@@ -606,6 +640,24 @@ describe "Indian card mandate reliability" do
     expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
     expect(subscription).to be_indian_card_mandate_requires_reauthorization
     expect(subscription.stripe_mandate_id).to be_nil
+  end
+
+  it "restores the prior mandate after a changed-plan payment fails" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update!(stripe_mandate_id: "mandate_prior_plan")
+
+    subscription.require_indian_card_mandate_reauthorization!
+
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to eq("mandate_prior_plan")
+
+    subscription.restore_indian_card_mandate_after_failed_reauthorization!
+
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to eq("mandate_prior_plan")
   end
 
   it "clears plan reauthorization after a confirmed charge registers matching terms" do

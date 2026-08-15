@@ -3820,6 +3820,13 @@ class Purchase < ApplicationRecord
       processor_charge = ChargeProcessor.get_charge(charge_processor_id, stripe_transaction_id, merchant_account:)
       source_payment_method_id = processor_charge.card_instance_id
       processor_charge.card_mandate
+    elsif processor_payment_intent_id.present? || charge&.stripe_payment_intent_id.present?
+      payment_intent_id = processor_payment_intent_id || charge.stripe_payment_intent_id
+      charge_intent = ChargeProcessor.get_charge_intent(merchant_account, payment_intent_id)
+      raise "Indian card mandate check found an incomplete PaymentIntent" unless charge_intent&.succeeded?
+
+      source_payment_method_id = charge_intent.payment_method_id
+      charge_intent.charge.card_mandate
     end
 
     mandate = ChargeProcessor.get_mandate(merchant_account, mandate_id) if mandate_id.present?

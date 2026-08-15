@@ -205,12 +205,12 @@ class Subscription::UpdaterService
             mandate_billing_info_changed:,
             discount_changed:
           )
+        # Restart subscription if necessary
+        subscription.resubscribe! if is_resubscribing
+
         if saved_card_mandate_terms_changed && !should_charge_user?
           subscription.require_indian_card_mandate_reauthorization!
         end
-
-        # Restart subscription if necessary
-        subscription.resubscribe! if is_resubscribing
 
         if (same_plan_and_price? || subscription.in_free_trial?) && !overdue_for_charge
           send_subscription_updated_api_notification if apply_plan_change_immediately?

@@ -1417,6 +1417,88 @@ describe Order::ChargeService, :vcr do
       Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_2)
     end
 
+    it "registers every recurring line on a mixed-cart PaymentIntent" do
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
+      merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(
+          :merchant_account,
+          user: nil,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          charge_processor_merchant_id: nil
+        )
+      paid_membership = create(:membership_product, user: seller_1, price_cents: 10_00)
+      free_trial_membership = create(
+        :membership_product,
+        :with_free_trial_enabled,
+        user: seller_1,
+        price_cents: 20_00
+      )
+      saved_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_mixed_cart_indian_card",
+        processor_payment_method_id: "pm_mixed_cart_indian_card",
+        stripe_fingerprint: "mixed_cart_indian_card_fingerprint",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        card_country: Compliance::Countries::IND.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030
+      )
+      buyer = create(:user, credit_card: saved_card)
+      params = {
+        line_items: [
+          {
+            uid: "paid-membership",
+            permalink: paid_membership.unique_permalink,
+            perceived_price_cents: 10_00,
+            quantity: 1
+          },
+          {
+            uid: "free-trial-membership",
+            permalink: free_trial_membership.unique_permalink,
+            perceived_price_cents: 20_00,
+            is_free_trial_purchase: true,
+            perceived_free_trial_duration: {
+              amount: free_trial_membership.free_trial_duration_amount,
+              unit: free_trial_membership.free_trial_duration_unit
+            },
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment)
+      order, = Order::CreateService.new(params:, buyer:).perform
+      charge_intent = instance_double(
+        StripeChargeIntent,
+        id: "pi_mixed_recurring_cart",
+        client_secret: "pi_mixed_recurring_cart_secret",
+        succeeded?: false,
+        requires_action?: true
+      )
+      mandate_options = nil
+      allow(Charge::CreateService).to receive(:new) do |**args|
+        mandate_options = args[:mandate_options]
+        service = instance_double(Charge::CreateService)
+        allow(service).to receive(:perform) do
+          charge = order.charges.where(seller: seller_1).last
+          charge.update!(credit_card: saved_card, merchant_account:, stripe_payment_intent_id: charge_intent.id)
+          charge.charge_intent = charge_intent
+          charge
+        end
+        service
+      end
+
+      Order::ChargeService.new(order:, params:).perform
+
+      purchases = order.reload.purchases.order(:id).to_a
+      expect(purchases).to all(be_is_indian_card_mandate_registration)
+      mandate = mandate_options.dig(:payment_method_options, :card, :mandate_options)
+      expect(mandate[:amount]).to eq(purchases.map(&:mandate_maximum_amount_cents).max)
+      expect(mandate[:interval]).to eq("sporadic")
+      expect(order.charges.sole.merchant_account).to eq(merchant_account)
+    ensure
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
+    end
+
     it "does not read a missing payment intent when a mandate card's processor outcome is already handled" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)

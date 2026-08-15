@@ -493,7 +493,6 @@ class Subscription < ApplicationRecord
       return unless alive?(include_pending_cancellation: false)
 
       notify_buyer = !renewal_disabled_due_to_indian_card_mandate?
-      self.stripe_mandate_id = nil
       self.renewal_disabled_due_to_indian_card_mandate = true
       self.indian_card_mandate_requires_reauthorization = true
       save!
@@ -503,6 +502,19 @@ class Subscription < ApplicationRecord
       after_commit do
         CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id).deliver_later(queue: "low")
       end
+    end
+  end
+
+  def restore_indian_card_mandate_after_failed_reauthorization!
+    return unless india_card_mandate_reliability_enabled?
+
+    save! if changed?
+    with_lock do
+      return unless indian_card_mandate_requires_reauthorization?
+
+      self.renewal_disabled_due_to_indian_card_mandate = false
+      self.indian_card_mandate_requires_reauthorization = false
+      save!
     end
   end
 
@@ -609,11 +621,13 @@ class Subscription < ApplicationRecord
   end
 
   def indian_card_mandate_source_purchase(card_id)
-    scope = purchases.where(credit_card_id: card_id, purchase_state: Purchase::NON_GIFT_SUCCESS_STATES)
-                     .where.not(stripe_transaction_id: nil)
-                     .or(
-                       purchases.where(credit_card_id: card_id, purchase_state: Purchase::NON_GIFT_SUCCESS_STATES)
-                                .where.not(processor_setup_intent_id: nil)
+    scope = purchases.left_joins(:processor_payment_intent, :charge)
+                     .where(credit_card_id: card_id, purchase_state: Purchase::NON_GIFT_SUCCESS_STATES)
+                     .where(
+                       "purchases.stripe_transaction_id IS NOT NULL OR " \
+                       "purchases.processor_setup_intent_id IS NOT NULL OR " \
+                       "processor_payment_intents.id IS NOT NULL OR " \
+                       "charges.stripe_payment_intent_id IS NOT NULL"
                      )
     scope.is_indian_card_mandate_registration.order(created_at: :desc).first || scope.order(created_at: :desc).first
   end

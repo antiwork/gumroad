@@ -282,6 +282,10 @@ class Order::ChargeService
       purchase.is_free_trial_purchase? || purchase.is_preorder_authorization? || purchase.is_test_purchase? ||
         !purchase.errors.empty? || !purchase.in_progress?
     end
+    mandate_purchases = purchases.select do |purchase|
+      purchase.in_progress? && purchase.errors.empty? &&
+        (purchase.is_original_subscription_purchase? || purchase.is_preorder_authorization? || purchase.is_upgrade_purchase?)
+    end
 
     if purchases_to_charge.present?
       amount_cents = purchases_to_charge.sum(&:total_transaction_cents)
@@ -289,9 +293,9 @@ class Order::ChargeService
       merchant_account = purchases.first.merchant_account
       seller = User.find(purchases.first.seller_id)
       statement_description = seller.name_or_username
-      mandate_options = mandate_options_for_stripe(purchases: purchases_to_charge)
+      mandate_options = mandate_options_for_stripe(purchases: mandate_purchases) if mandate_purchases.present?
       if setup_future_charges && mandate_options.present? && chargeable&.requires_mandate?
-        purchases_to_charge.each(&:mark_indian_card_mandate_registration!)
+        mandate_purchases.each(&:mark_indian_card_mandate_registration!)
       end
 
       charge = Charge::CreateService.new(

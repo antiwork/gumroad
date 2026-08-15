@@ -1049,7 +1049,7 @@ describe Subscription::UpdaterService, :vcr do
               expect(response).to eq(success: true)
               expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
               expect(@subscription).to be_indian_card_mandate_requires_reauthorization
-              expect(@subscription.stripe_mandate_id).to be_nil
+              expect(@subscription.stripe_mandate_id).to eq("mandate_old_terms")
             ensure
               Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
             end
@@ -3155,12 +3155,12 @@ describe Subscription::UpdaterService, :vcr do
           logged_in_user: @user,
           remote_ip: @remote_ip,
         )
-        allow(service).to receive(:charge_user!).and_return(success: true)
+        allow(service).to receive(:should_charge_user?).and_return(false)
 
-        expect(service.perform).to eq(success: true)
+        expect(service.perform).to include(success: true)
         expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
         expect(@subscription).to be_indian_card_mandate_requires_reauthorization
-        expect(@subscription.stripe_mandate_id).to be_nil
+        expect(@subscription.stripe_mandate_id).to eq("mandate_discounted_terms")
       ensure
         Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end

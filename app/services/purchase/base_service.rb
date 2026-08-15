@@ -114,6 +114,7 @@ class Purchase::BaseService
         new_original_purchase.update_flag!(:is_archived_original_subscription_purchase, true, true)
         previous_original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
         subscription.last_payment_option.update!(price: previous_original_purchase.price) if previous_original_purchase.price.present?
+        subscription.restore_indian_card_mandate_after_failed_reauthorization!
       end
     end
 
