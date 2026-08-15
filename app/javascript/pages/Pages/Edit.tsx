@@ -385,6 +385,8 @@ export default function PagesEdit() {
                   placeholder="Write your page..."
                   initialValue={page.content}
                   editable={canEdit}
+                  // Published pages are static HTML; the upsell card is a client-only node.
+                  allowUpsells={false}
                   onChange={setContent}
                 />
               </Fieldset>

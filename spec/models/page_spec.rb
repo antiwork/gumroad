@@ -238,6 +238,17 @@ describe Page do
       expect(page.content).not_to include("onclick")
     end
 
+    it "drops upsell-card nodes that the published static page cannot render" do
+      page = described_class.create!(
+        pageable: user, slug: "about", title: "About",
+        content: %(<p>Hello</p><upsell-card productid="abc"></upsell-card><p>World</p>)
+      )
+
+      expect(page.reload.content).to include("<p>Hello</p>")
+      expect(page.content).to include("<p>World</p>")
+      expect(page.content).not_to include("upsell-card")
+    end
+
     it "strips unsafe URI schemes from links while keeping safe ones" do
       page = described_class.create!(
         pageable: user, slug: "links", title: "Links",
