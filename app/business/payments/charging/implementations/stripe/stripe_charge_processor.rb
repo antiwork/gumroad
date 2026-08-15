@@ -351,7 +351,7 @@ class StripeChargeProcessor
     mandate = if off_session && chargeable.requires_mandate? && !upi_autopay
       if chargeable.respond_to?(:validated_stripe_mandate_id) && chargeable.validated_stripe_mandate_id.present?
         chargeable.validated_stripe_mandate_id
-      else
+      elsif mandate_options.blank?
         get_mandate_id_from_chargeable(chargeable, merchant_account)
       end
     end
