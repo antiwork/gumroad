@@ -71,6 +71,12 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # equal to them would let the outer layers cut the client before the
   # rescue can render its error envelope.
   BUFFERED_TIMEOUT = 90
+  # A buffered call is abandoned at BUFFERED_TIMEOUT, but Anthropic keeps
+  # generating — and billing — until max_tokens. Clamping the forwarded
+  # ceiling to what fits inside the timeout window keeps the elapsed-time
+  # timeout charge a true upper bound on upstream spend; anything larger
+  # must stream, and streams meter incrementally.
+  MAX_BUFFERED_OUTPUT_TOKENS = BUFFERED_TIMEOUT * TIMEOUT_OUTPUT_TOKENS_PER_SECOND
   # Client feature flags forward as sent: the spend boundary is the body
   # validators above, not this header, and dropping a flag the body relies
   # on fails the request. `fallback` is denied because it runs extra models
@@ -292,7 +298,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def forward_buffered(url, meter:)
       upstream = nil
       dispatched_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      upstream = HTTP.timeout(BUFFERED_TIMEOUT).headers(upstream_headers).post(url, body: @raw_body)
+      upstream = HTTP.timeout(BUFFERED_TIMEOUT).headers(upstream_headers).post(url, body: buffered_upstream_body(meter:))
       body = upstream.body.to_s
       meter_buffered_usage(body) if meter && upstream.status.success?
       copy_retry_after(upstream)
@@ -333,7 +339,24 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def timed_out_output_tokens(dispatched_at)
       elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - dispatched_at).ceil.clamp(1, BUFFERED_TIMEOUT)
       requested = @body["max_tokens"].is_a?(Integer) ? @body["max_tokens"] : MAX_TOKENS_PER_REQUEST
-      [requested, elapsed * TIMEOUT_OUTPUT_TOKENS_PER_SECOND].min
+      [requested, MAX_BUFFERED_OUTPUT_TOKENS, elapsed * TIMEOUT_OUTPUT_TOKENS_PER_SECOND].min
+    end
+
+    # What actually goes upstream on a metered buffered call. Anthropic
+    # keeps generating (and billing) up to max_tokens after this side gives
+    # up at BUFFERED_TIMEOUT, so a ceiling the timeout window can never
+    # reach would let every timed-out call spend more than the ledger
+    # records — repeatable, and invisible to the daily caps. Clamping the
+    # forwarded ceiling makes the upstream generation itself stop where the
+    # charge stops. count_tokens (meter: false) has nothing to clamp and
+    # forwards verbatim.
+    def buffered_upstream_body(meter:)
+      return @raw_body unless meter
+
+      max_tokens = @body["max_tokens"]
+      return @raw_body unless max_tokens.is_a?(Integer) && max_tokens > MAX_BUFFERED_OUTPUT_TOKENS
+
+      @body.merge("max_tokens" => MAX_BUFFERED_OUTPUT_TOKENS).to_json
     end
 
     # A synthetic charge cannot know how much of the prompt was a cache
