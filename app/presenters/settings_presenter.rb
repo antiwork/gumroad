@@ -274,13 +274,6 @@ class SettingsPresenter
   end
 
   def seller_refund_policy
-    # When a refund policy is enforced on the account (dispute rate got too high — see
-    # Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!), hide
-    # the "No refunds allowed" (0-day) option from the settings dropdown. The model
-    # validation on SellerRefundPolicy is the real guard; this keeps the UI honest.
-    allowed_periods = RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys
-    allowed_periods -= [0] if seller.refund_policy_enforced?
-
     {
       # The section always renders in Settings. When it isn't editable (account-level
       # refund policies are switched off and nothing is enforced on this account), the
@@ -288,13 +281,8 @@ class SettingsPresenter
       # the section entirely.
       editable: seller.refund_policy_settings_editable?,
       refund_policy_enforced: seller.refund_policy_enforced?,
-      allowed_refund_periods_in_days: allowed_periods.map do
-        {
-          key: _1,
-          value: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[_1]
-        }
-      end,
-      max_refund_period_in_days: seller.refund_policy.max_refund_period_in_days,
+      allowed_refund_periods_in_days: RefundPolicy.period_options,
+      max_refund_period_in_days: seller.refund_policy.effective_max_refund_period_in_days,
       fine_print: seller.refund_policy.fine_print,
       fine_print_enabled: seller.refund_policy.fine_print.present?,
     }

@@ -83,21 +83,16 @@ describe Api::V2::RefundPoliciesController do
         )
       end
 
-      it "updates the refund period to none" do
+      it "rejects the refund period none" do
         seller.refund_policy.update!(max_refund_period_in_days: 30)
 
         put :update, params: { access_token: token.token, refund_period: "none" }
 
-        expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(0)
         expect(response.parsed_body).to eq(
-          "success" => true,
-          "refund_policy" => {
-            "refund_period" => "none",
-            "title" => "No refunds allowed",
-            "fine_print" => nil,
-            "in_effect" => true,
-          }
+          "success" => false,
+          "message" => "Refund period must be one of: 7, 14, 30, 183."
         )
+        expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
       end
 
       it "rejects an invalid refund period with the allowed values" do
@@ -107,7 +102,7 @@ describe Api::V2::RefundPoliciesController do
 
         expect(response.parsed_body).to eq(
           "success" => false,
-          "message" => "Refund period must be one of: none, 7, 14, 30, 183."
+          "message" => "Refund period must be one of: 7, 14, 30, 183."
         )
         expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
       end
@@ -119,7 +114,7 @@ describe Api::V2::RefundPoliciesController do
 
         expect(response.parsed_body).to eq(
           "success" => false,
-          "message" => "Refund period must be one of: none, 7, 14, 30, 183."
+          "message" => "Refund period must be one of: 7, 14, 30, 183."
         )
         expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
       end

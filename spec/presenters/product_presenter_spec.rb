@@ -280,7 +280,7 @@ describe ProductPresenter do
     let!(:asset_previews) { create_list(:asset_preview, 2, link: product) }
     let!(:thumbnail) { create(:thumbnail, product:) }
     let!(:refund_policy) { create(:product_refund_policy, product:, seller: product.user) }
-    let!(:other_refund_policy) { create(:product_refund_policy, product: create(:product, user: product.user, name: "Other product"), max_refund_period_in_days: 0, fine_print: "This is another refund policy") }
+    let!(:other_refund_policy) { create(:product_refund_policy, product: create(:product, user: product.user, name: "Other product"), max_refund_period_in_days: 7, fine_print: "This is another refund policy") }
     let!(:variant_category) { create(:variant_category, link: product, title: "Version") }
     let!(:version1) { create(:variant, variant_category:, name: "Version 1", description: "I am version 1") }
     let!(:version2) { create(:variant, variant_category:, name: "Version 2", price_difference_cents: 100, max_purchase_count: 100) }
@@ -357,10 +357,6 @@ describe ProductPresenter do
             discover_fee_per_thousand: 300,
             refund_policy: {
               allowed_refund_periods_in_days: [
-                {
-                  key: 0,
-                  value: "No refunds allowed"
-                },
                 {
                   key: 7,
                   value: "7-day money back guarantee"
@@ -473,10 +469,10 @@ describe ProductPresenter do
           refund_policies: [
             {
               id: other_refund_policy.external_id,
-              title: "No refunds allowed",
+              title: "7-day money back guarantee",
               fine_print: "This is another refund policy",
               product_name: "Other product",
-              max_refund_period_in_days: 0,
+              max_refund_period_in_days: 7,
             }
           ],
           is_tiered_membership: false,
@@ -718,10 +714,6 @@ describe ProductPresenter do
               product_refund_policy_enabled: false,
               refund_policy: {
                 allowed_refund_periods_in_days: [
-                  {
-                    key: 0,
-                    value: "No refunds allowed"
-                  },
                   {
                     key: 7,
                     value: "7-day money back guarantee"
@@ -1027,10 +1019,6 @@ describe ProductPresenter do
               discover_fee_per_thousand: 100,
               refund_policy: {
                 allowed_refund_periods_in_days: [
-                  {
-                    key: 0,
-                    value: "No refunds allowed"
-                  },
                   {
                     key: 7,
                     value: "7-day money back guarantee"
