@@ -74,7 +74,7 @@ describe "Subscription restart at checkout", :js, type: :system do
         credit_card: { number: "4000003560000123" }
       )
       click_on "Pay", exact: true
-      within_sca_frame { click_on "Complete" }
+      within_sca_frame_if_challenged { click_on "Complete" }
 
       expect(page).to have_text("We could not verify this card for recurring payments.")
       expect(@subscription.reload).not_to be_alive
