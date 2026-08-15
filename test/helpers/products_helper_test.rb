@@ -53,6 +53,7 @@ class ProductsHelperTest < ActionView::TestCase
       with_real_s3 do
         product = create_product
         preview = create_asset_preview(link: product)
+        preview.generate_retina_variant!
 
         assert_match "https://asset.host.example.com/res/gumroad-specs/#{preview.retina_variant.key}",
                      cdn_url_for(product.preview_url)
