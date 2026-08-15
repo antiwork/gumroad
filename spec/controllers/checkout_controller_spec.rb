@@ -30,6 +30,7 @@ describe CheckoutController, type: :controller, inertia: true do
         request_apple_pay_merchant_tokens: false,
         payment_element_wallets: false,
         flat_payment_methods: false,
+        india_card_mandate_reliability: false,
         elements_options: nil,
       )
       expect(inertia.props[:checkout]).to eq({
