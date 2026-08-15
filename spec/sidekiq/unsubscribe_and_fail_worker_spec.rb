@@ -113,6 +113,47 @@ describe UnsubscribeAndFailWorker, :vcr do
     Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
   end
 
+  it "does not reuse an old mandate failure after an ordinary decline",
+     vcr: { cassette_name: "UnsubscribeAndFailWorker/calls_unsubscribe_and_fail_when_the_subscription_is_overdue_for_a_charge" } do
+    Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+    card = @subscription.credit_card_to_charge
+    card.update!(card_country: Compliance::Countries::IND.alpha2)
+    paid_through = @subscription.end_time_of_last_paid_period
+    create(
+      :purchase,
+      link: @product,
+      seller: @product.user,
+      purchaser: @subscription.user,
+      subscription: @subscription,
+      credit_card: card,
+      purchase_state: "failed",
+      error_code: PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
+      created_at: paid_through + 1.minute
+    )
+    create(
+      :purchase,
+      link: @product,
+      seller: @product.user,
+      purchaser: @subscription.user,
+      subscription: @subscription,
+      credit_card: card,
+      purchase_state: "failed",
+      error_code: PurchaseErrorCode::STRIPE_INSUFFICIENT_FUNDS,
+      created_at: paid_through + 2.minutes
+    )
+    expect_any_instance_of(Subscription).not_to receive(:refresh_indian_card_mandate!)
+    expect(RecurringChargeWorker).not_to receive(:perform_async)
+
+    travel_to paid_through + 1.hour do
+      described_class.new.perform(@subscription.id)
+    end
+
+    expect(@subscription.reload).not_to be_alive
+    expect(@subscription.failed_at).to be_present
+  ensure
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+  end
+
   it "does not call unsubscribe_and_fail when the subscription is NOT overdue for a charge" do
     travel_to @subscription.end_time_of_subscription - 1.hour do
       expect_any_instance_of(Subscription).not_to receive(:unsubscribe_and_fail!)

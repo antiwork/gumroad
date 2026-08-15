@@ -736,11 +736,12 @@ class Subscription < ApplicationRecord
       card_id = credit_card_to_charge&.id
       current_period_started_at = end_time_of_last_paid_period || created_at
       mandate_failure = if card_id.present?
-        purchases.failed
-                 .where(credit_card_id: card_id)
-                 .where("created_at >= ?", current_period_started_at)
-                 .order(created_at: :desc, id: :desc)
-                 .detect { _1.indian_card_mandate_error_status.present? }
+        latest_failure = purchases.failed
+                                  .where(credit_card_id: card_id)
+                                  .where("created_at >= ?", current_period_started_at)
+                                  .order(created_at: :desc, id: :desc)
+                                  .first
+        latest_failure if latest_failure&.indian_card_mandate_error_status.present?
       end
       if mandate_failure.present?
         begin
