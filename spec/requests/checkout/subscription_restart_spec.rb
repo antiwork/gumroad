@@ -74,9 +74,16 @@ describe "Subscription restart at checkout", :js, type: :system do
         credit_card: { number: "4000003560000123" }
       )
       click_on "Pay", exact: true
-      within_sca_frame_if_challenged { click_on "Complete" }
 
-      expect(page).to have_text("We could not verify this card for recurring payments.")
+      failure_message = "We could not verify this card for recurring payments."
+      challenge_or_failure = <<~XPATH.squish
+        //iframe[starts-with(@src, 'https://js.stripe.com/v3/three-ds-2-challenge')]
+        | //*[@role='alert' and contains(normalize-space(.), '#{failure_message}')]
+      XPATH
+      expect(page).to have_xpath(challenge_or_failure, wait: 60)
+      within_sca_frame(wait: 1) { click_on "Complete" } if page.has_selector?(SCA_CHALLENGE_IFRAME, wait: 0)
+
+      expect(page).to have_text(failure_message)
       expect(@subscription.reload).not_to be_alive
       expect(@subscription.stripe_mandate_id).to be_nil
       expect(@subscription.credit_card).to be_nil
