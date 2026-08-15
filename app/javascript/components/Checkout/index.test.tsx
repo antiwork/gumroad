@@ -751,7 +751,7 @@ describe("Checkout currency picker", () => {
     expect(getByLabelText("Currency")).toBeTruthy();
   });
 
-  it("renders the picker directly below the Total row (slavingia, 2026-08-15)", () => {
+  it("renders the picker directly below the Total row", () => {
     const { getByLabelText, getByText } = renderCheckout(
       buildState({ surcharges: { type: "loaded", result: quotedSurcharges } }),
       cart,
