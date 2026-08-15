@@ -147,6 +147,10 @@ class Stripe::SetupIntentsController < ApplicationController
       elsif params[:email].present?
         Subscription.restartable_for_product_and_email(product:, email: params[:email])
       end
+      return if subscription.nil?
+      return unless logged_in_user.present? ||
+        cookies.encrypted[subscription.cookie_key] == subscription.external_id
+
       subscription if subscription&.india_card_mandate_reliability_enabled?
     end
 

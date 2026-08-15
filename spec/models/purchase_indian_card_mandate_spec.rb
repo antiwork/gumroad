@@ -73,6 +73,31 @@ describe "Indian card mandate reliability" do
     expect(registration.indian_card_mandate_error_status).to be_nil
   end
 
+  it "does not classify UPI mandate failures as card mandate failures" do
+    upi_card = CreditCard.create!(
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      payment_method_type: "upi",
+      stripe_customer_id: "cus_upi_renewal",
+      processor_payment_method_id: "pm_upi_renewal",
+      stripe_fingerprint: "pm_upi_renewal",
+      visual: "UPI",
+      card_type: CardType::UPI,
+      card_country: Compliance::Countries::IND.alpha2,
+      recurring_authorization_verified_at: Time.current,
+      recurring_authorization_currency: Currency::INR,
+      recurring_authorization_max_amount_cents: 100_000
+    )
+    renewal = create(
+      :recurring_membership_purchase,
+      link: product,
+      seller:,
+      credit_card: upi_card,
+      stripe_error_code: "india_recurring_payment_mandate_canceled"
+    )
+
+    expect(renewal.indian_card_mandate_error_status).to be_nil
+  end
+
   it "does not validate mandates for non-Stripe rebills" do
     renewal = build(
       :purchase,

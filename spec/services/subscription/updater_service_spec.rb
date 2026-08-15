@@ -3734,6 +3734,20 @@ describe Subscription::UpdaterService, :vcr do
       end.to raise_error(Subscription::UpdateFailed, "The price just changed! Refresh the page for the updated price.")
     end
 
+    it "does not treat unchanged billing data as new mandate terms", vcr: false do
+      original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
+      service.params[:contact_info] = { country: "US", state: "CA", zip_code: "94107" }
+
+      expect(service.send(:mandate_billing_info_changed?)).to be(false)
+    end
+
+    it "detects changed billing data for new mandate terms", vcr: false do
+      original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
+      service.params[:contact_info] = { country: "US", state: "NY", zip_code: "10001" }
+
+      expect(service.send(:mandate_billing_info_changed?)).to be(true)
+    end
+
     it "requires reauthorization when saved-card billing details change the renewal terms" do
       previous_terms = { amount: 10_00, currency: Currency::USD, interval: "month", interval_count: 1 }
       current_terms = previous_terms.merge(amount: 10_75)

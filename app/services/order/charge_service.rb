@@ -284,7 +284,7 @@ class Order::ChargeService
     end
     mandate_purchases = purchases.select do |purchase|
       purchase.in_progress? && purchase.errors.empty? &&
-        (purchase.is_original_subscription_purchase? || purchase.is_preorder_authorization? || purchase.is_upgrade_purchase?)
+        (purchase.is_original_subscription_purchase? || purchase.is_preorder_authorization? || purchase.is_upgrade_purchase? || purchase.setup_future_charges)
     end
 
     if purchases_to_charge.present?

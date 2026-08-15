@@ -3494,6 +3494,7 @@ class Purchase < ApplicationRecord
 
   def indian_card_mandate_error_status
     return unless india_card_mandate_reliability_enabled?
+    return unless credit_card&.requires_mandate?
 
     code = [error_code, stripe_error_code].compact.find do |value|
       value.in?([

@@ -1499,6 +1499,50 @@ describe Order::ChargeService, :vcr do
       Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
     end
 
+    it "includes commission deposits in a shared mandate cap" do
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
+      seller_1.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+      merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      membership = create(
+        :purchase_in_progress,
+        link: create(:membership_product, user: seller_1),
+        seller: seller_1,
+        merchant_account:,
+        is_original_subscription_purchase: true,
+        total_transaction_cents: 10_00
+      )
+      commission = create(
+        :purchase_in_progress,
+        link: create(:commission_product, user: seller_1),
+        seller: seller_1,
+        merchant_account:,
+        setup_future_charges: true,
+        total_transaction_cents: 50_00
+      )
+      order = create(:order, purchases: [membership, commission])
+      mandate_options = {
+        payment_method_options: { card: { mandate_options: { amount: 50_00 } } }
+      }
+      charge = instance_double(Charge, charge_intent: nil, credit_card: nil)
+      create_service = instance_double(Charge::CreateService, perform: charge)
+      allow(Charge::CreateService).to receive(:new).and_return(create_service)
+      service = described_class.new(order:, params: {})
+      expect(service).to receive(:mandate_options_for_stripe)
+        .with(purchases: match_array([membership, commission]))
+        .and_return(mandate_options)
+
+      service.send(
+        :create_charge_for_seller_purchases,
+        [membership, commission],
+        instance_double(Chargeable, requires_mandate?: true),
+        false,
+        true
+      )
+    ensure
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
+    end
+
     it "does not read a missing payment intent when a mandate card's processor outcome is already handled" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)

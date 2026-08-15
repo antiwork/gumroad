@@ -119,7 +119,7 @@ describe Stripe::SetupIntentsController, :vcr do
         controller.send(:mandate_options_for_stripe, chargeable, subscription:)
       end
 
-      it "uses a restartable checkout subscription for server-owned mandate terms" do
+      it "uses a cookie-authenticated checkout subscription for server-owned mandate terms" do
         product = create(:subscription_product)
         subscription = create(:subscription, link: product)
         allow(controller).to receive(:params).and_return(
@@ -132,8 +132,27 @@ describe Stripe::SetupIntentsController, :vcr do
           .with(product:, email: "buyer@example.com")
           .and_return(subscription)
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+        encrypted_cookies = double
+        allow(encrypted_cookies).to receive(:[]).with(subscription.cookie_key).and_return(subscription.external_id)
+        allow(controller).to receive(:cookies).and_return(double(encrypted: encrypted_cookies))
 
         expect(controller.send(:authenticated_subscription)).to eq(subscription)
+      end
+
+      it "does not use email-derived subscription terms without its cookie" do
+        product = create(:subscription_product)
+        subscription = create(:subscription, link: product)
+        allow(controller).to receive(:params).and_return(
+          ActionController::Parameters.new(
+            email: "buyer@example.com",
+            products: [{ price: product.price_cents, permalink: product.unique_permalink }]
+          )
+        )
+        allow(Subscription).to receive(:restartable_for_product_and_email)
+          .with(product:, email: "buyer@example.com")
+          .and_return(subscription)
+
+        expect(controller.send(:authenticated_subscription)).to be_nil
       end
 
       it "does not bind one setup intent to multiple recurring products" do

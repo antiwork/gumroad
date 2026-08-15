@@ -84,8 +84,7 @@ class Subscription::UpdaterService
     else
       params[:offer_code].present?
     end
-    mandate_billing_info_changed = params[:contact_info].present? &&
-      params[:contact_info].slice(:country, :state, :zip_code).values.any?(&:present?)
+    mandate_billing_info_changed = mandate_billing_info_changed?
     check_saved_card_mandate_terms_after_update = (plan_or_price_changed || discount_changed || mandate_billing_info_changed) && use_existing_card? &&
       subscription.india_card_mandate_reliability_enabled? &&
       subscription.credit_card_to_charge&.stripe_charge_processor? &&
@@ -418,6 +417,17 @@ class Subscription::UpdaterService
 
     def future_subscription_charge?
       subscription.future_subscription_charge?(authenticated_offer_code_buyer: logged_in_user)
+    end
+
+    def mandate_billing_info_changed?
+      submitted_info = params[:contact_info]&.slice(:country, :state, :zip_code)&.symbolize_keys
+      return false if submitted_info.blank?
+
+      stored_info = original_purchase.slice(:country, :state, :zip_code).symbolize_keys
+      submitted_info[:country] = ISO3166::Country[submitted_info[:country]]&.common_name || submitted_info[:country]
+      stored_info[:country] = ISO3166::Country[stored_info[:country]]&.common_name || stored_info[:country]
+
+      submitted_info.any? { |key, value| value.presence != stored_info[key].presence }
     end
 
     def saved_card_update_requires_reauthorization?(previous_terms, plan_or_price_changed:, mandate_billing_info_changed:, discount_changed: false, seller_price_changed: false)
