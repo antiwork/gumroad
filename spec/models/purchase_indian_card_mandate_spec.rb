@@ -698,6 +698,36 @@ describe "Indian card mandate reliability" do
     expect(subscription.stripe_mandate_id).to eq("mandate_prior_plan")
   end
 
+  it "invalidates a replacement mandate after the changed plan rolls back" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update!(stripe_mandate_id: "mandate_prior_plan")
+    subscription.require_indian_card_mandate_reauthorization!
+    replacement_card = CreditCard.create!(
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      stripe_customer_id: "cus_replacement",
+      processor_payment_method_id: "pm_replacement",
+      stripe_fingerprint: "fingerprint_replacement",
+      visual: "**** **** **** 4242",
+      card_type: CardType::VISA,
+      card_country: Compliance::Countries::IND.alpha2,
+      expiry_month: 12,
+      expiry_year: 2030
+    )
+    subscription.update!(
+      credit_card: replacement_card,
+      stripe_mandate_id: "mandate_replacement_plan",
+      renewal_disabled_due_to_indian_card_mandate: false,
+      indian_card_mandate_requires_reauthorization: false
+    )
+
+    subscription.restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: card.id)
+
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to be_nil
+  end
+
   it "clears plan reauthorization after a confirmed charge registers matching terms" do
     registration = create_registration
     subscription = registration.subscription
@@ -855,6 +885,25 @@ describe "Indian card mandate reliability" do
     registration.subscription.update!(cancelled_at: 1.day.from_now)
 
     expect(registration.subscription.status).to eq("pending_cancellation")
+  end
+
+  it "shows a mandate failure until the renewal stop is recorded" do
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    registration = create_registration
+    create(
+      :failed_purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription: registration.subscription,
+      credit_card: card,
+      error_code: PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
+      created_at: registration.created_at + 1.second
+    )
+    Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+
+    expect(registration.subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(registration.subscription.status).to eq("pending_failure")
   end
 
   it "does not load route data when the mandate stop is clear" do

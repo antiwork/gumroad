@@ -507,16 +507,36 @@ class Subscription < ApplicationRecord
     end
   end
 
-  def restore_indian_card_mandate_after_failed_reauthorization!
+  def restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: nil)
     return unless india_card_mandate_reliability_enabled?
 
     save! if changed?
+    notify_buyer = false
     with_lock do
-      return unless indian_card_mandate_requires_reauthorization?
+      card = credit_card_to_charge
+      if expected_credit_card_id.present? && card&.id != expected_credit_card_id
+        self.stripe_mandate_id = nil
+        if card&.stripe_charge_processor? && card.requires_mandate?
+          notify_buyer = !renewal_disabled_due_to_indian_card_mandate?
+          self.renewal_disabled_due_to_indian_card_mandate = true
+          self.indian_card_mandate_requires_reauthorization = true
+        else
+          self.renewal_disabled_due_to_indian_card_mandate = false
+          self.indian_card_mandate_requires_reauthorization = false
+        end
+      else
+        return unless indian_card_mandate_requires_reauthorization?
 
-      self.renewal_disabled_due_to_indian_card_mandate = false
-      self.indian_card_mandate_requires_reauthorization = false
+        self.renewal_disabled_due_to_indian_card_mandate = false
+        self.indian_card_mandate_requires_reauthorization = false
+      end
       save!
+    end
+
+    if notify_buyer
+      after_commit do
+        CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id).deliver_later(queue: "low")
+      end
     end
   end
 
@@ -1345,7 +1365,8 @@ class Subscription < ApplicationRecord
       else
         purchases.order(:created_at).last
       end
-    last_purchase&.failed? && last_purchase.indian_card_mandate_error_status.blank?
+    last_purchase&.failed? &&
+      (!renewal_disabled_due_to_indian_card_mandate? || last_purchase.indian_card_mandate_error_status.blank?)
   end
 
   def status
