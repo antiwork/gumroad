@@ -488,7 +488,9 @@ class Order::ChargeService
   # decline. Single-purchase carts already get this headroom from
   # Purchase#mandate_options_for_stripe; this gives multi-item carts the same treatment.
   def mandate_options_for_stripe(purchases:, with_currency: false)
-    return purchases.first.mandate_options_for_stripe(with_currency:) if purchases.count == 1
+    if purchases.one? && !purchases.first.is_multi_buy?
+      return purchases.first.mandate_options_for_stripe(with_currency:)
+    end
 
     mandate_amount = purchases.map(&:mandate_maximum_amount_cents).max
 

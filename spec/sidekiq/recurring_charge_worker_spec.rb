@@ -396,6 +396,20 @@ describe RecurringChargeWorker, :vcr do
       expect(@subscription).to be_indian_card_mandate_requires_reauthorization
       expect(@subscription.stripe_mandate_id).to be_nil
     end
+
+    it "rolls back the plan when mandate-safe plan cleanup fails",
+       vcr: { cassette_name: "RecurringChargeWorker/subscription_has_a_pending_plan_change/updates_the_variants_and_prices_before_charging" } do
+      allow_any_instance_of(SubscriptionPlanChange).to receive(:mark_deleted!).and_raise("plan cleanup failed")
+
+      expect do
+        described_class.new.perform(@subscription.id)
+      end.to raise_error(RuntimeError, "plan cleanup failed")
+
+      expect(@plan_change.reload).not_to be_applied
+      expect(@subscription.reload.recurrence).to eq(BasePrice::Recurrence::QUARTERLY)
+      expect(@subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(@subscription.stripe_mandate_id).to eq("mandate_old_plan")
+    end
   end
 
   describe "non-tiered subscription has a pending plan change" do

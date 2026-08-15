@@ -197,6 +197,45 @@ describe Purchase::ConfirmService, :vcr do
       ensure
         Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end
+
+      it "invalidates a replacement mandate when the changed plan rolls back",
+         vcr: { cassette_name: "Purchase_ConfirmService/when_SCA_fails/for_a_membership_upgrade_purchase/reverts_the_subscription_to_old_tier_and_returns_an_error_message" } do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        prior_card = CreditCard.create!(
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          stripe_customer_id: "cus_prior_upgrade_card",
+          processor_payment_method_id: "pm_prior_upgrade_card",
+          stripe_fingerprint: "fingerprint_prior_upgrade_card",
+          visual: "**** **** **** 4242",
+          card_type: CardType::VISA,
+          card_country: Compliance::Countries::USA.alpha2,
+          expiry_month: 12,
+          expiry_year: 2030
+        )
+        @subscription.original_purchase.update!(credit_card: prior_card)
+        @subscription.update!(
+          stripe_mandate_id: "mandate_replacement_plan",
+          renewal_disabled_due_to_indian_card_mandate: false,
+          indian_card_mandate_requires_reauthorization: false
+        )
+
+        Purchase::ConfirmService.new(
+          purchase: @membership_upgrade_purchase,
+          params: {
+            stripe_error: {
+              code: "invalid_request_error",
+              message: "We are unable to authenticate your payment method."
+            }
+          }
+        ).perform
+
+        expect(@subscription.reload.original_purchase.variant_attributes).to eq([@original_tier])
+        expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+        expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+        expect(@subscription.stripe_mandate_id).to be_nil
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
     end
 
     context "for a membership restart purchase" do

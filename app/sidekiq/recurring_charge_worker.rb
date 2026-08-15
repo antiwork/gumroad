@@ -62,31 +62,36 @@ class RecurringChargeWorker
         same_tier = latest_applicable_plan_change.tier == subscription.tier
         new_price = subscription.link.prices.is_buy.alive.find_by(recurrence: latest_applicable_plan_change.recurrence) ||
           subscription.link.prices.is_buy.find_by(recurrence: latest_applicable_plan_change.recurrence) # use live price if exists, else deleted price
+        mandate_reauthorization_required = false
         begin
-          subscription.update_current_plan!(
-            new_variants: [latest_applicable_plan_change.tier],
-            new_price:,
-            new_quantity: latest_applicable_plan_change.quantity,
-            perceived_price_cents: latest_applicable_plan_change.perceived_price_cents,
-            is_applying_plan_change: true,
-          )
-          latest_applicable_plan_change.update!(applied: true)
+          ActiveRecord::Base.transaction do
+            subscription.update_current_plan!(
+              new_variants: [latest_applicable_plan_change.tier],
+              new_price:,
+              new_quantity: latest_applicable_plan_change.quantity,
+              perceived_price_cents: latest_applicable_plan_change.perceived_price_cents,
+              is_applying_plan_change: true,
+            )
+            latest_applicable_plan_change.update!(applied: true)
+            subscription.reload
+
+            mandate_reauthorization_required = check_mandate_terms_after_plan_change &&
+              subscription.indian_card_mandate_terms != mandate_terms_before_plan_change
+            if mandate_reauthorization_required
+              subscription.require_indian_card_mandate_reauthorization!(clear_existing_mandate: true)
+            end
+            plan_changes.map(&:mark_deleted!)
+          end
         rescue Subscription::UpdateFailed => e
           Rails.logger.info("RecurringChargeWorker#perform(#{subscription_id}) failed: #{e.class} (#{e.message})")
           return
         end
         subscription.reload.original_purchase.schedule_workflows_for_variants unless same_tier
-        plan_changes.map(&:mark_deleted!)
         override_params[:is_upgrade_purchase] = true # avoid double charged error
         subscription.reload
 
         UpdateIntegrationsOnTierChangeWorker.perform_async(subscription.id) unless same_tier
-
-        if check_mandate_terms_after_plan_change &&
-           subscription.indian_card_mandate_terms != mandate_terms_before_plan_change
-          subscription.require_indian_card_mandate_reauthorization!(clear_existing_mandate: true)
-          return
-        end
+        return if mandate_reauthorization_required
       end
 
       subscription.charge!(override_params:)
