@@ -129,4 +129,15 @@ describe Product::ComputeCallAvailabilitiesService, :freeze_time do
 
     expect(service.perform).to contain_exactly({ start_time: 10.hours.from_now, end_time: 16.hours.from_now })
   end
+
+  it "excludes slots sold on the seller's other call product" do
+    other_product = create(:call_product, :available_for_a_year, user: seller)
+    create_call_availability(start_time: 10.hours.from_now, end_time: 16.hours.from_now)
+    create(:call, start_time: 12.hours.from_now, end_time: 13.hours.from_now, link: other_product)
+
+    expect(service.perform).to contain_exactly(
+      { start_time: 10.hours.from_now, end_time: 12.hours.from_now },
+      { start_time: 13.hours.from_now, end_time: 16.hours.from_now }
+    )
+  end
 end

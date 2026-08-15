@@ -71,8 +71,14 @@ class Call < ApplicationRecord
     end
 
     def start_time_and_end_time_available?
-      link.sold_calls.occupies_availability.overlaps_with(start_time, end_time).empty? &&
+      seller_occupied_calls.overlaps_with(start_time, end_time).empty? &&
         link.call_availabilities.containing(start_time, end_time).exists?
+    end
+
+    # Capacity is the seller's calendar, not the purchased product. Two call
+    # products on the same account can otherwise accept the same wall-clock slot.
+    def seller_occupied_calls
+      Call.occupies_availability.where(purchases: { seller_id: link.user_id })
     end
 
     def selected_time_availability_already_validated?

@@ -19,7 +19,7 @@ class Product::ComputeCallAvailabilitiesService
 
   private
     attr_reader :product
-    delegate :call_availabilities, :sold_calls, :call_limitation_info, to: :product
+    delegate :call_availabilities, :call_limitation_info, to: :product
 
     def untaken_availabilities
       availability_changes = Hash.new(0)
@@ -109,7 +109,11 @@ class Product::ComputeCallAvailabilitiesService
     end
 
     def taken_availabilities
-      @_taken_availabilities ||= fetch_intervals(sold_calls.occupies_availability.upcoming.ordered_chronologically)
+      @_taken_availabilities ||= fetch_intervals(seller_sold_calls.occupies_availability.upcoming.ordered_chronologically)
+    end
+
+    def seller_sold_calls
+      product.user.sold_calls
     end
 
     def fetch_intervals(relation)

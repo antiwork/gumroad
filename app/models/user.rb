@@ -100,6 +100,7 @@ class User < ApplicationRecord
   has_one :billing_detail, foreign_key: :purchaser_id, dependent: :destroy
   has_many :purchased_products, -> { distinct }, through: :purchases, class_name: "Link", source: :link
   has_many :sales, class_name: "Purchase", foreign_key: :seller_id
+  has_many :sold_calls, through: :sales, source: :call
   has_many :preorders_bought, class_name: "Preorder", foreign_key: :purchaser_id
   has_many :preorders_sold, class_name: "Preorder", foreign_key: :seller_id
 

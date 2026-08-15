@@ -80,6 +80,23 @@ describe Call do
       expect(call.errors.full_messages).to include("Selected time is no longer available")
     end
 
+    it "rejects a slot already sold on the seller's other call product" do
+      other_product = create(:call_product, :available_for_a_year, user: link.user)
+      create(:call, start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, link: other_product)
+
+      call = build(:call, start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, link:)
+      expect(call).to be_invalid
+      expect(call.errors.full_messages).to include("Selected time is no longer available")
+    end
+
+    it "still accepts a slot sold by a different seller" do
+      other_seller_product = create(:call_product, :available_for_a_year)
+      create(:call, start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, link: other_seller_product)
+
+      call = build(:call, start_time: 1.day.from_now, end_time: 1.day.from_now + 1.hour, link:)
+      expect(call).to be_valid
+    end
+
     it "does not validate selected time availability for gift receiver purchases" do
       start_time = 1.day.from_now
       end_time = start_time + 1.hour
