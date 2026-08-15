@@ -82,7 +82,7 @@ class Stripe::SetupIntentsController < ApplicationController
             payment_method_options: {
               card: {
                 mandate_options: {
-                  reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id,
+                  reference: StripeChargeProcessor::MANDATE_PREFIX + (Rails.env.production? ? subscription.external_id : SecureRandom.hex),
                   amount_type: "maximum",
                   amount: terms[:amount],
                   currency: terms[:currency],

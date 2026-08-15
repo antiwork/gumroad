@@ -100,6 +100,7 @@ describe Stripe::SetupIntentsController, :vcr do
       it "uses server-owned subscription terms for a subscription mandate" do
         subscription = create(:subscription)
         chargeable = double(requires_mandate?: true)
+        allow(Rails.env).to receive(:production?).and_return(true)
         allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 1, subscription_id: subscription.external_id }]))
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
         expect(subscription).to receive(:indian_card_mandate_terms).with(
