@@ -2,7 +2,7 @@
 
 class Api::V2::EmailsController < Api::V2::BaseController
   before_action { doorkeeper_authorize! :edit_emails }
-  before_action :fetch_installment, only: %i[show preview send_email destroy]
+  before_action :fetch_installment, only: %i[show preview send_email schedule unschedule destroy]
 
   RESULTS_PER_PAGE = 10
   AUDIENCE_TYPES_BY_PARAM = {
@@ -101,6 +101,36 @@ class Api::V2::EmailsController < Api::V2::BaseController
     end
   end
 
+  def schedule
+    return render_response(false, message: "The email has already been sent.") if @installment.has_been_blasted?
+
+    ensure_installment_seller
+    service = SaveInstallmentService.new(
+      seller: current_seller,
+      params: service_params_for_schedule(@installment),
+      installment: @installment,
+      preview_email_recipient: current_seller
+    )
+
+    if service.process
+      success_with_email(service.installment)
+    else
+      render_response(false, message: service.error)
+    end
+  end
+
+  def unschedule
+    return render_response(false, message: "This email is not scheduled.") unless @installment.ready_to_publish?
+
+    @installment.ready_to_publish = false
+    @installment.installment_rule&.mark_deleted!
+    if @installment.save
+      success_with_email(@installment)
+    else
+      error_with_email(@installment)
+    end
+  end
+
   def destroy
     if @installment.update(deleted_at: Time.current)
       success_with_email
@@ -194,6 +224,17 @@ class Api::V2::EmailsController < Api::V2::BaseController
       service_params = {
         installment: installment_service_attributes(installment),
         publish: "true",
+      }
+      if installment.variant_type? && installment.base_variant.present?
+        service_params[:variant_external_id] = installment.base_variant.external_id
+      end
+      ActionController::Parameters.new(service_params)
+    end
+
+    def service_params_for_schedule(installment)
+      service_params = {
+        installment: installment_service_attributes(installment),
+        to_be_published_at: params[:to_be_published_at],
       }
       if installment.variant_type? && installment.base_variant.present?
         service_params[:variant_external_id] = installment.base_variant.external_id
