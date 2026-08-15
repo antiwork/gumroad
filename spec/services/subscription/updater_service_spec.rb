@@ -1008,6 +1008,7 @@ describe Subscription::UpdaterService, :vcr do
                 perceived_price_cents: 7_99,
                 perceived_upgrade_price_cents: 3_38,
               )
+              expect(CustomerLowPriorityMailer).not_to receive(:subscription_indian_card_mandate_invalid)
 
               response = Subscription::UpdaterService.new(
                 subscription: @subscription,
@@ -1043,6 +1044,7 @@ describe Subscription::UpdaterService, :vcr do
                 remote_ip: @remote_ip,
               )
               allow(service).to receive(:charge_user!).and_return(success: true)
+              expect(CustomerLowPriorityMailer).not_to receive(:subscription_indian_card_mandate_invalid)
 
               response = service.perform
 

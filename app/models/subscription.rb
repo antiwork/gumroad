@@ -484,22 +484,22 @@ class Subscription < ApplicationRecord
     end
   end
 
-  def require_indian_card_mandate_reauthorization!
+  def require_indian_card_mandate_reauthorization!(notify_buyer: true)
     return unless india_card_mandate_reliability_enabled?
 
-    notify_buyer = false
+    should_notify_buyer = false
     with_lock do
       card = credit_card_to_charge
       return unless card&.stripe_charge_processor? && card.requires_mandate?
       return unless alive?(include_pending_cancellation: false)
 
-      notify_buyer = !renewal_disabled_due_to_indian_card_mandate?
+      should_notify_buyer = notify_buyer && !renewal_disabled_due_to_indian_card_mandate?
       self.renewal_disabled_due_to_indian_card_mandate = true
       self.indian_card_mandate_requires_reauthorization = true
       save!
     end
 
-    if notify_buyer
+    if should_notify_buyer
       after_commit do
         CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id).deliver_later(queue: "low")
       end

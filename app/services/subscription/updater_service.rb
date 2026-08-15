@@ -232,7 +232,7 @@ class Subscription::UpdaterService
           if should_charge_user?
             result = charge_user!
             if saved_card_mandate_terms_changed && result[:success]
-              subscription.require_indian_card_mandate_reauthorization!
+              subscription.require_indian_card_mandate_reauthorization!(notify_buyer: false)
             end
           else
             result = { success: true, success_message: }
