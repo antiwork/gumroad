@@ -20,5 +20,9 @@ describe RefundPolicy do
       expect(policy.effective_max_refund_period_in_days).to eq(7)
       expect(policy.title).to eq("7-day money back guarantee")
     end
+
+    it "keeps a 0-day account policy when the purchase is physical" do
+      expect(policy.effective_max_refund_period_in_days(for_physical: true)).to eq(0)
+    end
   end
 end
