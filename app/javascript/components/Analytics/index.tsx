@@ -203,6 +203,10 @@ const Analytics = ({
   const mountedRef = React.useRef(true);
   React.useEffect(() => () => void (mountedRef.current = false), []);
   React.useEffect(() => {
+    // A run whose range or aggregation has been superseded must not touch shared state. Aborting
+    // mid-body rejects with a raw DOMException from `response.json()`, outside the `request`
+    // wrapper, so the AbortError check below cannot be the only guard.
+    let obsolete = false;
     const rangeKey = `${startTime}:${endTime}`;
     // A range the auto-retry did not pick is one the seller did, which retires the old streak
     // outright: its export no longer owns the toast, however late its confirmation arrives.
@@ -266,6 +270,7 @@ const Analytics = ({
         });
         activeRequests.current = [byStateRequest.abort, byReferralRequest.abort];
         const [byState, byReferral] = await Promise.all([byStateRequest.response, byReferralRequest.response]);
+        if (obsolete) return;
         setData({ byState, byReferral });
         activeRequests.current = null;
         const recovered = pendingExportRef.current;
@@ -279,7 +284,7 @@ const Analytics = ({
           if (recovered.enqueued) announceCsv(recovered);
         }
       } catch (e) {
-        if (e instanceof AbortError) return;
+        if (obsolete || e instanceof AbortError) return;
         // rangeDays is the gap between two included endpoints, so 0 is a single day — the
         // narrowest range there is, and the only one with nothing left to halve.
         if (rangeDays <= 0) {
@@ -327,6 +332,9 @@ const Analytics = ({
       }
     };
     void loadData();
+    return () => {
+      obsolete = true;
+    };
   }, [startTime, endTime, hourly]);
 
   const selectedProducts = products.filter((product) => product.selected).map((product) => product.unique_permalink);
