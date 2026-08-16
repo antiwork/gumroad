@@ -157,12 +157,6 @@ const Analytics = ({
   );
   const [aggregateBy, setAggregateBy] = React.useState<"hourly" | "daily" | "monthly">("daily");
   const minDate = React.useMemo(() => startOfDay(parseISO(earliest_date)), [earliest_date]);
-  // Today on the seller's clock, which is the end of the same range the backend clamps to. Derived
-  // on every render rather than passed from the server, so a dashboard left open past the seller's
-  // midnight still offers their current day. en-CA formats as YYYY-MM-DD.
-  const maxDate = startOfDay(
-    parseISO(new Intl.DateTimeFormat("en-CA", { timeZone: seller_time_zone }).format(new Date())),
-  );
   const dateRange = useAnalyticsDateRange();
   const { locale } = useUserAgentInfo();
   // Hourly buckets are only available for short ranges (the backend rejects wider
@@ -372,7 +366,7 @@ const Analytics = ({
             </Select>
             <ProductsPopover products={products} setProducts={setProducts} />
             <div className="col-span-2">
-              <DateRangePicker {...dateRange} minDate={minDate} maxDate={maxDate} />
+              <DateRangePicker {...dateRange} minDate={minDate} timeZone={seller_time_zone} />
             </div>
             <ExportSalesPopover />
           </>

@@ -3,6 +3,8 @@ import {
   endOfMonth,
   endOfQuarter,
   endOfYear,
+  parseISO,
+  startOfDay,
   startOfMonth,
   startOfQuarter,
   startOfYear,
@@ -31,7 +33,7 @@ export const DateRangePicker = ({
   setFrom,
   setTo,
   minDate,
-  maxDate,
+  timeZone,
 }: {
   from: Date;
   to: Date;
@@ -40,9 +42,9 @@ export const DateRangePicker = ({
   // Earliest date the caller's backend holds data for — where "All time" starts. Callers that
   // leave it out fall back to the date tracking itself began.
   minDate?: Date;
-  // Latest date it holds, on the backend's own clock. "All time" ends there, since the browser's
-  // today can be a day off when the two time zones disagree.
-  maxDate?: Date;
+  // The backend's own time zone, as an IANA identifier. "All time" ends on today there, since the
+  // browser's date can be a day off when the two zones disagree.
+  timeZone?: string;
 }) => {
   const today = new Date();
   const uid = React.useId();
@@ -54,10 +56,14 @@ export const DateRangePicker = ({
     setTo(to);
     setOpen(false);
   };
-  // Both ends come from the backend when the caller supplies them, so "All time" spans exactly
-  // what it will return. An account cannot be created after its own today, so this cannot invert.
+  // Both ends follow the backend when the caller supplies them, so "All time" spans exactly what
+  // it will return. Derived here next to `today` rather than passed in, so it stays right on a
+  // dashboard left open past midnight. en-CA formats as YYYY-MM-DD. An account cannot be created
+  // after its own today, so this cannot invert.
   const allTimeStart = minDate ?? PRODUCT_EVENT_TRACKING_STARTED_DATE;
-  const allTimeEnd = maxDate ?? today;
+  const allTimeEnd = timeZone
+    ? startOfDay(parseISO(new Intl.DateTimeFormat("en-CA", { timeZone }).format(today)))
+    : today;
   const presets = [
     { label: "Today", from: today, to: today },
     { label: "Last 7 days", from: subDays(today, 7), to: today },
