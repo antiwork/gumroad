@@ -208,7 +208,12 @@ const Analytics = ({
   React.useEffect(() => () => void (mountedRef.current = false), []);
   React.useEffect(() => {
     const rangeKey = `${startTime}:${endTime}`;
-    if (streakRangeRef.current !== rangeKey) pendingExportRef.current = null;
+    // A range the auto-retry did not pick is one the seller did, which retires the old streak
+    // outright: its export no longer owns the toast, however late its confirmation arrives.
+    if (streakRangeRef.current !== rangeKey) {
+      pendingExportRef.current = null;
+      latestStreakRef.current = null;
+    }
     streakRangeRef.current = rangeKey;
     // Deliberately not awaited: narrowing the range is what gets the seller a chart back, and it
     // must not queue behind an export endpoint that is slow for the same reason the analytics load
