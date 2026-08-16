@@ -1310,6 +1310,29 @@ it("does not autosave when the feature flag is off", async () => {
   }
 });
 
+it("does not autosave while paused, then saves after resume", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.setAutosavePaused(true));
+    act(() => contextCapture.current?.updateProduct({ name: "Held while paused" }));
+    await act(async () => void vi.advanceTimersByTime(5_000));
+    expect(saveProductMock).not.toHaveBeenCalled();
+    expect(contextCapture.current?.autosavePaused).toBe(true);
+
+    act(() => contextCapture.current?.setAutosavePaused(false));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    expect(saveProductMock.mock.calls[0]?.[2]).toMatchObject({ name: "Held while paused" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 // Pins the in-flight cross-scope move path: the scoped sentPagesById lookup
 // keys on the page's CURRENT container, so a page the seller moves to another
 // tier while the save request runs would miss its sent snapshot. The

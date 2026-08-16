@@ -161,8 +161,18 @@ export const Layout = ({
   // preview body), shown in the Receipt tab's email chrome. Null while the preview is loading.
   receiptSubject?: string | null;
 }) => {
-  const { product, updateProduct, uniquePermalink, saving, save, saveStatus, autosaveEnabled, receiptEmailFrom } =
-    useProductEditContext();
+  const {
+    product,
+    updateProduct,
+    uniquePermalink,
+    saving,
+    save,
+    saveStatus,
+    autosaveEnabled,
+    autosavePaused,
+    setAutosavePaused,
+    receiptEmailFrom,
+  } = useProductEditContext();
   const currentSeller = useCurrentSeller();
   const rootPath = Routes.edit_link_path(uniquePermalink);
 
@@ -276,7 +286,9 @@ export const Layout = ({
   const saveStatusIndicator = autosaveEnabled ? (
     <>
       <span className="text-sm text-muted">
-        {saveStatus === "review_deletions" ? (
+        {autosavePaused ? (
+          "Autosave paused"
+        ) : saveStatus === "review_deletions" ? (
           // Autosave never confirms a deletion on the seller's behalf. The
           // label is the affordance they actually see, so it opens the same
           // deletion summary the Save button would.
@@ -288,8 +300,11 @@ export const Layout = ({
         )}
       </span>
       <span className="sr-only" role="status">
-        {announcedStatuses.includes(saveStatus) ? saveStatusLabel : ""}
+        {autosavePaused ? "Autosave paused" : announcedStatuses.includes(saveStatus) ? saveStatusLabel : ""}
       </span>
+      <button type="button" className="text-sm text-muted underline" onClick={() => setAutosavePaused(!autosavePaused)}>
+        {autosavePaused ? "Resume autosave" : "Pause autosave"}
+      </button>
     </>
   ) : null;
 

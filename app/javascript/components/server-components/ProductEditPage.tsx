@@ -142,6 +142,8 @@ const createContextValue = (props: Props) => ({
   saving: false,
   saveStatus: "saved" as const,
   autosaveEnabled: props.autosave_enabled,
+  autosavePaused: false,
+  setAutosavePaused: () => {},
   save: () => Promise.resolve(false),
   variantIdMappings: {},
   richContentIdMappings: {},
@@ -561,6 +563,12 @@ const ProductEditPage = (props: Props) => {
 
   const [saving, setSaving] = React.useState(false);
   const [autosaveGeneration, setAutosaveGeneration] = React.useState(0);
+  const [autosavePaused, setAutosavePausedState] = React.useState(false);
+  const setAutosavePaused = (paused: boolean) => {
+    setAutosavePausedState(paused);
+    // Resume must re-enter the debounce effect even if product state is unchanged.
+    if (!paused) setAutosaveGeneration((generation) => generation + 1);
+  };
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
   // Deletions awaiting the seller's final confirmation in the save-time summary
   // modal. Non-null while the modal is open; the ref holds the resolver of the
@@ -919,6 +927,7 @@ const ProductEditPage = (props: Props) => {
       deletionsNeedAttention ||
       saveBlockedByModal ||
       !props.autosave_enabled ||
+      autosavePaused ||
       autosaveRetryCount >= AUTOSAVE_RETRY_LIMIT
     ) {
       return;
@@ -984,6 +993,7 @@ const ProductEditPage = (props: Props) => {
     saveBlockedByModal,
     autosaveGeneration,
     autosaveRetryCount,
+    autosavePaused,
     props.autosave_enabled,
   ]);
 
@@ -1019,6 +1029,8 @@ const ProductEditPage = (props: Props) => {
       saving,
       saveStatus,
       autosaveEnabled: props.autosave_enabled,
+      autosavePaused,
+      setAutosavePaused,
       variantIdMappings,
       richContentIdMappings,
       fileIdMappings,
@@ -1035,6 +1047,8 @@ const ProductEditPage = (props: Props) => {
       filesById,
       saving,
       saveStatus,
+      autosavePaused,
+      setAutosavePaused,
       variantIdMappings,
       richContentIdMappings,
       fileIdMappings,

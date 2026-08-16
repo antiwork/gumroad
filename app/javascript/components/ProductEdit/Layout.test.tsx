@@ -68,6 +68,8 @@ const renderHeader = ({
   saving,
   saveStatus,
   autosaveEnabled = true,
+  autosavePaused = false,
+  setAutosavePaused = () => undefined,
   contentUpdates = null,
   handle = "share",
   published = true,
@@ -75,6 +77,8 @@ const renderHeader = ({
   saving: boolean;
   saveStatus: SaveStatus;
   autosaveEnabled?: boolean;
+  autosavePaused?: boolean;
+  setAutosavePaused?: (paused: boolean) => void;
   contentUpdates?: ContentUpdates;
   handle?: string;
   published?: boolean;
@@ -109,6 +113,8 @@ const renderHeader = ({
                     saving,
                     saveStatus,
                     autosaveEnabled,
+                    autosavePaused,
+                    setAutosavePaused,
                     save,
                     contentUpdates,
                     setContentUpdates: () => undefined,
@@ -162,6 +168,24 @@ it("leaves Save changes enabled and hides status when autosave is off", () => {
 
   expect(screen.getByRole("button", { name: "Save changes" }).hasAttribute("disabled")).toBe(false);
   expect(screen.queryByText("All changes saved")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Pause autosave" })).toBeNull();
+});
+
+it("pauses autosave from the header", () => {
+  const setAutosavePaused = vi.fn();
+  renderHeader({ saving: false, saveStatus: "unsaved", setAutosavePaused });
+
+  fireEvent.click(screen.getByRole("button", { name: "Pause autosave" }));
+  expect(setAutosavePaused).toHaveBeenCalledWith(true);
+});
+
+it("shows Autosave paused and Resume while paused", () => {
+  const setAutosavePaused = vi.fn();
+  renderHeader({ saving: false, saveStatus: "unsaved", autosavePaused: true, setAutosavePaused });
+
+  expect(screen.getAllByText("Autosave paused").length).toBeGreaterThan(0);
+  fireEvent.click(screen.getByRole("button", { name: "Resume autosave" }));
+  expect(setAutosavePaused).toHaveBeenCalledWith(false);
 });
 
 it("opens the deletion review from the status label", () => {

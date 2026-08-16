@@ -292,6 +292,10 @@ export const ProductEditContext = React.createContext<{
   saving: boolean;
   saveStatus: SaveStatus;
   autosaveEnabled: boolean;
+  // Session-only. Pause stops the debounce without turning the seller flag off;
+  // Resume schedules the usual save if the editor is dirty.
+  autosavePaused: boolean;
+  setAutosavePaused: (paused: boolean) => void;
   // Resolves true only when the save request actually succeeded (false on
   // request failure or when the seller cancels the deletion confirmation) —
   // callers chaining navigation on save() must check it before proceeding.
