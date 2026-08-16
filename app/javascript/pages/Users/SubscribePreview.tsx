@@ -16,9 +16,9 @@ export default function SubscribePreview() {
   return (
     <div className="override flex h-full w-full items-center gap-6 p-8">
       <Avatar data-subscribe-preview-avatar className="size-28 w-28! rounded-full" src={avatar_url} />
-      <section className="min-w-0 grid gap-2">
+      <section className="grid min-w-0 gap-2">
         <h1 className="truncate text-3xl">{title}</h1>
-        {bio ? <p className="line-clamp-3 whitespace-pre-line text-lg text-muted">{bio}</p> : null}
+        {bio ? <p className="line-clamp-3 text-lg whitespace-pre-line text-muted">{bio}</p> : null}
       </section>
     </div>
   );
