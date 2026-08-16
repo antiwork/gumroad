@@ -14,7 +14,6 @@ class PostSendgridApi
   # - renders and locally caches the email template
   # - sends the emails via SendGrid API, with substitutions for each recipient
   # - records the emails as sent in EmailInfo
-  # - records the emails in EmailEvent
   # - updates delivery statistics
   # - sends push notifications
   # It does not:
@@ -62,7 +61,6 @@ class PostSendgridApi
       create_email_info_records
       update_delivery_statistics
       send_push_notifications
-      upsert_email_events_documents
     end
 
     true
@@ -252,10 +250,6 @@ class PostSendgridApi
         sent_at: Time.current,
       }
       EmailInfo.create_with(base_attributes).insert_all!(attributes)
-    end
-
-    def upsert_email_events_documents
-      EmailEvent.log_send_events(@recipients.map { _1[:email] }, Time.current)
     end
 
     def validate_recipients
