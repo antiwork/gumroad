@@ -181,6 +181,57 @@ describe CustomerSurchargeController, :vcr do
       expect(codes).not_to include(Currency::CAD)
     end
 
+    # BuyerCurrencyQuote.create refuses these carts whatever currency is asked for, so listing the
+    # currencies the sellers could settle would give the buyer a menu whose entries each disappear
+    # as they are tried.
+    it "offers only USD for a free cart, which no currency can be quoted for" do
+      post "calculate_all", params: {
+        products: [{ permalink: @product.unique_permalink, price: 0, quantity: 1 }],
+      }, as: :json
+
+      expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).to eq([Currency::USD])
+    end
+
+    it "offers only USD for a cart spanning more sellers than one request will quote" do
+      extra_sellers = Array.new(Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES) do
+        create(:user).tap do |seller|
+          Feature.activate_user(:buyer_local_currency, seller)
+          Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        end
+      end
+      permalinks = [@product, *extra_sellers.map { create(:product, user: _1) }].map(&:unique_permalink)
+
+      post "calculate_all", params: {
+        products: permalinks.map { { permalink: _1, price: 100, quantity: 1 } },
+      }, as: :json
+
+      expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).to eq([Currency::USD])
+    ensure
+      extra_sellers&.each do |seller|
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+    end
+
+    it "still offers the settleable currencies for a cart that only this currency cannot be quoted for" do
+      # A quotable cart whose requested currency alone fails: the menu keeps its siblings and
+      # drops the one that was refused.
+      allow(StripeFxQuote).to receive(:create).and_raise(StripeFxQuote::SettlementCurrencyMismatch, "gbp")
+
+      post "calculate_all", params: {
+        products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }],
+        buyer_currency: Currency::GBP,
+      }, as: :json
+
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).to include(Currency::USD, Currency::CAD)
+      expect(codes).not_to include(Currency::GBP)
+    end
+
     it "does not advertise non-USD currencies when a cart line cannot be quoted" do
       post "calculate_all", params: {
         products: [

@@ -25,6 +25,11 @@ type Currency = {
 
 export const currencyCodeList: CurrencyCode[] = Object.keys(currenciesMap);
 
+// Narrows a currency code that came from outside the app (a cookie, a query parameter, a server
+// response) before it is used to index the currency table.
+export const isCurrencyCode = (code: string): code is CurrencyCode =>
+  Object.prototype.hasOwnProperty.call(currenciesMap, code);
+
 export const findCurrencyByCode = (code: CurrencyCode): Currency => {
   const spec = currenciesMap[code];
   return {

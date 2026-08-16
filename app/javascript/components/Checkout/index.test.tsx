@@ -137,6 +137,8 @@ const buildState = (overrides: Partial<State> = {}): State => ({
   state: "",
   zipCode: "10001",
   buyerCurrency: null,
+  buyerCurrencyRemint: null,
+  unavailableBuyerCurrency: null,
   saveAddress: false,
   gift: null,
   customFieldValues: {},
@@ -794,6 +796,96 @@ describe("Checkout currency picker", () => {
     );
 
     expect(queryByLabelText("Currency")).toBeNull();
+  });
+
+  it("keeps the picker and the summary in place while the chosen currency is re-quoted", () => {
+    const { getByLabelText, getByText } = renderCheckout(
+      buildState({
+        buyerCurrency: "usd",
+        surcharges: { type: "pending" },
+        buyerCurrencyRemint: { surcharges: quotedSurcharges, previousCurrency: "cad" },
+      }),
+      cart,
+    );
+
+    expect(getByLabelText("Currency")).toBeTruthy();
+    expect(getByText("Total")).toBeTruthy();
+    expect(getByText("Subtotal")).toBeTruthy();
+    expect(getByText("Updating total…")).toBeTruthy();
+  });
+
+  it("leaves the focused select in the document across the re-quote", () => {
+    const loaded = buildState({ surcharges: { type: "loaded", result: quotedSurcharges } });
+    const { getByLabelText, rerender } = renderCheckout(loaded, cart);
+    const select = getByLabelText("Currency");
+    select.focus();
+
+    rerender(
+      <StateContext.Provider
+        value={[
+          buildState({
+            buyerCurrency: "usd",
+            surcharges: { type: "pending" },
+            buyerCurrencyRemint: { surcharges: quotedSurcharges, previousCurrency: "cad" },
+          }),
+          vi.fn(),
+        ]}
+      >
+        <Checkout discoverUrl="#" cart={cart} updateCart={vi.fn()} />
+      </StateContext.Provider>,
+    );
+
+    expect(getByLabelText("Currency")).toBe(select);
+    expect(document.activeElement).toBe(select);
+  });
+
+  it("names the currency the server refused instead of switching the total quietly", () => {
+    const { getByText } = renderCheckout(
+      buildState({
+        buyerCurrency: "cad",
+        unavailableBuyerCurrency: "gbp",
+        surcharges: { type: "loaded", result: quotedSurcharges },
+      }),
+      cart,
+    );
+
+    expect(getByText(/We can't charge this cart in £ \(British Pounds\)/u)).toBeTruthy();
+  });
+
+  it("still names the refused currency when only one currency is left to offer", () => {
+    // Refusing a currency usually withdraws it from the menu, which can leave a single option and
+    // unmount the picker — exactly when the buyer needs to be told why their choice did not take.
+    const usdOnly: SurchargesResponse = {
+      ...quotedSurcharges,
+      detected_buyer_currency: "usd",
+      available_buyer_currencies: [{ code: "usd", label: "$ (US Dollars)" }],
+      buyer_currency_quote: null,
+    };
+    const { getByText, queryByLabelText } = renderCheckout(
+      buildState({
+        buyerCurrency: null,
+        unavailableBuyerCurrency: "gbp",
+        surcharges: { type: "loaded", result: usdOnly },
+      }),
+      cart,
+    );
+
+    expect(queryByLabelText("Currency")).toBeNull();
+    expect(getByText(/We can't charge this cart in £ \(British Pounds\)/u)).toBeTruthy();
+  });
+
+  it("stops saying the total is updating once the re-quote has failed", () => {
+    const { queryByText, getByText } = renderCheckout(
+      buildState({
+        buyerCurrency: "usd",
+        surcharges: { type: "error" },
+        buyerCurrencyRemint: { surcharges: quotedSurcharges, previousCurrency: "cad" },
+      }),
+      cart,
+    );
+
+    expect(queryByText("Updating total…")).toBeNull();
+    expect(getByText("Total")).toBeTruthy();
   });
 
   it("replaces an unavailable saved currency with the resolved picker value", () => {

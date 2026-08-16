@@ -93,14 +93,19 @@ class CustomerSurchargeController < ApplicationController
       currency: quote_currency
     )
     # create() refuses a mixed/unquotable cart. Advertising those currencies would
-    # let the picker claim a presentment the charge will never honor.
-    available = if all_lines_quotable
-      available_buyer_currencies(quote_line_items.filter_map(&:product).uniq)
-    else
-      available_buyer_currencies([])
-    end
-    # Settlement can list a currency that create() then refuses (cart-wide seller /
-    # mixed-shape gates). Don't advertise the currency we just attempted to quote.
+    # let the picker claim a presentment the charge will never honor. `cart_quotable?` asks the
+    # quote service the same question for the gates that hold in every currency (zero total,
+    # more sellers than it will quote, a mixed recurring cart, ...), so a cart no currency can
+    # get past offers US dollars alone rather than a menu whose entries disappear one by one as
+    # the buyer tries them.
+    quotable_cart = all_lines_quotable && Checkout::BuyerCurrencyQuote.cart_quotable?(
+      line_items: quote_line_items,
+      canonical_total_cents: quote_line_items.sum(&:canonical_total_cents)
+    )
+    available = available_buyer_currencies(quotable_cart ? quote_line_items.filter_map(&:product).uniq : [])
+    # What is left can still fail for a reason specific to one currency (a settlement mismatch
+    # on the seller's account, a product already priced in it). Don't advertise the one we just
+    # attempted to quote; the checkout tells the buyer their choice was refused.
     if quote_currency.present? && quote_currency != Currency::USD && quote_props.nil?
       available = available.reject { |entry| entry[:code] == quote_currency }
     end
