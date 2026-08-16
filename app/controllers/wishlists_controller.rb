@@ -5,6 +5,8 @@ class WishlistsController < ApplicationController
   include PageMeta::Favicon
   include PageMeta::Wishlist
 
+  self.buyer_currency_footer_actions = %w[show].freeze
+
   before_action :authenticate_user!, except: :show
   after_action :verify_authorized, except: :show
 

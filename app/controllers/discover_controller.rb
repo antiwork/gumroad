@@ -9,6 +9,8 @@ class DiscoverController < ApplicationController
 
   layout "inertia", only: [:index]
 
+  self.buyer_currency_footer_actions = %w[index].freeze
+
   before_action :set_affiliate_cookie, only: [:index]
 
   def index

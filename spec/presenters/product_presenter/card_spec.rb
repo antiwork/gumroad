@@ -5,7 +5,7 @@ require "spec_helper"
 describe ProductPresenter::Card do
   include Rails.application.routes.url_helpers
 
-  let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", remote_ip: "0.0.0.0") }
+  let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", remote_ip: "0.0.0.0", params: {}, cookie_jar: {}) }
   let(:creator) { create(:user, name: "Testy", username: "testy") }
   let(:product) { create(:product, unique_permalink: "test", name: "hello", user: creator) }
 

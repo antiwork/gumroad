@@ -9,6 +9,7 @@
 # HTML → rich text conversion.
 class PagesController < Sellers::BaseController
   include RendersCustomHtmlPages
+  include CurrencyHelper
 
   layout "inertia"
 
@@ -167,7 +168,7 @@ class PagesController < Sellers::BaseController
       # The prices are derived from the requester's IP, so this response must never be shared.
       response.cache_control.replace(private: true, no_store: true)
       prices_referenced = Pages::ProductPrices.referenced_in?(custom_html)
-      prices = prices_referenced ? Pages::ProductPrices.build(current_seller, ip: request.remote_ip) : {}
+      prices = prices_referenced ? Pages::ProductPrices.build(current_seller, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request)) : {}
       interpolated = Pages::Interpolator.interpolate_profile(custom_html, profile: current_seller, prices:)
       render html: profile_custom_html_document(
         interpolated,

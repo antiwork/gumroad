@@ -15,7 +15,11 @@ function ProfileProductShowPage() {
   const props = typia.assert<PageProps>(usePage().props);
 
   return (
-    <ProfileLayout creatorProfile={props.creator_profile}>
+    <ProfileLayout
+      creatorProfile={props.creator_profile}
+      currencySelector
+      shownCurrency={props.product.buyer_currency_display?.buyer_currency_shown}
+    >
       <ProductLayout cart {...props} />
     </ProfileLayout>
   );
