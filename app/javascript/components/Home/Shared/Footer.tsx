@@ -34,8 +34,10 @@ const FooterLink = ({
   );
 };
 
+// shrink-0: these anchors wrap bare SVGs, so a flex parent that runs short squeezes them to zero
+// width and the icons vanish silently instead of overflowing.
 const SocialLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
-  <a href={href} className="hover:text-pink">
+  <a href={href} className="shrink-0 hover:text-pink">
     {children}
   </a>
 );
@@ -103,8 +105,15 @@ export const HomeFooter = ({ currencySelector = false }: { currencySelector?: bo
             <FooterLink href={Routes.privacy_path()}>Privacy Policy</FooterLink>
           </div>
         </div>
-        <div className="flex flex-col gap-6">
-          <div className="flex justify-between">
+        {/*
+          The copyright at the bottom of the left column and this row form one band across the
+          gutter, so the selector belongs at its far right — Gumroad mark on one end, currency on
+          the other, the same relationship PoweredByFooter has. The icons keep their own group so
+          the two do not share a distribution rail; with no selector the group spans the column and
+          spreads exactly as it did before.
+        */}
+        <div className="flex flex-wrap items-center justify-between gap-6">
+          <div className="flex grow justify-between gap-6">
             <SocialLink href="https://x.com/gumroad">
               <svg width="24" height="24" viewBox="0 0 1200 1227" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
