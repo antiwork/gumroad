@@ -33,11 +33,8 @@ class DisputeEvidence < ApplicationRecord
 
   SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS = 72
   EVIDENCE_REMINDER_LEAD_TIME = 24.hours
-  # How long the emailed link outlives the deadline it points at. The window is re-checked on every
-  # request (check_if_needs_redirect) and login plus ownership are required besides, so a token that
-  # died exactly at seller_response_due_at bought nothing — it only turned "the deadline has passed"
-  # into a 404 for the seller who clicks a minute late, or who is still on the form when the window
-  # closes under them mid-save.
+  # check_if_needs_redirect re-checks the window on every request, so the emailed link may safely
+  # outlive the deadline it quotes — and must, or a late click gets a 404 instead of the explanation.
   EVIDENCE_LINK_GRACE_PERIOD = 30.days
   STRIPE_MAX_COMBINED_FILE_SIZE = 5_000_000.bytes
   MINIMUM_RECOMMENDED_CUSTOMER_COMMUNICATION_FILE_SIZE = 1_000_000.bytes
@@ -129,8 +126,6 @@ class DisputeEvidence < ApplicationRecord
     self.class.seller_response_due_at(seller_contacted_at)
   end
 
-  # Expiry to mint the emailed evidence link with. Deliberately later than the deadline the link
-  # quotes — see EVIDENCE_LINK_GRACE_PERIOD.
   def evidence_link_expires_at
     seller_response_due_at&.+(EVIDENCE_LINK_GRACE_PERIOD)
   end

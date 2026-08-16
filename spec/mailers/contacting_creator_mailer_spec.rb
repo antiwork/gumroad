@@ -361,10 +361,8 @@ describe ContactingCreatorMailer do
           expect(mail.body.encoded).to include "Submit additional information"
         end
 
-        # The link's expiry is not the deadline. Minting it with seller_response_due_at killed the
-        # token the same second the window closed, so a seller who clicked a minute late got a 404
-        # instead of the "deadline has passed" explanation the page is written to give them. The
-        # window is still refused on arrival — check_if_needs_redirect does that, not the token.
+        # The link outlives the deadline on purpose — check_if_needs_redirect refuses the late save,
+        # not the token expiry.
         it "mints a link that still resolves after the deadline it quotes" do
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
           token = mail.body.decoded[%r{/purchases/([^/?"]+)/dispute_evidence}, 1]
