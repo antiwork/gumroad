@@ -17,6 +17,9 @@ class AnalyticsPresenter
       # never draws. Accounts older than product event tracking start where the data does instead
       # of at a stretch of guaranteed zeroes.
       earliest_date: [seller.created_at.in_time_zone(seller.timezone).to_date, PRODUCT_EVENT_TRACKING_STARTED_DATE].max.to_s,
+      # The other end of the same clamp. Both dates are on the seller's clock, which is the one the
+      # backend counts by — the browser's can be a day off when the two zones disagree.
+      latest_date: Time.current.in_time_zone(seller.timezone).to_date.to_s,
       # The share of a typical day's revenue this seller has historically booked by
       # now, or null when recent history is too thin. Used to weight the projected
       # end-of-day total by when this seller's sales actually happen instead of

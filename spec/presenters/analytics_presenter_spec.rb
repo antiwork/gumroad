@@ -61,6 +61,15 @@ describe AnalyticsPresenter do
       expect(presenter.page_props[:earliest_date]).to eq("2019-03-05")
     end
 
+    # The browser's today can be a day behind or ahead of the seller's, and the backend counts by
+    # the seller's.
+    it "returns today on the seller's clock as the latest date" do
+      seller.update!(timezone: "Tokyo")
+      travel_to(Time.utc(2026, 4, 9, 20, 0, 0)) do
+        expect(presenter.page_props[:latest_date]).to eq("2026-04-10")
+      end
+    end
+
     it "returns the date tracking began for sellers who predate it" do
       seller.update!(created_at: Time.utc(2011, 6, 1))
       expect(presenter.page_props[:earliest_date]).to eq(PRODUCT_EVENT_TRACKING_STARTED_DATE.to_s)

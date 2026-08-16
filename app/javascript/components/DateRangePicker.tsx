@@ -31,6 +31,7 @@ export const DateRangePicker = ({
   setFrom,
   setTo,
   minDate,
+  maxDate,
 }: {
   from: Date;
   to: Date;
@@ -39,6 +40,9 @@ export const DateRangePicker = ({
   // Earliest date the caller's backend holds data for — where "All time" starts. Callers that
   // leave it out fall back to the date tracking itself began.
   minDate?: Date;
+  // Latest date it holds, on the backend's own clock. "All time" ends there, since the browser's
+  // today can be a day off when the two time zones disagree.
+  maxDate?: Date;
 }) => {
   const today = new Date();
   const uid = React.useId();
@@ -50,11 +54,10 @@ export const DateRangePicker = ({
     setTo(to);
     setOpen(false);
   };
-  // `minDate` is a date on the seller's clock while `today` is the browser's, so a new account in a
-  // far-ahead zone can start after today here. The seller's clock is the one the backend uses, so
-  // keep their date and let the end catch up to it rather than inverting the range.
+  // Both ends come from the backend when the caller supplies them, so "All time" spans exactly
+  // what it will return. An account cannot be created after its own today, so this cannot invert.
   const allTimeStart = minDate ?? PRODUCT_EVENT_TRACKING_STARTED_DATE;
-  const allTimeEnd = allTimeStart > today ? allTimeStart : today;
+  const allTimeEnd = maxDate ?? today;
   const presets = [
     { label: "Today", from: today, to: today },
     { label: "Last 7 days", from: subDays(today, 7), to: today },
