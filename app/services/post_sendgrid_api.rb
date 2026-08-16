@@ -9,16 +9,8 @@ class PostSendgridApi
 
   def self.process(**args) = new(**args).send_emails
 
-  # Sends post emails via SendGrid API.
-  # How it works:
-  # - renders and locally caches the email template
-  # - sends the emails via SendGrid API, with substitutions for each recipient
-  # - records the emails as sent in EmailInfo
-  # - updates delivery statistics
-  # - sends push notifications
-  # It does not:
-  # - check whether the post has already been sent to the email addresses (it's the caller's responsibility)
-  # - create any UrlRedirect records (same)
+  # Does not check whether the post was already sent, or create UrlRedirects —
+  # both are the caller's job.
   #
   # `recipients` keys:
   # required => :email (string)
