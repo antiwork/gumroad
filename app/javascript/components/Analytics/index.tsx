@@ -38,7 +38,14 @@ const WIDE_RANGE_DAYS = 366;
 const csvOnItsWay = (range: string) => `A CSV of ${range} is on its way to your email.`;
 const withCsvNote = (message: string, exportedRange: string | null) =>
   exportedRange ? `${message} ${csvOnItsWay(exportedRange)}` : message;
-const TERMINAL_FAILURE = "Sorry, something went wrong. Please try again.";
+// Shown when the retry runs out of range to halve. It names what failed and points at the recovery
+// the seller still has: the emailed CSV once that is confirmed, otherwise the export control beside
+// the picker.
+const ANALYTICS_FAILED = "We couldn't load your analytics for this range.";
+const terminalMessage = (exportedRange: string | null) =>
+  exportedRange
+    ? withCsvNote(ANALYTICS_FAILED, exportedRange)
+    : `${ANALYTICS_FAILED} Export all sales to get your sales history by email.`;
 type PendingExport = {
   startTime: string;
   endTime: string;
@@ -292,12 +299,12 @@ const Analytics = ({
             // This alert is the last one, so nothing after it can carry the promise. A late
             // confirmation repeats it instead of replacing it with a bare success toast.
             exported.streakEnded = true;
-            exported.finalFailure = TERMINAL_FAILURE;
+            exported.finalFailure = ANALYTICS_FAILED;
             // No narrower range is left to fail either, so it is also the last chance to get the
             // CSV moving.
             enqueueExport(exported);
           }
-          showAlert(withCsvNote(TERMINAL_FAILURE, csvNoteFor(exported)), "error");
+          showAlert(terminalMessage(csvNoteFor(exported)), "error");
           return;
         }
         const pendingExport = (pendingExportRef.current ??= {
