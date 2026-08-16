@@ -9,8 +9,8 @@ class PostSendgridApi
 
   def self.process(**args) = new(**args).send_emails
 
-  # Does not check whether the post was already sent, or create UrlRedirects —
-  # both are the caller's job.
+  # Does not check whether the post was already sent to each recipient email, or
+  # create UrlRedirects — both are the caller's job.
   #
   # `recipients` keys:
   # required => :email (string)
