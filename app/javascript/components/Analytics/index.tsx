@@ -59,14 +59,6 @@ const csvNoteFor = (pendingExport: PendingExport | null) => {
   pendingExport.announced = true;
   return pendingExport.label;
 };
-// Used where no failure alert will follow, so the promise would otherwise never be made.
-const announceCsv = (pendingExport: PendingExport) => {
-  if (pendingExport.announced) return;
-  pendingExport.announced = true;
-  const { finalFailure, label } = pendingExport;
-  if (finalFailure) showAlert(withCsvNote(finalFailure, label), "error");
-  else showAlert(csvOnItsWay(label), "success");
-};
 
 export type Product = {
   name: string;
@@ -215,6 +207,17 @@ const Analytics = ({
       latestStreakRef.current = null;
     }
     streakRangeRef.current = rangeKey;
+    // The single place the CSV promise is announced without a failure alert to carry it. Both
+    // callers run in callbacks that outlive their streak and the page itself, and showAlert reaches
+    // a toast that survives navigation, so the ownership checks live here rather than at each call.
+    const announceCsv = (pendingExport: PendingExport) => {
+      if (pendingExport.announced) return;
+      if (latestStreakRef.current !== pendingExport || !mountedRef.current) return;
+      pendingExport.announced = true;
+      const { finalFailure, label } = pendingExport;
+      if (finalFailure) showAlert(withCsvNote(finalFailure, label), "error");
+      else showAlert(csvOnItsWay(label), "success");
+    };
     // Deliberately not awaited: narrowing the range is what gets the seller a chart back, and it
     // must not queue behind an export endpoint that is slow for the same reason the analytics load
     // just failed. Whichever alert comes first after the server confirms carries the promise — this
@@ -238,10 +241,7 @@ const Analytics = ({
           pendingExport.enqueued = true;
           // Silent while the streak is live: a retry alert is about to replace anything shown here,
           // and those alerts carry the promise themselves.
-          // Only for the newest streak, and only while the page is still up. One toast exists,
-          // and it belongs to whatever the seller is looking at now.
-          const stillCurrent = latestStreakRef.current === pendingExport && mountedRef.current;
-          if (pendingExport.streakEnded && stillCurrent) announceCsv(pendingExport);
+          if (pendingExport.streakEnded) announceCsv(pendingExport);
         })
         .catch(() => {
           // Let the next failure in this streak enqueue the export again.
