@@ -38,6 +38,7 @@ const WIDE_RANGE_DAYS = 366;
 const csvOnItsWay = (range: string) => `A CSV of ${range} is on its way to your email.`;
 const withCsvNote = (message: string, exportedRange: string | null) =>
   exportedRange ? `${message} ${csvOnItsWay(exportedRange)}` : message;
+const TERMINAL_FAILURE = "Sorry, something went wrong. Please try again.";
 type PendingExport = {
   startTime: string;
   endTime: string;
@@ -46,6 +47,9 @@ type PendingExport = {
   enqueued: boolean;
   announced: boolean;
   streakEnded: boolean;
+  // The last thing the seller was told, when the streak ended without a chart. A late confirmation
+  // repeats it rather than replacing the only notice that the range never loaded.
+  finalFailure: string | null;
 };
 // The range to name in a failure alert, once the server has confirmed the export. Every alert in
 // the streak carries it, because they replace each other in milliseconds and only the last one
@@ -59,7 +63,9 @@ const csvNoteFor = (pendingExport: PendingExport | null) => {
 const announceCsv = (pendingExport: PendingExport) => {
   if (pendingExport.announced) return;
   pendingExport.announced = true;
-  showAlert(csvOnItsWay(pendingExport.label), "success");
+  const { finalFailure, label } = pendingExport;
+  if (finalFailure) showAlert(withCsvNote(finalFailure, label), "error");
+  else showAlert(csvOnItsWay(label), "success");
 };
 
 export type Product = {
@@ -262,13 +268,15 @@ const Analytics = ({
           // above already retires the streak as soon as the seller picks anything else.
           const exported = pendingExportRef.current;
           if (exported) {
-            // This alert is the last one, so nothing after it can carry the promise.
+            // This alert is the last one, so nothing after it can carry the promise. A late
+            // confirmation repeats it instead of replacing it with a bare success toast.
             exported.streakEnded = true;
+            exported.finalFailure = TERMINAL_FAILURE;
             // No narrower range is left to fail either, so it is also the last chance to get the
             // CSV moving.
             enqueueExport(exported);
           }
-          showAlert(withCsvNote("Sorry, something went wrong. Please try again.", csvNoteFor(exported)), "error");
+          showAlert(withCsvNote(TERMINAL_FAILURE, csvNoteFor(exported)), "error");
           return;
         }
         const pendingExport = (pendingExportRef.current ??= {
@@ -279,6 +287,7 @@ const Analytics = ({
           enqueued: false,
           announced: false,
           streakEnded: false,
+          finalFailure: null,
         });
         enqueueExport(pendingExport);
         showAlert(

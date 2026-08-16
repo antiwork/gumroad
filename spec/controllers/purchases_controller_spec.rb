@@ -907,6 +907,19 @@ describe PurchasesController, :vcr do
         expect(response.body).not_to include(already_the_sellers_next_month.external_id)
       end
 
+      # `created_before` is a strict `lt` serialized to whole seconds, so an end-of-day boundary
+      # drops the last second of the range. Analytics counts it, so the seller-clock export has to.
+      it "includes the last second of the range when in_seller_time_zone is set" do
+        seller.update!(timezone: "Tokyo")
+
+        last_second = create(:purchase, link: @product, seller:, created_at: Time.utc(2020, 8, 31, 14, 59, 59))
+        index_model_records(Purchase)
+
+        get :export, params: { start_time: "2020-08-01", end_time: "2020-08-31", in_seller_time_zone: true }
+
+        expect(response.body).to include(last_second.external_id)
+      end
+
       it "includes purchases at UTC midnight boundary regardless of seller's timezone" do
         seller.update!(timezone: "Pacific Time (US & Canada)")
 

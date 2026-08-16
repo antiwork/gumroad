@@ -121,7 +121,13 @@ class Exports::PurchaseExportService
     # sales the chart failed to draw.
     time_zone = (ActiveSupport::TimeZone[seller.timezone] if in_seller_time_zone) || ActiveSupport::TimeZone["UTC"]
     start_time = Date.parse(filters[:start_time]).in_time_zone(time_zone).beginning_of_day if filters[:start_time].present?
-    end_time = Date.parse(filters[:end_time]).in_time_zone(time_zone).end_of_day if filters[:end_time].present?
+    if filters[:end_time].present?
+      last_day = Date.parse(filters[:end_time]).in_time_zone(time_zone).beginning_of_day
+      # `created_before` is a strict `lt` serialized to whole seconds, so `end_of_day` drops the
+      # last second of the range. Analytics covers everything up to the next midnight, so the
+      # seller-clock export matches that; the default keeps the boundary #4553 established.
+      end_time = in_seller_time_zone ? last_day + 1.day : last_day.end_of_day
+    end
 
     search_service = PurchaseSearchService.new(
       seller:,
