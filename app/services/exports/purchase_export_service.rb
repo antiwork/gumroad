@@ -111,11 +111,17 @@ class Exports::PurchaseExportService
     tempfile
   end
 
-  def self.export(seller:, recipient:, filters: {}, force_async: false)
+  def self.export(seller:, recipient:, filters: {}, force_async: false, in_seller_time_zone: false)
     product_ids = Link.by_external_ids(filters[:product_ids]).ids if filters[:product_ids].present?
     variant_ids = BaseVariant.by_external_ids(filters[:variant_ids]).ids if filters[:variant_ids].present?
-    start_time = Date.parse(filters[:start_time]).in_time_zone("UTC").beginning_of_day if filters[:start_time].present?
-    end_time = Date.parse(filters[:end_time]).in_time_zone("UTC").end_of_day if filters[:end_time].present?
+    # Date filters are UTC days by default, so a custom range returns what filtering the
+    # unfiltered "All Sales" export by the same dates would, and every row's UTC timestamp
+    # column stays inside the requested range (#4553). The analytics dashboard opts out: its
+    # chart buckets by the seller's own clock, and the CSV it promises has to cover the same
+    # sales the chart failed to draw.
+    time_zone = (ActiveSupport::TimeZone[seller.timezone] if in_seller_time_zone) || ActiveSupport::TimeZone["UTC"]
+    start_time = Date.parse(filters[:start_time]).in_time_zone(time_zone).beginning_of_day if filters[:start_time].present?
+    end_time = Date.parse(filters[:end_time]).in_time_zone(time_zone).end_of_day if filters[:end_time].present?
 
     search_service = PurchaseSearchService.new(
       seller:,
