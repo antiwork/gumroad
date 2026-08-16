@@ -42,9 +42,11 @@ class RefundPolicy < ApplicationRecord
     false
   end
 
-  def effective_max_refund_period_in_days
+  # Account-level policies have no product. Pass for_physical: true when
+  # snapshotting a physical purchase so a stored 0-day policy still applies.
+  def effective_max_refund_period_in_days(for_physical: allows_no_refunds?)
     days = max_refund_period_in_days
-    return days if days.blank? || allows_no_refunds?
+    return days if days.blank? || for_physical
 
     [days, MINIMUM_DIGITAL_REFUND_PERIOD_IN_DAYS].max
   end
