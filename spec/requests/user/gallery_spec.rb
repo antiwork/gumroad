@@ -44,9 +44,10 @@ describe "User Gallery Page Scenario", :elasticsearch_wait_for_refresh, type: :s
     end
 
     it "uses the first image cover as the preview" do
+      cover_url = @product_with_previews.asset_previews.last.url
       visit("/creatorgal")
       within find_product_card(@product_with_previews) do
-        expect(find("figure")).to have_image(src: @product_with_previews.asset_previews.last.url)
+        expect(find("figure")).to have_image(src: cover_url)
       end
     end
 
