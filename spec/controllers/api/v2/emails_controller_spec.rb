@@ -849,6 +849,41 @@ describe Api::V2::EmailsController do
         }.as_json)
         expect(draft.reload.ready_to_publish?).to be(false)
       end
+
+      it "does not unschedule an email that is already published" do
+        @installment.update!(published_at: Time.current)
+        create(:blast, post: @installment)
+
+        post @action, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The email has already been sent."
+        }.as_json)
+        expect(@installment.reload).to be_published
+        expect(@installment.ready_to_publish?).to be(true)
+        expect(@installment.installment_rule).to be_alive
+      end
+
+      it "does not report success if the publish job ran while waiting for the row lock" do
+        allow_any_instance_of(Installment).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          receiver = original.receiver
+          if receiver.id == @installment.id && !@publish_job_ran
+            @publish_job_ran = true
+            PublishScheduledPostJob.new.perform(@installment.id, @installment.installment_rule.version)
+          end
+          original.call(*args, &block)
+        end
+
+        post @action, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The email has already been sent."
+        }.as_json)
+        expect(@installment.reload).to be_published
+        expect(PostEmailBlast.where(post: @installment)).to exist
+      end
     end
 
     it "grants unschedule access with the account scope used by the CLI" do
