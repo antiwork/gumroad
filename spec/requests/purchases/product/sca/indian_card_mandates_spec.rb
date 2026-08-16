@@ -46,7 +46,7 @@ describe("Successful purchases from a product page with SCA and mandate creation
     expect(stripe_charge.payment_method_details.card.mandate).to be_present
   end
 
-  it "uses the first PaymentIntent for a flagged membership registration" do
+  it "blocks renewal while a flagged membership mandate is pending" do
     Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, creator)
     visit membership_product.long_url
     add_to_cart(membership_product, option: "Second Tier")
@@ -61,7 +61,26 @@ describe("Successful purchases from a product page with SCA and mandate creation
 
     stripe_payment_intent = Stripe::PaymentIntent.retrieve(purchase.credit_card.stripe_payment_intent_id)
     stripe_charge = Stripe::Charge.retrieve(stripe_payment_intent.latest_charge)
-    expect(stripe_charge.payment_method_details.card.mandate).to be_present
+    mandate_id = stripe_charge.payment_method_details.card.mandate
+    expect(mandate_id).to be_present
+    stripe_mandate = Stripe::Mandate.retrieve(mandate_id)
+    expect(stripe_mandate.status).to be_in(%w[pending active])
+    expect(stripe_mandate.payment_method).to eq(stripe_charge.payment_method)
+    pending_mandate = Stripe::Mandate.construct_from(stripe_mandate.to_hash.merge(status: "pending"))
+    allow(ChargeProcessor).to receive(:get_mandate).and_return(pending_mandate)
+
+    CheckIndianCardMandateRegistrationJob.new.perform(purchase.id)
+    subscription = purchase.subscription.reload
+    expect(purchase.reload).to be_indian_card_mandate_pending
+    expect(subscription.stripe_mandate_id).to be_nil
+    expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
+
+    expect do
+      travel_to(purchase.created_at + subscription.period + 1.minute) do
+        RecurringChargeWorker.new.perform(subscription.id)
+      end
+    end.not_to change(Purchase, :count)
+    expect(subscription.reload.alive?(include_pending_cancellation: false)).to be(true)
   ensure
     Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, creator)
   end
