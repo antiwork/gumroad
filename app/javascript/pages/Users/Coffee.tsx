@@ -18,7 +18,12 @@ export default function CoffeePage() {
   const { product, purchase, creator_profile } = typia.assert<Props>(usePage().props);
 
   return (
-    <ProfileLayout creatorProfile={creator_profile} hideFollowForm>
+    <ProfileLayout
+      creatorProfile={creator_profile}
+      hideFollowForm
+      currencySelector
+      shownCurrency={product.buyer_currency_display?.buyer_currency_shown}
+    >
       <CoffeeProduct product={product} purchase={purchase} className="mx-auto w-full max-w-6xl lg:px-0" />
     </ProfileLayout>
   );

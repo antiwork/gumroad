@@ -13,18 +13,38 @@ afterEach(() => {
 });
 
 describe("FooterCurrencySelector", () => {
-  it("defaults to detected and writes the cookie on change", () => {
+  it("defaults to the detected currency and writes the cookie on change", () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
     render(<FooterCurrencySelector detectedCurrency="usd" />);
 
     const select = screen.getByLabelText<HTMLSelectElement>("Currency");
-    expect(select.value).toBe("");
+    expect(select.value).toBe("usd");
     expect(screen.getByRole("option", { name: "$ (US Dollars) — detected" })).toBeTruthy();
+    // The detected currency is one option, not a phantom entry alongside the real one.
+    expect(screen.queryByRole("option", { name: "$ (US Dollars)" })).toBeNull();
 
     fireEvent.change(select, { target: { value: "gbp" } });
 
     expect(document.cookie).toContain("gumroad_buyer_currency=gbp");
     expect(assign).toHaveBeenCalled();
+  });
+
+  it("falls back to USD when detection returns nothing", () => {
+    render(<FooterCurrencySelector />);
+
+    expect(screen.getByLabelText<HTMLSelectElement>("Currency").value).toBe("usd");
+  });
+
+  it("disables itself once the reload is under way", () => {
+    vi.spyOn(window.location, "assign").mockImplementation(() => {});
+    render(<FooterCurrencySelector detectedCurrency="usd" />);
+
+    const select = screen.getByLabelText<HTMLSelectElement>("Currency");
+    expect(select.disabled).toBe(false);
+
+    fireEvent.change(select, { target: { value: "gbp" } });
+
+    expect(select.disabled).toBe(true);
   });
 
   it("strips a ?currency= param so it cannot override the new selection", () => {
@@ -52,13 +72,34 @@ describe("FooterCurrencySelector", () => {
     expect(screen.getByLabelText<HTMLSelectElement>("Currency").value).toBe("eur");
   });
 
-  it("clears the cookie when switching back to detected", () => {
-    vi.spyOn(window.location, "assign").mockImplementation(() => {});
-    document.cookie = "gumroad_buyer_currency=eur; path=/";
+  it("says so when the product's price did not render in the selected currency", () => {
+    document.cookie = "gumroad_buyer_currency=gbp; path=/";
+    render(<FooterCurrencySelector detectedCurrency="gbp" shownCurrency="usd" />);
+
+    expect(screen.getByText("Not available for this product — showing $ (US Dollars)")).toBeTruthy();
+  });
+
+  it("stays quiet when the product's price did render in the selected currency", () => {
+    document.cookie = "gumroad_buyer_currency=gbp; path=/";
+    render(<FooterCurrencySelector shownCurrency="gbp" />);
+
+    expect(screen.queryByText(/Not available for this product/u)).toBeNull();
+  });
+
+  it("stays quiet on pages that report no focal price", () => {
+    document.cookie = "gumroad_buyer_currency=gbp; path=/";
     render(<FooterCurrencySelector />);
 
-    fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "" } });
+    expect(screen.queryByText(/Not available for this product/u)).toBeNull();
+  });
 
-    expect(document.cookie).not.toContain("gumroad_buyer_currency=eur");
+  // The old document still describes the old currency, so the mismatch means nothing yet.
+  it("does not claim unavailability while the reload is in flight", () => {
+    vi.spyOn(window.location, "assign").mockImplementation(() => {});
+    render(<FooterCurrencySelector detectedCurrency="usd" shownCurrency="usd" />);
+
+    fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "gbp" } });
+
+    expect(screen.queryByText(/Not available for this product/u)).toBeNull();
   });
 });

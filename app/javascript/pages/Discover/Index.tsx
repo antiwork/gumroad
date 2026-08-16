@@ -572,7 +572,7 @@ function DiscoverIndex() {
           ) : null}
         </div>
       </Layout>
-      <HomeFooter />
+      <HomeFooter currencySelector />
     </>
   );
 }

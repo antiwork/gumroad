@@ -8,6 +8,8 @@ class UsersController < ApplicationController
   include RendersCustomHtmlPages
   include CurrencyHelper
 
+  self.buyer_currency_footer_actions = %w[show coffee].freeze
+
   before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data landing_iframe_content landing_version landing_products]
 
   after_action :verify_authorized, only: %i[deactivate edit]

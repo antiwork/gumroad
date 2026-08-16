@@ -11,7 +11,7 @@ function ProductShowPage() {
   return (
     <>
       <Layout {...props} />
-      <PoweredByFooter />
+      <PoweredByFooter currencySelector shownCurrency={props.product.buyer_currency_display?.buyer_currency_shown} />
     </>
   );
 }
