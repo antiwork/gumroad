@@ -19,6 +19,7 @@ import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
+import { RatingStars } from "$app/components/RatingStars";
 import { Search } from "$app/components/Search";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -240,6 +241,7 @@ const CustomersPage = ({
   if (!currentSeller) return null;
   const timeZoneAbbreviation = format(new Date(), "z", { timeZone: currentSeller.timeZone.name });
   const showNameColumn = customers.some((customer) => customer.name);
+  const showReviewColumn = customers.some((customer) => customer.review);
 
   return (
     <div className="h-full">
@@ -462,6 +464,7 @@ const CustomersPage = ({
                   <TableHead>Email</TableHead>
                   {showNameColumn ? <TableHead>Name</TableHead> : null}
                   <TableHead {...thProps("product_name")}>Product</TableHead>
+                  {showReviewColumn ? <TableHead>Review</TableHead> : null}
                   <TableHead {...thProps("created_at")}>Purchase Date</TableHead>
                   <TableHead {...thProps("price_cents")}>Price</TableHead>
                 </TableRow>
@@ -539,6 +542,29 @@ const CustomersPage = ({
                           </Pill>
                         ) : null}
                       </TableCell>
+                      {showReviewColumn ? (
+                        <TableCell>
+                          {customer.review ? (
+                            <WithTooltip
+                              tip={
+                                customer.review.message ??
+                                (customer.review.response ? "No written review · Replied" : "No written review")
+                              }
+                            >
+                              <div
+                                className="inline-flex items-center"
+                                aria-label={
+                                  `${customer.review.rating} ${customer.review.rating === 1 ? "star" : "stars"}` +
+                                  (customer.review.message ? "" : ", no written review") +
+                                  (customer.review.response ? ", replied" : "")
+                                }
+                              >
+                                <RatingStars rating={customer.review.rating} />
+                              </div>
+                            </WithTooltip>
+                          ) : null}
+                        </TableCell>
+                      ) : null}
                       <TableCell>
                         {createdAt.toLocaleDateString(userAgentInfo.locale, {
                           day: "numeric",

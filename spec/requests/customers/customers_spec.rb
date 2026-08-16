@@ -46,6 +46,24 @@ describe "Sales page", type: :system, js: true do
       expect(page).to have_table_row({ "Email" => "customer1@gumroad.com", "Name" => "Customer 1", "Product" => "Product 1", "Price" => "$1" })
       expect(page).to have_table_row({ "Email" => "customer2@gumroad.com", "Name" => "Customer 2", "Product" => "Membership", "Price" => "$2 a month" })
       expect(page).to have_table_row({ "Email" => "customer3hasaninsanelylonge...", "Name" => "Customer 3", "Product" => "Product 2Bundle", "Price" => "$3" })
+      expect(page).not_to have_selector(:columnheader, "Review")
+    end
+
+    it "shows the rating on the sale that carries it" do
+      create(:purchase, link: product1, full_name: "Customer 1", email: "customer1@gumroad.com", created_at: Time.current, seller:)
+      create(:product_review, purchase: purchase1, rating: 3, message: nil)
+      index_model_records(Purchase)
+
+      login_as seller
+      visit customers_path
+
+      expect(page).to have_selector(:columnheader, "Review")
+      expect(page).to have_selector("[aria-label='3 stars, no written review']", count: 1)
+
+      same_buyer_rows = page.all(:table_row, { "Email" => "customer1@gumroad.com" })
+      expect(same_buyer_rows.size).to eq(2)
+      expect(same_buyer_rows[0]).not_to have_selector("[aria-label='3 stars, no written review']")
+      expect(same_buyer_rows[1]).to have_selector("[aria-label='3 stars, no written review']")
     end
 
     it "hides the Name column when no sale on the page has a name" do
