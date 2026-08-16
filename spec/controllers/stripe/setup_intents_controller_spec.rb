@@ -103,7 +103,7 @@ describe Stripe::SetupIntentsController, :vcr do
         allow(Rails.env).to receive(:production?).and_return(true)
         allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 1, subscription_id: subscription.external_id }]))
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
-        expect(subscription).to receive(:indian_card_mandate_terms).with(
+        expect(subscription).to receive(:indian_card_mandate_terms).twice.with(
           billing_info: nil,
           authenticated_offer_code_buyer: nil
         ).and_return(
@@ -114,16 +114,19 @@ describe Stripe::SetupIntentsController, :vcr do
         )
 
         mandate_options = controller.send(:mandate_options_for_stripe, chargeable, subscription:)
+        next_mandate_options = controller.send(:mandate_options_for_stripe, chargeable, subscription:)
         mandate_terms = mandate_options.dig(:payment_method_options, :card, :mandate_options)
+        next_mandate_terms = next_mandate_options.dig(:payment_method_options, :card, :mandate_options)
 
         expect(mandate_options[:metadata]).to eq(gumroad_subscription_id: subscription.external_id)
         expect(mandate_terms).to include(
           amount: 12_34,
           currency: Currency::INR,
           interval: "month",
-          interval_count: 3,
-          reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id
+          interval_count: 3
         )
+        expect(mandate_terms[:reference]).to start_with("#{StripeChargeProcessor::MANDATE_PREFIX}#{subscription.external_id}-")
+        expect(next_mandate_terms[:reference]).not_to eq(mandate_terms[:reference])
       end
 
       it "omits the interval count for a sporadic subscription mandate" do

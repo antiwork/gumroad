@@ -375,7 +375,10 @@ class Subscription::UpdaterService
       mandate_options.amount_type == "maximum" &&
         mandate_options.amount.to_i == expected_terms[:amount] &&
         mandate_options.currency.to_s.downcase == expected_terms[:currency] &&
-        mandate_options.reference == StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id &&
+        StripeChargeProcessor.indian_card_mandate_reference_for_subscription?(
+          mandate_options.reference,
+          subscription.external_id
+        ) &&
         mandate_options.interval == expected_terms[:interval] &&
         mandate_options.interval_count == expected_terms[:interval_count] &&
         Array(mandate_options.supported_types).include?("india")

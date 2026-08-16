@@ -19,6 +19,28 @@ describe StripeChargeProcessor, :vcr do
     end
   end
 
+  describe ".indian_card_mandate_reference_for_subscription?" do
+    let(:subscription_external_id) { "subscription-id" }
+
+    it "accepts a unique reference for the subscription" do
+      reference = described_class.indian_card_mandate_reference(subscription_external_id)
+
+      expect(described_class.indian_card_mandate_reference_for_subscription?(reference, subscription_external_id)).to be(true)
+    end
+
+    it "accepts the legacy reference during a deploy" do
+      reference = "#{described_class::MANDATE_PREFIX}#{subscription_external_id}"
+
+      expect(described_class.indian_card_mandate_reference_for_subscription?(reference, subscription_external_id)).to be(true)
+    end
+
+    it "rejects a reference for a different subscription" do
+      reference = described_class.indian_card_mandate_reference("different-subscription")
+
+      expect(described_class.indian_card_mandate_reference_for_subscription?(reference, subscription_external_id)).to be(false)
+    end
+  end
+
   describe ".indian_card_mandate_currency_supported?" do
     it "allows Stripe India mandate currencies" do
       expect(described_class.indian_card_mandate_currency_supported?(Currency::INR)).to be(true)

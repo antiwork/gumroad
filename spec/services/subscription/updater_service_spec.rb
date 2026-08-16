@@ -3584,7 +3584,7 @@ describe Subscription::UpdaterService, :vcr do
         amount_type: "maximum",
         amount: terms[:amount],
         currency: terms[:currency],
-        reference: StripeChargeProcessor::MANDATE_PREFIX + subscription.external_id,
+        reference: StripeChargeProcessor.indian_card_mandate_reference(subscription.external_id),
         interval: terms[:interval],
         interval_count: terms[:interval_count],
         supported_types: ["india"]
@@ -3856,6 +3856,35 @@ describe Subscription::UpdaterService, :vcr do
 
     it "rejects mandate terms that do not match the subscription" do
       mismatched_options = Stripe::StripeObject.construct_from(mandate_options.to_h.merge(amount: mandate_options.amount + 1))
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_active",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: mismatched_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_active",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(Subscription::UpdateFailed)
+    end
+
+    it "rejects a mandate reference for a different subscription" do
+      mismatched_options = Stripe::StripeObject.construct_from(
+        mandate_options.to_h.merge(
+          reference: StripeChargeProcessor.indian_card_mandate_reference("different-subscription")
+        )
+      )
       setup_intent = instance_double(
         StripeSetupIntent,
         succeeded?: true,

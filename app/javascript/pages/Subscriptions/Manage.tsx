@@ -450,14 +450,13 @@ export default function SubscriptionsManage() {
       {subscription.payment_method_update_required ? (
         <CardContent>
           <Alert variant="warning" className="grow">
-            Automatic renewals are paused because your payment method needs an update. You keep access while renewals
-            are paused. Update your payment method below to restore renewals.
+            Automatic renewals are paused. You keep access in the meantime; update your payment method below to resume.
           </Alert>
         </CardContent>
       ) : null}
 
       {!subscription.is_installment_plan ? (
-        <CardContent style={{ display: "grid", gap: "1rem", gridTemplateColumns: "1fr" }}>
+        <CardContent className="grid grid-cols-1 gap-4 empty:hidden">
           <ConfigurationSelector
             product={configurationSelectorProduct}
             selection={selection}

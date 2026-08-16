@@ -59,6 +59,17 @@ class StripeChargeProcessor
     mandate_payment_method == payment_method_id
   end
 
+  def self.indian_card_mandate_reference(subscription_external_id)
+    # Stripe rejects a reference that an earlier mandate attempt already used.
+    "#{MANDATE_PREFIX}#{subscription_external_id}-#{SecureRandom.hex}"
+  end
+
+  def self.indian_card_mandate_reference_for_subscription?(reference, subscription_external_id)
+    subscription_reference = "#{MANDATE_PREFIX}#{subscription_external_id}"
+    # Accept SetupIntents created with the old format during a deploy.
+    reference == subscription_reference || reference.to_s.start_with?("#{subscription_reference}-")
+  end
+
   def self.indian_card_mandate_interval(recurrence)
     case recurrence
     when "yearly"
