@@ -411,10 +411,18 @@ class AssetPreview < ApplicationRecord
     if style == :retina
       variant = retina_variant
       if variant && variant_processed?(variant)
+        return Rails.cache.fetch("attachment_#{file.id}_retina_url") { variant.url }
+      end
+
+      enqueue_retina_variant_process
+
+      # Inline workers finish during enqueue. Re-read so this call and the
+      # next one return the same URL.
+      variant = retina_variant
+      if variant && variant_processed?(variant)
         Rails.cache.fetch("attachment_#{file.id}_retina_url") { variant.url }
       else
-        enqueue_retina_variant_process
-        file.url
+        Rails.cache.fetch("attachment_#{file.id}_original_url") { file.url }
       end
     else
       Rails.cache.fetch("attachment_#{file.id}_#{style}_url") { file.url }
