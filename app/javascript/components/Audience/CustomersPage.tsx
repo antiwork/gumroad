@@ -553,6 +553,7 @@ const CustomersPage = ({
                             >
                               <div
                                 className="inline-flex items-center"
+                                tabIndex={0}
                                 aria-label={[
                                   `${customer.review.rating} ${customer.review.rating === 1 ? "star" : "stars"}`,
                                   customer.review.message ? null : "no written review",
