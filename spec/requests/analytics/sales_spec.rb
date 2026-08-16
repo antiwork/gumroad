@@ -64,7 +64,11 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
       failing_analytics_loads do
         expect do
           visit sales_dashboard_path(from: "2020-01-01", to: "2024-01-01")
-          expect(page).to have_text("Sorry, something went wrong. Please try again.", wait: 30)
+          # Nothing follows this alert, so it has to carry the CSV promise itself.
+          expect(page).to have_text(
+            %r{Sorry, something went wrong\. Please try again\. A CSV of .*2020.*2024.* is on its way to your email\.},
+            wait: 30,
+          )
           expect(page).to have_current_path(/from=2024-01-01.*to=2024-01-01/, wait: 20)
         end.to change { ActionMailer::Base.deliveries.size }.by(1)
       end

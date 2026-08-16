@@ -36,9 +36,31 @@ const WIDE_RANGE_DAYS = 366;
 // Names the exported range rather than calling it "the full range": by the time the export is
 // confirmed, the picker has usually moved to a narrower one, and only the dates say which is which.
 const csvOnItsWay = (range: string) => `A CSV of ${range} is on its way to your email.`;
-// Only ever appended once the server has confirmed the export — never as a prediction.
 const withCsvNote = (message: string, exportedRange: string | null) =>
   exportedRange ? `${message} ${csvOnItsWay(exportedRange)}` : message;
+type PendingExport = {
+  startTime: string;
+  endTime: string;
+  label: string;
+  requested: boolean;
+  enqueued: boolean;
+  announced: boolean;
+  streakEnded: boolean;
+};
+// The range to name in a failure alert, once the server has confirmed the export. Every alert in
+// the streak carries it, because they replace each other in milliseconds and only the last one
+// stays on screen long enough to read.
+const csvNoteFor = (pendingExport: PendingExport | null) => {
+  if (!pendingExport?.enqueued) return null;
+  pendingExport.announced = true;
+  return pendingExport.label;
+};
+// Used where no failure alert will follow, so the promise would otherwise never be made.
+const announceCsv = (pendingExport: PendingExport) => {
+  if (pendingExport.announced) return;
+  pendingExport.announced = true;
+  showAlert(csvOnItsWay(pendingExport.label), "success");
+};
 
 export type Product = {
   name: string;
@@ -168,13 +190,7 @@ const Analytics = ({
   // CSV is enqueued. Held across retries so the email covers what they asked for rather than
   // whichever halved range a later attempt happens to be on, and so one streak sends one email.
   // At-most-once is best effort: an enqueue whose response is lost is retried and can send twice.
-  const pendingExportRef = React.useRef<{
-    startTime: string;
-    endTime: string;
-    label: string;
-    requested: boolean;
-    enqueued: boolean;
-  } | null>(null);
+  const pendingExportRef = React.useRef<PendingExport | null>(null);
   // The range the current failure streak is on, including the one the auto-retry is moving to. Any
   // other range is one the seller picked, which starts a fresh streak — otherwise their new range
   // inherits the old one's "CSV is on its way".
@@ -185,9 +201,9 @@ const Analytics = ({
     streakRangeRef.current = rangeKey;
     // Deliberately not awaited: narrowing the range is what gets the seller a chart back, and it
     // must not queue behind an export endpoint that is slow for the same reason the analytics load
-    // just failed. The seller only hears about the CSV once the server has taken it, which is why
-    // the confirmation is its own alert.
-    const enqueueExport = (pendingExport: NonNullable<typeof pendingExportRef.current>) => {
+    // just failed. Whichever alert comes first after the server confirms carries the promise — this
+    // one when the confirmation lands between retries, otherwise the next failure alert.
+    const enqueueExport = (pendingExport: PendingExport) => {
       if (pendingExport.requested || pendingExport.enqueued) return;
       pendingExport.requested = true;
       void request({
@@ -204,7 +220,9 @@ const Analytics = ({
         .then((response) => {
           if (!response.ok) throw new ResponseError();
           pendingExport.enqueued = true;
-          showAlert(csvOnItsWay(pendingExport.label), "success");
+          // Silent while the streak is live: a retry alert is about to replace anything shown here,
+          // and those alerts carry the promise themselves.
+          if (pendingExport.streakEnded) announceCsv(pendingExport);
         })
         .catch(() => {
           // Let the next failure in this streak enqueue the export again.
@@ -227,7 +245,13 @@ const Analytics = ({
         const [byState, byReferral] = await Promise.all([byStateRequest.response, byReferralRequest.response]);
         setData({ byState, byReferral });
         activeRequests.current = null;
+        const recovered = pendingExportRef.current;
         pendingExportRef.current = null;
+        if (recovered) {
+          // The chart is back, so no failure alert will carry the promise from here on.
+          recovered.streakEnded = true;
+          if (recovered.enqueued) announceCsv(recovered);
+        }
       } catch (e) {
         if (e instanceof AbortError) return;
         // rangeDays is the gap between two included endpoints, so 0 is a single day — the
@@ -237,12 +261,14 @@ const Analytics = ({
           // confirmation is worth showing even though the chart never came back. The range check
           // above already retires the streak as soon as the seller picks anything else.
           const exported = pendingExportRef.current;
-          // No narrower range is left to fail, so this is the last chance to get the CSV moving.
-          if (exported) enqueueExport(exported);
-          showAlert(
-            withCsvNote("Sorry, something went wrong. Please try again.", exported?.enqueued ? exported.label : null),
-            "error",
-          );
+          if (exported) {
+            // This alert is the last one, so nothing after it can carry the promise.
+            exported.streakEnded = true;
+            // No narrower range is left to fail either, so it is also the last chance to get the
+            // CSV moving.
+            enqueueExport(exported);
+          }
+          showAlert(withCsvNote("Sorry, something went wrong. Please try again.", csvNoteFor(exported)), "error");
           return;
         }
         const pendingExport = (pendingExportRef.current ??= {
@@ -251,12 +277,14 @@ const Analytics = ({
           label: Intl.DateTimeFormat(locale).formatRange(dateRange.from, dateRange.to),
           requested: false,
           enqueued: false,
+          announced: false,
+          streakEnded: false,
         });
         enqueueExport(pendingExport);
         showAlert(
           withCsvNote(
             "This range couldn't load, so we're retrying with the most recent half.",
-            pendingExport.enqueued ? pendingExport.label : null,
+            csvNoteFor(pendingExport),
           ),
           "error",
         );
