@@ -553,11 +553,13 @@ const CustomersPage = ({
                             >
                               <div
                                 className="inline-flex items-center"
-                                aria-label={
-                                  `${customer.review.rating} ${customer.review.rating === 1 ? "star" : "stars"}` +
-                                  (customer.review.message ? "" : ", no written review") +
-                                  (customer.review.response ? ", replied" : "")
-                                }
+                                aria-label={[
+                                  `${customer.review.rating} ${customer.review.rating === 1 ? "star" : "stars"}`,
+                                  customer.review.message ? null : "no written review",
+                                  customer.review.response ? "replied" : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(", ")}
                               >
                                 <RatingStars rating={customer.review.rating} />
                               </div>

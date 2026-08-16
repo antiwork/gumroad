@@ -58,6 +58,11 @@ PROFILE_FLOW_SPECS = %w[
   spec/requests/profile_custom_html_spec.rb
 ].freeze
 
+# Sales list (CustomersPage) is exercised by the customers request specs.
+CUSTOMERS_FLOW_SPECS = %w[
+  spec/requests/customers
+].freeze
+
 FANOUT = {
   %r{\Aapp/presenters/checkout/} => CHECKOUT_FLOW_SPECS,
   %r{\Aapp/javascript/components/Checkout/} => CHECKOUT_FLOW_SPECS,
@@ -79,6 +84,10 @@ FANOUT = {
   # storefront pages exercised by the user/profile request specs.
   %r{\Aapp/javascript/components/Profile/} => PROFILE_FLOW_SPECS,
   %r{\Aapp/javascript/pages/Profile/} => PROFILE_FLOW_SPECS,
+  # Sales list / customer detail: request specs live under spec/requests/customers,
+  # not next to the Audience component name.
+  %r{\Aapp/javascript/components/Audience/} => CUSTOMERS_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Customers/} => CUSTOMERS_FLOW_SPECS,
   # Help-center article partials render through the help_center request specs;
   # the per-article view glob finds nothing because specs aren't per-article.
   %r{\Aapp/views/help_center/} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
