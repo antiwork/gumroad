@@ -122,11 +122,18 @@ class Exports::PurchaseExportService
     time_zone = (ActiveSupport::TimeZone[seller.timezone] if in_seller_time_zone) || ActiveSupport::TimeZone["UTC"]
     start_time = Date.parse(filters[:start_time]).in_time_zone(time_zone).beginning_of_day if filters[:start_time].present?
     if filters[:end_time].present?
-      last_day = Date.parse(filters[:end_time]).in_time_zone(time_zone).beginning_of_day
+      last_date = Date.parse(filters[:end_time])
       # `created_before` is a strict `lt` serialized to whole seconds, so `end_of_day` drops the
-      # last second of the range. Analytics covers everything up to the next midnight, so the
-      # seller-clock export matches that; the default keeps the boundary #4553 established.
-      end_time = in_seller_time_zone ? last_day + 1.day : last_day.end_of_day
+      # last second of the range. Analytics covers everything up to the next date's start on the
+      # seller's clock, so the seller-clock export matches that. Resolve it from the next date
+      # rather than adding a day: where DST skips midnight, the last date's start is already 01:00
+      # and adding a day would leak that hour of the next day in. Same trap as
+      # CreatorAnalytics::Web#hourly_buckets. The default keeps the boundary #4553 established.
+      end_time = if in_seller_time_zone
+        (last_date + 1).in_time_zone(time_zone)
+      else
+        last_date.in_time_zone(time_zone).end_of_day
+      end
     end
 
     search_service = PurchaseSearchService.new(

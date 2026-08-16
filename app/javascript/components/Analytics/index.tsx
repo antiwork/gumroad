@@ -50,6 +50,9 @@ type PendingExport = {
   // The last thing the seller was told, when the streak ended without a chart. A late confirmation
   // repeats it rather than replacing the only notice that the range never loaded.
   finalFailure: string | null;
+  // The range on screen when the streak ended. A confirmation that lands after the seller has moved
+  // on stays quiet: one toast exists, and it belongs to whatever they are looking at now.
+  endedOnRange: string | null;
 };
 // The range to name in a failure alert, once the server has confirmed the export. Every alert in
 // the streak carries it, because they replace each other in milliseconds and only the last one
@@ -228,7 +231,11 @@ const Analytics = ({
           pendingExport.enqueued = true;
           // Silent while the streak is live: a retry alert is about to replace anything shown here,
           // and those alerts carry the promise themselves.
-          if (pendingExport.streakEnded) announceCsv(pendingExport);
+          // Only while the seller is still on the range this streak ended on — otherwise this
+          // would replace the alert belonging to whatever they moved to.
+          if (pendingExport.streakEnded && pendingExport.endedOnRange === streakRangeRef.current) {
+            announceCsv(pendingExport);
+          }
         })
         .catch(() => {
           // Let the next failure in this streak enqueue the export again.
@@ -256,6 +263,7 @@ const Analytics = ({
         if (recovered) {
           // The chart is back, so no failure alert will carry the promise from here on.
           recovered.streakEnded = true;
+          recovered.endedOnRange = streakRangeRef.current;
           if (recovered.enqueued) announceCsv(recovered);
         }
       } catch (e) {
@@ -271,6 +279,7 @@ const Analytics = ({
             // This alert is the last one, so nothing after it can carry the promise. A late
             // confirmation repeats it instead of replacing it with a bare success toast.
             exported.streakEnded = true;
+            exported.endedOnRange = streakRangeRef.current;
             exported.finalFailure = TERMINAL_FAILURE;
             // No narrower range is left to fail either, so it is also the last chance to get the
             // CSV moving.
@@ -288,6 +297,7 @@ const Analytics = ({
           announced: false,
           streakEnded: false,
           finalFailure: null,
+          endedOnRange: null,
         });
         enqueueExport(pendingExport);
         showAlert(
