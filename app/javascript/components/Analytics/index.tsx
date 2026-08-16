@@ -1,4 +1,4 @@
-import { differenceInDays, lightFormat, startOfDay } from "date-fns";
+import { addDays, differenceInDays, lightFormat, parseISO, startOfDay } from "date-fns";
 import { pickBy } from "lodash-es";
 import * as React from "react";
 
@@ -9,7 +9,7 @@ import {
   fetchAnalyticsDataByState,
 } from "$app/data/analytics";
 import { assertDefined } from "$app/utils/assert";
-import { AbortError, request } from "$app/utils/request";
+import { AbortError, request, ResponseError } from "$app/utils/request";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { ExportSalesPopover } from "$app/components/Analytics/ExportSalesPopover";
@@ -25,6 +25,7 @@ import { DateRangePicker } from "$app/components/DateRangePicker";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Select } from "$app/components/ui/Select";
+import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
@@ -32,6 +33,12 @@ import placeholder from "$assets/images/placeholders/sales.png";
 const MAX_HOURLY_DATE_RANGE_DAYS = 7;
 // Past this width, daily rendering means thousands of chart points, so we default to monthly.
 const WIDE_RANGE_DAYS = 366;
+// Names the exported range rather than calling it "the full range": by the time the export is
+// confirmed, the picker has usually moved to a narrower one, and only the dates say which is which.
+const csvOnItsWay = (range: string) => `A CSV of ${range} is on its way to your email.`;
+// Only ever appended once the server has confirmed the export — never as a prediction.
+const withCsvNote = (message: string, exportedRange: string | null) =>
+  exportedRange ? `${message} ${csvOnItsWay(exportedRange)}` : message;
 
 export type Product = {
   name: string;
@@ -105,6 +112,10 @@ const formatData = (data: AnalyticsDataByReferral, selectedPermalinks: string[])
 export type AnalyticsProps = {
   products: Product[];
   seller_time_zone: string;
+  // First date the backend will ever return data for: it clamps every requested range to the
+  // seller's account creation date. The picker starts here so "All time" means the same span
+  // the chart draws.
+  earliest_date: string;
   // Fraction (0..1) of a typical day's revenue this seller has historically booked by
   // the time the page rendered, or null when recent sales history is too thin. Used
   // to weight the projected end-of-day total on the sales chart.
@@ -116,6 +127,7 @@ export type AnalyticsProps = {
 const Analytics = ({
   products: initialProducts,
   seller_time_zone,
+  earliest_date,
   expected_sales_fraction_of_day,
   country_codes,
   state_names,
@@ -124,7 +136,9 @@ const Analytics = ({
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
   const [aggregateBy, setAggregateBy] = React.useState<"hourly" | "daily" | "monthly">("daily");
+  const minDate = React.useMemo(() => startOfDay(parseISO(earliest_date)), [earliest_date]);
   const dateRange = useAnalyticsDateRange();
+  const { locale } = useUserAgentInfo();
   // Hourly buckets are only available for short ranges (the backend rejects wider
   // ones). Compare calendar days, not exact times: the picked dates carry a
   // time-of-day, but only yyyy-MM-dd strings are sent to the backend.
@@ -150,9 +164,53 @@ const Analytics = ({
   const hasContent = products.length > 0;
 
   const activeRequests = React.useRef<AbortController[] | null>(null);
-  // One emailed export per failure streak, however many times the retry halves.
-  const exportEnqueuedRef = React.useRef(false);
+  // The range the seller actually asked for when the current failure streak began, and whether its
+  // CSV is enqueued. Held across retries so the email covers what they asked for rather than
+  // whichever halved range a later attempt happens to be on, and so one streak sends one email.
+  // At-most-once is best effort: an enqueue whose response is lost is retried and can send twice.
+  const pendingExportRef = React.useRef<{
+    startTime: string;
+    endTime: string;
+    label: string;
+    requested: boolean;
+    enqueued: boolean;
+  } | null>(null);
+  // The range the current failure streak is on, including the one the auto-retry is moving to. Any
+  // other range is one the seller picked, which starts a fresh streak — otherwise their new range
+  // inherits the old one's "CSV is on its way".
+  const streakRangeRef = React.useRef<string | null>(null);
   React.useEffect(() => {
+    const rangeKey = `${startTime}:${endTime}`;
+    if (streakRangeRef.current !== rangeKey) pendingExportRef.current = null;
+    streakRangeRef.current = rangeKey;
+    // Deliberately not awaited: narrowing the range is what gets the seller a chart back, and it
+    // must not queue behind an export endpoint that is slow for the same reason the analytics load
+    // just failed. The seller only hears about the CSV once the server has taken it, which is why
+    // the confirmation is its own alert.
+    const enqueueExport = (pendingExport: NonNullable<typeof pendingExportRef.current>) => {
+      if (pendingExport.requested || pendingExport.enqueued) return;
+      pendingExport.requested = true;
+      void request({
+        method: "GET",
+        accept: "json",
+        url: Routes.export_purchases_path({
+          start_time: pendingExport.startTime,
+          end_time: pendingExport.endTime,
+          force_async: true,
+          // Bound the CSV by the same seller-clock days the chart buckets by.
+          in_seller_time_zone: true,
+        }),
+      })
+        .then((response) => {
+          if (!response.ok) throw new ResponseError();
+          pendingExport.enqueued = true;
+          showAlert(csvOnItsWay(pendingExport.label), "success");
+        })
+        .catch(() => {
+          // Let the next failure in this streak enqueue the export again.
+          pendingExport.requested = false;
+        });
+    };
     const loadData = async () => {
       if (!hasContent) return;
 
@@ -169,27 +227,45 @@ const Analytics = ({
         const [byState, byReferral] = await Promise.all([byStateRequest.response, byReferralRequest.response]);
         setData({ byState, byReferral });
         activeRequests.current = null;
-        exportEnqueuedRef.current = false;
+        pendingExportRef.current = null;
       } catch (e) {
         if (e instanceof AbortError) return;
-        if (rangeDays > 1) {
-          if (!exportEnqueuedRef.current) {
-            exportEnqueuedRef.current = true;
-            request({
-              method: "GET",
-              accept: "html",
-              url: Routes.export_purchases_path({ start_time: startTime, end_time: endTime, force_async: true }),
-            }).catch(() => {});
-          }
+        // rangeDays is the gap between two included endpoints, so 0 is a single day — the
+        // narrowest range there is, and the only one with nothing left to halve.
+        if (rangeDays <= 0) {
+          // Deliberately not cleared: the export for this streak may still be in flight, and its
+          // confirmation is worth showing even though the chart never came back. The range check
+          // above already retires the streak as soon as the seller picks anything else.
+          const exported = pendingExportRef.current;
+          // No narrower range is left to fail, so this is the last chance to get the CSV moving.
+          if (exported) enqueueExport(exported);
           showAlert(
-            "This range couldn't load, so we're retrying with the most recent half. A CSV of the full range is on its way to your email.",
+            withCsvNote("Sorry, something went wrong. Please try again.", exported?.enqueued ? exported.label : null),
             "error",
           );
-          const midpoint = new Date((startOfDay(dateRange.from).getTime() + startOfDay(dateRange.to).getTime()) / 2);
-          dateRange.setFrom(midpoint);
-        } else {
-          showAlert("Sorry, something went wrong. Please try again.", "error");
+          return;
         }
+        const pendingExport = (pendingExportRef.current ??= {
+          startTime,
+          endTime,
+          label: Intl.DateTimeFormat(locale).formatRange(dateRange.from, dateRange.to),
+          requested: false,
+          enqueued: false,
+        });
+        enqueueExport(pendingExport);
+        showAlert(
+          withCsvNote(
+            "This range couldn't load, so we're retrying with the most recent half.",
+            pendingExport.enqueued ? pendingExport.label : null,
+          ),
+          "error",
+        );
+        // Move the start forward by whole days so every retry is at least one day narrower and
+        // the halving reaches a single day. A midpoint in milliseconds can land mid-day and
+        // stall two days short of that.
+        const nextFrom = addDays(startOfDay(dateRange.from), Math.ceil(rangeDays / 2));
+        streakRangeRef.current = `${lightFormat(nextFrom, "yyyy-MM-dd")}:${endTime}`;
+        dateRange.setFrom(nextFrom);
       }
     };
     void loadData();
@@ -228,7 +304,7 @@ const Analytics = ({
             </Select>
             <ProductsPopover products={products} setProducts={setProducts} />
             <div className="col-span-2">
-              <DateRangePicker {...dateRange} />
+              <DateRangePicker {...dateRange} minDate={minDate} />
             </div>
             <ExportSalesPopover />
           </>
