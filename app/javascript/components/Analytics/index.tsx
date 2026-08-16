@@ -136,8 +136,6 @@ export type AnalyticsProps = {
   // seller's account creation date. The picker starts here so "All time" means the same span
   // the chart draws.
   earliest_date: string;
-  // Today on the seller's clock, the other end of the same backend clamp.
-  latest_date: string;
   // Fraction (0..1) of a typical day's revenue this seller has historically booked by
   // the time the page rendered, or null when recent sales history is too thin. Used
   // to weight the projected end-of-day total on the sales chart.
@@ -150,7 +148,6 @@ const Analytics = ({
   products: initialProducts,
   seller_time_zone,
   earliest_date,
-  latest_date,
   expected_sales_fraction_of_day,
   country_codes,
   state_names,
@@ -160,7 +157,12 @@ const Analytics = ({
   );
   const [aggregateBy, setAggregateBy] = React.useState<"hourly" | "daily" | "monthly">("daily");
   const minDate = React.useMemo(() => startOfDay(parseISO(earliest_date)), [earliest_date]);
-  const maxDate = React.useMemo(() => startOfDay(parseISO(latest_date)), [latest_date]);
+  // Today on the seller's clock, which is the end of the same range the backend clamps to. Derived
+  // on every render rather than passed from the server, so a dashboard left open past the seller's
+  // midnight still offers their current day. en-CA formats as YYYY-MM-DD.
+  const maxDate = startOfDay(
+    parseISO(new Intl.DateTimeFormat("en-CA", { timeZone: seller_time_zone }).format(new Date())),
+  );
   const dateRange = useAnalyticsDateRange();
   const { locale } = useUserAgentInfo();
   // Hourly buckets are only available for short ranges (the backend rejects wider
