@@ -273,6 +273,9 @@ const Analytics = ({
         if (recovered) {
           // The chart is back, so no failure alert will carry the promise from here on.
           recovered.streakEnded = true;
+          // The chart came back, so a terminal failure recorded on an earlier pass of this same
+          // range no longer describes anything.
+          recovered.finalFailure = null;
           if (recovered.enqueued) announceCsv(recovered);
         }
       } catch (e) {
