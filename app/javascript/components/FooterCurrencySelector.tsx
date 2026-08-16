@@ -2,12 +2,9 @@ import * as React from "react";
 
 import { readBuyerCurrencyPreference, writeBuyerCurrencyPreference } from "$app/utils/buyerCurrencyPreference";
 import { classNames } from "$app/utils/classNames";
-import { currencyCodeList, findCurrencyByCode, type CurrencyCode } from "$app/utils/currency";
+import { currencyCodeList, findCurrencyByCode, isCurrencyCode } from "$app/utils/currency";
 
 import { Select } from "$app/components/ui/Select";
-
-const currencyCodes: readonly string[] = currencyCodeList;
-const isCurrencyCode = (code: string): code is CurrencyCode => currencyCodes.includes(code);
 
 // The buyer-facing presentment currency selector. Only pages that render a price mount it — see
 // PoweredByFooter and HomeFooter, which both default it off. Writes the same cookie the checkout

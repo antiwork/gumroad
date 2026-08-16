@@ -1,8 +1,6 @@
-import { CurrencyCode, currencyCodeList } from "$app/utils/currency";
+import { CurrencyCode, isCurrencyCode } from "$app/utils/currency";
 
 const BUYER_CURRENCY_COOKIE = "gumroad_buyer_currency";
-
-const isKnownCurrencyCode = (code: string): code is CurrencyCode => currencyCodeList.some((known) => known === code);
 
 export function readBuyerCurrencyPreference(): CurrencyCode | null {
   if (typeof window === "undefined") return null;
@@ -19,7 +17,7 @@ export function readBuyerCurrencyPreference(): CurrencyCode | null {
           return null;
         }
       })();
-  return raw && isKnownCurrencyCode(raw) ? raw : null;
+  return raw && isCurrencyCode(raw) ? raw : null;
 }
 
 export function writeBuyerCurrencyPreference(code: string | null) {
