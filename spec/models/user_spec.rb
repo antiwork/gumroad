@@ -3331,6 +3331,11 @@ describe User, :vcr do
       expect(GenerateSubscribePreviewJob).to have_enqueued_sidekiq_job(@user.id)
     end
 
+    it "schedules GenerateSubscribePreviewJob when the bio changes" do
+      @user.update!(bio: "I write about woodworking.")
+      expect(GenerateSubscribePreviewJob).to have_enqueued_sidekiq_job(@user.id)
+    end
+
     it "schedules GenerateSubscribePreviewJob when the seller highlight_color changes" do
       @user.seller_profile.update!(highlight_color: "#133337")
       @user.save!

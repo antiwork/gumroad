@@ -130,6 +130,7 @@ class UsersController < ApplicationController
     render inertia: "Users/SubscribePreview", props: {
       avatar_url: @user.resized_avatar_url(size: 240),
       title: @user.name_or_username,
+      bio: @user.bio.presence,
     }
   end
 
