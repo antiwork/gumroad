@@ -349,7 +349,11 @@ export default function MainPage() {
           header={
             <>
               <h2>Refund policy</h2>
-              <div>Choose how refunds will be handled for your products.</div>
+              <div>
+                {props.user.seller_refund_policy.editable
+                  ? "Choose how refunds will be handled for your products."
+                  : "Refund policies are set per product in the product editor."}
+              </div>
             </>
           }
         >
@@ -371,6 +375,7 @@ export default function MainPage() {
             </FieldsetTitle>
             <Select
               id="max-refund-period-in-days"
+              className="disabled:opacity-100 disabled:bg-muted"
               value={form.data.user.seller_refund_policy.max_refund_period_in_days}
               disabled={isFormDisabled || !props.user.seller_refund_policy.editable}
               onChange={(e) =>
