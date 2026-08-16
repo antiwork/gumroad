@@ -344,12 +344,28 @@ class AssetPreviewTest < ActiveSupport::TestCase
     assert_equal 210, asset_preview.display_height
   end
 
-  test "url_from_file serves the original and enqueues processing when the retina variant is not ready" do
+  test "url_from_file serves a stable original and enqueues processing when the retina variant is not ready" do
     asset_preview = create_asset_preview
     ProcessAssetPreviewRetinaWorker.jobs.clear
 
-    assert_equal asset_preview.file.url, asset_preview.url_from_file(style: :retina)
+    first = asset_preview.url_from_file(style: :retina)
+    second = asset_preview.url_from_file(style: :retina)
+
+    assert_equal first, second
+    assert_equal Rails.cache.read("attachment_#{asset_preview.file.id}_original_url"), first
     assert_includes ProcessAssetPreviewRetinaWorker.jobs.map { _1["args"] }, [asset_preview.id]
+  end
+
+  test "url_from_file returns the same retina URL when processing finishes during enqueue" do
+    asset_preview = create_asset_preview
+
+    Sidekiq::Testing.inline! do
+      first = asset_preview.url_from_file(style: :retina)
+      second = asset_preview.url_from_file(style: :retina)
+
+      assert_equal asset_preview.retina_variant.url, first
+      assert_equal first, second
+    end
   end
 
   test "generate_retina_variant! re-raises processing failures so the worker can retry" do
