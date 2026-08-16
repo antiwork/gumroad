@@ -10,7 +10,7 @@ describe("Dispute evidence page", type: :system, js: true) do
   let(:evidence_token) do
     purchase.secure_external_id(
       scope: Purchases::DisputeEvidenceController::SECURE_ID_SCOPE,
-      expires_at: dispute_evidence.seller_response_due_at
+      expires_at: dispute_evidence.evidence_link_expires_at
     )
   end
 

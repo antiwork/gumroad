@@ -6,10 +6,13 @@ require "inertia_rails/rspec"
 describe Purchases::DisputeEvidenceController, type: :controller, inertia: true do
   let(:dispute_evidence) { create(:dispute_evidence) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
+  # Minted exactly the way the chargeback emails mint it, so the elapsed-window cases below
+  # exercise the link a real seller holds. evidence_link_expires_at outlives the deadline on
+  # purpose: the token is not what closes the window, check_if_needs_redirect is.
   let(:evidence_token) do
     purchase.secure_external_id(
       scope: Purchases::DisputeEvidenceController::SECURE_ID_SCOPE,
-      expires_at: dispute_evidence.seller_response_due_at
+      expires_at: dispute_evidence.evidence_link_expires_at
     )
   end
 
@@ -50,9 +53,12 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
     end
 
+    # Past the deadline rather than exactly on it: a stamp of exactly
+    # SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours.ago puts the request on the boundary the
+    # window check compares against, which is a state no seller can act from.
     context "when the window has elapsed without the row being resolved" do
       before do
-        dispute_evidence.update!(seller_contacted_at: DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours.ago)
+        dispute_evidence.update!(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 0.1).hours.ago)
       end
 
       it "redirects" do
@@ -169,7 +175,7 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
     # the submission, so a late save would either arrive too late or race the forward. This is the
     # one case where the seller genuinely cannot keep adding to their response.
     it "refuses a save once the window has elapsed, and forwards nothing" do
-      dispute_evidence.update!(seller_contacted_at: DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours.ago)
+      dispute_evidence.update!(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 0.1).hours.ago)
 
       put :update, params: {
         purchase_id: evidence_token,

@@ -120,7 +120,7 @@ class ContactingCreatorMailer < ApplicationMailer
                 purchase_dispute_evidence_url(
                   @disputable.purchase_for_dispute_evidence.secure_external_id(
                     scope: Purchases::DisputeEvidenceController::SECURE_ID_SCOPE,
-                    expires_at: dispute_evidence.seller_response_due_at
+                    expires_at: dispute_evidence.evidence_link_expires_at
                   )
                 ),
                 class: "button primary"

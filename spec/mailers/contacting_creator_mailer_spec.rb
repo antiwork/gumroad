@@ -361,6 +361,21 @@ describe ContactingCreatorMailer do
           expect(mail.body.encoded).to include "Submit additional information"
         end
 
+        # The link's expiry is not the deadline. Minting it with seller_response_due_at killed the
+        # token the same second the window closed, so a seller who clicked a minute late got a 404
+        # instead of the "deadline has passed" explanation the page is written to give them. The
+        # window is still refused on arrival — check_if_needs_redirect does that, not the token.
+        it "mints a link that still resolves after the deadline it quotes" do
+          mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+          token = mail.body.decoded[%r{/purchases/([^/?"]+)/dispute_evidence}, 1]
+          expect(token).to be_present
+
+          travel_to(dispute_evidence.seller_response_due_at + 1.hour) do
+            found = Purchase.find_by_secure_external_id(token, scope: Purchases::DisputeEvidenceController::SECURE_ID_SCOPE)
+            expect(found).to eq(purchase)
+          end
+        end
+
         # Hours are computed when the mail renders, not when it is enqueued, and
         # CreateMissingDisputeEvidenceJob backdates windows to a few hours to beat the processor's
         # cutoff. A notice queued with an hour left can therefore render with none, and asking for

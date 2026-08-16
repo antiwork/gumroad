@@ -228,6 +228,21 @@ describe DisputeEvidence do
     end
   end
 
+  describe "#evidence_link_expires_at" do
+    it "outlives the deadline, so a seller who clicks late reaches the explanation" do
+      dispute_evidence.update!(seller_contacted_at: 3.hours.ago)
+
+      expect(dispute_evidence.evidence_link_expires_at)
+        .to eq(dispute_evidence.seller_response_due_at + described_class::EVIDENCE_LINK_GRACE_PERIOD)
+    end
+
+    it "returns nil without a seller-contacted stamp, which has no deadline to outlive" do
+      dispute_evidence.update_as_not_seller_contacted!
+
+      expect(dispute_evidence.evidence_link_expires_at).to be_nil
+    end
+  end
+
   describe ".seller_response_reminder_at" do
     it "returns 24 hours before the seller response deadline" do
       stamp = Time.current
