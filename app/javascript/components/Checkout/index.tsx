@@ -1,10 +1,13 @@
 import { X } from "@boxicons/react";
 import * as React from "react";
 
+import { isWalletPaymentElementType } from "$app/data/card_payment_method_data";
+import type { SurchargesResponse } from "$app/data/customer_surcharge";
 import { computeOfferDiscount } from "$app/data/offer_code";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { classNames } from "$app/utils/classNames";
+import { findCurrencyByCode, isCurrencyCode } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
 import {
@@ -41,12 +44,14 @@ import {
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -78,8 +83,8 @@ import {
   computeTipForPrice,
   getErrors,
   getFutureInstallmentsTotal,
-  getTotalPrice,
   getTotalPriceFromProducts,
+  getTotalPriceFromSurcharges,
   isProcessing,
   isTippingEnabled,
   useState,
@@ -109,6 +114,98 @@ const nameOfSalesTaxForCountry = (countryCode: string) => {
     default:
       return "VAT";
   }
+};
+
+// The same `display_format` the surcharge endpoint builds its menu labels from, so the notice
+// names a currency exactly as the picker does.
+const currencyLabel = (code: string) =>
+  isCurrencyCode(code) ? findCurrencyByCode(code).displayFormat : code.toUpperCase();
+
+// `surcharges` is the summary's quote, which during a currency change is the one the change
+// replaced (see `summarySurcharges` below). Reading the menu off the live surcharge state instead
+// would empty it for the length of the round trip, unmounting the select the buyer is focused in.
+const CurrencyPicker = ({
+  isListedCurrency,
+  surcharges,
+  isRequoting,
+}: {
+  isListedCurrency: boolean;
+  surcharges: SurchargesResponse | null;
+  isRequoting: boolean;
+}) => {
+  const [state, dispatch] = useState();
+  const uid = React.useId();
+  const options = surcharges?.available_buyer_currencies ?? [];
+  const detected = surcharges?.detected_buyer_currency ?? null;
+  const preferred = state.buyerCurrency ?? detected ?? "usd";
+  const value = options.some((option) => option.code === preferred)
+    ? preferred
+    : detected && options.some((option) => option.code === detected)
+      ? detected
+      : (options[0]?.code ?? "usd");
+  const canChooseCurrency =
+    options.length >= 2 &&
+    state.paymentMethod === "card" &&
+    !state.willSaveCard &&
+    !isWalletPaymentElementType(state.paymentElementType) &&
+    !isListedCurrency;
+
+  React.useEffect(() => {
+    if (!canChooseCurrency || state.buyerCurrency == null || state.buyerCurrency === value) return;
+
+    dispatch({ type: "set-value", buyerCurrency: value });
+  }, [canChooseCurrency, dispatch, state.buyerCurrency, value]);
+
+  // Wallet, non-card, save-card, and listed-currency paths do not honor a buyer-selected FX quote.
+  if (!canChooseCurrency) return null;
+
+  return (
+    // Carries its own cell chrome so the summary box shows no stray divider when this returns null.
+    <div className="grid gap-4 border-t border-border p-4 sm:p-5">
+      <Fieldset>
+        <FieldsetTitle>
+          <Label htmlFor={uid}>Currency</Label>
+        </FieldsetTitle>
+        <Select
+          id={uid}
+          value={value}
+          // Only a payment in flight disables this. A re-quote does not: taking the control the
+          // buyer is holding focus in out of reach is the behaviour being fixed here.
+          disabled={isProcessing(state)}
+          onChange={(e) => dispatch({ type: "set-value", buyerCurrency: e.target.value })}
+        >
+          {options.map((option) => (
+            <option key={option.code} value={option.code}>
+              {option.label}
+              {option.code === detected ? " — detected" : ""}
+            </option>
+          ))}
+        </Select>
+      </Fieldset>
+      {/* Always rendered so the live region exists before the text lands in it. */}
+      <div role="status" className="text-muted empty:hidden">
+        {isRequoting ? "Updating total…" : ""}
+      </div>
+    </div>
+  );
+};
+
+// Its own cell rather than part of CurrencyPicker: a refused currency is usually one the server
+// then withdraws from the menu, which can leave a single currency and unmount the picker — the
+// place the buyer most needs to be told why their choice did not take.
+const CurrencyRefusalNotice = ({ summaryCurrencyCode }: { summaryCurrencyCode: string }) => {
+  const [state] = useState();
+  const unavailable = state.unavailableBuyerCurrency;
+  if (!unavailable) return null;
+
+  return (
+    <div className="border-t border-border p-4 sm:p-5">
+      <Alert variant="warning">
+        We can't charge this cart in {currencyLabel(unavailable)}, so the total is in{" "}
+        {currencyLabel(summaryCurrencyCode)}.
+      </Alert>
+    </div>
+  );
 };
 
 export const Checkout = ({
@@ -214,7 +311,20 @@ export const Checkout = ({
       0,
     ) + computeTip(state);
 
-  const total = getTotalPrice(state);
+  // The quote the summary renders from. While a currency change is being re-quoted that is the
+  // quote the change replaced, so the card keeps its rows — and the picker sitting under them —
+  // instead of folding up around the control the buyer just used. Everything that gates paying
+  // still reads `state.surcharges` (isSubmitDisabled, the Element amount, the submitted quote
+  // token), so no amount shown from here can be charged.
+  const summarySurcharges =
+    state.surcharges.type === "loaded" ? state.surcharges.result : (state.buyerCurrencyRemint?.surcharges ?? null);
+  // Only while a replacement is actually in flight. An errored fetch keeps the snapshot on screen
+  // (it is the quote the buyer was returned to) but nothing is coming, so the summary must stop
+  // saying it is working.
+  const isRequoting =
+    (state.surcharges.type === "pending" || state.surcharges.type === "loading") && summarySurcharges !== null;
+
+  const total = getTotalPriceFromSurcharges(summarySurcharges);
   const visibleDiscounts = cart.discountCodes.filter(
     (code) =>
       !code.fromUrl ||
@@ -234,14 +344,12 @@ export const Checkout = ({
   const futureInstallmentsWithoutTipsTotal = getFutureInstallmentsTotal(state);
 
   const displayTipSelector = isTippingEnabled(state);
-  const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
-    state.surcharges.type === "loaded" ? state.surcharges.result : null,
-    {
-      cartPermalinks: cart.items.map((item) => item.product.permalink),
-      willSaveCard: state.willSaveCard,
-      paymentMethod: state.paymentMethod,
-    },
-  );
+  const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
+    cartPermalinks: cart.items.map((item) => item.product.permalink),
+    willSaveCard: state.willSaveCard,
+    paymentMethod: state.paymentMethod,
+    paymentElementType: state.paymentElementType,
+  });
   // The buyer-currency amounts every row of the table renders from, so the visible numbers
   // sum exactly to the locked total the buyer is charged. An unusable allocation makes
   // buyerCurrencyDisplay null above, keeping every row and the submitted token canonical.
@@ -292,9 +400,9 @@ export const Checkout = ({
     // a conversion of their own, because any separate arithmetic drifts from what gets charged by a
     // minor unit — see computeTipForListedLines.
     tipCents: computeTipForListedLines(state, listedTipLines),
-    usdTaxCents: state.surcharges.type === "loaded" ? state.surcharges.result.tax_cents : 0,
-    usdTaxIncludedCents: state.surcharges.type === "loaded" ? state.surcharges.result.tax_included_cents : 0,
-    usdShippingCents: state.surcharges.type === "loaded" ? state.surcharges.result.shipping_rate_cents : 0,
+    usdTaxCents: summarySurcharges?.tax_cents ?? 0,
+    usdTaxIncludedCents: summarySurcharges?.tax_included_cents ?? 0,
+    usdShippingCents: summarySurcharges?.shipping_rate_cents ?? 0,
   });
   // The one currency the whole summary is formatted in: the FX-quoted buyer currency when a quote
   // is being displayed, else the listed currency on the method-forced lane, else canonical USD
@@ -359,8 +467,16 @@ export const Checkout = ({
                     />
                   </div>
                 ) : null}
-                <div className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}>
-                  {state.surcharges.type === "loaded" ? (
+                <div
+                  className={classNames(
+                    "grid gap-4 p-4 transition-opacity sm:px-5",
+                    displayTipSelector && "border-t border-border",
+                    isRequoting && "opacity-50",
+                  )}
+                  data-checkout-price-rows="true"
+                  aria-busy={isRequoting}
+                >
+                  {summarySurcharges ? (
                     <>
                       <CartPriceItem
                         title="Subtotal"
@@ -370,33 +486,33 @@ export const Checkout = ({
                             : formatCheckoutPrice(subtotal, localCurrency)
                         }
                       />
-                      {state.surcharges.result.tax_included_cents ? (
+                      {summarySurcharges.tax_included_cents ? (
                         <CartPriceItem
                           title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
                           price={
                             listedAmounts && listedCurrency
                               ? formatPresentmentCents(listedAmounts.taxIncludedCents, listedCurrency)
-                              : formatCheckoutPrice(state.surcharges.result.tax_included_cents, localCurrency)
+                              : formatCheckoutPrice(summarySurcharges.tax_included_cents, localCurrency)
                           }
                         />
                       ) : null}
-                      {state.surcharges.result.tax_cents ? (
+                      {summarySurcharges.tax_cents ? (
                         <CartPriceItem
                           title={nameOfSalesTaxForCountry(state.country)}
                           price={
                             localAmounts && localCurrency
                               ? formatPresentmentCents(localAmounts.taxCents, localCurrency)
-                              : formatCheckoutPrice(state.surcharges.result.tax_cents, localCurrency)
+                              : formatCheckoutPrice(summarySurcharges.tax_cents, localCurrency)
                           }
                         />
                       ) : null}
-                      {state.surcharges.result.shipping_rate_cents ? (
+                      {summarySurcharges.shipping_rate_cents ? (
                         <CartPriceItem
                           title="Shipping rate"
                           price={
                             localAmounts && localCurrency
                               ? formatPresentmentCents(localAmounts.shippingCents, localCurrency)
-                              : formatCheckoutPrice(state.surcharges.result.shipping_rate_cents, localCurrency)
+                              : formatCheckoutPrice(summarySurcharges.shipping_rate_cents, localCurrency)
                           }
                         />
                       ) : null}
@@ -470,7 +586,13 @@ export const Checkout = ({
                 </div>
                 {total != null ? (
                   <>
-                    <footer className="grid gap-4 border-t border-border p-4 sm:px-5">
+                    <footer
+                      className={classNames(
+                        "grid gap-4 border-t border-border p-4 transition-opacity sm:px-5",
+                        isRequoting && "opacity-50",
+                      )}
+                      aria-busy={isRequoting}
+                    >
                       <CartPriceItem
                         title="Total"
                         price={
@@ -481,6 +603,12 @@ export const Checkout = ({
                         variant="large"
                       />
                     </footer>
+                    <CurrencyPicker
+                      isListedCurrency={listedCurrency != null}
+                      surcharges={summarySurcharges}
+                      isRequoting={isRequoting}
+                    />
+                    <CurrencyRefusalNotice summaryCurrencyCode={localCurrency?.currencyCode ?? "usd"} />
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
                       <div className="grid gap-4 border-t border-border p-4">
                         <CartPriceItem

@@ -55,6 +55,46 @@ describe Checkout::BuyerCurrencyQuote do
   end
 
   describe ".create" do
+    it "quotes the requested currency instead of the IP currency" do
+      allow(StripeFxQuote).to receive(:create).with(
+        to_currency: Currency::USD,
+        from_currency: Currency::GBP,
+        stripe_account_id: merchant_account.charge_processor_merchant_id,
+        destination_account_id: nil
+      ).and_return(stripe_fx_quote)
+
+      result = described_class.create(
+        line_items: line_items_for(product),
+        canonical_total_cents: 10_00,
+        ip: "24.48.0.1",
+        currency: Currency::GBP
+      )
+
+      expect(result).to have_attributes(currency: Currency::GBP, canonical_total_cents: 10_00)
+    end
+
+    it "does not quote when the buyer asks for US dollars" do
+      result = described_class.create(
+        line_items: line_items_for(product),
+        canonical_total_cents: 10_00,
+        ip: "24.48.0.1",
+        currency: Currency::USD
+      )
+
+      expect(result).to be_nil
+    end
+
+    it "ignores an unknown requested currency and uses the IP currency" do
+      result = described_class.create(
+        line_items: line_items_for(product),
+        canonical_total_cents: 10_00,
+        ip: "24.48.0.1",
+        currency: "xyz"
+      )
+
+      expect(result).to have_attributes(currency: Currency::CAD)
+    end
+
     it "creates a signed quote for an eligible single-product checkout" do
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
@@ -1047,6 +1087,95 @@ describe Checkout::BuyerCurrencyQuote do
           expect(seller_merchant_account.reload.settlement_currency_mismatch_active?(Currency::CAD)).to be(false)
         end
       end
+    end
+  end
+
+  # The surcharge endpoint asks this before it publishes a currency menu. It has to answer for the
+  # gates that hold in every currency and only those, or the menu either offers currencies the cart
+  # can never be quoted in or hides ones it can.
+  describe ".cart_quotable?" do
+    def quotable?(line_items, canonical_total_cents)
+      described_class.cart_quotable?(line_items:, canonical_total_cents:)
+    end
+
+    it "accepts a plain paid cart" do
+      expect(quotable?(line_items_for(product), 10_00)).to be(true)
+    end
+
+    it "refuses a cart with nothing to charge" do
+      free = create(:product, user: seller, price_cents: 0)
+      expect(quotable?(line_items_for(free), 0)).to be(false)
+    end
+
+    it "refuses a cart whose lines do not add up to its total" do
+      expect(quotable?(line_items_for(product), 20_00)).to be(false)
+    end
+
+    it "refuses a cart spanning more sellers than one request will quote" do
+      extra_sellers = Array.new(described_class::MAX_QUOTED_CHARGES) do
+        create(:user, disable_buyer_local_currency: false).tap do |extra_seller|
+          Feature.activate_user(:buyer_local_currency, extra_seller)
+          Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
+        end
+      end
+      products = [product, *extra_sellers.map { create(:product, user: _1, price_cents: 10_00) }]
+
+      expect(quotable?(line_items_for(*products), 10_00 * products.length)).to be(false)
+    ensure
+      extra_sellers&.each do |extra_seller|
+        Feature.deactivate_user(:buyer_local_currency, extra_seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
+      end
+    end
+
+    it "refuses a paid cart carrying a seller whose own lines are all free" do
+      # create() withholds the quote for a seller it would charge nothing, and one withheld charge
+      # takes the whole cart back to canonical USD.
+      free_seller = create(:user, disable_buyer_local_currency: false).tap do |other|
+        Feature.activate_user(:buyer_local_currency, other)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other)
+      end
+      free_product = create(:product, user: free_seller, price_cents: 0)
+
+      expect(quotable?(line_items_for(product, free_product), 10_00)).to be(false)
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, free_seller) if free_seller
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, free_seller) if free_seller
+    end
+
+    it "refuses a cart whose seller is outside the rollout" do
+      other = create(:user, disable_buyer_local_currency: false)
+      expect(quotable?(line_items_for(create(:product, user: other, price_cents: 10_00)), 10_00)).to be(false)
+    end
+
+    it "refuses a cart mixing a membership with a one-off" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+      membership = create(:membership_product, user: seller, price_cents: 10_00)
+
+      expect(quotable?(line_items_for(product, membership), 20_00)).to be(false)
+    end
+
+    it "refuses a tip on a cart priced in something other than US dollars" do
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      tipped = line_items_for(eur_product)
+      tipped.first.tip_cents = 1_00
+      tipped.first.price_cents = 9_00
+
+      expect(quotable?(tipped, 10_00)).to be(false)
+    end
+
+    # The currency-specific gates stay out of this predicate: they are what lets the endpoint
+    # drop one currency from the menu while keeping the rest.
+    it "accepts a cart priced in the currency a buyer might ask for" do
+      gbp_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::GBP)
+
+      expect(quotable?(line_items_for(gbp_product), 10_00)).to be(true)
+      expect(described_class.create(
+               line_items: line_items_for(gbp_product),
+               canonical_total_cents: 10_00,
+               ip: "24.48.0.1",
+               currency: Currency::GBP
+             )).to be_nil
     end
   end
 
