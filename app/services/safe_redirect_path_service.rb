@@ -8,6 +8,8 @@ class SafeRedirectPathService
   end
 
   def process
+    return "/" if path.blank?
+
     if (allow_subdomain_host && subdomain_host?) || same_host?
       path
     else
