@@ -95,6 +95,17 @@ describe SignupController, type: :controller, inertia: true do
         end
       end
     end
+
+    it "sets a SERP description that names both live fee channels" do
+      get :new
+
+      tags = controller.send(:meta_tags)
+      description = tags["meta-name-description"][:content]
+      expect(tags["title"][:inner_content]).to eq("Sign up for Gumroad")
+      expect(description).to eq("Create a free Gumroad account. Sell digital products, memberships, and courses with no monthly fee. Direct sales: 10% + 50¢. Discover: 30%.")
+      expect(description).not_to match(/10% \+ 50¢ per sale/)
+      expect(tags["canonical"][:href]).to eq(signup_url)
+    end
   end
 
   describe "POST create", :vcr do

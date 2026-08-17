@@ -17,7 +17,7 @@ class SignupController < Devise::RegistrationsController
 
   def new
     set_meta_tag(title: "Sign up for Gumroad")
-    set_meta_tag(name: "description", content: "Create a free Gumroad account. Sell digital products, memberships, and courses with no monthly fee — 10% + 50¢ per sale.")
+    set_meta_tag(name: "description", content: "Create a free Gumroad account. Sell digital products, memberships, and courses with no monthly fee. Direct sales: 10% + 50¢. Discover: 30%.")
     set_meta_tag(tag_name: "link", rel: "canonical", href: signup_url, head_key: "canonical")
     auth_presenter = AuthPresenter.new(params:, application: @application)
     render inertia: "Signup/New", props: auth_presenter.signup_props.merge(is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?)
