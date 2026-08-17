@@ -412,11 +412,11 @@ class Purchase < ApplicationRecord
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
 
-  # Full refunds flip stripe_refunded without touching purchase_state, so they need
-  # their own trigger or the cached 5%-fee eligibility stays true after GMV drops.
+  # Full refunds and failed-refund reversals flip stripe_refunded without touching
+  # purchase_state, so either direction must refresh the cached 5%-fee eligibility.
   after_commit :enqueue_high_volume_fee_eligibility_refresh, if: -> (purchase) {
     (purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful") ||
-      (purchase.stripe_refunded_previously_changed? && purchase.stripe_refunded?)
+      purchase.stripe_refunded_previously_changed?
   }
 
   after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) {
