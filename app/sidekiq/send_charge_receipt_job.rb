@@ -14,12 +14,11 @@ class SendChargeReceiptJob
                   unique_across_queues: true,
                   on_conflict: { server: :raise }
 
-  # In a multi-item checkout the line items settle independently: the free/$0 row lands almost
-  # immediately while a paid row can complete seconds later (the free+paid receipt race, gp#2025).
-  # Sending on the first settled row would emit a free-only receipt that never includes the paid
-  # purchase. Defer until every purchase reaches a terminal state. Bounded: a genuinely slow
-  # payment (ACH, Pix) must not hold the buyer's receipt forever, so once the budget is exhausted
-  # we fall through and send with what has settled.
+  # In a multi-item checkout the line items settle independently: a free/$0 row lands almost
+  # immediately while a paid row completes seconds later. Sending on the first settled row would
+  # emit a free-only receipt that never includes the later purchase (gp#2025). Defer until every
+  # purchase reaches a terminal state, but bound the delay so a slow payment (ACH, Pix) does not
+  # hold the buyer's receipt forever.
   RETRY_DELAYS = [10.seconds, 30.seconds, 1.minute, 5.minutes].freeze
 
   def perform(charge_id, attempt = 0)
