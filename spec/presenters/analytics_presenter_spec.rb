@@ -53,5 +53,17 @@ describe AnalyticsPresenter do
       seller.update!(timezone: "Eastern Time (US & Canada)")
       expect(presenter.page_props[:seller_time_zone]).to eq("America/New_York")
     end
+
+    # CreatorAnalytics::CachingProxy#requested_dates clamps to this same date, so the picker and
+    # the chart have to agree on it.
+    it "returns the seller's creation date in the seller's time zone as the earliest date" do
+      seller.update!(timezone: "Tokyo", created_at: Time.utc(2019, 3, 4, 20, 0, 0))
+      expect(presenter.page_props[:earliest_date]).to eq("2019-03-05")
+    end
+
+    it "returns the date tracking began for sellers who predate it" do
+      seller.update!(created_at: Time.utc(2011, 6, 1))
+      expect(presenter.page_props[:earliest_date]).to eq(PRODUCT_EVENT_TRACKING_STARTED_DATE.to_s)
+    end
   end
 end

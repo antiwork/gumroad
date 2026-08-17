@@ -26,24 +26,66 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
       expect(page).to have_current_path(sales_dashboard_path(from: "2020-01-01", to: "2024-06-01"))
     end
 
-    it "halves the range on repeated failures and enqueues exactly one emailed export" do
-      allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).and_raise("boom")
-      # The stubbed 500s are the scenario under test, not incidental breakage.
+    # The stubbed 500s below are the scenario under test, not incidental breakage. Capybara stores
+    # the raised error and re-raises it at teardown, so each example clears it before restoring the
+    # setting.
+    def failing_analytics_loads(succeeds_within_days: nil)
       Capybara.raise_server_errors = false
-
-      expect do
-        visit sales_dashboard_path(from: "2020-01-01", to: "2024-01-01")
-        # Every load fails, so the retry halves until the range is a single day and gives up.
-        expect(page).to have_text("Sorry, something went wrong. Please try again.", wait: 20)
-        expect(page).to have_current_path(/from=2023-12-31.*to=2024-01-01/, wait: 20)
-        # sidekiq_inline runs the export pipeline to completion, so assert on the delivered email.
-      end.to change { ActionMailer::Base.deliveries.size }.by(1)
-
-      expect(ActionMailer::Base.deliveries.last.to).to eq([user_with_role_for_seller.email])
+      allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).and_wrap_original do |original, start_date, end_date, **kwargs|
+        raise "boom" if succeeds_within_days.nil? || (end_date - start_date).to_i > succeeds_within_days
+        original.call(start_date, end_date, **kwargs)
+      end
+      yield
     ensure
-      # Clear the stored (intentional) server error before re-enabling raising, or teardown re-raises it.
       Capybara.current_session.server&.reset_error!
       Capybara.raise_server_errors = true
+    end
+
+    it "halves the range until a load succeeds and emails the full range as a CSV" do
+      failing_analytics_loads(succeeds_within_days: 400) do
+        expect do
+          visit sales_dashboard_path(from: "2020-01-01", to: "2024-01-01")
+          # The alert names the range that was exported, not "the full range" — by then the picker
+          # has moved to a narrower one.
+          expect(page).to have_text(%r{A CSV of .*2020.*2024.* is on its way to your email\.}, wait: 20)
+          # 1461 days fails, 730 fails, 365 loads.
+          expect(page).to have_current_path(/from=2023-01-01.*to=2024-01-01/, wait: 20)
+          expect(page).to have_no_text("Loading sales chart…", wait: 20)
+          # sidekiq_inline runs the export pipeline to completion, so assert on the delivered email.
+        end.to change { ActionMailer::Base.deliveries.size }.by(1)
+      end
+
+      expect(ActionMailer::Base.deliveries.last.to).to eq([user_with_role_for_seller.email])
+    end
+
+    # rangeDays counts the gap between two included dates, so the halving has to keep going at
+    # rangeDays == 1 (two days) and actually try the single day before giving up.
+    it "halves down to a single day when every load fails" do
+      failing_analytics_loads do
+        expect do
+          visit sales_dashboard_path(from: "2020-01-01", to: "2024-01-01")
+          # Nothing follows this alert, so it has to carry the CSV promise itself.
+          expect(page).to have_text(
+            %r{We couldn't load your analytics for this range\. A CSV of .*2020.*2024.* is on its way to your email\.},
+            wait: 30,
+          )
+          expect(page).to have_current_path(/from=2024-01-01.*to=2024-01-01/, wait: 20)
+        end.to change { ActionMailer::Base.deliveries.size }.by(1)
+      end
+    end
+
+    it "does not promise an emailed CSV when the export cannot be enqueued" do
+      allow(Exports::PurchaseExportService).to receive(:export).and_raise("no export for you")
+
+      failing_analytics_loads(succeeds_within_days: 400) do
+        expect do
+          visit sales_dashboard_path(from: "2020-01-01", to: "2024-01-01")
+          expect(page).to have_text("This range couldn't load, so we're retrying with the most recent half.", wait: 20)
+          expect(page).to have_current_path(/from=2023-01-01.*to=2024-01-01/, wait: 20)
+        end.not_to change { ActionMailer::Base.deliveries.size }
+      end
+
+      expect(page).to have_no_text("on its way to your email")
     end
 
     it "defaults to monthly aggregation for ranges wider than 366 days" do
@@ -64,6 +106,21 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
         expect(page).to have_content("Last 30 days")
         expect(page).to have_content("Last year")
       end
+    end
+
+    # The backend clamps every range to the seller's creation date, so a preset that starts
+    # earlier would draw a chart the picker disagrees with.
+    it "starts All time at the seller's creation date" do
+      # Noon UTC is the same calendar day in the seller's Pacific time zone, so the expected
+      # date below doesn't depend on the offset.
+      seller.update!(created_at: Time.utc(2021, 5, 20, 12, 0, 0))
+
+      visit sales_dashboard_path
+      initial = find('[aria-label="Date range selector"]').text
+      select_disclosure initial do
+        click_on "All time"
+      end
+      expect(page).to have_current_path(/from=2021-05-20/)
     end
 
     it "accepts a custom range wider than 366 days" do
