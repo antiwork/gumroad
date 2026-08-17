@@ -71,6 +71,26 @@ describe InternalNotificationMailer do
       end
     end
 
+    context "with S3 file attachments" do
+      subject(:mail) do
+        described_class.notify(
+          room_name: "risk",
+          sender: "India Sales Reporting",
+          message_text: "Report ready",
+          s3_attachments: [{ "bucket" => "gumroad-reporting", "key" => "sales-tax/in.csv", "filename" => "in.csv" }]
+        )
+      end
+
+      it "attaches the CSV downloaded from S3" do
+        s3_object = double("s3_object")
+        allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket, :object).and_return(s3_object)
+        allow(s3_object).to receive_message_chain(:get, :body, :read).and_return("id,amount\n1,100\n")
+
+        expect(mail.attachments["in.csv"]).to be_present
+        expect(mail.attachments["in.csv"].body.decoded).to eq("id,amount\n1,100\n")
+      end
+    end
+
     context "when room has no email configured" do
       subject(:mail) do
         described_class.notify(

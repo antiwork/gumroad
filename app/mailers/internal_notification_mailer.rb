@@ -5,7 +5,7 @@ class InternalNotificationMailer < ApplicationMailer
 
   default from: NOREPLY_EMAIL
 
-  def notify(room_name:, sender:, message_text:, attachments_data: [])
+  def notify(room_name:, sender:, message_text:, attachments_data: [], s3_attachments: [])
     @sender = sender
     @message_text = message_text
     @room_name = room_name
@@ -13,6 +13,11 @@ class InternalNotificationMailer < ApplicationMailer
 
     recipient = CHAT_ROOMS.dig(room_name.to_sym, :email)
     return if recipient.blank?
+
+    Array(s3_attachments).each do |att|
+      obj = Aws::S3::Resource.new.bucket(att.fetch("bucket")).object(att.fetch("key"))
+      attachments[att.fetch("filename")] = { mime_type: att["mime_type"].presence || "text/csv", content: obj.get.body.read }
+    end
 
     # CC Gumclaw on every internal notification, in addition to the room's own recipient,
     # so it ingests the full stream. Skip if it's already the room's recipient (no dup).
