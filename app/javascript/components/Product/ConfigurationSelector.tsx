@@ -327,6 +327,10 @@ export const OptionRadioButton = ({
   priceCents ??= 0;
   const { value: discountedPriceCents } = computeSelectionDiscountedPrice(priceCents, discount, product, quantity);
   const buyerLocalContext = buyerLocalContextFor(product);
+  // aria-label overrides the button's content for screen readers, so the rendered
+  // description must be re-exposed via aria-describedby or it is never announced.
+  const uid = React.useId();
+  const descriptionId = description ? `${uid}-description` : undefined;
   return (
     <Tab isSelected={selected} asChild className={recurrence ? "flex-col" : undefined}>
       <Button
@@ -334,6 +338,7 @@ export const OptionRadioButton = ({
         aria-checked={selected}
         disabled={disabled}
         aria-label={name}
+        aria-describedby={descriptionId}
         onClick={onClick}
         itemProp="offer"
         itemType="https://schema.org/Offer"
@@ -371,7 +376,7 @@ export const OptionRadioButton = ({
           <h4>{name}</h4>
           {quantityLeft != null ? <small className="block">{`${quantityLeft} left`}</small> : null}
           {description ? (
-            <div>
+            <div id={descriptionId}>
               <Breaklines text={description} />
             </div>
           ) : null}
