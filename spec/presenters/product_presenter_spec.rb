@@ -233,6 +233,15 @@ describe ProductPresenter do
       expect(props[:main_section_index]).to eq(0)
     end
 
+    it "shows the virtual catalog when the seller has only non-product profile sections" do
+      create(:seller_profile_posts_section, seller:)
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].size).to eq(1)
+      expect(props[:sections].first[:id]).to eq(ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID)
+    end
+
     it "shows the seller's saved profile products sections when they have customized their profile" do
       section = create(:seller_profile_products_section, seller:)
       create(:seller_profile_posts_section, seller:)

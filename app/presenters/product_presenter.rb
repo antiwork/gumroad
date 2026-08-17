@@ -92,22 +92,20 @@ class ProductPresenter
       main_section_index: product.main_section_index || 0,
     }
     if show_membership_page_catalog?(rendered_sections: props[:sections])
-      # Query all on-profile sections (not just products sections) so the virtual
-      # default-products section is injected under exactly the same condition
-      # LinksController#search accepts its id for pagination.
-      catalog_props = ProfileSectionsPresenter.new(seller: user, query: user.seller_profile_sections.on_profile)
+      # Product sections only: the virtual default-products section must be injected even when
+      # the seller's profile has non-product sections, and LinksController#search mirrors this
+      # query when accepting its id for pagination.
+      catalog_props = ProfileSectionsPresenter.new(seller: user, query: user.seller_profile_products_sections.on_profile)
                                               .props(request:, pundit_user:, seller_custom_domain_url:, editing: false, include_default_products_section: true)
-      props[:sections] = catalog_props[:sections].select { _1[:type] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_TYPE }
+      props[:sections] = catalog_props[:sections]
       props[:main_section_index] = 0
     end
     props
   end
 
-  # Membership subscribe links open the product page directly, so buyers who land there never
-  # see the rest of the catalog (gumroad-private#2179). When the seller hasn't curated sections
-  # for this page, show their profile products sections (or the virtual all-products section)
-  # below the membership. Skipped for the seller's own view, which renders the section editor
-  # and must keep the editing-shaped (empty) sections payload.
+  # Buyers landing from a subscribe link never see the catalog (gumroad-private#2179), so show it
+  # when the page has no curated sections. The seller's own view keeps the empty, editing-shaped
+  # payload for the section editor.
   def show_membership_page_catalog?(rendered_sections:)
     product.is_recurring_billing? &&
       rendered_sections.empty? &&
