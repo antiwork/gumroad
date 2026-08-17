@@ -29,6 +29,55 @@ describe SendChargeReceiptJob do
     expect(described_class.sidekiq_options["on_conflict"]).to eq({ "server" => :raise })
   end
 
+  context "when a purchase is still in_progress (free+paid race, gp#2025)" do
+    before do
+      allow(SendChargeReceiptJob).to receive(:perform_in)
+    end
+
+    it "defers sending, re-enqueues with a delay, and does not mark the charge sent" do
+      purchase_one.update!(purchase_state: "in_progress")
+
+      described_class.new.perform(charge.id)
+
+      expect(SendChargeReceiptJob).to have_received(:perform_in).with(10.seconds, charge.id, 1)
+      expect(CustomerMailer).not_to have_received(:receipt)
+      expect(charge.reload.receipt_sent?).to be(false)
+    end
+
+    it "deferring escalates through the retry delays until the budget is exhausted" do
+      purchase_one.update!(purchase_state: "in_progress")
+
+      described_class.new.perform(charge.id, 3)
+
+      expect(SendChargeReceiptJob).to have_received(:perform_in).with(5.minutes, charge.id, 4)
+      expect(CustomerMailer).not_to have_received(:receipt)
+    end
+
+    it "falls through and sends with what has settled once the retry budget is spent" do
+      purchase_one.update!(purchase_state: "in_progress")
+
+      described_class.new.perform(charge.id, described_class::RETRY_DELAYS.size)
+
+      expect(SendChargeReceiptJob).not_to have_received(:perform_in)
+      expect(CustomerMailer).to have_received(:receipt).with(nil, charge.id)
+      expect(charge.reload.receipt_sent?).to be(true)
+    end
+
+    it "stops deferring once the slow purchase settles and sends split receipts" do
+      purchase_one.update!(purchase_state: "in_progress")
+
+      described_class.new.perform(charge.id)
+      expect(CustomerMailer).not_to have_received(:receipt)
+
+      purchase_one.update!(purchase_state: "successful")
+      described_class.new.perform(charge.id)
+
+      expect(CustomerMailer).to have_received(:receipt).with(purchase_one.id, single_purchase: true)
+      expect(CustomerMailer).to have_received(:receipt).with(purchase_two.id, single_purchase: true)
+      expect(charge.reload.receipt_sent?).to be(true)
+    end
+  end
+
   context "with all purchases ready" do
     context "for a single-item order" do
       let(:charge) { create(:charge, purchases: [purchase_one], seller: seller) }
