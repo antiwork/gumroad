@@ -111,7 +111,7 @@ const PWYWInput = React.forwardRef<
             onBlur();
           }}
           ref={ref}
-          ariaLabel={hideLabel ? "Name a fair price" : undefined}
+          {...(hideLabel ? { ariaLabel: "Name a fair price" } : {})}
         />
       </Fieldset>
     </div>
