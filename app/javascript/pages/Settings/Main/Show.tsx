@@ -375,7 +375,7 @@ export default function MainPage() {
             </FieldsetTitle>
             <Select
               id="max-refund-period-in-days"
-              className="disabled:opacity-100 disabled:bg-muted"
+              className="disabled:bg-muted disabled:opacity-100"
               value={form.data.user.seller_refund_policy.max_refund_period_in_days}
               disabled={isFormDisabled || !props.user.seller_refund_policy.editable}
               onChange={(e) =>
