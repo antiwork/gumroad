@@ -1931,6 +1931,56 @@ describe User, :vcr do
         end
       end
     end
+
+    describe "#high_volume_seller?" do
+      it "is false for a seller below the threshold" do
+        seller = create(:user)
+
+        expect(seller.high_volume_seller?).to be(false)
+      end
+
+      it "is true when trailing-30-day gross successful sales reach the threshold" do
+        seller = create(:user)
+        product = create(:product, user: seller)
+        create(:purchase, link: product, seller:, price_cents: Purchase::HIGH_VOLUME_SALES_THRESHOLD_CENTS, purchase_state: "successful")
+
+        expect(seller.high_volume_seller?).to be(true)
+      end
+
+      it "ignores sales older than the lookback window" do
+        seller = create(:user)
+        product = create(:product, user: seller)
+        travel_to(Purchase::HIGH_VOLUME_LOOKBACK.days.ago - 1.day) do
+          create(:purchase, link: product, seller:, price_cents: Purchase::HIGH_VOLUME_SALES_THRESHOLD_CENTS, purchase_state: "successful")
+        end
+
+        expect(seller.high_volume_seller?).to be(false)
+      end
+
+      it "ignores non-successful, free, gift, and refunded rows" do
+        seller = create(:user)
+        product = create(:product, user: seller)
+        create(:purchase, link: product, seller:, price_cents: Purchase::HIGH_VOLUME_SALES_THRESHOLD_CENTS, purchase_state: "failed")
+
+        expect(seller.high_volume_seller?).to be(false)
+      end
+    end
+
+    describe "#gumroad_fee_per_thousand" do
+      it "returns the standard flat rate for a non-high-volume seller" do
+        seller = create(:user)
+
+        expect(seller.gumroad_fee_per_thousand).to eq(Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND)
+      end
+
+      it "returns the reduced rate for a high-volume seller" do
+        seller = create(:user)
+        product = create(:product, user: seller)
+        create(:purchase, link: product, seller:, price_cents: Purchase::HIGH_VOLUME_SALES_THRESHOLD_CENTS, purchase_state: "successful")
+
+        expect(seller.gumroad_fee_per_thousand).to eq(Purchase::HIGH_VOLUME_FEE_PER_THOUSAND)
+      end
+    end
   end
 
   describe "user roles" do

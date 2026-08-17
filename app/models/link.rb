@@ -1296,10 +1296,10 @@ class Link < ApplicationRecord
   end
 
   def gumroad_amount_for_paypal_order(amount_cents:, affiliate_id: nil, vat_cents: 0, was_recommended: false)
-    fee_per_thousand = Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND
+    fee_per_thousand = user.gumroad_fee_per_thousand
 
     if was_recommended
-      gumroad_fee_cents = (amount_cents * (fee_per_thousand + discover_fee_per_thousand - Purchase::GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND)) / 1000
+      gumroad_fee_cents = (amount_cents * (fee_per_thousand + discover_fee_per_thousand - fee_per_thousand)) / 1000
     else
       gumroad_fee_cents = (amount_cents * fee_per_thousand) / 1000
     end

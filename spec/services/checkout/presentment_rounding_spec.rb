@@ -133,6 +133,15 @@ describe Checkout::PresentmentRounding do
       expect(described_class.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents: 10_00)).to eq(0)
     end
 
+    it "uses the reduced high-volume rate for a seller at or above $20k/month" do
+      seller = create(:user)
+      product = create(:product, user: seller)
+      create(:purchase, link: product, seller:, price_cents: Purchase::HIGH_VOLUME_SALES_THRESHOLD_CENTS, purchase_state: "successful")
+
+      expect(seller.high_volume_seller?).to be(true)
+      expect(described_class.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents: 10_00)).to eq(50)
+    end
+
     # The cap has to be a floor under what Gumroad actually collects, and the only thing
     # that makes including tips in its base correct is that Purchase#price_cents is itself
     # tip-inclusive (a tip makes the price "customizable" rather than adding a line beside

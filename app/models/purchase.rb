@@ -24,6 +24,16 @@ class Purchase < ApplicationRecord
   GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND = 100
 
   GUMROAD_FLAT_FEE_PER_THOUSAND = 100
+  # Standard platform fee for sellers whose trailing-30-day gross sales volume is at or
+  # above HIGH_VOLUME_SALES_THRESHOLD_CENTS. Sahil, 2026-08-17 (gp#2177): high-volume
+  # sellers (>$20k/month) move from the standard 10% to 5%.
+  HIGH_VOLUME_FEE_PER_THOUSAND = 50
+  # Trailing-30-day gross successful sales volume at which a seller qualifies for the
+  # reduced 5% platform fee.
+  HIGH_VOLUME_SALES_THRESHOLD_CENTS = 20_000_00
+  # Rolling lookback window (days) over which the high-volume seller's gross sales volume
+  # is measured.
+  HIGH_VOLUME_LOOKBACK = 30
   GUMROAD_DISCOVER_FEE_PER_THOUSAND = 300
   GUMROAD_FIXED_FEE_CENTS = 50
   PROCESSOR_FEE_PER_THOUSAND = 29
@@ -4899,20 +4909,31 @@ class Purchase < ApplicationRecord
     end
 
     def calculate_additional_discover_fee_per_thousand
+      base_fee_per_thousand = effective_gumroad_fee_per_thousand
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
-        subscription.original_purchase.discover_fee_per_thousand - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+        subscription.original_purchase.discover_fee_per_thousand - base_fee_per_thousand - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif is_preorder_charge?
-        preorder.authorization_purchase.discover_fee_per_thousand - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - PROCESSOR_FEE_PER_THOUSAND
+        preorder.authorization_purchase.discover_fee_per_thousand - base_fee_per_thousand - PROCESSOR_FEE_PER_THOUSAND
       else
-        GUMROAD_DISCOVER_FEE_PER_THOUSAND - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+        GUMROAD_DISCOVER_FEE_PER_THOUSAND - base_fee_per_thousand - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       end
     end
 
     def calculate_gumroad_fee_per_thousand
       calculate_custom_fee_per_thousand
-      (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) +
+      effective_gumroad_fee_per_thousand +
         (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0) +
         pix_iof_fee_per_thousand
+    end
+
+    # The seller's base (direct-sale) platform fee per thousand after any negotiated custom
+    # fee, else their effective flat rate (which includes the high-volume reduced rate). This
+    # is what Discover's additional fee subtracts off the full 30% so a Discover sale always
+    # lands at exactly GUMROAD_DISCOVER_FEE_PER_THOUSAND regardless of base rate — for a
+    # regular seller 300-100, for a high-volume seller 300-50, for a custom-fee seller
+    # 300-custom. Keeps Discover at 30% for everyone.
+    def effective_gumroad_fee_per_thousand
+      custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand
     end
 
     # The Brazilian IOF tax Gumroad absorbs on the buyer's behalf and recovers from the seller
@@ -4949,7 +4970,10 @@ class Purchase < ApplicationRecord
     end
 
     def gumroad_flat_fee_per_thousand
-      seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge? ? 0 : GUMROAD_FLAT_FEE_PER_THOUSAND
+      return 0 if seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge?
+      return HIGH_VOLUME_FEE_PER_THOUSAND if seller.high_volume_seller?
+
+      GUMROAD_FLAT_FEE_PER_THOUSAND
     end
 
     def calculate_taxes

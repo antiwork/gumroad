@@ -222,6 +222,27 @@ class User < ApplicationRecord
   attr_json_data_accessor :daily_product_creation_limit
   attr_json_data_accessor :tiktok_pixel_id
 
+  # Trailing-30-day gross successful sales volume in cents. Both one-time and recurring
+  # charges count (subscription revenue is real seller volume); only free/gift/refunded
+  # rows are excluded. Backs the high-volume seller's reduced platform fee (gp#2177).
+  def gross_sales_cents_since(since)
+    sales.non_free
+         .where(purchase_state: Purchase::NON_GIFT_SUCCESS_STATES)
+         .where("purchases.created_at >= ?", since)
+         .sum(:price_cents)
+  end
+
+  def high_volume_seller?
+    gross_sales_cents_since(Purchase::HIGH_VOLUME_LOOKBACK.days.ago) >= Purchase::HIGH_VOLUME_SALES_THRESHOLD_CENTS
+  end
+
+  # Effective flat (direct-sale) platform fee per thousand, ignoring any negotiated
+  # custom fee. High-volume sellers (>$20k/month) get the reduced 5% rate. The purchase
+  # fee path layers the new-seller waiver on top of this.
+  def gumroad_fee_per_thousand
+    high_volume_seller? ? Purchase::HIGH_VOLUME_FEE_PER_THOUSAND : Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND
+  end
+
   def disable_buyer_local_currency
     ActiveModel::Type::Boolean.new.cast(json_data_for_attr("disable_buyer_local_currency", default: false))
   end
