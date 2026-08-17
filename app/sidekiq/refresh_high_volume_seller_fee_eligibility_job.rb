@@ -16,9 +16,16 @@ class RefreshHighVolumeSellerFeeEligibilityJob
   end
 
   private
+    # Threshold-crossers can only appear via new paid sales, but the per-sale hook can
+    # be missed (dead job, flag ramped after the sales landed), so recompute the full
+    # qualifying set from purchases each night instead of only yesterday's sellers.
     def seller_ids_to_refresh
-      recent = Purchase.successful.where("created_at >= ?", 1.day.ago).distinct.pluck(:seller_id)
+      qualifying = Purchase.paid
+        .where("purchases.created_at >= ?", User::HIGH_VOLUME_FEE_WINDOW.ago)
+        .group(:seller_id)
+        .having("SUM(purchases.price_cents) >= ?", User::HIGH_VOLUME_FEE_THRESHOLD_CENTS)
+        .pluck(:seller_id)
       flagged = User.where("json_data LIKE ?", "%high_volume_fee_eligible%true%").pluck(:id)
-      (recent + flagged).uniq
+      (qualifying + flagged).uniq
     end
 end

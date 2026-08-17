@@ -52,6 +52,15 @@ class Purchase::HighVolumeSellerFeeTest < ActiveSupport::TestCase
     assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
   end
 
+  test "a full refund enqueues an eligibility refresh for the seller" do
+    purchase = create_purchase(link: @product, seller: @seller, price_cents: 1000)
+    RefreshHighVolumeSellerFeeEligibilityJob.clear
+
+    purchase.update!(stripe_refunded: true)
+
+    assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
+  end
+
   private
     def mark_volume_eligible!(seller)
       seller.high_volume_fee_eligible = true
