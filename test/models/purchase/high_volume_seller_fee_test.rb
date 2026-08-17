@@ -37,13 +37,12 @@ class Purchase::HighVolumeSellerFeeTest < ActiveSupport::TestCase
     assert_equal 40, purchase.custom_fee_per_thousand
   end
 
-  test "discover fee is unchanged for an eligible seller" do
+  test "discover sales keep the full rate: the volume base does not apply when the discover fee is charged" do
     mark_volume_eligible!(@seller)
     purchase = create_purchase(link: @product, seller: @seller, purchase_state: "in_progress", price_cents: 10_000)
     purchase.stubs(:charge_discover_fee?).returns(true)
-    purchase.send(:calculate_custom_fee_per_thousand)
 
-    assert_nil purchase.custom_fee_per_thousand
+    assert_equal Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND, purchase.send(:gumroad_flat_fee_per_thousand)
   end
 
   test "a successful purchase enqueues an eligibility refresh for the seller" do
@@ -69,6 +68,25 @@ class Purchase::HighVolumeSellerFeeTest < ActiveSupport::TestCase
     purchase.update!(stripe_refunded: false)
 
     assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
+  end
+
+  test "paypal order fee uses the volume rate for an eligible seller on a direct sale only" do
+    mark_volume_eligible!(@seller)
+
+    direct = @product.gumroad_amount_for_paypal_order(amount_cents: 10_000)
+    recommended = @product.gumroad_amount_for_paypal_order(amount_cents: 10_000, was_recommended: true)
+
+    assert_equal 10_000 * User::HIGH_VOLUME_FEE_PER_THOUSAND / 1000, direct
+    assert_equal 10_000 * (Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND + @product.discover_fee_per_thousand - Purchase::GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) / 1000, recommended
+  end
+
+  test "paypal order fee is unchanged when the flag is off, even with a custom fee" do
+    Feature.deactivate(:high_volume_seller_fee)
+    mark_volume_eligible!(@seller)
+    @seller.update!(custom_fee_per_thousand: 40)
+
+    assert_equal 10_000 * Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND / 1000,
+                 @product.gumroad_amount_for_paypal_order(amount_cents: 10_000)
   end
 
   private
