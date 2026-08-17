@@ -4961,7 +4961,9 @@ class Purchase < ApplicationRecord
 
     def gumroad_flat_fee_per_thousand
       return 0 if seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge?
-      return User::HIGH_VOLUME_FEE_PER_THOUSAND if seller.high_volume_seller_fee?
+      # Discover keeps its full 30%: the 5% volume rate applies to direct sales only,
+      # so don't let it lower the base under the discover surcharge.
+      return User::HIGH_VOLUME_FEE_PER_THOUSAND if seller.high_volume_seller_fee? && !charge_discover_fee?
 
       GUMROAD_FLAT_FEE_PER_THOUSAND
     end
