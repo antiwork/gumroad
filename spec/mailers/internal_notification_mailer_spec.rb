@@ -84,10 +84,20 @@ describe InternalNotificationMailer do
       it "attaches the CSV downloaded from S3" do
         s3_object = double("s3_object")
         allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket, :object).and_return(s3_object)
+        allow(s3_object).to receive(:content_length).and_return(20)
         allow(s3_object).to receive_message_chain(:get, :body, :read).and_return("id,amount\n1,100\n")
 
         expect(mail.attachments["in.csv"]).to be_present
         expect(mail.attachments["in.csv"].body.decoded).to eq("id,amount\n1,100\n")
+      end
+
+      it "skips attaching a CSV larger than the MIME cap" do
+        s3_object = double("s3_object")
+        allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket, :object).and_return(s3_object)
+        allow(s3_object).to receive(:content_length).and_return(described_class::MAX_S3_ATTACHMENT_BYTES + 1)
+
+        expect(s3_object).not_to receive(:get)
+        expect(mail.attachments).to be_empty
       end
     end
 

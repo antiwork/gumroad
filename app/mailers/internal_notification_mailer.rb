@@ -2,6 +2,7 @@
 
 class InternalNotificationMailer < ApplicationMailer
   SUBJECT_PREFIX = ("[#{Rails.env}] " unless Rails.env.production?)
+  MAX_S3_ATTACHMENT_BYTES = 7.megabytes
 
   default from: NOREPLY_EMAIL
 
@@ -16,6 +17,11 @@ class InternalNotificationMailer < ApplicationMailer
 
     Array(s3_attachments).each do |att|
       obj = Aws::S3::Resource.new.bucket(att.fetch("bucket")).object(att.fetch("key"))
+      # 7-day S3 link in the body is the fallback when a CSV is too large to MIME.
+      if obj.content_length.to_i > MAX_S3_ATTACHMENT_BYTES
+        Rails.logger.warn("Skipping oversized S3 attachment #{att["filename"]} (#{obj.content_length} bytes)")
+        next
+      end
       attachments[att.fetch("filename")] = { mime_type: att["mime_type"].presence || "text/csv", content: obj.get.body.read }
     end
 
