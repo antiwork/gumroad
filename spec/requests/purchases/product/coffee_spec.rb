@@ -31,10 +31,10 @@ describe "Coffee", type: :system, js: true do
       within_cart_item "Buy me a coffee!" do
         expect(page).to have_text("US$1")
         select_disclosure "Edit" do
-          fill_in "Price", with: ""
+          fill_in "Name a fair price", with: ""
           click_on "Save changes"
-          expect(find_field("Price")["aria-invalid"]).to eq("true")
-          fill_in "Price", with: "2"
+          expect(find_field("Name a fair price")["aria-invalid"]).to eq("true")
+          fill_in "Name a fair price", with: "2"
           click_on "Save changes"
         end
         expect(page).to have_text("US$2")
