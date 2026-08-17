@@ -478,15 +478,16 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(jobs.first["args"].first).to eq("http://notification.com")
     end
 
-    it "does not post to the app's post url if the post url is invalid", :skip_resource_subscription_dns_stub do
-      allow(ResourceSubscription).to receive(:resolve_addresses).and_return([IPAddr.new("93.184.216.34")])
-      allow(ResourceSubscription).to receive(:resolve_addresses).with("localhost").and_return([IPAddr.new("127.0.0.1")])
-      @resource_subscription.update!(post_url: "http://localhost/path")
+    # Delivery-time URL enforcement lives in PostToIndividualPingEndpointWorker (SsrfFilter
+    # validates at connect time); a DNS pre-check here dropped pings on transient empty lookups.
+    it "enqueues delivery even when the endpoint hostname does not resolve at fan-out time", :skip_resource_subscription_dns_stub do
+      allow(ResourceSubscription).to receive(:resolve_addresses).and_return([])
+      @resource_subscription.update!(post_url: "https://hooks.example.com/sale")
       purchase = create(:purchase, link: @product)
 
       PostToPingEndpointsWorker.new.perform(purchase.id, nil)
 
-      expect(PostToIndividualPingEndpointWorker).to_not have_enqueued_sidekiq_job(@resource_subscription.post_url, anything, @resource_subscription.content_type, anything)
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@resource_subscription.post_url, anything, @resource_subscription.content_type, @user.id)
     end
 
     it "does not post to the app's post url if the user hasn't given view_sales permissions to the app" do
