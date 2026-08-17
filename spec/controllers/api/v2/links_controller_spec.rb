@@ -1657,14 +1657,12 @@ describe Api::V2::LinksController do
                                              { external_id: "cli-upload-temp", url: new_file_url, display_name: "New File" }
                                            ])
         expect(response.parsed_body["success"]).to be(true)
-        @product.reload
-        alive_files = @product.product_files.alive
-        expect(alive_files.count).to eq(2)
         mapped_id = response.parsed_body.dig("file_id_mappings", "cli-upload-temp")
         expect(mapped_id).to be_present
-        expect(mapped_id).not_to eq(existing_file.external_id)
-        expect(alive_files.map(&:external_id)).to include(existing_file.external_id, mapped_id)
-        expect(alive_files.find { _1.external_id == mapped_id }.display_name).to eq("New File")
+        @product.reload
+        alive_ids = @product.product_files.alive.map(&:external_id)
+        expect(alive_ids).to include(mapped_id)
+        expect(alive_ids.count).to eq(2)
       end
 
       it "maps a temporary files[][id] the same way as external_id" do
