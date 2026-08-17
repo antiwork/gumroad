@@ -543,6 +543,7 @@ const CallDateAndTimeSelector = ({
             disabled={isLoading || availableDates.length === 0}
             onChange={(event) => {
               const [year, month, day] = event.target.value.split("-").map(Number);
+              if (year === undefined || month === undefined || day === undefined) return;
               setSelectedDateFromReactCalendar(new Date(year, month - 1, day));
             }}
           >
