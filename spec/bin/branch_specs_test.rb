@@ -4,7 +4,8 @@
 # Tests for bin/branch-specs' mapping layers: Public/Profile component
 # fanout, a per-file config/ exception list, vitest co-location, lib/app
 # content-attribution fallback, help_center view mapping, and the mailer
-# template render graph.
+# template render graph. Also its behavior under an ASCII-only locale, where
+# each read must name an encoding.
 #
 # Same shape as check_migration_versions_test.rb: throwaway git repos, no
 # Rails. The selector runs from the repo root of the throwaway repo, so each
@@ -21,12 +22,13 @@ SELECTOR = File.expand_path("../../bin/branch-specs", __dir__)
 $failures = []
 $count = 0
 
-def build_repo(dir, base_files:, head_files:)
+def build_repo(dir, base_files:, head_files:, quote_path: nil)
   Dir.chdir(dir) do
     system("git init -q -b main .", exception: true)
     system("git config user.email t@t.t", exception: true)
     system("git config user.name t", exception: true)
     system("git config commit.gpgsign false", exception: true)
+    system("git config core.quotePath #{quote_path}", exception: true) unless quote_path.nil?
 
     write = lambda do |files|
       files.each do |path, content|
@@ -43,11 +45,23 @@ def build_repo(dir, base_files:, head_files:)
   end
 end
 
-def check(name, base_files:, head_files:, expect_specs: nil, expect_escalate: false)
+# Forces Encoding.default_external to US-ASCII, which the selector's reads have
+# to survive. LC_ALL=C, not an empty LANG: capture3 merges into the current
+# environment, an empty LC_ALL is ignored, and a stray LC_CTYPE restores UTF-8.
+ASCII_LOCALE = { "LC_ALL" => "C", "LANG" => "C", "LC_CTYPE" => nil, "LANGUAGE" => nil }.freeze
+
+# Captured output arrives tagged with this process's default_external, which is
+# itself US-ASCII when the suite runs without a locale. Read it as UTF-8 so the
+# non-ASCII expectations below compare as text rather than raising.
+def utf8(str) = str.dup.force_encoding(Encoding::UTF_8)
+
+def check(name, base_files:, head_files:, expect_specs: nil, expect_escalate: false, env: {}, quote_path: nil)
   $count += 1
   Dir.mktmpdir do |dir|
-    build_repo(dir, base_files:, head_files:)
-    stdout, stderr, status = Open3.capture3("ruby", SELECTOR, "--base", "base", chdir: dir)
+    build_repo(dir, base_files:, head_files:, quote_path:)
+    stdout, stderr, status = Open3.capture3(env, "ruby", SELECTOR, "--base", "base", chdir: dir)
+    stdout = utf8(stdout)
+    stderr = utf8(stderr)
 
     if expect_escalate
       unless status.exitstatus == 3
@@ -346,6 +360,98 @@ check(
   base_files: { "app/javascript/components/Novel/Thing.tsx" => "old" },
   head_files: { "app/javascript/components/Novel/Thing.tsx" => "new" },
   expect_escalate: true,
+)
+
+# --- Locale handling -------------------------------------------------------
+#
+# Three reads can carry non-ASCII bytes: the header comments via --help, git
+# paths, and grep paths. Under an ASCII-only locale an unqualified read of any
+# of them raises ArgumentError.
+
+# --help takes no base ref, so it does not fit check().
+def check_help_under_ascii_locale
+  $count += 1
+  stdout, stderr, status = Open3.capture3(ASCII_LOCALE, "ruby", SELECTOR, "--help")
+  stdout = utf8(stdout)
+  stderr = utf8(stderr)
+  name = "--help renders under an ASCII-only locale"
+  if !status.success?
+    $failures << "#{name}: exit #{status.exitstatus}\nstderr: #{stderr}"
+  elsif !stdout.include?("Usage:")
+    $failures << "#{name}: header block missing from output\nstdout: #{stdout}"
+  elsif !stdout.include?("—")
+    $failures << "#{name}: em-dash lost, so the read transcoded\nstdout: #{stdout}"
+  end
+end
+check_help_under_ascii_locale
+
+# git prints raw path bytes when core.quotePath is off.
+check(
+  "non-ASCII changed path maps under an ASCII-only locale",
+  base_files: {
+    "app/models/café.rb" => "old",
+    "spec/models/café_spec.rb" => SPEC_STUB,
+  },
+  head_files: { "app/models/café.rb" => "new" },
+  expect_specs: ["spec/models/café_spec.rb"],
+  env: ASCII_LOCALE,
+  quote_path: false,
+)
+
+# grep prints raw path bytes always, so content attribution needs the same care.
+check(
+  "non-ASCII spec filename resolves by content under an ASCII-only locale",
+  base_files: {
+    "lib/utilities/compliance/colombia_id_number.rb" => "old",
+    "spec/services/café_compliance_spec.rb" =>
+      "#{SPEC_STUB}describe \"x\" do\n  it { ColombiaIdNumber.valid?(\"1\") }\nend\n",
+  },
+  head_files: { "lib/utilities/compliance/colombia_id_number.rb" => "new" },
+  expect_specs: ["spec/services/café_compliance_spec.rb"],
+  env: ASCII_LOCALE,
+  quote_path: false,
+)
+
+# Bytes that are no valid encoding must be refused, not scrubbed: U+FFFD can
+# name a different real file. They come from a stub grep because APFS rejects
+# such filenames, so a real-file fixture would only ever run on Linux. The
+# assertion is on stderr because scrubbing also exits 3, via a mapping gap.
+def check_invalid_path_bytes_rejected(name, base_files:, head_files:)
+  $count += 1
+  Dir.mktmpdir do |dir|
+    build_repo(dir, base_files:, head_files:)
+    stub = File.join(dir, "stub-bin")
+    FileUtils.mkdir_p(stub)
+    File.write(File.join(stub, "grep"), "#!/bin/sh\nprintf 'spec/bad\\377_spec.rb\\n'\n")
+    FileUtils.chmod(0o755, File.join(stub, "grep"))
+
+    env = ASCII_LOCALE.merge("PATH" => "#{stub}:#{ENV.fetch('PATH')}")
+    _stdout, stderr, status = Open3.capture3(env, "ruby", SELECTOR, "--base", "base", chdir: dir)
+    stderr = utf8(stderr).scrub
+
+    if status.exitstatus != 3
+      $failures << "#{name}: expected escalate (exit 3), got #{status.exitstatus}\nstderr: #{stderr}"
+    elsif !stderr.include?("not valid UTF-8")
+      $failures << "#{name}: escalated for the wrong reason, so the bytes were reinterpreted\nstderr: #{stderr}"
+    end
+  end
+end
+# Both greps that read path names: content attribution, and the mailer render
+# graph. Each reaches its grep first for the diff it is given.
+check_invalid_path_bytes_rejected(
+  "invalid path bytes from the content-attribution grep are refused",
+  base_files: { "lib/utilities/compliance/colombia_id_number.rb" => "old" },
+  head_files: { "lib/utilities/compliance/colombia_id_number.rb" => "new" },
+)
+
+check_invalid_path_bytes_rejected(
+  "invalid path bytes from the mailer render-graph grep are refused",
+  base_files: {
+    "app/mailers/customer_mailer.rb" => MAILER_STUB,
+    "spec/mailers/customer_mailer_spec.rb" => SPEC_STUB,
+    "app/views/customer_mailer/_footer.html.erb" => "old",
+  },
+  head_files: { "app/views/customer_mailer/_footer.html.erb" => "new" },
 )
 
 if $failures.empty?

@@ -120,6 +120,12 @@ jobs:
           bundler-cache: true
       - run: bundle exec rubocop --format github
 
+      # Lives here because this job always runs and already has the project's
+      # Ruby. relevant_specs is the wrong home: it is skipped exactly when the
+      # run-all-specs label is set, which is whenever the selector itself changes.
+      - name: Self-test the spec selector
+        run: ruby spec/bin/branch_specs_test.rb
+
   migration_versions:
     name: Migration versions
     runs-on: ubicloud-standard-2
