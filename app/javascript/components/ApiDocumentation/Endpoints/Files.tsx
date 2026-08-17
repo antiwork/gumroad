@@ -229,6 +229,11 @@ export const AttachFile = () => (
         canonical <code>file_url</code>. Entries without a <code>url</code> are dropped (and the file they point to is
         deleted).
       </p>
+      <p>
+        New files may include a client <code>id</code> or <code>external_id</code> (the CLI uses{" "}
+        <code>cli-upload-…</code>). A successful PUT then returns top-level <code>file_id_mappings</code> from that
+        client id to the canonical ProductFile id. The key is omitted when nothing remapped.
+      </p>
       <CodeSnippet caption="Attach on update (PUT /v2/products/:id) — preserve existing files">
         {`curl https://api.gumroad.com/v2/products/PRODUCT_ID \\
   -d "access_token=ACCESS_TOKEN" \\

@@ -359,6 +359,7 @@ class Api::V2::LinksController < Api::V2::BaseController
         return render_response(false, message: "'modified' is not an accepted parameter on files[]; it is an internal save-path flag.")
       end
       existing_files_by_id = @product.product_files.alive.index_by(&:external_id)
+      @known_existing_file_ids = existing_files_by_id.keys
       new_files = []
       params[:files].each do |f|
         existing = f[:id].present? ? existing_files_by_id[f[:id]] : nil
@@ -477,7 +478,9 @@ class Api::V2::LinksController < Api::V2::BaseController
         flag_changed = @product.has_same_rich_content_for_all_variants? != rich_content_flag_was
 
         unless @normalized_files.nil?
-          referenced_existing_ids = @normalized_files.filter_map { |f| f[:id] if f[:id].present? }
+          # Unknown client ids (cli-upload-*) are creates. Only ids that matched
+          # an alive file before this request can be a concurrent delete.
+          referenced_existing_ids = @normalized_files.filter_map { |f| f[:id] if f[:id].present? && @known_existing_file_ids&.include?(f[:id]) }
           if referenced_existing_ids.any?
             locked_alive_ids = @product.product_files.alive.lock.map(&:external_id)
             missing_ids = referenced_existing_ids - locked_alive_ids
