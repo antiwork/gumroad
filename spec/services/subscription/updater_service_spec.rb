@@ -3650,6 +3650,54 @@ describe Subscription::UpdaterService, :vcr do
       expect(subscription.stripe_mandate_id).to eq("mandate_active")
     end
 
+    it "recovers a listed-INR membership with no stored fixing through an INR reauthorization" do
+      product.update_column(:price_currency_type, Currency::INR)
+      original_purchase.update_columns(
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 80_000,
+        price_cents: 10_00,
+        total_transaction_cents: 10_00,
+        rate_converted_to_usd: "80"
+      )
+      Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      subscription.reload
+
+      expect(subscription.indian_card_mandate_terms).to include(currency: Currency::INR)
+
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_inr_recovery",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_inr_recovery",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      subscription.reload
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+      expect(subscription.stripe_mandate_id).to eq("mandate_inr_recovery")
+      expect(subscription.current_later_charge_presentment).to have_attributes(
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 80_000,
+        canonical_price_cents: 10_00
+      )
+    end
+
     it "rejects a replacement card without an active mandate" do
       setup_intent = instance_double(
         StripeSetupIntent,

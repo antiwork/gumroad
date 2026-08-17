@@ -392,6 +392,10 @@ class Subscription::UpdaterService
         subscription.indian_card_mandate_requires_reauthorization = false
       end
       subscription.save!
+      # The validated setup intent carried the subscription's own mandate terms, so a mandate
+      # here is in the terms currency; store the matching fixing before any charge below bills
+      # the renewal amount.
+      subscription.record_indian_card_mandate_presentment! if stripe_mandate_id.present?
     end
 
     def associate_replacement_card!(credit_card, had_saved_card:, **mandate_validation)
