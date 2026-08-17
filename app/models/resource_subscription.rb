@@ -41,29 +41,33 @@ class ResourceSubscription < ApplicationRecord
     VALID_RESOURCE_NAMES.include?(resource_name)
   end
 
-  # Creation-time gate. Unresolved DNS is false here (don't persist a URL we cannot prove public);
-  # delivery uses #post_url_delivery_status so a transient empty lookup can retry instead of drop.
+  # A literal-hostname blocklist (the old implementation here) only catches the exact strings an
+  # attacker didn't bother varying — it misses other loopback forms, RFC1918/link-local ranges,
+  # IPv6 private ranges, and any hostname that simply resolves to one of those. Resolve the
+  # hostname and check the actual IPs against ssrf_filter's reserved-range list (the same gem and
+  # blocklist the public media/thumbnail URL fetchers already trust) instead of pattern-matching
+  # the URL string. Creation-time gate only: at delivery, SsrfFilter.post re-resolves and refuses
+  # reserved IPs at connect time, so a DNS record that later points internal is still caught.
   def self.valid_post_url?(post_url)
-    post_url_delivery_status(post_url) == :ok
-  end
-
-  # :ok / :reserved / :unresolved / :invalid. Delivery must not treat :unresolved like :reserved —
-  # empty Resolv results are usually a blip, not a private hop.
-  def self.post_url_delivery_status(post_url)
     uri = URI.parse(post_url)
-    return :invalid unless uri.kind_of?(URI::HTTP) && uri.hostname.present?
+    return false unless uri.kind_of?(URI::HTTP) && uri.hostname.present?
 
-    # uri.hostname (not uri.host) strips IPv6 brackets so Resolv/IPAddr get "::1", not "[::1]".
-    ip_addresses = resolve_addresses(uri.hostname)
-    return :unresolved if ip_addresses.empty?
-    return :reserved if ip_addresses.any? { |ip| reserved_ip_address?(ip) }
-
-    :ok
-  rescue URI::InvalidURIError, IPAddr::Error
-    :invalid
-  rescue Resolv::ResolvError
-    :unresolved
+    # uri.hostname (not uri.host) strips the brackets from a literal IPv6 host so it's a valid
+    # Resolv/IPAddr input, e.g. "[::1]" -> "::1".
+    resolves_to_public_address?(uri.hostname)
+  rescue URI::InvalidURIError
+    false
   end
+
+  def self.resolves_to_public_address?(hostname)
+    ip_addresses = resolve_addresses(hostname)
+    return false if ip_addresses.empty?
+
+    ip_addresses.none? { |ip| reserved_ip_address?(ip) }
+  rescue IPAddr::Error
+    false
+  end
+  private_class_method :resolves_to_public_address?
 
   # Extracted as its own method (rather than inlined) so specs can stub DNS resolution instead of
   # depending on real external hostnames resolving during a test run.
