@@ -1,19 +1,12 @@
 # frozen_string_literal: true
 
+# No-op stub so payloads already in the low queue / retry set drain cleanly
+# after EmailEvent's removal. Delete once a post-removal deploy has aged out
+# the retry window.
 class LogResendEventJob
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :low
+  sidekiq_options retry: 0, queue: :low
 
-  def perform(event_json)
-    resend_event_info = ResendEventInfo.new(event_json)
-    return if resend_event_info.invalid?
-    return unless resend_event_info.type.in?([ResendEventInfo::EVENT_OPENED, ResendEventInfo::EVENT_CLICKED])
-
-    case resend_event_info.type
-    when ResendEventInfo::EVENT_OPENED
-      EmailEvent.log_open_event(resend_event_info.email, resend_event_info.created_at)
-    when ResendEventInfo::EVENT_CLICKED
-      EmailEvent.log_click_event(resend_event_info.email, resend_event_info.created_at)
-    end
+  def perform(*)
   end
 end

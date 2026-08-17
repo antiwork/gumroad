@@ -68,6 +68,28 @@ module CurrencyHelper
     nil
   end
 
+  # The buyer's explicit presentment choice from the footer selector (or a ?currency= link),
+  # validated against the currencies we support. Same cookie the checkout picker writes, so
+  # the product page and the checkout can never disagree about what the buyer asked for.
+  def buyer_currency_preference(request)
+    raw = request_hash_value(request, :params, :currency).presence ||
+      request_hash_value(request, :cookie_jar, :gumroad_buyer_currency).presence
+    code = raw.to_s.downcase
+    code if CURRENCY_CHOICES.key?(code)
+  end
+
+  # Product-page render must tolerate a request-like object that has no params
+  # or cookie jar (presenter specs, mailer previews).
+  def request_hash_value(request, method_name, key)
+    return unless request.respond_to?(method_name)
+
+    source = request.public_send(method_name)
+    source[key] if source.respond_to?(:[])
+  rescue NoMethodError, TypeError
+    nil
+  end
+  private :request_hash_value
+
   def buyer_currency_for_country(country_code)
     return if country_code.blank?
 
@@ -106,7 +128,7 @@ module CurrencyHelper
     to_rate / from_rate
   end
 
-  def buyer_currency_display_props(product:, price_cents:, ip:)
+  def buyer_currency_display_props(product:, price_cents:, ip:, preferred_currency: nil)
     product_currency = product.price_currency_type.to_s.downcase
     creator_opted_in = !product.user.disable_buyer_local_currency? &&
       Feature.active?(:buyer_local_currency, product.user)
@@ -122,7 +144,10 @@ module CurrencyHelper
 
     return default_props unless creator_opted_in
 
-    buyer_currency = buyer_currency_for_ip(ip)
+    # An explicit choice (footer selector cookie / ?currency= link) beats IP detection.
+    # A preferred USD on a USD-priced product falls through to default_props below, which
+    # is the canonical price — exactly what the buyer asked for.
+    buyer_currency = preferred_currency.presence || buyer_currency_for_ip(ip)
     return default_props unless buyer_currency.present? && buyer_currency != product_currency
     # Only show a currency this checkout could actually be settled in. Otherwise the page
     # promises a local price that the charge path will refuse, and the buyer is charged the

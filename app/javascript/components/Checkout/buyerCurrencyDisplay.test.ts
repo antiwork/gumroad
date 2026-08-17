@@ -39,7 +39,7 @@ const surcharges = (overrides: Partial<SurchargesResponse> = {}): SurchargesResp
   ...overrides,
 });
 
-const cartOptions = { cartPermalinks: ["prod"] };
+const cartOptions = { cartPermalinks: ["prod"], paymentElementType: "card" };
 
 describe("getCheckoutBuyerCurrencyDisplay", () => {
   it("uses the locked surcharge quote as the checkout display rate", () => {
@@ -81,6 +81,18 @@ describe("getCheckoutBuyerCurrencyDisplay", () => {
       getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentMethod: "stripePaymentRequest" }),
     ).toBeNull();
     expect(getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentMethod: "card" })).not.toBeNull();
+  });
+
+  it("does not use buyer-currency display when Apple Pay or Google Pay is selected in the Payment Element", () => {
+    expect(
+      getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentElementType: "apple_pay" }),
+    ).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentElementType: "google_pay" }),
+    ).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyDisplay(surcharges(), { ...cartOptions, paymentElementType: "card" }),
+    ).not.toBeNull();
   });
 
   it("does not use buyer-currency display when the allocation is missing or belongs to another cart", () => {
@@ -207,6 +219,12 @@ describe("getCheckoutBuyerCurrencyQuoteToken", () => {
     // A non-card method (PayPal) also charges canonically; sending the token with it would
     // make the charge fail closed on every attempt instead of completing in USD.
     expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { ...cartOptions, paymentMethod: "paypal" })).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyQuoteToken(surcharges(), { ...cartOptions, paymentElementType: "apple_pay" }),
+    ).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyQuoteToken(surcharges(), { ...cartOptions, paymentElementType: "google_pay" }),
+    ).toBeNull();
     expect(getCheckoutBuyerCurrencyQuoteToken(surcharges({ buyer_currency_quote: null }), cartOptions)).toBeNull();
     expect(getCheckoutBuyerCurrencyQuoteToken(null, cartOptions)).toBeNull();
   });
@@ -216,7 +234,9 @@ describe("getCheckoutBuyerCurrencyQuoteToken", () => {
     if (response.buyer_currency_quote) delete response.buyer_currency_quote.line_allocations;
 
     expect(getCheckoutBuyerCurrencyQuoteToken(response, cartOptions)).toBeNull();
-    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), { cartPermalinks: ["other"] })).toBeNull();
+    expect(
+      getCheckoutBuyerCurrencyQuoteToken(surcharges(), { cartPermalinks: ["other"], paymentElementType: "card" }),
+    ).toBeNull();
   });
 });
 
@@ -237,6 +257,15 @@ describe("formatCheckoutPrice", () => {
 
   it("formats canonical USD when no buyer-currency display exists", () => {
     expect(formatCheckoutPrice(1_000, null)).toBe("US$10");
+  });
+
+  it("drops .00 on whole buyer-currency amounts the same way USD does", () => {
+    expect(formatCheckoutPrice(0, { currencyCode: "gbp", rate: 1, subunitToUnit: 100 })).toBe("£0");
+    expect(formatCheckoutPrice(1_000, { currencyCode: "gbp", rate: 0.8, subunitToUnit: 100 })).toBe("£8");
+  });
+
+  it("keeps two decimals on fractional buyer-currency amounts", () => {
+    expect(formatCheckoutPrice(1_000, { currencyCode: "gbp", rate: 0.749, subunitToUnit: 100 })).toBe("£7.49");
   });
 });
 

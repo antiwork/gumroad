@@ -195,7 +195,6 @@ describe ForeignWebhooksController do
         post :sendgrid, body: raw_body, as: :json
         expect(response).to be_successful
         expect(HandleSendgridEventJob.jobs.size).to eq(1)
-        expect(LogSendgridEventWorker.jobs.size).to eq(1)
       end
 
       it "accepts a signature from the first configured key" do
@@ -206,7 +205,6 @@ describe ForeignWebhooksController do
         post :sendgrid, body: raw_body, as: :json
         expect(response).to be_successful
         expect(HandleSendgridEventJob.jobs.size).to eq(1)
-        expect(LogSendgridEventWorker.jobs.size).to eq(1)
       end
 
       it "ignores blank entries when some keys are unset" do
@@ -227,7 +225,6 @@ describe ForeignWebhooksController do
         post :sendgrid, body: raw_body, as: :json
         expect(response).to be_a_server_error
         expect(HandleSendgridEventJob.jobs.size).to eq(0)
-        expect(LogSendgridEventWorker.jobs.size).to eq(0)
       end
 
       it "returns 500 so SendGrid retries when timestamp header is missing" do
@@ -236,7 +233,6 @@ describe ForeignWebhooksController do
         post :sendgrid, body: raw_body, as: :json
         expect(response).to be_a_server_error
         expect(HandleSendgridEventJob.jobs.size).to eq(0)
-        expect(LogSendgridEventWorker.jobs.size).to eq(0)
       end
 
       it "returns 500 so SendGrid retries when no public keys are configured" do
@@ -247,7 +243,6 @@ describe ForeignWebhooksController do
         post :sendgrid, body: raw_body, as: :json
         expect(response).to be_a_server_error
         expect(HandleSendgridEventJob.jobs.size).to eq(0)
-        expect(LogSendgridEventWorker.jobs.size).to eq(0)
       end
     end
 
@@ -261,7 +256,6 @@ describe ForeignWebhooksController do
         post :sendgrid, body: raw_body, as: :json
         expect(response).to be_a_server_error
         expect(HandleSendgridEventJob.jobs.size).to eq(0)
-        expect(LogSendgridEventWorker.jobs.size).to eq(0)
       end
 
       it "returns 500 so SendGrid retries when payload is tampered" do
@@ -269,7 +263,6 @@ describe ForeignWebhooksController do
         post :sendgrid, body: [{ event: "tampered", email: "attacker@example.com" }].to_json, as: :json
         expect(response).to be_a_server_error
         expect(HandleSendgridEventJob.jobs.size).to eq(0)
-        expect(LogSendgridEventWorker.jobs.size).to eq(0)
       end
     end
 
@@ -283,7 +276,6 @@ describe ForeignWebhooksController do
         post :sendgrid, body: raw_body, as: :json
         expect(response).to be_a_server_error
         expect(HandleSendgridEventJob.jobs.size).to eq(0)
-        expect(LogSendgridEventWorker.jobs.size).to eq(0)
       end
     end
 
@@ -303,7 +295,6 @@ describe ForeignWebhooksController do
         post :sendgrid, body: raw_body, as: :json
         expect(response).to be_successful
         expect(HandleSendgridEventJob.jobs.size).to eq(1)
-        expect(LogSendgridEventWorker.jobs.size).to eq(1)
       end
 
       it "shadow-logs failures but processes the webhook anyway" do
@@ -313,7 +304,6 @@ describe ForeignWebhooksController do
         post :sendgrid, body: raw_body, as: :json
         expect(response).to be_successful
         expect(HandleSendgridEventJob.jobs.size).to eq(1)
-        expect(LogSendgridEventWorker.jobs.size).to eq(1)
       end
 
       it "processes unsigned legacy webhooks without erroring" do
@@ -354,7 +344,6 @@ describe ForeignWebhooksController do
           foreign_webhook: payload
         )
         expect(HandleResendEventJob).to have_enqueued_sidekiq_job(expected_params)
-        expect(LogResendEventJob).to have_enqueued_sidekiq_job(expected_params)
         expect(response).to be_successful
       end
     end
@@ -366,7 +355,6 @@ describe ForeignWebhooksController do
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
-        expect(LogResendEventJob.jobs.size).to eq(0)
       end
 
       it "returns bad request when timestamp is missing" do
@@ -375,7 +363,6 @@ describe ForeignWebhooksController do
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
-        expect(LogResendEventJob.jobs.size).to eq(0)
       end
 
       it "returns bad request when message ID is missing" do
@@ -384,7 +371,6 @@ describe ForeignWebhooksController do
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
-        expect(LogResendEventJob.jobs.size).to eq(0)
       end
     end
 
@@ -395,7 +381,6 @@ describe ForeignWebhooksController do
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
-        expect(LogResendEventJob.jobs.size).to eq(0)
       end
 
       it "returns bad request when signature is incorrect" do
@@ -404,7 +389,6 @@ describe ForeignWebhooksController do
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
-        expect(LogResendEventJob.jobs.size).to eq(0)
       end
     end
 
@@ -415,7 +399,6 @@ describe ForeignWebhooksController do
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
-        expect(LogResendEventJob.jobs.size).to eq(0)
       end
     end
   end

@@ -331,6 +331,7 @@ class PurchasesController < ApplicationController
       seller: current_seller,
       recipient: impersonating_user || logged_in_user,
       filters: params.slice(:start_time, :end_time, :product_ids, :variant_ids),
+      force_async: params[:force_async].present?,
     )
 
     if tempfile

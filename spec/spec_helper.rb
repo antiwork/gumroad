@@ -351,7 +351,6 @@ RSpec.configure do |config|
     $redis.flushdb
     %i[
       store_discover_searches
-      log_email_events
       seller_refund_policy_new_users_enabled
       paypal_payout_fee
       disable_braintree_sales

@@ -19,7 +19,8 @@ class ProductReviewsController < ApplicationController
         .includes(:response, approved_video: :video_file, purchase: :purchaser)
         .order(rating: :desc, created_at: :desc, id: :desc),
       page: [permitted_params[:page].to_i, 1].max,
-      limit: PER_PAGE
+      limit: PER_PAGE,
+      overflow: :empty_page
     )
 
     render json: {

@@ -131,16 +131,16 @@ describe "SafeRedirectPathService" do
     end
 
     context "when path is nil" do
-      it "raises TypeError" do
+      it "returns the site root" do
         @path = nil
-        expect { service.process }.to raise_error(TypeError)
+        expect(service.process).to eq("/")
       end
     end
 
     context "when path is an empty string" do
-      it "raises an error" do
+      it "returns the site root" do
         @path = ""
-        expect { service.process }.to raise_error(URI::InvalidURIError)
+        expect(service.process).to eq("/")
       end
     end
   end

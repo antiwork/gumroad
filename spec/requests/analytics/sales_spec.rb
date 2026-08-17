@@ -18,25 +18,55 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
     expect(page).to have_text("You don't have any sales yet.")
   end
 
-  context "with the 366-day date range cap" do
+  context "with the date range picker" do
     let!(:product) { create(:product, user: seller) }
 
-    it "clamps the URL when the requested range exceeds 366 days" do
+    it "does not clamp the URL when the requested range exceeds 366 days" do
       visit sales_dashboard_path(from: "2020-01-01", to: "2024-06-01")
-      expect(page).to have_current_path(sales_dashboard_path(from: "2023-06-01", to: "2024-06-01"))
+      expect(page).to have_current_path(sales_dashboard_path(from: "2020-01-01", to: "2024-06-01"))
     end
 
-    it "hides All time and any preset wider than 366 days" do
+    it "halves the range on repeated failures and enqueues exactly one emailed export" do
+      allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).and_raise("boom")
+      # The stubbed 500s are the scenario under test, not incidental breakage.
+      Capybara.raise_server_errors = false
+
+      expect do
+        visit sales_dashboard_path(from: "2020-01-01", to: "2024-01-01")
+        # Every load fails, so the retry halves until the range is a single day and gives up.
+        expect(page).to have_text("Sorry, something went wrong. Please try again.", wait: 20)
+        expect(page).to have_current_path(/from=2023-12-31.*to=2024-01-01/, wait: 20)
+        # sidekiq_inline runs the export pipeline to completion, so assert on the delivered email.
+      end.to change { ActionMailer::Base.deliveries.size }.by(1)
+
+      expect(ActionMailer::Base.deliveries.last.to).to eq([user_with_role_for_seller.email])
+    ensure
+      # Clear the stored (intentional) server error before re-enabling raising, or teardown re-raises it.
+      Capybara.current_session.server&.reset_error!
+      Capybara.raise_server_errors = true
+    end
+
+    it "defaults to monthly aggregation for ranges wider than 366 days" do
+      visit sales_dashboard_path(from: "2020-01-01", to: "2024-06-01")
+      expect(page).to have_select("Aggregate by", selected: "Monthly")
+    end
+
+    it "keeps daily aggregation for ranges within 366 days" do
+      visit sales_dashboard_path(from: "2024-01-01", to: "2024-06-01")
+      expect(page).to have_select("Aggregate by", selected: "Daily")
+    end
+
+    it "offers the All time preset" do
       visit sales_dashboard_path
       initial = find('[aria-label="Date range selector"]').text
       select_disclosure initial do
-        expect(page).not_to have_content("All time")
+        expect(page).to have_content("All time")
         expect(page).to have_content("Last 30 days")
         expect(page).to have_content("Last year")
       end
     end
 
-    it "rejects a custom range wider than 366 days" do
+    it "accepts a custom range wider than 366 days" do
       visit sales_dashboard_path
       initial = find('[aria-label="Date range selector"]').text
       select_disclosure initial do
@@ -44,7 +74,12 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
         fill_in "From (including)", with: "01/01/2020"
         fill_in "To (including)", with: "01/01/2024"
       end
-      expect(page).to have_text("Range can be at most 366 days")
+      # DateInput only commits on blur. Filling From then To blurs From (so `from`
+      # lands in the URL) but leaves To focused — without this click, `to` stays
+      # at today. Same pattern as the "calculates total stats" custom-range step.
+      find("body").click
+      expect(page).not_to have_text("Range can be at most")
+      expect(page).to have_current_path(sales_dashboard_path(from: "2020-01-01", to: "2024-01-01"))
     end
 
     it "shows the export confirmation popover linking to the unfiltered export" do

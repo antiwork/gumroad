@@ -9,7 +9,7 @@ import {
   fetchAnalyticsDataByState,
 } from "$app/data/analytics";
 import { assertDefined } from "$app/utils/assert";
-import { AbortError } from "$app/utils/request";
+import { AbortError, request } from "$app/utils/request";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { ExportSalesPopover } from "$app/components/Analytics/ExportSalesPopover";
@@ -28,9 +28,10 @@ import { Select } from "$app/components/ui/Select";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
-const MAX_DATE_RANGE_DAYS = 366;
 // Must match CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS on the backend.
 const MAX_HOURLY_DATE_RANGE_DAYS = 7;
+// Past this width, daily rendering means thousands of chart points, so we default to monthly.
+const WIDE_RANGE_DAYS = 366;
 
 export type Product = {
   name: string;
@@ -123,15 +124,21 @@ const Analytics = ({
     initialProducts.map((product) => ({ ...product, selected: product.alive })),
   );
   const [aggregateBy, setAggregateBy] = React.useState<"hourly" | "daily" | "monthly">("daily");
-  const dateRange = useAnalyticsDateRange({ maxRangeDays: MAX_DATE_RANGE_DAYS });
+  const dateRange = useAnalyticsDateRange();
   // Hourly buckets are only available for short ranges (the backend rejects wider
   // ones). Compare calendar days, not exact times: the picked dates carry a
   // time-of-day, but only yyyy-MM-dd strings are sent to the backend.
   const rangeDays = differenceInDays(startOfDay(dateRange.to), startOfDay(dateRange.from));
   const canAggregateHourly = rangeDays >= 0 && rangeDays <= MAX_HOURLY_DATE_RANGE_DAYS;
+  const isWideRange = rangeDays > WIDE_RANGE_DAYS;
   React.useEffect(() => {
     if (aggregateBy === "hourly" && !canAggregateHourly) setAggregateBy("daily");
   }, [aggregateBy, canAggregateHourly]);
+  // Depends only on isWideRange so it fires when the range crosses the threshold, not on
+  // every aggregateBy change — the seller can still switch back to Daily explicitly.
+  React.useEffect(() => {
+    if (isWideRange) setAggregateBy("monthly");
+  }, [isWideRange]);
   const hourly = aggregateBy === "hourly" && canAggregateHourly;
   const [data, setData] = React.useState<{
     byReferral: AnalyticsDataByReferral;
@@ -143,6 +150,8 @@ const Analytics = ({
   const hasContent = products.length > 0;
 
   const activeRequests = React.useRef<AbortController[] | null>(null);
+  // One emailed export per failure streak, however many times the retry halves.
+  const exportEnqueuedRef = React.useRef(false);
   React.useEffect(() => {
     const loadData = async () => {
       if (!hasContent) return;
@@ -160,9 +169,27 @@ const Analytics = ({
         const [byState, byReferral] = await Promise.all([byStateRequest.response, byReferralRequest.response]);
         setData({ byState, byReferral });
         activeRequests.current = null;
+        exportEnqueuedRef.current = false;
       } catch (e) {
         if (e instanceof AbortError) return;
-        showAlert("Sorry, something went wrong. Please try again.", "error");
+        if (rangeDays > 1) {
+          if (!exportEnqueuedRef.current) {
+            exportEnqueuedRef.current = true;
+            request({
+              method: "GET",
+              accept: "html",
+              url: Routes.export_purchases_path({ start_time: startTime, end_time: endTime, force_async: true }),
+            }).catch(() => {});
+          }
+          showAlert(
+            "This range couldn't load, so we're retrying with the most recent half. A CSV of the full range is on its way to your email.",
+            "error",
+          );
+          const midpoint = new Date((startOfDay(dateRange.from).getTime() + startOfDay(dateRange.to).getTime()) / 2);
+          dateRange.setFrom(midpoint);
+        } else {
+          showAlert("Sorry, something went wrong. Please try again.", "error");
+        }
       }
     };
     void loadData();
@@ -201,7 +228,7 @@ const Analytics = ({
             </Select>
             <ProductsPopover products={products} setProducts={setProducts} />
             <div className="col-span-2">
-              <DateRangePicker {...dateRange} maxRangeDays={MAX_DATE_RANGE_DAYS} />
+              <DateRangePicker {...dateRange} />
             </div>
             <ExportSalesPopover />
           </>
