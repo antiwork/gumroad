@@ -239,6 +239,7 @@ class Subscription::UpdaterService
           # Charge user if necessary
           if should_charge_user?
             result = charge_user!
+            record_mandate_presentment_after_charge! if result[:success]
             if saved_card_mandate_terms_changed && result[:success]
               subscription.require_indian_card_mandate_reauthorization!(notify_buyer: false)
             end
@@ -366,9 +367,16 @@ class Subscription::UpdaterService
       mandate_options = setup_intent.card_mandate_options
       return false if mandate_options.blank?
 
+      # Recompute the terms with the rate stamped when the setup intent was created, so a
+      # cached-rate refresh between setup and this validation cannot reject the mandate the
+      # buyer just approved. The stamp is server-authored metadata; a missing or unusable
+      # value falls back to the live rate (intents created before the stamp existed).
+      fixed_rate = BigDecimal(setup_intent.metadata[:gumroad_mandate_rate].to_s, exception: false)
+      fixed_rate = nil unless fixed_rate&.positive?
       expected_terms = subscription.indian_card_mandate_terms(
         billing_info: params[:contact_info],
-        authenticated_offer_code_buyer: logged_in_user
+        authenticated_offer_code_buyer: logged_in_user,
+        fixed_rate:
       )
       return false if expected_terms.blank?
 
@@ -392,6 +400,22 @@ class Subscription::UpdaterService
         subscription.indian_card_mandate_requires_reauthorization = false
       end
       subscription.save!
+      return if stripe_mandate_id.blank?
+
+      # The validated setup intent carried the subscription's own mandate terms, so a mandate
+      # here is in the terms currency. The fixing must exist before any charge below — an
+      # overdue renewal bills it, and a prorated upgrade re-fixes its own amount from it —
+      # and it is recorded again after the charge so an upgrade's prorated re-fix does not
+      # linger as the renewal amount.
+      subscription.record_indian_card_mandate_presentment!
+      @record_mandate_presentment_after_charge = true
+    end
+
+    def record_mandate_presentment_after_charge!
+      return unless @record_mandate_presentment_after_charge
+
+      @record_mandate_presentment_after_charge = false
+      subscription.record_indian_card_mandate_presentment!
     end
 
     def associate_replacement_card!(credit_card, had_saved_card:, **mandate_validation)

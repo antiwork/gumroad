@@ -3637,7 +3637,8 @@ describe Subscription::UpdaterService, :vcr do
       allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
       expect(subscription).to receive(:indian_card_mandate_terms).with(
         billing_info: nil,
-        authenticated_offer_code_buyer: nil
+        authenticated_offer_code_buyer: nil,
+        fixed_rate: nil
       ).and_call_original
 
       mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
@@ -3648,6 +3649,179 @@ describe Subscription::UpdaterService, :vcr do
       expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
       expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
       expect(subscription.stripe_mandate_id).to eq("mandate_active")
+    end
+
+    it "validates against the rate stamped on the setup intent after a cache refresh" do
+      product.update_column(:price_currency_type, Currency::INR)
+      original_purchase.update_columns(
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 80_000,
+        price_cents: 10_00,
+        total_transaction_cents: 10_00,
+        rate_converted_to_usd: "80"
+      )
+      currencies = Redis::Namespace.new(:currencies, redis: $redis)
+      currencies.set("INR", "80")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      subscription.reload
+
+      terms, mandate_rate = subscription.indian_card_mandate_terms_with_rate
+      expect(terms).to include(currency: Currency::INR)
+      expect(mandate_rate).to eq("80.0")
+      stamped_mandate_options = Stripe::StripeObject.construct_from(
+        amount_type: "maximum",
+        amount: terms[:amount],
+        currency: terms[:currency],
+        reference: StripeChargeProcessor.indian_card_mandate_reference(subscription.external_id),
+        interval: terms[:interval],
+        interval_count: terms[:interval_count],
+        supported_types: ["india"]
+      )
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_inr_pinned",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: {
+          gumroad_subscription_id: subscription.external_id,
+          gumroad_mandate_rate: mandate_rate
+        },
+        card_mandate_options: stamped_mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_inr_pinned",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      currencies.set("INR", "85")
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      subscription.reload
+      expect(subscription.stripe_mandate_id).to eq("mandate_inr_pinned")
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    end
+
+    it "restores the renewal fixing after a prorated upgrade re-fixes its own amount" do
+      product.update_column(:price_currency_type, Currency::INR)
+      original_purchase.update_columns(
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 80_000,
+        price_cents: 10_00,
+        total_transaction_cents: 10_00,
+        rate_converted_to_usd: "80"
+      )
+      Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      subscription.reload
+      terms = subscription.indian_card_mandate_terms
+      stamped_mandate_options = Stripe::StripeObject.construct_from(
+        amount_type: "maximum",
+        amount: terms[:amount],
+        currency: terms[:currency],
+        reference: StripeChargeProcessor.indian_card_mandate_reference(subscription.external_id),
+        interval: terms[:interval],
+        interval_count: terms[:interval_count],
+        supported_types: ["india"]
+      )
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_inr_upgrade",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: stamped_mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_inr_upgrade",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      # The fixing exists before the charge, so a required-INR upgrade can proceed.
+      expect(subscription.reload.current_later_charge_presentment).to have_attributes(
+        presentment_price_cents: 80_000
+      )
+
+      # The prorated upgrade re-fixed its own amount during the charge.
+      subscription.later_charge_presentments.create!(
+        processor: StripeChargeProcessor.charge_processor_id,
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 30_000,
+        canonical_price_cents: 3_75,
+        signup_currency_units_per_usd: BigDecimal("80"),
+        effective_from: Time.current
+      )
+
+      service.send(:record_mandate_presentment_after_charge!)
+
+      expect(subscription.reload.current_later_charge_presentment).to have_attributes(
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 80_000
+      )
+    end
+
+    it "recovers a listed-INR membership with no stored fixing through an INR reauthorization" do
+      product.update_column(:price_currency_type, Currency::INR)
+      original_purchase.update_columns(
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 80_000,
+        price_cents: 10_00,
+        total_transaction_cents: 10_00,
+        rate_converted_to_usd: "80"
+      )
+      Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      subscription.reload
+
+      expect(subscription.indian_card_mandate_terms).to include(currency: Currency::INR)
+
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_inr_recovery",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_inr_recovery",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      subscription.reload
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+      expect(subscription.stripe_mandate_id).to eq("mandate_inr_recovery")
+      expect(subscription.current_later_charge_presentment).to have_attributes(
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 80_000,
+        canonical_price_cents: 10_00
+      )
     end
 
     it "rejects a replacement card without an active mandate" do
