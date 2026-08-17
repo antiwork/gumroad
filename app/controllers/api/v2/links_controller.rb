@@ -402,6 +402,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     previous_custom_html = nil
     sanitization_report = nil
+    file_id_mappings = {}
     begin
       ActiveRecord::Base.transaction do
         # Lock the product row so concurrent custom_html PUTs serialize their
@@ -486,7 +487,7 @@ class Api::V2::LinksController < Api::V2::BaseController
           validate_file_embed_conflicts!(skip_variant_embeds: flag_changed && @product.has_same_rich_content_for_all_variants? && !@normalized_rich_content.nil?)
 
           rich_content_params = build_rich_content_params
-          SaveFilesService.perform(@product, { files: @normalized_files }, rich_content_params)
+          file_id_mappings = SaveFilesService.perform(@product, { files: @normalized_files }, rich_content_params) || {}
         end
 
         @product.save!
@@ -542,6 +543,7 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
 
     additional_info = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html, sanitization_report: sanitization_report } : {}
+    additional_info[:file_id_mappings] = file_id_mappings if file_id_mappings.present?
     warnings = [check_offer_code_validity]
     if params[:custom_html].present?
       # Profiles share the sanitizer, so buy-affordance warnings stay in the product API.
