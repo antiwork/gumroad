@@ -347,13 +347,35 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     expect(getCheckoutListedCurrencyDisplay(listedCurrencyPayment(null), brlCartItems())).toBeNull();
   });
 
-  it("stays in canonical USD when the cart no longer has the lane's single-item shape", () => {
-    // The cart can be edited after the page rendered; a second item means the server would no
-    // longer mount a forced-currency element, so displaying the listed currency would lie.
-    expect(
-      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [...brlCartItems(), ...brlCartItems()]),
-    ).toBeNull();
+  it("renders the listed currency for a multi-item cart uniformly priced in it", () => {
+    expect(getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [...brlCartItems(), ...brlCartItems()])).toEqual({
+      currencyCode: "brl",
+      rate: 5.45,
+      subunitToUnit: 100,
+    });
+  });
+
+  it("stays in canonical USD for an empty cart or one mixing pricing currencies", () => {
     expect(getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [])).toBeNull();
+    // One USD line beside a BRL line means the server mounted the canonical USD element, so
+    // displaying the listed currency would lie.
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [
+        ...brlCartItems(),
+        ...brlCartItems({ currencyCode: "usd" }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("stays in canonical USD when items disagree on the exchange rate", () => {
+    // A partial rate reload could leave same-currency items on split rates; converting shared
+    // USD rows (tax, shipping) with either rate could disagree with the charge.
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [
+        ...brlCartItems(),
+        ...brlCartItems({ exchangeRate: 5.5 }),
+      ]),
+    ).toBeNull();
   });
 
   it("stays in canonical USD when the cart's product is not priced in the element's currency", () => {

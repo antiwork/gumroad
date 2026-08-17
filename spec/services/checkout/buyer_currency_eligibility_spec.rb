@@ -373,6 +373,25 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.direct_listed_amount?).to eq(true)
   end
 
+  it "allows direct listed charging for a multi-item cart uniformly priced in the buyer's currency" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                     displayed_price_currency_type: Currency::CAD)
+    second_purchase = create(:purchase,
+                             link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                             seller:,
+                             merchant_account:,
+                             purchase_state: "in_progress",
+                             ip_address: "203.0.113.1")
+    second_purchase.update!(displayed_price_currency_type: Currency::CAD)
+    purchases << second_purchase
+
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+    expect(decision.direct_listed_amount?).to eq(true)
+  end
+
   it "falls back when checkout did not mount the listed-currency Payment Element" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),

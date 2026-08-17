@@ -1682,6 +1682,48 @@ describe Checkout::StripePaymentPresenter do
       end
     end
 
+    it "mounts a multi-item cart uniformly priced in CAD as one direct-listed CAD element" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
+      second_product = create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 2500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("24.48.0.1", "Canada")
+
+      add_products = [checkout_product_for(product), checkout_product_for(second_product)]
+      expect(stripe_payment_props(add_products:, ip: "24.48.0.1")).to eq(
+        payment_element_client_confirm_props(
+          currency: Currency::CAD,
+          presentment_amount_cents: 4000,
+          direct_listed_card: true,
+          disable_wallets: true,
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps a cart mixing CAD and USD listings on the canonical USD element even in the direct-listed ramp" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
+      usd_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 2500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("24.48.0.1", "Canada")
+
+      add_products = [checkout_product_for(product), checkout_product_for(usd_product)]
+      expect(stripe_payment_props(add_products:, ip: "24.48.0.1"))
+        .to eq(payment_element_client_confirm_props)
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
     it "keeps that CAD listing on the USD element while the direct-listed ramp is off" do
       seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
       activate_buyer_currency_flags(seller)

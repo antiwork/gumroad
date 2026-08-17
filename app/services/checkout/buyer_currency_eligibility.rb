@@ -395,7 +395,6 @@ class Checkout::BuyerCurrencyEligibility
       # CardElement and canonical-USD Element fallbacks must stay canonical.
       return fallback(:listed_currency_is_buyer_currency) unless listed_in_buyer_currency.all? &&
                                                                 purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
-                                                                purchases.one? &&
                                                                 self.class.listed_currency_direct_charge_enabled?(seller) &&
                                                                 listed_currency_displayed?(buyer_currency)
 
