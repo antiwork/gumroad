@@ -6,7 +6,7 @@ describe Ffprobe do
   describe "#parse" do
     context "when a valid movie file is supplied" do
       let(:ffprobe_parsed) do
-        Ffprobe.new(fixture_file_upload("sample.mov")).parse
+        Ffprobe.new(file_fixture("sample.mov")).parse
       end
 
       expected_ffprobe_data = {
@@ -71,8 +71,11 @@ describe Ffprobe do
     # viewer sees, which is what streamio-ffmpeg already reports for every other
     # format we accept. See https://github.com/antiwork/gumroad-private/issues/1392
     context "when the video carries rotation metadata" do
+      # file_fixture, not fixture_file_upload: the latter hands back a Tempfile
+      # that nothing references once Ffprobe has copied the path out, and a GC
+      # during the stubbing below unlinks it before parse reads it.
       def parsed_with(stream_attributes)
-        probe = Ffprobe.new(fixture_file_upload("sample.mov"))
+        probe = Ffprobe.new(file_fixture("sample.mov"))
         allow(probe).to receive(:`).and_return({ streams: [{ width: 1920, height: 1080, r_frame_rate: "30/1" }.merge(stream_attributes)] }.to_json)
         probe.parse
       end
