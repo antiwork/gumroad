@@ -1660,9 +1660,11 @@ describe Api::V2::LinksController do
         @product.reload
         alive_files = @product.product_files.alive
         expect(alive_files.count).to eq(2)
-        new_file = alive_files.find { _1.display_name == "New File" }
-        expect(new_file).to be_present
-        expect(response.parsed_body["file_id_mappings"]).to eq("cli-upload-temp" => new_file.external_id)
+        mapped_id = response.parsed_body.dig("file_id_mappings", "cli-upload-temp")
+        expect(mapped_id).to be_present
+        expect(mapped_id).not_to eq(existing_file.external_id)
+        expect(alive_files.map(&:external_id)).to include(existing_file.external_id, mapped_id)
+        expect(alive_files.find { _1.external_id == mapped_id }.display_name).to eq("New File")
       end
 
       it "maps a temporary files[][id] the same way as external_id" do
