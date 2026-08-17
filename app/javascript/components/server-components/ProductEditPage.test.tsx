@@ -690,6 +690,250 @@ const buildTieredProps = (product: Product): ProductEditPageProps => ({
   ai_generated: false,
 });
 
+<<<<<<< Updated upstream
+=======
+it("autosaves the latest product state after the seller stops editing", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+    vi.mocked(showAlert).mockClear();
+
+    render(<ProductEditPage {...props} />);
+    expect(contextCapture.current).not.toBeNull();
+
+    await act(async () => void vi.advanceTimersByTime(2_000));
+    expect(saveProductMock).not.toHaveBeenCalled();
+
+    act(() => contextCapture.current?.updateProduct({ name: "First draft" }));
+    act(() => void vi.advanceTimersByTime(1_000));
+    act(() => contextCapture.current?.updateProduct({ name: "Final title" }));
+    act(() => void vi.advanceTimersByTime(1_499));
+    expect(saveProductMock).not.toHaveBeenCalled();
+
+    await act(async () => void vi.advanceTimersByTime(1));
+
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    expect(saveProductMock.mock.calls[0]?.[2]).toMatchObject({ name: "Final title" });
+    expect(showAlert).not.toHaveBeenCalledWith("Changes saved!", "success");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("waits for file uploads to finish before autosaving", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    product.files = [
+      {
+        id: "uploading-file",
+        display_name: "Video",
+        description: null,
+        extension: "mp4",
+        file_size: 100,
+        is_pdf: false,
+        pdf_stamp_enabled: false,
+        hide_kindle_and_read_buttons: false,
+        is_streamable: true,
+        stream_only: false,
+        is_transcoding_in_progress: false,
+        url: "blob:video",
+        subtitle_files: [],
+        thumbnail: null,
+        status: {
+          type: "unsaved",
+          uploadStatus: { type: "uploading", progress: { percent: 50, bitrate: 1 } },
+          url: "blob:video",
+        },
+      },
+    ];
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Changed during upload" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).not.toHaveBeenCalled();
+
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        const file = current.files[0];
+        if (!file) throw new Error("expected file");
+        file.status = { type: "unsaved", uploadStatus: { type: "uploaded" }, url: "https://cdn.example/video.mp4" };
+      }),
+    );
+    await act(async () => void vi.advanceTimersByTime(1_500));
+
+    expect(saveProductMock).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("warns before leaving while an edit has not been saved", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Still pending" }));
+
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    const afterSave = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(afterSave);
+    expect(afterSave.defaultPrevented).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("reports whether edits are saved without waiting for another change", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    expect(contextCapture.current?.saveStatus).toBe("saved");
+
+    act(() => contextCapture.current?.updateProduct({ name: "Changed" }));
+    expect(contextCapture.current?.saveStatus).toBe("unsaved");
+
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(contextCapture.current?.saveStatus).toBe("saved");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("queues a manual save that overlaps an automatic save", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+    saveProductMock.mockImplementation(
+      () => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })),
+    );
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Overlapping save" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+
+    let manualSave: Promise<boolean> | undefined;
+    act(() => {
+      manualSave = contextCapture.current?.save();
+    });
+    requests[0]?.resolve({});
+    await act(async () => void (await manualSave));
+
+    expect(saveProductMock).toHaveBeenCalledTimes(2);
+    requests[1]?.resolve({});
+    await act(async () => void (await Promise.resolve()));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("retries a failed autosave without waiting for another edit", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    const { ResponseError } = await import("$app/utils/request");
+    saveProductMock
+      .mockRejectedValueOnce(new ResponseError("Save failed"))
+      .mockResolvedValueOnce({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() => contextCapture.current?.updateProduct({ name: "Needs retry" }));
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+
+    await act(async () => Promise.resolve());
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledTimes(2);
+    expect(saveProductMock.mock.calls[1]?.[2]).toMatchObject({ name: "Needs retry" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("waits for description image uploads before autosaving", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() =>
+      contextCapture.current?.updateProduct({
+        description: '<img src="blob:https://gumroad.test/pending-image">',
+      }),
+    );
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).not.toHaveBeenCalled();
+
+    act(() =>
+      contextCapture.current?.updateProduct({
+        description: '<img src="https://cdn.example/image.png">',
+      }),
+    );
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).toHaveBeenCalledOnce();
+    expect(saveProductMock.mock.calls[0]?.[2]).toMatchObject({
+      description: '<img src="https://cdn.example/image.png">',
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("does not autosave a deletion that still needs seller confirmation", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const product = buildTieredProduct([
+      buildTier("tier-a", "Tier A", [
+        {
+          id: "page-a",
+          newlyAdded: false,
+          title: "Buyer page",
+          description: {},
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ]),
+    ]);
+    const props = buildTieredProps(product);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+
+    render(<ProductEditPage {...props} />);
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        const tier = current.variants[0];
+        if (!tier) throw new Error("expected tier");
+        tier.rich_content = [];
+      }),
+    );
+    await act(async () => void vi.advanceTimersByTime(1_500));
+    expect(saveProductMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+>>>>>>> Stashed changes
 // Pins the in-flight cross-scope move path: the scoped sentPagesById lookup
 // keys on the page's CURRENT container, so a page the seller moves to another
 // tier while the save request runs would miss its sent snapshot. The

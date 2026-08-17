@@ -19,7 +19,7 @@ export const useDedupeInFlight = <TKey, TResult>(
   key: TKey,
   fn: () => Promise<TResult>,
   shouldStartQueued: (result: TResult) => boolean,
-): (() => Promise<TResult>) => {
+): ((forceQueue?: boolean) => Promise<TResult>) => {
   const fnRef = useRefToLatest(fn);
   const shouldStartQueuedRef = useRefToLatest(shouldStartQueued);
   const activeRef = React.useRef<ActiveCall<TKey, TResult> | null>(null);
@@ -64,13 +64,13 @@ export const useDedupeInFlight = <TKey, TResult>(
     void start(key).then(queued.resolve, queued.reject);
   }, [key, settledVersion, start]);
 
-  return React.useCallback(() => {
+  return React.useCallback((forceQueue = false) => {
     const active = activeRef.current;
     if (!active) {
       if (queuedRef.current) return queuedRef.current.promise;
       return start(key);
     }
-    if (!queuedRef.current && Object.is(active.key, key)) return active.promise;
+    if (!forceQueue && !queuedRef.current && Object.is(active.key, key)) return active.promise;
     if (queuedRef.current) return queuedRef.current.promise;
 
     let resolve: QueuedCall<TResult>["resolve"] = () => {};

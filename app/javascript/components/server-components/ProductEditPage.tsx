@@ -744,7 +744,74 @@ const ProductEditPage = (props: Props) => {
     return performSave();
   };
   const saveKey = React.useMemo(() => ({ product, currencyType }), [product, currencyType]);
+<<<<<<< Updated upstream
   const save = useDedupeInFlight(saveKey, runSave, (saved) => saved);
+=======
+  const dedupedSave = useDedupeInFlight(saveKey, runSave, (saved) => saved);
+  const save = React.useCallback(() => dedupedSave(automaticSaveRef.current), [dedupedSave]);
+  const hasUnsavedChanges =
+    !isEqual(product, lastSavedProductRef.current) || currencyType !== lastSavedCurrencyTypeRef.current;
+  const uploadsInProgress =
+    imagesUploading.size > 0 ||
+    product.description.includes("blob:") ||
+    product.public_files.some(isFileUploading) ||
+    product.files.some((file) => isFileUploading(file) || file.subtitle_files.some(isFileUploading));
+  const pendingDeletionsByKind = findPendingDeletions(product, lastSavedProductRef.current);
+  const deletionsNeedAttention =
+    pendingDeletionsByKind.confirmed.variants.length +
+      pendingDeletionsByKind.confirmed.pages.length +
+      pendingDeletionsByKind.unexpected.variants.length +
+      pendingDeletionsByKind.unexpected.pages.length >
+    0;
+  const saveBlockedByModal =
+    pendingDeletions !== null ||
+    missingContentConflict !== null ||
+    hiddenContentConflict !== null ||
+    staleContentConflict !== null ||
+    staleDeletionConflict !== null;
+  const saveStatus: "saved" | "unsaved" | "saving" = saving ? "saving" : hasUnsavedChanges ? "unsaved" : "saved";
+  const saveRef = React.useRef(save);
+  saveRef.current = save;
+
+  React.useEffect(() => {
+    if (!hasUnsavedChanges) return;
+
+    const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [hasUnsavedChanges]);
+
+  React.useEffect(() => {
+    if (!hasUnsavedChanges || uploadsInProgress || saving || deletionsNeedAttention || saveBlockedByModal) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      automaticSaveRef.current = true;
+      void saveRef.current().then(
+        (saved) => {
+          automaticSaveRef.current = false;
+          if (!saved) setAutosaveGeneration((generation) => generation + 1);
+        },
+        () => {
+          automaticSaveRef.current = false;
+          setAutosaveGeneration((generation) => generation + 1);
+        },
+      );
+    }, 1_500);
+    return () => window.clearTimeout(timer);
+  }, [
+    product,
+    currencyType,
+    hasUnsavedChanges,
+    uploadsInProgress,
+    saving,
+    deletionsNeedAttention,
+    saveBlockedByModal,
+    autosaveGeneration,
+  ]);
+
+>>>>>>> Stashed changes
   const confirmDeletionsAndSave = async () => {
     setPendingDeletions(null);
     const saved = await performSave();
