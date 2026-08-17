@@ -479,9 +479,10 @@ class Subscription < ApplicationRecord
         self.renewal_disabled_due_to_indian_card_mandate = true
       end
       save! if changed?
+      # Inside the lock: committing cleared flags without the fixing would let a concurrent
+      # scan observe a recovered subscription with no stored amount and pause it again.
+      record_indian_card_mandate_presentment! if completed_reauthorization
     end
-
-    record_indian_card_mandate_presentment! if completed_reauthorization
 
     if notify_buyer
       after_commit do
@@ -582,7 +583,8 @@ class Subscription < ApplicationRecord
     canonical_price_cents = renewal_price_cents if canonical_price_cents.zero?
     presentment_matches = presentment.present? &&
       presentment.canonical_price_cents == canonical_price_cents &&
-      indian_card_renewal_presentment_supported?(presentment.presentment_currency)
+      indian_card_renewal_presentment_supported?(presentment.presentment_currency) &&
+      indian_card_presentment_price_current?(presentment, purchase)
     recovery_currency = indian_card_recovery_presentment_currency unless presentment_matches
     price_cap_rate = if presentment_matches
       purchase.rate_converted_to_usd.presence
@@ -597,7 +599,7 @@ class Subscription < ApplicationRecord
     canonical_cap_cents = if billing_info.present?
       indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cap_cents)
     else
-      purchase.mandate_maximum_amount_cents
+      purchase.mandate_maximum_amount_cents(fixed_rate: (fixed_rate if recovery_currency.present?))
     end
     canonical_cap_cents = price_cap_cents if canonical_cap_cents.zero?
     return unless canonical_cap_cents.positive?
@@ -617,7 +619,34 @@ class Subscription < ApplicationRecord
     end
     if price_rate.present?
       variable_cap_cents = [canonical_cap_cents - price_cap_cents, 0].max
-      amount = indian_card_presentment_cents(price_cap_cents, price_rate, currency) +
+      if recovery_currency.present? && billing_info.blank?
+        # The canonical cap keeps signup-rate dollars while the recovery price cap uses the
+        # current rate; FX drift between the two bases must not consume the tax/shipping
+        # headroom. Floor the variable part at the cap's own non-price part — the same
+        # pre-discount price basis mandate_maximum_amount_cents scaled, at the same rate.
+        price_basis_cents = if purchase.is_free_trial_purchase?
+          price_cap_cents
+        else
+          indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: purchase.rate_converted_to_usd.presence)
+        end
+        extras_cents = [canonical_cap_cents - price_basis_cents, 0].max
+        if extras_cents.positive? && price_basis_cents.positive? && price_cap_cents.positive?
+          # Scale the signup-basis extras to the pinned price basis so today's tax converts
+          # to today's rupees. Future FX drift stays uncovered, as on every fixed cap.
+          extras_cents = Rational(extras_cents * price_cap_cents, price_basis_cents).ceil
+        end
+        variable_cap_cents = [variable_cap_cents, extras_cents].max
+      end
+      price_part_cents = indian_card_presentment_cents(price_cap_cents, price_rate, currency)
+      if recovery_currency.present?
+        # The listed price converts to rounded USD cents and back, which can land a few
+        # paise below the exact amount the recovered fixing will bill; a cap below the
+        # fixed renewal amount guarantees a decline. Floor at the exact listed price.
+        listed_price_floor_cents = purchase.mandate_maximum_displayed_price_cents.to_i
+        listed_price_floor_cents = renewal_price_cents.to_i if listed_price_floor_cents.zero?
+        price_part_cents = [price_part_cents, listed_price_floor_cents].max
+      end
+      amount = price_part_cents +
         indian_card_presentment_cents(variable_cap_cents, fixed_rate || get_rate(currency), currency)
     end
 
@@ -633,12 +662,18 @@ class Subscription < ApplicationRecord
     billing_info: nil,
     authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED
   )
-    terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:)
-    return [terms, nil] if terms.blank? || terms[:currency] == Currency::USD
+    2.times do
+      terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:)
+      return [terms, nil] if terms.blank? || terms[:currency] == Currency::USD
 
-    rate = get_rate(terms[:currency])
-    terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, fixed_rate: rate)
-    [terms, rate]
+      rate = get_rate(terms[:currency])
+      pinned = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, fixed_rate: rate)
+      # A concurrent re-fixing can flip the terms currency between the two reads; the rate
+      # must belong to the currency it prices, so retry, then give up on pinning.
+      return [pinned, rate] if pinned.present? && pinned[:currency] == terms[:currency]
+    end
+
+    [indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:), nil]
   end
 
   def future_subscription_charge?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
@@ -670,6 +705,38 @@ class Subscription < ApplicationRecord
     amount.ceil
   end
 
+  # A listed-currency fixing is only current while its fixed price equals the plan's listed
+  # price: a plan change can move the price while the canonical USD value coincidentally
+  # stays equal (price and rate moving together), and a mandate approved off that row would
+  # authorize the old amount. Cross-currency (quote-lane) fixings have no listed price to
+  # compare and keep the canonical-only match.
+  def indian_card_presentment_price_current?(presentment, purchase)
+    displayed_currency = (purchase[:displayed_price_currency_type].presence || link.price_currency_type).to_s.downcase
+    if displayed_currency == presentment.presentment_currency
+      # Every price the current plan can legitimately fix: the signup price, this cycle's
+      # discounted price, and the post-discount full price (a renewal re-fixes to it when a
+      # limited-duration discount ends). A plan change moves all of them away.
+      plan_price_candidates = [
+        purchase.displayed_price_cents.to_i,
+        current_subscription_price_cents.to_i,
+        renewal_pre_discount_total_cents.to_i,
+      ].select(&:positive?)
+      return true if plan_price_candidates.empty?
+
+      plan_price_candidates.include?(presentment.presentment_price_cents)
+    else
+      # A cross-currency (quote-lane) row carries no listed price to compare; it is current
+      # only while renewals still bill the signup price it was fixed from. After a
+      # limited-duration discount ends, a mandate approved off the row would be sized and
+      # denominated for terms the renewal no longer uses. Free signups fixed their row from
+      # renewal terms, so they have no signup price to hold against it.
+      signup_price_cents = purchase.displayed_price_cents.to_i
+      return true unless signup_price_cents.positive?
+
+      current_subscription_price_cents.to_i == signup_price_cents
+    end
+  end
+
   # The gp#1410 recovery shape: only a membership whose renewals can re-fix in rupees
   # (product and original purchase both listed in INR) may fall back to INR mandate terms —
   # a mandate the renewal lane cannot bill would strand the subscription after reauth.
@@ -695,30 +762,41 @@ class Subscription < ApplicationRecord
     currency = indian_card_recovery_presentment_currency
     return if currency.blank?
 
+    # Record the price the renewal will actually bill — the currently authorized renewal
+    # amount, not the signup price, which stays discounted after a limited-duration
+    # discount ends. The signup canonical and rate apply only while the two agree.
     purchase = original_purchase
+    presentment_price_cents = current_subscription_price_cents.to_i
+    presentment_price_cents = renewal_pre_discount_total_cents.to_i if presentment_price_cents.zero?
+    return unless presentment_price_cents.positive?
+
     canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
-    presentment_price_cents = purchase.displayed_price_cents.to_i
     rate = BigDecimal(purchase.rate_converted_to_usd.to_s, exception: false)
-    if presentment_price_cents.zero? || canonical_price_cents.zero?
-      # Free-trial and fully-discounted registrations carry zero prices; size the fixing
-      # from the renewal terms instead — the pre-discount total when a temporary discount
-      # zeroes the current one. The renewal lane re-fixes exact canonical drift.
-      presentment_price_cents = current_subscription_price_cents.to_i
-      presentment_price_cents = renewal_pre_discount_total_cents.to_i if presentment_price_cents.zero?
+    unless presentment_price_cents == purchase.displayed_price_cents.to_i &&
+           canonical_price_cents.positive? && rate&.positive?
       rate = BigDecimal(get_rate(currency).to_s, exception: false)
-      canonical_price_cents = rate&.positive? ? get_usd_cents(currency, presentment_price_cents, rate:) : 0
+      return unless rate&.positive?
+
+      canonical_price_cents = get_usd_cents(currency, presentment_price_cents, rate:)
     end
-    return unless canonical_price_cents.positive? && presentment_price_cents.positive? && rate&.positive?
+    return unless canonical_price_cents.positive?
 
     with_lock do
       current = current_later_charge_presentment
-      # Keep any fixing that indian_card_mandate_terms itself would use — the mandate was
-      # then approved in that currency, not in INR. Supersede only a row terms rejected
-      # (wrong canonical or unsupported currency), which the INR mandate cannot bill.
       if current.present?
-        return if current.presentment_currency == currency
-        return if current.canonical_price_cents == canonical_price_cents &&
-                  indian_card_renewal_presentment_supported?(current.presentment_currency)
+        # A same-currency fixing at the plan's current price stays authoritative: FX
+        # re-fixing keeps the price and only moves the canonical value, which the renewal
+        # lane re-fixes itself. At any other price the mandate was approved off recovery
+        # terms, so the row must be superseded even when its canonical value matches.
+        return if current.presentment_currency == currency &&
+                  current.presentment_price_cents == presentment_price_cents
+        # Keep a cross-currency row exactly when indian_card_mandate_terms would bill it —
+        # the mandate was then approved in that row's currency, not in the recovery
+        # currency. Same predicate set as presentment_matches.
+        return if current.presentment_currency != currency &&
+                  current.canonical_price_cents == LaterChargePresentment.canonical_price_cents_for(purchase) &&
+                  indian_card_renewal_presentment_supported?(current.presentment_currency) &&
+                  indian_card_presentment_price_current?(current, purchase)
       end
 
       later_charge_presentments.create!(

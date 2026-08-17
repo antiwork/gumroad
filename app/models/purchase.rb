@@ -4050,7 +4050,9 @@ class Purchase < ApplicationRecord
     price_cents + shipping_cents.to_i + tax.tax_cents.to_i
   end
 
-  def mandate_maximum_amount_cents
+  # `fixed_rate` pins the displayed-to-USD conversion the free-trial branch needs, so a
+  # cached-rate refresh between sizing a mandate and validating it compares equal amounts.
+  def mandate_maximum_amount_cents(fixed_rate: nil)
     # An upgrade purchase only charges the prorated difference today, and any active
     # discount record lives on the subscription's original purchase rather than on the
     # upgrade purchase itself. Future renewals bill that original purchase (which
@@ -4071,7 +4073,8 @@ class Purchase < ApplicationRecord
       price_cents = if reference_purchase.subscription.present?
         reference_purchase.subscription.indian_card_mandate_price_cents(
           reference_purchase,
-          renewal_price_cents
+          renewal_price_cents,
+          fixed_rate:
         )
       else
         reference_purchase.indian_card_mandate_price_cents(

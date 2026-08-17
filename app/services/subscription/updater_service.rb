@@ -239,6 +239,7 @@ class Subscription::UpdaterService
           # Charge user if necessary
           if should_charge_user?
             result = charge_user!
+            record_mandate_presentment_after_charge! if result[:success]
             if saved_card_mandate_terms_changed && result[:success]
               subscription.require_indian_card_mandate_reauthorization!(notify_buyer: false)
             end
@@ -399,10 +400,22 @@ class Subscription::UpdaterService
         subscription.indian_card_mandate_requires_reauthorization = false
       end
       subscription.save!
+      return if stripe_mandate_id.blank?
+
       # The validated setup intent carried the subscription's own mandate terms, so a mandate
-      # here is in the terms currency; store the matching fixing before any charge below bills
-      # the renewal amount.
-      subscription.record_indian_card_mandate_presentment! if stripe_mandate_id.present?
+      # here is in the terms currency. The fixing must exist before any charge below — an
+      # overdue renewal bills it, and a prorated upgrade re-fixes its own amount from it —
+      # and it is recorded again after the charge so an upgrade's prorated re-fix does not
+      # linger as the renewal amount.
+      subscription.record_indian_card_mandate_presentment!
+      @record_mandate_presentment_after_charge = true
+    end
+
+    def record_mandate_presentment_after_charge!
+      return unless @record_mandate_presentment_after_charge
+
+      @record_mandate_presentment_after_charge = false
+      subscription.record_indian_card_mandate_presentment!
     end
 
     def associate_replacement_card!(credit_card, had_saved_card:, **mandate_validation)

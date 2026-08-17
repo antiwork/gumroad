@@ -180,12 +180,31 @@ describe Onetime::PauseIndianCardMandateRenewals do
       owner: subscription,
       presentment_currency: Currency::INR,
       presentment_price_cents: 80_000,
-      canonical_price_cents: 10_00,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(subscription.original_purchase),
       signup_currency_units_per_usd: BigDecimal("80")
     )
     mandate = Stripe::Mandate.construct_from(id: "mandate_active", status: "active", payment_method: "pm_shared")
     allow_any_instance_of(Subscription).to receive(:indian_card_mandate_for)
       .with(card.id).and_return([mandate, "active", nil])
+
+    result = described_class.process(seller_id: seller.id, dry_run: false)
+
+    expect(result).to eq(scanned: 1, paused: 0, already_paused: 0, mandate_check_errors: 0)
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+  end
+
+  it "leaves a pending registration to the mandate check job" do
+    subscription = create_membership
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(subscription.original_purchase),
+      signup_currency_units_per_usd: BigDecimal("80")
+    )
+    allow_any_instance_of(Subscription).to receive(:indian_card_mandate_for)
+      .with(card.id).and_return([nil, "pending", nil])
 
     result = described_class.process(seller_id: seller.id, dry_run: false)
 
@@ -200,7 +219,7 @@ describe Onetime::PauseIndianCardMandateRenewals do
       owner: subscription,
       presentment_currency: Currency::INR,
       presentment_price_cents: 80_000,
-      canonical_price_cents: 10_00,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(subscription.original_purchase),
       signup_currency_units_per_usd: BigDecimal("80")
     )
     allow_any_instance_of(Subscription).to receive(:indian_card_mandate_for)
@@ -212,6 +231,178 @@ describe Onetime::PauseIndianCardMandateRenewals do
     expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
   end
 
+  it "pauses a membership whose fixing cannot satisfy the required renewal currency" do
+    inr_product = create(:subscription_product, user: seller)
+    Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+    subscription = create_membership(link: inr_product)
+    inr_product.update_column(:price_currency_type, Currency::INR)
+    subscription.original_purchase.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      rate_converted_to_usd: "80"
+    )
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::NZD,
+      presentment_price_cents: 1_700,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(subscription.original_purchase),
+      signup_currency_units_per_usd: BigDecimal("1.7")
+    )
+
+    expect_any_instance_of(Subscription).not_to receive(:indian_card_mandate_for)
+
+    result = described_class.process(seller_id: seller.id, dry_run: false)
+
+    expect(result).to eq(scanned: 1, paused: 1, already_paused: 0, mandate_check_errors: 0)
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+  end
+
+  it "pauses a membership whose fixing predates the current plan" do
+    inr_product = create(:subscription_product, user: seller)
+    Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+    subscription = create_membership(link: inr_product)
+    inr_product.update_column(:price_currency_type, Currency::INR)
+    subscription.original_purchase.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      rate_converted_to_usd: "80"
+    )
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 72_000,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(subscription.original_purchase) + 1_00,
+      signup_currency_units_per_usd: BigDecimal("80")
+    )
+
+    expect_any_instance_of(Subscription).not_to receive(:indian_card_mandate_for)
+
+    result = described_class.process(seller_id: seller.id, dry_run: false)
+
+    expect(result).to eq(scanned: 1, paused: 1, already_paused: 0, mandate_check_errors: 0)
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+  end
+
+  it "does not treat a cross-currency fixing price as a plan change" do
+    subscription = create_membership
+    # A quote-lane INR fixing on a USD-listed membership: its fixed price never equals the
+    # listed USD price, and that difference alone must not pause an active mandate.
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(subscription.original_purchase),
+      signup_currency_units_per_usd: BigDecimal("80")
+    )
+    mandate = Stripe::Mandate.construct_from(id: "mandate_active", status: "active", payment_method: "pm_shared")
+    allow_any_instance_of(Subscription).to receive(:indian_card_mandate_for)
+      .with(card.id).and_return([mandate, "active", nil])
+
+    result = described_class.process(seller_id: seller.id, dry_run: false)
+
+    expect(result).to eq(scanned: 1, paused: 0, already_paused: 0, mandate_check_errors: 0)
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+  end
+
+  it "leaves a membership alone after a normal FX re-fixing" do
+    inr_product = create(:subscription_product, user: seller)
+    Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+    subscription = create_membership(link: inr_product)
+    inr_product.update_column(:price_currency_type, Currency::INR)
+    subscription.original_purchase.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      rate_converted_to_usd: "80"
+    )
+    # An FX re-fixing keeps the fixed price and moves only the canonical USD value.
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(subscription.original_purchase) + 1_00,
+      signup_currency_units_per_usd: BigDecimal("85")
+    )
+    mandate = Stripe::Mandate.construct_from(id: "mandate_active", status: "active", payment_method: "pm_shared")
+    allow_any_instance_of(Subscription).to receive(:indian_card_mandate_for)
+      .with(card.id).and_return([mandate, "active", nil])
+
+    result = described_class.process(seller_id: seller.id, dry_run: false)
+
+    expect(result).to eq(scanned: 1, paused: 0, already_paused: 0, mandate_check_errors: 0)
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+  end
+
+  it "pauses a membership whose fixing collapses to canonical USD terms" do
+    subscription = create_membership
+    # An NZD fixing cannot carry an India mandate, and the USD-listed product offers no
+    # recovery currency, so terms fall back to USD — incoherent with the stored fixing.
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::NZD,
+      presentment_price_cents: 1_700,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(subscription.original_purchase),
+      signup_currency_units_per_usd: BigDecimal("1.7")
+    )
+
+    expect_any_instance_of(Subscription).not_to receive(:indian_card_mandate_for)
+
+    result = described_class.process(seller_id: seller.id, dry_run: false)
+
+    expect(result).to eq(scanned: 1, paused: 1, already_paused: 0, mandate_check_errors: 0)
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+  end
+
+  it "leaves a full-price fixing alone after a limited-duration discount expires" do
+    inr_product = create(:subscription_product, user: seller)
+    Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+    subscription = create_membership(link: inr_product)
+    inr_product.update_column(:price_currency_type, Currency::INR)
+    # The signup purchase keeps the discounted price; the renewal lane re-fixed the full
+    # price when the discount ran out.
+    subscription.original_purchase.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 40_000,
+      rate_converted_to_usd: "80"
+    )
+    allow_any_instance_of(Subscription).to receive(:current_subscription_price_cents).and_return(80_000)
+    allow_any_instance_of(Subscription).to receive(:renewal_pre_discount_total_cents).and_return(80_000)
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: 10_00,
+      signup_currency_units_per_usd: BigDecimal("80")
+    )
+    mandate = Stripe::Mandate.construct_from(id: "mandate_active", status: "active", payment_method: "pm_shared")
+    allow_any_instance_of(Subscription).to receive(:indian_card_mandate_for)
+      .with(card.id).and_return([mandate, "active", nil])
+
+    result = described_class.process(seller_id: seller.id, dry_run: false)
+
+    expect(result).to eq(scanned: 1, paused: 0, already_paused: 0, mandate_check_errors: 0)
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+  end
+
+  it "does not pause a membership that recovers during the scan" do
+    subscription = create_membership
+    service = described_class.new(seller_id: seller.id, dry_run: false)
+    allow(service).to receive(:at_risk?).and_wrap_original do |original, sub, checked_card|
+      sub.update!(stripe_mandate_id: "mandate_recovered_mid_scan")
+      original.call(sub, checked_card)
+    end
+
+    result = service.process
+
+    expect(result).to eq(scanned: 1, paused: 0, already_paused: 0, mandate_check_errors: 0)
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    expect(CustomerLowPriorityMailer).not_to have_received(:subscription_indian_card_mandate_invalid)
+  end
+
   it "skips a membership when the mandate check fails" do
     subscription = create_membership
     create(
@@ -219,7 +410,7 @@ describe Onetime::PauseIndianCardMandateRenewals do
       owner: subscription,
       presentment_currency: Currency::INR,
       presentment_price_cents: 80_000,
-      canonical_price_cents: 10_00,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(subscription.original_purchase),
       signup_currency_units_per_usd: BigDecimal("80")
     )
     allow_any_instance_of(Subscription).to receive(:indian_card_mandate_for)
@@ -240,7 +431,7 @@ describe Onetime::PauseIndianCardMandateRenewals do
       owner: subscription,
       presentment_currency: Currency::INR,
       presentment_price_cents: 80_000,
-      canonical_price_cents: 10_00,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(subscription.original_purchase),
       signup_currency_units_per_usd: BigDecimal("80")
     )
     allow_any_instance_of(Subscription).to receive(:indian_card_mandate_for)
