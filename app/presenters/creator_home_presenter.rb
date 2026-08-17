@@ -6,8 +6,7 @@ class CreatorHomePresenter
   ACTIVITY_ITEMS_LIMIT = 10
   BALANCE_ITEMS_LIMIT = 3
   GUMHEAD_FEATURE = :gumhead
-  # A rolling release in this repo, refreshed by antiwork/gumhead's release
-  # workflow. A fixed tag, because releases/latest here is a deploy release.
+  # A fixed tag, because releases/latest here is a deploy release.
   GUMHEAD_DOWNLOAD_URL = "https://github.com/antiwork/gumroad/releases/download/gumhead-latest/Gumhead.zip"
 
   attr_reader :pundit_user, :seller
