@@ -22,6 +22,7 @@
 # Ai::PageSanitizer before rendering — so what the preview shows is what confirming would publish.
 class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseController
   include RendersCustomHtmlPages
+  include CurrencyHelper
 
   before_action :authenticate_user!
   before_action :authorize_store_agent
@@ -82,7 +83,7 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
     # Same reference gate as the live embed (UsersController#landing_iframe_content), so a
     # proposal previews with exactly the payloads it would be served with once applied.
     prices_referenced = Pages::ProductPrices.referenced_in?(sanitized)
-    prices = prices_referenced ? Pages::ProductPrices.build(current_seller, ip: request.remote_ip) : {}
+    prices = prices_referenced ? Pages::ProductPrices.build(current_seller, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request)) : {}
     document = profile_custom_html_document(
       Pages::Interpolator.interpolate_profile(display_html, profile: current_seller, prices:),
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(current_seller).to_json),

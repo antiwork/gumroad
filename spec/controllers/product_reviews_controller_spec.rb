@@ -272,6 +272,14 @@ describe ProductReviewsController do
         reviews.reverse.first(2).map { ProductReviewPresenter.new(_1).product_review_props }
       )
     end
+
+    it "returns an empty page instead of raising when the requested page exceeds the total pages" do
+      get :index, params: { product_id: product.external_id, page: 99 }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["reviews"]).to eq([])
+      expect(response.parsed_body["pagination"]).to include("pages" => 2, "page" => 99)
+    end
   end
 
   describe "#show" do

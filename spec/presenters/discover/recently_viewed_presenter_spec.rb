@@ -5,7 +5,7 @@ require "spec_helper"
 describe Discover::RecentlyViewedPresenter do
   let(:user) { create(:user) }
   let(:browser_guid) { SecureRandom.uuid }
-  let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", cookie_jar: {}, remote_ip: "0.0.0.0") }
+  let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", cookie_jar: {}, params: {}, remote_ip: "0.0.0.0") }
   let(:presenter) { described_class.new(user:, browser_guid:, request:) }
 
   let!(:product) { create(:product, :recommendable, name: "Viewed Product") }

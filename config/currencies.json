@@ -7,7 +7,7 @@
     },
     "gbp": {
       "symbol": "£",
-      "display_format": "£ (GBP)",
+      "display_format": "£ (British Pounds)",
       "min_price": 59
     },
     "eur": {

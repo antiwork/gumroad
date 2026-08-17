@@ -332,6 +332,8 @@ describe "Sales page", type: :system, js: true do
         expect(Exports::PurchaseExportService).to receive(:export).with(
           seller:,
           recipient: user_with_role_for_seller,
+          force_async: false,
+          in_seller_time_zone: false,
           filters: ActionController::Parameters.new(
             {
               start_time: 1.month.ago.strftime("%Y-%m-%d"),
@@ -351,6 +353,8 @@ describe "Sales page", type: :system, js: true do
           expect(Exports::PurchaseExportService).to receive(:export).with(
             seller:,
             recipient: user_with_role_for_seller,
+            force_async: false,
+            in_seller_time_zone: false,
             filters: ActionController::Parameters.new(
               {
                 start_time: 1.month.ago.strftime("%Y-%m-%d"),

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { SurchargesResponse } from "$app/data/customer_surcharge";
+import type { CurrencyCode } from "$app/utils/currency";
+
 import {
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
@@ -173,6 +176,9 @@ const state = (overrides: Partial<State> = {}): State => ({
   city: "",
   state: "",
   zipCode: "10001",
+  buyerCurrency: null,
+  buyerCurrencyRemint: null,
+  unavailableBuyerCurrency: null,
   saveAddress: false,
   gift: null,
   customFieldValues: {},
@@ -1624,6 +1630,12 @@ describe("reduceCheckoutState", () => {
       }
     });
 
+    it("invalidates surcharges when the buyer picks a currency", () => {
+      const next = reduceCheckoutState(state(), { type: "set-value", buyerCurrency: "gbp" });
+      expect(next.buyerCurrency).toBe("gbp");
+      expect(next.surcharges).toEqual({ type: "pending" });
+    });
+
     it("does not cancel an in-progress wallet payment when its own address updates land", () => {
       // The Apple Pay / Google Pay sheet dispatches address set-values as part of its own
       // payment flow (shipping address change, billing details from the chosen card). Wallet
@@ -1889,6 +1901,225 @@ describe("reduceCheckoutState", () => {
       const next = reduceCheckoutState(retrying, { type: "cancel" });
 
       expect(next.status).toEqual({ type: "input", errors: new Set() });
+    });
+  });
+  describe("currency re-quote", () => {
+    const quoted = (currency: CurrencyCode, available: CurrencyCode[]): SurchargesResponse => ({
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 0,
+      tax_cents: 0,
+      tax_included_cents: 0,
+      subtotal: 1_000,
+      detected_buyer_currency: "cad",
+      available_buyer_currencies: available.map((code) => ({ code, label: code.toUpperCase() })),
+      buyer_currency_quote:
+        currency === "usd"
+          ? null
+          : {
+              token: "quote-token",
+              currency,
+              canonical_total_cents: 1_000,
+              presentment_total_cents: 1_250,
+              charge_presentment_total_cents: 1_250,
+              rate: 1.25,
+              subunit_to_unit: 100,
+              expires_at: "2999-01-01T00:00:00Z",
+              line_allocations: [],
+            },
+    });
+    const loadedIn = (currency: CurrencyCode, available: CurrencyCode[]) =>
+      ({ type: "loaded", result: quoted(currency, available) }) as const;
+
+    it("holds the replaced quote so the summary can stay on screen while the new one is minted", () => {
+      const before = state({ surcharges: loadedIn("cad", ["usd", "cad", "gbp"]) });
+
+      const next = reduceCheckoutState(before, { type: "set-value", buyerCurrency: "gbp" });
+
+      expect(next.surcharges).toEqual({ type: "pending" });
+      expect(next.buyerCurrencyRemint?.surcharges).toEqual(quoted("cad", ["usd", "cad", "gbp"]));
+      expect(next.buyerCurrencyRemint?.previousCurrency).toBeNull();
+    });
+
+    it("keeps the first held quote when a second change lands before the first one returns", () => {
+      const picked = reduceCheckoutState(state({ surcharges: loadedIn("cad", ["usd", "cad", "gbp"]) }), {
+        type: "set-value",
+        buyerCurrency: "gbp",
+      });
+
+      const pickedAgain = reduceCheckoutState(picked, { type: "set-value", buyerCurrency: "usd" });
+
+      expect(pickedAgain.buyerCurrencyRemint?.surcharges).toEqual(quoted("cad", ["usd", "cad", "gbp"]));
+      expect(pickedAgain.buyerCurrencyRemint?.previousCurrency).toBeNull();
+    });
+
+    it("drops the held quote when the cart itself changes", () => {
+      const picked = reduceCheckoutState(state({ surcharges: loadedIn("cad", ["usd", "cad", "gbp"]) }), {
+        type: "set-value",
+        buyerCurrency: "gbp",
+      });
+
+      const edited = reduceCheckoutState(picked, { type: "update-products", products: [product({ price: 2_000 })] });
+
+      expect(edited.buyerCurrencyRemint).toBeNull();
+    });
+
+    it("releases the held quote once the chosen currency comes back", () => {
+      const loading = state({
+        buyerCurrency: "gbp",
+        buyerCurrencyRemint: { surcharges: quoted("cad", ["usd", "cad", "gbp"]), previousCurrency: "cad" },
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+      });
+
+      const next = reduceCheckoutState(loading, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: quoted("gbp", ["usd", "cad", "gbp"]),
+      });
+
+      expect(next.buyerCurrency).toBe("gbp");
+      expect(next.buyerCurrencyRemint).toBeNull();
+      expect(next.unavailableBuyerCurrency).toBeNull();
+      expect(next.surcharges.type).toBe("loaded");
+    });
+
+    it("restores the previous currency and names the refused one when the response omits it", () => {
+      const loading = state({
+        buyerCurrency: "gbp",
+        buyerCurrencyRemint: { surcharges: quoted("cad", ["usd", "cad", "gbp"]), previousCurrency: "cad" },
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+      });
+
+      // A cart-wide refusal answers in canonical USD and drops gbp from the menu.
+      const next = reduceCheckoutState(loading, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: quoted("usd", ["usd", "cad"]),
+      });
+
+      expect(next.unavailableBuyerCurrency).toBe("gbp");
+      expect(next.buyerCurrency).toBe("cad");
+      // The response in hand is the USD fallback, so the restored CAD selection is re-quoted.
+      expect(next.surcharges).toEqual({ type: "pending" });
+      expect(next.buyerCurrencyRemint?.previousCurrency).toBe("cad");
+    });
+
+    it("keeps the canonical response when the restored selection is US dollars", () => {
+      const loading = state({
+        buyerCurrency: "gbp",
+        buyerCurrencyRemint: { surcharges: quoted("usd", ["usd", "gbp"]), previousCurrency: "usd" },
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+      });
+
+      const next = reduceCheckoutState(loading, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: quoted("usd", ["usd"]),
+      });
+
+      expect(next.unavailableBuyerCurrency).toBe("gbp");
+      expect(next.buyerCurrency).toBe("usd");
+      expect(next.surcharges.type).toBe("loaded");
+    });
+
+    it("restores the previous currency when the re-quote never arrives", () => {
+      const loading = state({
+        buyerCurrency: "gbp",
+        buyerCurrencyRemint: { surcharges: quoted("cad", ["usd", "cad", "gbp"]), previousCurrency: "cad" },
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+      });
+
+      const next = reduceCheckoutState(loading, { type: "surcharges-fetch-failed", requestId: 1 });
+
+      expect(next.buyerCurrency).toBe("cad");
+      // A request that never completed is not the server refusing the currency, so the notice
+      // that says so must stay off; the generic error alert covers this.
+      expect(next.unavailableBuyerCurrency).toBeNull();
+      // The held quote stays: it is the one the summary is showing and the one the buyer is back on.
+      expect(next.buyerCurrencyRemint?.previousCurrency).toBe("cad");
+      expect(next.surcharges).toEqual({ type: "error" });
+    });
+
+    it("settles on the response when the currency it restores to was withdrawn as well", () => {
+      // A transient FX failure withdraws every non-USD currency, so the buyer's previous choice
+      // is gone too. Asking for it again would be refused again, without end.
+      const loading = state({
+        buyerCurrency: "gbp",
+        buyerCurrencyRemint: { surcharges: quoted("cad", ["usd", "cad", "gbp"]), previousCurrency: "cad" },
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+      });
+
+      const next = reduceCheckoutState(loading, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: quoted("usd", ["usd"]),
+      });
+
+      expect(next.unavailableBuyerCurrency).toBe("gbp");
+      expect(next.buyerCurrency).toBe("cad");
+      expect(next.surcharges.type).toBe("loaded");
+      expect(next.buyerCurrencyRemint).toBeNull();
+    });
+
+    it("keeps the selection when the response carries no currency menu at all", () => {
+      // A server from before the picker shipped says nothing about which currencies it can quote.
+      const menuless = { ...quoted("gbp", []), available_buyer_currencies: undefined };
+      const loading = state({
+        buyerCurrency: "gbp",
+        buyerCurrencyRemint: { surcharges: quoted("cad", ["usd", "cad", "gbp"]), previousCurrency: "cad" },
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+      });
+
+      const next = reduceCheckoutState(loading, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: menuless,
+      });
+
+      expect(next.buyerCurrency).toBe("gbp");
+      expect(next.unavailableBuyerCurrency).toBeNull();
+      expect(next.surcharges.type).toBe("loaded");
+    });
+
+    it("retires the refusal notice as soon as the buyer picks again", () => {
+      const notified = state({ unavailableBuyerCurrency: "gbp", surcharges: loadedIn("usd", ["usd", "cad"]) });
+
+      const next = reduceCheckoutState(notified, { type: "set-value", buyerCurrency: "cad" });
+
+      expect(next.unavailableBuyerCurrency).toBeNull();
+    });
+
+    it("retires the refusal notice when the cart it described is replaced", () => {
+      const notified = state({ unavailableBuyerCurrency: "gbp", surcharges: loadedIn("cad", ["usd", "cad"]) });
+
+      for (const action of [
+        { type: "update-products" as const, products: [product({ price: 2_000 })] },
+        { type: "set-value", tip: { type: "fixed", amount: 2_00 } } as const,
+        { type: "set-value", country: "CA" } as const,
+      ]) {
+        expect(reduceCheckoutState(notified, action).unavailableBuyerCurrency).toBeNull();
+      }
+    });
+
+    it("keeps the refusal notice through the response that restores the previous currency", () => {
+      // That response lists the refused currency again — the menu is settlement-based and only
+      // drops what the request in hand tried — so it is no evidence the currency now works.
+      const restoring = state({
+        buyerCurrency: "cad",
+        unavailableBuyerCurrency: "gbp",
+        buyerCurrencyRemint: { surcharges: quoted("cad", ["usd", "cad", "gbp"]), previousCurrency: "cad" },
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+      });
+
+      const next = reduceCheckoutState(restoring, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: quoted("cad", ["usd", "cad", "gbp"]),
+      });
+
+      expect(next.buyerCurrency).toBe("cad");
+      expect(next.unavailableBuyerCurrency).toBe("gbp");
+      expect(next.surcharges.type).toBe("loaded");
     });
   });
 });

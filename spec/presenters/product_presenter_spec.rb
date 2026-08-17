@@ -85,7 +85,7 @@ describe ProductPresenter do
   end
 
   describe "#product_props" do
-    let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:31337", protocol: "http", cookie_jar: {}, remote_ip: "0.0.0.0") }
+    let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:31337", protocol: "http", cookie_jar: {}, params: {}, remote_ip: "0.0.0.0") }
     let(:buyer) { create(:user) }
     let(:pundit_user) { SellerContext.new(user: buyer, seller: buyer) }
     let(:product) { create(:product) }
@@ -251,7 +251,7 @@ describe ProductPresenter do
   end
 
   describe "#edit_props" do
-    let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", remote_ip: "0.0.0.0") }
+    let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", remote_ip: "0.0.0.0", params: {}, cookie_jar: {}) }
     let(:circle_integration) { create(:circle_integration) }
     let(:discord_integration) { create(:discord_integration) }
     let(:product) do
@@ -1158,7 +1158,7 @@ describe ProductPresenter do
   end
 
   describe ".card_for_web" do
-    let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", remote_ip: "0.0.0.0") }
+    let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", remote_ip: "0.0.0.0", params: {}, cookie_jar: {}) }
     let(:product) { create(:product) }
 
     it "returns properties from the card presenter" do

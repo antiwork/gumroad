@@ -33,6 +33,9 @@ class DisputeEvidence < ApplicationRecord
 
   SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS = 72
   EVIDENCE_REMINDER_LEAD_TIME = 24.hours
+  # check_if_needs_redirect re-checks the window on every request, so the emailed link may safely
+  # outlive the deadline it quotes — and must, or a late click gets a 404 instead of the explanation.
+  EVIDENCE_LINK_GRACE_PERIOD = 30.days
   STRIPE_MAX_COMBINED_FILE_SIZE = 5_000_000.bytes
   MINIMUM_RECOMMENDED_CUSTOMER_COMMUNICATION_FILE_SIZE = 1_000_000.bytes
   # Bounds the inline merge work in Purchases::DisputeEvidenceController#update; Stripe still
@@ -121,6 +124,10 @@ class DisputeEvidence < ApplicationRecord
 
   def seller_response_due_at
     self.class.seller_response_due_at(seller_contacted_at)
+  end
+
+  def evidence_link_expires_at
+    seller_response_due_at&.+(EVIDENCE_LINK_GRACE_PERIOD)
   end
 
   def self.schedule_due_soon_reminder(dispute_id:, seller_contacted_at:, resolved_at:)

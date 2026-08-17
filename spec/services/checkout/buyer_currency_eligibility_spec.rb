@@ -52,6 +52,36 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to be_nil
   end
 
+  it "gates on the currency the submitted quote token confirmed, not GeoIP" do
+    token = Rails.application.message_verifier(:buyer_currency_quote).generate({ currency: Currency::GBP })
+
+    picked_decision = described_class.new(order:,
+                                          seller:,
+                                          merchant_account:,
+                                          chargeable:,
+                                          purchases:,
+                                          params: { buyer_currency_quote: token },
+                                          setup_future_charges:,
+                                          off_session:).decision
+
+    expect(picked_decision).to be_eligible
+    expect(picked_decision.currency).to eq(Currency::GBP)
+  end
+
+  it "falls back to GeoIP when the submitted quote token is tampered" do
+    tampered_decision = described_class.new(order:,
+                                            seller:,
+                                            merchant_account:,
+                                            chargeable:,
+                                            purchases:,
+                                            params: { buyer_currency_quote: "not-a-signed-token" },
+                                            setup_future_charges:,
+                                            off_session:).decision
+
+    expect(tampered_decision).to be_eligible
+    expect(tampered_decision.currency).to eq(Currency::CAD)
+  end
+
   it "allows the PR1 Stripe test-mode Gumroad platform-account path" do
     platform_merchant_account = create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::USD)
     purchase.update!(merchant_account: platform_merchant_account)

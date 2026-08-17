@@ -23,7 +23,13 @@ if [[ $BRANCH_DEPLOYMENT == "true" ]]; then
   fi
 fi
 
-echo "npm run setup"
-npm run setup
+# Production/staging images already ran this in compile_assets.sh (docker commit).
+# Re-running on every boot holds :3000 closed while nginx is already in ALB rotation.
+if [[ ! -f app/javascript/utils/routes.js || ! -f public/pages-tailwind.css ]]; then
+  echo "npm run setup"
+  npm run setup
+else
+  echo "npm run setup skipped (outputs already in image)"
+fi
 
 exec bundle exec rails server -p $PORT
