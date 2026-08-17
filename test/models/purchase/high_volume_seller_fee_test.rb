@@ -73,7 +73,7 @@ class Purchase::HighVolumeSellerFeeTest < ActiveSupport::TestCase
 
   private
     def mark_volume_eligible!(seller)
-      seller.high_volume_fee_eligible = true
+      seller.high_volume_fee_month = Time.current.strftime("%Y-%m")
       seller.save!(validate: false)
     end
 end

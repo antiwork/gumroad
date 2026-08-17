@@ -66,11 +66,10 @@ class User < ApplicationRecord
 
   MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT = 10_000
 
-  # 5% once trailing-30-day GMV is at least $20k. Eligibility is cached so purchase
-  # fee calc does not SUM the seller's sales (closed #4283).
+  # 5% once month-to-date GMV reaches $20k; resets each calendar month (gp#2177).
+  # Eligibility is cached so purchase fee calc does not SUM the seller's sales (closed #4283).
   HIGH_VOLUME_FEE_PER_THOUSAND = 50
   HIGH_VOLUME_FEE_THRESHOLD_CENTS = 2_000_000
-  HIGH_VOLUME_FEE_WINDOW = 30.days
 
   # Ceiling on how long a cached avatar URL can keep being served after the file
   # behind it goes away (avatar URLs are otherwise stable for the seller's picture).
@@ -250,14 +249,25 @@ class User < ApplicationRecord
     set_json_data_for_attr("disable_buyer_currency_rounding", ActiveModel::Type::Boolean.new.cast(value))
   end
 
-  def high_volume_fee_eligible
-    ActiveModel::Type::Boolean.new.cast(json_data_for_attr("high_volume_fee_eligible", default: false))
+  def high_volume_fee_month
+    json_data_for_attr("high_volume_fee_month")
   end
-  alias_method :high_volume_fee_eligible?, :high_volume_fee_eligible
 
-  def high_volume_fee_eligible=(value)
-    set_json_data_for_attr("high_volume_fee_eligible", ActiveModel::Type::Boolean.new.cast(value))
+  # Deletes the key when nil so the nightly LIKE scan set does not accumulate
+  # sellers who fell below the threshold months ago.
+  def high_volume_fee_month=(value)
+    if value.nil?
+      json_data.delete("high_volume_fee_month")
+    else
+      set_json_data_for_attr("high_volume_fee_month", value)
+    end
     json_data_will_change!
+  end
+
+  # Month-keyed so eligibility expires on its own at calendar-month rollover,
+  # before the nightly refresh gets to the seller.
+  def high_volume_fee_eligible?
+    high_volume_fee_month == Time.current.strftime("%Y-%m")
   end
 
   def high_volume_seller_fee?
@@ -271,15 +281,16 @@ class User < ApplicationRecord
     Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND
   end
 
-  def trailing_month_gross_sales_cents
-    sales.paid.where("purchases.created_at >= ?", HIGH_VOLUME_FEE_WINDOW.ago).sum(:price_cents)
+  def month_to_date_gross_sales_cents
+    sales.paid.where("purchases.created_at >= ?", Time.current.beginning_of_month).sum(:price_cents)
   end
 
   def refresh_high_volume_fee_eligibility!
-    eligible = trailing_month_gross_sales_cents >= HIGH_VOLUME_FEE_THRESHOLD_CENTS
-    return eligible if high_volume_fee_eligible? == eligible
+    eligible = month_to_date_gross_sales_cents >= HIGH_VOLUME_FEE_THRESHOLD_CENTS
+    new_month = eligible ? Time.current.strftime("%Y-%m") : nil
+    return eligible if high_volume_fee_month == new_month
 
-    self.high_volume_fee_eligible = eligible
+    self.high_volume_fee_month = new_month
     save!(validate: false)
     eligible
   end

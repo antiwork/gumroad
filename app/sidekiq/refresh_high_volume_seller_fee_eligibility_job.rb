@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Recomputes the cached 30-day GMV flag used by the 5%-after-$20k fee.
+# Recomputes the cached month-to-date GMV flag used by the 5%-after-$20k fee.
 # Per-seller on each successful sale; nightly with no args to drop sellers who fell below.
 class RefreshHighVolumeSellerFeeEligibilityJob
   include Sidekiq::Job
@@ -21,11 +21,11 @@ class RefreshHighVolumeSellerFeeEligibilityJob
     # qualifying set from purchases each night instead of only yesterday's sellers.
     def seller_ids_to_refresh
       qualifying = Purchase.paid
-        .where("purchases.created_at >= ?", User::HIGH_VOLUME_FEE_WINDOW.ago)
+        .where("purchases.created_at >= ?", Time.current.beginning_of_month)
         .group(:seller_id)
         .having("SUM(purchases.price_cents) >= ?", User::HIGH_VOLUME_FEE_THRESHOLD_CENTS)
         .pluck(:seller_id)
-      flagged = User.where("json_data LIKE ?", "%high_volume_fee_eligible%true%").pluck(:id)
+      flagged = User.where("json_data LIKE ?", "%high_volume_fee_month%").pluck(:id)
       (qualifying + flagged).uniq
     end
 end
