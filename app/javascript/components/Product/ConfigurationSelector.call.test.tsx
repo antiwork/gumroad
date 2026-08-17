@@ -29,11 +29,11 @@ const durationOption = {
 };
 
 const callProduct: Product = {
-  permalink: "songwriting-consultation",
+  permalink: "call-product",
   rental: null,
   options: [durationOption],
   currency_code: "usd",
-  price_cents: 7499,
+  price_cents: 1000,
   installment_plan: null,
   is_tiered_membership: false,
   is_legacy_subscription: false,
