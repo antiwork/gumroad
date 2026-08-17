@@ -1,14 +1,9 @@
 # frozen_string_literal: true
 
-# Pauses renewals for the memberships at risk of gp#1410: the saved card is India-issued and
-# the recurring e-mandate Stripe holds is unusable for India recurring payments — it is
-# absent, no longer active, or was registered in USD (any membership without a stored non-USD
-# fixing charged in canonical USD, and many Indian issuers no longer accept USD e-mandates).
-#
-# The next off-session renewal for these memberships is guaranteed to fail, so pause them up
-# front instead of waiting for each renewal date. `require_indian_card_mandate_reauthorization!`
-# keeps the buyer's access, sends the existing "update your payment method" email once, and
-# routes them through the INR reauthorization path.
+# Pauses gp#1410's at-risk memberships up front instead of waiting for each renewal to fail:
+# an India-issued card whose mandate is absent, inactive, or implied-USD (no stored non-USD
+# fixing) cannot renew, because many Indian issuers refuse USD e-mandates. Pausing keeps
+# access and sends the buyer onto the INR reauthorization path.
 #
 #   Onetime::PauseIndianCardMandateRenewals.process(seller_id: 123, dry_run: true)
 #   Onetime::PauseIndianCardMandateRenewals.process(seller_id: 123)
@@ -36,6 +31,9 @@ class Onetime::PauseIndianCardMandateRenewals
       subscriptions.each do |subscription|
         scanned += 1
         next unless subscription.india_card_mandate_reliability_enabled?
+        # A membership that will never charge again (completed, or permanently free) needs no
+        # mandate and must not be paused or emailed.
+        next unless subscription.future_subscription_charge?
 
         card = subscription.credit_card_to_charge
         next unless card&.stripe_charge_processor? && card.requires_mandate?
@@ -50,14 +48,21 @@ class Onetime::PauseIndianCardMandateRenewals
           next unless at_risk?(subscription, card)
         rescue ChargeProcessorError => e
           # A transient Stripe failure must not pause (and email) a member whose mandate may
-          # be fine; skip and re-run for the leftovers.
+          # be fine; skip and re-run for the leftovers. Only a real run reports these — dry-run
+          # lookup noise is not actionable. (Anomaly reports from inside the lookup itself,
+          # e.g. a mandate bound to another payment method, stay on for both: they flag bad
+          # data worth seeing whenever it is observed.)
           mandate_check_errors += 1
-          ErrorNotifier.notify(e, subscription: subscription.external_id)
+          Rails.logger.info("[#{self.class.name}] mandate check failed for subscription #{subscription.external_id}: #{e.class}")
+          ErrorNotifier.notify(e, subscription: subscription.external_id) unless dry_run
           next
         end
 
         paused += 1
-        subscription.require_indian_card_mandate_reauthorization! unless dry_run
+        # notify_buyer_if_already_disabled: a renewal-disabled membership without the reauth
+        # flag was paused before the INR path deployed; this run's email is its signal to
+        # come back and reauthorize.
+        subscription.require_indian_card_mandate_reauthorization!(notify_buyer_if_already_disabled: true) unless dry_run
       end
     end
 

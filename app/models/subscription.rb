@@ -490,7 +490,7 @@ class Subscription < ApplicationRecord
     end
   end
 
-  def require_indian_card_mandate_reauthorization!(notify_buyer: true, clear_existing_mandate: false)
+  def require_indian_card_mandate_reauthorization!(notify_buyer: true, clear_existing_mandate: false, notify_buyer_if_already_disabled: false)
     return unless india_card_mandate_reliability_enabled?
 
     should_notify_buyer = false
@@ -499,7 +499,9 @@ class Subscription < ApplicationRecord
       return unless card&.stripe_charge_processor? && card.requires_mandate?
       return unless alive?(include_pending_cancellation: false)
 
-      should_notify_buyer = notify_buyer && !renewal_disabled_due_to_indian_card_mandate?
+      should_notify_buyer = notify_buyer &&
+        (!renewal_disabled_due_to_indian_card_mandate? ||
+          (notify_buyer_if_already_disabled && !indian_card_mandate_requires_reauthorization?))
       self.stripe_mandate_id = nil if clear_existing_mandate
       self.renewal_disabled_due_to_indian_card_mandate = true
       self.indian_card_mandate_requires_reauthorization = true
@@ -568,7 +570,8 @@ class Subscription < ApplicationRecord
 
   def indian_card_mandate_terms(
     billing_info: nil,
-    authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED
+    authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED,
+    fixed_rate: nil
   )
     purchase = original_purchase
     return if purchase.nil?
@@ -580,10 +583,16 @@ class Subscription < ApplicationRecord
     presentment_matches = presentment.present? &&
       presentment.canonical_price_cents == canonical_price_cents &&
       indian_card_renewal_presentment_supported?(presentment.presentment_currency)
+    recovery_currency = indian_card_recovery_presentment_currency unless presentment_matches
+    price_cap_rate = if presentment_matches
+      purchase.rate_converted_to_usd.presence
+    elsif recovery_currency.present?
+      fixed_rate
+    end
     price_cap_cents = indian_card_mandate_price_cents(
       purchase,
       renewal_price_cents,
-      fixed_rate: (purchase.rate_converted_to_usd.presence if presentment_matches)
+      fixed_rate: price_cap_rate
     )
     canonical_cap_cents = if billing_info.present?
       indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cap_cents)
@@ -599,21 +608,37 @@ class Subscription < ApplicationRecord
     if presentment_matches
       currency = presentment.presentment_currency
       price_rate = presentment.signup_currency_units_per_usd
-    elsif (recovery_currency = indian_card_recovery_presentment_currency).present?
+    elsif recovery_currency.present?
       # Stripe will not register an India recurring e-mandate in USD for many Indian issuers
       # (gp#1410), so a listed-INR membership with no stored fixing must still collect its
       # replacement mandate in rupees, sized at today's rate.
       currency = recovery_currency
-      price_rate = get_rate(currency)
+      price_rate = fixed_rate || get_rate(currency)
     end
     if price_rate.present?
       variable_cap_cents = [canonical_cap_cents - price_cap_cents, 0].max
       amount = indian_card_presentment_cents(price_cap_cents, price_rate, currency) +
-        indian_card_presentment_cents(variable_cap_cents, get_rate(currency), currency)
+        indian_card_presentment_cents(variable_cap_cents, fixed_rate || get_rate(currency), currency)
     end
 
     interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(recurrence)
     { amount:, currency:, interval:, interval_count: }
+  end
+
+  # Terms plus the conversion rate they were sized with. The caller stores the rate beside
+  # the mandate it creates (SetupIntent metadata) and validates with it later: the cached
+  # rate refreshes hourly, and a refresh between setup and validation must not reject the
+  # mandate the buyer just approved.
+  def indian_card_mandate_terms_with_rate(
+    billing_info: nil,
+    authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED
+  )
+    terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:)
+    return [terms, nil] if terms.blank? || terms[:currency] == Currency::USD
+
+    rate = get_rate(terms[:currency])
+    terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, fixed_rate: rate)
+    [terms, rate]
   end
 
   def future_subscription_charge?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
@@ -646,9 +671,8 @@ class Subscription < ApplicationRecord
   end
 
   # The gp#1410 recovery shape: only a membership whose renewals can re-fix in rupees
-  # (product and original purchase both listed in INR) may fall back to INR mandate terms.
-  # Anything else keeps canonical USD, because a mandate in a currency the renewal lane
-  # cannot bill would strand the subscription after a successful reauthorization.
+  # (product and original purchase both listed in INR) may fall back to INR mandate terms —
+  # a mandate the renewal lane cannot bill would strand the subscription after reauth.
   def indian_card_recovery_presentment_currency
     return unless india_card_mandate_reliability_enabled?
 
@@ -664,11 +688,9 @@ class Subscription < ApplicationRecord
     currency
   end
 
-  # A completed INR reauthorization leaves the mandate in rupees while the subscription still
-  # has no stored fixing (its historical charges settled in canonical USD). The renewal lane
-  # refuses to invent a buyer-currency amount without a stored row, so record the listed-INR
-  # fixing here from the same purchase terms the mandate cap was sized from. Without it, the
-  # first renewal after a successful reauthorization pauses the subscription again.
+  # The renewal lane refuses to invent a buyer-currency amount without a stored row, so a
+  # completed INR reauthorization must record the listed-INR fixing — otherwise the first
+  # renewal after a successful reauthorization pauses the subscription again.
   def record_indian_card_mandate_presentment!
     currency = indian_card_recovery_presentment_currency
     return if currency.blank?
@@ -677,10 +699,27 @@ class Subscription < ApplicationRecord
     canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
     presentment_price_cents = purchase.displayed_price_cents.to_i
     rate = BigDecimal(purchase.rate_converted_to_usd.to_s, exception: false)
+    if presentment_price_cents.zero? || canonical_price_cents.zero?
+      # Free-trial and fully-discounted registrations carry zero prices; size the fixing
+      # from the renewal terms instead — the pre-discount total when a temporary discount
+      # zeroes the current one. The renewal lane re-fixes exact canonical drift.
+      presentment_price_cents = current_subscription_price_cents.to_i
+      presentment_price_cents = renewal_pre_discount_total_cents.to_i if presentment_price_cents.zero?
+      rate = BigDecimal(get_rate(currency).to_s, exception: false)
+      canonical_price_cents = rate&.positive? ? get_usd_cents(currency, presentment_price_cents, rate:) : 0
+    end
     return unless canonical_price_cents.positive? && presentment_price_cents.positive? && rate&.positive?
 
     with_lock do
-      return if current_later_charge_presentment.present?
+      current = current_later_charge_presentment
+      # Keep any fixing that indian_card_mandate_terms itself would use — the mandate was
+      # then approved in that currency, not in INR. Supersede only a row terms rejected
+      # (wrong canonical or unsupported currency), which the INR mandate cannot bill.
+      if current.present?
+        return if current.presentment_currency == currency
+        return if current.canonical_price_cents == canonical_price_cents &&
+                  indian_card_renewal_presentment_supported?(current.presentment_currency)
+      end
 
       later_charge_presentments.create!(
         processor: StripeChargeProcessor.charge_processor_id,

@@ -366,9 +366,16 @@ class Subscription::UpdaterService
       mandate_options = setup_intent.card_mandate_options
       return false if mandate_options.blank?
 
+      # Recompute the terms with the rate stamped when the setup intent was created, so a
+      # cached-rate refresh between setup and this validation cannot reject the mandate the
+      # buyer just approved. The stamp is server-authored metadata; a missing or unusable
+      # value falls back to the live rate (intents created before the stamp existed).
+      fixed_rate = BigDecimal(setup_intent.metadata[:gumroad_mandate_rate].to_s, exception: false)
+      fixed_rate = nil unless fixed_rate&.positive?
       expected_terms = subscription.indian_card_mandate_terms(
         billing_info: params[:contact_info],
-        authenticated_offer_code_buyer: logged_in_user
+        authenticated_offer_code_buyer: logged_in_user,
+        fixed_rate:
       )
       return false if expected_terms.blank?
 

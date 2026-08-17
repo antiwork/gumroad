@@ -140,6 +140,30 @@ describe Onetime::PauseIndianCardMandateRenewals do
     expect(CustomerLowPriorityMailer).not_to have_received(:subscription_indian_card_mandate_invalid)
   end
 
+  it "skips memberships with no future charge" do
+    subscription = create_membership
+    subscription.update!(charge_occurrence_count: 1)
+
+    result = described_class.process(seller_id: seller.id, dry_run: false)
+
+    expect(result).to eq(scanned: 1, paused: 0, already_paused: 0, mandate_check_errors: 0)
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(CustomerLowPriorityMailer).not_to have_received(:subscription_indian_card_mandate_invalid)
+  end
+
+  it "pauses and emails a membership that was renewal-disabled without reauthorization" do
+    subscription = create_membership
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+
+    result = described_class.process(seller_id: seller.id, dry_run: false)
+
+    expect(result).to eq(scanned: 1, paused: 1, already_paused: 0, mandate_check_errors: 0)
+    subscription.reload
+    expect(subscription).to be_indian_card_mandate_requires_reauthorization
+    expect(CustomerLowPriorityMailer).to have_received(:subscription_indian_card_mandate_invalid)
+      .with(subscription.id).once
+  end
+
   it "skips dead memberships" do
     subscription = create_membership
     subscription.update!(failed_at: Time.current, deactivated_at: Time.current)
@@ -206,6 +230,27 @@ describe Onetime::PauseIndianCardMandateRenewals do
 
     expect(result).to eq(scanned: 1, paused: 0, already_paused: 0, mandate_check_errors: 1)
     expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(ErrorNotifier).to have_received(:notify).once
+  end
+
+  it "does not notify the error tracker when a mandate check fails on a dry run" do
+    subscription = create_membership
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: 10_00,
+      signup_currency_units_per_usd: BigDecimal("80")
+    )
+    allow_any_instance_of(Subscription).to receive(:indian_card_mandate_for)
+      .and_raise(ChargeProcessorUnavailableError)
+
+    expect(ErrorNotifier).not_to receive(:notify)
+
+    result = described_class.process(seller_id: seller.id, dry_run: true)
+
+    expect(result).to eq(scanned: 1, paused: 0, already_paused: 0, mandate_check_errors: 1)
   end
 
   it "does not check Stripe for memberships without a stored fixing" do

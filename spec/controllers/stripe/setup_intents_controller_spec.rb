@@ -103,14 +103,19 @@ describe Stripe::SetupIntentsController, :vcr do
         allow(Rails.env).to receive(:production?).and_return(true)
         allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ price: 1, subscription_id: subscription.external_id }]))
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
-        expect(subscription).to receive(:indian_card_mandate_terms).twice.with(
+        expect(subscription).to receive(:indian_card_mandate_terms_with_rate).twice.with(
           billing_info: nil,
           authenticated_offer_code_buyer: nil
         ).and_return(
-          amount: 12_34,
-          currency: Currency::INR,
-          interval: "month",
-          interval_count: 3
+          [
+            {
+              amount: 12_34,
+              currency: Currency::INR,
+              interval: "month",
+              interval_count: 3
+            },
+            "80.0"
+          ]
         )
 
         mandate_options = controller.send(:mandate_options_for_stripe, chargeable, subscription:)
@@ -118,7 +123,10 @@ describe Stripe::SetupIntentsController, :vcr do
         mandate_terms = mandate_options.dig(:payment_method_options, :card, :mandate_options)
         next_mandate_terms = next_mandate_options.dig(:payment_method_options, :card, :mandate_options)
 
-        expect(mandate_options[:metadata]).to eq(gumroad_subscription_id: subscription.external_id)
+        expect(mandate_options[:metadata]).to eq(
+          gumroad_subscription_id: subscription.external_id,
+          gumroad_mandate_rate: "80.0"
+        )
         expect(mandate_terms).to include(
           amount: 12_34,
           currency: Currency::INR,
@@ -134,18 +142,24 @@ describe Stripe::SetupIntentsController, :vcr do
         chargeable = double(requires_mandate?: true)
         allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ subscription_id: subscription.external_id }]))
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
-        allow(subscription).to receive(:indian_card_mandate_terms).and_return(
-          amount: 12_34,
-          currency: Currency::USD,
-          interval: "sporadic",
-          interval_count: nil
+        allow(subscription).to receive(:indian_card_mandate_terms_with_rate).and_return(
+          [
+            {
+              amount: 12_34,
+              currency: Currency::USD,
+              interval: "sporadic",
+              interval_count: nil
+            },
+            nil
+          ]
         )
 
-        mandate_terms = controller.send(:mandate_options_for_stripe, chargeable, subscription:)
-          .dig(:payment_method_options, :card, :mandate_options)
+        mandate_options = controller.send(:mandate_options_for_stripe, chargeable, subscription:)
+        mandate_terms = mandate_options.dig(:payment_method_options, :card, :mandate_options)
 
         expect(mandate_terms).to include(interval: "sporadic")
         expect(mandate_terms).not_to have_key(:interval_count)
+        expect(mandate_options[:metadata]).to eq(gumroad_subscription_id: subscription.external_id)
       end
 
       it "uses the submitted billing location for subscription mandate terms" do
@@ -159,14 +173,19 @@ describe Stripe::SetupIntentsController, :vcr do
           )
         )
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
-        expect(subscription).to receive(:indian_card_mandate_terms).with(
+        expect(subscription).to receive(:indian_card_mandate_terms_with_rate).with(
           billing_info:,
           authenticated_offer_code_buyer: nil
         ).and_return(
-          amount: 12_34,
-          currency: Currency::INR,
-          interval: "month",
-          interval_count: 1
+          [
+            {
+              amount: 12_34,
+              currency: Currency::INR,
+              interval: "month",
+              interval_count: 1
+            },
+            "80.0"
+          ]
         )
 
         controller.send(:mandate_options_for_stripe, chargeable, subscription:)
