@@ -258,7 +258,6 @@ class Api::V2::SalesController < Api::V2::BaseController
       from ||= to - 29
 
       return error_400("'from' must be on or before 'to'.") if from > to
-      return error_400("Date range cannot exceed #{AnalyticsController::MAX_DATE_RANGE_DAYS} days.") if (to - from).to_i > AnalyticsController::MAX_DATE_RANGE_DAYS
       # Hourly grouping produces 24 buckets per day, so it only allows short ranges.
       if group_by == "hour" && (to - from).to_i > CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS
         return error_400("Date range cannot exceed #{CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS} days when grouping by hour.")

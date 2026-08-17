@@ -782,6 +782,16 @@ describe PurchasesController, :vcr do
           expect_correct_csv(response.body.to_s)
         end
 
+        it "queues the emailed export when force_async is set" do
+          get :export, params: { force_async: true }
+
+          export = SalesExport.last!
+          expect(export.recipient).to eq(user_with_role_for_seller)
+          expect(Exports::Sales::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(export.id)
+          expect(response).to redirect_to(customers_path)
+          expect(response).to have_http_status(:see_other)
+        end
+
         it "sends data as CSV with purchases in the correct order", :elasticsearch_wait_for_refresh do
           # We don't expect ES to return documents in any specific order,
           # because we expect the purchases.find_each in #purchases_data to order them.

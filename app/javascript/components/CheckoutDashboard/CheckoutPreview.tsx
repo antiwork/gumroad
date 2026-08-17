@@ -21,6 +21,9 @@ export const CheckoutPreview = ({
     () => [
       {
         country: "United States",
+        buyerCurrency: null,
+        buyerCurrencyRemint: null,
+        unavailableBuyerCurrency: null,
         email: "",
         vatId: "",
         fullName: "",

@@ -19,7 +19,7 @@ export default function WishlistShowPage() {
 
   if (layout === "profile" && creator_profile) {
     return (
-      <ProfileLayout creatorProfile={creator_profile}>
+      <ProfileLayout creatorProfile={creator_profile} currencySelector>
         <Wishlist layout="profile" {...wishlistProps} user={null} />
       </ProfileLayout>
     );

@@ -8,6 +8,7 @@
 # between the two surfaces would be a security regression, not a cosmetic one.
 module RendersCustomHtmlPages
   extend ActiveSupport::Concern
+  include CurrencyHelper
 
   PAGE_ASSET_HOSTS = [CDN_S3_PROXY_HOST, PUBLIC_STORAGE_CDN_S3_PROXY_HOST].compact.uniq.join(" ")
 
@@ -921,7 +922,7 @@ module RendersCustomHtmlPages
       # never be shared — same rule as landing_iframe_content. And same as there, the build is
       # skipped for pages that reference no price: they cannot consume it.
       response.cache_control.replace(private: true, no_store: true)
-      prices = Pages::ProductPrices.referenced_in?(seller.custom_html) ? Pages::ProductPrices.build(seller, ip: request.remote_ip, offset:, limit:) : {}
+      prices = Pages::ProductPrices.referenced_in?(seller.custom_html) ? Pages::ProductPrices.build(seller, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request), offset:, limit:) : {}
       render json: {
         success: true,
         offset:,

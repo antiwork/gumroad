@@ -1863,7 +1863,7 @@ describe "PurchaseRefunds", :vcr do
       expect(already_refunded).not_to receive(:block_buyer!)
       expect do
         expect(already_refunded.refund_for_fraud_and_block_buyer!(admin.id, skip_already_refunded: true)).to be_nil
-      end.not_to change { BlockedObject.count }
+      end.not_to change { PlatformBlock.count }
     end
 
     it "keeps the legacy nil-as-truthy behavior for already-refunded purchases when skip_already_refunded is not set" do

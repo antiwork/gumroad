@@ -254,6 +254,7 @@ const CheckoutIndexPage = () => {
       cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
       willSaveCard: state.willSaveCard,
       paymentMethod: state.paymentMethod,
+      paymentElementType: state.paymentElementType,
     },
   );
   // The direct-listed currency lane, for the large-tip confirmation below and for the tip
@@ -555,6 +556,7 @@ const CheckoutIndexPage = () => {
             cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
             willSaveCard: state.willSaveCard,
             paymentMethod: state.paymentMethod,
+            paymentElementType: state.paymentElementType,
           },
         ),
         lineItems: (() => {

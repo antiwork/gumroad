@@ -72,14 +72,12 @@ class ForeignWebhooksController < ApplicationController
 
   def sendgrid
     HandleSendgridEventJob.perform_async(params.to_unsafe_hash.to_hash)
-    LogSendgridEventWorker.perform_async(params.to_unsafe_hash.to_hash)
 
     render json: { success: true }
   end
 
   def resend
     HandleResendEventJob.perform_async(params.to_unsafe_hash.to_hash)
-    LogResendEventJob.perform_async(params.to_unsafe_hash.to_hash)
 
     render json: { success: true }
   end

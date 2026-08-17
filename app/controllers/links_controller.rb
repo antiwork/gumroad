@@ -12,6 +12,9 @@ class LinksController < ApplicationController
 
   enable_mobile_app_web_view only: %i[new create edit]
 
+  # Products/Show and Products/Profile/Show both render from #show.
+  self.buyer_currency_footer_actions = %w[show].freeze
+
   DEFAULT_PRICE = 500
   PRICE_INPUT_MAX_LENGTH = 64
   PRICE_INPUT_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
