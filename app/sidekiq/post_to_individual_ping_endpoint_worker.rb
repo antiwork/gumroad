@@ -57,6 +57,14 @@ class PostToIndividualPingEndpointWorker
       end
     end
 
+  # An empty lookup is usually a DNS blip, not a verdict on the URL (gp#2155), so retry it on the
+  # same backoff as a 5xx. Must precede the blanket rescue: SsrfFilter::Error is in
+  # INTERNET_EXCEPTIONS, which is also why PrivateIPAddress still falls through to a plain drop.
+  rescue SsrfFilter::UnresolvedHostname => e
+    Rails.logger.info("[#{e.class}] PostToIndividualPingEndpointWorker error content_type=#{content_type} user_id=#{user_id} retry_count=#{retry_count}")
+    if retry_count < (BACKOFF_STRATEGY.length - 1)
+      PostToIndividualPingEndpointWorker.perform_in(BACKOFF_STRATEGY[retry_count].seconds, post_url, params.merge("retry_count" => retry_count + 1), content_type, user_id)
+    end
   # rescue clause to handle connection errors. Without this, the job
   # would fail if the user inputted post_url is invalid.
   rescue *INTERNET_EXCEPTIONS => e

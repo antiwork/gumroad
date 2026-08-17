@@ -1623,7 +1623,7 @@ class User < ApplicationRecord
 
     def should_subscribe_preview_be_regenerated?
       previously_new_record? ||
-        %w[name username].intersect?(saved_changes.keys) ||
+        %w[name username bio].intersect?(saved_changes.keys) ||
         %w[font background_color highlight_color].intersect?(seller_profile.saved_changes.keys) ||
         avatar_changed
     end
