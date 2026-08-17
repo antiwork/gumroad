@@ -327,10 +327,14 @@ export const OptionRadioButton = ({
   priceCents ??= 0;
   const { value: discountedPriceCents } = computeSelectionDiscountedPrice(priceCents, discount, product, quantity);
   const buyerLocalContext = buyerLocalContextFor(product);
-  // aria-label overrides the button's content for screen readers, so the rendered
-  // description must be re-exposed via aria-describedby or it is never announced.
+  // aria-label overrides the button's content for screen readers, so everything
+  // rendered inside (price, stock, description) must be re-exposed via
+  // aria-describedby or it is never announced.
   const uid = React.useId();
+  const priceId = hidePrice ? undefined : `${uid}-price`;
+  const quantityLeftId = quantityLeft != null ? `${uid}-quantity-left` : undefined;
   const descriptionId = description ? `${uid}-description` : undefined;
+  const describedBy = [priceId, quantityLeftId, descriptionId].filter(Boolean).join(" ") || undefined;
   return (
     <Tab isSelected={selected} asChild className={recurrence ? "flex-col" : undefined}>
       <Button
@@ -338,7 +342,7 @@ export const OptionRadioButton = ({
         aria-checked={selected}
         disabled={disabled}
         aria-label={name}
-        aria-describedby={descriptionId}
+        aria-describedby={describedBy}
         onClick={onClick}
         itemProp="offer"
         itemType="https://schema.org/Offer"
@@ -351,7 +355,7 @@ export const OptionRadioButton = ({
           </Alert>
         ) : null}
         {hidePrice ? null : (
-          <Pill className="shrink-0">
+          <Pill id={priceId} className="shrink-0">
             {discountedPriceCents < priceCents ? (
               <>
                 <s>{formatBuyerLocalOrSetPrice(priceCents, buyerLocalContext)}</s>{" "}
@@ -374,7 +378,7 @@ export const OptionRadioButton = ({
         )}
         <div>
           <h4>{name}</h4>
-          {quantityLeft != null ? <small className="block">{`${quantityLeft} left`}</small> : null}
+          {quantityLeft != null ? <small id={quantityLeftId} className="block">{`${quantityLeft} left`}</small> : null}
           {description ? (
             <div id={descriptionId}>
               <Breaklines text={description} />

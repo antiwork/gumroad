@@ -18,7 +18,7 @@ const versionedProduct: Product = {
     {
       id: "opt-listener",
       name: "Listener's Edition",
-      quantity_left: null,
+      quantity_left: 5,
       description: "Enjoy the complete album in a simple digital edition.",
       price_difference_cents: 0,
       recurrence_price_values: null,
@@ -75,21 +75,28 @@ const renderSelector = () => {
   render(<Harness />);
 };
 
+const describedByTexts = (radio: HTMLElement) => {
+  const describedBy = radio.getAttribute("aria-describedby");
+  if (!describedBy) throw new Error("expected aria-describedby on the version radio");
+  return describedBy.split(" ").map((id) => document.getElementById(id)?.textContent ?? "");
+};
+
 describe("version selector accessibility", () => {
-  it("exposes each version's description to screen readers via aria-describedby", () => {
+  it("exposes price, stock, and description to screen readers via aria-describedby", () => {
     renderSelector();
 
-    const radio = screen.getByRole("radio", { name: "Listener's Edition" });
-    const describedBy = radio.getAttribute("aria-describedby");
-    if (!describedBy) throw new Error("expected aria-describedby on the version radio");
-    const description = document.getElementById(describedBy);
-    expect(description?.textContent).toBe("Enjoy the complete album in a simple digital edition.");
+    const texts = describedByTexts(screen.getByRole("radio", { name: "Listener's Edition" }));
+    expect(texts).toHaveLength(3);
+    expect(texts[0]).toContain("$9.99");
+    expect(texts[1]).toBe("5 left");
+    expect(texts[2]).toBe("Enjoy the complete album in a simple digital edition.");
   });
 
-  it("omits aria-describedby when a version has no description", () => {
+  it("omits the stock and description references when a version has neither", () => {
     renderSelector();
 
-    const radio = screen.getByRole("radio", { name: "Collector's Edition" });
-    expect(radio.getAttribute("aria-describedby")).toBeNull();
+    const texts = describedByTexts(screen.getByRole("radio", { name: "Collector's Edition" }));
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toContain("$14.99");
   });
 });
