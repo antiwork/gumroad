@@ -5,6 +5,7 @@ import {
   eachDayOfInterval,
   eachMinuteOfInterval,
   endOfDay,
+  format,
   interval,
   isEqual,
   max,
@@ -44,6 +45,7 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Pill } from "$app/components/ui/Pill";
+import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -497,6 +499,18 @@ const CallDateAndTimeSelector = ({
   const setSelectedDateFromReactCalendar = (date: Date) =>
     onChange({ callStartTime: getAvailableStartTimesByDate(date)[0] ?? null });
 
+  const availableDates = React.useMemo(
+    () =>
+      Object.keys(availabilitiesByDate)
+        .map((date) => new Date(date))
+        .filter((date) => isAvailableOnDate(date))
+        .sort(compareAsc),
+    [availabilitiesByDate, callDurationInMinutes],
+  );
+  const dateSelectId = React.useId();
+  const timeGroupName = React.useId();
+  const selectedDateValue = selectedStartTime ? format(selectedStartTime, "yyyy-MM-dd") : "";
+
   if (firstAvailableStartTime === null && !isLoading) {
     return (
       <Alert role="status" variant="warning">
@@ -519,6 +533,29 @@ const CallDateAndTimeSelector = ({
           <span>Select a date</span>
           {isLoading ? <LoadingSpinner /> : null}
         </h4>
+        <Fieldset>
+          <FieldsetTitle>
+            <Label htmlFor={dateSelectId}>Date</Label>
+          </FieldsetTitle>
+          <Select
+            id={dateSelectId}
+            value={selectedDateValue}
+            disabled={isLoading || availableDates.length === 0}
+            onChange={(event) => {
+              const [year, month, day] = event.target.value.split("-").map(Number);
+              setSelectedDateFromReactCalendar(new Date(year, month - 1, day));
+            }}
+          >
+            {availableDates.map((date) => {
+              const value = format(date, "yyyy-MM-dd");
+              return (
+                <option key={value} value={value}>
+                  {formatCallDate(date, { time: { hidden: true }, timeZone: { hidden: true } })}
+                </option>
+              );
+            })}
+          </Select>
+        </Fieldset>
         <Calendar
           locale={{ code: "en-US" }}
           mode="single"
@@ -546,27 +583,35 @@ const CallDateAndTimeSelector = ({
               {clientTimeZone.shortFormattedName}
             </span>
           </h4>
-          <Tabs variant="buttons" className="grid-cols-2 md:grid-flow-row" role="radiogroup">
+          <fieldset className="grid grid-cols-2 gap-3 md:grid-flow-row">
+            <legend className="sr-only">Select a time</legend>
             {getAvailableStartTimesByDate(selectedStartTime).map((time) => {
               const isSelected = isEqual(selectedStartTime, time);
+              const label = formatCallDate(time, { date: { hidden: true }, timeZone: { hidden: true } });
               return (
-                <Tab key={time.toISOString()} isSelected={isSelected} asChild>
-                  <Button
-                    role="radio"
-                    aria-checked={isSelected}
-                    onClick={() => onChange({ callStartTime: time })}
-                    className="justify-center"
-                  >
-                    <div>{formatCallDate(time, { date: { hidden: true }, timeZone: { hidden: true } })}</div>
-                  </Button>
-                </Tab>
+                <Label
+                  key={time.toISOString()}
+                  className={`justify-center rounded-sm border px-4 py-3 ${
+                    isSelected ? "border-indicator bg-background ring-1 ring-indicator" : "border-border"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name={timeGroupName}
+                    value={time.toISOString()}
+                    checked={isSelected}
+                    onChange={() => onChange({ callStartTime: time })}
+                  />
+                  {label}
+                </Label>
               );
             })}
-          </Tabs>
+          </fieldset>
         </section>
       ) : null}
       {selectedStartTime ? (
-        <div>
+        <div role="status" aria-live="polite">
           <h4>
             You selected{" "}
             <strong>
