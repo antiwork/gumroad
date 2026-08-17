@@ -85,12 +85,33 @@ class ProductPresenter
 
   def product_page_props(seller_custom_domain_url:, **kwargs)
     sections_props = ProfileSectionsPresenter.new(seller: user, query: product.seller_profile_sections).props(request:, pundit_user:, seller_custom_domain_url:)
-    {
+    props = {
       **product_props(seller_custom_domain_url:, **kwargs),
       **sections_props,
       sections: product.sections.filter_map { |id| sections_props[:sections].find { |section| section[:id] === ObfuscateIds.encrypt(id) } },
       main_section_index: product.main_section_index || 0,
     }
+    if show_membership_page_catalog?(rendered_sections: props[:sections])
+      # Query all on-profile sections (not just products sections) so the virtual
+      # default-products section is injected under exactly the same condition
+      # LinksController#search accepts its id for pagination.
+      catalog_props = ProfileSectionsPresenter.new(seller: user, query: user.seller_profile_sections.on_profile)
+                                              .props(request:, pundit_user:, seller_custom_domain_url:, editing: false, include_default_products_section: true)
+      props[:sections] = catalog_props[:sections].select { _1[:type] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_TYPE }
+      props[:main_section_index] = 0
+    end
+    props
+  end
+
+  # Membership subscribe links open the product page directly, so buyers who land there never
+  # see the rest of the catalog (gumroad-private#2179). When the seller hasn't curated sections
+  # for this page, show their profile products sections (or the virtual all-products section)
+  # below the membership. Skipped for the seller's own view, which renders the section editor
+  # and must keep the editing-shaped (empty) sections payload.
+  def show_membership_page_catalog?(rendered_sections:)
+    product.is_recurring_billing? &&
+      rendered_sections.empty? &&
+      pundit_user&.seller != user
   end
 
   def covers

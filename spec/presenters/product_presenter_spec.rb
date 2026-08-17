@@ -213,6 +213,59 @@ describe ProductPresenter do
     end
   end
 
+  describe "membership page catalog fallback" do
+    let(:request) { ActionDispatch::TestRequest.create }
+    let(:seller) { create(:user) }
+    let(:visitor_pundit_user) { SellerContext.logged_out }
+    let(:membership) { create(:membership_product, user: seller) }
+
+    before do
+      # A second published product so the catalog has something beyond the membership itself.
+      create(:product, user: seller)
+      allow_any_instance_of(ProfileSectionsPresenter).to receive(:section_search_results).and_return({ total: 2, filetypes_data: [], tags_data: [], products: [] })
+    end
+
+    it "shows the seller's catalog on a membership page with no curated sections" do
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].size).to eq(1)
+      expect(props[:sections].first[:id]).to eq(ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID)
+      expect(props[:main_section_index]).to eq(0)
+    end
+
+    it "shows the seller's saved profile products sections when they have customized their profile" do
+      section = create(:seller_profile_products_section, seller:)
+      create(:seller_profile_posts_section, seller:)
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].map { _1[:id] }).to eq([section.external_id])
+    end
+
+    it "keeps curated per-page sections when the seller configured them" do
+      section = create(:seller_profile_products_section, seller:, product: membership)
+      membership.update!(sections: [section.id])
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].map { _1[:id] }).to eq([section.external_id])
+    end
+
+    it "does not inject the catalog for non-membership products" do
+      product = create(:product, user: seller)
+
+      props = described_class.new(product:, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections]).to eq([])
+    end
+
+    it "does not inject the catalog for the seller's own view" do
+      props = described_class.new(product: membership, request:, pundit_user: SellerContext.new(user: seller, seller:)).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections]).to eq([])
+    end
+  end
+
   describe "layout-specific props methods" do
     let(:request) { ActionDispatch::TestRequest.create }
     let(:pundit_user) { SellerContext.new(user: @user, seller: @user) }
