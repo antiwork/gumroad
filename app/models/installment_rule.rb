@@ -207,7 +207,8 @@ class InstallmentRule < ApplicationRecord
     end
 
     def to_be_published_at_cannot_be_in_the_past
-      return if deleted_at_changed?
+      # Deleting a rule after its date passes is fine; reviving one must re-check the date.
+      return if being_marked_as_deleted?
       return if to_be_published_at.blank?
       return if to_be_published_at > Time.current
 

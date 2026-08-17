@@ -103,6 +103,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
 
   def schedule
     return render_response(false, message: "The email has already been sent.") if @installment.has_been_blasted? || @installment.published?
+    return render_response(false, message: "The to_be_published_at parameter is required.") if params[:to_be_published_at].blank?
 
     ensure_installment_seller
     service = SaveInstallmentService.new(

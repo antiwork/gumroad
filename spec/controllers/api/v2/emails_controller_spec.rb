@@ -773,6 +773,57 @@ describe Api::V2::EmailsController do
           expect(PublishScheduledPostJob).to have_enqueued_sidekiq_job(scheduled.id, 2).at(2.days.from_now)
         end
       end
+
+      it "sends an email that is scheduled again after being unscheduled" do
+        freeze_time do
+          post @action, params: @params
+          post :unschedule, params: @params
+          post @action, params: @params.merge(to_be_published_at: 2.days.from_now.to_s)
+
+          expect(response.parsed_body["success"]).to eq(true)
+          rule = @installment.reload.installment_rule
+          expect(rule).to be_alive
+          expect(@installment.ready_to_publish?).to be(true)
+          expect(PublishScheduledPostJob).to have_enqueued_sidekiq_job(@installment.id, rule.version).at(2.days.from_now)
+
+          PublishScheduledPostJob.new.perform(@installment.id, rule.version)
+          expect(@installment.reload).to be_published
+          expect(PostEmailBlast.where(post: @installment)).to exist
+        end
+      end
+
+      it "rejects a past time when re-scheduling an unscheduled email" do
+        post @action, params: @params
+        post :unschedule, params: @params
+        post @action, params: @params.merge(to_be_published_at: 1.day.ago.to_s)
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "Please select a date and time in the future."
+        }.as_json)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+        expect(@installment.installment_rule).to be_deleted
+      end
+
+      it "returns an error when to_be_published_at is missing" do
+        post @action, params: @params.except(:to_be_published_at)
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The to_be_published_at parameter is required."
+        }.as_json)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+      end
+
+      it "returns an error when to_be_published_at is not a valid time" do
+        post @action, params: @params.merge(to_be_published_at: "not-a-time")
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "Please provide a valid date and time."
+        }.as_json)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+      end
     end
 
     it "grants schedule access with the account scope used by the CLI" do
@@ -818,6 +869,16 @@ describe Api::V2::EmailsController do
       it "cancels a schedule even when installment validations fail" do
         @installment.update_column(:message, "<p><br></p>")
         expect(@installment.reload).not_to be_valid
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+        expect(@installment.installment_rule).to be_deleted
+      end
+
+      it "cancels a schedule whose publish time has already passed" do
+        @installment.installment_rule.update_column(:to_be_published_at, 1.hour.ago)
 
         post @action, params: @params
 

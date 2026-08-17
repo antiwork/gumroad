@@ -300,9 +300,9 @@ export const ScheduleEmail = () => (
     </ApiParameters>
     <EmailResponseFields />
     <CodeSnippet caption="cURL example">
-      {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg==/schedule \\\\
-  -d "access_token=ACCESS_TOKEN" \\\\
-  -d "to_be_published_at=2026-07-01 14:00" \\\\
+      {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg==/schedule \\
+  -d "access_token=ACCESS_TOKEN" \\
+  -d "to_be_published_at=2026-07-01 14:00" \\
   -X POST`}
     </CodeSnippet>
     <CodeSnippet caption="Gumroad CLI">
@@ -341,8 +341,8 @@ export const UnscheduleEmail = () => (
   >
     <EmailResponseFields />
     <CodeSnippet caption="cURL example">
-      {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg==/unschedule \\\\
-  -d "access_token=ACCESS_TOKEN" \\\\
+      {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg==/unschedule \\
+  -d "access_token=ACCESS_TOKEN" \\
   -X POST`}
     </CodeSnippet>
     <CodeSnippet caption="Gumroad CLI">gumroad emails unschedule bfi_30HLgGWL8H2wo_Gzlg==</CodeSnippet>
