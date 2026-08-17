@@ -37,6 +37,14 @@ class CheckoutController < ApplicationController
       return redirect_to checkout_path, alert: "You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart."
     end
 
+    # Official checkout always sends product.id. Some clients post a flattened
+    # item (permalink/price/quantity only); strong params then leave product blank
+    # and item[:product][:id] 500s. Reject before the transaction — skipping those
+    # items inside filter_map would mark every existing cart product deleted.
+    if items.any? { |item| item[:product].blank? || item[:product][:id].blank? }
+      return redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."
+    end
+
     ActiveRecord::Base.transaction do
       browser_guid = cookies[:_gumroad_guid]
       cart = Cart.fetch_by(user: logged_in_user, browser_guid:) || Cart.new(user: logged_in_user, browser_guid:)

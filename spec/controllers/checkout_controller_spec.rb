@@ -1077,6 +1077,33 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(ErrorNotifier).to have_received(:notify)
       end
 
+      it "rejects items that omit product.id without emptying the existing cart" do
+        product = create(:product)
+        cart = create(:cart, user: controller.logged_in_user)
+        create(:cart_product, cart:, product:)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  option_id: "iJrFhe1dZwE2jeq1HS9scg==",
+                  price: 2000,
+                  quantity: 1
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.not_to change { cart.alive_cart_products.count }
+
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
       it "returns an error when cart contains more than allowed number of cart products" do
         items = (Cart::MAX_ALLOWED_CART_PRODUCTS + 1).times.map { { product: { id: _1 + 1 } }  }
         patch :update, params: { cart: { items: } }, as: :json
