@@ -46,9 +46,8 @@ class ResourceSubscription < ApplicationRecord
   # IPv6 private ranges, and any hostname that simply resolves to one of those. Resolve the
   # hostname and check the actual IPs against ssrf_filter's reserved-range list (the same gem and
   # blocklist the public media/thumbnail URL fetchers already trust) instead of pattern-matching
-  # the URL string. Called again at delivery time in PostToPingEndpointsWorker, not just here at
-  # creation, so a DNS record that starts pointing internal after the subscription is created
-  # still gets caught before each send.
+  # the URL string. Creation-time gate only: at delivery, SsrfFilter.post re-resolves and refuses
+  # reserved IPs at connect time, so a DNS record that later points internal is still caught.
   def self.valid_post_url?(post_url)
     uri = URI.parse(post_url)
     return false unless uri.kind_of?(URI::HTTP) && uri.hostname.present?
