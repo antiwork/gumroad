@@ -7,9 +7,9 @@ if Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true"
       begin
         model.__elasticsearch__.create_index!
       rescue Elasticsearch::Transport::Transport::Errors::BadRequest => e
-        # Shared staging ES can hit its shard cap; keep serving HTML with empty
-        # search on this preview until shards are freed. Any other 400 (bad
-        # mapping etc.) is a real defect and must still abort boot.
+        # Shared staging ES can hit its shard cap; keep the preview booting.
+        # Search-backed pages may error until shards are freed. Any other 400
+        # (bad mapping etc.) is a real defect and must still abort boot.
         raise unless e.message.match?(/maximum (normal )?shards open/)
         Rails.logger.error("preview ES index #{model.index_name} not created: #{e.message}")
       end
