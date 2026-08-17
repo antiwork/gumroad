@@ -152,6 +152,11 @@ stale_transient_suppression_sweep:
   class: StaleTransientSuppressionSweepJob
   queue: low
   description: Clears stale TRANSIENT SendGrid bounce/block suppressions for users active since the failure (bounded, logged; never touches spam reports or unsubscribes)
+refresh_high_volume_seller_fee_eligibility:
+  cron: "45 4 * * *" # UTC 04:45 — after the suppression sweep, off payout/report hours
+  class: RefreshHighVolumeSellerFeeEligibilityJob
+  queue: low
+  description: Recomputes the cached 30-day GMV flag for the 5%-after-$20k seller fee
 purge_old_deleted_asset_previews: # Duration: 1min
   cron: "30 10 * * *" # UTC 10:30
   class: PurgeOldDeletedAssetPreviewsWorker

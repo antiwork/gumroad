@@ -412,6 +412,10 @@ class Purchase < ApplicationRecord
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
 
+  after_commit :enqueue_high_volume_fee_eligibility_refresh, if: -> (purchase) {
+    purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
+  }
+
   after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) {
     purchase.purchase_state_previously_changed? &&
       ORDER_OUTCOME_STATES.include?(purchase.purchase_state)
@@ -3643,6 +3647,10 @@ class Purchase < ApplicationRecord
     UpdateSalesRelatedProductsInfosJob.perform_async(id, increment)
   end
 
+  def enqueue_high_volume_fee_eligibility_refresh
+    RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id)
+  end
+
   def free_purchase?
     price_cents == 0 && shipping_cents == 0
   end
@@ -4949,7 +4957,10 @@ class Purchase < ApplicationRecord
     end
 
     def gumroad_flat_fee_per_thousand
-      seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge? ? 0 : GUMROAD_FLAT_FEE_PER_THOUSAND
+      return 0 if seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge?
+      return User::HIGH_VOLUME_FEE_PER_THOUSAND if seller.high_volume_seller_fee?
+
+      GUMROAD_FLAT_FEE_PER_THOUSAND
     end
 
     def calculate_taxes

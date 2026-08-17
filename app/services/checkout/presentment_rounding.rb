@@ -124,7 +124,7 @@ class Checkout::PresentmentRounding
   def self.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents:, merchant_account: nil)
     return 0 if merchant_account&.is_a_brazilian_stripe_connect_account?
 
-    fee_per_thousand = (seller.custom_fee_per_thousand.presence || Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND).to_i
+    fee_per_thousand = seller.gumroad_fee_per_thousand.to_i
     return 0 unless fee_per_thousand.positive?
 
     canonical_price_and_tip_cents.to_i * fee_per_thousand / 1000

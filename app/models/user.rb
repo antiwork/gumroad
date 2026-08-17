@@ -66,6 +66,12 @@ class User < ApplicationRecord
 
   MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT = 10_000
 
+  # 5% once trailing-30-day GMV is at least $20k. Eligibility is cached so purchase
+  # fee calc does not SUM the seller's sales (closed #4283).
+  HIGH_VOLUME_FEE_PER_THOUSAND = 50
+  HIGH_VOLUME_FEE_THRESHOLD_CENTS = 2_000_000
+  HIGH_VOLUME_FEE_WINDOW = 30.days
+
   # Ceiling on how long a cached avatar URL can keep being served after the file
   # behind it goes away (avatar URLs are otherwise stable for the seller's picture).
   AVATAR_VARIANT_URL_CACHE_TTL = 1.day
@@ -242,6 +248,40 @@ class User < ApplicationRecord
 
   def disable_buyer_currency_rounding=(value)
     set_json_data_for_attr("disable_buyer_currency_rounding", ActiveModel::Type::Boolean.new.cast(value))
+  end
+
+  def high_volume_fee_eligible
+    ActiveModel::Type::Boolean.new.cast(json_data_for_attr("high_volume_fee_eligible", default: false))
+  end
+  alias_method :high_volume_fee_eligible?, :high_volume_fee_eligible
+
+  def high_volume_fee_eligible=(value)
+    set_json_data_for_attr("high_volume_fee_eligible", ActiveModel::Type::Boolean.new.cast(value))
+    json_data_will_change!
+  end
+
+  def high_volume_seller_fee?
+    Feature.active?(:high_volume_seller_fee, self) && high_volume_fee_eligible?
+  end
+
+  def gumroad_fee_per_thousand
+    return custom_fee_per_thousand if custom_fee_per_thousand.present?
+    return HIGH_VOLUME_FEE_PER_THOUSAND if high_volume_seller_fee?
+
+    Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND
+  end
+
+  def trailing_month_gross_sales_cents
+    sales.paid.where("purchases.created_at >= ?", HIGH_VOLUME_FEE_WINDOW.ago).sum(:price_cents)
+  end
+
+  def refresh_high_volume_fee_eligibility!
+    eligible = trailing_month_gross_sales_cents >= HIGH_VOLUME_FEE_THRESHOLD_CENTS
+    return eligible if high_volume_fee_eligible? == eligible
+
+    self.high_volume_fee_eligible = eligible
+    save!(validate: false)
+    eligible
   end
 
   attr_blockable :email
