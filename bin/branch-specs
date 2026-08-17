@@ -195,6 +195,78 @@ def specs_mentioning(basename)
   $?.success? ? out.split("\n") : []
 end
 
+def grep_files(pattern, root)
+  out = IO.popen(["grep", "-rlE", pattern, root], err: File::NULL, &:read)
+  $?.success? ? out.split("\n") : []
+end
+
+def mailer_subclassed?(mailer)
+  camel = mailer.split("_").map(&:capitalize).join
+  grep_files("<\\s*#{Regexp.escape(camel)}\\b", "app/mailers/").any?
+end
+
+# Files that render a template. A qualified render spells out the whole key
+# (customer_mailer/receipt/item); a bare one names only the partial and Rails
+# resolves it against the mailer's prefix, so it can reach a top-level partial
+# only, and only from that mailer's own templates.
+def template_referrers(view)
+  owner, rest = view.delete_prefix("app/views/").split("/", 2)
+  key = "#{owner}/#{rest.sub(%r{\.[^/]*\z}, '').sub(%r{(\A|/)_}, '\1')}"
+  refs = grep_files("[\"']#{Regexp.escape(key)}[\"']", "app/")
+  bare = rest[%r{\A_([^/]+?)\.}, 1]
+  refs += grep_files("[\"']#{Regexp.escape(bare)}[\"']", "app/views/#{owner}/") if bare
+  refs.uniq - [view]
+end
+
+# A mailer template is covered by spec/mailers/<mailer>_spec.rb, keyed on the
+# first path segment: partials nest deeper (customer_mailer/receipt/sections/
+# _header.html.erb) and still belong to customer_mailer.
+#
+# Naming only that owner is not enough, because templates cross mailers:
+# customer_low_priority_mailer renders customer_mailer/receipt/sections/items,
+# and receipt/_item reaches it one level further down. So walk the render graph
+# up from the changed template and collect every mailer it can be reached from.
+# A referrer that is not a mailer view ends the walk with no answer — the
+# receipt previews controller renders customer_mailer/receipt, and no mailer
+# spec covers that — so the caller escalates, as it does today.
+def mailer_view_specs(path)
+  owner = path[%r{\Aapp/views/([^/]+)/.+\z}, 1]
+  return [] unless owner && File.exist?("app/mailers/#{owner}.rb")
+
+  mailers = [owner]
+  seen = [path]
+  queue = [path]
+  until queue.empty?
+    template_referrers(queue.shift).each do |ref|
+      next if seen.include?(ref)
+      seen << ref
+      case ref
+      when %r{\Aapp/views/([^/]+)/}
+        return [] unless File.exist?("app/mailers/#{$1}.rb")
+        mailers << $1
+        queue << ref
+      when %r{\Aapp/mailers/([^/]+)\.rb\z}
+        mailers << $1
+      else
+        return []
+      end
+    end
+  end
+
+  # A mailer other mailers inherit from lends its prefix to their bare renders,
+  # so its templates are reachable from view trees this walk never visits.
+  return [] if mailers.uniq.any? { |m| mailer_subclassed?(m) }
+
+  covered = mailers.uniq.map do |m|
+    (["spec/mailers/#{m}_spec.rb"] + Dir.glob("spec/mailers/#{m}/**/*_spec.rb")).select { |s| File.exist?(s) }
+  end
+  # One uncovered mailer in the graph is enough to escalate. Returning the rest
+  # would let the owner's own spec stand in for coverage that does not exist.
+  return [] if covered.any?(&:empty?)
+
+  covered.flatten
+end
+
 def spec_candidates(path)
   case path
   when %r{\Aspec/.*_spec\.rb\z}
@@ -210,8 +282,15 @@ def spec_candidates(path)
       Dir.glob("spec/#{$1}/#{$2}#{$3}/**/*_spec.rb")
     e2e = Dir.glob("spec/requests/**/#{$3}*_spec.rb")
     unit + e2e
-  when %r{\Aapp/views/(.*)/[^/]+\z}
-    Dir.glob("spec/requests/#{$1}*_spec.rb") + Dir.glob("spec/views/#{$1}/**/*_spec.rb")
+  when %r{\Aapp/views/(([^/]+)(?:/.*)?)/[^/]+\z}
+    # A mailer's templates are attributed by the render graph alone. Adding the
+    # request/view globs here would let an unrelated spec keep the caller from
+    # escalating on a graph the walk could not resolve.
+    if File.exist?("app/mailers/#{$2}.rb")
+      mailer_view_specs(path)
+    else
+      Dir.glob("spec/requests/#{$1}*_spec.rb") + Dir.glob("spec/views/#{$1}/**/*_spec.rb")
+    end
   when %r{\Aapp/([^/]+)/(.*)\.rb\z}
     ["spec/#{$1}/#{$2}_spec.rb"]
   when %r{\Alib/(.*)\.rb\z}
