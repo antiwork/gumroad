@@ -412,11 +412,15 @@ class Purchase < ApplicationRecord
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
 
-  # Full refunds and failed-refund reversals flip stripe_refunded without touching
-  # purchase_state, so either direction must refresh the cached 5%-fee eligibility.
   after_commit :enqueue_high_volume_fee_eligibility_refresh, if: -> (purchase) {
-    (purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful") ||
-      purchase.stripe_refunded_previously_changed?
+    purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
+  }
+
+  # Refunds and failed-refund reversals flip stripe_refunded without touching
+  # purchase_state. Refresh synchronously: async would let a sale land on the stale
+  # cached rate until the low queue drains. Cheap because refunds are rare.
+  after_commit :refresh_high_volume_fee_eligibility, if: -> (purchase) {
+    purchase.stripe_refunded_previously_changed?
   }
 
   after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) {
@@ -3651,6 +3655,14 @@ class Purchase < ApplicationRecord
   end
 
   def enqueue_high_volume_fee_eligibility_refresh
+    RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id)
+  end
+
+  def refresh_high_volume_fee_eligibility
+    seller.refresh_high_volume_fee_eligibility!
+  rescue => e
+    # Never fail the refund over the fee cache; fall back to the async repair.
+    Rails.logger.error("high_volume_fee sync refresh failed for seller #{seller_id}: #{e.message}")
     RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id)
   end
 

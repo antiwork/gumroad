@@ -51,22 +51,39 @@ class Purchase::HighVolumeSellerFeeTest < ActiveSupport::TestCase
     assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
   end
 
-  test "a full refund enqueues an eligibility refresh for the seller" do
-    purchase = create_purchase(link: @product, seller: @seller, price_cents: 1000)
+  test "a full refund clears eligibility synchronously so the next sale cannot use the stale 5% rate" do
+    purchase = create_purchase(link: @product, seller: @seller, price_cents: 2_000_000)
+    @seller.refresh_high_volume_fee_eligibility!
+    assert @seller.high_volume_fee_eligible?
     RefreshHighVolumeSellerFeeEligibilityJob.clear
 
     purchase.update!(stripe_refunded: true)
 
-    assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
+    assert_not @seller.reload.high_volume_fee_eligible?
+    assert_empty RefreshHighVolumeSellerFeeEligibilityJob.jobs
   end
 
-  test "a refund reversal enqueues an eligibility refresh for the seller" do
-    purchase = create_purchase(link: @product, seller: @seller, price_cents: 1000)
+  test "a refund reversal restores eligibility synchronously" do
+    purchase = create_purchase(link: @product, seller: @seller, price_cents: 2_000_000)
     purchase.update!(stripe_refunded: true)
+    @seller.reload
+    assert_not @seller.high_volume_fee_eligible?
     RefreshHighVolumeSellerFeeEligibilityJob.clear
 
     purchase.update!(stripe_refunded: false)
 
+    assert @seller.reload.high_volume_fee_eligible?
+    assert_empty RefreshHighVolumeSellerFeeEligibilityJob.jobs
+  end
+
+  test "a refund still commits when the synchronous refresh raises, falling back to the async job" do
+    purchase = create_purchase(link: @product, seller: @seller, price_cents: 1000)
+    RefreshHighVolumeSellerFeeEligibilityJob.clear
+    User.any_instance.stubs(:refresh_high_volume_fee_eligibility!).raises(StandardError, "boom")
+
+    purchase.update!(stripe_refunded: true)
+
+    assert purchase.reload.stripe_refunded?
     assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
   end
 
