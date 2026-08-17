@@ -88,29 +88,33 @@ const PWYWInput = React.forwardRef<
     onChange(setCents);
   };
 
+  // Don't wrap this lone input in a flex <fieldset>+<legend>: that hides it from VoiceOver,
+  // and aria-label="Price" would override the visible name and collide with the price display.
   return (
-    <Fieldset state={hasError ? "danger" : undefined}>
+    <div className="flex flex-col gap-2">
       {!hideLabel ? (
-        <FieldsetTitle>
-          <Label htmlFor={uid}>Name a fair price:</Label>
-        </FieldsetTitle>
+        <Label htmlFor={uid} className="text-base leading-snug font-bold">
+          Name a fair price:
+        </Label>
       ) : null}
-      <PriceInput
-        id={uid}
-        currencyCode={inputCurrency}
-        cents={inputCents}
-        onChange={handleChange}
-        placeholder={`${formatPriceCentsWithoutCurrencySymbol(inputCurrency, toInputCents(suggestedPriceCents) || 0)}+`}
-        hasError={hasError}
-        onBlur={() => {
-          const minPriceCents = getMinPriceCents(currencyCode);
-          if (cents && cents < minPriceCents) onChange(minPriceCents);
-          onBlur();
-        }}
-        ref={ref}
-        ariaLabel="Price"
-      />
-    </Fieldset>
+      <Fieldset state={hasError ? "danger" : undefined} style={{ display: "block" }}>
+        <PriceInput
+          id={uid}
+          currencyCode={inputCurrency}
+          cents={inputCents}
+          onChange={handleChange}
+          placeholder={`${formatPriceCentsWithoutCurrencySymbol(inputCurrency, toInputCents(suggestedPriceCents) || 0)}+`}
+          hasError={hasError}
+          onBlur={() => {
+            const minPriceCents = getMinPriceCents(currencyCode);
+            if (cents && cents < minPriceCents) onChange(minPriceCents);
+            onBlur();
+          }}
+          ref={ref}
+          ariaLabel={hideLabel ? "Name a fair price" : undefined}
+        />
+      </Fieldset>
+    </div>
   );
 });
 PWYWInput.displayName = "PWYWInput";
