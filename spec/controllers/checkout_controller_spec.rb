@@ -1100,7 +1100,7 @@ describe CheckoutController, type: :controller, inertia: true do
 
         expect(response).to have_http_status(:found)
         expect(response).to redirect_to(checkout_path)
-        expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+        expect(flash[:alert]).to eq("A product in your cart is missing. Refresh the page and try again.")
         expect(ErrorNotifier).not_to have_received(:notify)
       end
 
@@ -1135,7 +1135,7 @@ describe CheckoutController, type: :controller, inertia: true do
 
         expect(response).to have_http_status(:found)
         expect(response).to redirect_to(checkout_path)
-        expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+        expect(flash[:alert]).to eq("A product in your cart is missing. Refresh the page and try again.")
         expect(ErrorNotifier).not_to have_received(:notify)
         expect(cart.reload.alive_cart_products).to contain_exactly(existing_cart_product)
         expect(cart.alive_cart_products.where(product: valid_product)).to be_empty

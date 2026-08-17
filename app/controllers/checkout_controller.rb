@@ -40,7 +40,7 @@ class CheckoutController < ApplicationController
     # Reject invalid items before the transaction; skipping them during filtering
     # would mark every existing cart product deleted.
     if items.any? { |item| item[:product].blank? || item[:product][:id].blank? }
-      return redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."
+      return redirect_to checkout_path, alert: "A product in your cart is missing. Refresh the page and try again."
     end
 
     ActiveRecord::Base.transaction do
