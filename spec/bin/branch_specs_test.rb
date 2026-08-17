@@ -3,7 +3,8 @@
 
 # Tests for bin/branch-specs' mapping layers: Public/Profile component
 # fanout, a per-file config/ exception list, vitest co-location, lib/app
-# content-attribution fallback, and help_center view mapping.
+# content-attribution fallback, help_center view mapping, and the mailer
+# template render graph.
 #
 # Same shape as check_migration_versions_test.rb: throwaway git repos, no
 # Rails. The selector runs from the repo root of the throwaway repo, so each
@@ -159,6 +160,183 @@ check(
     "app/views/help_center/articles/contents/_260-your-payout-settings-page.html.erb" => "new",
   },
   expect_specs: %w[spec/requests/help_center_spec.rb],
+)
+
+MAILER_STUB = "# frozen_string_literal: true\n"
+
+# The plain case: a mailer template is covered by its mailer's spec.
+check(
+  "mailer template maps to its mailer spec",
+  base_files: {
+    "app/mailers/contacting_creator_mailer.rb" => MAILER_STUB,
+    "spec/mailers/contacting_creator_mailer_spec.rb" => SPEC_STUB,
+    "app/views/contacting_creator_mailer/chargeback_evidence_due_soon.html.erb" => "old",
+  },
+  head_files: {
+    "app/views/contacting_creator_mailer/chargeback_evidence_due_soon.html.erb" => "new",
+  },
+  expect_specs: %w[spec/mailers/contacting_creator_mailer_spec.rb],
+)
+
+# A partial another mailer renders must pull that mailer's spec in too.
+check(
+  "shared mailer partial pulls in the consuming mailer's spec",
+  base_files: {
+    "app/mailers/customer_mailer.rb" => MAILER_STUB,
+    "app/mailers/customer_low_priority_mailer.rb" => MAILER_STUB,
+    "spec/mailers/customer_mailer_spec.rb" => SPEC_STUB,
+    "spec/mailers/customer_low_priority_mailer_spec.rb" => SPEC_STUB,
+    "app/views/customer_mailer/_footer.html.erb" => "old",
+    "app/views/customer_low_priority_mailer/notice.html.erb" =>
+      %(<%= render("customer_mailer/footer") %>\n),
+  },
+  head_files: { "app/views/customer_mailer/_footer.html.erb" => "new" },
+  expect_specs: %w[
+    spec/mailers/customer_low_priority_mailer_spec.rb
+    spec/mailers/customer_mailer_spec.rb
+  ],
+)
+
+# The consumer is often one partial further out, so the walk is transitive:
+# _item <- _items <- the other mailer's template.
+check(
+  "transitively shared mailer partial reaches the consuming mailer",
+  base_files: {
+    "app/mailers/customer_mailer.rb" => MAILER_STUB,
+    "app/mailers/customer_low_priority_mailer.rb" => MAILER_STUB,
+    "spec/mailers/customer_mailer_spec.rb" => SPEC_STUB,
+    "spec/mailers/customer_low_priority_mailer_spec.rb" => SPEC_STUB,
+    "app/views/customer_mailer/_item.html.erb" => "old",
+    "app/views/customer_mailer/_items.html.erb" => %(<%= render("customer_mailer/item") %>\n),
+    "app/views/customer_low_priority_mailer/notice.html.erb" =>
+      %(<%= render("customer_mailer/items") %>\n),
+  },
+  head_files: { "app/views/customer_mailer/_item.html.erb" => "new" },
+  expect_specs: %w[
+    spec/mailers/customer_low_priority_mailer_spec.rb
+    spec/mailers/customer_mailer_spec.rb
+  ],
+)
+
+# A referrer outside app/views has no mailer spec to name, so the safe answer
+# is the full suite — including when it is reached through another partial.
+check(
+  "mailer template a controller renders still escalates",
+  base_files: {
+    "app/mailers/customer_mailer.rb" => MAILER_STUB,
+    "spec/mailers/customer_mailer_spec.rb" => SPEC_STUB,
+    "app/views/customer_mailer/_receipt.html.erb" => "old",
+    "app/controllers/api/internal/receipt_previews_controller.rb" =>
+      %(render(template: "customer_mailer/receipt")\n),
+  },
+  head_files: { "app/views/customer_mailer/_receipt.html.erb" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "mailer partial transitively reaching a controller still escalates",
+  base_files: {
+    "app/mailers/customer_mailer.rb" => MAILER_STUB,
+    "spec/mailers/customer_mailer_spec.rb" => SPEC_STUB,
+    "app/views/customer_mailer/receipt/_item.html.erb" => "old",
+    "app/views/customer_mailer/_receipt.html.erb" =>
+      %(<%= render("customer_mailer/receipt/item") %>\n),
+    "app/controllers/api/internal/receipt_previews_controller.rb" =>
+      %(render(template: "customer_mailer/receipt")\n),
+  },
+  head_files: { "app/views/customer_mailer/receipt/_item.html.erb" => "new" },
+  expect_escalate: true,
+)
+
+# Rails resolves a bare render against the mailer's prefix, so the walk has to
+# follow those too or it stops before reaching the external consumer.
+check(
+  "bare render keeps the walk going to the consuming mailer",
+  base_files: {
+    "app/mailers/affiliate_mailer.rb" => MAILER_STUB,
+    "app/mailers/affiliate_request_mailer.rb" => MAILER_STUB,
+    "spec/mailers/affiliate_mailer_spec.rb" => SPEC_STUB,
+    "spec/mailers/affiliate_request_mailer_spec.rb" => SPEC_STUB,
+    "app/views/affiliate_mailer/_footer.html.erb" => "old",
+    # renders the partial by bare name, and is itself rendered by the other mailer
+    "app/views/affiliate_mailer/invitation.html.erb" => %(<%= render("footer") %>\n),
+    "app/views/affiliate_request_mailer/approved.html.erb" =>
+      %(<%= render("affiliate_mailer/invitation") %>\n),
+  },
+  head_files: { "app/views/affiliate_mailer/_footer.html.erb" => "new" },
+  expect_specs: %w[
+    spec/mailers/affiliate_mailer_spec.rb
+    spec/mailers/affiliate_request_mailer_spec.rb
+  ],
+)
+
+# The owner having a spec must not paper over a consumer that has none.
+check(
+  "consuming mailer without a spec escalates even when the owner has one",
+  base_files: {
+    "app/mailers/customer_mailer.rb" => MAILER_STUB,
+    "app/mailers/support_contact_mailer.rb" => MAILER_STUB,
+    "spec/mailers/customer_mailer_spec.rb" => SPEC_STUB,
+    "app/views/customer_mailer/_footer.html.erb" => "old",
+    "app/views/support_contact_mailer/notice.html.erb" =>
+      %(<%= render("customer_mailer/footer") %>\n),
+  },
+  head_files: { "app/views/customer_mailer/_footer.html.erb" => "new" },
+  expect_escalate: true,
+)
+
+# No spec/mailers/<mailer>_spec.rb means nothing to select; do not invent one.
+check(
+  "mailer template with no mailer spec still escalates",
+  base_files: {
+    "app/mailers/support_contact_mailer.rb" => MAILER_STUB,
+    "app/views/support_contact_mailer/contact_form.html.erb" => "old",
+  },
+  head_files: { "app/views/support_contact_mailer/contact_form.html.erb" => "new" },
+  expect_escalate: true,
+)
+
+# An unrelated spec named after the mailer must not stand in for the render
+# graph and keep the selector from escalating.
+check(
+  "unsafe mailer graph escalates even when a view spec exists for the directory",
+  base_files: {
+    "app/mailers/customer_mailer.rb" => MAILER_STUB,
+    "spec/mailers/customer_mailer_spec.rb" => SPEC_STUB,
+    "spec/views/customer_mailer/receipt_spec.rb" => SPEC_STUB,
+    "app/views/customer_mailer/_receipt.html.erb" => "old",
+    "app/controllers/api/internal/receipt_previews_controller.rb" =>
+      %(render(template: "customer_mailer/receipt")\n),
+  },
+  head_files: { "app/views/customer_mailer/_receipt.html.erb" => "new" },
+  expect_escalate: true,
+)
+
+# Bare renders resolve through inherited prefixes, so a parent mailer's
+# templates are reachable from view trees the walk never visits.
+check(
+  "template of a mailer other mailers inherit from escalates",
+  base_files: {
+    "app/mailers/application_mailer.rb" => "class ApplicationMailer < ActionMailer::Base\nend\n",
+    "app/mailers/customer_mailer.rb" => "class CustomerMailer < ApplicationMailer\nend\n",
+    "spec/mailers/application_mailer_spec.rb" => SPEC_STUB,
+    "spec/mailers/customer_mailer_spec.rb" => SPEC_STUB,
+    "app/views/application_mailer/_footer.html.erb" => "old",
+    "app/views/customer_mailer/notice.html.erb" => %(<%= render("footer") %>\n),
+  },
+  head_files: { "app/views/application_mailer/_footer.html.erb" => "new" },
+  expect_escalate: true,
+)
+
+# A non-mailer view directory must not pick up a mailer spec.
+check(
+  "non-mailer view directory does not map to spec/mailers",
+  base_files: {
+    "spec/mailers/products_spec.rb" => SPEC_STUB,
+    "app/views/products/show.html.erb" => "old",
+  },
+  head_files: { "app/views/products/show.html.erb" => "new" },
+  expect_escalate: true,
 )
 
 # A genuinely unmapped app file must still escalate (the guard this whole
