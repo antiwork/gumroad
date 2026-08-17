@@ -176,8 +176,10 @@ module Purchase::ChargeEventsHandler
       return
     end
 
+    stripe_error_code = event.extras.try(:[], "stripe_error_code")
     charged_purchases.each do |purchase|
       if purchase.in_progress? && purchase.is_an_async_off_session_charge_in_india?
+        purchase.stripe_error_code = stripe_error_code if stripe_error_code.present?
         if purchase.subscription.present?
           purchase.subscription.handle_purchase_failure(purchase)
         else

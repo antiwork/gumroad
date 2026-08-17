@@ -65,6 +65,37 @@ class Subscription::UpdaterService
 
     result = nil
     terminated_or_scheduled_for_termination = subscription.termination_date.present?
+    had_indian_card_mandate_stop = subscription.renewal_disabled_due_to_indian_card_mandate?
+    replacement_card = nil
+    had_saved_card = false
+    seller_price_changed = is_resubscribing && price_changed?
+    plan_or_price_changed = !same_plan_and_price? || seller_price_changed
+    original_discount = subscription.original_purchase.purchase_offer_code_discount
+    discount_changed = if params[:once_per_cart_discount_allocation].present?
+      true
+    elsif params[:clear_discount]
+      true
+    elsif params[:offer_code].present? && original_discount.present?
+      params[:offer_code] != original_discount.offer_code ||
+        params[:offer_code].amount != original_discount.offer_code_amount ||
+        params[:offer_code].is_percent? != original_discount.offer_code_is_percent ||
+        params[:offer_code].once_per_cart? != original_discount.once_per_cart? ||
+        params[:offer_code].duration_in_billing_cycles != original_discount.duration_in_billing_cycles
+    else
+      params[:offer_code].present?
+    end
+    mandate_billing_info_changed = mandate_billing_info_changed?
+    check_saved_card_mandate_terms_after_update = (plan_or_price_changed || discount_changed || mandate_billing_info_changed) && use_existing_card? &&
+      subscription.india_card_mandate_reliability_enabled? &&
+      subscription.credit_card_to_charge&.stripe_charge_processor? &&
+      subscription.credit_card_to_charge.requires_mandate?
+    mandate_terms_before_update = if check_saved_card_mandate_terms_after_update
+      subscription.indian_card_mandate_terms(
+        billing_info: original_purchase.slice(:country, :state, :zip_code),
+        authenticated_offer_code_buyer: logged_in_user
+      )
+    end
+    saved_card_mandate_terms_changed = false
 
     begin
       ActiveRecord::Base.transaction do
@@ -82,43 +113,29 @@ class Subscription::UpdaterService
           # (a) Get chargeable. Return if error
           error_message = get_chargeable
           if error_message.present?
-            logger.info("SubscriptionUpdater: Error fetching chargeable for subscription #{subscription.external_id}: #{error_message} ; params: #{params}")
+            logger.info("SubscriptionUpdater: Error fetching chargeable for subscription #{subscription.external_id}: #{error_message}")
             raise Subscription::UpdateFailed, error_message
           end
 
           # (b) Create new credit card. Return if error.
-          credit_card = CreditCard.create(chargeable, card_data_handling_mode, logged_in_user)
+          replacement_card = CreditCard.create(chargeable, card_data_handling_mode, logged_in_user)
 
-          unless credit_card.errors.empty?
-            logger.info("SubscriptionUpdater: Error creating new credit card for subscription #{subscription.external_id}: #{credit_card.errors.full_messages} ; params: #{params}")
-            raise Subscription::UpdateFailed, credit_card.errors.messages[:base].first
+          unless replacement_card.errors.empty?
+            logger.info("SubscriptionUpdater: Error creating new credit card for subscription #{subscription.external_id}: #{replacement_card.errors.full_messages}")
+            raise Subscription::UpdateFailed, replacement_card.errors.messages[:base].first
           end
 
-          # (c) Associate the new card with the subscription
-          update_subscription_credit_card!(credit_card)
-
-          # (d) Send email for giftee adding their first card
-          if !had_saved_card && subscription.gift? && !is_resubscribing
-            CustomerLowPriorityMailer.subscription_giftee_added_card(subscription.id).deliver_later
+          if indian_card_mandate_validation_required?(replacement_card)
+            # A plan update builds its replacement purchase before mandate validation. Keep the
+            # new card available for that build, but persist it only after validation succeeds.
+            subscription.credit_card = replacement_card
+          else
+            associate_replacement_card!(replacement_card, had_saved_card:, **validate_indian_card_mandate!(replacement_card))
+            replacement_card = nil
           end
         end
 
-        original_discount = subscription.original_purchase.purchase_offer_code_discount
-        discount_changed = if params[:once_per_cart_discount_allocation].present?
-          true
-        elsif params[:clear_discount]
-          true
-        elsif params[:offer_code].present? && original_discount.present?
-          params[:offer_code] != original_discount.offer_code ||
-            params[:offer_code].amount != original_discount.offer_code_amount ||
-            params[:offer_code].is_percent? != original_discount.offer_code_is_percent ||
-            params[:offer_code].once_per_cart? != original_discount.once_per_cart? ||
-            params[:offer_code].duration_in_billing_cycles != original_discount.duration_in_billing_cycles
-        else
-          params[:offer_code].present?
-        end
-
-        if !same_plan_and_price? || (is_resubscribing && (discount_changed || price_changed?))
+        if !same_plan_and_price? || (is_resubscribing && discount_changed) || seller_price_changed
           self.new_purchase = subscription.update_current_plan!(
             new_variants: variants,
             new_price: price,
@@ -132,6 +149,7 @@ class Subscription::UpdaterService
             once_per_cart_discount_allocation: params[:once_per_cart_discount_allocation],
           )
           subscription.reload
+
         end
 
         if !same_plan_and_price? || overdue_for_charge
@@ -144,11 +162,13 @@ class Subscription::UpdaterService
           subscription.subscription_plan_changes.alive.update_all(deleted_at: Time.current)
         end
 
-        # Do not allow restarting a subscription when the payment method that
-        # future charges will actually use is no longer supported by the product
-        # creator. It's possible that the creator has disconnected their PayPal
-        # account, and if the subscription would be charged via PayPal, future
-        # charges will fail.
+        if replacement_card.present?
+          mandate_validation = validate_indian_card_mandate!(replacement_card)
+          associate_replacement_card!(replacement_card, had_saved_card:, **mandate_validation)
+        end
+
+        # Do not allow a restart or renewal resume when the payment method that
+        # future charges will use is no longer supported by the product creator.
         #
         # We check `Subscription#credit_card_to_charge` — the same card recurring
         # charges use (it prefers the subscription's own card over the user's
@@ -157,7 +177,7 @@ class Subscription::UpdaterService
         # no chargeable card (e.g. free memberships) have nothing to reject, and
         # a new payment method supplied at checkout has already been validated
         # and associated with the subscription above, so it is covered here too.
-        if is_resubscribing
+        if is_resubscribing || had_indian_card_mandate_stop
           card_to_charge = subscription.credit_card_to_charge
           if card_to_charge.present? && !subscription.link.user.supports_card?(card_to_charge.as_json)
             error_message = if card_to_charge.charge_processor_id == PaypalChargeProcessor.charge_processor_id
@@ -167,6 +187,8 @@ class Subscription::UpdaterService
             end
             raise Subscription::UpdateFailed, error_message
           end
+
+          validate_saved_indian_card_mandate! if use_existing_card?
         end
 
         if !apply_plan_change_immediately?
@@ -183,8 +205,20 @@ class Subscription::UpdaterService
           end
         end
 
+        saved_card_mandate_terms_changed = check_saved_card_mandate_terms_after_update &&
+          saved_card_update_requires_reauthorization?(
+            mandate_terms_before_update,
+            plan_or_price_changed:,
+            mandate_billing_info_changed:,
+            discount_changed:,
+            seller_price_changed:
+          )
         # Restart subscription if necessary
         subscription.resubscribe! if is_resubscribing
+
+        if saved_card_mandate_terms_changed && !should_charge_user?
+          subscription.require_indian_card_mandate_reauthorization!
+        end
 
         if (same_plan_and_price? || subscription.in_free_trial?) && !overdue_for_charge
           send_subscription_updated_api_notification if apply_plan_change_immediately?
@@ -205,13 +239,16 @@ class Subscription::UpdaterService
           # Charge user if necessary
           if should_charge_user?
             result = charge_user!
+            if saved_card_mandate_terms_changed && result[:success]
+              subscription.require_indian_card_mandate_reauthorization!(notify_buyer: false)
+            end
           else
             result = { success: true, success_message: }
           end
         end
       end
     rescue ActiveRecord::RecordInvalid, Subscription::UpdateFailed => e
-      logger.info("SubscriptionUpdater: Error updating subscription #{subscription.external_id}: #{e.message} ; params: #{params}")
+      logger.info("SubscriptionUpdater: Error updating subscription #{subscription.external_id}: #{e.message}")
       result = { success: false, error_message: e.message }
     end
 
@@ -235,7 +272,7 @@ class Subscription::UpdaterService
 
     def validate_perceived_prices_match
       unless new_price_cents == params[:perceived_price_cents] && amount_owed == params[:perceived_upgrade_price_cents]
-        logger.info("SubscriptionUpdater: Error updating subscription - perceived prices do not match: id: #{subscription.external_id} ; new_price_cents: #{new_price_cents} ; amount_owed: #{amount_owed} ; params: #{params}")
+        logger.info("SubscriptionUpdater: Error updating subscription - perceived prices do not match: id: #{subscription.external_id} ; new_price_cents: #{new_price_cents} ; amount_owed: #{amount_owed}")
         raise Subscription::UpdateFailed, "The price just changed! Refresh the page for the updated price."
       end
     end
@@ -272,7 +309,7 @@ class Subscription::UpdaterService
 
       # return error message if necessary
       if card_data_handling_error.present?
-        logger.info("SubscriptionUpdater: Error building chargeable for subscription #{subscription.external_id}: #{card_data_handling_error.error_message} #{card_data_handling_error.card_error_code} ; params: #{params}")
+        logger.info("SubscriptionUpdater: Error building chargeable for subscription #{subscription.external_id}: #{card_data_handling_error.error_message} #{card_data_handling_error.card_error_code}")
         Rails.logger.error("Card data handling error at update stored card: " \
                            "#{card_data_handling_error.error_message} #{card_data_handling_error.card_error_code}")
         card_data_handling_error.is_card_error? ? PurchaseErrorCode.customer_error_message(card_data_handling_error.error_message) : "There is a temporary problem, please try again (your card was not charged)."
@@ -281,9 +318,140 @@ class Subscription::UpdaterService
       end
     end
 
-    def update_subscription_credit_card!(credit_card)
+    def validate_indian_card_mandate!(credit_card)
+      return { clear_mandate_stop: true, stripe_mandate_id: nil } unless subscription.india_card_mandate_reliability_enabled?
+      return { clear_mandate_stop: true, stripe_mandate_id: nil } unless credit_card.stripe_charge_processor?
+      return { clear_mandate_stop: true, stripe_mandate_id: nil } unless credit_card.requires_mandate?
+      return { clear_mandate_stop: true, stripe_mandate_id: nil } unless future_subscription_charge?
+
+      merchant_account = subscription.renewal_merchant_account
+      setup_intent_id = credit_card.stripe_setup_intent_id
+      setup_intent = ChargeProcessor.get_setup_intent(merchant_account, setup_intent_id) if setup_intent_id.present?
+      mandate_id = setup_intent&.mandate if setup_intent&.succeeded?
+      mandate = ChargeProcessor.get_mandate(merchant_account, mandate_id) if mandate_id.present?
+      status = mandate&.status || "missing"
+      payment_method_id = credit_card.processor_payment_method_id
+      customer_matches = setup_intent&.customer_id == credit_card.stripe_customer_id
+      binding_matches = setup_intent&.payment_method_id == payment_method_id &&
+        StripeChargeProcessor.mandate_matches_payment_method?(mandate, payment_method_id)
+      terms_match = indian_card_setup_intent_terms_match?(setup_intent)
+
+      unless status == "active" && customer_matches && binding_matches && terms_match
+        ErrorNotifier.notify(
+          "Indian card update rejected without an active e-mandate",
+          subscription: subscription.external_id,
+          mandate_status: status
+        )
+        raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+      end
+
+      stripe_chargeable = chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id)
+      stripe_chargeable.validated_stripe_mandate_id = mandate.id if stripe_chargeable.respond_to?(:validated_stripe_mandate_id=)
+      { clear_mandate_stop: true, stripe_mandate_id: mandate.id }
+    rescue ChargeProcessorError => e
+      ErrorNotifier.notify(e, subscription: subscription.external_id)
+      raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+    end
+
+    def indian_card_mandate_validation_required?(credit_card)
+      subscription.india_card_mandate_reliability_enabled? &&
+        credit_card.stripe_charge_processor? &&
+        credit_card.requires_mandate?
+    end
+
+    def indian_card_setup_intent_terms_match?(setup_intent)
+      return false unless setup_intent&.usage == "off_session"
+      return false unless setup_intent.metadata[:gumroad_subscription_id] == subscription.external_id
+
+      mandate_options = setup_intent.card_mandate_options
+      return false if mandate_options.blank?
+
+      expected_terms = subscription.indian_card_mandate_terms(
+        billing_info: params[:contact_info],
+        authenticated_offer_code_buyer: logged_in_user
+      )
+      return false if expected_terms.blank?
+
+      mandate_options.amount_type == "maximum" &&
+        mandate_options.amount.to_i == expected_terms[:amount] &&
+        mandate_options.currency.to_s.downcase == expected_terms[:currency] &&
+        StripeChargeProcessor.indian_card_mandate_reference_for_subscription?(
+          mandate_options.reference,
+          subscription.external_id
+        ) &&
+        mandate_options.interval == expected_terms[:interval] &&
+        mandate_options.interval_count == expected_terms[:interval_count] &&
+        Array(mandate_options.supported_types).include?("india")
+    end
+
+    def update_subscription_credit_card!(credit_card, clear_mandate_stop: false, stripe_mandate_id: nil)
       subscription.credit_card = credit_card
+      if clear_mandate_stop
+        subscription.stripe_mandate_id = stripe_mandate_id
+        subscription.renewal_disabled_due_to_indian_card_mandate = false
+        subscription.indian_card_mandate_requires_reauthorization = false
+      end
       subscription.save!
+    end
+
+    def associate_replacement_card!(credit_card, had_saved_card:, **mandate_validation)
+      update_subscription_credit_card!(credit_card, **mandate_validation)
+
+      if !had_saved_card && subscription.gift? && !is_resubscribing
+        CustomerLowPriorityMailer.subscription_giftee_added_card(subscription.id).deliver_later
+      end
+    end
+
+    def validate_saved_indian_card_mandate!
+      return unless subscription.india_card_mandate_reliability_enabled?
+
+      credit_card = subscription.credit_card_to_charge
+      return if credit_card.nil?
+
+      unless future_subscription_charge? && credit_card.stripe_charge_processor? && credit_card.requires_mandate?
+        subscription.clear_indian_card_mandate_state!(expected_credit_card_id: credit_card.id)
+        return
+      end
+
+      mandate, status, = subscription.indian_card_mandate_for(credit_card.id)
+      unless status == "active"
+        raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+      end
+
+      subscription.update_renewal_for_indian_card_mandate!(
+        "active",
+        expected_credit_card_id: credit_card.id,
+        mandate_id: mandate.id
+      )
+    rescue ChargeProcessorError => e
+      ErrorNotifier.notify(e, subscription: subscription.external_id)
+      raise Subscription::UpdateFailed, "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+    end
+
+    def future_subscription_charge?
+      subscription.future_subscription_charge?(authenticated_offer_code_buyer: logged_in_user)
+    end
+
+    def mandate_billing_info_changed?
+      submitted_info = params[:contact_info]&.slice(:country, :state, :zip_code)&.symbolize_keys
+      return false if submitted_info.blank?
+
+      stored_info = original_purchase.slice(:country, :state, :zip_code).symbolize_keys
+      submitted_info[:country] = ISO3166::Country[submitted_info[:country]]&.common_name || submitted_info[:country]
+      stored_info[:country] = ISO3166::Country[stored_info[:country]]&.common_name || stored_info[:country]
+
+      submitted_info.any? { |key, value| value.presence != stored_info[key].presence }
+    end
+
+    def saved_card_update_requires_reauthorization?(previous_terms, plan_or_price_changed:, mandate_billing_info_changed:, discount_changed: false, seller_price_changed: false)
+      return false unless future_subscription_charge?
+      return false unless discount_changed || mandate_billing_info_changed || seller_price_changed || (plan_or_price_changed && apply_plan_change_immediately?)
+
+      billing_info = params[:contact_info] if mandate_billing_info_changed
+      subscription.indian_card_mandate_terms(
+        billing_info:,
+        authenticated_offer_code_buyer: logged_in_user
+      ) != previous_terms
     end
 
     def record_plan_change!
@@ -350,7 +518,7 @@ class Subscription::UpdaterService
         authenticated_offer_code_buyer: logged_in_user,
       )
 
-      subscription.unsubscribe_and_fail! if is_resubscribing && !(upgrade_purchase.successful? ||
+      subscription.unsubscribe_and_fail!(preserve_access_for_mandate_failure: false) if is_resubscribing && !(upgrade_purchase.successful? ||
           (upgrade_purchase.in_progress? && upgrade_purchase.charge_intent&.requires_action?))
       error_message = upgrade_purchase.errors.full_messages.first || upgrade_purchase.error_code
 
@@ -373,7 +541,7 @@ class Subscription::UpdaterService
           }
         }
       else
-        logger.info("SubscriptionUpdater: Error charging user for subscription #{subscription.external_id}: #{error_message} ; params: #{params}")
+        logger.info("SubscriptionUpdater: Error charging user for subscription #{subscription.external_id}: #{error_message}")
         raise Subscription::UpdateFailed, error_message
       end
     end

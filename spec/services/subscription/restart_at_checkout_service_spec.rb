@@ -101,6 +101,36 @@ describe Subscription::RestartAtCheckoutService do
         expect(transformed_params[:offer_code]).to eq(offer_code)
       end
 
+      it "passes checkout contact information to the updater" do
+        checkout_params = base_params.deep_merge(
+          purchase: {
+            full_name: "Buyer Name",
+            street_address: "123 Main St",
+            country: "US",
+            state: "CA",
+            zip_code: "94107",
+            city: "San Francisco",
+          }
+        )
+
+        transformed_params = described_class.new(
+          subscription:,
+          product:,
+          params: checkout_params,
+          buyer:
+        ).send(:updater_service_params)
+
+        expect(transformed_params[:contact_info]).to eq(
+          email:,
+          full_name: "Buyer Name",
+          street_address: "123 Main St",
+          country: "US",
+          state: "CA",
+          zip_code: "94107",
+          city: "San Francisco"
+        )
+      end
+
       it "uses the buyer identity when defaulting the perceived restart price" do
         params_without_perceived_price = base_params.deep_dup
         params_without_perceived_price[:purchase].delete(:perceived_price_cents)

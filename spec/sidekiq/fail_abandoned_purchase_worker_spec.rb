@@ -372,6 +372,37 @@ describe FailAbandonedPurchaseWorker, :vcr do
             expect(@membership_upgrade_purchase.reload.purchase_state).to eq("failed")
             expect(@subscription.reload.original_purchase.variant_attributes).to eq [@original_tier]
           end
+
+          it "invalidates a replacement mandate after it restores the prior plan",
+             vcr: { cassette_name: "FailAbandonedPurchaseWorker/_perform/when_purchase_is_in_progress/membership_upgrade_purchase/when_purchase_was_abandoned_and_SCA_never_completed/cancels_the_charge_intent_marks_purchase_as_failed_and_cancels_membership_upgrade" } do
+            Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+            replacement_card = CreditCard.create!(
+              charge_processor_id: StripeChargeProcessor.charge_processor_id,
+              stripe_customer_id: "cus_replacement",
+              processor_payment_method_id: "pm_replacement",
+              stripe_fingerprint: "fingerprint_replacement",
+              visual: "**** **** **** 4242",
+              card_type: CardType::VISA,
+              card_country: Compliance::Countries::IND.alpha2,
+              expiry_month: 12,
+              expiry_year: 2030
+            )
+            @subscription.update!(
+              credit_card: replacement_card,
+              stripe_mandate_id: "mandate_replacement_plan",
+              renewal_disabled_due_to_indian_card_mandate: false,
+              indian_card_mandate_requires_reauthorization: false
+            )
+
+            described_class.new.perform(@membership_upgrade_purchase.id)
+
+            expect(@subscription.reload.original_purchase.variant_attributes).to eq [@original_tier]
+            expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+            expect(@subscription.stripe_mandate_id).to be_nil
+          ensure
+            Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+          end
         end
       end
 

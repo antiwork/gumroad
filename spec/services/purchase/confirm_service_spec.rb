@@ -171,6 +171,10 @@ describe Purchase::ConfirmService, :vcr do
       end
 
       it "reverts the subscription to old tier and returns an error message" do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @subscription.update!(stripe_mandate_id: "mandate_prior_plan")
+        @subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+        @subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
         expect(@membership_upgrade_purchase.purchase_state).to eq("in_progress")
         expect(@subscription.original_purchase.variant_attributes).to eq [@new_tier]
         expect_any_instance_of(Purchase::BaseService).to receive(:mark_items_failed).and_call_original
@@ -187,6 +191,11 @@ describe Purchase::ConfirmService, :vcr do
         expect(error_message).to eq("We are unable to authenticate your payment method.")
         expect(@membership_upgrade_purchase.reload.purchase_state).to eq("failed")
         expect(@subscription.reload.original_purchase.variant_attributes).to eq [@original_tier]
+        expect(@subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+        expect(@subscription).not_to be_indian_card_mandate_requires_reauthorization
+        expect(@subscription.stripe_mandate_id).to eq("mandate_prior_plan")
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end
     end
 
@@ -220,11 +229,15 @@ describe Purchase::ConfirmService, :vcr do
       end
 
       it "marks the purchase as failed and unsubscribes the membership" do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
         expect(@membership_restart_purchase.purchase_state).to eq("in_progress")
         expect(@subscription.reload.is_resubscription_pending_confirmation?).to be true
         expect(@subscription.alive?).to be(true)
         expect(@subscription).not_to receive(:send_restart_notifications!)
-        expect(@subscription).to receive(:unsubscribe_and_fail!).and_call_original
+        expect(@subscription).to receive(:unsubscribe_and_fail!)
+          .with(preserve_access_for_mandate_failure: false)
+          .and_call_original
         expect_any_instance_of(Purchase::BaseService).to receive(:mark_items_failed).and_call_original
 
         params = {
@@ -240,6 +253,8 @@ describe Purchase::ConfirmService, :vcr do
         expect(@membership_restart_purchase.reload.failed?).to be true
         expect(@subscription.reload.is_resubscription_pending_confirmation?).to be false
         expect(@subscription.alive?).to be(false)
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end
     end
   end
