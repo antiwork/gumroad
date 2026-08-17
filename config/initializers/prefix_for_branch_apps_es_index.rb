@@ -7,10 +7,10 @@ if Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true"
       begin
         model.__elasticsearch__.create_index!
       rescue Elasticsearch::Transport::Transport::Errors::BadRequest => e
-        # Shared staging ES sits at a 1000-shard cap. A failed create used to
-        # abort boot (js:export and puma), so Nomad crash-looped the preview
-        # and GitHub still recorded a successful deploy. Search on this app
-        # stays empty until shards are freed; the HTML app must still serve.
+        # Shared staging ES can hit its shard cap; keep serving HTML with empty
+        # search on this preview until shards are freed. Any other 400 (bad
+        # mapping etc.) is a real defect and must still abort boot.
+        raise unless e.message.match?(/maximum (normal )?shards open/)
         Rails.logger.error("preview ES index #{model.index_name} not created: #{e.message}")
       end
     end
