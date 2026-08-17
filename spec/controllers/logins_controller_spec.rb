@@ -18,7 +18,7 @@ describe LoginsController, type: :controller, inertia: true do
       expect(response).to be_successful
       expect(inertia.component).to eq("Logins/New")
       expect(inertia.props[:current_user]).to be_nil
-      expect(inertia.props[:title]).to eq("Log In")
+      expect(inertia.props[:title]).to eq("Log in to Gumroad")
       expect(inertia.props[:email]).to be_nil
       expect(inertia.props[:application_name]).to be_nil
     end
