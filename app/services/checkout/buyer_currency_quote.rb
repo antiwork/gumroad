@@ -443,10 +443,13 @@ class Checkout::BuyerCurrencyQuote
     buyer_currency = currency.presence || buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
-    # Converting a listing already priced in the buyer's own currency through USD and back
-    # returns something near but not equal to the price on the page, so that cart is withheld.
-    # The rest of the per-line gates are currency-independent and ran in `cart_quotable?`.
-    return unless line_items.all? { |line_item| quotable_line_item?(line_item, buyer_currency:) }
+    # A cart whose every line is already listed in the buyer currency uses the listed-amount
+    # lane (or stays unquoted). Mixed listing is one USD basis — quote all of it, including
+    # the already-listed lines (gumroad-private#1433). Shape gates ran in `cart_quotable?`.
+    listed_in_buyer_currency = line_items.map do |line_item|
+      line_item.product.price_currency_type.to_s.downcase == buyer_currency.to_s.downcase
+    end
+    return if listed_in_buyer_currency.any? && listed_in_buyer_currency.all?
 
     charge_quotes = line_items_by_seller.map do |seller_id, seller_line_items|
       charge_quote_for(seller: sellers_by_id.fetch(seller_id), charge_line_items: seller_line_items, buyer_currency:)

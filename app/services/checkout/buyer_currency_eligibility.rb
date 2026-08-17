@@ -381,46 +381,28 @@ class Checkout::BuyerCurrencyEligibility
       listed_in_buyer_currency << (purchase.link.price_currency_type.to_s.downcase == buyer_currency)
     end
 
-    # A product already priced in the buyer's currency is withheld from the QUOTE lane so an
-    # FX round trip can never misprice it (see BuyerCurrencyQuote#quotable_product?). It does
-    # not need one: the listed price is already the amount the buyer was shown, so charge it
-    # directly. A mixed cart still falls back — one direct line beside one quoted line needs
-    # the per-line basis tracked in gumroad-private#1298.
+    # Listed-amount lane: every line is already the buyer's currency and can be charged as
+    # listed cents. A mixed listing cart is still one USD basis (gumroad-private#1433) — quote
+    # the whole cart into the buyer currency instead of falling presentment back to USD.
     if listed_in_buyer_currency.any?
-      # The direct lane charges `displayed_price_cents`, which is denominated in the
-      # purchase's snapshotted currency, not the product's current one. A seller who
-      # repriced from USD to the buyer's currency after the purchase was built would
-      # otherwise get USD-denominated cents sent as the buyer's currency.
-      # The mount-currency report ties this charge decision to the surface the buyer saw;
-      # CardElement and canonical-USD Element fallbacks must stay canonical.
-      return fallback(:listed_currency_is_buyer_currency) unless listed_in_buyer_currency.all? &&
-                                                                purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
-                                                                self.class.listed_currency_direct_charge_enabled?(seller) &&
-                                                                listed_currency_displayed?(buyer_currency)
+      listed_lane = listed_in_buyer_currency.all? &&
+        purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
+        self.class.listed_currency_direct_charge_enabled?(seller) &&
+        listed_currency_displayed?(buyer_currency) &&
+        purchases.none? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? } &&
+        purchases.none? { _1.tip&.value_cents.to_i.positive? || _1.shipping_cents.to_i.positive? }
 
-      # A shape whose later charges are fixed at signup cannot use this lane yet. The fixing
-      # is derived from the charge presentment's fx_rate (FixLaterChargePresentmentService
-      # #presentment_terms), and this lane records none because it mints no quote — so the
-      # signup would charge the listed currency and every renewal after it would find no
-      # stored row and fall back to canonical USD. That is the mid-subscription currency
-      # switch #subscription_renewal_with_stored_amount? exists to prevent. Lifting this
-      # needs a fixing written from `rate_converted_to_usd`.
-      return fallback(:listed_currency_is_buyer_currency) if purchases.any? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? }
+      if listed_lane
+        return eligible(currency: buyer_currency, direct_listed_amount: true)
+      end
 
-      # Tip on a non-USD listing still diverges between the surcharge request and the order
-      # builder (USD tip split vs listed tip run through get_usd_cents). Shipping conversion
-      # now matches Purchase#calculate_shipping, but the direct-listed Element still mounts
-      # product price only (`listed_element_amount_cents`) and `directListedCardActive` still
-      # excludes shipping carts. Keep shipping gated here until presentment and the Element
-      # amount can carry it together; otherwise eligibility would claim listed CAD while the
-      # card remounts USD. The quote lane can withhold a tip-bearing token because `verify!`
-      # would catch the mismatch; here there is no token and no verification, so an unexcluded
-      # tipped cart would charge the divergent total silently.
-      return fallback(:listed_currency_is_buyer_currency) if purchases.any? { _1.tip&.value_cents.to_i.positive? || _1.shipping_cents.to_i.positive? }
+      unless listed_in_buyer_currency.all?
+        return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?(buyer_currency)
 
-      # No settlement gate applies: the marker only predicts FX quote failures, and this
-      # lane mints no quote because the listed price is already in the buyer's currency.
-      return eligible(currency: buyer_currency, direct_listed_amount: true)
+        return eligible(currency: buyer_currency)
+      end
+
+      return fallback(:listed_currency_is_buyer_currency)
     end
 
     # Checked here (not up top with the other account gates) because the settlement

@@ -431,7 +431,7 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
   end
 
-  it "falls back for a mixed cart with a buyer-currency product and a quoted product" do
+  it "quotes a mixed cart of a buyer-currency listing and a USD listing" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
@@ -442,8 +442,9 @@ describe Checkout::BuyerCurrencyEligibility do
                         purchase_state: "in_progress",
                         ip_address: "203.0.113.1")
 
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+    expect(decision.direct_listed_amount?).to eq(false)
   end
 
   it "keeps earlier fallbacks ahead of direct listed charging" do

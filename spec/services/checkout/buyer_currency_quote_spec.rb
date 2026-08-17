@@ -760,13 +760,13 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
-    it "returns nil when only one item of a mixed cart is priced in the buyer's currency" do
+    it "quotes a mixed cart when only one item is priced in the buyer's currency" do
       cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
-      expect(StripeFxQuote).not_to receive(:create)
 
       result = described_class.create(line_items: line_items_for(product, cad_product), canonical_total_cents: 20_00, ip: "24.48.0.1")
 
-      expect(result).to be_nil
+      expect(result).to have_attributes(currency: Currency::CAD, canonical_total_cents: 20_00)
+      expect(StripeFxQuote).to have_received(:create)
     end
 
     it "returns nil when any item in the cart offers an installment plan even if the rest are supported" do
