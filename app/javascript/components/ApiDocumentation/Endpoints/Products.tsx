@@ -438,7 +438,7 @@ export const CreateProduct = () => (
       />
       <ApiParameter
         name="refund_fine_print"
-        description='(optional) fine print for the product-level refund policy; requires refund_period unless the product already has one enabled, and cannot be combined with refund_period "inherit". Empty string clears it'
+        description='(optional) fine print for the product-level refund policy; requires refund_period unless the product already has one enabled, and cannot be combined with refund_period "inherit". Empty string clears it. Rejected if it states that refunds are not allowed for a non-physical product'
       />
       <ApiParameter
         name="rich_content"
@@ -543,7 +543,7 @@ export const UpdateProduct = () => (
       />
       <ApiParameter
         name="refund_fine_print"
-        description='(optional) fine print for the product-level refund policy; requires refund_period unless the product already has one enabled, and cannot be combined with refund_period "inherit". Empty string clears it'
+        description='(optional) fine print for the product-level refund policy; requires refund_period unless the product already has one enabled, and cannot be combined with refund_period "inherit". Empty string clears it. Rejected if it states that refunds are not allowed for a non-physical product'
       />
       <ApiParameter
         name="custom_html"

@@ -145,6 +145,23 @@ describe Api::V2::RefundPoliciesController do
         expect(refund_policy.fine_print).to eq("Existing fine print")
       end
 
+      it "rejects fine print that denies refunds" do
+        allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
+          { "choices" => [{ "message" => { "content" => %({"no_refunds": true}) } }] }
+        )
+        seller.refund_policy.update_columns(max_refund_period_in_days: 30, fine_print: "Existing fine print")
+
+        put :update, params: { access_token: token.token, refund_period: "14", fine_print: "All sales are final. No refunds." }
+
+        expect(response.parsed_body).to eq(
+          "success" => false,
+          "message" => "Fine print cannot state that refunds are not allowed"
+        )
+        refund_policy = seller.refund_policy.reload
+        expect(refund_policy.max_refund_period_in_days).to eq(30)
+        expect(refund_policy.fine_print).to eq("Existing fine print")
+      end
+
       it "strips HTML from fine print" do
         put :update, params: { access_token: token.token, refund_period: "14", fine_print: "<p>Refunds <strong>approved</strong></p>" }
 

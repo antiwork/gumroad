@@ -62,7 +62,7 @@ export const UpdateRefundPolicy = () => (
       />
       <ApiParameter
         name="fine_print"
-        description="Optional. Max 3000 characters. HTML is stripped. Send an empty value to clear it."
+        description="Optional. Max 3000 characters. HTML is stripped. Send an empty value to clear it. Rejected if it states that refunds are not allowed."
       />
     </ApiParameters>
     <ApiResponseFields>
