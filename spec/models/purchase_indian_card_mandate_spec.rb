@@ -1,0 +1,1779 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe "Indian card mandate reliability" do
+  let(:seller) { create(:user) }
+  let(:product) { create(:subscription_product, user: seller) }
+  let(:buyer) { create(:user) }
+  let(:card) do
+    CreditCard.create!(
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      stripe_customer_id: "cus_shared",
+      processor_payment_method_id: "pm_shared",
+      stripe_fingerprint: "fingerprint_shared",
+      visual: "**** **** **** 4242",
+      card_type: CardType::VISA,
+      card_country: Compliance::Countries::IND.alpha2,
+      expiry_month: 12,
+      expiry_year: 2030
+    )
+  end
+  let(:merchant_account) do
+    create(
+      :merchant_account,
+      user: nil,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      charge_processor_merchant_id: nil
+    )
+  end
+
+  before do
+    allow(MerchantAccount).to receive(:gumroad)
+      .with(StripeChargeProcessor.charge_processor_id)
+      .and_return(merchant_account)
+    Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+  end
+
+  after do
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+  end
+
+  def create_registration
+    purchase = create(
+      :membership_purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      credit_card: card,
+      merchant_account:,
+      stripe_transaction_id: "ch_registration"
+    )
+    purchase.subscription.update!(user: buyer, credit_card: card)
+    purchase
+  end
+
+  it "keeps enforcement off when the feature is off" do
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    registration = create_registration
+
+    expect(registration.india_card_mandate_reliability_enabled?).to be(false)
+    expect(registration.subscription.india_card_mandate_reliability_enabled?).to be(false)
+  end
+
+  it "maps Stripe's inactive-mandate failures only when enforcement is on" do
+    registration = create_registration
+
+    ["payment_intent_mandate_invalid", "india_recurring_payment_mandate_canceled"].each do |error_code|
+      registration.stripe_error_code = error_code
+      expect(registration.indian_card_mandate_error_status).to eq("inactive")
+    end
+
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    expect(registration.indian_card_mandate_error_status).to be_nil
+  end
+
+  it "does not classify UPI mandate failures as card mandate failures" do
+    upi_card = CreditCard.create!(
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      payment_method_type: "upi",
+      stripe_customer_id: "cus_upi_renewal",
+      processor_payment_method_id: "pm_upi_renewal",
+      stripe_fingerprint: "pm_upi_renewal",
+      visual: "UPI",
+      card_type: CardType::UPI,
+      card_country: Compliance::Countries::IND.alpha2,
+      recurring_authorization_verified_at: Time.current,
+      recurring_authorization_currency: Currency::INR,
+      recurring_authorization_max_amount_cents: 100_000
+    )
+    renewal = create(
+      :recurring_membership_purchase,
+      link: product,
+      seller:,
+      credit_card: upi_card,
+      stripe_error_code: "india_recurring_payment_mandate_canceled"
+    )
+
+    expect(renewal.indian_card_mandate_error_status).to be_nil
+  end
+
+  it "omits the interval count for a two-year registration mandate" do
+    registration = create_registration
+    allow(registration).to receive(:subscription_duration).and_return("every_two_years")
+    allow(registration).to receive(:chargeable).and_return(double(requires_mandate?: true))
+
+    mandate_terms = registration.mandate_options_for_stripe
+      .dig(:payment_method_options, :card, :mandate_options)
+
+    expect(mandate_terms).to include(interval: "sporadic")
+    expect(mandate_terms).not_to have_key(:interval_count)
+  end
+
+  it "does not validate mandates for non-Stripe rebills" do
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      credit_card: card,
+      charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
+      stripe_transaction_id: nil,
+      merchant_account: nil
+    )
+
+    expect do
+      renewal.send(:validate_indian_card_mandate_for_rebill!, instance_double(Chargeable))
+    end.not_to raise_error
+  end
+
+  it "requires the INR mandate currency for renewal presentment" do
+    registration = create_registration
+    subscription = registration.subscription
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      is_original_subscription_purchase: false,
+      total_transaction_cents: 10_00
+    )
+    allow(subscription).to receive(:indian_card_mandate_terms).and_return(
+      amount: 80_000,
+      currency: Currency::INR,
+      interval: "month",
+      interval_count: 1
+    )
+    presentment = Purchase::LaterChargePresentmentService::Result.new(
+      processor_amount_cents: 80_000,
+      processor_currency: Currency::INR,
+      processor_gumroad_amount_cents: 8_000,
+      stripe_fx_quote_id: "fxq_renewal"
+    )
+    presentment_service = instance_double(Purchase::LaterChargePresentmentService, perform: presentment)
+    expect(Purchase::LaterChargePresentmentService).to receive(:new).with(
+      hash_including(
+        purchases: [renewal],
+        required_currency: Currency::INR,
+        required_currency_error_code: PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING
+      )
+    ).and_return(presentment_service)
+
+    expect(renewal.send(:later_charge_presentment_processor_args, off_session: true)).to include(
+      processor_currency: Currency::INR,
+      stripe_fx_quote_id: "fxq_renewal"
+    )
+  end
+
+  it "does not apply subscription mandate validation to preorder releases" do
+    release = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      credit_card: card,
+      merchant_account:,
+      stripe_transaction_id: nil,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id
+    )
+    allow(release).to receive(:preorder).and_return(instance_double(Preorder))
+
+    expect do
+      release.send(:validate_indian_card_mandate_for_rebill!, instance_double(Chargeable))
+    end.not_to raise_error
+  end
+
+  it "does not enforce mandates for direct Connect charges" do
+    direct_account = create(:merchant_account_stripe_connect, user: seller)
+    registration = create(
+      :membership_purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      credit_card: card,
+      merchant_account: direct_account,
+      stripe_transaction_id: "ch_registration"
+    )
+
+    expect(registration.india_card_mandate_reliability_enabled?).to be(false)
+    expect(registration.subscription.india_card_mandate_reliability_enabled?).to be(true)
+  end
+
+  it "does not enforce mandates when the seller's current route is direct Connect" do
+    registration = create_registration
+    create(:merchant_account_stripe_connect, user: seller)
+    seller.update!(check_merchant_account_is_linked: true)
+
+    expect(registration.subscription.reload.india_card_mandate_reliability_enabled?).to be(false)
+  end
+
+  it "does not use a source from an old direct Connect route" do
+    direct_account = create(:merchant_account_stripe_connect, user: seller)
+    seller.update!(check_merchant_account_is_linked: false)
+    registration = create(
+      :membership_purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      credit_card: card,
+      merchant_account: direct_account,
+      stripe_transaction_id: "ch_registration"
+    )
+    registration.subscription.update!(user: buyer, credit_card: card)
+
+    expect(registration.subscription.reload.india_card_mandate_reliability_enabled?).to be(true)
+    expect(registration.subscription.indian_card_mandate_for(card.id)).to eq([nil, "missing", nil])
+  end
+
+  it "uses the registration purchase instead of a later shared-card pointer" do
+    registration = create_registration
+    subscription = registration.subscription
+    registration.mark_indian_card_mandate_registration!
+    create(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      stripe_transaction_id: "ch_later"
+    )
+    card.update!(json_data: { stripe_payment_intent_id: "pi_other_subscription" })
+
+    expect(subscription.indian_card_mandate_source_purchase(card.id)).to eq(registration)
+  end
+
+  it "uses the source charge payment method for a legacy card" do
+    registration = create_registration
+    registration.mark_indian_card_mandate_registration!
+    card.update_column(:processor_payment_method_id, nil)
+    mandate = Stripe::Mandate.construct_from(id: "mandate_legacy", status: "active", payment_method: "pm_shared")
+    processor_charge = instance_double(
+      BaseProcessorCharge,
+      card_mandate: "mandate_legacy",
+      card_instance_id: "pm_shared"
+    )
+    allow(ChargeProcessor).to receive(:get_charge).and_return(processor_charge)
+    allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+    expect(registration.retrieve_indian_card_mandate).to eq([mandate, "active"])
+  end
+
+  it "keeps the registration check when another save follows the success transition" do
+    registration = create_registration
+    registration.update_column(:purchase_state, "in_progress")
+    registration.reload.mark_indian_card_mandate_registration!
+    expect(CheckIndianCardMandateRegistrationJob).to receive(:perform_async).with(registration.id)
+
+    ActiveRecord::Base.transaction do
+      registration.mark_successful!
+      registration.save!
+    end
+  end
+
+  it "binds an active mandate from the subscription purchase to the renewal" do
+    registration = create_registration
+    subscription = registration.subscription
+    registration.mark_indian_card_mandate_registration!
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:
+    )
+    mandate = Stripe::Mandate.construct_from(id: "mandate_subscription", status: "active", payment_method: "pm_shared")
+    allow(subscription).to receive(:indian_card_mandate_source_purchase).with(card.id).and_return(registration)
+    allow(registration).to receive(:retrieve_indian_card_mandate).and_return([mandate, "active"])
+    allow(registration).to receive(:record_indian_card_mandate_status!).with("active", mandate_id: "mandate_subscription")
+    stripe_chargeable = instance_double(StripeChargeableCreditCard)
+    expect(stripe_chargeable).to receive(:validated_stripe_mandate_id=).with("mandate_subscription")
+    chargeable = instance_double(Chargeable)
+    allow(chargeable).to receive(:get_chargeable_for).with(StripeChargeProcessor.charge_processor_id).and_return(stripe_chargeable)
+
+    renewal.send(:validate_indian_card_mandate_for_rebill!, chargeable)
+  end
+
+  it "rejects an inactive mandate before the renewal reaches Stripe" do
+    registration = create_registration
+    subscription = registration.subscription
+    registration.mark_indian_card_mandate_registration!
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:
+    )
+    allow(subscription).to receive(:indian_card_mandate_source_purchase).with(card.id).and_return(registration)
+    allow(registration).to receive(:retrieve_indian_card_mandate).and_return([nil, "inactive"])
+    allow(registration).to receive(:record_indian_card_mandate_status!).with("inactive", mandate_id: nil)
+    allow(ErrorNotifier).to receive(:notify)
+
+    expect do
+      renewal.send(:validate_indian_card_mandate_for_rebill!, instance_double(Chargeable))
+    end.to raise_error(ChargeProcessorCardError) do |error|
+      expect(error.error_code).to eq(PurchaseErrorCode::INDIA_CARD_MANDATE_INACTIVE)
+    end
+  end
+
+  it "starts checks for a pending source created before the feature rollout" do
+    registration = create_registration
+    subscription = registration.subscription
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:
+    )
+    allow(subscription).to receive(:indian_card_mandate_for).with(card.id).and_return([nil, "pending", registration])
+    allow(registration).to receive(:record_indian_card_mandate_status!).with("pending", mandate_id: nil)
+    expect(registration).to receive(:mark_indian_card_mandate_registration!)
+    expect(CheckIndianCardMandateRegistrationJob).to receive(:perform_async).with(registration.id)
+    allow(ErrorNotifier).to receive(:notify)
+
+    expect do
+      renewal.send(:validate_indian_card_mandate_for_rebill!, instance_double(Chargeable))
+    end.to raise_error(ChargeProcessorCardError) do |error|
+      expect(error.error_code).to eq(PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING)
+    end
+  end
+
+  it "does not use the shared card pointer when the subscription has no exact source" do
+    subscription = create(:subscription, link: product, user: buyer, credit_card: card)
+    source = create(
+      :membership_purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      stripe_transaction_id: "ch_removed"
+    )
+    source.update_columns(stripe_transaction_id: nil, processor_setup_intent_id: nil)
+    card.update!(json_data: { stripe_payment_intent_id: "pi_other_subscription" })
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:
+    )
+    allow(ErrorNotifier).to receive(:notify)
+
+    expect(ChargeProcessor).not_to receive(:get_charge_intent)
+    expect do
+      renewal.send(:validate_indian_card_mandate_for_rebill!, instance_double(Chargeable))
+    end.to raise_error(ChargeProcessorCardError) do |error|
+      expect(error.error_code).to eq(PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING)
+    end
+  end
+
+  it "uses a shared charge PaymentIntent bound to the subscription purchase" do
+    registration = create_registration
+    registration.update_columns(stripe_transaction_id: nil)
+    registration.mark_indian_card_mandate_registration!
+    charge = create(
+      :charge,
+      order: create(:order),
+      seller:,
+      merchant_account:,
+      stripe_payment_intent_id: "pi_mixed_cart_mandate"
+    )
+    charge.purchases << registration
+    processor_charge = instance_double(StripeCharge, card_mandate: "mandate_mixed_cart")
+    charge_intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      payment_method_id: card.processor_payment_method_id,
+      charge: processor_charge
+    )
+    mandate = Stripe::Mandate.construct_from(
+      id: "mandate_mixed_cart",
+      status: "active",
+      payment_method: card.processor_payment_method_id
+    )
+    allow(ChargeProcessor).to receive(:get_charge_intent)
+      .with(merchant_account, "pi_mixed_cart_mandate")
+      .and_return(charge_intent)
+    allow(ChargeProcessor).to receive(:get_mandate)
+      .with(merchant_account, "mandate_mixed_cart")
+      .and_return(mandate)
+
+    expect(registration.subscription.indian_card_mandate_for(card.id)).to eq([mandate, "active", registration])
+  end
+
+  it "uses the mandate stored for a replacement card" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update!(stripe_mandate_id: "mandate_replacement")
+    mandate = Stripe::Mandate.construct_from(
+      id: "mandate_replacement",
+      status: "active",
+      payment_method: "pm_shared"
+    )
+    allow(ChargeProcessor).to receive(:get_mandate)
+      .with(merchant_account, "mandate_replacement")
+      .and_return(mandate)
+
+    expect(subscription.indian_card_mandate_for(card.id)).to eq([mandate, "active", nil])
+  end
+
+  it "keeps using the source binding when a legacy card has no payment method ID" do
+    registration = create_registration
+    subscription = registration.subscription
+    card.update!(processor_payment_method_id: nil)
+    mandate = Stripe::Mandate.construct_from(
+      id: "mandate_legacy",
+      status: "active",
+      payment_method: "pm_legacy"
+    )
+    allow(subscription).to receive(:indian_card_mandate_source_purchase).with(card.id).and_return(registration)
+    allow(registration).to receive(:retrieve_indian_card_mandate).and_return([mandate, "active"])
+
+    expect(subscription.indian_card_mandate_for(card.id)).to eq([mandate, "active", registration])
+    registration.record_indian_card_mandate_status!("active", mandate_id: mandate.id)
+
+    expect(subscription.reload.stripe_mandate_id).to be_nil
+    expect(subscription.indian_card_mandate_for(card.id)).to eq([mandate, "active", registration])
+  end
+
+  it "preserves access after Stripe rejects an inactive mandate" do
+    registration = create_registration
+    subscription = registration.subscription
+    renewal = create(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      card_country: Compliance::Countries::IND.alpha2,
+      purchase_state: "in_progress",
+      stripe_error_code: "payment_intent_mandate_invalid"
+    )
+    mail = instance_double(ActionMailer::MessageDelivery, deliver_later: true)
+    allow(CustomerLowPriorityMailer).to receive(:subscription_indian_card_mandate_invalid).with(subscription.id).and_return(mail)
+    expect(UnsubscribeAndFailWorker).not_to receive(:perform_in)
+
+    subscription.handle_purchase_failure(renewal)
+
+    expect(renewal.reload).to be_failed
+    expect(subscription.reload).to be_alive
+    expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription.status).to eq("payment_method_update_required")
+  end
+
+  it "converts the server-owned full renewal cap into the stored renewal currency" do
+    registration = create_registration
+    subscription = registration.subscription
+    allow(subscription).to receive(:original_purchase).and_return(registration)
+    allow(registration).to receive(:mandate_maximum_amount_cents).and_return(12_50)
+    allow(registration).to receive(:mandate_maximum_displayed_price_cents).and_return(12_50)
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(registration)
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 49_950,
+      canonical_price_cents:,
+      signup_currency_units_per_usd: BigDecimal("83.25")
+    )
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 104_063,
+      currency: Currency::INR
+    )
+  end
+
+  it "uses the checkout buyer when it computes mandate terms" do
+    registration = create_registration
+    subscription = registration.subscription
+    expect(subscription).to receive(:current_subscription_price_cents).with(
+      authenticated_offer_code_buyer: nil
+    ).and_call_original
+
+    expect(
+      subscription.indian_card_mandate_terms(authenticated_offer_code_buyer: nil)
+    ).to be_present
+  end
+
+  it "uses USD when the renewal currency cannot carry an India mandate" do
+    registration = create_registration
+    subscription = registration.subscription
+    allow(subscription).to receive(:original_purchase).and_return(registration)
+    allow(registration).to receive(:mandate_maximum_amount_cents).and_return(12_50)
+    allow(registration).to receive(:mandate_maximum_displayed_price_cents).and_return(12_50)
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(registration)
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::NZD,
+      presentment_price_cents: 2_000,
+      canonical_price_cents:,
+      signup_currency_units_per_usd: BigDecimal("1.6")
+    )
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 12_50,
+      currency: Currency::USD
+    )
+
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      is_original_subscription_purchase: false,
+      total_transaction_cents: 12_50
+    )
+    expect(Purchase::LaterChargePresentmentService).not_to receive(:new)
+
+    expect(renewal.send(:later_charge_presentment_processor_args, off_session: true)).to eq({})
+  end
+
+  it "keeps a destination renewal mandate in the supported canonical currency" do
+    registration = create_registration
+    subscription = registration.subscription
+    destination_account = create(
+      :merchant_account,
+      user: seller,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      charge_processor_merchant_id: "acct_destination"
+    )
+    allow(subscription).to receive(:renewal_merchant_account).and_return(destination_account)
+    allow(subscription).to receive(:original_purchase).and_return(registration)
+    allow(registration).to receive(:mandate_maximum_amount_cents).and_return(12_50)
+    allow(registration).to receive(:mandate_maximum_displayed_price_cents).and_return(12_50)
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(registration)
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 49_950,
+      canonical_price_cents:,
+      signup_currency_units_per_usd: BigDecimal("83.25")
+    )
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 12_50,
+      currency: Currency::USD
+    )
+  end
+
+  it "uses the future renewal amount when the signup transaction was free" do
+    product = create(:membership_product_with_preset_tiered_pricing, :with_free_trial_enabled)
+    registration = create(
+      :free_trial_membership_purchase,
+      link: product,
+      displayed_price_cents: 0,
+      price_cents: 0,
+      total_transaction_cents: 0
+    )
+    subscription = registration.subscription
+    renewal_price_cents = 10_00
+    allow(subscription).to receive(:current_subscription_price_cents).and_return(renewal_price_cents)
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: renewal_price_cents * 80,
+      canonical_price_cents: renewal_price_cents,
+      signup_currency_units_per_usd: BigDecimal("80")
+    )
+
+    expect(registration.mandate_maximum_amount_cents).to eq(renewal_price_cents)
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: renewal_price_cents * 80,
+      currency: Currency::INR
+    )
+  end
+
+  it "uses the paid renewal amount when a free trial charges shipping" do
+    product = create(:membership_product_with_preset_tiered_pricing, :with_free_trial_enabled)
+    registration = create(
+      :free_trial_membership_purchase,
+      link: product,
+      displayed_price_cents: 0,
+      price_cents: 0,
+      shipping_cents: 2_00,
+      total_transaction_cents: 2_00
+    )
+    allow(registration.subscription).to receive(:current_subscription_price_cents).and_return(10_00)
+
+    expect(registration.mandate_maximum_amount_cents).to eq(12_00)
+  end
+
+  it "sizes a temporarily free mandate before the subscription exists" do
+    product = create(:membership_product_with_preset_tiered_pricing, :with_free_trial_enabled)
+    registration = create(
+      :purchase_in_progress,
+      link: product,
+      is_original_subscription_purchase: true,
+      is_free_trial_purchase: true,
+      displayed_price_cents: 0,
+      price_cents: 0,
+      total_transaction_cents: 0,
+      variant_attributes: [product.default_tier]
+    )
+    registration.create_purchase_offer_code_discount!(
+      offer_code: create(:offer_code, products: [product]),
+      offer_code_amount: 10_00,
+      offer_code_is_percent: false,
+      pre_discount_minimum_price_cents: 10_00,
+      duration_in_billing_cycles: 1
+    )
+
+    expect(registration.subscription).to be_nil
+    expect(registration.mandate_maximum_amount_cents).to eq(10_00)
+  end
+
+  it "uses the pre-discount price for a temporary full discount" do
+    registration = create_registration
+    registration.update!(displayed_price_cents: 0)
+    registration.create_purchase_offer_code_discount!(
+      offer_code: create(:offer_code, products: [product]),
+      offer_code_amount: 100,
+      offer_code_is_percent: true,
+      pre_discount_minimum_price_cents: 10_00,
+      duration_in_billing_cycles: 1
+    )
+
+    expect(registration.mandate_maximum_displayed_price_cents).to eq(10_00)
+  end
+
+  it "recomputes the canonical mandate cap for the submitted billing location" do
+    registration = create_registration
+    subscription = registration.subscription
+    source_purchase = subscription.original_purchase
+    product.update_column(:price_currency_type, Currency::EUR)
+    source_purchase.update_columns(
+      displayed_price_currency_type: Currency::EUR,
+      rate_converted_to_usd: "0.8"
+    )
+    allow(source_purchase).to receive(:mandate_maximum_displayed_price_cents).and_return(10_00)
+    allow(subscription).to receive(:get_rate).with(Currency::EUR).and_return("1.0")
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(source_purchase)
+    allow(subscription).to receive(:current_later_charge_presentment).and_return(
+      instance_double(
+        LaterChargePresentment,
+        canonical_price_cents:,
+        presentment_currency: Currency::EUR,
+        presentment_price_cents: source_purchase.displayed_price_cents,
+        signup_currency_units_per_usd: BigDecimal("0.8")
+      )
+    )
+    tax_calculation = instance_double(SalesTaxCalculation, tax_cents: 1_25)
+    expect(SalesTaxCalculator).to receive(:new).with(
+      product:,
+      price_cents: 12_50,
+      shipping_cents: 0,
+      quantity: source_purchase.quantity,
+      buyer_location: {
+        postal_code: "94107",
+        country: Compliance::Countries::USA.alpha2,
+        state: "CA",
+        ip_address: source_purchase.ip_address,
+      },
+      buyer_vat_id: nil,
+      from_discover: false
+    ).and_return(instance_double(SalesTaxCalculator, calculate: tax_calculation))
+
+    expect(
+      subscription.indian_card_mandate_terms(
+        billing_info: { country: "United States", state: "CA", zip_code: "94107" }
+      )
+    ).to include(amount: 11_25, currency: Currency::EUR)
+  end
+
+  it "uses the current renewal rate when no later-charge presentment is fixed" do
+    registration = create_registration
+    subscription = registration.subscription
+    source_purchase = subscription.original_purchase
+    product.update_column(:price_currency_type, Currency::EUR)
+    source_purchase.update_columns(
+      displayed_price_currency_type: Currency::EUR,
+      rate_converted_to_usd: "0.8"
+    )
+    allow(source_purchase).to receive(:mandate_maximum_displayed_price_cents).and_return(10_00)
+    allow(subscription).to receive(:get_rate).with(Currency::EUR).and_return("1.0")
+    allow(SalesTaxCalculator).to receive(:new).and_return(
+      instance_double(SalesTaxCalculator, calculate: instance_double(SalesTaxCalculation, tax_cents: 0))
+    )
+
+    expect(
+      subscription.indian_card_mandate_terms(
+        billing_info: { country: "United States", state: "CA", zip_code: "94107" }
+      )
+    ).to include(amount: 10_00, currency: Currency::USD)
+  end
+
+  it "presents INR mandate terms when a listed-INR membership has no stored fixing" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    allow(subscription).to receive(:original_purchase).and_return(registration)
+    allow(registration).to receive(:mandate_maximum_amount_cents).and_return(10_00)
+    allow(registration).to receive(:mandate_maximum_displayed_price_cents).and_return(80_000)
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 80_000,
+      currency: Currency::INR
+    )
+  end
+
+  it "keeps the tax headroom in the recovery cap when the rate moved since signup" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 96_000,
+      price_cents: 10_00,
+      tax_cents: 2_00,
+      total_transaction_cents: 12_00,
+      rate_converted_to_usd: "96"
+    )
+    subscription.reload
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+
+    terms = subscription.indian_card_mandate_terms(fixed_rate: "80.0")
+
+    # Price cap at the stamped rate is 1,200 USD cents, which equals the signup-rate
+    # canonical total; without the floor the ₹ tax headroom would collapse to zero. The
+    # floor scales the 200-cent signup tax to the pinned price basis (200 × 1200/1000 = 240),
+    # covering the tax a renewal recomputes at the stronger rate.
+    expect(terms).to include(
+      amount: 96_000 + (2_40 * 80),
+      currency: Currency::INR
+    )
+  end
+
+  it "pins recovery mandate terms to the captured conversion rate" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+
+    terms, rate = subscription.indian_card_mandate_terms_with_rate
+    expect(rate).to eq("80.0")
+    expect(terms).to include(amount: 80_000, currency: Currency::INR)
+
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("85.0")
+
+    expect(subscription.indian_card_mandate_terms(fixed_rate: rate)).to eq(terms)
+    expect(subscription.indian_card_mandate_terms).not_to eq(terms)
+  end
+
+  it "keeps canonical USD mandate terms for a listed-INR membership when the feature is off" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    allow(subscription).to receive(:original_purchase).and_return(registration)
+    allow(registration).to receive(:mandate_maximum_amount_cents).and_return(10_00)
+    allow(registration).to receive(:mandate_maximum_displayed_price_cents).and_return(80_000)
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 10_00,
+      currency: Currency::USD
+    )
+  end
+
+  it "keeps canonical USD mandate terms when the purchase was not displayed in INR" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    subscription.reload
+    allow(subscription).to receive(:original_purchase).and_return(registration)
+    allow(registration).to receive(:mandate_maximum_amount_cents).and_return(10_00)
+    allow(registration).to receive(:mandate_maximum_displayed_price_cents).and_return(10_00)
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 10_00,
+      currency: Currency::USD
+    )
+  end
+
+  it "stops an off-session renewal for a listed-INR membership with no stored fixing before Stripe" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+    renewal = build(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      is_original_subscription_purchase: false,
+      price_cents: 10_00,
+      displayed_price_cents: 80_000,
+      displayed_price_currency_type: Currency::INR,
+      total_transaction_cents: 10_00
+    )
+    allow(ErrorNotifier).to receive(:notify)
+
+    expect do
+      renewal.send(:later_charge_presentment_processor_args, off_session: true)
+    end.to raise_error(ChargeProcessorCardError) do |error|
+      expect(error.error_code).to eq(PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING)
+    end
+  end
+
+  it "stores the listed-INR fixing when a reauthorization completes" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_inr_reauthorized",
+      clear_reauthorization: true
+    )
+
+    subscription.reload
+    fixing = subscription.current_later_charge_presentment
+    expect(fixing).to have_attributes(
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: 10_00
+    )
+    expect(fixing.signup_currency_units_per_usd).to eq(BigDecimal("80"))
+    expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to eq("mandate_inr_reauthorized")
+  end
+
+  it "stores a fixing from renewal terms when the registration was free" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 0,
+      price_cents: 0,
+      total_transaction_cents: 0,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+    allow(subscription).to receive(:current_subscription_price_cents).and_return(80_000)
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_inr_reauthorized",
+      clear_reauthorization: true
+    )
+
+    expect(subscription.reload.current_later_charge_presentment).to have_attributes(
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: 10_00
+    )
+  end
+
+  it "stores the current renewal price when it differs from the signup price" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    # The signup purchase keeps its discounted price after the discount's billing cycles
+    # ran out; the renewal now bills the full price.
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 40_000,
+      price_cents: 5_00,
+      total_transaction_cents: 5_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+    allow(subscription).to receive(:current_subscription_price_cents).and_return(80_000)
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_inr_reauthorized",
+      clear_reauthorization: true
+    )
+
+    expect(subscription.reload.current_later_charge_presentment).to have_attributes(
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: 10_00
+    )
+  end
+
+  it "stores a fixing from the pre-discount total during a temporary full discount" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 0,
+      price_cents: 0,
+      total_transaction_cents: 0,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+    allow(subscription).to receive(:current_subscription_price_cents).and_return(0)
+    allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(80_000)
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_inr_reauthorized",
+      clear_reauthorization: true
+    )
+
+    expect(subscription.reload.current_later_charge_presentment).to have_attributes(
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: 10_00
+    )
+  end
+
+  it "stores the fixing before the cleared flags leave the reauthorization lock" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+    open_transactions_before = ActiveRecord::Base.connection.open_transactions
+    expect(subscription).to receive(:record_indian_card_mandate_presentment!) do
+      expect(ActiveRecord::Base.connection.open_transactions).to be > open_transactions_before
+    end
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_inr_reauthorized",
+      clear_reauthorization: true
+    )
+  end
+
+  it "does not store a fixing when an active mandate needs no reauthorization" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_no_reauthorization"
+    )
+
+    expect(subscription.reload.current_later_charge_presentment).to be_nil
+  end
+
+  it "supersedes a same-currency fixing at an outdated price even when the canonical value matches" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 79_000,
+      canonical_price_cents: 10_00,
+      signup_currency_units_per_usd: BigDecimal("79")
+    )
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_inr_reauthorized",
+      clear_reauthorization: true
+    )
+
+    expect(subscription.reload.later_charge_presentments.count).to eq(2)
+    expect(subscription.current_later_charge_presentment).to have_attributes(
+      presentment_price_cents: 80_000,
+      canonical_price_cents: 10_00
+    )
+  end
+
+  it "does not trust a cross-currency fixing once the signup price stopped billing" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    # The signup purchase keeps its discounted price; renewals bill the full price now.
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 40_000,
+      price_cents: 5_00,
+      total_transaction_cents: 5_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::CAD,
+      presentment_price_cents: 675,
+      canonical_price_cents: 5_00,
+      signup_currency_units_per_usd: BigDecimal("1.35")
+    )
+    allow(subscription).to receive(:current_subscription_price_cents).and_return(80_000)
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+
+    expect(subscription.indian_card_mandate_terms).to include(currency: Currency::INR)
+  end
+
+  it "floors the recovery cap at the exact listed price" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    # 80,000 paise at 85/USD stores 941 USD cents; converting back yields 79,985 paise,
+    # just below the exact amount the recovered fixing bills.
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 941,
+      total_transaction_cents: 941,
+      rate_converted_to_usd: "85"
+    )
+    subscription.reload
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("85.0")
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 80_000,
+      currency: Currency::INR
+    )
+  end
+
+  it "keeps the scaled tax headroom for an expired limited-duration discount" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 40_000,
+      price_cents: 5_00,
+      tax_cents: 1_00,
+      total_transaction_cents: 6_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    allow(subscription).to receive(:original_purchase).and_return(registration)
+    # The cap scales the signup total past the discount: full price plus scaled tax.
+    allow(registration).to receive(:mandate_maximum_amount_cents).and_return(12_00)
+    allow(registration).to receive(:mandate_maximum_displayed_price_cents).and_return(80_000)
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("64.0")
+
+    terms = subscription.indian_card_mandate_terms(fixed_rate: "64.0")
+
+    # At the strengthened rate the price cap is 1,250 USD cents against a 1,200-cent
+    # canonical cap. The floor keeps the 200-cent scaled tax part — not the 100-cent
+    # discounted tax — and scales it to the pinned price basis (200 × 1250/1000 = 250).
+    expect(terms).to include(
+      amount: 80_000 + (2_50 * 64),
+      currency: Currency::INR
+    )
+  end
+
+  it "trusts a fixing re-fixed to the full price after a discount ended" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 40_000,
+      price_cents: 5_00,
+      total_transaction_cents: 5_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    allow(subscription).to receive(:original_purchase).and_return(registration)
+    allow(subscription).to receive(:current_subscription_price_cents).and_return(80_000)
+    allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(80_000)
+    # The expired discount keeps the cap at the pre-discount price.
+    allow(registration).to receive(:mandate_maximum_displayed_price_cents).and_return(80_000)
+    allow(registration).to receive(:mandate_maximum_amount_cents).and_return(10_00)
+    # The renewal re-fixed the full price when the discount's billing cycles ran out.
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(registration),
+      signup_currency_units_per_usd: BigDecimal("80")
+    )
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 80_000,
+      currency: Currency::INR
+    )
+  end
+
+  it "sizes mandate terms from recovery instead of a fixing at an outdated price" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    # Price and rate moved together, so the canonical USD value still matches the plan.
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 79_000,
+      canonical_price_cents: 10_00,
+      signup_currency_units_per_usd: BigDecimal("79")
+    )
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+
+    expect(subscription.indian_card_mandate_terms).to include(
+      amount: 80_000,
+      currency: Currency::INR
+    )
+  end
+
+  it "keeps a matching supported fixing in another currency when a reauthorization completes" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::CAD,
+      presentment_price_cents: 1_350,
+      canonical_price_cents: 10_00,
+      signup_currency_units_per_usd: BigDecimal("1.35")
+    )
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_cad_reauthorized",
+      clear_reauthorization: true
+    )
+
+    subscription.reload
+    expect(subscription.later_charge_presentments.count).to eq(1)
+    expect(subscription.current_later_charge_presentment.presentment_currency).to eq(Currency::CAD)
+  end
+
+  it "keeps an FX re-fixed fixing at the plan price when a reauthorization completes" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: 9_50,
+      signup_currency_units_per_usd: BigDecimal("84")
+    )
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_inr_reauthorized",
+      clear_reauthorization: true
+    )
+
+    subscription.reload
+    expect(subscription.later_charge_presentments.count).to eq(1)
+    expect(subscription.current_later_charge_presentment.canonical_price_cents).to eq(9_50)
+  end
+
+  it "supersedes a stale fixing in the mandate currency when a reauthorization completes" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 72_000,
+      canonical_price_cents: 9_00,
+      signup_currency_units_per_usd: BigDecimal("80")
+    )
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_inr_reauthorized",
+      clear_reauthorization: true
+    )
+
+    subscription.reload
+    expect(subscription.later_charge_presentments.count).to eq(2)
+    expect(subscription.current_later_charge_presentment).to have_attributes(
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: 10_00
+    )
+  end
+
+  it "pins the free-trial mandate cap to the passed rate" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 0,
+      price_cents: 0,
+      total_transaction_cents: 0,
+      rate_converted_to_usd: "80"
+    )
+    registration.update_flag!(:is_free_trial_purchase, true, true)
+    allow(subscription).to receive(:current_subscription_price_cents).and_return(80_000)
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("75.0")
+
+    expect(registration.mandate_maximum_amount_cents(fixed_rate: "80.0")).to eq(10_00)
+    expect(registration.mandate_maximum_amount_cents).to eq(1_067)
+  end
+
+  it "supersedes a cross-currency fixing whose signup price stopped billing" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 40_000,
+      price_cents: 5_00,
+      total_transaction_cents: 5_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    # Canonical still matches the discounted signup, but renewals bill the full price, so
+    # the mandate was approved in INR — not in the row's currency.
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::CAD,
+      presentment_price_cents: 675,
+      canonical_price_cents: 5_00,
+      signup_currency_units_per_usd: BigDecimal("1.35")
+    )
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+    allow(subscription).to receive(:current_subscription_price_cents).and_return(80_000)
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_inr_reauthorized",
+      clear_reauthorization: true
+    )
+
+    subscription.reload
+    expect(subscription.later_charge_presentments.count).to eq(2)
+    expect(subscription.current_later_charge_presentment).to have_attributes(
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000
+    )
+  end
+
+  it "supersedes a fixing in another currency when a reauthorization completes" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "80"
+    )
+    subscription.reload
+    create(
+      :later_charge_presentment,
+      owner: subscription,
+      presentment_currency: Currency::NZD,
+      presentment_price_cents: 1_700,
+      canonical_price_cents: 10_00,
+      signup_currency_units_per_usd: BigDecimal("1.7")
+    )
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_inr_reauthorized",
+      clear_reauthorization: true
+    )
+
+    subscription.reload
+    expect(subscription.later_charge_presentments.count).to eq(2)
+    expect(subscription.current_later_charge_presentment).to have_attributes(
+      presentment_currency: Currency::INR,
+      presentment_price_cents: 80_000,
+      canonical_price_cents: 10_00
+    )
+  end
+
+  it "rejects a stored mandate for a different payment method" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update!(stripe_mandate_id: "mandate_other_card")
+    mandate = Stripe::Mandate.construct_from(
+      id: "mandate_other_card",
+      status: "active",
+      payment_method: "pm_other"
+    )
+    allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+    allow(ErrorNotifier).to receive(:notify)
+
+    expect(subscription.indian_card_mandate_for(card.id)).to eq([nil, "missing", nil])
+  end
+
+  it "pauses renewal without ending access and clears the pause after an active mandate" do
+    registration = create_registration
+    registration.mark_indian_card_mandate_registration!
+    allow(ErrorNotifier).to receive(:notify)
+
+    registration.record_indian_card_mandate_status!("missing")
+
+    subscription = registration.subscription.reload
+    expect(subscription).to be_alive
+    expect(subscription).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription.status).to eq("payment_method_update_required")
+
+    registration.record_indian_card_mandate_status!("active")
+
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).to be_alive
+  end
+
+  it "shows the payment update state during a temporary free renewal" do
+    registration = create_registration
+    registration.update!(displayed_price_cents: 0)
+    registration.create_purchase_offer_code_discount!(
+      offer_code: create(:offer_code, products: [product]),
+      offer_code_amount: 100,
+      offer_code_is_percent: true,
+      pre_discount_minimum_price_cents: 10_00,
+      duration_in_billing_cycles: 2
+    )
+    subscription = registration.subscription.reload
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+
+    expect(subscription.current_subscription_price_cents).to eq(0)
+    expect(subscription).to be_future_subscription_charge
+    expect(subscription.status).to eq("payment_method_update_required")
+  end
+
+  it "does not let an old active registration clear a plan reauthorization" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update!(stripe_mandate_id: nil)
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    subscription.reload
+
+    subscription.update_renewal_for_indian_card_mandate!(
+      "active",
+      expected_credit_card_id: card.id,
+      mandate_id: "mandate_old_plan"
+    )
+
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to be_nil
+  end
+
+  it "does not let an old registration replace a newer mandate" do
+    old_registration = create_registration
+    subscription = old_registration.subscription
+    old_registration.mark_indian_card_mandate_registration!
+    new_registration = create(
+      :purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription:,
+      credit_card: card,
+      merchant_account:,
+      stripe_transaction_id: "ch_new_registration",
+      created_at: old_registration.created_at + 1.second
+    )
+    new_registration.mark_indian_card_mandate_registration!
+    subscription.update!(stripe_mandate_id: "mandate_new")
+
+    old_registration.record_indian_card_mandate_status!("active", mandate_id: "mandate_old")
+
+    expect(subscription.reload.stripe_mandate_id).to eq("mandate_new")
+  end
+
+  it "restores the prior mandate after a changed-plan payment fails" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update!(stripe_mandate_id: "mandate_prior_plan")
+
+    subscription.require_indian_card_mandate_reauthorization!
+
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to eq("mandate_prior_plan")
+
+    subscription.restore_indian_card_mandate_after_failed_reauthorization!
+
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to eq("mandate_prior_plan")
+  end
+
+  it "invalidates a replacement mandate after the changed plan rolls back" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update!(stripe_mandate_id: "mandate_prior_plan")
+    subscription.require_indian_card_mandate_reauthorization!
+    replacement_card = CreditCard.create!(
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      stripe_customer_id: "cus_replacement",
+      processor_payment_method_id: "pm_replacement",
+      stripe_fingerprint: "fingerprint_replacement",
+      visual: "**** **** **** 4242",
+      card_type: CardType::VISA,
+      card_country: Compliance::Countries::IND.alpha2,
+      expiry_month: 12,
+      expiry_year: 2030
+    )
+    subscription.update!(
+      credit_card: replacement_card,
+      stripe_mandate_id: "mandate_replacement_plan",
+      renewal_disabled_due_to_indian_card_mandate: false,
+      indian_card_mandate_requires_reauthorization: false
+    )
+
+    subscription.restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: card.id)
+
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to be_nil
+  end
+
+  it "clears plan reauthorization after a confirmed charge registers matching terms" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    registration.mark_indian_card_mandate_registration!
+    allow(registration).to receive(:processor_payment_intent_id).and_return("pi_matching_terms")
+    terms = subscription.indian_card_mandate_terms
+    mandate_options = Stripe::StripeObject.construct_from(
+      amount: terms[:amount],
+      amount_type: "maximum",
+      interval: terms[:interval],
+      interval_count: terms[:interval_count],
+      supported_types: ["india"]
+    )
+    intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      payment_method_id: card.processor_payment_method_id,
+      customer_id: card.stripe_customer_id,
+      setup_future_usage: "off_session",
+      currency: terms[:currency],
+      card_mandate_options: mandate_options
+    )
+    allow(ChargeProcessor).to receive(:get_charge_intent).with(merchant_account, "pi_matching_terms").and_return(intent)
+
+    registration.record_indian_card_mandate_status!("active", mandate_id: "mandate_matching_terms")
+
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to eq("mandate_matching_terms")
+  end
+
+  it "clears plan reauthorization for matching sporadic terms" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    registration.mark_indian_card_mandate_registration!
+    allow(registration).to receive(:processor_payment_intent_id).and_return("pi_sporadic_terms")
+    terms = {
+      amount: 10_00,
+      currency: Currency::USD,
+      interval: "sporadic",
+      interval_count: nil
+    }
+    allow_any_instance_of(Subscription).to receive(:indian_card_mandate_terms).and_return(terms)
+    mandate_options = Stripe::StripeObject.construct_from(
+      amount: terms[:amount],
+      amount_type: "maximum",
+      interval: terms[:interval],
+      interval_count: nil,
+      supported_types: ["india"]
+    )
+    intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      payment_method_id: card.processor_payment_method_id,
+      customer_id: card.stripe_customer_id,
+      setup_future_usage: "off_session",
+      currency: terms[:currency],
+      card_mandate_options: mandate_options
+    )
+    allow(ChargeProcessor).to receive(:get_charge_intent).with(merchant_account, "pi_sporadic_terms").and_return(intent)
+
+    registration.record_indian_card_mandate_status!("active", mandate_id: "mandate_sporadic_terms")
+
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to eq("mandate_sporadic_terms")
+  end
+
+  it "keeps plan reauthorization when a confirmed charge has different terms" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+    subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+    registration.mark_indian_card_mandate_registration!
+    allow(registration).to receive(:processor_payment_intent_id).and_return("pi_old_terms")
+    terms = subscription.indian_card_mandate_terms
+    mandate_options = Stripe::StripeObject.construct_from(
+      amount: terms[:amount] - 1,
+      amount_type: "maximum",
+      interval: terms[:interval],
+      interval_count: terms[:interval_count],
+      supported_types: ["india"]
+    )
+    intent = instance_double(
+      StripeChargeIntent,
+      succeeded?: true,
+      payment_method_id: card.processor_payment_method_id,
+      customer_id: card.stripe_customer_id,
+      setup_future_usage: "off_session",
+      currency: terms[:currency],
+      card_mandate_options: mandate_options
+    )
+    allow(ChargeProcessor).to receive(:get_charge_intent).with(merchant_account, "pi_old_terms").and_return(intent)
+
+    registration.record_indian_card_mandate_status!("active", mandate_id: "mandate_old_terms")
+
+    expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).to be_indian_card_mandate_requires_reauthorization
+    expect(subscription.stripe_mandate_id).to be_nil
+  end
+
+  it "does not require Stripe reauthorization for a non-Stripe Indian card" do
+    registration = create_registration
+    subscription = registration.subscription
+    card.update_columns(
+      charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
+      braintree_customer_id: "braintree_customer"
+    )
+
+    subscription.require_indian_card_mandate_reauthorization!
+
+    expect(subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+  end
+
+  it "clears the pause when the effective payment method is not an Indian card" do
+    registration = create_registration
+    subscription = registration.subscription
+    subscription.update!(
+      stripe_mandate_id: "mandate_old_card",
+      renewal_disabled_due_to_indian_card_mandate: true,
+      indian_card_mandate_requires_reauthorization: true,
+      credit_card: nil
+    )
+    non_indian_card = CreditCard.create!(
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      stripe_customer_id: "cus_non_indian",
+      processor_payment_method_id: "pm_non_indian",
+      stripe_fingerprint: "fingerprint_non_indian",
+      visual: "**** **** **** 4242",
+      card_type: CardType::VISA,
+      card_country: Compliance::Countries::USA.alpha2,
+      expiry_month: 12,
+      expiry_year: 2030
+    )
+    buyer.update!(credit_card: non_indian_card)
+
+    expect(subscription.reload.refresh_indian_card_mandate!).to eq("active")
+    expect(subscription.reload).to have_attributes(
+      stripe_mandate_id: nil,
+      renewal_disabled_due_to_indian_card_mandate: false,
+      indian_card_mandate_requires_reauthorization: false
+    )
+  end
+
+
+  it "shows pending cancellation instead of the mandate stop" do
+    registration = create_registration
+    registration.mark_indian_card_mandate_registration!
+    registration.record_indian_card_mandate_status!("missing")
+    registration.subscription.update!(cancelled_at: 1.day.from_now)
+
+    expect(registration.subscription.status).to eq("pending_cancellation")
+  end
+
+  it "shows a mandate failure until the renewal stop is recorded" do
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    registration = create_registration
+    create(
+      :failed_purchase,
+      link: product,
+      seller:,
+      purchaser: buyer,
+      subscription: registration.subscription,
+      credit_card: card,
+      error_code: PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
+      created_at: registration.created_at + 1.second
+    )
+    Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+
+    expect(registration.subscription.reload).not_to be_renewal_disabled_due_to_indian_card_mandate
+    expect(registration.subscription.status).to eq("pending_failure")
+  end
+
+  it "does not load route data when the mandate stop is clear" do
+    subscription = create_registration.subscription
+    allow(subscription).to receive(:pending_failure?).and_return(false)
+    expect(subscription).not_to receive(:india_card_mandate_reliability_enabled?)
+
+    expect(subscription.status).to eq("alive")
+  end
+end

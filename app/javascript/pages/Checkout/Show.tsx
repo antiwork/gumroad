@@ -254,6 +254,7 @@ const CheckoutIndexPage = () => {
       cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
       willSaveCard: state.willSaveCard,
       paymentMethod: state.paymentMethod,
+      paymentElementType: state.paymentElementType,
     },
   );
   // The direct-listed currency lane, for the large-tip confirmation below and for the tip
@@ -454,6 +455,7 @@ const CheckoutIndexPage = () => {
           : null,
         durationInMonths: item.product.duration_in_months,
         recurrence: item.recurrence,
+        forceNewSubscription: item.force_new_subscription,
         recommended_by: item.recommended_by,
         shippableCountryCodes: item.product.shippable_country_codes,
         nativeType: item.product.native_type,
@@ -555,6 +557,7 @@ const CheckoutIndexPage = () => {
             cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
             willSaveCard: state.willSaveCard,
             paymentMethod: state.paymentMethod,
+            paymentElementType: state.paymentElementType,
           },
         ),
         lineItems: (() => {

@@ -17,7 +17,9 @@ import {
   GetEmail,
   GetEmails,
   PreviewEmail,
+  ScheduleEmail,
   SendEmail,
+  UnscheduleEmail,
 } from "$app/components/ApiDocumentation/Endpoints/Emails";
 import {
   AbortFile,
@@ -217,6 +219,8 @@ export default function Api() {
                 <CreateEmail />
                 <PreviewEmail />
                 <SendEmail />
+                <ScheduleEmail />
+                <UnscheduleEmail />
                 <DeleteEmail />
               </ApiResource>
 

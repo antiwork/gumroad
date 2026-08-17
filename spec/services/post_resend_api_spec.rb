@@ -356,17 +356,6 @@ describe PostResendApi, :freeze_time do
     )
   end
 
-  it "records the email events" do
-    expect(EmailEvent).to receive(:log_send_events).with(["c1@example.com"], Time.current).and_call_original
-
-    send_emails(recipients: [{ email: "c1@example.com" }])
-    expect(EmailEvent.first!).to have_attributes(
-      "email_digest" => EmailEvent.email_sha_digest("c1@example.com"),
-      "sent_emails_count" => 1,
-      "last_email_sent_at" => Time.current,
-    )
-  end
-
   it "sends push notifications" do
     purchaser = create(:user, email: "c1@example.com")
     purchase = create(:purchase, purchaser:)

@@ -151,6 +151,7 @@ class Checkout::StripePaymentPresenter
         fallback_reason:,
         disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
+        india_card_mandate_reliability: india_card_mandate_reliability?,
         # CardElement carts never mount a Payment Element, so there is no element wallet surface
         # to enable — they keep the Payment Request Button regardless of the rollout flag.
         payment_element_wallets: false,
@@ -167,6 +168,7 @@ class Checkout::StripePaymentPresenter
         fallback_reason: nil,
         disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
+        india_card_mandate_reliability: india_card_mandate_reliability?,
         # The disable_wallets constraint is server-owned here for the same reason as in
         # client_confirm_props: when the cart can't take a wallet payment (the buyer-currency
         # presentment lane above), the element wallet surface stays off regardless of the
@@ -267,6 +269,17 @@ class Checkout::StripePaymentPresenter
     # enabling it for one seller never changes another seller's checkout.)
     def request_apple_pay_merchant_tokens?
       sellers.present? && sellers.all? { _1.present? && Feature.active?(APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, _1) }
+    end
+
+    def india_card_mandate_reliability?
+      return false unless items.one? && sellers.one?
+
+      seller = sellers.first
+      return false unless seller.present? && Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+
+      merchant_account = seller&.merchant_account(StripeChargeProcessor.charge_processor_id) ||
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+      !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
     end
 
     # Same seller-complete keying as request_apple_pay_merchant_tokens? and for the same reason:
@@ -378,6 +391,7 @@ class Checkout::StripePaymentPresenter
         recurring_upi_registration: recurring_upi_registration_shape?(items),
         disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
+        india_card_mandate_reliability: india_card_mandate_reliability?,
         # The disable_wallets constraint is server-owned: when the cart can't take a wallet
         # payment (the buyer-currency presentment case above), the element wallet surface stays
         # off no matter what the rollout flag says — the client never has to reconcile the two.

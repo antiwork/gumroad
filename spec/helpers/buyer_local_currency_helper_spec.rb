@@ -5,6 +5,35 @@ require "spec_helper"
 describe CurrencyHelper do
   let(:helper) { Class.new { include CurrencyHelper }.new }
 
+  describe "#buyer_currency_preference" do
+    def request_with(params: {}, cookies: {})
+      env = Rack::MockRequest.env_for("/", params:)
+      env["HTTP_COOKIE"] = cookies.map { |k, v| "#{k}=#{v}" }.join("; ") if cookies.present?
+      ActionDispatch::Request.new(env)
+    end
+
+    it "reads a supported currency from the gumroad_buyer_currency cookie" do
+      expect(helper.buyer_currency_preference(request_with(cookies: { gumroad_buyer_currency: "gbp" }))).to eq("gbp")
+    end
+
+    it "lets a ?currency= param override the cookie" do
+      request = request_with(params: { currency: "EUR" }, cookies: { gumroad_buyer_currency: "gbp" })
+      expect(helper.buyer_currency_preference(request)).to eq("eur")
+    end
+
+    it "rejects currencies we do not support" do
+      expect(helper.buyer_currency_preference(request_with(cookies: { gumroad_buyer_currency: "xyz" }))).to be_nil
+    end
+
+    it "returns nil with no preference set" do
+      expect(helper.buyer_currency_preference(request_with)).to be_nil
+    end
+
+    it "returns nil when the request does not expose params or cookies" do
+      expect(helper.buyer_currency_preference(Object.new)).to be_nil
+    end
+  end
+
   describe "#buyer_currency_for_country" do
     it "maps supported countries to buyer currencies" do
       expect(helper.buyer_currency_for_country("DE")).to eq("eur")
@@ -217,6 +246,22 @@ describe CurrencyHelper do
       expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "eur")
     end
 
+    it "prefers an explicit currency choice over the IP-detected currency" do
+      allow(helper).to receive(:buyer_local_currency_rate).with(from_currency: "usd", to_currency: "gbp").and_return(BigDecimal("0.75"))
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4", preferred_currency: "gbp")
+
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "gbp")
+    end
+
+    it "shows the canonical USD price when the buyer explicitly picks USD from a non-USD IP" do
+      # An American in Bali: detection says the local currency, but the buyer asked for
+      # dollars. USD == product currency falls through to the default props — the listed price.
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4", preferred_currency: "usd")
+
+      expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+    end
+
     it "hides the buyer currency when the account settles that currency in itself rather than USD" do
       merchant_account.record_settlement_currency_mismatch!("eur")
 
@@ -242,6 +287,27 @@ describe CurrencyHelper do
       props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
 
       expect(props).to include(display_mode: "default", buyer_currency_shown: "usd")
+    end
+
+    it "hides an unsupported platform mandate currency for a membership" do
+      membership = create(:subscription_product, user: seller, price_cents: 1000, price_currency_type: Currency::USD)
+      platform_merchant_account = create(
+        :merchant_account,
+        user: nil,
+        currency: Currency::USD,
+        charge_processor_merchant_id: "acct_india_mandate_display"
+      )
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+      allow(helper).to receive(:buyer_currency_merchant_account).with(seller).and_return(platform_merchant_account)
+      allow(helper).to receive(:buyer_currency_for_ip).and_return(Currency::AUD)
+
+      props = helper.buyer_currency_display_props(product: membership, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "default", buyer_currency_shown: Currency::USD)
+    ensure
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
     end
 
     it "shows the buyer currency for a product priced in a third currency, which the charge path does present" do

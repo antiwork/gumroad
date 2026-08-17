@@ -54,4 +54,14 @@ describe RecurringChargeReminderWorker, :vcr do
       RecurringChargeReminderWorker.new.perform(@subscription.id)
     end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).with(@subscription.id)
   end
+
+  it "does not send a reminder while an Indian card mandate update is required",
+     vcr: { cassette_name: "RecurringChargeReminderWorker/does_not_send_a_reminder_if_the_subscription_is_no_longer_alive" } do
+    @subscription.update!(renewal_disabled_due_to_indian_card_mandate: true)
+    allow_any_instance_of(Subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+
+    expect do
+      described_class.new.perform(@subscription.id)
+    end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).with(@subscription.id)
+  end
 end

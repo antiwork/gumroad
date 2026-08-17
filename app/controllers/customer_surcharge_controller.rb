@@ -82,6 +82,34 @@ class CustomerSurchargeController < ApplicationController
       )
     end
 
+    detected_buyer_currency = buyer_currency_for_ip(request.remote_ip)
+    requested_buyer_currency = Checkout::BuyerCurrencyQuote.normalize_requested_currency(params[:buyer_currency])
+    quote_currency = requested_buyer_currency || detected_buyer_currency
+    quote_props = buyer_currency_quote_props(
+      line_items: all_lines_quotable ? quote_line_items : nil,
+      # Sum the per-line integers: rounding the running totals once can disagree
+      # with charge-time line totals, and a quote that does not reconcile is refused.
+      canonical_total_cents: quote_line_items.sum(&:canonical_total_cents),
+      currency: quote_currency
+    )
+    # create() refuses a mixed/unquotable cart. Advertising those currencies would
+    # let the picker claim a presentment the charge will never honor. `cart_quotable?` asks the
+    # quote service the same question for the gates that hold in every currency (zero total,
+    # more sellers than it will quote, a mixed recurring cart, ...), so a cart no currency can
+    # get past offers US dollars alone rather than a menu whose entries disappear one by one as
+    # the buyer tries them.
+    quotable_cart = all_lines_quotable && Checkout::BuyerCurrencyQuote.cart_quotable?(
+      line_items: quote_line_items,
+      canonical_total_cents: quote_line_items.sum(&:canonical_total_cents)
+    )
+    available = available_buyer_currencies(quotable_cart ? quote_line_items.filter_map(&:product).uniq : [])
+    # What is left can still fail for a reason specific to one currency (a settlement mismatch
+    # on the seller's account, a product already priced in it). Don't advertise the one we just
+    # attempted to quote; the checkout tells the buyer their choice was refused.
+    if quote_currency.present? && quote_currency != Currency::USD && quote_props.nil?
+      available = available.reject { |entry| entry[:code] == quote_currency }
+    end
+
     render json: {
       vat_id_valid:,
       has_vat_id_input:,
@@ -92,26 +120,21 @@ class CustomerSurchargeController < ApplicationController
       # Unlike the agreement total above, this includes only the tax due on an installment's
       # first payment. Payment surfaces must use the amount the charge path will create now.
       charge_canonical_total_cents: all_lines_quotable ? quote_line_items.sum(&:charge_canonical_total_cents) : nil,
-      buyer_currency_quote: buyer_currency_quote_props(
-        line_items: all_lines_quotable ? quote_line_items : nil,
-        # Sum the per-line integer totals rather than rounding the fractional running
-        # totals once: two lines with fractional taxes (0.4 + 0.4) round to 0 per line
-        # but 1 when summed first, and a quote whose lines don't reconcile to its total
-        # is refused. The per-line integers are also what the purchases carry at charge
-        # time, so this is the total the quote verification will see.
-        canonical_total_cents: quote_line_items.sum(&:canonical_total_cents)
-      )
+      buyer_currency_quote: quote_props,
+      detected_buyer_currency:,
+      available_buyer_currencies: available
     }
   end
 
   private
-    def buyer_currency_quote_props(line_items:, canonical_total_cents:)
+    def buyer_currency_quote_props(line_items:, canonical_total_cents:, currency: nil)
       return if line_items.nil?
 
       quote = Checkout::BuyerCurrencyQuote.create(
         line_items:,
         canonical_total_cents: canonical_total_cents.round.to_i,
-        ip: request.remote_ip
+        ip: request.remote_ip,
+        currency:
       )
       return if quote.blank?
 
@@ -247,5 +270,30 @@ class CustomerSurchargeController < ApplicationController
                                                 from_discover:).calculate
 
       { sales_tax_result:, shipping_rate:, rate: }
+    end
+
+    def available_buyer_currencies(products)
+      unless products.present? && products.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1.user) }
+        return [{ code: Currency::USD, label: CURRENCY_CHOICES.dig(Currency::USD, :display_format) || Currency::USD.upcase }]
+      end
+
+      codes = [Currency::USD] + CURRENCY_CHOICES.keys.map(&:to_s)
+      codes.uniq.filter_map do |code|
+        next unless products.all? { |product| currency_offered_for?(product, code) }
+
+        { code:, label: (CURRENCY_CHOICES.dig(code, :display_format) || code.upcase) }
+      end
+    end
+
+    def currency_offered_for?(product, code)
+      return true if code == Currency::USD
+      return false if product.blank?
+
+      buyer_currency_settleable?(
+        seller: product.user,
+        buyer_currency: code,
+        product:,
+        product_currency: product.price_currency_type
+      )
     end
 end

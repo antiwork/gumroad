@@ -157,7 +157,7 @@ export const CreateEmail = () => (
   <ApiEndpoint
     method="post"
     path="/emails"
-    description="Create a draft audience email, or send it immediately by passing publish=true (or draft=false). Scheduled emails can only be created in the Emails web editor. Requires the edit_emails or account scope."
+    description="Create a draft audience email, or send it immediately by passing publish=true (or draft=false). Scheduling is done on an existing email via the schedule endpoint. Requires the edit_emails or account scope."
   >
     <ApiParameters>
       <ApiParameter name="subject" description="Email subject line" />
@@ -280,6 +280,91 @@ export const SendEmail = () => (
     "url": "https://seller.gumroad.com/p/launch-update",
     "created_at": "2026-06-17T12:00:00.000Z",
     "updated_at": "2026-06-17T12:15:00.000Z"
+  }
+}`}
+    </CodeSnippet>
+  </ApiEndpoint>
+);
+
+export const ScheduleEmail = () => (
+  <ApiEndpoint
+    method="post"
+    path="/emails/:id/schedule"
+    description="Schedule a draft audience email to publish at a set time. Rescheduling an already-scheduled email replaces its publish time. Schedules only the email: the audience is fixed at publish, and sending eligibility is re-validated at send time. Requires the edit_emails or account scope."
+  >
+    <ApiParameters>
+      <ApiParameter
+        name="to_be_published_at"
+        description="Schedule date and time in the seller's timezone (e.g. 2026-07-01 14:00)"
+      />
+    </ApiParameters>
+    <EmailResponseFields />
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg==/schedule \\
+  -d "access_token=ACCESS_TOKEN" \\
+  -d "to_be_published_at=2026-07-01 14:00" \\
+  -X POST`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">
+      gumroad emails schedule bfi_30HLgGWL8H2wo_Gzlg== --to-be-published-at "2026-07-01 14:00"
+    </CodeSnippet>
+    <CodeSnippet caption="Example response:">
+      {`{
+  "success": true,
+  "email": {
+    "id": "bfi_30HLgGWL8H2wo_Gzlg==",
+    "subject": "Launch update",
+    "message": "<p>Hello, world!</p>",
+    "audience_type": "audience",
+    "product_id": null,
+    "state": "scheduled",
+    "published_at": null,
+    "scheduled_at": "2026-07-01T18:00:00.000Z",
+    "send_emails": true,
+    "shown_on_profile": false,
+    "audience_count": null,
+    "recipients_count": null,
+    "url": null,
+    "created_at": "2026-06-17T12:00:00.000Z",
+    "updated_at": "2026-06-17T12:00:00.000Z"
+  }
+}`}
+    </CodeSnippet>
+  </ApiEndpoint>
+);
+
+export const UnscheduleEmail = () => (
+  <ApiEndpoint
+    method="post"
+    path="/emails/:id/unschedule"
+    description="Cancel a scheduled audience email and turn it back into a draft. The pending publish job is cancelled. Requires the edit_emails or account scope."
+  >
+    <EmailResponseFields />
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/emails/bfi_30HLgGWL8H2wo_Gzlg==/unschedule \\
+  -d "access_token=ACCESS_TOKEN" \\
+  -X POST`}
+    </CodeSnippet>
+    <CodeSnippet caption="Gumroad CLI">gumroad emails unschedule bfi_30HLgGWL8H2wo_Gzlg==</CodeSnippet>
+    <CodeSnippet caption="Example response:">
+      {`{
+  "success": true,
+  "email": {
+    "id": "bfi_30HLgGWL8H2wo_Gzlg==",
+    "subject": "Launch update",
+    "message": "<p>Hello, world!</p>",
+    "audience_type": "audience",
+    "product_id": null,
+    "state": "draft",
+    "published_at": null,
+    "scheduled_at": null,
+    "send_emails": true,
+    "shown_on_profile": false,
+    "audience_count": null,
+    "recipients_count": null,
+    "url": null,
+    "created_at": "2026-06-17T12:00:00.000Z",
+    "updated_at": "2026-06-17T12:00:00.000Z"
   }
 }`}
     </CodeSnippet>

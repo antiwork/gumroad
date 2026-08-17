@@ -5,6 +5,11 @@ require "spec_helper"
 describe StripeSetupIntent, :vcr do
   include StripeChargesHelper
 
+  let!(:merchant_account) do
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+      create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+  end
+
   let(:processor_setup_intent) { create_stripe_setup_intent(StripePaymentMethodHelper.success.to_stripejs_payment_method_id) }
 
   subject (:stripe_setup_intent) { described_class.new(processor_setup_intent) }
@@ -18,6 +23,16 @@ describe StripeSetupIntent, :vcr do
   describe "#client_secret" do
     it "returns the client secret of Stripe setup intent" do
       expect(stripe_setup_intent.client_secret).to eq(processor_setup_intent.client_secret)
+    end
+  end
+
+  describe "#payment_method_id" do
+    it "returns the attached payment method ID",
+       vcr: { cassette_name: "StripeSetupIntent/_id/returns_the_ID_of_Stripe_setup_intent" } do
+      payment_method = processor_setup_intent.payment_method
+      expected_id = payment_method.respond_to?(:id) ? payment_method.id : payment_method
+
+      expect(stripe_setup_intent.payment_method_id).to eq(expected_id)
     end
   end
 

@@ -294,6 +294,21 @@ describe Purchase::LaterChargePresentmentService do
       end
     end
 
+    it "uses the caller's card-mandate error for a permanent currency mismatch" do
+      message = "Update this card before the next renewal."
+
+      expect do
+        service(
+          required_currency: Currency::INR,
+          required_currency_error_code: PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING,
+          required_currency_error_message: message
+        ).perform
+      end.to raise_error(ChargeProcessorCardError) do |error|
+        expect(error.error_code).to eq(PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING)
+        expect(error.message).to eq(message)
+      end
+    end
+
     it "requests a payment-method update instead of falling back to USD when the fixing is missing" do
       stored.destroy!
       expect(ErrorNotifier).to receive(:notify).with(

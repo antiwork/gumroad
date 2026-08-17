@@ -224,6 +224,13 @@ class Charge::CreateService
 
     presentment_currency = processor_args[:processor_currency]
     return mandate_options if presentment_currency.blank? || presentment_currency == Currency::USD
+    unless Checkout::BuyerCurrencyEligibility.indian_card_mandate_presentment_supported?(
+      seller:,
+      merchant_account:,
+      currency: presentment_currency
+    )
+      raise BuyerCurrencyQuoteInvalid, "unsupported India card mandate currency: #{presentment_currency}"
+    end
 
     canonical_cap_cents = mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)
     # No cap to convert (amount_type is not "maximum", or the shape changed): leave the options
@@ -244,11 +251,15 @@ class Charge::CreateService
     deep_merged_mandate_options(presentment_cap_cents, presentment_currency)
   end
 
-  # Rebuild the nested mandate options with the converted cap and an explicit currency, without
-  # mutating the hash the caller passed in (it belongs to the Purchase that built it).
+  # Stripe uses the PaymentIntent currency for mandate options. Older code added an unsupported
+  # nested currency field, so preserve that behavior until the reliability flag is active.
   def deep_merged_mandate_options(cap_cents, currency)
     card_options = mandate_options[:payment_method_options][:card]
-    inner = card_options[:mandate_options].merge(amount: cap_cents, currency:)
+    inner = card_options[:mandate_options].merge(amount: cap_cents)
+    unless Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) &&
+           !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
+      inner = inner.merge(currency:)
+    end
 
     mandate_options.merge(
       payment_method_options: mandate_options[:payment_method_options].merge(

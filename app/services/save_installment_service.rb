@@ -91,8 +91,19 @@ class SaveInstallmentService
       return if error.present?
 
       timezone = ActiveSupport::TimeZone[seller.timezone]
-      to_be_published_at = timezone.parse(params[:to_be_published_at])
+      to_be_published_at = begin
+        timezone.parse(params[:to_be_published_at])
+      rescue ArgumentError
+        nil
+      end
+      if to_be_published_at.nil?
+        @error = "Please provide a valid date and time."
+        return
+      end
+
       installment_rule = installment.installment_rule || installment.build_installment_rule
+      # Revive a rule soft-deleted by an unschedule; PublishScheduledPostJob no-ops on deleted rules.
+      installment_rule.deleted_at = nil
       installment_rule.to_be_published_at = to_be_published_at
       installment.ready_to_publish = true
 

@@ -18,7 +18,7 @@ class ProductPresenter::ProductProps
     ppp_details = product.ppp_details(request.remote_ip)
     displayed_price_cents = displayed_price_cents(discount_code_result:, ppp_details:, quantity:)
     original_price_cents = product.price_cents if displayed_price_cents.present? && displayed_price_cents < product.price_cents
-    buyer_currency_display = buyer_currency_display_props(product:, price_cents: displayed_price_cents, ip: request.remote_ip)
+    buyer_currency_display = buyer_currency_display_props(product:, price_cents: displayed_price_cents, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request))
 
     {
       product: {

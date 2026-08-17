@@ -156,6 +156,23 @@ describe PostToIndividualPingEndpointWorker do
     expect(request["authorization"]).to eq("Basic #{Base64.strict_encode64("user:secret")}")
   end
 
+  it "re-enqueues itself with backoff when the endpoint hostname does not resolve" do
+    allow(SsrfFilter).to receive(:post).and_raise(SsrfFilter::UnresolvedHostname.new("Could not resolve hostname 'notification.com'"))
+
+    PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
+
+    expect(PostToIndividualPingEndpointWorker.jobs.size).to eq(1)
+    job = PostToIndividualPingEndpointWorker.jobs.first
+    expect(job["args"]).to eq(["http://notification.com", { "q" => 47, "retry_count" => 1 }, Mime[:url_encoded_form].to_s, nil])
+    expect(job["at"]).to be_within(5).of(PostToIndividualPingEndpointWorker::BACKOFF_STRATEGY.first.seconds.from_now.to_f)
+  end
+
+  it "retries an unresolved hostname the right number of times and does not raise", :sidekiq_inline do
+    expect(SsrfFilter).to receive(:post).exactly(4).times.with("http://notification.com", kind_of(Hash)).and_raise(SsrfFilter::UnresolvedHostname.new("Could not resolve hostname 'notification.com'"))
+
+    PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "b" => 3 })
+  end
+
   it "retries 50x status codes the right number of times and does not raise", :sidekiq_inline do
     error_response = Net::HTTPInternalServerError.new("1.1", "500", "Internal Server Error")
     expect(SsrfFilter).to receive(:post).exactly(4).times.with("http://notification.com", kind_of(Hash)).and_return(error_response)

@@ -11,12 +11,13 @@ describe ProductPresenter::ProductProps do
   describe "#props", :vcr do
     let(:seller) { create(:user, name: "Testy", username: "testy", created_at: 60.days.ago) }
     let(:buyer) { create(:user) }
-    let(:request) { OpenStruct.new(remote_ip: "12.12.128.128", host: "example.com", host_with_port: "example.com") }
+    let(:request) { OpenStruct.new(remote_ip: "12.12.128.128", host: "example.com", host_with_port: "example.com", params: {}, cookie_jar: {}) }
 
     before do
       create(:payment_completed, user: seller)
       create(:custom_domain, user: seller, domain: "www.example.com")
       allow(request).to receive(:cookie_jar).and_return({})
+      allow(request).to receive(:params).and_return({})
     end
 
     context "membership product" do
@@ -32,6 +33,7 @@ describe ProductPresenter::ProductProps do
           allow(request).to receive(:host).and_return("http://testy.test.gumroad.com")
           allow(request).to receive(:host_with_port).and_return("http://testy.test.gumroad.com:1234")
           allow(request).to receive(:cookie_jar).and_return({ _gumroad_guid: purchase.browser_guid })
+          allow(request).to receive(:params).and_return({})
         end
         let(:pundit_user) { SellerContext.new(user: buyer, seller: buyer) }
 
@@ -294,6 +296,7 @@ describe ProductPresenter::ProductProps do
           allow(request).to receive(:host).and_return("http://testy.test.gumroad.com")
           allow(request).to receive(:host_with_port).and_return("http://testy.test.gumroad.com:1234")
           allow(request).to receive(:cookie_jar).and_return({ _gumroad_guid: purchase.browser_guid })
+          allow(request).to receive(:params).and_return({})
         end
         let(:pundit_user) { SellerContext.new(user: buyer, seller: buyer) }
 

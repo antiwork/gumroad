@@ -24,6 +24,7 @@ describe CheckoutPresenter do
         fallback_reason: "empty_cart",
         disable_wallets: false,
         request_apple_pay_merchant_tokens: false,
+        india_card_mandate_reliability: false,
         payment_element_wallets: false,
         flat_payment_methods: false,
         elements_options: nil,
@@ -856,6 +857,11 @@ describe CheckoutPresenter do
     context "tiered membership product" do
       before :each do
         @product = create(:membership_product_with_preset_tiered_pricing)
+        @merchant_account = create(
+          :merchant_account,
+          user: nil,
+          charge_processor_merchant_id: nil
+        )
         @default_tier = @product.default_tier
         @product_price = @product.prices.alive.find_by(recurrence: "monthly")
         @tier_price = @default_tier.prices.alive.find_by(recurrence: "monthly")
@@ -865,7 +871,7 @@ describe CheckoutPresenter do
                                                  email: "jgumroad@example.com", full_name: "Jane Gumroad",
                                                  street_address: "100 Main St", city: "San Francisco", state: "CA",
                                                  zip_code: "00000", country: "USA", variant_attributes: [@default_tier],
-                                                 price_cents: @original_price_cents)
+                                                 price_cents: @original_price_cents, merchant_account: @merchant_account)
       end
 
       it "returns subscription data object for the subscription manage page" do
@@ -952,6 +958,7 @@ describe CheckoutPresenter do
                                  is_in_free_trial: false,
                                  is_test: false,
                                  is_overdue_for_charge: false,
+                                 payment_method_update_required: false,
                                  is_gift: false,
                                  is_installment_plan: false,
                                  current_recurrence_available: true,
@@ -966,6 +973,19 @@ describe CheckoutPresenter do
                                paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
                                request_apple_pay_merchant_tokens: false,
                              })
+      end
+
+      it "shows when the buyer must update the payment method" do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @subscription.update!(cancelled_at: nil, price: @tier_price)
+        @subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+        @subscription.reload
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
+
+        expect(result[:subscription][:payment_method_update_required]).to be(true)
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
       end
 
       it "reports the charges still owed for a fixed-length subscription",

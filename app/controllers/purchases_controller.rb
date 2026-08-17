@@ -331,10 +331,16 @@ class PurchasesController < ApplicationController
       seller: current_seller,
       recipient: impersonating_user || logged_in_user,
       filters: params.slice(:start_time, :end_time, :product_ids, :variant_ids),
+      force_async: params[:force_async].present?,
+      in_seller_time_zone: params[:in_seller_time_zone].present?,
     )
 
     if tempfile
       send_file tempfile.path
+    elsif request.format.json?
+      # The analytics dashboard enqueues this export from JS and only tells the seller their CSV
+      # is coming once it succeeds, so it needs an answer rather than a redirect to a whole page.
+      render json: { success: true }
     else
       redirect_to customers_path, notice: "You will receive an email in your inbox with the data you've requested shortly.", status: :see_other
     end

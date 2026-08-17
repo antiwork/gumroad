@@ -234,6 +234,44 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(200)
     end
 
+    # Anthropic bills a timed-out buffered generation up to the max_tokens
+    # it was sent, so the forwarded ceiling must never exceed what the
+    # timeout window (and therefore the synthetic charge) can cover.
+    it "clamps the forwarded max_tokens on a buffered call to the timeout-window ceiling" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages(request_payload.merge(max_tokens: described_class::MAX_TOKENS_PER_REQUEST))
+
+      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+        JSON.parse(req.body)["max_tokens"] == described_class::MAX_BUFFERED_OUTPUT_TOKENS
+      }
+    end
+
+    it "forwards a buffered max_tokens under the timeout-window ceiling untouched" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages(request_payload.merge(max_tokens: 64))
+
+      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+        JSON.parse(req.body)["max_tokens"] == 64
+      }
+    end
+
+    it "does not clamp max_tokens when streaming" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 200, body: { input_tokens: 5 }.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages(request_payload.merge(stream: true, max_tokens: described_class::MAX_TOKENS_PER_REQUEST))
+
+      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+        JSON.parse(req.body)["max_tokens"] == described_class::MAX_TOKENS_PER_REQUEST
+      }
+    end
+
     it "allows large outputs when streaming" do
       stub_request(:post, messages_url)
         .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })

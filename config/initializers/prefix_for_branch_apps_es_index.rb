@@ -11,6 +11,9 @@ if Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true"
         # abort boot (js:export and puma), so Nomad crash-looped the preview
         # and GitHub still recorded a successful deploy. Search on this app
         # stays empty until shards are freed; the HTML app must still serve.
+        # Any other 400 (bad mapping etc.) is a real defect and must still
+        # abort boot.
+        raise unless e.message.match?(/maximum (normal )?shards open/)
         Rails.logger.error("preview ES index #{model.index_name} not created: #{e.message}")
       end
     end

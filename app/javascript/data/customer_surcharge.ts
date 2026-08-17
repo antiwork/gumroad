@@ -18,6 +18,7 @@ export type GetSurchargesRequest = {
   country: string;
   state?: string;
   vat_id?: string;
+  buyer_currency?: string;
 };
 
 export type SurchargesResponse = {
@@ -67,6 +68,8 @@ export type SurchargesResponse = {
         }[]
       | undefined;
   } | null;
+  detected_buyer_currency?: string | null | undefined;
+  available_buyer_currencies?: { code: string; label: string }[] | undefined;
 };
 
 export const getSurcharges = async (data: GetSurchargesRequest, abortSignal?: AbortSignal) => {

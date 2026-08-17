@@ -13,6 +13,47 @@ describe StripeChargeProcessor, :vcr do
     end
   end
 
+  describe ".indian_card_mandate_interval" do
+    it "uses a sporadic mandate for a two-year recurrence" do
+      expect(described_class.indian_card_mandate_interval("every_two_years")).to eq(["sporadic", nil])
+    end
+  end
+
+  describe ".indian_card_mandate_reference_for_subscription?" do
+    let(:subscription_external_id) { "subscription-id" }
+
+    it "accepts a unique reference for the subscription" do
+      reference = described_class.indian_card_mandate_reference(subscription_external_id)
+
+      expect(described_class.indian_card_mandate_reference_for_subscription?(reference, subscription_external_id)).to be(true)
+    end
+
+    it "accepts the legacy reference during a deploy" do
+      reference = "#{described_class::MANDATE_PREFIX}#{subscription_external_id}"
+
+      expect(described_class.indian_card_mandate_reference_for_subscription?(reference, subscription_external_id)).to be(true)
+    end
+
+    it "rejects a reference for a different subscription" do
+      reference = described_class.indian_card_mandate_reference("different-subscription")
+
+      expect(described_class.indian_card_mandate_reference_for_subscription?(reference, subscription_external_id)).to be(false)
+    end
+  end
+
+  describe ".indian_card_mandate_currency_supported?" do
+    it "allows Stripe India mandate currencies" do
+      expect(described_class.indian_card_mandate_currency_supported?(Currency::INR)).to be(true)
+      expect(described_class.indian_card_mandate_currency_supported?(Currency::USD)).to be(true)
+      expect(described_class.indian_card_mandate_currency_supported?(Currency::CAD)).to be(true)
+    end
+
+    it "rejects other Stripe charge currencies" do
+      expect(described_class.indian_card_mandate_currency_supported?(Currency::NZD)).to be(false)
+      expect(described_class.indian_card_mandate_currency_supported?(Currency::BRL)).to be(false)
+    end
+  end
+
   describe ".charge_minor_units_compatible?" do
     it "allows currencies whose stored minor units match what Stripe charges" do
       expect(described_class.charge_minor_units_compatible?("usd")).to be(true)
@@ -1078,6 +1119,84 @@ describe StripeChargeProcessor, :vcr do
               expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(mandate: "mandate_123")).and_return(payment_intent)
               charge_intent = subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session: true)
               expect(charge_intent).to be_a(StripeChargeIntent)
+            end
+
+            it "uses new terms instead of an unvalidated saved-card mandate",
+               vcr: { cassette_name: "StripeChargeProcessor/_create_payment_intent_or_charge_/Support_for_RBI_regulations_for_Indian_cards/when_off-session/for_an_Indian_card_with_SCA_support/when_the_saved_card_has_a_registered_e-mandate/does_not_send_new_terms_with_an_existing_mandate" } do
+              saved_chargeable = instance_double(
+                StripeChargeableCreditCard,
+                validated_stripe_mandate_id: nil,
+                requires_mandate?: true,
+                stripe_charge_params: { customer: "cus_saved", payment_method: "pm_saved" }
+              )
+              expect(subject).not_to receive(:get_mandate_id_from_chargeable)
+              payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_renewal", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
+              mandate_options = { payment_method_options: { card: { mandate_options: { amount: 1_00 } } } }
+
+              expect(Stripe::PaymentIntent).to receive(:create) do |stripe_params|
+                expect(stripe_params).not_to have_key(:mandate)
+                expect(stripe_params).to include(mandate_options)
+                payment_intent
+              end
+
+              subject.create_payment_intent_or_charge!(
+                merchant_account,
+                saved_chargeable,
+                1_00,
+                30,
+                "reference",
+                "test description",
+                off_session: true,
+                mandate_options:
+              )
+            end
+
+            it "reuses the mandate authenticated for the current checkout",
+               vcr: { cassette_name: "StripeChargeProcessor/_create_payment_intent_or_charge_/Support_for_RBI_regulations_for_Indian_cards/when_off-session/for_an_Indian_card_with_SCA_support/when_the_saved_card_has_a_registered_e-mandate/references_the_mandate_on_the_payment_intent" } do
+              allow(subject).to receive(:get_mandate_id_from_chargeable).with(chargeable, merchant_account).and_return("mandate_checkout")
+              payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_checkout", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
+              mandate_options = { payment_method_options: { card: { mandate_options: { amount: 1_00 } } } }
+
+              expect(Stripe::PaymentIntent).to receive(:create) do |stripe_params|
+                expect(stripe_params[:mandate]).to eq("mandate_checkout")
+                expect(stripe_params).not_to have_key(:payment_method_options)
+                payment_intent
+              end
+
+              subject.create_payment_intent_or_charge!(
+                merchant_account,
+                chargeable,
+                1_00,
+                30,
+                "reference",
+                "test description",
+                off_session: true,
+                mandate_options:
+              )
+            end
+
+            it "prefers the mandate validated for this subscription",
+               vcr: { cassette_name: "StripeChargeProcessor/_create_payment_intent_or_charge_/Support_for_RBI_regulations_for_Indian_cards/when_off-session/for_an_Indian_card_with_SCA_support/when_the_saved_card_has_a_registered_e-mandate/references_the_mandate_on_the_payment_intent" } do
+              chargeable.validated_stripe_mandate_id = "mandate_subscription"
+              expect(subject).not_to receive(:get_mandate_id_from_chargeable)
+              payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_renewal", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
+              mandate_options = { payment_method_options: { card: { mandate_options: { amount: 1_00 } } } }
+
+              expect(Stripe::PaymentIntent).to receive(:create) do |stripe_params|
+                expect(stripe_params[:mandate]).to eq("mandate_subscription")
+                expect(stripe_params).not_to have_key(:payment_method_options)
+                payment_intent
+              end
+              subject.create_payment_intent_or_charge!(
+                merchant_account,
+                chargeable,
+                1_00,
+                30,
+                "reference",
+                "test description",
+                off_session: true,
+                mandate_options:
+              )
             end
           end
 

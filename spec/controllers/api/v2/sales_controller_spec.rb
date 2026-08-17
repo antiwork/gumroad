@@ -741,15 +741,16 @@ describe Api::V2::SalesController do
         expect(Api::V2::SalesSummary).not_to have_received(:new)
       end
 
-      it "returns a 400 error if date range is too wide" do
+      it "accepts a date range wider than 366 days" do
         get :summary, params: @params.merge(from: "2025-01-01", to: "2026-05-21")
 
-        expect(response.code).to eq "400"
-        expect(response.parsed_body).to eq({
-          status: 400,
-          error: "Date range cannot exceed 366 days."
-        }.as_json)
-        expect(Api::V2::SalesSummary).not_to have_received(:new)
+        expect(response.code).to eq "200"
+        expect(Api::V2::SalesSummary).to have_received(:new).with(
+          seller: @seller,
+          from: Date.new(2025, 1, 1),
+          to: Date.new(2026, 5, 21),
+          group_by: nil
+        )
       end
 
       it "returns a 400 error if group_by is invalid" do

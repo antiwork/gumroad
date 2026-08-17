@@ -984,6 +984,15 @@ describe UsersController do
       expect(inertia.component).to eq("Users/SubscribePreview")
       expect(inertia.props[:title]).to eq(creator.name_or_username)
       expect(inertia.props[:avatar_url]).to end_with(".png")
+      expect(inertia.props[:bio]).to eq(creator.bio.presence)
+    end
+
+    it "passes the creator bio when present" do
+      creator.update!(bio: "I write about woodworking.")
+
+      get :subscribe_preview, params: { username: creator.username }
+
+      expect(inertia.props[:bio]).to eq("I write about woodworking.")
     end
 
     it "sets custom styles in page meta when user has custom_styles" do
