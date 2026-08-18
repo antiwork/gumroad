@@ -14,9 +14,25 @@ class SendChargeReceiptJob
                   unique_across_queues: true,
                   on_conflict: { server: :raise }
 
-  def perform(charge_id)
+  # Wait for independently settled line items so the first completed purchase does not produce an
+  # incomplete receipt, but bound the delay for payment methods that remain pending long-term.
+  RETRY_DELAYS = [10.seconds, 30.seconds, 1.minute, 5.minutes].freeze
+
+  # Attempt is a retry counter only. Default lock_args is the full args list, so
+  # [charge_id] and [charge_id, 1] would otherwise get different digests and could
+  # run at the same time.
+  def self.lock_args(args)
+    [args.first]
+  end
+
+  def perform(charge_id, attempt = 0)
     charge = Charge.find(charge_id)
     return if charge.receipt_sent?
+
+    if charge.purchases.any?(&:in_progress?) && (delay = RETRY_DELAYS[attempt])
+      self.class.perform_in(delay, charge_id, attempt + 1)
+      return
+    end
 
     charge.purchases_requiring_stamping.each do |purchase|
       PdfStampingService.stamp_for_purchase!(purchase)
