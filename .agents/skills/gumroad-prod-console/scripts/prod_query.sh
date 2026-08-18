@@ -292,13 +292,112 @@ fi
 
 encoded=$(printf '%s\n' "$ruby_code" | base64 | tr -d '\n')
 
+record_success() {
+  # Remember last-good only after the query succeeded, and only for
+  # auto-selected hosts. A PROD_INSTANCE_IP pin is per-invocation — caching it
+  # would stick later unpinned calls on that box. A host that passed docker-true
+  # but failed boot/DB must not become last-good either.
+  if [ -z "${PROD_INSTANCE_IP:-}" ]; then
+    write_instance_cache "$instance_ip"
+  fi
+}
+
+# Warm path: a persistent `rails runner` loop on the host serves spooled
+# queries so only the FIRST call after a host recycle pays Rails boot.
+# Replica-only: a non-default DB host var (i.e. a primary write session) must
+# never ride a loop that was booted pointing at the replica, so it always
+# takes the one-shot path below. PROD_NO_RUNNER_LOOP=1 opts out entirely.
+script_dir=$(cd "$(dirname "$0")" && pwd)
+runner_loop_ok=1
+[ -n "${PROD_NO_RUNNER_LOOP:-}" ] && runner_loop_ok=
+[ "$PROD_DB_HOST_VAR" != "DATABASE_WORKER_REPLICA1_HOST" ] && runner_loop_ok=
+[ -f "$script_dir/prod_runner_loop.rb" ] || runner_loop_ok=
+
+if [ -n "$runner_loop_ok" ]; then
+  loop_b64=$(base64 < "$script_dir/prod_runner_loop.rb" | tr -d '\n')
+  # Runs INSIDE the puma container. Quoted heredoc, placeholders substituted
+  # below — remote $vars here must not expand on this machine.
+  remote_script=$(cat <<'REMOTE'
+set -u
+BASE=/tmp/gumclaw-runner
+mkdir -p "$BASE/in" "$BASE/out"
+job_id=$(date +%s)-$$-$RANDOM
+new_sum=$(echo "__LOOP_B64__" | base64 --decode | md5sum | awk '{print $1}')
+loop_alive=
+if [ -f "$BASE/loop.pid" ] && kill -0 "$(cat "$BASE/loop.pid")" 2>/dev/null; then
+  loop_alive=1
+  # A live loop running stale code stays stale until the host recycles —
+  # replace it so client and loop can never disagree on the job contract.
+  old_sum=$(md5sum "$BASE/loop.rb" 2>/dev/null | awk '{print $1}')
+  if [ "$old_sum" != "$new_sum" ]; then
+    kill "$(cat "$BASE/loop.pid")" 2>/dev/null
+    rm -f "$BASE/loop.pid" "$BASE/starting"
+    loop_alive=
+  fi
+fi
+if [ -z "$loop_alive" ]; then
+  # One booter at a time: concurrent cold callers would each boot a loop and
+  # all but one exit after wasting a full Rails boot. Stale after 180s so a
+  # crashed booter cannot wedge the warm path forever.
+  now=$(date +%s)
+  if ! { [ -f "$BASE/starting" ] && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -lt 180 ]; }; then
+    echo "$now" > "$BASE/starting"
+    echo "__LOOP_B64__" | base64 --decode > "$BASE/loop.rb"
+    # No cd: bundle needs the app's Gemfile, i.e. the container WORKDIR the
+    # one-shot path already relies on.
+    ( DATABASE_HOST="$__DB_HOST_VAR__" nohup bundle exec rails runner "$BASE/loop.rb" > "$BASE/loop.log" 2>&1 & )
+  fi
+fi
+echo "__QUERY_B64__" | base64 --decode > "$BASE/in/$job_id.rb.tmp"
+mv "$BASE/in/$job_id.rb.tmp" "$BASE/in/$job_id.rb"
+deadline=$(( $(date +%s) + 360 ))
+while [ ! -f "$BASE/out/$job_id.rc" ]; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    rm -f "$BASE/in/$job_id.rb"
+    echo "gumclaw runner loop timed out; see $BASE/loop.log on the host" >&2
+    exit 97
+  fi
+  # Loop provably dead (pid gone, boot window expired, job still spooled):
+  # bail now instead of burning the full deadline before the fallback.
+  if [ -f "$BASE/in/$job_id.rb" ] \
+     && ! { [ -f "$BASE/loop.pid" ] && kill -0 "$(cat "$BASE/loop.pid" 2>/dev/null)" 2>/dev/null; } \
+     && [ $(( $(date +%s) - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -ge 180 ]; then
+    rm -f "$BASE/in/$job_id.rb"
+    echo "gumclaw runner loop is not running; see $BASE/loop.log on the host" >&2
+    exit 97
+  fi
+  sleep 0.2
+done
+cat "$BASE/out/$job_id.out" 2>/dev/null
+cat "$BASE/out/$job_id.err" >&2 2>/dev/null
+rc=$(cat "$BASE/out/$job_id.rc")
+rm -f "$BASE/out/$job_id.out" "$BASE/out/$job_id.err" "$BASE/out/$job_id.rc"
+exit "$rc"
+REMOTE
+)
+  remote_script=${remote_script//__LOOP_B64__/$loop_b64}
+  remote_script=${remote_script//__QUERY_B64__/$encoded}
+  remote_script=${remote_script//__DB_HOST_VAR__/$PROD_DB_HOST_VAR}
+  remote_b64=$(printf '%s\n' "$remote_script" | base64 | tr -d '\n')
+
+  set +e
+  LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" "admin@$PROD_BASTION" \
+    'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) bash -c "echo '"$remote_b64"' | base64 --decode | bash"'
+  loop_rc=$?
+  set -e
+  if [ "$loop_rc" -eq 0 ]; then
+    record_success
+    exit 0
+  fi
+  if [ "$loop_rc" -ne 97 ] && [ "$loop_rc" -ne 255 ]; then
+    # The loop ran the query and the QUERY failed. Do not re-run it on the
+    # cold path — even read-only code should not silently execute twice.
+    exit "$loop_rc"
+  fi
+  >&2 echo "Runner loop unavailable (rc=$loop_rc); falling back to one-shot rails runner."
+fi
+
 LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" "admin@$PROD_BASTION" \
   'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running") bash -c "echo '"$encoded"' | base64 --decode | DATABASE_HOST=\$'"$PROD_DB_HOST_VAR"' bundle exec rails runner -"'
 
-# Remember last-good only after rails runner succeeded (set -e), and only for
-# auto-selected hosts. A PROD_INSTANCE_IP pin is per-invocation — caching it
-# would stick later unpinned calls on that box. A host that passed docker-true
-# but failed boot/DB must not become last-good either.
-if [ -z "${PROD_INSTANCE_IP:-}" ]; then
-  write_instance_cache "$instance_ip"
-fi
+record_success
