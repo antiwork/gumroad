@@ -390,6 +390,7 @@ Rails.application.routes.draw do
             get :products
           end
         end
+        resources :products, only: [:index, :destroy]
         get "/agent/meta", to: "agent#meta"
         get "/agent/conversations/latest", to: "agent#latest_conversation"
         get "/agent/turns/:client_turn_id", to: "agent#turn_status"
