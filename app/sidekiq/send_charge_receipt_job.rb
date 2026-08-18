@@ -18,6 +18,13 @@ class SendChargeReceiptJob
   # incomplete receipt, but bound the delay for payment methods that remain pending long-term.
   RETRY_DELAYS = [10.seconds, 30.seconds, 1.minute, 5.minutes].freeze
 
+  # Attempt is a retry counter only. Default lock_args is the full args list, so
+  # [charge_id] and [charge_id, 1] would otherwise get different digests and could
+  # run at the same time.
+  def self.lock_args(args)
+    [args.first]
+  end
+
   def perform(charge_id, attempt = 0)
     charge = Charge.find(charge_id)
     return if charge.receipt_sent?

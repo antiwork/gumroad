@@ -18,11 +18,20 @@ describe SendChargeReceiptJob do
     allow(CustomerMailer).to receive_message_chain(:receipt, :deliver_now)
   end
 
-  it "uses the same runtime lock across the default and critical queues" do
-    default_job = { "class" => described_class.name, "queue" => "default", "lock_args" => [charge.id] }
-    critical_job = default_job.merge("queue" => "critical")
+  it "locks by charge id only" do
+    expect(described_class.lock_args([123])).to eq([123])
+    expect(described_class.lock_args([123, 1])).to eq([123])
+  end
 
-    expect(SidekiqUniqueJobs::LockDigest.call(default_job)).to eq(SidekiqUniqueJobs::LockDigest.call(critical_job))
+  it "uses the same runtime lock across the default and critical queues" do
+    without_attempt = { "class" => described_class.name, "queue" => "default", "args" => [charge.id] }
+    with_attempt = { "class" => described_class.name, "queue" => "critical", "args" => [charge.id, 1] }
+    without_attempt["lock_args"] = SidekiqUniqueJobs::LockArgs.call(without_attempt)
+    with_attempt["lock_args"] = SidekiqUniqueJobs::LockArgs.call(with_attempt)
+
+    expect(without_attempt["lock_args"]).to eq([charge.id])
+    expect(with_attempt["lock_args"]).to eq([charge.id])
+    expect(SidekiqUniqueJobs::LockDigest.call(without_attempt)).to eq(SidekiqUniqueJobs::LockDigest.call(with_attempt))
     expect(described_class.sidekiq_options["lock"]).to eq(:while_executing)
     expect(described_class.sidekiq_options["lock_timeout"]).to eq(2)
     expect(described_class.sidekiq_options["unique_across_queues"]).to be(true)
