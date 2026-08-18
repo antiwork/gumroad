@@ -164,13 +164,8 @@ class ProductPresenter
         is_epublication: product.is_epublication?,
         product_refund_policy_enabled: product.product_refund_policy_enabled?,
         refund_policy: {
-          allowed_refund_periods_in_days: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.map do
-            {
-              key: _1,
-              value: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[_1]
-            }
-          end,
-          max_refund_period_in_days: refund_policy.max_refund_period_in_days,
+          allowed_refund_periods_in_days: RefundPolicy.period_options(allow_no_refunds: product.is_physical?),
+          max_refund_period_in_days: refund_policy.effective_max_refund_period_in_days,
           fine_print: refund_policy.fine_print,
           fine_print_enabled: refund_policy.fine_print.present?,
           title: refund_policy.title,
@@ -330,7 +325,9 @@ class ProductPresenter
       google_client_id: GlobalConfig.get("GOOGLE_CLIENT_ID"),
       seller_refund_policy_enabled: product.user.account_level_refund_policy_enabled?,
       seller_refund_policy: {
-        title: product.user.refund_policy.title,
+        # Product context keeps the editor preview honest for physical products under
+        # a leftover 0-day account policy — the purchase snapshot keeps those at 0.
+        title: product.user.refund_policy.title(for_physical: product.is_physical?),
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
