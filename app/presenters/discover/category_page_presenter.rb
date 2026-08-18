@@ -28,7 +28,7 @@ class Discover::CategoryPagePresenter
   end
 
   def breadcrumb_list_json_ld
-    items = [{ name: "Discover", url: UrlService.discover_full_path("/") }]
+    items = [{ name: "Discover", url: UrlService.discover_full_path(Discover::CanonicalUrlPresenter::INDEX_PATH) }]
     slugs.each_with_index do |slug, index|
       items << {
         name: labels[index],

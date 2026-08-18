@@ -77,5 +77,8 @@ export const discoverTitleGenerator = (
   if (defaultSortOrder && urlParams.get("sort") === defaultSortOrder) urlParams.delete("sort");
   const isCategorySeoPage = urlParams.size === 0;
   if (taxonomyTitle && isCategorySeoPage) taxonomyTitle += " — digital products by independent creators";
+  if (!searchOrTagsTitle && !taxonomyTitle && isCategorySeoPage) {
+    return "Discover digital products from independent creators | Gumroad";
+  }
   return [searchOrTagsTitle, taxonomyTitle, "Gumroad"].filter((s) => s).join(" | ");
 };
