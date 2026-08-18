@@ -29,7 +29,7 @@ class HomeController < ApplicationController
   # Note: these headers are advisory until a Cloudflare Cache Rule makes HTML
   # eligible for caching; without that rule behavior is unchanged in
   # production.
-  EDGE_CACHEABLE_ACTIONS = %w[about features features_md pricing high_volume_discounts terms privacy prohibited dpa hackathon saas small_bets].freeze
+  EDGE_CACHEABLE_ACTIONS = %w[about features features_md pricing terms privacy prohibited dpa hackathon saas small_bets].freeze
 
   prepend_before_action :prepare_edge_cacheable_response, if: :edge_cacheable_request?
   after_action :set_edge_cache_headers, if: -> { @edge_cacheable_response }
@@ -74,16 +74,6 @@ class HomeController < ApplicationController
     set_meta_tag(property: "og:description", content: "Direct sales: 10% + 50¢ per sale, $0 monthly. Discover marketplace sales: 30%. Gumroad handles sales tax worldwide as Merchant of Record, at no extra cost.")
     set_meta_tag(property: "og:type", content: "website")
     set_meta_tag(property: "og:url", content: pricing_url)
-  end
-
-  def high_volume_discounts
-    set_meta_tag(title: "Gumroad high-volume discounts: 5% after $20k (standard 10% + 50¢)")
-    set_meta_tag(name: "description", content: "Direct sales start at 10% + 50¢. After $20,000 in paid sales in a calendar month, new direct sales are 5% + 50¢. Discover stays 30%. No application.")
-    set_meta_tag(tag_name: "link", rel: "canonical", href: high_volume_discounts_url, head_key: "canonical")
-    set_meta_tag(property: "og:title", content: "Gumroad high-volume discounts: 5% after $20k (standard 10% + 50¢)")
-    set_meta_tag(property: "og:description", content: "Direct sales start at 10% + 50¢. After $20,000 in paid sales in a calendar month, new direct sales are 5% + 50¢. Discover stays 30%. No application.")
-    set_meta_tag(property: "og:type", content: "website")
-    set_meta_tag(property: "og:url", content: high_volume_discounts_url)
   end
 
   def privacy
