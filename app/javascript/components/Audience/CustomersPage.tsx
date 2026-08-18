@@ -511,7 +511,9 @@ const CustomersPage = ({
                         {customer.subscription ? (
                           !customer.subscription.is_installment_plan && customer.subscription.status !== "alive" ? (
                             <Pill size="small" className="ml-2">
-                              Inactive
+                              {customer.subscription.status === "payment_method_update_required"
+                                ? "Payment update required"
+                                : "Inactive"}
                             </Pill>
                           ) : null
                         ) : (

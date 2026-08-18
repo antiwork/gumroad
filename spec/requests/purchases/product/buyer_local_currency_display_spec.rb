@@ -145,7 +145,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       visit "/l/#{@product.unique_permalink}"
 
       expect(page).to have_text("€8+", normalize_ws: true) # localized minimum on the price tag
-      expect(page).to have_field("Price", placeholder: "9.60+") # suggested price converted to EUR (12.00 * 0.8)
+      expect(page).to have_field("Name a fair price", placeholder: "9.60+") # suggested price converted to EUR (12.00 * 0.8)
     end
 
     it "states the minimum price in the buyer's local currency when the entered amount is below the floor" do

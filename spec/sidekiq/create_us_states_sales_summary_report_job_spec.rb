@@ -81,7 +81,7 @@ describe CreateUsStatesSalesSummaryReportJob do
 
       described_class.new.perform(subdivision_codes, month, year, true)
 
-      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green", anything)
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)
@@ -122,7 +122,7 @@ describe CreateUsStatesSalesSummaryReportJob do
 
       expect { described_class.new.perform(subdivision_codes, month, year, true) }.not_to raise_error
 
-      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green", anything)
     end
 
     it "creates a summary CSV file with correct totals for each state without submitting transactions to TaxJar when push_to_taxjar is false" do
@@ -131,7 +131,7 @@ describe CreateUsStatesSalesSummaryReportJob do
 
       described_class.new.perform(subdivision_codes, month, year)
 
-      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green", anything)
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

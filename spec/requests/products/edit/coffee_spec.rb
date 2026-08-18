@@ -35,7 +35,7 @@ describe "Coffee Edit", type: :system, js: true do
       expect(page).to have_link("Caffeine Addict")
       expect(page).to have_selector("h1", text: "Coffee product")
       expect(page).to have_selector("h3", text: "Buy me a coffee product")
-      expect(page).to have_field("Price", with: "1")
+      expect(page).to have_field("Name a fair price", with: "1")
       expect(page).to have_link("Support")
     end
 
@@ -43,7 +43,7 @@ describe "Coffee Edit", type: :system, js: true do
     fill_in "Suggested amount 2", with: 2
     click_on "Delete", match: :first
 
-    in_preview { expect(page).to have_field("Price", with: "2") }
+    in_preview { expect(page).to have_field("Name a fair price", with: "2") }
 
     click_on "Add amount"
     fill_in "Suggested amount 2", with: 4
@@ -54,7 +54,7 @@ describe "Coffee Edit", type: :system, js: true do
       expect(page).to have_radio_button("$2")
       expect(page).to have_radio_button("$4")
       expect(page).to have_radio_button("Other", checked: true)
-      expect(page).to have_field("Price")
+      expect(page).to have_field("Name a fair price")
       expect(page).to have_link("Tip")
     end
 

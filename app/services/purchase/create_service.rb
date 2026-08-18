@@ -20,7 +20,7 @@ class Purchase::CreateService < Purchase::BaseService
 
   def perform
     unless @product.allow_parallel_purchases?
-      inventory_semaphore = SuoSemaphore.product_inventory(@product.id, acquisition_timeout: INVENTORY_LOCK_ACQUISITION_TIMEOUT)
+      inventory_semaphore = inventory_lock_client
       inventory_lock_token = inventory_semaphore.lock
       if inventory_lock_token.nil?
         Rails.logger.warn("Could not acquire lock for product_inventory semaphore (product id: #{@product.id})")
@@ -50,20 +50,12 @@ class Purchase::CreateService < Purchase::BaseService
       validate_perceived_free_trial_params
 
       if @product.user.account_level_refund_policy_enabled?
-        purchase.build_purchase_refund_policy(
-          max_refund_period_in_days: @product.user.refund_policy.max_refund_period_in_days,
-          title: @product.user.refund_policy.title,
-          fine_print: @product.user.refund_policy.fine_print
-        )
+        attach_purchase_refund_policy(@product.user.refund_policy)
       elsif @product.product_refund_policy_enabled? && @product.product_refund_policy.present?
         # The enabled flag can be out of sync with the underlying record (the
         # ProductRefundPolicy row may have been deleted or never created), so we only
         # attach a purchase refund policy when the record actually exists.
-        purchase.build_purchase_refund_policy(
-          max_refund_period_in_days: @product.product_refund_policy.max_refund_period_in_days,
-          title: @product.product_refund_policy.title,
-          fine_print: @product.product_refund_policy.fine_print
-        )
+        attach_purchase_refund_policy(@product.product_refund_policy)
       end
 
       # build pre-order if purchase is for pre-order product & return
@@ -206,6 +198,15 @@ class Purchase::CreateService < Purchase::BaseService
   end
 
   private
+    def attach_purchase_refund_policy(policy)
+      for_physical = @product.is_physical?
+      purchase.build_purchase_refund_policy(
+        max_refund_period_in_days: policy.effective_max_refund_period_in_days(for_physical:),
+        title: policy.title(for_physical:),
+        fine_print: policy.fine_print
+      )
+    end
+
     # Every processor may use this signature- and expiry-checked hint while building the purchase.
     # Stripe later performs the full amount verification; PayPal discards the token after the hint,
     # which makes expiry the only bound on its pricing use (gumroad-private#1958).
@@ -223,6 +224,15 @@ class Purchase::CreateService < Purchase::BaseService
 
     def is_gift?
       !!params[:is_gift]
+    end
+
+    def inventory_lock_client
+      extra = { acquisition_timeout: INVENTORY_LOCK_ACQUISITION_TIMEOUT }
+      if @product.native_type == Link::NATIVE_TYPE_CALL
+        SuoSemaphore.seller_call_inventory(@product.user_id, extra)
+      else
+        SuoSemaphore.product_inventory(@product.id, extra)
+      end
     end
 
     def should_check_for_restartable_subscription?

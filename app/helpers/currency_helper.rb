@@ -241,6 +241,13 @@ module CurrencyHelper
     return false if merchant_account.blank?
     return false unless merchant_account.stripe_charge_processor?
     return false unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account, seller:)
+    if product.is_recurring_billing?
+      return false unless Checkout::BuyerCurrencyEligibility.indian_card_mandate_presentment_supported?(
+        seller:,
+        merchant_account:,
+        currency: buyer_currency
+      )
+    end
 
     # Accounts that settle this currency in itself rather than USD reject the FX quote the
     # charge needs, so a local price shown for them always ends up charged in USD.

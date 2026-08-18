@@ -242,8 +242,13 @@ describe Purchase::ChargeEventsHandler, :vcr do
     end
 
     it "finalizes a failed renewal" do
-      event = build(:charge_event_payment_failed, charge_id: purchase.stripe_transaction_id)
-      expect_any_instance_of(Subscription).to receive(:handle_purchase_failure).with(purchase)
+      event = build(
+        :charge_event_payment_failed,
+        charge_id: purchase.stripe_transaction_id,
+        extras: { "stripe_error_code" => "india_recurring_payment_mandate_canceled" }
+      )
+      expect_any_instance_of(Subscription).to receive(:handle_purchase_failure)
+        .with(have_attributes(stripe_error_code: "india_recurring_payment_mandate_canceled"))
 
       purchase.handle_event_failed!(event)
     end

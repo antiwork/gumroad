@@ -20,7 +20,8 @@ function ProfileProductShowPage() {
       currencySelector
       shownCurrency={props.product.buyer_currency_display?.buyer_currency_shown}
     >
-      <ProductLayout cart {...props} />
+      {/* The profile header above already shows the seller's avatar and name. */}
+      <ProductLayout cart hideSellerByline {...props} />
     </ProfileLayout>
   );
 }

@@ -540,7 +540,7 @@ export const SUBSCRIBER_FIELDS: FieldDefinition[] = [
     name: "status",
     type: "string",
     description:
-      'Subscription status: "alive", "pending_cancellation", "pending_failure", "failed_payment", "fixed_subscription_period_ended", or "cancelled"',
+      'Subscription status: "alive", "payment_method_update_required", "pending_cancellation", "pending_failure", "failed_payment", "fixed_subscription_period_ended", or "cancelled"',
   },
 ];
 

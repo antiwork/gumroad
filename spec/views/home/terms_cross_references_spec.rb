@@ -110,7 +110,7 @@ describe "app/views/home/terms.html.erb cross-references" do
     # parsing, and if the lost one is the last of its section the contiguity example stays green too.
     counts = subsections.keys.group_by { |k| k.split(".").first.to_i }.transform_values(&:size)
     expect(counts.sort.to_h).to eq(
-      { 1 => 2, 3 => 4, 4 => 5, 6 => 9, 8 => 2, 10 => 8, 11 => 3, 12 => 2, 13 => 6, 16 => 2,
+      { 1 => 2, 3 => 4, 4 => 5, 6 => 9, 8 => 2, 10 => 8, 11 => 4, 12 => 2, 13 => 6, 16 => 2,
         17 => 3, 20 => 2, 21 => 4, 23 => 4, 25 => 12, 26 => 2, 27 => 14 }
     )
   end
@@ -133,7 +133,7 @@ describe "app/views/home/terms.html.erb cross-references" do
 
   it "points every subsection cite at a subsection that exists" do
     cited = cited_numbers('\d{1,2}\.\d{1,2}')
-    expect(cited.sort).to eq(["10.5", "11.3", "12.1", "25.1", "25.4", "25.5", "25.9", "3.4", "4.1", "6.1", "6.4"])
+    expect(cited.sort).to eq(["10.5", "11.3", "11.4", "12.1", "25.1", "25.4", "25.5", "25.9", "3.4", "4.1", "6.1", "6.4"])
 
     missing = cited - subsections.keys
     expect(missing).to be_empty, "cited but absent: #{missing.inspect}"
@@ -211,6 +211,8 @@ describe "app/views/home/terms.html.erb cross-references" do
   it "keeps the section numbers the help center cites" do
     expect(source).to include('id="section-11-3"')
     expect(subsections["11.3"]).to match(/Holds on Funds/)
+    expect(source).to include('id="section-11-4"')
+    expect(subsections["11.4"]).to match(/Changing Payout Country/)
     expect(sections[22]).to match(/COPYRIGHT INFRINGEMENT/)
 
     articles = Rails.root.glob("app/views/help_center/articles/contents/*.html.erb")
@@ -220,6 +222,8 @@ describe "app/views/home/terms.html.erb cross-references" do
     expect(suspension).to include("gumroad.com/terms#section-11-3")
     expect(suspension).to match(/Section#{sp}+11\.3/o)
     expect(articles.fetch("_155-things-you-cant-sell-on-gumroad.html.erb")).to match(/section#{sp}+11\.3/o)
+    expect(articles.fetch("_13-getting-paid.html.erb")).to include("gumroad.com/terms#section-11-4")
+    expect(articles.fetch("_260-your-payout-settings-page.html.erb")).to include("gumroad.com/terms#section-11-4")
     expect(articles.fetch("_286-how-do-i-report-a-gumroad-creator.html.erb")).to match(/Section#{sp}+22#{sp}+of/o)
 
     # Same section-word alternation as the Terms scans, so a new article citing "SECTIONS 11.3 and
@@ -228,7 +232,7 @@ describe "app/views/home/terms.html.erb cross-references" do
     cited = articles.values
                     .flat_map { |body| body.scan(/(?:#{section_word})#{sp}+(\d{1,2}(?:\.\d{1,2})?)(?!\d)/) }
                     .flatten.uniq
-    expect(cited.sort).to eq(["11.3", "22"]),
+    expect(cited.sort).to eq(["11.3", "11.4", "22"]),
                           "help articles cite Terms sections #{cited.sort.inspect}. A number new to " \
                           "this list needs asserting above against the heading it points at."
   end

@@ -58,7 +58,7 @@ describe CreateCanadaMonthlySalesReportJob do
 
       described_class.new.perform(month, year)
 
-      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Canada Sales Reporting", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Canada Sales Reporting", anything, "green", anything)
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

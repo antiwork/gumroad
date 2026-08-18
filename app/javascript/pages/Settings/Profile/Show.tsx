@@ -28,13 +28,14 @@ import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 import { ProfileSectionsForm } from "$app/components/Profile/SectionsForm";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ToggleSettingRow } from "$app/components/SettingRow";
 import { postToMobileApp } from "$app/components/Settings/Layout";
 import { ShareButtons } from "$app/components/ShareButtons";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
 import { ColorPicker } from "$app/components/ui/ColorPicker";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -448,6 +449,18 @@ export default function SettingsPage() {
                 }}
                 disabled={!canUpdate}
               />
+              <Fieldset>
+                <ToggleSettingRow
+                  value={profileSettings.product_page_storefront_enabled}
+                  onChange={(value) => updateProfileSettings({ product_page_storefront_enabled: value })}
+                  disabled={!canUpdate}
+                  label="Show your storefront on product pages"
+                />
+                <FieldsetDescription>
+                  Product pages display your profile header above the product and the rest of your products below it, so
+                  buyers landing on a shared link can browse your whole store.
+                </FieldsetDescription>
+              </Fieldset>
               {loggedInUser?.policies.settings_profile.manage_social_connections ? (
                 <Fieldset>
                   <FieldsetTitle>Social links</FieldsetTitle>

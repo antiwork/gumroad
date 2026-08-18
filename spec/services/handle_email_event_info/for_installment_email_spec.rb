@@ -565,5 +565,32 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
         end
       end
     end
+
+    describe "DynamoDB dual write" do
+      it "records the open event in DynamoDB" do
+        expect(EmailEngagementDynamoStore).to receive(:record_open).with(
+          installment_id: @installment.id,
+          mailer_method: "CreatorContactingCustomersMailer.purchase_installment",
+          mailer_args: @identifier
+        )
+
+        params = { "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                                 "identifier" => @identifier, "installment_id" => @installment.id }] }
+        HandleSendgridEventJob.new.perform(params)
+      end
+
+      it "records the click event in DynamoDB" do
+        expect(EmailEngagementDynamoStore).to receive(:record_click).with(
+          installment_id: @installment.id,
+          mailer_method: "CreatorContactingCustomersMailer.purchase_installment",
+          mailer_args: @identifier,
+          click_url: "https://www&#46;gumroad&#46;com"
+        )
+
+        params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                                 "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
+        HandleSendgridEventJob.new.perform(params)
+      end
+    end
   end
 end

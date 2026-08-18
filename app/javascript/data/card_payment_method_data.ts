@@ -375,6 +375,14 @@ export const confirmCardIfNeeded = async <
 type PrepareFutureChargesRequest<CardParams extends CardPaymentMethodParams | PaymentRequestPaymentMethodParams> = {
   products: Product[];
   cardParams: CardParams;
+  email?: string | null;
+  billingInfo?: FutureChargesBillingInfo | null;
+  mandateReliabilitySetup?: boolean;
+};
+export type FutureChargesBillingInfo = {
+  country: string | null;
+  state: string | null;
+  postal_code: string | null;
 };
 type PrepareFutureChargesResponse<CardParams extends CardPaymentMethodParams | PaymentRequestPaymentMethodParams> =
   | {
@@ -390,10 +398,8 @@ export const prepareFutureCharges = async <
 >(
   data: PrepareFutureChargesRequest<CardParams>,
 ): Promise<PrepareFutureChargesResponse<CardParams>> => {
-  // The wallet details and element-collected billing details on the card params are client-side
-  // context (checkout's buyer/tax details and the wallet_type reported with the purchase). The
-  // setup-intent endpoint has no contract for them, so keep them out of the request body while
-  // preserving them on the returned reusable params, which purchase submission still needs.
+  // Keep payment-method context out of the SetupIntent request. The caller sends the effective
+  // billing location through the narrow billing_info contract below.
   const {
     wallet: _wallet,
     elementBillingAddress: _elementBillingAddress,
@@ -404,7 +410,20 @@ export const prepareFutureCharges = async <
     method: "POST",
     url: Routes.stripe_setup_intents_path(),
     accept: "json",
-    data: { ...setupIntentCardParams, products: data.products },
+    data: {
+      ...setupIntentCardParams,
+      email: data.email ?? null,
+      billing_info: data.billingInfo ?? null,
+      ...(data.mandateReliabilitySetup === undefined
+        ? {}
+        : { mandate_reliability_setup: data.mandateReliabilitySetup }),
+      products: data.products.map((product) => ({
+        price: product.price,
+        subscription_id: product.subscription_id,
+        permalink: product.permalink,
+        force_new_subscription: product.forceNewSubscription ?? false,
+      })),
+    },
   });
 
   if (response.ok) {
@@ -413,7 +432,7 @@ export const prepareFutureCharges = async <
       cardParams: {
         ...data.cardParams,
         stripe_customer_id: responseData.reusable_token,
-        stripe_setup_intent_id: responseData.setup_intent_id,
+        ...("setup_intent_id" in responseData ? { stripe_setup_intent_id: responseData.setup_intent_id } : {}),
         status: "success",
         reusable: true,
       },
@@ -435,5 +454,6 @@ export const prepareFutureCharges = async <
 };
 type CreateSetupIntentSuccessResponse =
   | { success: true; reusable_token: string; setup_intent_id: string; requires_card_setup: true; client_secret: string }
-  | { success: true; reusable_token: string; setup_intent_id: string };
+  | { success: true; reusable_token: string; setup_intent_id: string }
+  | { success: true; reusable_token: string; setup_intent_skipped: true };
 type CreateSetupIntentErrorResponse = { success: false; error_message: string; error_code?: string };

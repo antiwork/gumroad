@@ -453,7 +453,10 @@ export const DashboardPage = ({
                   <NavigationButton href={gumhead.download_url} color="primary" target="_blank" rel="noreferrer">
                     Download for Mac
                   </NavigationButton>
-                  <span className="text-sm text-muted">Windows coming soon</span>
+                  {/* The build ships only the arm64 slice (app binary and bundled
+                      Node runtime). Drop the Apple Silicon note when a universal
+                      build exists — the download URL stays the same. */}
+                  <span className="text-sm text-muted">Apple Silicon &middot; Windows coming soon</span>
                 </div>
               </div>
             </CardContent>

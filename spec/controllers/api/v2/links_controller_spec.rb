@@ -1654,12 +1654,40 @@ describe Api::V2::LinksController do
 
         put @action, params: @params.merge(files: [
                                              { id: existing_file.external_id, url: existing_file.url, display_name: "Existing" },
-                                             { url: new_file_url, display_name: "New File" }
+                                             { external_id: "cli-upload-temp", url: new_file_url, display_name: "New File" }
                                            ])
         expect(response.parsed_body["success"]).to be(true)
+        mapped_id = response.parsed_body.dig("file_id_mappings", "cli-upload-temp")
+        expect(mapped_id).to be_present
         @product.reload
-        alive_files = @product.product_files.alive
-        expect(alive_files.count).to eq(2)
+        alive_ids = @product.product_files.alive.map(&:external_id)
+        expect(alive_ids).to include(mapped_id)
+        expect(alive_ids.count).to eq(2)
+      end
+
+      it "maps a temporary files[][id] the same way as external_id" do
+        new_s3_key = "attachments/#{@user.external_id}/#{SecureRandom.hex}/original/new_file.pdf"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(new_s3_key).put(body: "test content")
+        new_file_url = "#{S3_BASE_URL}#{new_s3_key}"
+
+        put @action, params: @params.merge(files: [
+                                             { id: "cli-upload-temp", url: new_file_url, display_name: "New File" }
+                                           ])
+        expect(response.parsed_body["success"]).to be(true)
+        new_file = @product.reload.product_files.alive.find { _1.display_name == "New File" }
+        expect(new_file).to be_present
+        expect(response.parsed_body["file_id_mappings"]).to eq("cli-upload-temp" => new_file.external_id)
+      end
+
+      it "omits file_id_mappings when no client id is remapped" do
+        existing_file = create(:product_file, link: @product)
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(existing_file.s3_key).put(body: "test content")
+
+        put @action, params: @params.merge(files: [
+                                             { id: existing_file.external_id, url: existing_file.url, display_name: "Existing" }
+                                           ])
+        expect(response.parsed_body["success"]).to be(true)
+        expect(response.parsed_body).not_to have_key("file_id_mappings")
       end
 
       it "does not delete existing files when only rich_content changes" do

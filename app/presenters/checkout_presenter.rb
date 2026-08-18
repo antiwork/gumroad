@@ -301,6 +301,7 @@ class CheckoutPresenter
         is_in_free_trial: subscription.in_free_trial?,
         is_test: subscription.is_test_subscription,
         is_overdue_for_charge: subscription.overdue_for_charge?,
+        payment_method_update_required: subscription.status == "payment_method_update_required",
         is_gift: subscription.gift?,
         is_installment_plan: subscription.is_installment_plan,
         # False when the seller has retired the recurrence this buyer is on; the row is still

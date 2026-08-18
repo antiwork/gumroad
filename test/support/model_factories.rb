@@ -58,7 +58,7 @@ module ModelFactories
     ContentModeration::ModerateRecordService::CheckResult.new(passed:, reasons:)
   end
 
-  def create_user(tipping_enabled: false, discover_boost_enabled: false, **attrs)
+  def create_user(tipping_enabled: false, discover_boost_enabled: false, product_page_storefront_enabled: false, **attrs)
     user = User.create!({
       email: "user-#{unique_suffix}@example.com",
       username: "u#{unique_suffix}",
@@ -66,12 +66,14 @@ module ModelFactories
       confirmed_at: Time.current,
       user_risk_state: "not_reviewed",
     }.merge(attrs))
-    # User's before_create enables both tipping and the Discover boost. The
-    # RSpec :user factory turns them back off by default so tests don't silently
-    # inherit a boosted 30% Discover fee (discover_fee_per_thousand = 300) or
-    # tipping. Mirror that here for parity — callers opt in with the keyword.
+    # User's before_create enables tipping, the Discover boost, and the product-page
+    # storefront. The RSpec :user factory turns them back off by default so tests don't
+    # silently inherit a boosted 30% Discover fee (discover_fee_per_thousand = 300),
+    # tipping, or the storefront-wrapped product page. Mirror that here for parity —
+    # callers opt in with the keyword.
     user.update_column(:flags, user.flags ^ User.flag_mapping["flags"][:tipping_enabled]) unless tipping_enabled
     user.update_column(:flags, user.flags ^ User.flag_mapping["flags"][:discover_boost_enabled]) unless discover_boost_enabled
+    user.update_column(:flags, user.flags ^ User.flag_mapping["flags"][:product_page_storefront_enabled]) unless product_page_storefront_enabled
     user
   end
 

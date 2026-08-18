@@ -67,6 +67,7 @@ class ProfilePresenter
           background_color: HexColorValidator.normalize(seller.seller_profile.background_color),
           highlight_color: HexColorValidator.normalize(seller.seller_profile.highlight_color),
           profile_picture_blob_id: seller.avatar.signed_id,
+          product_page_storefront_enabled: seller.product_page_storefront_enabled?,
         },
         editable_profile: shared_profile_props(seller_custom_domain_url: nil, request:),
         # Version stamp for optimistic concurrency: the editor sends it back on save so the server

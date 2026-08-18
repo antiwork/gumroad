@@ -21,7 +21,7 @@ describe "Subscription restart at checkout", :js, type: :system do
              email: @buyer.email,
              credit_card: @credit_card,
              variant_attributes: [@tier],
-             price_cents: @product.price_cents)
+             price_cents: 500)
     end
 
     @subscription.update!(cancelled_at: 1.day.ago, deactivated_at: 1.day.ago, cancelled_by_buyer: true)
@@ -50,6 +50,43 @@ describe "Subscription restart at checkout", :js, type: :system do
 
       expect(@subscription.reload).to be_alive
       expect(@subscription.cancelled_at).to be_nil
+      expect(@product.subscriptions.count).to eq(1)
+    end
+  end
+
+  context "with the India mandate feature" do
+    before do
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @seller)
+      @buyer.update!(credit_card: nil)
+      @subscription.update!(credit_card: nil)
+    end
+
+    after do
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @seller)
+    end
+
+    it "keeps a guest restart stopped while Stripe reports the new mandate as pending" do
+      visit "/checkout?product=#{@product.unique_permalink}&option=#{@tier.external_id}&quantity=1"
+
+      fill_checkout_form(
+        @product,
+        email: @buyer.email,
+        credit_card: { number: "4000003560000123" }
+      )
+      click_on "Pay", exact: true
+
+      failure_message = "We could not verify this card for recurring payments."
+      challenge_or_failure = <<~XPATH.squish
+        //iframe[starts-with(@src, 'https://js.stripe.com/v3/three-ds-2-challenge')]
+        | //*[@role='alert' and contains(normalize-space(.), '#{failure_message}')]
+      XPATH
+      expect(page).to have_xpath(challenge_or_failure, wait: 60)
+      within_sca_frame(wait: 1) { click_on "Complete" } if page.has_selector?(SCA_CHALLENGE_IFRAME, wait: 0)
+
+      expect(page).to have_text(failure_message)
+      expect(@subscription.reload).not_to be_alive
+      expect(@subscription.stripe_mandate_id).to be_nil
+      expect(@subscription.credit_card).to be_nil
       expect(@product.subscriptions.count).to eq(1)
     end
   end

@@ -368,5 +368,38 @@ describe HandleEmailEventInfo::ForAbandonedCartEmail do
         end
       end
     end
+
+    describe "DynamoDB dual write" do
+      it "records an open event in DynamoDB for each workflow installment" do
+        [abandoned_cart_workflow_installment1, abandoned_cart_workflow_installment3].each do |installment|
+          expect(EmailEngagementDynamoStore).to receive(:record_open).with(
+            installment_id: installment.id,
+            mailer_method: "CustomerMailer.abandoned_cart",
+            mailer_args: mailer_args_with_multiple_workflow_ids
+          )
+        end
+
+        HandleSendgridEventJob.new.perform(
+          { "_json" => [{ "event" => "open", "mailer_class" => "CustomerMailer", "mailer_method" => "abandoned_cart",
+                          "mailer_args" => mailer_args_with_multiple_workflow_ids }] }
+        )
+      end
+
+      it "records a click event in DynamoDB for each workflow installment" do
+        [abandoned_cart_workflow_installment1, abandoned_cart_workflow_installment3].each do |installment|
+          expect(EmailEngagementDynamoStore).to receive(:record_click).with(
+            installment_id: installment.id,
+            mailer_method: "CustomerMailer.abandoned_cart",
+            mailer_args: mailer_args_with_multiple_workflow_ids,
+            click_url: "https://www&#46;gumroad&#46;com/checkout"
+          )
+        end
+
+        HandleSendgridEventJob.new.perform(
+          { "_json" => [{ "event" => "click", "mailer_class" => "CustomerMailer", "mailer_method" => "abandoned_cart",
+                          "mailer_args" => mailer_args_with_multiple_workflow_ids, "url" => "https://www&#46;gumroad&#46;com/checkout" }] }
+        )
+      end
+    end
   end
 end

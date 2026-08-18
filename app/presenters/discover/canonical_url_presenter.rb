@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
 class Discover::CanonicalUrlPresenter
+  # `/` on DISCOVER_DOMAIN is the marketing homepage (home#about), not Discover.
+  INDEX_PATH = "/discover"
+
   def self.canonical_url(params)
     if params.values_at(:taxonomy, :query, :tags).all?(&:blank?)
-      return UrlService.discover_full_path("/")
+      return UrlService.discover_full_path(INDEX_PATH)
     end
 
-    path = params[:taxonomy] || "/"
+    path = params[:taxonomy].presence || INDEX_PATH
     valid_canonical_params = params.permit(:sort, :query, :min_price, :max_price, :rating, tags: [], filetypes: [])
                                    .to_h
                                    .transform_values { |value| to_canonical_value(value) }

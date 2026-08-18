@@ -555,6 +555,50 @@ describe Charge::CreateService, :vcr do
                                 params: { buyer_currency_quote: "locked-token" }).perform
     end
 
+    it "rejects an unsupported mandate currency before Stripe submission" do
+      merchant_account = create(
+        :merchant_account,
+        user: nil,
+        currency: Currency::USD,
+        charge_processor_merchant_id: "acct_india_mandate_charge_guard"
+      )
+      mandate_options = {
+        payment_method_options: {
+          card: {
+            mandate_options: {
+              amount_type: "maximum",
+              amount: 10_00,
+              supported_types: ["india"]
+            }
+          }
+        }
+      }
+      service = described_class.new(
+        order: create(:order),
+        seller: seller_1,
+        merchant_account:,
+        chargeable: instance_double(Chargeable),
+        purchases: [],
+        amount_cents: 10_00,
+        gumroad_amount_cents: 3_00,
+        setup_future_charges: true,
+        off_session: false,
+        statement_description: seller_1.name_or_username,
+        mandate_options:
+      )
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
+
+      expect do
+        service.send(
+          :mandate_options_in_charge_currency,
+          processor_currency: Currency::AUD,
+          processor_amount_cents: 15_00
+        )
+      end.to raise_error(Charge::CreateService::BuyerCurrencyQuoteInvalid, /aud/)
+    ensure
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
+    end
+
     it "never registers an e-mandate cap below the amount being charged" do
       # A discount-free subscription caps at exactly today's total. Rounding that conversion
       # down by a subunit would make the very first renewal at the same price exceed the cap.

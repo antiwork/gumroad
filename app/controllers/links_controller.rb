@@ -59,7 +59,9 @@ class LinksController < ApplicationController
     authorize Link
 
     set_meta_tag(title: "What are you creating?")
-    render inertia: "Products/New", props: ProductPresenter.new_page_props(current_seller:)
+    render inertia: "Products/New", props: ProductPresenter.new_page_props(current_seller:).merge(
+      is_mobile_app_web_view: params[:display] == "mobile_app" || session[:mobile_app_web_view] == true
+    )
   end
 
   def create
@@ -210,6 +212,12 @@ class LinksController < ApplicationController
         else
           if params[:embed] || params[:overlay]
             render inertia: "Products/Iframe/Show", props: presenter.iframe_product_props(**presenter_props)
+          elsif @product.user.product_page_storefront_enabled? && pundit_user&.seller != @product.user
+            # Storefront-wrapped product page (gumroad-private#2196): profile header above the
+            # product, catalog below (injected in ProductPresenter#product_page_props). Same
+            # component the `layout=profile` branch above renders. The seller's own view keeps
+            # the standalone page — the presenter suppresses the catalog for owners anyway.
+            render inertia: "Products/Profile/Show", props: presenter.profile_product_props(**presenter_props)
           else
             render inertia: "Products/Show", props: presenter.product_page_props(**presenter_props)
           end
@@ -252,12 +260,13 @@ class LinksController < ApplicationController
       # live products) when the creator has products but hasn't saved any profile sections yet.
       # That section has no database row, so when the frontend fetches more results for it,
       # accept its well-known id and search across all the creator's profile products (leaving
-      # `section` nil below does exactly that). Guarded on the creator still having no saved
-      # sections so this id can't be used to bypass a customized profile layout.
+      # `section` nil below does exactly that). Guarded on the creator having no saved product
+      # sections — mirroring ProductPresenter's storefront catalog on product pages — so this id
+      # can't be used to bypass a customized profile layout.
       searching_default_products_section =
         user.present? &&
         search_params[:section_id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID &&
-        user.seller_profile_sections.on_profile.none?
+        user.seller_profile_products_sections.on_profile.none?
       return render json: { total: 0, filetypes_data: [], tags_data: [], taxonomy_attributes_data: [], products: [] } if user.nil? || (section.nil? && !searching_default_products_section && search_params[:ids].blank?)
       search_params[:section] = section if section
       search_params[:is_alive_on_profile] = true
@@ -265,6 +274,16 @@ class LinksController < ApplicationController
       search_params[:sort] = section&.default_product_sort if search_params[:sort].nil?
       search_params[:sort] = ProductSortKey::PAGE_LAYOUT if search_params[:sort] == "default" || search_params[:sort].nil?
       search_params[:ids]&.map! { ObfuscateIds.decrypt(_1) }
+      if search_params[:exclude_ids].present?
+        # Always overwrite (or drop) the key: leaving a crafted nested structure in place would
+        # reach ES as a `terms` clause and 400 (→ public 500).
+        exclude_ids = Array(search_params[:exclude_ids]).filter_map { _1.is_a?(String) ? ObfuscateIds.decrypt(_1) : nil }
+        if exclude_ids.any?
+          search_params[:exclude_ids] = exclude_ids
+        else
+          search_params.delete(:exclude_ids)
+        end
+      end
     else
       search_params[:sort] = ProductSortKey::FEATURED if search_params[:sort] == "default"
       search_params[:include_rated_as_adult] = logged_in_user&.show_nsfw_products?

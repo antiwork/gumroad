@@ -129,4 +129,30 @@ describe Product::ComputeCallAvailabilitiesService, :freeze_time do
 
     expect(service.perform).to contain_exactly({ start_time: 10.hours.from_now, end_time: 16.hours.from_now })
   end
+
+  it "excludes slots sold on the seller's other call product" do
+    other_product = create(:call_product, :available_for_a_year, user: seller)
+    create_call_availability(start_time: 10.hours.from_now, end_time: 16.hours.from_now)
+    create(:call, start_time: 12.hours.from_now, end_time: 13.hours.from_now, link: other_product)
+
+    expect(service.perform).to contain_exactly(
+      { start_time: 10.hours.from_now, end_time: 12.hours.from_now },
+      { start_time: 13.hours.from_now, end_time: 16.hours.from_now }
+    )
+  end
+
+  it "does not apply a sibling product's bookings to this product's daily maximum" do
+    call_limitation_info.update!(maximum_calls_per_day: 1, minimum_notice_in_minutes: 0)
+    other_product = create(:call_product, :available_for_a_year, user: seller)
+    create_call_availability(start_time: 10.hours.from_now, end_time: 16.hours.from_now)
+    sibling = create(:call, start_time: 8.hours.from_now, end_time: 9.hours.from_now, link: other_product)
+
+    expect(Call.occupies_availability.where(id: sibling.id)).to exist
+    expect(seller.sold_calls.occupies_availability).to contain_exactly(sibling)
+    expect(call_product.sold_calls.occupies_availability).to be_empty
+
+    expect(service.perform).to contain_exactly(
+      { start_time: 10.hours.from_now, end_time: 16.hours.from_now }
+    )
+  end
 end

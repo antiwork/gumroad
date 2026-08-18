@@ -15,6 +15,89 @@ set -e
 : "${PROD_CONTAINER_FILTER:=puma-*}"
 : "${PROD_DB_HOST_VAR:=DATABASE_WORKER_REPLICA1_HOST}"
 : "${PROD_AWS_PROFILE:=gumroad-prod}"
+: "${PROD_SSH_CONTROL_PATH:=$HOME/.ssh/cm-gr-%C}"
+# Key the cache file by discovery scope. A cached IP only means something for
+# the bastion/security-group/container combination that selected it; a shared
+# file would let a config change reuse a host outside the new scope (the
+# docker probe alone cannot catch that when the bastion stays the same).
+cache_scope=$(printf '%s' "$PROD_BASTION|$PROD_SECURITY_GROUP|$PROD_CONTAINER_FILTER" | cksum | cut -d' ' -f1)
+: "${PROD_IP_CACHE:=$HOME/.cache/gumroad-prod-console/last_ip.$cache_scope}"
+: "${PROD_IP_CACHE_TTL:=600}"
+
+# Extra ssh flags. Must stay flags on the `ssh` binary — `timeout` cannot
+# execute a shell function (it would 127 every probe).
+#
+# The ControlPath keeps ssh's %C token (hash of local host, remote host, port,
+# user): mux reuse keys on the socket path alone, so a fixed name would let a
+# changed PROD_BASTION silently reuse the master to the old bastion.
+#
+# ServerAlive* bounds a dead master: without it, a network change or laptop
+# sleep leaves a half-dead socket that every later ssh attaches to and hangs
+# on (kernel TCP keepalive takes ~2h). With it, the master kills itself in
+# ~30s and ControlMaster=auto builds a fresh one.
+SSH_MUX_OPTS=(
+  -o ControlMaster=auto
+  -o "ControlPath=$PROD_SSH_CONTROL_PATH"
+  -o ControlPersist=8h
+  -o ServerAliveInterval=15
+  -o ServerAliveCountMax=2
+)
+
+if command -v timeout >/dev/null 2>&1; then
+  probe_timeout() { timeout "$@"; }
+elif command -v gtimeout >/dev/null 2>&1; then
+  probe_timeout() { gtimeout "$@"; }
+else
+  probe_timeout() {
+    local dur=$1; shift
+    "$@" & local pid=$!
+    ( sleep "$dur"; kill -TERM "$pid" 2>/dev/null ) & local watcher=$!
+    disown "$watcher" 2>/dev/null
+    wait "$pid" 2>/dev/null; local rc=$?
+    kill -TERM "$watcher" 2>/dev/null
+    return $rc
+  }
+fi
+
+# BSD stat wants -f %m, GNU stat wants -c %Y. Chaining them with || is not
+# enough: GNU's -f is filesystem mode, which still prints for an existing file
+# and would pollute the captured value with a multi-line block. Probe the GNU
+# form silently first, then run whichever form this system supports.
+file_mtime() {
+  if stat -c %Y "$1" >/dev/null 2>&1; then
+    stat -c %Y "$1"
+  else
+    stat -f %m "$1"
+  fi
+}
+
+# Last-good private IP. Skip EC2 discovery when that host still answers.
+try_cached_instance() {
+  [ -f "$PROD_IP_CACHE" ] || return 1
+  local age ip remaining
+  age=$(( $(date +%s) - $(file_mtime "$PROD_IP_CACHE") ))
+  [ "$age" -ge "$PROD_IP_CACHE_TTL" ] && return 1
+  ip=$(tr -d '[:space:]' < "$PROD_IP_CACHE")
+  case "$ip" in
+    [0-9]*.[0-9]*.[0-9]*.[0-9]*) ;;
+    *) return 1 ;;
+  esac
+  remaining=8
+  if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" -o ConnectTimeout=5 \
+      "admin@$PROD_BASTION" \
+      'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
+      >/dev/null 2>&1; then
+    instance_ip="$ip"
+    >&2 echo "Using cached instance $instance_ip (${age}s old)"
+    return 0
+  fi
+  return 1
+}
+
+write_instance_cache() {
+  mkdir -p "$(dirname "$PROD_IP_CACHE")"
+  printf '%s\n' "$1" > "$PROD_IP_CACHE"
+}
 
 # Non-interactive shells (e.g. Claude Code's Bash tool) don't source .zshrc,
 # so an AWS_PROFILE export there won't reach this script. Fall back to the
@@ -39,21 +122,25 @@ else
   exit 1
 fi
 
-# Preflight: AWS credentials for EC2 lookup.
-if ! aws sts get-caller-identity >/dev/null 2>&1; then
-  echo "Error: AWS credentials not configured." >&2
-  echo "Run 'aws configure', set AWS_PROFILE, or export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY." >&2
-  echo "You also need SSH access to $PROD_BASTION." >&2
-  exit 1
-fi
-
-# Pick a healthy instance in the production security group.
-# Honor an explicit override first (set PROD_INSTANCE_IP to pin a host, e.g.
-# when you already know a specific instance is healthy or sick).
+# Preflight only when we still need EC2 discovery. A warm cache or an explicit
+# pin can hop without AWS.
+need_discovery=1
 if [ -n "${PROD_INSTANCE_IP:-}" ]; then
   instance_ip="$PROD_INSTANCE_IP"
+  need_discovery=
   >&2 echo "Using PROD_INSTANCE_IP override: $instance_ip"
-else
+elif try_cached_instance; then
+  need_discovery=
+fi
+
+if [ -n "$need_discovery" ]; then
+  if ! aws sts get-caller-identity >/dev/null 2>&1; then
+    echo "Error: AWS credentials not configured." >&2
+    echo "Run 'aws configure', set AWS_PROFILE, or export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY." >&2
+    echo "You also need SSH access to $PROD_BASTION." >&2
+    exit 1
+  fi
+
   # List all running instances, oldest first (oldest is warmest, but any works).
   # Only running instances: stopped or terminating ones have no private IP
   # (the CLI prints "None"), and probing those would waste 20 seconds each.
@@ -66,30 +153,6 @@ else
   if [ -z "$candidate_ips" ]; then
     echo "Error: No running instance found in security group $PROD_SECURITY_GROUP" >&2
     exit 1
-  fi
-
-  # Bound each probe so a hung docker exec can't stall the whole run. GNU
-  # coreutils `timeout` does this on Linux, but macOS — where many of us run
-  # this from a laptop — ships no `timeout` (and often no `gtimeout` either).
-  # A missing binary would exit 127 and be misread as "instance unhealthy",
-  # failing every candidate and killing the console entirely. So resolve a real
-  # timeout binary if present, else fall back to a small pure-bash timer.
-  if command -v timeout >/dev/null 2>&1; then
-    probe_timeout() { timeout "$@"; }
-  elif command -v gtimeout >/dev/null 2>&1; then
-    probe_timeout() { gtimeout "$@"; }
-  else
-    probe_timeout() {
-      local dur=$1; shift
-      "$@" & local pid=$!
-      ( sleep "$dur"; kill -TERM "$pid" 2>/dev/null ) & local watcher=$!
-      # Drop the watcher from the job table so killing it below doesn't print a
-      # "Terminated" notice on every successful probe.
-      disown "$watcher" 2>/dev/null
-      wait "$pid" 2>/dev/null; local rc=$?
-      kill -TERM "$watcher" 2>/dev/null
-      return $rc
-    }
   fi
 
   # Probe each candidate with a cheap 20s check and take the first one that
@@ -122,7 +185,7 @@ else
       break
     fi
     [ "$remaining" -gt 20 ] && remaining=20 || true
-    if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
+    if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" \
         -o ConnectTimeout=10 "admin@$PROD_BASTION" \
         'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
         >/dev/null 2>"$probe_err"; then
@@ -186,7 +249,7 @@ else
         [ "$remaining" -gt 60 ] && remaining=60 || true
         connect_timeout=$(( remaining / 3 ))
         [ "$connect_timeout" -lt 5 ] && connect_timeout=5 || true
-        if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
+        if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" \
             -o ConnectTimeout="$connect_timeout" "admin@$PROD_BASTION" \
             'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
             >/dev/null 2>&1; then
@@ -229,8 +292,8 @@ else
     [ "$remaining" -gt 20 ] && remaining=20 || true
     if [ "$remaining" -lt 5 ]; then
       >&2 echo "Skipped clearing outdated bastion host keys for:$stale_key_ips (out of selection budget)."
-    elif LC_PAPER="$instance_ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER \
-        -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "admin@$PROD_BASTION" \
+    elif LC_PAPER="$instance_ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" \
+        -o ConnectTimeout=10 "admin@$PROD_BASTION" \
         "$keygen_cmd" >/dev/null 2>&1; then
       >&2 echo "Cleared outdated bastion host keys for:$stale_key_ips"
     else
@@ -253,5 +316,242 @@ fi
 
 encoded=$(printf '%s\n' "$ruby_code" | base64 | tr -d '\n')
 
-LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "admin@$PROD_BASTION" \
-  'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running") bash -c "echo '"$encoded"' | base64 --decode | DATABASE_HOST=\$'"$PROD_DB_HOST_VAR"' bundle exec rails runner -"'
+record_success() {
+  # Remember last-good only after the query succeeded, and only for
+  # auto-selected hosts. A PROD_INSTANCE_IP pin is per-invocation — caching it
+  # would stick later unpinned calls on that box. The cache is an
+  # optimization: a failed write must not turn the successful query into a
+  # nonzero exit.
+  if [ -z "${PROD_INSTANCE_IP:-}" ]; then
+    write_instance_cache "$instance_ip" \
+      || >&2 echo "Warning: could not write $PROD_IP_CACHE (continuing)."
+  fi
+}
+
+record_failure() {
+  # Drop the cache on any failed run. The docker-true probe cannot tell a
+  # host that fails Rails boot/DB from a healthy one that ran a bad query, so
+  # keeping the entry would re-select a broken host on every call until the
+  # TTL expires. Worst case of dropping is one extra discovery after a typo.
+  if [ -z "${PROD_INSTANCE_IP:-}" ]; then
+    rm -f "$PROD_IP_CACHE"
+  fi
+}
+
+# Warm path: a persistent `rails runner` loop on the host serves spooled
+# queries so only the FIRST call after a host recycle pays Rails boot.
+# Replica-only: a non-default DB host var (i.e. a primary write session) must
+# never ride a loop that was booted pointing at the replica, so it always
+# takes the one-shot path below. PROD_NO_RUNNER_LOOP=1 opts out entirely.
+script_dir=$(cd "$(dirname "$0")" && pwd)
+runner_loop_ok=1
+[ -n "${PROD_NO_RUNNER_LOOP:-}" ] && runner_loop_ok=
+[ "$PROD_DB_HOST_VAR" != "DATABASE_WORKER_REPLICA1_HOST" ] && runner_loop_ok=
+[ -f "$script_dir/prod_runner_loop.rb" ] || runner_loop_ok=
+
+if [ -n "$runner_loop_ok" ]; then
+  loop_b64=$(base64 < "$script_dir/prod_runner_loop.rb" | tr -d '\n')
+  # Runs INSIDE the puma container. Quoted heredoc, placeholders substituted
+  # below — remote $vars here must not expand on this machine.
+  remote_script=$(cat <<'REMOTE'
+set -u
+BASE=/tmp/gumclaw-runner
+
+# The loop evals whatever lands in in/ with THIS shell's privileges, and /tmp
+# is world-writable inside the container. Refuse a spool tree someone else
+# pre-created (symlink or foreign owner) — otherwise a lower-privileged
+# process could plant loop.rb or job files for a higher-privileged loop.
+# The -L re-check after mkdir catches a symlink swapped in between the two.
+mkdir -p "$BASE"
+if [ -L "$BASE" ] || [ ! -d "$BASE" ] || [ "$(stat -c %u "$BASE")" != "$(id -u)" ]; then
+  echo "GUMCLAW_LOOP_FALLBACK_OK: spool dir $BASE is a symlink or owned by someone else" >&2
+  exit 97
+fi
+chmod 700 "$BASE"
+mkdir -p "$BASE/in" "$BASE/out"
+
+# flock is required for the single-booter lock below; without it the loop
+# path cannot boot safely, and the one-shot path costs only the Rails boot.
+if ! command -v flock >/dev/null 2>&1; then
+  echo "GUMCLAW_LOOP_FALLBACK_OK: flock unavailable in container" >&2
+  exit 97
+fi
+
+job_id=$(date +%s)-$$-$RANDOM
+new_sum=$(echo "__LOOP_B64__" | base64 --decode | md5sum | awk '{print $1}')
+
+# PID-reuse guard: loop.pid can outlive its process (SIGKILL, crash), and a
+# recycled PID can belong to anything — this shell can run as root, so a
+# blind kill could hit a puma worker. Only treat a PID as ours when its
+# cmdline still names our loop script.
+pid_is_loop() {
+  [ -n "$1" ] && grep -qaF "$BASE/loop.rb" "/proc/$1/cmdline" 2>/dev/null
+}
+loop_pid_alive() {
+  local pid
+  pid=$(cat "$BASE/loop.pid" 2>/dev/null) || return 1
+  pid_is_loop "$pid"
+}
+
+loop_alive=
+live_pid=$(cat "$BASE/loop.pid" 2>/dev/null || echo "")
+if pid_is_loop "$live_pid"; then
+  loop_alive=1
+  # A live loop running stale code stays stale until the host recycles —
+  # replace it so client and loop can never disagree on the job contract.
+  old_sum=$(md5sum "$BASE/loop.rb" 2>/dev/null | awk '{print $1}')
+  if [ "$old_sum" != "$new_sum" ]; then
+    # Only the loop parent publishes results, so killing it mid-job strands
+    # that caller at rc 96. A recent .taken with no rc yet means a job may be
+    # executing: serve THIS query one-shot and let a later idle call do the
+    # replacement. (A job taken between this check and the kill below
+    # degrades to the existing accepted rc-96 path, nothing worse.)
+    if [ -n "$(find "$BASE/out" -name '*.taken' -mmin -7 2>/dev/null | head -n1)" ]; then
+      echo "GUMCLAW_LOOP_FALLBACK_OK: stale loop is busy; deferring replacement" >&2
+      exit 97
+    fi
+    # Signal only the PID we validated above, and wait for it to exit before
+    # spooling: a still-running old loop uses the OLD job contract and could
+    # claim the job this run is about to spool.
+    kill "$live_pid" 2>/dev/null
+    tries=0
+    while pid_is_loop "$live_pid" && [ "$tries" -lt 50 ]; do
+      sleep 0.2
+      tries=$(( tries + 1 ))
+    done
+    if pid_is_loop "$live_pid"; then
+      echo "GUMCLAW_LOOP_FALLBACK_OK: stale loop did not exit; deferring replacement" >&2
+      exit 97
+    fi
+    rm -f "$BASE/loop.pid" "$BASE/starting"
+    loop_alive=
+  fi
+fi
+if [ -z "$loop_alive" ]; then
+  # One booter at a time: concurrent cold callers would each boot a loop and
+  # all but one exit after wasting a full Rails boot. flock serializes the
+  # whole decide-and-boot step and cannot go stale (the kernel releases it
+  # when the holder exits), so the age check on `starting` — which outlives a
+  # successful boot on purpose, for the client's dead-loop grace below — runs
+  # with no takeover race. Boot rc 2 = the loop script could not be written.
+  (
+    flock -n 9 || exit 0
+    now=$(date +%s)
+    if [ -f "$BASE/starting" ] && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -lt 180 ]; then
+      exit 0
+    fi
+    echo "$now" > "$BASE/starting"
+    # Lock holder writes loop.rb — losers must not overwrite it mid-boot with
+    # their own version. A failed write (e.g. ENOSPC) would boot a truncated
+    # script: release the claim and tell the client a one-shot re-run is safe.
+    if ! echo "__LOOP_B64__" | base64 --decode > "$BASE/loop.rb"; then
+      rm -f "$BASE/loop.rb" "$BASE/starting"
+      exit 2
+    fi
+    # No cd: bundle needs the app's Gemfile, i.e. the container WORKDIR the
+    # one-shot path already relies on.
+    ( DATABASE_HOST="$__DB_HOST_VAR__" nohup bundle exec rails runner "$BASE/loop.rb" > "$BASE/loop.log" 2>&1 & )
+  ) 9>"$BASE/boot.lock"
+  if [ "$?" -eq 2 ]; then
+    echo "GUMCLAW_LOOP_FALLBACK_OK: could not write the loop script" >&2
+    exit 97
+  fi
+fi
+# A partial spool write (e.g. ENOSPC) must never be published — the loop
+# would eval truncated Ruby as if it were the query. The job is provably
+# unclaimed here, so a one-shot re-run is safe.
+if ! echo "__QUERY_B64__" | base64 --decode > "$BASE/in/$job_id.rb.tmp"; then
+  rm -f "$BASE/in/$job_id.rb.tmp"
+  echo "GUMCLAW_LOOP_FALLBACK_OK: could not spool the job" >&2
+  exit 97
+fi
+mv "$BASE/in/$job_id.rb.tmp" "$BASE/in/$job_id.rb"
+# Two-phase deadline keyed on the loop's .taken marker. QUEUE time (loop boot
+# ~15s + earlier jobs, each capped at 300s) must not eat the EXECUTION budget,
+# or a query behind a slow neighbour gets re-run one-shot while still running.
+spool_time=$(date +%s)
+queue_deadline=$(( spool_time + 420 ))
+exec_deadline=
+while [ ! -f "$BASE/out/$job_id.rc" ]; do
+  now=$(date +%s)
+  if [ -z "$exec_deadline" ] && [ -f "$BASE/out/$job_id.taken" ]; then
+    exec_deadline=$(( now + 360 ))
+  fi
+  if [ -n "$exec_deadline" ]; then
+    if [ "$now" -ge "$exec_deadline" ]; then
+      # Taken but no result: the query may still be executing. Never re-run.
+      echo "gumclaw runner loop took the query but produced no result; NOT re-running. See $BASE/loop.log on the host" >&2
+      rm -f "$BASE/out/$job_id.taken"
+      exit 96
+    fi
+  else
+    dead_loop=
+    # The 10s grace covers the flock winner's window between taking the boot
+    # lock and writing `starting`: a missing file reads as age-infinite and
+    # would otherwise trip this check on the very first poll.
+    if ! loop_pid_alive \
+       && [ $(( now - spool_time )) -ge 10 ] \
+       && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -ge 180 ]; then
+      dead_loop=1
+    fi
+    if [ "$now" -ge "$queue_deadline" ] || [ -n "$dead_loop" ]; then
+      # Job still spooled, never picked up — remove it and tell the client a
+      # one-shot re-run is safe. The sentinel goes on stderr because exit
+      # codes cannot be trusted here: the query's own rc passes through this
+      # script verbatim, so ANY reserved number could collide with it.
+      rm -f "$BASE/in/$job_id.rb"
+      echo "GUMCLAW_LOOP_FALLBACK_OK: query was never picked up" >&2
+      exit 97
+    fi
+  fi
+  sleep 0.2
+done
+cat "$BASE/out/$job_id.out" 2>/dev/null
+cat "$BASE/out/$job_id.err" >&2 2>/dev/null
+rc=$(cat "$BASE/out/$job_id.rc")
+rm -f "$BASE/out/$job_id.out" "$BASE/out/$job_id.err" "$BASE/out/$job_id.rc" "$BASE/out/$job_id.taken"
+exit "$rc"
+REMOTE
+)
+  remote_script=${remote_script//__LOOP_B64__/$loop_b64}
+  remote_script=${remote_script//__QUERY_B64__/$encoded}
+  remote_script=${remote_script//__DB_HOST_VAR__/$PROD_DB_HOST_VAR}
+  remote_b64=$(printf '%s\n' "$remote_script" | base64 | tr -d '\n')
+
+  loop_err=$(mktemp)
+  set +e
+  LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" "admin@$PROD_BASTION" \
+    'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) bash -c "echo '"$remote_b64"' | base64 --decode | bash"' \
+    2>"$loop_err"
+  loop_rc=$?
+  set -e
+  cat "$loop_err" >&2
+  fallback_ok=
+  grep -q "GUMCLAW_LOOP_FALLBACK_OK" "$loop_err" && fallback_ok=1
+  rm -f "$loop_err"
+  if [ "$loop_rc" -eq 0 ]; then
+    record_success
+    exit 0
+  fi
+  if [ -z "$fallback_ok" ]; then
+    # Anything else — the query ran and failed, or it may still be executing
+    # (rc 96), or the transport dropped mid-flight (rc 255, spool state
+    # unknown). Do not re-run: even read-only code should not silently
+    # execute twice.
+    record_failure
+    exit "$loop_rc"
+  fi
+  >&2 echo "Runner loop never took the query; falling back to one-shot rails runner."
+fi
+
+query_rc=0
+LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" "admin@$PROD_BASTION" \
+  'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running") bash -c "echo '"$encoded"' | base64 --decode | DATABASE_HOST=\$'"$PROD_DB_HOST_VAR"' bundle exec rails runner -"' \
+  || query_rc=$?
+
+if [ "$query_rc" -ne 0 ]; then
+  record_failure
+  exit "$query_rc"
+fi
+
+record_success

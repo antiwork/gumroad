@@ -39,6 +39,8 @@ class HandleEmailEventInfo::ForInstallmentEmail
     end
 
     def handle_open_event!
+      EmailEngagementDynamoStore.record_open(**dynamo_engagement_attributes)
+
       open_event = CreatorEmailOpenEvent.where(
         mailer_method: email_event_info.mailer_class_and_method,
         mailer_args: email_event_info.mailer_args,
@@ -65,6 +67,8 @@ class HandleEmailEventInfo::ForInstallmentEmail
 
     def handle_click_event!
       return if email_event_info.click_url_as_mongo_key.blank?
+
+      EmailEngagementDynamoStore.record_click(**dynamo_engagement_attributes, click_url: email_event_info.click_url_as_mongo_key)
 
       summary = CreatorEmailClickSummary.where(installment_id: email_event_info.installment_id).last
       if summary.present?
@@ -174,6 +178,14 @@ class HandleEmailEventInfo::ForInstallmentEmail
       # Clear cache and precompute the result
       installment.invalidate_cache(key)
       installment.send(key)
+    end
+
+    def dynamo_engagement_attributes
+      {
+        installment_id: email_event_info.installment_id,
+        mailer_method: email_event_info.mailer_class_and_method,
+        mailer_args: email_event_info.mailer_args,
+      }
     end
 
     def creator_email_open_event_exists?(email_event_info)

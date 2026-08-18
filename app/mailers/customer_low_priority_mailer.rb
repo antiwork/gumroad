@@ -9,6 +9,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
   after_action :deliver_subscription_email, only: %i[subscription_autocancelled subscription_cancelled subscription_cancelled_by_seller
                                                      subscription_card_declined subscription_card_declined_warning
+                                                     subscription_indian_card_mandate_invalid
                                                      subscription_charge_failed subscription_product_deleted subscription_renewal_reminder
                                                      subscription_charge_blocked_location
                                                      subscription_price_change_notification subscription_ended free_trial_expiring_soon
@@ -108,6 +109,11 @@ class CustomerLowPriorityMailer < ApplicationMailer
     @declined = true
     @payment_method_is_upi = @subscription.credit_card_to_charge&.recurring_upi?
     @subject = @payment_method_is_upi ? "Your payment method needs attention." : "Your card was declined."
+  end
+
+  def subscription_indian_card_mandate_invalid(subscription_id)
+    @subscription = Subscription.find(subscription_id)
+    @subject = "Update your payment method to keep automatic renewals active."
   end
 
   def subscription_charge_failed(subscription_id)

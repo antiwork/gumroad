@@ -6,6 +6,7 @@ import typia from "typia";
 
 import { RecurringProductType } from "$app/data/products";
 import { ProductNativeType, ProductServiceType } from "$app/parsers/product";
+import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, currencyCodeList, findCurrencyByCode } from "$app/utils/currency";
 import {
   RecurrenceId,
@@ -79,6 +80,7 @@ type NewProductPageProps = {
   eligible_for_service_products: boolean;
   ai_generation_enabled: boolean;
   ai_promo_dismissed: boolean;
+  is_mobile_app_web_view?: boolean;
 };
 
 const NewProductPage = () => {
@@ -91,7 +93,14 @@ const NewProductPage = () => {
     eligible_for_service_products,
     ai_generation_enabled,
     ai_promo_dismissed,
+    is_mobile_app_web_view,
   } = typia.assert<NewProductPageProps>(usePage().props);
+
+  const isMobileAppWebView =
+    Boolean(is_mobile_app_web_view) ||
+    (typeof window !== "undefined" &&
+      (Boolean(window.ReactNativeWebView) ||
+        new URLSearchParams(window.location.search).get("display") === "mobile_app"));
 
   const formUID = React.useId();
 
@@ -267,11 +276,13 @@ const NewProductPage = () => {
         title={show_orientation_text ? "Publish your first product" : "What are you creating?"}
         actions={
           <>
-            <Button asChild>
-              <Link href={Routes.products_path()}>
-                <span>Cancel</span>
-              </Link>
-            </Button>
+            {isMobileAppWebView ? null : (
+              <Button asChild>
+                <Link href={Routes.products_path()}>
+                  <span>Cancel</span>
+                </Link>
+              </Button>
+            )}
             {ai_generation_enabled ? (
               <Popover open={aiPopoverOpen} onOpenChange={setAiPopoverOpen}>
                 <PopoverAnchor>
@@ -371,6 +382,7 @@ const NewProductPage = () => {
                   onChange={(e) => form.setData("link.name", e.target.value)}
                   aria-invalid={!!errors["link.name"]}
                   ref={nameInputRef}
+                  className="border-foreground/40"
                 />
                 <Errors errors={errors["link.name"]} label="Name" />
               </Fieldset>
@@ -550,9 +562,14 @@ const ProductTypeSelector = ({
     {types.map((type) => {
       const isSelected = type === selectedType;
       const typeButton = (
-        <Tab key={type} isSelected={isSelected} asChild>
+        <Tab
+          key={type}
+          isSelected={isSelected}
+          asChild
+          className="not-active:hover:translate-0 not-active:hover:shadow-none"
+        >
           <Button
-            className="flex-col"
+            className={classNames("flex-col hover:translate-0 hover:shadow-none", isSelected && "shadow-none")}
             role="radio"
             aria-checked={isSelected}
             data-type={type}

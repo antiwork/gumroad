@@ -39,4 +39,9 @@ describe("discoverTitleGenerator", () => {
     const title = discoverTitleGenerator({ taxonomy: "design" }, taxonomies, "", undefined);
     expect(title).toBe("Design — digital products by independent creators | Gumroad");
   });
+
+  test("uses the Discover landing title on the unfiltered index", () => {
+    const title = discoverTitleGenerator({}, taxonomies, "", undefined);
+    expect(title).toBe("Discover digital products from independent creators | Gumroad");
+  });
 });

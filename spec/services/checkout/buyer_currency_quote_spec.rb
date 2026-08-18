@@ -319,6 +319,25 @@ describe Checkout::BuyerCurrencyQuote do
       end
     end
 
+    it "withholds an unsupported platform mandate currency before creating an FX quote" do
+      membership = create(:subscription_product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::AUD)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(
+        line_items: line_items_for(membership),
+        canonical_total_cents: 10_00,
+        ip: "24.48.0.1"
+      )
+
+      expect(result).to be_nil
+    ensure
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    end
+
     it "returns nil instead of reporting an error when a line item carries no product" do
       orphan_line = described_class::LineItem.new(
         permalink: "gone", product: nil,
