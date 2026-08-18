@@ -523,6 +523,7 @@ Rails.application.routes.draw do
     get "/features", to: "home#features"
     get "/features.md", to: "home#features_md"
     get "/pricing", to: "home#pricing"
+    get "/high-volume-discounts", to: "home#high_volume_discounts"
     get "/terms", to: "home#terms"
     get "/prohibited", to: "home#prohibited"
     get "/privacy", to: "home#privacy"

@@ -1,0 +1,127 @@
+<%= render "home/shared/header",
+  bg_color: "green",
+  subtitle: "High-volume discounts",
+  title: "5% after $20,000 in a calendar month",
+  description: "Direct sales start at 10% + 50¢. Once you hit $20,000 in paid sales this month, new direct sales are 5% + 50¢. No application." do %>
+<% end %>
+
+<div class="flex flex-col border-b border-black dark:border-white/35 overflow-hidden lg:flex-row">
+  <div class="bg-purple dark:text-black flex items-center justify-center text-center lg:w-1/2 px-4 py-16 md:p-24 xl:p-32 border-b lg:border-b-0 lg:border-r">
+    <div class="max-w-xl space-y-8">
+      <h3 class="font-medium text-5xl lg:text-6xl">
+        10% + $0.50
+      </h3>
+      <p class="text-xl lg:text-2xl">
+        The standard fee on every direct sale through your profile or product links, until you reach $20,000 this calendar month.
+      </p>
+    </div>
+  </div>
+  <div class="bg-green dark:text-black flex items-center justify-center text-center lg:w-1/2 px-4 py-16 md:p-16 xl:p-32">
+    <div class="max-w-xl space-y-8">
+      <h3 class="font-medium text-5xl lg:text-6xl">
+        5% + $0.50
+      </h3>
+      <p class="text-xl lg:text-2xl">
+        Automatic on new direct sales after $20,000 in paid sales this calendar month. Resets on the 1st.
+      </p>
+    </div>
+  </div>
+</div>
+
+<%= render "home/shared/section_header",
+  subtitle: "How it works",
+  title: "No form. No ticket. It just applies.",
+  description: "We look at your paid sales so far this calendar month. Cross $20,000 and the next direct sale is 5% + 50¢. Drop back under $20,000 (a refund can do that) and new sales go back to 10% + 50¢." %>
+
+<div class="border-b border-black dark:border-white/35"></div>
+
+<div class="flex flex-col border-b border-black dark:border-white/35 overflow-hidden lg:flex-row">
+  <div class="bg-black text-white py-16 px-8 flex items-center justify-center sm:p-12 md:p-16 lg:w-1/2 xl:p-24 lg:border-r">
+    <div class="max-w-2xl space-y-8">
+      <h3 class="font-medium text-3xl lg:text-4xl xl:text-5xl text-green">
+        The process
+      </h3>
+      <ol class="grid grid-cols-1 gap-4 pl-0 text-lg list-none">
+        <li class="flex items-start gap-4">
+          <span>1.</span>
+          <span>You sell as usual at 10% + 50¢ on direct sales.</span>
+        </li>
+        <li class="flex items-start gap-4">
+          <span>2.</span>
+          <span>When paid sales this calendar month reach $20,000, new direct sales that month are 5% + 50¢.</span>
+        </li>
+        <li class="flex items-start gap-4">
+          <span>3.</span>
+          <span>On the 1st of the next month it starts over at 10% + 50¢ until you hit $20,000 again.</span>
+        </li>
+      </ol>
+    </div>
+  </div>
+  <div class="bg-pink dark:text-black py-16 px-8 flex items-center justify-center sm:p-12 md:p-16 lg:w-1/2 xl:p-24">
+    <div class="max-w-2xl space-y-8">
+      <h3 class="font-medium text-3xl lg:text-4xl xl:text-5xl">
+        What this does not change
+      </h3>
+      <ul class="grid grid-cols-1 gap-3 pl-0 text-lg">
+        <li class="flex items-start gap-4">
+          <span>→</span>
+          Discover marketplace sales stay 30%.
+        </li>
+        <li class="flex items-start gap-4">
+          <span>→</span>
+          The 50¢ per-sale fee stays.
+        </li>
+        <li class="flex items-start gap-4">
+          <span>→</span>
+          A custom fee we already set for you still wins.
+        </li>
+        <li class="flex items-start gap-4">
+          <span>→</span>
+          There is no monthly subscription.
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="mx-auto my-16 max-w-6xl px-8 md:my-24 md:px-28 md:text-center lg:my-32">
+  <h2 class="text-5xl font-medium md:text-6xl lg:text-7xl">
+    Frequently asked questions
+  </h2>
+</div>
+
+<div class="mx-auto mb-16 px-8 md:px-28">
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Do I need to apply?",
+      content: "No. There is no application and no support ticket. Once your paid sales this calendar month reach $20,000, new direct sales that month are charged 5% + 50¢."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Is this a trailing 30 days?",
+      content: "No. It is the current calendar month, and it resets on the 1st."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "What counts toward $20,000?",
+      content: "Paid sales this calendar month. A refund can bring you back under $20,000, and new sales go back to 10% + 50¢ until you cross it again that month."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "Does Discover get the 5% rate?",
+      content: "No. Sales that come through Gumroad Discover stay at 30%."
+    } %>
+  </div>
+  <div class="accordion-container">
+    <%= render partial: "home/shared/accordion_item", locals: {
+      title: "What is the standard fee?",
+      content: "Direct sales are 10% + 50¢. There is no monthly fee. See #{link_to 'all pricing', pricing_path}."
+    } %>
+  </div>
+</div>
+
+<%= render "home/shared/section_cta" %>
+<%= render "home/shared/footer" %>

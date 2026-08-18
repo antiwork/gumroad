@@ -33,6 +33,7 @@ describe "Marketing page edge caching", type: :request do
         "features" => "/features",
         "features_md" => "/features.md",
         "pricing" => "/pricing",
+        "high_volume_discounts" => "/high-volume-discounts",
         "terms" => "/terms",
         "privacy" => "/privacy",
         "prohibited" => "/prohibited",

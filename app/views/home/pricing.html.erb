@@ -34,6 +34,7 @@
     </h3>
     <p class="text-xl lg:text-2xl">
       Per transaction for all sales through your profile or direct links to your customers.
+      After $20,000 in a calendar month, new direct sales are <%= link_to "5% + $0.50", high_volume_discounts_path, class: "underline" %>.
     </p>
   </div>
 </div>
@@ -121,7 +122,7 @@
   <div class="accordion-container">
     <%= render partial: "home/shared/accordion_item", locals: {
       title: "What are the fees?",
-      content: "Unlike other platforms, Gumroad doesn't charge you a monthly fee. Instead, our fees are deducted as a small percentage of every sale, so we only make money when you do."
+      content: "Unlike other platforms, Gumroad doesn't charge you a monthly fee. Direct sales are 10% + 50¢. After $20,000 in paid sales in a calendar month, new direct sales are 5% + 50¢. Discover marketplace sales are 30%. #{link_to 'High-volume discounts', high_volume_discounts_path}."
     } %>
   </div>
   <div class="accordion-container">
