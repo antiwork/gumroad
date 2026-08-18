@@ -413,6 +413,17 @@ class Purchase < ApplicationRecord
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
 
+  after_commit :enqueue_high_volume_fee_eligibility_refresh, if: -> (purchase) {
+    purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
+  }
+
+  # Refunds and failed-refund reversals flip stripe_refunded without touching
+  # purchase_state. Refresh synchronously: async would let a sale land on the stale
+  # cached rate until the low queue drains. Cheap because refunds are rare.
+  after_commit :refresh_high_volume_fee_eligibility, if: -> (purchase) {
+    purchase.stripe_refunded_previously_changed?
+  }
+
   after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) {
     purchase.purchase_state_previously_changed? &&
       ORDER_OUTCOME_STATES.include?(purchase.purchase_state)
@@ -3670,6 +3681,32 @@ class Purchase < ApplicationRecord
     UpdateSalesRelatedProductsInfosJob.perform_async(id, increment)
   end
 
+  def enqueue_high_volume_fee_eligibility_refresh
+    return if seller_id.blank?
+
+    # A sale that crosses $20k must lower the very next sale's fee, so refresh
+    # synchronously while the seller is below the cached threshold. Already-eligible
+    # sellers can't change state on a sale; flag-off keeps the async pre-warm.
+    # Reload before branching: a concurrent refund can clear the cached eligibility
+    # this in-memory seller still shows, which would wrongly skip the sync refresh.
+    if seller && Feature.active?(:high_volume_seller_fee, seller) && !seller.reload.high_volume_fee_eligible?
+      refresh_high_volume_fee_eligibility
+    else
+      RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id)
+    end
+  end
+
+  def refresh_high_volume_fee_eligibility
+    return if seller.nil?
+
+    seller.refresh_high_volume_fee_eligibility!
+  rescue => e
+    # Never fail the refund or the sale over the fee cache; fall back to the async repair.
+    # Do not enqueue a blank seller_id — that is the job's nightly full-fleet sentinel.
+    Rails.logger.error("high_volume_fee sync refresh failed for seller #{seller_id}: #{e.message}")
+    RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id) if seller_id.present?
+  end
+
   def free_purchase?
     price_cents == 0 && shipping_cents == 0
   end
@@ -5213,7 +5250,12 @@ class Purchase < ApplicationRecord
     end
 
     def gumroad_flat_fee_per_thousand
-      seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge? ? 0 : GUMROAD_FLAT_FEE_PER_THOUSAND
+      return 0 if seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge?
+      # Discover keeps its full 30%: the 5% volume rate applies to direct sales only,
+      # so don't let it lower the base under the discover surcharge.
+      return User::HIGH_VOLUME_FEE_PER_THOUSAND if seller.high_volume_seller_fee? && !charge_discover_fee?
+
+      GUMROAD_FLAT_FEE_PER_THOUSAND
     end
 
     def calculate_taxes
