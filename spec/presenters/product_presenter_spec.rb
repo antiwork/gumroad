@@ -273,6 +273,21 @@ describe ProductPresenter do
 
       expect(props[:sections]).to eq([])
     end
+
+    it "omits the membership the buyer is already viewing" do
+      other = create(:product, user: seller, name: "Beautiful widget")
+      allow_any_instance_of(ProfileSectionsPresenter).to receive(:section_search_results).and_return(
+        { total: 2, filetypes_data: [], tags_data: [], products: [membership.id, other.id] }
+      )
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      cards = props[:sections].first[:search_results][:products]
+      expect(cards.map { _1[:name] }).to eq(["Beautiful widget"])
+      expect(cards.map { _1[:id] }).not_to include(membership.external_id)
+      expect(props[:sections].first[:search_results][:total]).to eq(1)
+      expect(props[:sections].first[:exclude_ids]).to eq([membership.external_id])
+    end
   end
 
   describe "layout-specific props methods" do

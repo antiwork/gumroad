@@ -97,7 +97,7 @@ class ProductPresenter
       # query when accepting its id for pagination.
       catalog_props = ProfileSectionsPresenter.new(seller: user, query: user.seller_profile_products_sections.on_profile)
                                               .props(request:, pundit_user:, seller_custom_domain_url:, editing: false, include_default_products_section: true)
-      props[:sections] = catalog_props[:sections]
+      props[:sections] = omit_current_product_from_catalog(catalog_props[:sections])
       props[:main_section_index] = 0
     end
     props
@@ -110,6 +110,22 @@ class ProductPresenter
     product.is_recurring_billing? &&
       rendered_sections.empty? &&
       pundit_user&.seller != user
+  end
+
+  # The fallback exists to surface the rest of the store. Leading with the membership
+  # the buyer is already on reads as a render bug (and wastes the first tile).
+  def omit_current_product_from_catalog(sections)
+    sections.each do |section|
+      results = section[:search_results]
+      next unless results.is_a?(Hash) && results[:products].is_a?(Array)
+
+      before = results[:products].size
+      results[:products] = results[:products].reject { |card| card[:id] == product.external_id }
+      dropped = before - results[:products].size
+      results[:total] -= dropped if results[:total].present? && dropped.positive?
+      section[:exclude_ids] = [product.external_id]
+    end
+    sections
   end
 
   def covers

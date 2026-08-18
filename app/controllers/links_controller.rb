@@ -266,6 +266,10 @@ class LinksController < ApplicationController
       search_params[:sort] = section&.default_product_sort if search_params[:sort].nil?
       search_params[:sort] = ProductSortKey::PAGE_LAYOUT if search_params[:sort] == "default" || search_params[:sort].nil?
       search_params[:ids]&.map! { ObfuscateIds.decrypt(_1) }
+      if search_params[:exclude_ids].present?
+        exclude_ids = Array(search_params[:exclude_ids]).filter_map { ObfuscateIds.decrypt(_1) }
+        search_params[:exclude_ids] = exclude_ids if exclude_ids.any?
+      end
     else
       search_params[:sort] = ProductSortKey::FEATURED if search_params[:sort] == "default"
       search_params[:include_rated_as_adult] = logged_in_user&.show_nsfw_products?
