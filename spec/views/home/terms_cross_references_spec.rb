@@ -110,7 +110,7 @@ describe "app/views/home/terms.html.erb cross-references" do
     # parsing, and if the lost one is the last of its section the contiguity example stays green too.
     counts = subsections.keys.group_by { |k| k.split(".").first.to_i }.transform_values(&:size)
     expect(counts.sort.to_h).to eq(
-      { 1 => 2, 3 => 4, 4 => 5, 6 => 9, 8 => 2, 10 => 8, 11 => 3, 12 => 2, 13 => 6, 16 => 2,
+      { 1 => 2, 3 => 4, 4 => 5, 6 => 9, 8 => 2, 10 => 8, 11 => 4, 12 => 2, 13 => 6, 16 => 2,
         17 => 3, 20 => 2, 21 => 4, 23 => 4, 25 => 12, 26 => 2, 27 => 14 }
     )
   end
@@ -133,7 +133,7 @@ describe "app/views/home/terms.html.erb cross-references" do
 
   it "points every subsection cite at a subsection that exists" do
     cited = cited_numbers('\d{1,2}\.\d{1,2}')
-    expect(cited.sort).to eq(["10.5", "11.3", "12.1", "25.1", "25.4", "25.5", "25.9", "3.4", "4.1", "6.1", "6.4"])
+    expect(cited.sort).to eq(["10.5", "11.3", "11.4", "12.1", "25.1", "25.4", "25.5", "25.9", "3.4", "4.1", "6.1", "6.4"])
 
     missing = cited - subsections.keys
     expect(missing).to be_empty, "cited but absent: #{missing.inspect}"
