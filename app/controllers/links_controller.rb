@@ -210,6 +210,12 @@ class LinksController < ApplicationController
         else
           if params[:embed] || params[:overlay]
             render inertia: "Products/Iframe/Show", props: presenter.iframe_product_props(**presenter_props)
+          elsif Feature.active?(:default_product_page_to_storefront, @product.user)
+            # Default product pages to the creator's storefront — the creator's profile header
+            # above and their other products below — instead of the standalone single-product
+            # page. Off by default (gp#2196); enabled per-actor so Sahil can measure lift and
+            # gate the rollout to new creators.
+            render inertia: "Products/Profile/Show", props: presenter.default_storefront_product_props(**presenter_props)
           else
             render inertia: "Products/Show", props: presenter.product_page_props(**presenter_props)
           end

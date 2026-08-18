@@ -75,6 +75,16 @@ class ProductPresenter
     )
   end
 
+  # The flag-gated default storefront page (gp#2196): the creator's header above, their other
+  # products below. Rendered through the PROFILE-layout page with the virtual default products
+  # section enabled, so a creator with no curated sections still shows their catalog. Off by
+  # default; enabled per-actor so the rollout to new creators can be measured.
+  def default_storefront_product_props(seller_custom_domain_url:, **kwargs)
+    product_page_props(seller_custom_domain_url:, include_default_products_section: true, **kwargs).merge(
+      creator_profile: ProfilePresenter.new(pundit_user:, seller: product.user).creator_profile
+    )
+  end
+
   def discover_product_props(discover_props:, **kwargs)
     product_page_props(**kwargs).merge(discover_props)
   end
@@ -83,12 +93,17 @@ class ProductPresenter
     product_props(**kwargs)
   end
 
-  def product_page_props(seller_custom_domain_url:, **kwargs)
-    sections_props = ProfileSectionsPresenter.new(seller: user, query: product.seller_profile_sections).props(request:, pundit_user:, seller_custom_domain_url:)
+  def product_page_props(seller_custom_domain_url:, include_default_products_section: false, **kwargs)
+    sections_props = ProfileSectionsPresenter.new(seller: user, query: product.seller_profile_sections).props(request:, pundit_user:, seller_custom_domain_url:, include_default_products_section:)
+    sections = product.sections.filter_map { |id| sections_props[:sections].find { |section| section[:id] === ObfuscateIds.encrypt(id) } }
+    if include_default_products_section && sections.none? { _1[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+      default_section = sections_props[:sections].find { _1[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+      sections.append(default_section) if default_section
+    end
     {
       **product_props(seller_custom_domain_url:, **kwargs),
       **sections_props,
-      sections: product.sections.filter_map { |id| sections_props[:sections].find { |section| section[:id] === ObfuscateIds.encrypt(id) } },
+      sections:,
       main_section_index: product.main_section_index || 0,
     }
   end
