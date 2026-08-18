@@ -316,6 +316,27 @@ describe ProductPresenter do
       expect(props[:sections].first[:exclude_ids]).to eq([membership.external_id])
     end
 
+    it "shrinks the total when the sold-out current product falls beyond the fetched page" do
+      other = create(:product, user: seller, name: "Beautiful widget")
+      allow(membership).to receive(:hide_sold_out_variants?).and_return(true)
+      allow(membership).to receive(:remaining_for_sale_count).and_return(0)
+      allow_any_instance_of(ProfileSectionsPresenter).to receive(:section_search_results).and_return(
+        { total: 3, filetypes_data: [], tags_data: [], products: [other.id] }
+      )
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      # ES counted the sold-out product (sold-out filtering happens in Ruby on the fetched
+      # page only), so the total must still shrink for it.
+      expect(props[:sections].first[:search_results][:total]).to eq(2)
+    end
+
+    it "labels the virtual catalog section" do
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].first[:header]).to eq("More from #{seller.name_or_username}")
+    end
+
     it "keeps the total when a saved section's search never counted the current product" do
       other = create(:product, user: seller, name: "Beautiful widget")
       # add_new_products: false so the lazily-created membership is not auto-appended to

@@ -95,9 +95,17 @@ class ProductPresenter
       # Product sections only: the virtual default-products section must be injected even when
       # the seller's profile has non-product sections, and LinksController#search mirrors this
       # query when accepting its id for pagination.
+      # `omit_product` drops the product the buyer is already viewing from the catalog —
+      # leading with it reads as a render bug (and wastes the first tile).
       catalog_props = ProfileSectionsPresenter.new(seller: user, query: user.seller_profile_products_sections.on_profile)
-                                              .props(request:, pundit_user:, seller_custom_domain_url:, editing: false, include_default_products_section: true)
-      props[:sections] = omit_current_product_from_catalog(catalog_props[:sections])
+                                              .props(request:, pundit_user:, seller_custom_domain_url:, editing: false, include_default_products_section: true, omit_product: product)
+      props[:sections] = catalog_props[:sections]
+      props[:sections].each do |section|
+        # The virtual catalog needs a label on product pages: with no heading it reads as
+        # stray cards below the product rather than the rest of the store. Saved sections
+        # keep the seller's own header choice, including a hidden one.
+        section[:header] = "More from #{user.name_or_username}" if section[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID
+      end
       props[:main_section_index] = 0
     end
     props
@@ -112,43 +120,6 @@ class ProductPresenter
       layout != Product::Layout::DISCOVER &&
       rendered_sections.empty? &&
       pundit_user&.seller != user
-  end
-
-  # The catalog exists to surface the rest of the store. Leading with the product
-  # the buyer is already on reads as a render bug (and wastes the first tile).
-  def omit_current_product_from_catalog(sections)
-    sections.each do |section|
-      results = section[:search_results]
-      next unless results.is_a?(Hash) && results[:products].is_a?(Array)
-
-      before = results[:products].size
-      results[:products] = results[:products].reject { |card| card[:id] == product.external_id }
-      dropped = before - results[:products].size
-      if results[:total].present?
-        if dropped.positive?
-          results[:total] -= dropped
-        elsif current_product_in_section_total?(section)
-          # The product sits beyond the fetched page: `exclude_ids` pagination will never
-          # return it, so the total must shrink here or the grid keeps requesting an empty
-          # final page.
-          results[:total] -= 1
-        end
-      end
-      section[:exclude_ids] = [product.external_id]
-    end
-    sections
-  end
-
-  # Mirrors the section's ES query (is_alive_on_profile + shown_products) and the sold-out
-  # filtering in ProfileSectionsPresenter#section_props, so we only shrink the total when the
-  # search actually counted the current product.
-  def current_product_in_section_total?(section)
-    return false unless product.alive? && !product.archived?
-    return false if product.hide_sold_out_variants? && product.remaining_for_sale_count == 0
-    return true if section[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID
-
-    saved_section = user.seller_profile_products_sections.find_by_external_id(section[:id])
-    saved_section.present? && saved_section.shown_products.include?(product.id)
   end
 
   def covers

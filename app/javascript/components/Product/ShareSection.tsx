@@ -182,8 +182,8 @@ export const ShareSection = ({
         <Popover>
           <PopoverAnchor>
             <PopoverTrigger aria-label="Share" asChild>
-              <Button size="icon">
-                <Share className="size-5" />
+              <Button>
+                <Share className="size-5" /> Share
               </Button>
             </PopoverTrigger>
           </PopoverAnchor>
