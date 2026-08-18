@@ -53,10 +53,10 @@ export function Calendar({ defaultMonth, ...props }: React.ComponentProps<typeof
         disabled: classNames("opacity-30", defaultClassNames.disabled),
       }}
       components={{
+        // Visible text, not icon-only: the aria-label alone doesn't help sighted keyboard users.
         Chevron: ({ className, orientation, disabled }) => (
           <div className={classNames({ "cursor-not-allowed text-muted": disabled }, className)}>
-            {/* Force the chevrons to be rendered as text rather than emoji images */}
-            {`${orientation === "left" ? "◀" : "▶"}\u{FE0E}`}
+            {orientation === "left" ? "Previous" : "Next"}
           </div>
         ),
       }}
