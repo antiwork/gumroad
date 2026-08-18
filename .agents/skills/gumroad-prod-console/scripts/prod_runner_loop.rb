@@ -21,9 +21,15 @@ FileUtils.mkdir_p(OUT_DIR)
 
 if File.exist?(PID_FILE)
   old = begin; Integer(File.read(PID_FILE).strip); rescue StandardError; 0; end
-  if old.positive? && (begin; Process.kill(0, old); true; rescue StandardError; false; end)
-    exit 0
+  # kill(0) alone is not identity: a recycled PID from a stale pid file would
+  # look alive and stop this loop from booting at all. Same check as the
+  # client's loop_pid_alive — the cmdline must still name our loop script.
+  old_is_loop = old.positive? && begin
+    File.read("/proc/#{old}/cmdline").include?(File.join(BASE, "loop.rb"))
+  rescue StandardError
+    false
   end
+  exit 0 if old_is_loop
 end
 File.write(PID_FILE, Process.pid.to_s)
 

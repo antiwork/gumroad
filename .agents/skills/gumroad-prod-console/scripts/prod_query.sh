@@ -359,13 +359,34 @@ BASE=/tmp/gumclaw-runner
 mkdir -p "$BASE/in" "$BASE/out"
 job_id=$(date +%s)-$$-$RANDOM
 new_sum=$(echo "__LOOP_B64__" | base64 --decode | md5sum | awk '{print $1}')
+
+# PID-reuse guard: loop.pid can outlive its process (SIGKILL, crash), and a
+# recycled PID can belong to anything — this shell runs as root, so a blind
+# kill could hit a puma worker. Only treat the PID as ours when its cmdline
+# still names our loop script.
+loop_pid_alive() {
+  local pid
+  pid=$(cat "$BASE/loop.pid" 2>/dev/null) || return 1
+  [ -n "$pid" ] || return 1
+  grep -qaF "$BASE/loop.rb" "/proc/$pid/cmdline" 2>/dev/null
+}
+
 loop_alive=
-if [ -f "$BASE/loop.pid" ] && kill -0 "$(cat "$BASE/loop.pid")" 2>/dev/null; then
+if loop_pid_alive; then
   loop_alive=1
   # A live loop running stale code stays stale until the host recycles —
   # replace it so client and loop can never disagree on the job contract.
   old_sum=$(md5sum "$BASE/loop.rb" 2>/dev/null | awk '{print $1}')
   if [ "$old_sum" != "$new_sum" ]; then
+    # Only the loop parent publishes results, so killing it mid-job strands
+    # that caller at rc 96. A recent .taken with no rc yet means a job may be
+    # executing: serve THIS query one-shot and let a later idle call do the
+    # replacement. (A job taken between this check and the kill below
+    # degrades to the existing accepted rc-96 path, nothing worse.)
+    if [ -n "$(find "$BASE/out" -name '*.taken' -mmin -7 2>/dev/null | head -n1)" ]; then
+      echo "GUMCLAW_LOOP_FALLBACK_OK: stale loop is busy; deferring replacement" >&2
+      exit 97
+    fi
     kill "$(cat "$BASE/loop.pid")" 2>/dev/null
     rm -f "$BASE/loop.pid" "$BASE/starting"
     loop_alive=
@@ -373,18 +394,36 @@ if [ -f "$BASE/loop.pid" ] && kill -0 "$(cat "$BASE/loop.pid")" 2>/dev/null; the
 fi
 if [ -z "$loop_alive" ]; then
   # One booter at a time: concurrent cold callers would each boot a loop and
-  # all but one exit after wasting a full Rails boot. Stale after 180s so a
-  # crashed booter cannot wedge the warm path forever.
+  # all but one exit after wasting a full Rails boot. noclobber makes the
+  # claim atomic — a bare check-then-write let simultaneous callers all pass
+  # the check. A lock older than 180s is a crashed booter; clear it so it
+  # cannot wedge the warm path forever.
   now=$(date +%s)
-  if ! { [ -f "$BASE/starting" ] && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -lt 180 ]; }; then
-    echo "$now" > "$BASE/starting"
-    echo "__LOOP_B64__" | base64 --decode > "$BASE/loop.rb"
+  if [ -f "$BASE/starting" ] && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -ge 180 ]; then
+    rm -f "$BASE/starting"
+  fi
+  if (set -o noclobber; echo "$now" > "$BASE/starting") 2>/dev/null; then
+    # Lock winner writes loop.rb — losers must not overwrite it mid-boot with
+    # their own version. A failed write (e.g. ENOSPC) would boot a truncated
+    # script: release the lock and tell the client a one-shot re-run is safe.
+    if ! echo "__LOOP_B64__" | base64 --decode > "$BASE/loop.rb"; then
+      rm -f "$BASE/loop.rb" "$BASE/starting"
+      echo "GUMCLAW_LOOP_FALLBACK_OK: could not write the loop script" >&2
+      exit 97
+    fi
     # No cd: bundle needs the app's Gemfile, i.e. the container WORKDIR the
     # one-shot path already relies on.
     ( DATABASE_HOST="$__DB_HOST_VAR__" nohup bundle exec rails runner "$BASE/loop.rb" > "$BASE/loop.log" 2>&1 & )
   fi
 fi
-echo "__QUERY_B64__" | base64 --decode > "$BASE/in/$job_id.rb.tmp"
+# A partial spool write (e.g. ENOSPC) must never be published — the loop
+# would eval truncated Ruby as if it were the query. The job is provably
+# unclaimed here, so a one-shot re-run is safe.
+if ! echo "__QUERY_B64__" | base64 --decode > "$BASE/in/$job_id.rb.tmp"; then
+  rm -f "$BASE/in/$job_id.rb.tmp"
+  echo "GUMCLAW_LOOP_FALLBACK_OK: could not spool the job" >&2
+  exit 97
+fi
 mv "$BASE/in/$job_id.rb.tmp" "$BASE/in/$job_id.rb"
 # Two-phase deadline keyed on the loop's .taken marker. QUEUE time (loop boot
 # ~15s + earlier jobs, each capped at 300s) must not eat the EXECUTION budget,
@@ -405,7 +444,7 @@ while [ ! -f "$BASE/out/$job_id.rc" ]; do
     fi
   else
     dead_loop=
-    if ! { [ -f "$BASE/loop.pid" ] && kill -0 "$(cat "$BASE/loop.pid" 2>/dev/null)" 2>/dev/null; } \
+    if ! loop_pid_alive \
        && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -ge 180 ]; then
       dead_loop=1
     fi
