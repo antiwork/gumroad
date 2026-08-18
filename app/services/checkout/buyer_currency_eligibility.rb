@@ -353,13 +353,9 @@ class Checkout::BuyerCurrencyEligibility
         return eligible(currency: buyer_currency, direct_listed_amount: true)
       end
 
-      unless listed_in_buyer_currency.all?
-        return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?(buyer_currency)
-
-        return eligible(currency: buyer_currency)
-      end
-
-      return fallback(:listed_currency_is_buyer_currency)
+      # All-listed but not listed-lane (flag off, tip, shipping, later-charge). Mixed
+      # listing falls through to the quote-lane gates below so it cannot skip them.
+      return fallback(:listed_currency_is_buyer_currency) if listed_in_buyer_currency.all?
     end
 
     # Checked here (not up top with the other account gates) because the settlement
