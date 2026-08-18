@@ -53,8 +53,8 @@ class RefundPolicy < ApplicationRecord
     [days, MINIMUM_DIGITAL_REFUND_PERIOD_IN_DAYS].max
   end
 
-  def title
-    ALLOWED_REFUND_PERIODS_IN_DAYS[effective_max_refund_period_in_days]
+  def title(for_physical: allows_no_refunds?)
+    ALLOWED_REFUND_PERIODS_IN_DAYS[effective_max_refund_period_in_days(for_physical:)]
   end
 
   def as_json(*)

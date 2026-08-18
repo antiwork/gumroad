@@ -25,4 +25,16 @@ describe RefundPolicy do
       expect(policy.effective_max_refund_period_in_days(for_physical: true)).to eq(0)
     end
   end
+
+  describe "#title" do
+    let(:policy) { SellerRefundPolicy.new(max_refund_period_in_days: 0) }
+
+    it "floors a 0-day account policy by default" do
+      expect(policy.title).to eq("7-day money back guarantee")
+    end
+
+    it "keeps the no-refunds title in a physical context" do
+      expect(policy.title(for_physical: true)).to eq("No refunds allowed")
+    end
+  end
 end

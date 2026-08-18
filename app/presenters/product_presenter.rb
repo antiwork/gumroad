@@ -325,7 +325,9 @@ class ProductPresenter
       google_client_id: GlobalConfig.get("GOOGLE_CLIENT_ID"),
       seller_refund_policy_enabled: product.user.account_level_refund_policy_enabled?,
       seller_refund_policy: {
-        title: product.user.refund_policy.title,
+        # Product context keeps the editor preview honest for physical products under
+        # a leftover 0-day account policy — the purchase snapshot keeps those at 0.
+        title: product.user.refund_policy.title(for_physical: product.is_physical?),
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),

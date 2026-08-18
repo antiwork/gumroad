@@ -566,6 +566,25 @@ describe ProductPresenter do
       end
     end
 
+    context "with a leftover 0-day account-level refund policy" do
+      before do
+        product.user.refund_policy.update_columns(max_refund_period_in_days: 0)
+      end
+
+      it "resolves the seller policy preview against the product's physicality" do
+        physical_product = create(:product, :is_physical, user: product.user)
+
+        expect(described_class.new(product: physical_product, request:).edit_props[:seller_refund_policy]).to eq(
+          title: "No refunds allowed",
+          fine_print: nil,
+        )
+        expect(presenter.edit_props[:seller_refund_policy]).to eq(
+          title: "7-day money back guarantee",
+          fine_print: nil,
+        )
+      end
+    end
+
     context "when the price_checker feature flag is enabled for the seller" do
       before { Flipper.enable(:price_checker, product.user) }
 

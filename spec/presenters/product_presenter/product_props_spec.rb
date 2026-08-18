@@ -424,6 +424,29 @@ describe ProductPresenter::ProductProps do
       end
     end
 
+    context "with a leftover 0-day account-level refund policy" do
+      before do
+        seller.update!(refund_policy_enabled: true)
+        seller.refund_policy.update_columns(max_refund_period_in_days: 0)
+      end
+
+      context "when the product is physical" do
+        let(:product) { create(:product, :is_physical, user: seller) }
+
+        it "keeps the no-refunds title the purchase will snapshot" do
+          expect(presenter.props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product][:refund_policy][:title]).to eq("No refunds allowed")
+        end
+      end
+
+      context "when the product is digital" do
+        let(:product) { create(:product, user: seller) }
+
+        it "floors the title to the 7-day guarantee" do
+          expect(presenter.props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product][:refund_policy][:title]).to eq("7-day money back guarantee")
+        end
+      end
+    end
+
     context "with default discount code" do
       let(:product) { create(:product, user: seller, price_cents: 1000) }
       let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 200) }

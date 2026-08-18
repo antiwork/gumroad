@@ -199,10 +199,10 @@ class Purchase::CreateService < Purchase::BaseService
 
   private
     def attach_purchase_refund_policy(policy)
-      days = policy.effective_max_refund_period_in_days(for_physical: @product.is_physical?)
+      for_physical = @product.is_physical?
       purchase.build_purchase_refund_policy(
-        max_refund_period_in_days: days,
-        title: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[days],
+        max_refund_period_in_days: policy.effective_max_refund_period_in_days(for_physical:),
+        title: policy.title(for_physical:),
         fine_print: policy.fine_print
       )
     end
