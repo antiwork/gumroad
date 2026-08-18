@@ -1,0 +1,22 @@
+Round-3 money-path review of antiwork/gumroad PR #7279 at adeb8630d0573a608fe922042f2112b2f6c863bf (branch gp2181-multi-item-direct-listed-cart). Base origin/main.
+
+This is NOT the first review. A panel at 28ef46e4115c226a9e0bbabf995b207bd1c92507 returned CHANGES-REQUIRED with three P1s. HEAD then added only adeb8630d0 "Trigger preview deploy for multi-item EUR stills" — production files under app/ lib/ config/ db/ are byte-identical to that reviewed tip. Grade each prior finding RESOLVED / STILL-OPEN / REGRESSED against THIS head by re-reading the live code (do not rubber-stamp). Then hunt any remaining P0/P1 on the committed diff vs origin/main.
+
+Prior P1s (re-derive from current code at this sha):
+1. [P1] Split exchange rates: direct_listed_card_shape? accepts every nonempty cart whose product currencies match the buyer currency, but does not require the items' exchange rates to match. JS display falls back to canonical USD for a split-rate same-currency cart while presenter still mounts a buyer-currency Payment Element and eligibility still selects direct_listed_amount. Quote widening does not help: an all-CAD cart stays in the direct lane.
+2. [P1] Mixed CAD+USD cart: presenter mounts USD, eligibility charges CAD. The quote-lane commit is internally contradictory. Presenter spec pins canonical USD Payment Element for a CAD+USD mixed cart; eligibility for the identical cart returns eligible CAD (direct_listed_amount false) via `unless listed_in_buyer_currency.all?`. That branch requires no quote token and no quote-lane mount report. Shown-USD / charged-CAD (or block_unexpected_buyer_currency_quote if a token is submitted).
+3. [P1] Gate direct-listed charging on every purchase seller. The widened multi-item direct lane still checks listed_currency_direct_charge_enabled? only for the singular seller. Presenter checks every item's seller. Codex: a cart edit adding a same-currency item from an unenabled seller can pass charge eligibility under the first seller's flag. Claude: each charge is already one seller, so the singular check is correct at charge time. Re-derive; do not inherit either engine's conclusion.
+
+The PR claim: extend checkout_listed_currency_direct_charge from single-item carts to multi-item carts uniformly priced in the buyer's currency. Mixed listing (EUR+USD products) is still one USD basis, quoted into the buyer currency (Sahil: mixed currency cannot happen; buyer sees everything in their currency).
+
+Numbered checks (answer each; READY-TO-MERGE or CHANGES-REQUIRED; P0/P1 only):
+1. DISPLAY vs CHARGE identity. Can checkout totals render one currency while Stripe Payment Element / Charge::DirectListedPresentment charge another? Enumerate getCheckoutListedCurrencyDisplay, StripePaymentPresenter#direct_listed_card_shape?, BuyerCurrencyEligibility#decision, BuyerCurrencyQuote, and the charge service. A shown-one-charged-another is P1.
+2. Four-way branch identity. Confirm display, presenter, eligibility, and charge all take the SAME branch for (a) uniform listed-currency multi-item, (b) mixed listed currencies, (c) mixed listed+USD, (d) split exchange rates on same listed currency.
+3. Money-repricing sweep: grep every caller of the changed methods. Does widening eligibility silently reprice subscription renewals, prepare, or any other money path?
+4. Two-candidate currency fields (link.price_currency_type vs purchase.displayed_price_currency_type) must not be confused. A fixture that sets both the same cannot kill the wrong-source mutant.
+5. Completeness of prior P1s: if later commits "fixed" split-rate / multi-seller by changing the lane to quote instead of direct-listed, is that a real fix or feature-suppression that still leaves a charge/display split?
+6. New specs: which example fails if the headline change (drop purchases.one? / items.one? / cartItems.length===1) is reverted? If none, the headline change is untested.
+7. Preference/fallback chain order (A.presence || B): is there an example with BOTH candidates present so an inversion would redden?
+8. Reachability: is the new multi-item listed lane and the mixed-listing quote path live on a real checkout request?
+9. KRW/TWD are NOT zero-decimal in Gumroad (only JPY). Flag any comment/doc that teaches the ISO zero-decimal rule.
+10. Do NOT modify any file. Do NOT run the test suite. Static review only. Write the full verdict in the final message: READY-TO-MERGE or CHANGES-REQUIRED, each finding as [P0]/[P1] path:line plus one-line fix.
