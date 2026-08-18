@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Persistent query loop for prod_query.sh. Booted once via `rails runner`,
 # then serves spooled queries without paying Rails boot per call.
 #
@@ -13,34 +15,66 @@ OUT_DIR = File.join(BASE, "out")
 PID_FILE = File.join(BASE, "loop.pid")
 IDLE_LIMIT = Integer(ENV.fetch("GUMCLAW_RUNNER_IDLE_LIMIT", "1800"))
 JOB_LIMIT = Integer(ENV.fetch("GUMCLAW_RUNNER_JOB_LIMIT", "300"))
+GC_INTERVAL = 300
+# Abandoned spool files (client died before consuming its result, or spooled
+# a job nobody served) accumulate forever and can fill the container's /tmp.
+# Reap anything well past every client deadline (420s queue + 360s exec).
+STALE_SPOOL_AGE = 3600
 
 FileUtils.mkdir_p(IN_DIR)
 FileUtils.mkdir_p(OUT_DIR)
 
 if File.exist?(PID_FILE)
   old = begin; Integer(File.read(PID_FILE).strip); rescue StandardError; 0; end
-  if old.positive? && (begin; Process.kill(0, old); true; rescue StandardError; false; end)
-    exit 0
+  # kill(0) alone is not identity: a recycled PID from a stale pid file would
+  # look alive and stop this loop from booting at all. Same check as the
+  # client's loop_pid_alive — the cmdline must still name our loop script.
+  old_is_loop = old.positive? && begin
+    File.read("/proc/#{old}/cmdline").include?(File.join(BASE, "loop.rb"))
+  rescue StandardError
+    false
   end
+  exit 0 if old_is_loop
 end
 File.write(PID_FILE, Process.pid.to_s)
 
 last_job = Time.now
+last_gc = Time.now
 loop do
   job = Dir[File.join(IN_DIR, "*.rb")].min
   if job.nil?
     break if Time.now - last_job > IDLE_LIMIT
+    if Time.now - last_gc > GC_INTERVAL
+      last_gc = Time.now
+      cutoff = Time.now - STALE_SPOOL_AGE
+      Dir[File.join(OUT_DIR, "*")].concat(Dir[File.join(IN_DIR, "*")]).each do |stale|
+        File.delete(stale) if File.mtime(stale) < cutoff
+      rescue StandardError
+        nil
+      end
+    end
     sleep 0.2
     next
   end
   last_job = Time.now
   id = File.basename(job, ".rb")
-  code = File.read(job)
-  # Taken marker BEFORE deleting the job: the client must be able to tell
+  # Taken marker BEFORE the job leaves in/: the client must be able to tell
   # "never picked up" (safe to re-run one-shot) from "executed or executing"
   # (must not re-run) at every instant.
   FileUtils.touch(File.join(OUT_DIR, "#{id}.taken"))
-  File.delete(job)
+  # Claim by atomic rename. The booter lock and the pid check are both
+  # best-effort, so two loops can briefly coexist — and the client's fallback
+  # can rm the job while we pick it up. rename lets exactly one consumer win;
+  # a read-then-delete here would double-execute in the first race and crash
+  # the loop with ENOENT in either.
+  claimed = "#{job}.claimed"
+  begin
+    File.rename(job, claimed)
+  rescue Errno::ENOENT
+    next
+  end
+  code = File.read(claimed)
+  File.delete(claimed)
   out_path = File.join(OUT_DIR, "#{id}.out")
   err_path = File.join(OUT_DIR, "#{id}.err")
   rc_path = File.join(OUT_DIR, "#{id}.rc")
@@ -62,10 +96,10 @@ loop do
     end
     status = 0
     begin
-      Timeout.timeout(JOB_LIMIT) { eval(code, TOPLEVEL_BINDING) } # rubocop:disable Security/Eval
+      Timeout.timeout(JOB_LIMIT) { eval(code, TOPLEVEL_BINDING) }
     rescue SystemExit => e
       status = e.status
-    rescue Exception => e # rubocop:disable Lint/RescueException
+    rescue Exception => e
       warn "#{e.class}: #{e.message}"
       e.backtrace&.first(10)&.each { |line| warn line }
       status = 1
