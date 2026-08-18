@@ -781,13 +781,27 @@ describe Checkout::BuyerCurrencyQuote do
 
     it "quotes a mixed cart when only one item is priced in the buyer's currency" do
       cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
-      line_items = line_items_for(product, cad_product)
+      usd_canonical = 12_50
+      cad_line = described_class::LineItem.new(
+        permalink: cad_product.unique_permalink,
+        product: cad_product,
+        price_cents: usd_canonical,
+        tip_cents: 0,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+        listed_currency_rate: "0.8"
+      )
+      line_items = line_items_for(product) + [cad_line]
+      canonical_total = product.price_cents + usd_canonical
 
       expect(described_class.buyer_currency_listing_quotable?(line_items:, buyer_currency: Currency::CAD)).to be(true)
 
-      result = described_class.create(line_items:, canonical_total_cents: 20_00, ip: "24.48.0.1")
+      result = described_class.create(line_items:, canonical_total_cents: canonical_total, ip: "24.48.0.1")
 
-      expect(result).to have_attributes(currency: Currency::CAD, canonical_total_cents: 20_00)
+      expect(result).to have_attributes(currency: Currency::CAD, canonical_total_cents: canonical_total)
+      cad_allocation = result.line_allocations.find { _1.permalink == cad_product.unique_permalink }
+      expect(cad_allocation.presentment_price_cents).to eq(10_00)
       expect(StripeFxQuote).to have_received(:create)
     end
 

@@ -473,8 +473,6 @@ class Checkout::BuyerCurrencyEligibility
 
     def listed_lane_rates_uniform?(purchases)
       rates = purchases.map { _1.rate_converted_to_usd.presence }
-      return true if rates.none?
-
       rates.all? && rates.map(&:to_s).uniq.one? && rates.first.to_d.positive?
     end
 

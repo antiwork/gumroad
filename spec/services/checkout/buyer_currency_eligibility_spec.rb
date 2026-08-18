@@ -413,7 +413,8 @@ describe Checkout::BuyerCurrencyEligibility do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
-                     displayed_price_currency_type: Currency::CAD)
+                     displayed_price_currency_type: Currency::CAD,
+                     rate_converted_to_usd: "0.8")
 
     expect(decision).to be_eligible
     expect(decision.currency).to eq(Currency::CAD)
@@ -424,14 +425,16 @@ describe Checkout::BuyerCurrencyEligibility do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
-                     displayed_price_currency_type: Currency::CAD)
+                     displayed_price_currency_type: Currency::CAD,
+                     rate_converted_to_usd: "0.8")
     second_purchase = create(:purchase,
                              link: create(:product, user: seller, price_currency_type: Currency::CAD),
                              seller:,
                              merchant_account:,
                              purchase_state: "in_progress",
                              ip_address: "203.0.113.1")
-    second_purchase.update!(displayed_price_currency_type: Currency::CAD)
+    second_purchase.update!(displayed_price_currency_type: Currency::CAD,
+                            rate_converted_to_usd: "0.8")
     purchases << second_purchase
 
     expect(decision).to be_eligible
@@ -481,7 +484,8 @@ describe Checkout::BuyerCurrencyEligibility do
   it "falls back when checkout did not mount the listed-currency Payment Element" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
-                     displayed_price_currency_type: Currency::CAD)
+                     displayed_price_currency_type: Currency::CAD,
+                     rate_converted_to_usd: "0.8")
 
     expect(decision).not_to be_eligible
     expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
@@ -491,7 +495,8 @@ describe Checkout::BuyerCurrencyEligibility do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
-                     displayed_price_currency_type: Currency::CAD)
+                     displayed_price_currency_type: Currency::CAD,
+                     rate_converted_to_usd: "0.8")
 
     client_confirm_decision = described_class.new(order:,
                                                   seller:,
@@ -571,7 +576,8 @@ describe Checkout::BuyerCurrencyEligibility do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
-                     displayed_price_currency_type: Currency::CAD)
+                     displayed_price_currency_type: Currency::CAD,
+                     rate_converted_to_usd: "0.8")
     create(:tip, purchase:, value_cents: 200)
 
     expect(decision).not_to be_eligible
@@ -597,7 +603,8 @@ describe Checkout::BuyerCurrencyEligibility do
     report_listed_currency_element(params)
     merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
-                     displayed_price_currency_type: Currency::CAD)
+                     displayed_price_currency_type: Currency::CAD,
+                     rate_converted_to_usd: "0.8")
 
     expect(decision).to be_eligible
     expect(decision.direct_listed_amount?).to eq(true)
