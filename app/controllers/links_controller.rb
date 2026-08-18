@@ -59,7 +59,9 @@ class LinksController < ApplicationController
     authorize Link
 
     set_meta_tag(title: "What are you creating?")
-    render inertia: "Products/New", props: ProductPresenter.new_page_props(current_seller:)
+    render inertia: "Products/New", props: ProductPresenter.new_page_props(current_seller:).merge(
+      is_mobile_app_web_view: params[:display] == "mobile_app" || session[:mobile_app_web_view] == true
+    )
   end
 
   def create
