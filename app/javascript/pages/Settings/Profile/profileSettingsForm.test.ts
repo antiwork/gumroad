@@ -14,6 +14,7 @@ const settings = (overrides: Partial<ProfileSettingsForm> = {}): ProfileSettings
   font: "ABC Favorit",
   background_color: "#ffffff",
   highlight_color: "#ff90e8",
+  product_page_storefront_enabled: false,
   ...overrides,
 });
 

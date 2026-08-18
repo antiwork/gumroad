@@ -7,6 +7,7 @@ export type ProfileSettingsForm = {
   background_color: string;
   highlight_color: string;
   profile_picture_blob_id: string | null;
+  product_page_storefront_enabled: boolean;
 };
 
 export const profileThemeColors = (backgroundColor: string, highlightColor: string) => {
@@ -36,6 +37,9 @@ export const changedProfileSettings = (
   if (current.font !== baseline.font) changes.font = current.font;
   if (current.background_color !== baseline.background_color) changes.background_color = current.background_color;
   if (current.highlight_color !== baseline.highlight_color) changes.highlight_color = current.highlight_color;
+  if (current.product_page_storefront_enabled !== baseline.product_page_storefront_enabled) {
+    changes.product_page_storefront_enabled = current.product_page_storefront_enabled;
+  }
   return changes;
 };
 
@@ -57,4 +61,8 @@ export const rebaseProfileSettings = (
       : current.background_color,
   highlight_color:
     current.highlight_color === previousBaseline.highlight_color ? incoming.highlight_color : current.highlight_color,
+  product_page_storefront_enabled:
+    current.product_page_storefront_enabled === previousBaseline.product_page_storefront_enabled
+      ? incoming.product_page_storefront_enabled
+      : current.product_page_storefront_enabled,
 });

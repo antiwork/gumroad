@@ -85,12 +85,48 @@ class ProductPresenter
 
   def product_page_props(seller_custom_domain_url:, **kwargs)
     sections_props = ProfileSectionsPresenter.new(seller: user, query: product.seller_profile_sections).props(request:, pundit_user:, seller_custom_domain_url:)
-    {
+    props = {
       **product_props(seller_custom_domain_url:, **kwargs),
       **sections_props,
       sections: product.sections.filter_map { |id| sections_props[:sections].find { |section| section[:id] === ObfuscateIds.encrypt(id) } },
       main_section_index: product.main_section_index || 0,
     }
+    if show_storefront_catalog?(rendered_sections: props[:sections])
+      # Product sections only: the virtual default-products section must be injected even when
+      # the seller's profile has non-product sections, and LinksController#search mirrors this
+      # query when accepting its id for pagination.
+      catalog_props = ProfileSectionsPresenter.new(seller: user, query: user.seller_profile_products_sections.on_profile)
+                                              .props(request:, pundit_user:, seller_custom_domain_url:, editing: false, include_default_products_section: true)
+      props[:sections] = omit_current_product_from_catalog(catalog_props[:sections])
+      props[:main_section_index] = 0
+    end
+    props
+  end
+
+  # Buyers landing on a shared product link see the rest of the catalog below the product
+  # (gumroad-private#2196) unless the seller curated per-page sections or turned the storefront
+  # rendering off. The seller's own view keeps the empty, editing-shaped payload for the
+  # section editor.
+  def show_storefront_catalog?(rendered_sections:)
+    user.product_page_storefront_enabled? &&
+      rendered_sections.empty? &&
+      pundit_user&.seller != user
+  end
+
+  # The catalog exists to surface the rest of the store. Leading with the product
+  # the buyer is already on reads as a render bug (and wastes the first tile).
+  def omit_current_product_from_catalog(sections)
+    sections.each do |section|
+      results = section[:search_results]
+      next unless results.is_a?(Hash) && results[:products].is_a?(Array)
+
+      before = results[:products].size
+      results[:products] = results[:products].reject { |card| card[:id] == product.external_id }
+      dropped = before - results[:products].size
+      results[:total] -= dropped if results[:total].present? && dropped.positive?
+      section[:exclude_ids] = [product.external_id]
+    end
+    sections
   end
 
   def covers
