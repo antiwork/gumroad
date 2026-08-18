@@ -9,7 +9,8 @@ class InternalNotificationWorker
       room_name: room_name,
       sender: sender,
       message_text: message_text,
-      attachments_data: options.fetch("attachments", [])
+      attachments_data: options.fetch("attachments", []),
+      s3_attachments: options.fetch("s3_attachments", [])
     ).deliver_now
   end
 end

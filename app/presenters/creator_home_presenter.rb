@@ -5,6 +5,9 @@ class CreatorHomePresenter
 
   ACTIVITY_ITEMS_LIMIT = 10
   BALANCE_ITEMS_LIMIT = 3
+  GUMHEAD_FEATURE = :gumhead
+  # A fixed tag, because releases/latest here is a deploy release.
+  GUMHEAD_DOWNLOAD_URL = "https://github.com/antiwork/gumroad/releases/download/gumhead-latest/Gumhead.zip"
 
   attr_reader :pundit_user, :seller
 
@@ -121,11 +124,18 @@ class CreatorHomePresenter
       email_confirmation:,
       tax_forms:,
       show_1099_download_notice:,
-      tax_center_enabled:
+      tax_center_enabled:,
+      **gumhead_props,
     }
   end
 
   private
+    def gumhead_props
+      return {} unless Feature.active?(GUMHEAD_FEATURE, seller)
+
+      { gumhead: { download_url: GUMHEAD_DOWNLOAD_URL } }
+    end
+
     def activity_items
       items = followers_activity_items + sales_activity_items
       items.sort_by { |item| item["timestamp"] }.last(ACTIVITY_ITEMS_LIMIT).reverse

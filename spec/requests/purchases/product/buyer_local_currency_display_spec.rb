@@ -80,7 +80,9 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       visit "/l/#{@product.unique_permalink}"
 
       expect(page).to have_text("$10", normalize_ws: true)
-      expect(page).to have_no_text("€")
+      # Footer selector lists every supported currency (including €). The product
+      # price itself must stay in the seller's set currency.
+      expect(page).to have_no_text("€8")
     end
   end
 
@@ -94,7 +96,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     it "shows the EUR-localized price on the product page, the USD charge on checkout, and records the purchase in USD" do
       visit "/l/#{@product.unique_permalink}"
 
-      expect(page).to have_text("€8.00", normalize_ws: true)
+      expect(page).to have_text("€8", normalize_ws: true)
       expect(page).to have_no_text("$10")
 
       # Charge currency is product-scoped, not geolocation. Resolve to US for the
@@ -104,7 +106,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       add_to_cart(@product)
       check_out(@product) do
         expect(page).to have_text("US$10", normalize_ws: true)
-        expect(page).to have_no_text("€")
+        within("[data-checkout-price-rows]") { expect(page).to have_no_text("€") }
       end
 
       purchase = Purchase.successful.last
@@ -117,7 +119,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       capture_gtag_events
       visit "/l/#{@product.unique_permalink}"
 
-      expect(page).to have_text("€8.00", normalize_ws: true)
+      expect(page).to have_text("€8", normalize_ws: true)
 
       payload = wait_for_gtag_event("buyer_currency_display_view").last
       expect(payload).to include(
@@ -142,8 +144,8 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     it "shows the pay-what-you-want field and suggested price in the buyer's local currency" do
       visit "/l/#{@product.unique_permalink}"
 
-      expect(page).to have_text("€8.00+", normalize_ws: true) # localized minimum on the price tag
-      expect(page).to have_field("Price", placeholder: "9.60+") # suggested price converted to EUR (12.00 * 0.8)
+      expect(page).to have_text("€8+", normalize_ws: true) # localized minimum on the price tag
+      expect(page).to have_field("Name a fair price", placeholder: "9.60+") # suggested price converted to EUR (12.00 * 0.8)
     end
 
     it "states the minimum price in the buyer's local currency when the entered amount is below the floor" do
@@ -152,7 +154,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       fill_in "Name a fair price", with: "5" # €5.00, below the €8.00 (= $10.00 * 0.8) floor
       click_on "I want this!"
 
-      expect(page).to have_alert(text: "Minimum price for this product is €8.00.", visible: :all)
+      expect(page).to have_alert(text: "Minimum price for this product is €8.", visible: :all)
     end
   end
 
@@ -184,7 +186,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       visit "/l/#{@product.unique_permalink}"
 
       expect(page).to have_text("$10", normalize_ws: true)
-      expect(page).to have_no_text("€")
+      expect(page).to have_no_text("€8")
     end
 
     it "does not fire the buyer_currency_display_view GA event for a US buyer" do
@@ -212,7 +214,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       visit "/l/#{@product.unique_permalink}"
 
       expect(page).to have_text("$10", normalize_ws: true)
-      expect(page).to have_no_text("€")
+      expect(page).to have_no_text("€8")
     end
   end
 
@@ -228,7 +230,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       visit "/l/#{@product.unique_permalink}"
 
       expect(page).to have_text("$10", normalize_ws: true)
-      expect(page).to have_no_text("€")
+      expect(page).to have_no_text("€8")
     end
   end
 
@@ -258,7 +260,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     it "shows the EUR price on the product page, applies VAT in USD at checkout, and records the purchase in USD" do
       visit "/l/#{@product.unique_permalink}"
 
-      expect(page).to have_text("€8.00", normalize_ws: true)
+      expect(page).to have_text("€8", normalize_ws: true)
       expect(page).to have_no_text("$10")
 
       add_to_cart(@product)
@@ -266,7 +268,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
       check_out(@product, zip_code: nil, credit_card: { number: "4000003800000008" }) do
         expect(page).to have_text("VAT US$2.20", normalize_ws: true)
         expect(page).to have_text("Total US$12.20", normalize_ws: true)
-        expect(page).to have_no_text("€")
+        within("[data-checkout-price-rows]") { expect(page).to have_no_text("€") }
       end
 
       purchase = Purchase.successful.last
@@ -283,7 +285,7 @@ describe "Buyer-local currency display (#5281)", type: :system, js: true do
     it "exempts a valid business VAT ID while still showing EUR on the product page", :stub_tax_id_validation do
       visit "/l/#{@product.unique_permalink}"
 
-      expect(page).to have_text("€8.00", normalize_ws: true)
+      expect(page).to have_text("€8", normalize_ws: true)
 
       add_to_cart(@product)
       check_out(@product, vat_id: "NL860999063B01", zip_code: nil, credit_card: { number: "4000003800000008" }) do

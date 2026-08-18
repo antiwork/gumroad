@@ -132,6 +132,10 @@ class Order::ChargeService
       purchase.charge_processor_id ||= chargeable&.charge_processor_id
 
       chargeable = purchase.load_and_prepare_chargeable(credit_card) unless purchase.is_test_purchase?
+      if Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, purchase.seller) &&
+         !StripeIntentChargeRouting.direct_charge_account?(purchase.merchant_account)
+        purchase.chargeable = chargeable
+      end
 
       purchase.check_for_blocked_customer_emails
       purchase.validate_purchasing_power_parity
@@ -145,16 +149,21 @@ class Order::ChargeService
     locked_quote = locked_setup_buyer_currency_quote(purchases:, merchant_account:, chargeable:)
     return if locked_quote == false
 
-    if merchant_account.stripe_charge_processor? && !card_already_saved
+    saved_card_needs_indian_mandate = card_already_saved && chargeable&.requires_mandate? &&
+      purchases.any?(&:india_card_mandate_reliability_enabled?)
+    if merchant_account.stripe_charge_processor? && (!card_already_saved || saved_card_needs_indian_mandate)
       mandate_options = mandate_options_for_stripe(purchases:, with_currency: true)
       mandate_options = mandate_options_in_setup_currency(mandate_options, locked_quote)
       self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
 
       if setup_intent.present?
         purchases.each do |purchase|
+          purchase.mark_indian_card_mandate_registration! if mandate_options.present? && purchase.credit_card&.requires_mandate?
           purchase.update!(processor_setup_intent_id: setup_intent.id)
           purchase.charge.update!(stripe_setup_intent_id: setup_intent.id)
-          purchase.credit_card.update!(json_data: { stripe_setup_intent_id: setup_intent.id }) if purchase.credit_card&.requires_mandate?
+          if !card_already_saved && purchase.credit_card&.requires_mandate?
+            purchase.credit_card.update!(json_data: { stripe_setup_intent_id: setup_intent.id })
+          end
 
           if setup_intent.succeeded?
             fix_setup_later_charge_presentment(purchase, locked_quote)
@@ -235,6 +244,7 @@ class Order::ChargeService
 
   def mandate_options_in_setup_currency(mandate_options, locked_quote)
     return mandate_options if mandate_options.blank? || locked_quote.blank?
+    return mandate_options unless StripeChargeProcessor.indian_card_mandate_currency_supported?(locked_quote.currency)
 
     canonical_cap_cents = mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)
     return mandate_options if canonical_cap_cents.blank? || !locked_quote.fx_rate&.positive?
@@ -275,6 +285,10 @@ class Order::ChargeService
       purchase.is_free_trial_purchase? || purchase.is_preorder_authorization? || purchase.is_test_purchase? ||
         !purchase.errors.empty? || !purchase.in_progress?
     end
+    mandate_purchases = purchases.select do |purchase|
+      purchase.in_progress? && purchase.errors.empty? &&
+        (purchase.is_original_subscription_purchase? || purchase.is_preorder_authorization? || purchase.is_upgrade_purchase? || purchase.setup_future_charges)
+    end
 
     if purchases_to_charge.present?
       amount_cents = purchases_to_charge.sum(&:total_transaction_cents)
@@ -282,7 +296,10 @@ class Order::ChargeService
       merchant_account = purchases.first.merchant_account
       seller = User.find(purchases.first.seller_id)
       statement_description = seller.name_or_username
-      mandate_options = mandate_options_for_stripe(purchases: purchases_to_charge)
+      mandate_options = mandate_options_for_stripe(purchases: mandate_purchases) if mandate_purchases.present?
+      if setup_future_charges && mandate_options.present? && chargeable&.requires_mandate?
+        mandate_purchases.each(&:mark_indian_card_mandate_registration!)
+      end
 
       charge = Charge::CreateService.new(
         order:,
@@ -302,7 +319,12 @@ class Order::ChargeService
       self.charge_intent = charge.charge_intent
       # charge_intent is nil when the processor call was rescued (e.g. a quote/settlement
       # mismatch) — Charge::CreateService returns the charge with no intent attached in that case.
-      charge.credit_card.update!(json_data: { stripe_payment_intent_id: charge_intent.id }) if charge_intent.present? && charge.credit_card&.requires_mandate?
+      if charge_intent.present? && charge.credit_card&.requires_mandate?
+        card_json_data = mandate_options.present? ? {} : charge.credit_card.json_data.to_h
+        charge.credit_card.update!(
+          json_data: card_json_data.merge("stripe_payment_intent_id" => charge_intent.id)
+        )
+      end
 
       if charge_intent&.succeeded?
         charge_waiting_for_flow_of_funds = charge_intent_waiting_for_flow_of_funds?(charge)
@@ -474,7 +496,9 @@ class Order::ChargeService
   # decline. Single-purchase carts already get this headroom from
   # Purchase#mandate_options_for_stripe; this gives multi-item carts the same treatment.
   def mandate_options_for_stripe(purchases:, with_currency: false)
-    return purchases.first.mandate_options_for_stripe(with_currency:) if purchases.count == 1
+    if purchases.one? && !purchases.first.is_multi_buy?
+      return purchases.first.mandate_options_for_stripe(with_currency:)
+    end
 
     mandate_amount = purchases.map(&:mandate_maximum_amount_cents).max
 

@@ -782,6 +782,27 @@ describe PurchasesController, :vcr do
           expect_correct_csv(response.body.to_s)
         end
 
+        it "queues the emailed export when force_async is set" do
+          get :export, params: { force_async: true }
+
+          export = SalesExport.last!
+          expect(export.recipient).to eq(user_with_role_for_seller)
+          expect(Exports::Sales::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(export.id)
+          expect(response).to redirect_to(customers_path)
+          expect(response).to have_http_status(:see_other)
+        end
+
+        # The analytics dashboard waits on this answer before it promises the seller an email,
+        # so a redirect to a whole HTML page would be both wasteful and ambiguous.
+        it "answers with JSON when the caller asks for it" do
+          request.headers["Accept"] = "application/json"
+          get :export, params: { force_async: true }
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body).to eq({ "success" => true })
+          expect(Exports::Sales::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(SalesExport.last!.id)
+        end
+
         it "sends data as CSV with purchases in the correct order", :elasticsearch_wait_for_refresh do
           # We don't expect ES to return documents in any specific order,
           # because we expect the purchases.find_each in #purchases_data to order them.
@@ -868,6 +889,35 @@ describe PurchasesController, :vcr do
         params[:start_time] = "2020-08-01"
         params[:end_time] = "2020-08-31"
         get :export, params:
+      end
+
+      # The analytics dashboard buckets its chart by the seller's clock, so the CSV it promises
+      # has to use the same boundaries. Tokyo is UTC+9: its August 1 runs from 2020-07-31 15:00
+      # UTC to 2020-08-01 15:00 UTC.
+      it "uses the seller's own day boundaries when in_seller_time_zone is set" do
+        seller.update!(timezone: "Tokyo")
+
+        inside_sellers_first_day = create(:purchase, link: @product, seller:, created_at: Time.utc(2020, 7, 31, 16, 0, 0))
+        already_the_sellers_next_month = create(:purchase, link: @product, seller:, created_at: Time.utc(2020, 8, 31, 20, 0, 0))
+        index_model_records(Purchase)
+
+        get :export, params: { start_time: "2020-08-01", end_time: "2020-08-31", in_seller_time_zone: true }
+
+        expect(response.body).to include(inside_sellers_first_day.external_id)
+        expect(response.body).not_to include(already_the_sellers_next_month.external_id)
+      end
+
+      # `created_before` is a strict `lt` serialized to whole seconds, so an end-of-day boundary
+      # drops the last second of the range. Analytics counts it, so the seller-clock export has to.
+      it "includes the last second of the range when in_seller_time_zone is set" do
+        seller.update!(timezone: "Tokyo")
+
+        last_second = create(:purchase, link: @product, seller:, created_at: Time.utc(2020, 8, 31, 14, 59, 59))
+        index_model_records(Purchase)
+
+        get :export, params: { start_time: "2020-08-01", end_time: "2020-08-31", in_seller_time_zone: true }
+
+        expect(response.body).to include(last_second.external_id)
       end
 
       it "includes purchases at UTC midnight boundary regardless of seller's timezone" do

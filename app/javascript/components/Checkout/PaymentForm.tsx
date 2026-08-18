@@ -59,6 +59,7 @@ import {
   isSubmitDisabled,
   PaymentMethodType,
   paymentElementCollectsFullBillingDetails,
+  requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
   requiresPayment,
   requiresReusablePaymentMethod,
@@ -987,8 +988,21 @@ const CreditCardContent = ({
             };
 
       const useReusablePaymentMethod = requiresReusablePaymentMethodForCardCollection(state, useStripePaymentElement);
+      const mandateReliabilitySetup =
+        !useStripePaymentElement &&
+        !!state.checkoutPayment.india_card_mandate_reliability &&
+        !requiresReusablePaymentMethod(state) &&
+        requiresPaymentElementReusablePaymentMethod(state);
       const paymentMethod = await (useReusablePaymentMethod
-        ? getReusablePaymentMethodResult(selectedPaymentMethod, { products: state.products })
+        ? getReusablePaymentMethodResult(selectedPaymentMethod, {
+            products: state.products,
+            billingInfo: {
+              country: state.country,
+              state: state.state,
+              postal_code: state.zipCode,
+            },
+            ...(mandateReliabilitySetup ? { mandateReliabilitySetup: true } : {}),
+          })
         : getPaymentMethodResult(selectedPaymentMethod));
 
       if (
@@ -1527,10 +1541,32 @@ const useStripePaymentRequest = (disabled: boolean) => {
         dispatch({ type: "set-value", fullName: e.payerName, ...(state.email ? {} : { email: e.payerEmail }) });
         setPaymentMethodEvent(e);
         const selectedPaymentMethod = preparePaymentRequestPaymentMethodData(e);
+        const shippingAddress = hasShipping(state) && e.shippingAddress ? getAddress(e.shippingAddress) : null;
+        const billingAddress = e.paymentMethod.billing_details.address;
+        const useReusablePaymentMethod = requiresReusablePaymentMethodForCardCollection(state, false);
+        const mandateReliabilitySetup =
+          !!state.checkoutPayment.india_card_mandate_reliability &&
+          !requiresReusablePaymentMethod(state) &&
+          requiresPaymentElementReusablePaymentMethod(state);
         dispatch({
           type: "set-payment-method",
-          paymentMethod: requiresReusablePaymentMethod(state)
-            ? await getReusablePaymentRequestPaymentMethodResult(selectedPaymentMethod, { products: state.products })
+          paymentMethod: useReusablePaymentMethod
+            ? await getReusablePaymentRequestPaymentMethodResult(selectedPaymentMethod, {
+                products: state.products,
+                email: state.email || e.payerEmail || null,
+                billingInfo: shippingAddress
+                  ? {
+                      country: shippingAddress.country,
+                      state: shippingAddress.state,
+                      postal_code: shippingAddress.zipCode,
+                    }
+                  : {
+                      country: billingAddress?.country ?? state.country,
+                      state: billingAddress?.state ?? state.state,
+                      postal_code: billingAddress?.postal_code ?? state.zipCode,
+                    },
+                ...(mandateReliabilitySetup ? { mandateReliabilitySetup: true } : {}),
+              })
             : getPaymentRequestPaymentMethodResult(selectedPaymentMethod),
         });
       })().catch(fail),

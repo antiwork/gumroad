@@ -105,6 +105,14 @@ module ChargeProcessor
     get_charge_processor(merchant_account.charge_processor_id).get_setup_intent(setup_intent_id, merchant_account:)
   end
 
+  # Public: Gets a Mandate object from the charge processor.
+  def self.get_mandate(merchant_account, mandate_id)
+    return if mandate_id.blank?
+    return unless StripeChargeProcessor.charge_processor_id == merchant_account.charge_processor_id
+
+    get_charge_processor(merchant_account.charge_processor_id).get_mandate(mandate_id, merchant_account:)
+  end
+
   # Public: Creates an intent to charge chargeable in the future.
   #
   # Depending on the implementation this setup intent may require on-session user confirmation.

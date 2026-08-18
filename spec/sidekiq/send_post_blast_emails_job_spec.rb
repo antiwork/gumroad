@@ -619,7 +619,8 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.rpush(snapshot_key, snapshotted_ids)
 
       # Simulate the purchase leaving the audience (refund) between snapshot and retry.
-      purchase.remove_from_audience_member_details
+      purchase.update_columns(stripe_refunded: true)
+      purchase.rebuild_audience_member_details
       expect(AudienceMember.find_by(email: purchase.email, seller: @seller)).to be_present
 
       described_class.new.perform(blast.id)

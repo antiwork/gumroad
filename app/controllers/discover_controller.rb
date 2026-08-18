@@ -9,6 +9,8 @@ class DiscoverController < ApplicationController
 
   layout "inertia", only: [:index]
 
+  self.buyer_currency_footer_actions = %w[index].freeze
+
   before_action :set_affiliate_cookie, only: [:index]
 
   def index
@@ -195,10 +197,13 @@ class DiscoverController < ApplicationController
         labels = params[:taxonomy].split("/").map { |slug| Discover::TaxonomyPresenter::TAXONOMY_LABELS[slug] || slug }
         title_parts << labels.join(" » ")
       end
-      title_parts << "Gumroad"
-      set_meta_tag(title: title_parts.join(" | "))
-
-      set_meta_tag(property: "og:title", content: "Gumroad")
+      title = if title_parts.empty?
+        "Discover digital products from independent creators | Gumroad"
+      else
+        (title_parts + ["Gumroad"]).join(" | ")
+      end
+      set_meta_tag(title:)
+      set_meta_tag(property: "og:title", content: title)
       set_meta_tag(property: "og:type", content: "website")
       set_meta_tag(property: "og:site_name", content: "Gumroad")
       set_meta_tag(tag_name: "link", rel: "canonical", href: Discover::CanonicalUrlPresenter.canonical_url(params), head_key: "canonical")

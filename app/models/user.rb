@@ -66,6 +66,11 @@ class User < ApplicationRecord
 
   MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT = 10_000
 
+  # 5% once month-to-date GMV reaches $20k; resets each calendar month (gp#2177).
+  # Eligibility is cached so purchase fee calc does not SUM the seller's sales (closed #4283).
+  HIGH_VOLUME_FEE_PER_THOUSAND = 50
+  HIGH_VOLUME_FEE_THRESHOLD_CENTS = 2_000_000
+
   # Ceiling on how long a cached avatar URL can keep being served after the file
   # behind it goes away (avatar URLs are otherwise stable for the seller's picture).
   AVATAR_VARIANT_URL_CACHE_TTL = 1.day
@@ -100,6 +105,7 @@ class User < ApplicationRecord
   has_one :billing_detail, foreign_key: :purchaser_id, dependent: :destroy
   has_many :purchased_products, -> { distinct }, through: :purchases, class_name: "Link", source: :link
   has_many :sales, class_name: "Purchase", foreign_key: :seller_id
+  has_many :sold_calls, through: :sales, source: :call
   has_many :preorders_bought, class_name: "Preorder", foreign_key: :purchaser_id
   has_many :preorders_sold, class_name: "Preorder", foreign_key: :seller_id
 
@@ -242,6 +248,59 @@ class User < ApplicationRecord
 
   def disable_buyer_currency_rounding=(value)
     set_json_data_for_attr("disable_buyer_currency_rounding", ActiveModel::Type::Boolean.new.cast(value))
+  end
+
+  def high_volume_fee_month
+    json_data_for_attr("high_volume_fee_month")
+  end
+
+  # Deletes the key when nil so the nightly LIKE scan set does not accumulate
+  # sellers who fell below the threshold months ago.
+  def high_volume_fee_month=(value)
+    if value.nil?
+      json_data.delete("high_volume_fee_month")
+    else
+      set_json_data_for_attr("high_volume_fee_month", value)
+    end
+    json_data_will_change!
+  end
+
+  # Month-keyed so eligibility expires on its own at calendar-month rollover,
+  # before the nightly refresh gets to the seller.
+  def high_volume_fee_eligible?
+    high_volume_fee_month == Time.current.strftime("%Y-%m")
+  end
+
+  def high_volume_seller_fee?
+    Feature.active?(:high_volume_seller_fee, self) && high_volume_fee_eligible?
+  end
+
+  def gumroad_fee_per_thousand
+    return custom_fee_per_thousand if custom_fee_per_thousand.present?
+    return HIGH_VOLUME_FEE_PER_THOUSAND if high_volume_seller_fee?
+
+    Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND
+  end
+
+  def month_to_date_gross_sales_cents
+    sales.paid.where("purchases.created_at >= ?", Time.current.beginning_of_month).sum(:price_cents)
+  end
+
+  # with_lock so the SUM and the write are atomic per seller: without it a refresh
+  # holding a pre-refund SUM can commit after the refund's refresh and restore 5%.
+  # reload first: lock! raises on dirty records, and merely reading a json_data
+  # accessor on a NULL json_data row dirties it (concerns/json_data.rb).
+  def refresh_high_volume_fee_eligibility!
+    reload
+    with_lock do
+      eligible = month_to_date_gross_sales_cents >= HIGH_VOLUME_FEE_THRESHOLD_CENTS
+      new_month = eligible ? Time.current.strftime("%Y-%m") : nil
+      if high_volume_fee_month != new_month
+        self.high_volume_fee_month = new_month
+        save!(validate: false)
+      end
+      eligible
+    end
   end
 
   attr_blockable :email
@@ -1623,7 +1682,7 @@ class User < ApplicationRecord
 
     def should_subscribe_preview_be_regenerated?
       previously_new_record? ||
-        %w[name username].intersect?(saved_changes.keys) ||
+        %w[name username bio].intersect?(saved_changes.keys) ||
         %w[font background_color highlight_color].intersect?(seller_profile.saved_changes.keys) ||
         avatar_changed
     end

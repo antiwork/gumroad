@@ -5,31 +5,17 @@ class Checkout::BuyerCurrencyEligibility
 
   FEATURE_NAME = :buyer_currency_charging
 
-  # The two per-seller rollout flags that decide whether a wallet (Apple Pay / Google Pay)
-  # may pay a buyer-currency checkout. They live here, next to FEATURE_NAME, because this
-  # service is what the charge path consults — the presenter reads the same constants for
-  # its render-time decision, so the surface a buyer sees and the charge the server accepts
-  # can never be gated on different flags.
-  #
-  # PAYMENT_ELEMENT_WALLETS_FEATURE_NAME is checkout's general "wallets render inside the
-  # Payment Element" flag; WALLETS_FEATURE_NAME is this lane's own ramp, so wallets can be
-  # pulled from buyer-currency checkouts alone without taking them off every other checkout.
+  # Shared with the presenter so wallets render and charge on the same flags.
+  # PAYMENT_ELEMENT_WALLETS is checkout-wide; WALLETS is this lane's ramp so we
+  # can pull wallets here without taking them off every other checkout.
   PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = :payment_element_wallets
   WALLETS_FEATURE_NAME = :buyer_currency_wallets
 
-  # Per-seller ramp for quoting DESTINATION charges in the buyer's currency.
-  #
-  # A destination charge is how Gumroad charges a seller who has a Gumroad-managed Stripe
-  # Custom account: the PaymentIntent is created on the Gumroad platform account and the
-  # seller's account only appears as `transfer_data[destination]`. Until this flag exists
-  # those sellers never reached the FX-quote lane at all, because the gate below asked
-  # `is_managed_by_gumroad?` — which is literally "this row has no user" — and a Custom
-  # account has one. That excluded roughly two thirds of Stripe volume from buyer-currency
-  # charging by accident rather than by decision (gumroad-private#1318).
-  #
-  # It is a separate flag from FEATURE_NAME because turning it on widens which charge model
-  # can reach a live money path, so it ramps on its own and can be pulled without taking
-  # buyer-currency charging away from the sellers who already have it.
+  # Per-seller ramp for quoting DESTINATION charges (Custom account: PI on the
+  # platform, seller only in transfer_data[destination]). Separate from FEATURE_NAME
+  # because it widens the charge model on a live money path. Custom accounts have
+  # a user, so they fail is_managed_by_gumroad? ("this row has no user") and never
+  # reached the FX lane without this flag.
   DESTINATION_CHARGE_FEATURE_NAME = :buyer_currency_destination_charges
 
   # Per-seller ramp for charging a product's listed currency directly when it is already
@@ -127,22 +113,20 @@ class Checkout::BuyerCurrencyEligibility
       !seller.disable_buyer_local_currency?
   end
 
-  # Whether this seller's memberships may be charged in the buyer's own currency.
-  #
-  # Its own ramp on top of seller_enabled?, because a membership is the first shape where the
-  # buyer-currency amount outlives the checkout that agreed it. Both halves are now wired:
-  # Purchase::BaseService#fix_later_charge_presentment stores the fixed amount once the signup
-  # charge has succeeded and the Subscription exists, and Purchase#create_charge_intent bills it
-  # on every renewal via Purchase::LaterChargePresentmentService.
-  #
-  # Pulling this flag stops NEW memberships entering the lane. It deliberately does not orphan
-  # existing ones: the renewal path checks only processor + stored-row facts, so a member whose
-  # amount was already fixed keeps being billed it rather than silently switching currency
-  # mid-subscription. gumroad-private#1322.
+  # Own ramp on top of seller_enabled?: a membership amount outlives checkout.
+  # Pulling the flag stops NEW memberships; existing ones keep billing the stored
+  # amount (renewal checks processor + stored-row facts, not this flag).
   def self.subscriptions_enabled?(seller)
     seller.present? &&
       seller_enabled?(seller) &&
       Feature.active?(SUBSCRIPTION_FEATURE_NAME, seller)
+  end
+
+  def self.indian_card_mandate_presentment_supported?(seller:, merchant_account:, currency:)
+    return true unless seller.present? && Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    return true if StripeIntentChargeRouting.direct_charge_account?(merchant_account)
+
+    StripeChargeProcessor.indian_card_mandate_currency_supported?(currency)
   end
 
   # Whether this seller's buyer-currency checkouts may take wallet payments at all. Seller must
@@ -182,52 +166,35 @@ class Checkout::BuyerCurrencyEligibility
     seller.present? && Feature.active?(DESTINATION_CHARGE_FEATURE_NAME, seller)
   end
 
-  # The account an FX quote for this charge must be minted on — which has to be the same
-  # account the PaymentIntent is created on, because a quote is only honoured in the
-  # account context that minted it.
+  # Quote must be minted on the same account the PaymentIntent is created on —
+  # Stripe only honours a quote in the account that minted it.
   #
-  # For a direct charge (Stripe Connect seller) that is the seller's own connected account,
-  # and for a seller with no Stripe account it is the Gumroad platform account; in both
-  # cases it is simply the merchant account we were handed. For a DESTINATION charge the
-  # two diverge: Stripe creates the intent on the Gumroad platform account, so the quote
-  # belongs there too. Passing the seller's connected account (which is what this code did
-  # before the destination lane existed) would mint the quote in one account and create the
-  # intent in another, and Stripe would reject it.
+  # Direct / no-Stripe: the merchant_account we were handed. Destination: Stripe
+  # creates the intent on the platform, so the quote belongs there too. Minting
+  # on the seller's Custom account and creating the intent on the platform is
+  # the pairing Stripe rejects.
   #
-  # This routing is deliberately NOT gated on the destination-charge ramp flag. Which
-  # account a quote must be minted on is a fact about how Stripe creates the intent, not
-  # a rollout choice: the forced-currency lane (iDEAL/Bancontact/UPI/Pix) has accepted
-  # destination charges since before this flag existed, so gating the routing would leave
-  # that lane minting a quote on the seller's Custom account for an intent created on the
-  # platform account — the exact cross-account pairing Stripe rejects. The flag governs
-  # whether the CARD lane may quote a destination charge at all (see
-  # #supported_merchant_account?), and while it is off no card checkout reaches here with
-  # a destination charge, so nothing about the card lane changes.
+  # NOT gated on DESTINATION_CHARGE_FEATURE_NAME. Which account to mint on is a
+  # fact about how Stripe creates the intent. The forced-currency lane
+  # (iDEAL/Bancontact/UPI/Pix) already does destination charges; gating would
+  # leave it minting on the seller Custom for a platform intent. The flag only
+  # governs whether the CARD lane may quote a destination charge
+  # (#supported_merchant_account?).
   def self.fx_quote_merchant_account(merchant_account)
     settlement_merchant_account(merchant_account)
   end
 
-  # The connected account the PaymentIntent for this charge will pay out to via
-  # `transfer_data[destination]`, or nil when the intent carries no transfer.
+  # Companion to #fx_quote_merchant_account: the connected account this
+  # PaymentIntent will pay out via transfer_data[destination], or nil when there
+  # is no transfer. Stripe requires the quote to declare usage.payment.destination
+  # and matches it against the intent — missing or extra destination is a hard
+  # charge-time failure.
   #
-  # This is the companion to #fx_quote_merchant_account: knowing which account to MINT the
-  # quote on is only half of what Stripe checks. Stripe also requires the quote to declare
-  # the transfer destination in advance (`usage.payment.destination`) and matches it against
-  # the intent exactly — a quote with no destination is refused on an intent that has one,
-  # and vice versa. Both are hard failures at charge time, so the two questions have to be
-  # answered together and from the same rule.
+  # Destination = Gumroad-managed Custom (user present, not Stripe Connect).
+  # Connect and no-Stripe charges have no transfer → nil.
   #
-  # A destination charge is the "Gumroad-managed Custom account" shape: the seller has a
-  # Stripe account of ours (so `user` is present) but it is not a Stripe Connect account of
-  # their own, which is precisely the branch in StripeChargeProcessor that sets
-  # `transfer_data`. A Stripe Connect seller is charged directly on their own account with no
-  # transfer, and a seller with no Stripe account at all is charged on the platform account
-  # with no transfer; both get nil.
-  #
-  # Like the routing above, this is NOT gated on the destination-charge ramp flag: whether an
-  # intent carries a transfer is a fact about how Stripe creates it, not a rollout choice,
-  # and the forced-currency lane (iDEAL/Bancontact/UPI/Pix) has been creating destination
-  # charges since before the flag existed.
+  # Same as the routing: NOT gated on the destination ramp. Forced-currency
+  # already creates destination charges.
   def self.fx_quote_destination_account_id(merchant_account)
     return nil if merchant_account.blank?
     return nil if merchant_account.is_a_stripe_connect_account?
@@ -247,43 +214,29 @@ class Checkout::BuyerCurrencyEligibility
   end
 
   def self.usd_settling_merchant_account?(merchant_account, presentment_currency:, seller: nil)
-    # Asked of the account the quote is actually minted on (see #fx_quote_merchant_account),
-    # because that is the account whose settlement configuration decides whether Stripe
-    # accepts the quote. For a direct or platform charge that is the same account we were
-    # handed. For a destination charge it is the Gumroad platform account, and the seller's
-    # own settlement currency is deliberately NOT consulted: per Stripe's Connect FX
-    # guidance, a destination charge using `transfer_data[amount]` converts the presentment
-    # currency to the PLATFORM's settlement currency at charge time, and the later transfer
-    # to the connected account is a second, separate conversion that no FX quote covers. A
-    # seller settling in euros can therefore be quoted safely — their euros come from the
-    # transfer, not from this charge.
+    # Asked of the account the quote is minted on (#fx_quote_merchant_account).
+    # Destination charges convert presentment → PLATFORM settlement at charge
+    # time; the later transfer is a second conversion no FX quote covers, so
+    # the seller's own settlement currency is ignored — a EUR-settling seller
+    # can still be quoted.
     quote_account = fx_quote_merchant_account(merchant_account)
     return false unless usd_holding_merchant_account?(quote_account)
 
-    # The stored currency answers the wrong question for accounts with Stripe
-    # multi-currency settlement enabled: it mirrors Stripe's default_currency ("usd"),
-    # but the payment intent's settlement currency can still differ per intent — and
-    # Stripe configures it PER CURRENCY (e.g. the platform account settles EUR in EUR
-    # since the iDEAL/SEPA capabilities were enabled, while every other currency still
-    # settles in USD). Stripe's rejection of an FX quote or intent is the only reliable
-    # signal, and once observed it is recorded on the merchant account for that
-    # presentment currency — while that marker is fresh, skip the doomed FX-quote round
-    # trip for that currency (up to 2s of checkout latency, on every visit) and fall
-    # back to canonical USD immediately. Other currencies keep quoting.
+    # Stored currency is Stripe's default_currency ("usd"), not per-intent
+    # settlement. Multi-currency settlement is per currency (platform settles
+    # EUR in EUR after iDEAL/SEPA; everything else still USD). Once Stripe
+    # rejects a quote, the mismatch is recorded on the merchant account for
+    # that presentment currency and we skip the doomed FX round-trip (up to
+    # 2s per visit) until the marker expires. Other currencies keep quoting.
     !quote_account&.settlement_currency_mismatch_active?(presentment_currency)
   end
 
-  # The weaker of the two settlement questions: does the account HOLD its balance in USD
-  # (per our stored mirror of Stripe's default_currency)? Unlike
-  # usd_settling_merchant_account? this deliberately ignores the learned
-  # settlement-currency-mismatch marker, because the marker only says "an FX quote to USD
-  # for this currency will be rejected" — it does not make a plain forced-currency charge
-  # fail. The direct-listed-amount forced lane (an EUR-priced product paid with iDEAL)
-  # never mints an FX quote, so the marker is irrelevant to it; gating that lane on the
-  # marker is exactly what turned iDEAL dark platform-wide on 2026-07-23 (enabling the
-  # iDEAL/SEPA capabilities made the platform account settle EUR in EUR, the EUR marker
-  # was recorded, and every Gumroad-managed seller lost the iDEAL tab —
-  # gumroad-private#933).
+  # Weaker settlement question: does the account HOLD its balance in USD
+  # (stored default_currency)? Ignores the mismatch marker — that only means
+  # "an FX quote to USD for this currency will be rejected", not that a
+  # forced-currency charge (EUR product + iDEAL, no FX quote) will fail.
+  # Gating this lane on the marker is what turned iDEAL dark platform-wide
+  # on 2026-07-23 (gumroad-private#933).
   def self.usd_holding_merchant_account?(merchant_account)
     return false if merchant_account.blank?
 
@@ -354,12 +307,22 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:off_session) if off_session && !multi_seller_order? && !subscription_renewal_with_stored_amount?
     return fallback(:missing_stripe_chargeable) if !client_confirm && chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
 
+    # The submitted quote token carries the currency the buyer actually confirmed — with the
+    # checkout picker that can differ from GeoIP's answer for this IP, and verify! holds the
+    # token to ITS currency, so gating on GeoIP here would reject the buyer's own valid token.
+    # A missing or tampered token falls back to GeoIP; verify! still rejects tampered tokens.
+    #
     # All purchases in an order come from the same checkout request, so any purchase's IP
     # identifies the buyer's location.
-    buyer_currency = buyer_currency_for_ip(purchases.first.ip_address)
+    buyer_currency = Checkout::BuyerCurrencyQuote.quoted_currency_hint(params[:buyer_currency_quote].presence) ||
+      buyer_currency_for_ip(purchases.first.ip_address)
     return fallback(:missing_buyer_currency) if buyer_currency.blank?
     return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
     return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    if purchases.any? { _1.link.is_recurring_billing? } &&
+       !self.class.indian_card_mandate_presentment_supported?(seller:, merchant_account:, currency: buyer_currency)
+      return fallback(:unsupported_indian_card_mandate_currency)
+    end
 
     # The verified quote locked the cart total, so every purchase on the charge must
     # individually support presentment — one unsupported item invalidates the whole cart.

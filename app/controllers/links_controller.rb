@@ -8,6 +8,12 @@ class LinksController < ApplicationController
   include PageMeta::Favicon, PageMeta::Product
   include RequireAccountEmail
   include RendersCustomHtmlPages
+  include MobileAppWebView
+
+  enable_mobile_app_web_view only: %i[new create edit]
+
+  # Products/Show and Products/Profile/Show both render from #show.
+  self.buyer_currency_footer_actions = %w[show].freeze
 
   DEFAULT_PRICE = 500
   PRICE_INPUT_MAX_LENGTH = 64

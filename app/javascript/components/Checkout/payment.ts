@@ -8,6 +8,7 @@ import { PurchasePaymentMethod } from "$app/data/purchase";
 import { SavedCreditCard } from "$app/parsers/card";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
+import { readBuyerCurrencyPreference, writeBuyerCurrencyPreference } from "$app/utils/buyerCurrencyPreference";
 import { isValidEmail } from "$app/utils/email";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
@@ -111,6 +112,7 @@ export type CheckoutPaymentConfig =
       fallback_reason: string;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      india_card_mandate_reliability?: boolean;
       payment_element_wallets: boolean;
       flat_payment_methods: boolean;
       elements_options: null;
@@ -120,6 +122,7 @@ export type CheckoutPaymentConfig =
       fallback_reason: null;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      india_card_mandate_reliability?: boolean;
       payment_element_wallets: boolean;
       flat_payment_methods: boolean;
       elements_options: PaymentElementConfig;
@@ -130,6 +133,7 @@ export type CheckoutPaymentConfig =
       recurring_upi_registration: boolean;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
+      india_card_mandate_reliability?: boolean;
       payment_element_wallets: boolean;
       flat_payment_methods: boolean;
       elements_options: PaymentElementClientConfirmConfig;
@@ -175,6 +179,7 @@ export type Product = {
   nativeType: ProductNativeType;
   recurrence: RecurrenceId | null;
   subscription_id?: string;
+  forceNewSubscription?: boolean;
   recommended_by?: string | null;
   shippableCountryCodes: string[];
 };
@@ -203,8 +208,26 @@ export type Tip =
       listedAmount?: number | null;
     };
 
+// Whether a response's currency menu offers `code`. Undefined when the response carries no menu
+// at all: a server from before the picker shipped says nothing about which currencies it can
+// quote, and reading its silence as a refusal would reject every choice during a rolling deploy.
+const offersBuyerCurrency = (surcharges: SurchargesResponse, code: string) =>
+  surcharges.available_buyer_currencies?.some((option) => option.code === code);
+
+export { readBuyerCurrencyPreference, writeBuyerCurrencyPreference };
+
 export type State = {
   products: Product[];
+  buyerCurrency: string | null;
+  // The quote that was on screen when the buyer changed currency, held only until the replacement
+  // lands. A currency change is the one quote invalidation whose control lives inside the summary
+  // it blanks, so the summary renders from this snapshot to keep its rows — and the picker the
+  // buyer is still holding focus in — in place across the round trip. `previousCurrency` is what
+  // the selection goes back to if the chosen currency turns out to be unquotable.
+  buyerCurrencyRemint: { surcharges: SurchargesResponse; previousCurrency: string | null } | null;
+  // A currency the buyer chose that the server then came back without. The summary names it, so a
+  // total that reverts to another currency says why instead of changing under the buyer.
+  unavailableBuyerCurrency: string | null;
   countries: Record<string, string>;
   usStates: string[];
   caProvinces: string[];
@@ -324,7 +347,8 @@ type SimpleValue =
   | "payLabel"
   | "warning"
   | "tip"
-  | "emailTypoSuggestion";
+  | "emailTypoSuggestion"
+  | "buyerCurrency";
 
 type PublicAction =
   | ({ type: "set-value" } & Partial<{ [key in SimpleValue]?: State[key] | undefined }>)
@@ -400,7 +424,11 @@ export function requiresPaymentElementReusablePaymentMethod(state: State) {
 }
 
 export function requiresReusablePaymentMethodForCardCollection(state: State, useStripePaymentElement: boolean) {
-  if (!useStripePaymentElement) return requiresReusablePaymentMethod(state);
+  if (!useStripePaymentElement) {
+    return state.checkoutPayment.india_card_mandate_reliability
+      ? requiresPaymentElementReusablePaymentMethod(state)
+      : requiresReusablePaymentMethod(state);
+  }
   if (
     state.checkoutPayment.integration === "payment_element" &&
     state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
@@ -525,6 +553,7 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
     cartPermalinks: state.products.map((product) => product.permalink),
     willSaveCard: state.willSaveCard,
     paymentMethod: state.paymentMethod,
+    paymentElementType: state.paymentElementType,
   });
   if (!display) return null;
 
@@ -718,10 +747,11 @@ function computeTipForFreeCart(state: State, permalink?: string): number {
   return 0;
 }
 
+export const getTotalPriceFromSurcharges = (surcharges: SurchargesResponse | null) =>
+  surcharges ? surcharges.subtotal + surcharges.tax_cents + surcharges.shipping_rate_cents : null;
+
 export function getTotalPrice(state: State) {
-  return state.surcharges.type === "loaded"
-    ? state.surcharges.result.subtotal + state.surcharges.result.tax_cents + state.surcharges.result.shipping_rate_cents
-    : null;
+  return getTotalPriceFromSurcharges(state.surcharges.type === "loaded" ? state.surcharges.result : null);
 }
 
 // The pre-tax sum of all future installment payments. Besides the summary row, this is the
@@ -822,6 +852,7 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       state: state.state,
       vat_id: state.vatId,
       postal_code: state.zipCode,
+      ...(state.buyerCurrency ? { buyer_currency: state.buyerCurrency } : {}),
     },
     abortSignal,
   );
@@ -919,9 +950,23 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         ("state" in action && action.state !== state.state && state.country === "CA") ||
         ("vatId" in action && action.vatId !== state.vatId) ||
         ("gift" in action && action.gift?.type !== state.gift?.type) ||
+        ("buyerCurrency" in action && action.buyerCurrency !== state.buyerCurrency) ||
         "products" in action ||
         "tip" in action
       ) {
+        // Hold the quote a currency change replaces, so the summary can keep its shape while the
+        // new one is minted. A second change landing on top of an in-flight one keeps the snapshot
+        // already held: that one is the last quote the buyer actually saw. Every other
+        // invalidation edits the cart itself, which makes the old amounts wrong rather than stale.
+        if ("buyerCurrency" in action) {
+          if (state.surcharges.type === "loaded")
+            state.buyerCurrencyRemint = { surcharges: state.surcharges.result, previousCurrency: state.buyerCurrency };
+        } else {
+          state.buyerCurrencyRemint = null;
+          // The refusal was about the cart being replaced here, so it no longer describes
+          // anything. The next response says whether the new cart can be quoted in that currency.
+          state.unavailableBuyerCurrency = null;
+        }
         if (state.surcharges.type === "loading") state.surcharges.abort();
         state.surcharges = { type: "pending" };
         // The totals (and the buyer-currency quote token) the in-progress payment was built on
@@ -952,6 +997,11 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         state.emailTypoSuggestion = null;
       }
       Object.assign(state, action);
+      if ("buyerCurrency" in action) {
+        // Picking again retires the notice about the last refusal.
+        state.unavailableBuyerCurrency = null;
+        writeBuyerCurrencyPreference(state.buyerCurrency);
+      }
       break;
     case "set-wallet-billing-address": {
       // The wallet (Apple Pay / Google Pay) sheet shares its billing address only after the
@@ -975,6 +1025,8 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         (country === "US" && zipCode !== state.zipCode) ||
         (country === "CA" && billingState !== state.state)
       ) {
+        state.buyerCurrencyRemint = null;
+        state.unavailableBuyerCurrency = null;
         if (state.surcharges.type === "loading") state.surcharges.abort();
         state.surcharges = { type: "pending" };
       }
@@ -1122,6 +1174,8 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
     }
     case "update-products":
       state.products = action.products;
+      state.buyerCurrencyRemint = null;
+      state.unavailableBuyerCurrency = null;
       if (state.surcharges.type === "loading") state.surcharges.abort();
       state.surcharges = action.surcharges ? { type: "loaded", result: action.surcharges } : { type: "pending" };
       // Accepting a cross-sell updates the products mid-pipeline on purpose, and it always
@@ -1185,7 +1239,42 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // from a passive effect only updates after React flushes effects, leaving a window
       // where a stale response still saw the old value.
       if (state.surcharges.type !== "loading" || state.surcharges.requestId !== action.requestId) return;
-      state.surcharges = { type: "loaded", result: action.result };
+      {
+        const remint = state.buyerCurrencyRemint;
+        state.buyerCurrencyRemint = null;
+        state.surcharges = { type: "loaded", result: action.result };
+        // The notice deliberately does NOT clear just because the menu lists that currency again.
+        // The menu is built from settlement eligibility and only drops the currency the request
+        // in hand tried, so the response that restores the previous selection lists the refused
+        // one right back — clearing on it would erase the explanation a moment after showing it.
+        // Only the buyer picking again, or a cart edit, retires the notice.
+        // The buyer picked a currency and the response came back without it: this cart cannot be
+        // quoted in it. Put the selection back where it was and record the refusal — moving the
+        // buyer on to some third currency with no explanation is what must not happen.
+        if (
+          remint &&
+          state.buyerCurrency != null &&
+          offersBuyerCurrency(action.result, state.buyerCurrency) === false
+        ) {
+          state.unavailableBuyerCurrency = state.buyerCurrency;
+          state.buyerCurrency = remint.previousCurrency;
+          writeBuyerCurrencyPreference(state.buyerCurrency);
+          // The response in hand is the canonical-USD fallback the refused currency produced, so
+          // the restored selection needs quoting again — but only when this same response says it
+          // is still on offer. Asking again for a currency the server has just withdrawn would
+          // refuse, restore, and ask again without end (a transient FX error withdraws every
+          // currency, so the buyer's previous one can be gone too).
+          const restored = state.buyerCurrency ?? action.result.detected_buyer_currency ?? null;
+          if (
+            restored != null &&
+            restored !== (action.result.buyer_currency_quote?.currency ?? "usd") &&
+            offersBuyerCurrency(action.result, restored)
+          ) {
+            state.buyerCurrencyRemint = remint;
+            state.surcharges = { type: "pending" };
+          }
+        }
+      }
       // A quote arriving is the other half of what a refused submit is waiting for. Accepting an
       // offer edits the cart, and a cart edit resets the quote to pending, so the refreshed payment
       // configuration usually lands while the quote is still in flight — this is where the resume
@@ -1197,6 +1286,17 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // "error". A stale failure must not surface a bogus alert or strand the checkout while
       // a fresher request is still loading.
       if (state.surcharges.type !== "loading" || state.surcharges.requestId !== action.requestId) return;
+      // A currency the buyer chose whose quote never arrived. Put the selection back on the
+      // currency the summary is still showing, so the picker and the amounts under it agree while
+      // the "something went wrong" alert explains the rest. The snapshot stays: it is the last
+      // quote the buyer saw, and it is the one they are being returned to.
+      //
+      // `unavailableBuyerCurrency` is deliberately NOT set: a request that never completed is not
+      // the server saying it cannot charge that currency, and the notice must not claim it did.
+      if (state.buyerCurrencyRemint) {
+        state.buyerCurrency = state.buyerCurrencyRemint.previousCurrency;
+        writeBuyerCurrencyPreference(state.buyerCurrency);
+      }
       state.surcharges = { type: "error" };
       break;
   }
@@ -1247,6 +1347,9 @@ export function createReducer(initial: {
       state: initial.state ?? "",
       email: url.searchParams.get("email") ?? initial.email,
       zipCode: initial.address?.zip ?? "",
+      buyerCurrency: readBuyerCurrencyPreference(),
+      buyerCurrencyRemint: null,
+      unavailableBuyerCurrency: null,
       customFieldValues,
       surcharges: { type: "pending" },
       saveAddress: !!initial.address,

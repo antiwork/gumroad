@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_07_160000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1099,6 +1099,19 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_07_160000) do
     t.datetime "updated_at", null: false
     t.index ["stripe_person_id"], name: "index_guardians_on_stripe_person_id", unique: true
     t.index ["user_id"], name: "index_guardians_on_user_id"
+  end
+
+  create_table "gumhead_usage_events", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "model", null: false
+    t.bigint "input_tokens", default: 0, null: false
+    t.bigint "output_tokens", default: 0, null: false
+    t.bigint "cache_creation_input_tokens", default: 0, null: false
+    t.bigint "cache_creation_1h_input_tokens", default: 0, null: false
+    t.bigint "cache_read_input_tokens", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "created_at"], name: "index_gumhead_usage_events_on_user_id_and_created_at"
   end
 
   create_table "gumroad_daily_analytics", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2557,6 +2570,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_07_160000) do
     t.string "token"
     t.datetime "token_expires_at"
     t.string "business_vat_id", limit: 191
+    t.string "stripe_mandate_id"
     t.index ["cancelled_at"], name: "index_subscriptions_on_cancelled_at"
     t.index ["deactivated_at"], name: "index_subscriptions_on_deactivated_at"
     t.index ["ended_at"], name: "index_subscriptions_on_ended_at"

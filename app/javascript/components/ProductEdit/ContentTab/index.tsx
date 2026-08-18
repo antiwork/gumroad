@@ -218,11 +218,14 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   const pages: (Page & { chosen?: boolean })[] = selectedVariant ? selectedVariant.rich_content : product.rich_content;
   const pagesRef = useRefToLatest(pages);
   const setPages = (nextPages: Page[]) =>
-    updateProduct((product) => {
-      if (selectedVariant) selectedVariant.rich_content = nextPages;
+    updateProduct((current) => {
+      const variant = current.has_same_rich_content_for_all_variants
+        ? undefined
+        : current.variants.find((item) => item.id === selectedVariantId);
+      if (variant) variant.rich_content = nextPages;
       else {
-        product.has_same_rich_content_for_all_variants = true;
-        product.rich_content = nextPages;
+        current.has_same_rich_content_for_all_variants = true;
+        current.rich_content = nextPages;
       }
     });
   // Only the sortable goes through this. Its report is a DOM-derived list, so a
@@ -231,8 +234,20 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   // row (gumroad-private#1508). Intentional removals (the confirm modal, the
   // copy-from-version replacement) call setPages directly, so reconciliation
   // cannot resurrect what the seller actually deleted.
-  const reorderPages = (reportedPages: Page[]) =>
-    setPages(reorderRowsPreservingMembership(reportedPages, pagesRef.current));
+  const reorderPages = (reportedPages: Page[]) => {
+    const currentPages = pagesRef.current;
+    // A report whose ids are disjoint from this variant is the previous
+    // variant's list arriving late (Sortable layout vs a stale pagesRef).
+    // Adopting it would replace this tier's pages with another tier's.
+    if (
+      reportedPages.length > 0 &&
+      currentPages.length > 0 &&
+      reportedPages.every((row) => !currentPages.some((page) => page.id === row.id))
+    ) {
+      return;
+    }
+    setPages(reorderRowsPreservingMembership(reportedPages, currentPages));
+  };
   // Records that the seller explicitly deleted these pages, so the server-side
   // wipe guard allows removing them even though they may still have content.
   // A STORED id another surviving page still carries is skipped: raw ids can

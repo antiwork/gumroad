@@ -28,6 +28,28 @@ class StripeChargeIntent < ChargeIntent
     payment_intent.status == StripeIntentStatus::PROCESSING
   end
 
+  def payment_method_id
+    payment_method = payment_intent.try(:payment_method)
+    payment_method.respond_to?(:id) ? payment_method.id : payment_method
+  end
+
+  def customer_id
+    customer = payment_intent.try(:customer)
+    customer.respond_to?(:id) ? customer.id : customer
+  end
+
+  def setup_future_usage
+    payment_intent.try(:setup_future_usage)
+  end
+
+  def currency
+    payment_intent.try(:currency)
+  end
+
+  def card_mandate_options
+    payment_intent.try(:payment_method_options)&.try(:card)&.try(:mandate_options)
+  end
+
   # An asynchronous, customer-initiated payment (Pix) that the buyer has not paid yet: Stripe
   # handed them a QR code / copy-paste key and the intent stays in requires_action until they pay
   # in their banking app or the key expires. This is NOT a failure — the browser's confirm call

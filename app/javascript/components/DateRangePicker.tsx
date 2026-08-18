@@ -1,9 +1,10 @@
 import { ChevronDown } from "@boxicons/react";
 import {
-  differenceInDays,
   endOfMonth,
   endOfQuarter,
   endOfYear,
+  parseISO,
+  startOfDay,
   startOfMonth,
   startOfQuarter,
   startOfYear,
@@ -22,18 +23,28 @@ import { Label } from "$app/components/ui/Label";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
+// Product event tracking started here, so nothing before this date has analytics anywhere.
+// Must match PRODUCT_EVENT_TRACKING_STARTED_DATE on the backend.
+const PRODUCT_EVENT_TRACKING_STARTED_DATE = new Date("2012-10-13");
+
 export const DateRangePicker = ({
   from,
   to,
   setFrom,
   setTo,
-  maxRangeDays,
+  minDate,
+  timeZone,
 }: {
   from: Date;
   to: Date;
   setFrom: (from: Date) => void;
   setTo: (to: Date) => void;
-  maxRangeDays?: number;
+  // Earliest date the caller's backend holds data for — where "All time" starts. Callers that
+  // leave it out fall back to the date tracking itself began.
+  minDate?: Date;
+  // The backend's own time zone, as an IANA identifier. "All time" ends on today there, since the
+  // browser's date can be a day off when the two zones disagree.
+  timeZone?: string;
 }) => {
   const today = new Date();
   const uid = React.useId();
@@ -45,6 +56,14 @@ export const DateRangePicker = ({
     setTo(to);
     setOpen(false);
   };
+  // Both ends follow the backend when the caller supplies them, so "All time" spans exactly what
+  // it will return. Derived here next to `today` rather than passed in, so it stays right on a
+  // dashboard left open past midnight. en-CA formats as YYYY-MM-DD. An account cannot be created
+  // after its own today, so this cannot invert.
+  const allTimeStart = minDate ?? PRODUCT_EVENT_TRACKING_STARTED_DATE;
+  const allTimeEnd = timeZone
+    ? startOfDay(parseISO(new Intl.DateTimeFormat("en-CA", { timeZone }).format(today)))
+    : today;
   const presets = [
     { label: "Today", from: today, to: today },
     { label: "Last 7 days", from: subDays(today, 7), to: today },
@@ -72,11 +91,8 @@ export const DateRangePicker = ({
       from: startOfYear(subYears(today, 1)),
       to: endOfYear(subYears(today, 1)),
     },
-    { label: "All time", from: new Date("2012-10-13"), to: today },
+    { label: "All time", from: allTimeStart, to: allTimeEnd },
   ];
-  const visiblePresets =
-    maxRangeDays != null ? presets.filter((p) => differenceInDays(p.to, p.from) <= maxRangeDays) : presets;
-  const customRangeExceedsMax = maxRangeDays != null && differenceInDays(to, from) > maxRangeDays;
   return (
     <Popover
       open={open}
@@ -111,7 +127,7 @@ export const DateRangePicker = ({
                 }}
               />
             </Fieldset>
-            <Fieldset state={to < from || customRangeExceedsMax ? "danger" : undefined}>
+            <Fieldset state={to < from ? "danger" : undefined}>
               <FieldsetTitle>
                 <Label htmlFor={`${uid}-to`}>To (including)</Label>
               </FieldsetTitle>
@@ -121,18 +137,14 @@ export const DateRangePicker = ({
                 onChange={(date) => {
                   if (date) setTo(date);
                 }}
-                aria-invalid={to < from || customRangeExceedsMax}
+                aria-invalid={to < from}
               />
-              {to < from ? (
-                <FieldsetDescription>Must be after from date</FieldsetDescription>
-              ) : customRangeExceedsMax ? (
-                <FieldsetDescription>Range can be at most {maxRangeDays} days</FieldsetDescription>
-              ) : null}
+              {to < from ? <FieldsetDescription>Must be after from date</FieldsetDescription> : null}
             </Fieldset>
           </div>
         ) : (
           <Menu>
-            {visiblePresets.map((preset) => (
+            {presets.map((preset) => (
               <MenuItem key={preset.label} onClick={() => quickSet(preset.from, preset.to)}>
                 {preset.label}
               </MenuItem>

@@ -11,6 +11,11 @@ class SuoSemaphore
       Suo::Client::Redis.new("locks:product:#{product_id}:inventory", options)
     end
 
+    def seller_call_inventory(seller_id, extra_options = {})
+      options = default_options.merge(stale_lock_expiration: 60).merge(extra_options)
+      Suo::Client::Redis.new("locks:seller:#{seller_id}:call_inventory", options)
+    end
+
     private
       def default_options
         { client: $redis }

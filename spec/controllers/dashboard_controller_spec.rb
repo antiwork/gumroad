@@ -196,6 +196,22 @@ describe DashboardController, type: :controller, inertia: true do
       end
     end
 
+    it "does not feature Gumhead when the rollout flag is off" do
+      get :index
+
+      expect(inertia.props[:creator_home]).not_to have_key(:gumhead)
+    end
+
+    it "features Gumhead when the rollout flag is on for the seller" do
+      Feature.activate_user(:gumhead, seller)
+
+      get :index
+
+      expect(inertia.props[:creator_home][:gumhead]).to eq(
+        { download_url: CreatorHomePresenter::GUMHEAD_DOWNLOAD_URL }
+      )
+    end
+
     context "when seller is suspended for TOS" do
       let(:admin_user) { create(:user) }
       let!(:product) { create(:product, user: seller) }

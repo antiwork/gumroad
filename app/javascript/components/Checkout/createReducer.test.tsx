@@ -87,11 +87,12 @@ const stubSurchargeRequests = () => {
     resolve: (result: SurchargesResponse) => void;
     reject: (error: unknown) => void;
     signal: AbortSignal | undefined;
+    payload: unknown;
   }[] = [];
   getSurcharges.mockImplementation(
-    (_data: unknown, signal?: AbortSignal) =>
+    (data: unknown, signal?: AbortSignal) =>
       new Promise<SurchargesResponse>((resolve, reject) => {
-        requests.push({ resolve, reject, signal });
+        requests.push({ resolve, reject, signal, payload: data });
       }),
   );
   return requests;
@@ -210,5 +211,19 @@ describe("createReducer surcharge refetches", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(result.current[0].surcharges).toEqual({ type: "loaded", result: freshResult });
+  });
+
+  it("passes the selected buyer currency on the next surcharge fetch", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout();
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.payload).not.toHaveProperty("buyer_currency");
+
+    act(() => result.current[1]({ type: "set-value", buyerCurrency: "gbp" }));
+    expect(result.current[0].surcharges.type).toBe("pending");
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.payload).toMatchObject({ buyer_currency: "gbp" });
   });
 });

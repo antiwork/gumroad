@@ -57,7 +57,9 @@ class AlertOnBlockedEstablishedSubscribersJob
     # platform, decided the report was empty.
     return if scan[:stranded].empty? && !scan[:truncated]
 
-    InternalNotificationWorker.perform_async("risk", "Blocked established subscribers", message_for(scan))
+    # agent_reports, not risk: the stranded-buyer recovery lane works these candidates
+    # autonomously, so humans only see its escalations (gumroad-private#2106).
+    InternalNotificationWorker.perform_async("agent_reports", "Blocked established subscribers", message_for(scan))
   end
 
   private

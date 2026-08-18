@@ -9,6 +9,9 @@ PAYMENTS_NOTIFICATION_EMAIL = GlobalConfig.get("PAYMENTS_NOTIFICATION_EMAIL", "h
 INTERNAL_NOTIFICATION_ALWAYS_CC = GlobalConfig.get("INTERNAL_NOTIFICATION_ALWAYS_CC", "gumclaw@gumroad.com")
 
 CHAT_ROOMS = {
+  # Reports the agent already works autonomously (gumroad-private#2106): delivered to the
+  # agent inbox only, so the finding stays recorded without pushing mail at a human.
+  agent_reports: { email: INTERNAL_NOTIFICATION_ALWAYS_CC },
   announcements: { email: INTERNAL_NOTIFICATION_EMAIL },
   awards: { email: INTERNAL_NOTIFICATION_EMAIL },
   internals_log: { email: INTERNAL_NOTIFICATION_EMAIL },

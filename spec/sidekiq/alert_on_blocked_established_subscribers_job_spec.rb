@@ -48,7 +48,7 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |room, _sender, message|
-      expect(room).to eq("risk")
+      expect(room).to eq("agent_reports")
       expect(message).to include("subscription #{subscription.id}")
       expect(message).to include("#{described_class::MIN_SUCCESSFUL_CHARGES} successful charges")
       expect(message).to include("blocked since #{block.blocked_at.to_date}")
@@ -62,7 +62,7 @@ describe AlertOnBlockedEstablishedSubscribersJob do
 
     described_class.new.perform
 
-    expect(InternalNotificationWorker).to have_received(:perform_async).with("risk", "Blocked established subscribers", anything)
+    expect(InternalNotificationWorker).to have_received(:perform_async).with("agent_reports", "Blocked established subscribers", anything)
   end
 
   # The gap the pre-merge review found: a renewal can fail on a domain block too, and those rows
@@ -909,7 +909,7 @@ describe AlertOnBlockedEstablishedSubscribersJob do
   # and InternalNotificationMailer#notify returns silently when the room has no recipient, which
   # would leave the job permanently dark with all specs green.
   it "sends to a room that resolves to a real recipient" do
-    mail = InternalNotificationMailer.notify(room_name: "risk", sender: "spec", message_text: "hello")
+    mail = InternalNotificationMailer.notify(room_name: "agent_reports", sender: "spec", message_text: "hello")
 
     expect(mail.to).to be_present
   end

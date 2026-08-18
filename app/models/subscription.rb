@@ -11,6 +11,7 @@ class Subscription < ApplicationRecord
 
   has_paper_trail
   include ExternalId
+  include CurrencyHelper
   include FlagShihTzu
   include Subscription::PingNotification
   include Purchase::Searchable::SubscriptionCallbacks
@@ -51,6 +52,8 @@ class Subscription < ApplicationRecord
             5 => :is_resubscription_pending_confirmation,
             6 => :mor_fee_applicable,
             7 => :is_installment_plan,
+            8 => :renewal_disabled_due_to_indian_card_mandate,
+            9 => :indian_card_mandate_requires_reauthorization,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -357,7 +360,14 @@ class Subscription < ApplicationRecord
       purchase.process!(off_session:)
       error_messages = purchase.errors.messages.dup
       if purchase.errors.present? || purchase.error_code.present? || purchase.stripe_error_code.present?
-        unless from_failed_charge_email
+        mandate_status = purchase.indian_card_mandate_error_status
+        if mandate_status.present?
+          update_renewal_for_indian_card_mandate!(
+            mandate_status,
+            expected_credit_card_id: purchase.credit_card_id,
+            notify_buyer: mandate_status.in?(%w[inactive missing]) && !from_failed_charge_email
+          )
+        elsif !from_failed_charge_email
           if purchase.has_payment_network_error?
             schedule_charge(1.hour.from_now)
           else
@@ -376,8 +386,11 @@ class Subscription < ApplicationRecord
           end
         end
 
-        # schedule for termination 5 days after subscription is overdue for a charge
-        UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
+        # Product policy keeps access active until the buyer replaces the card.
+        unless mandate_status.present?
+          # schedule for termination 5 days after subscription is overdue for a charge
+          UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
+        end
         purchase.mark_failed!
       elsif purchase.pending_buyer_presentment_settlement?
         # FinalizeBuyerPresentmentPurchaseJob completes the renewal once Stripe settles it.
@@ -406,7 +419,9 @@ class Subscription < ApplicationRecord
     purchase.succeeded_at = succeeded_at if succeeded_at.present?
     purchase.update_balance_and_mark_successful!
     original_purchase.update!(should_exclude_product_review: false) if original_purchase.should_exclude_product_review?
+    self.stripe_mandate_id = nil if credit_card_id != purchase.credit_card_id
     self.credit_card_id = purchase.credit_card_id
+    self.renewal_disabled_due_to_indian_card_mandate = false unless indian_card_mandate_requires_reauthorization?
     save!
     create_purchase_event(purchase)
     if purchase.was_product_recommended
@@ -422,11 +437,463 @@ class Subscription < ApplicationRecord
   end
 
   def handle_purchase_failure(purchase)
-    CustomerLowPriorityMailer.subscription_card_declined(id).deliver_later(queue: "low")
-    ChargeDeclinedReminderWorker.perform_in(ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE - CHARGE_DECLINED_REMINDER_EMAIL, id)
-    # schedule for termination 5 days after subscription is overdue for a charge
-    UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
+    mandate_status = purchase.indian_card_mandate_error_status
+    if mandate_status.present?
+      update_renewal_for_indian_card_mandate!(
+        mandate_status,
+        expected_credit_card_id: purchase.credit_card_id,
+        notify_buyer: mandate_status.in?(%w[inactive missing])
+      )
+    else
+      CustomerLowPriorityMailer.subscription_card_declined(id).deliver_later(queue: "low")
+      ChargeDeclinedReminderWorker.perform_in(ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE - CHARGE_DECLINED_REMINDER_EMAIL, id)
+      # schedule for termination 5 days after subscription is overdue for a charge
+      UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
+    end
     purchase.mark_failed!
+  end
+
+  def update_renewal_for_indian_card_mandate!(status, expected_credit_card_id: nil, expected_registration_purchase_id: nil, mandate_id: nil, clear_reauthorization: false, notify_buyer: false, notify_buyer_if_already_disabled: false)
+    return unless india_card_mandate_reliability_enabled?
+
+    completed_reauthorization = false
+    with_lock do
+      return if expected_credit_card_id.present? && credit_card_to_charge&.id != expected_credit_card_id
+      return if expected_registration_purchase_id.present? && indian_card_mandate_source_purchase(expected_credit_card_id)&.id != expected_registration_purchase_id
+
+      if status == "active"
+        return if indian_card_mandate_requires_reauthorization? && !clear_reauthorization
+
+        self.stripe_mandate_id = mandate_id if mandate_id.present?
+        self.renewal_disabled_due_to_indian_card_mandate = false
+        if clear_reauthorization && indian_card_mandate_requires_reauthorization?
+          self.indian_card_mandate_requires_reauthorization = false
+          completed_reauthorization = true
+        end
+        notify_buyer = false
+      else
+        return unless status.in?(%w[inactive missing pending])
+        return unless alive?(include_pending_cancellation: false)
+
+        notify_buyer &&= !renewal_disabled_due_to_indian_card_mandate? || notify_buyer_if_already_disabled
+        self.renewal_disabled_due_to_indian_card_mandate = true
+      end
+      save! if changed?
+      # Inside the lock: committing cleared flags without the fixing would let a concurrent
+      # scan observe a recovered subscription with no stored amount and pause it again.
+      record_indian_card_mandate_presentment! if completed_reauthorization
+    end
+
+    if notify_buyer
+      after_commit do
+        CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id).deliver_later(queue: "low")
+      end
+    end
+  end
+
+  def require_indian_card_mandate_reauthorization!(notify_buyer: true, clear_existing_mandate: false, notify_buyer_if_already_disabled: false)
+    return unless india_card_mandate_reliability_enabled?
+
+    should_notify_buyer = false
+    with_lock do
+      card = credit_card_to_charge
+      return unless card&.stripe_charge_processor? && card.requires_mandate?
+      return unless alive?(include_pending_cancellation: false)
+
+      should_notify_buyer = notify_buyer &&
+        (!renewal_disabled_due_to_indian_card_mandate? ||
+          (notify_buyer_if_already_disabled && !indian_card_mandate_requires_reauthorization?))
+      self.stripe_mandate_id = nil if clear_existing_mandate
+      self.renewal_disabled_due_to_indian_card_mandate = true
+      self.indian_card_mandate_requires_reauthorization = true
+      save!
+    end
+
+    if should_notify_buyer
+      after_commit do
+        CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id).deliver_later(queue: "low")
+      end
+    end
+  end
+
+  def restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: nil)
+    return unless india_card_mandate_reliability_enabled?
+
+    save! if changed?
+    notify_buyer = false
+    with_lock do
+      card = credit_card_to_charge
+      if expected_credit_card_id.present? && card&.id != expected_credit_card_id
+        self.stripe_mandate_id = nil
+        if card&.stripe_charge_processor? && card.requires_mandate?
+          notify_buyer = !renewal_disabled_due_to_indian_card_mandate?
+          self.renewal_disabled_due_to_indian_card_mandate = true
+          self.indian_card_mandate_requires_reauthorization = true
+        else
+          self.renewal_disabled_due_to_indian_card_mandate = false
+          self.indian_card_mandate_requires_reauthorization = false
+        end
+      else
+        return unless indian_card_mandate_requires_reauthorization?
+
+        self.renewal_disabled_due_to_indian_card_mandate = false
+        self.indian_card_mandate_requires_reauthorization = false
+      end
+      save!
+    end
+
+    if notify_buyer
+      after_commit do
+        CustomerLowPriorityMailer.subscription_indian_card_mandate_invalid(id).deliver_later(queue: "low")
+      end
+    end
+  end
+
+  def clear_indian_card_mandate_state!(expected_credit_card_id:)
+    save! if changed?
+    with_lock do
+      return unless credit_card_to_charge&.id == expected_credit_card_id
+
+      self.stripe_mandate_id = nil
+      self.renewal_disabled_due_to_indian_card_mandate = false
+      self.indian_card_mandate_requires_reauthorization = false
+      save! if changed?
+    end
+  end
+
+  def india_card_mandate_reliability_enabled?
+    merchant_account = renewal_merchant_account
+    Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) &&
+      !original_purchase&.is_multi_buy? &&
+      !original_purchase&.order&.purchases&.many? &&
+      merchant_account.present? && !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
+  end
+
+  def indian_card_mandate_terms(
+    billing_info: nil,
+    authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED,
+    fixed_rate: nil
+  )
+    purchase = original_purchase
+    return if purchase.nil?
+
+    renewal_price_cents = current_subscription_price_cents(authenticated_offer_code_buyer:)
+    presentment = current_later_charge_presentment
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
+    canonical_price_cents = renewal_price_cents if canonical_price_cents.zero?
+    presentment_matches = presentment.present? &&
+      presentment.canonical_price_cents == canonical_price_cents &&
+      indian_card_renewal_presentment_supported?(presentment.presentment_currency) &&
+      indian_card_presentment_price_current?(presentment, purchase)
+    recovery_currency = indian_card_recovery_presentment_currency unless presentment_matches
+    price_cap_rate = if presentment_matches
+      purchase.rate_converted_to_usd.presence
+    elsif recovery_currency.present?
+      fixed_rate
+    end
+    price_cap_cents = indian_card_mandate_price_cents(
+      purchase,
+      renewal_price_cents,
+      fixed_rate: price_cap_rate
+    )
+    canonical_cap_cents = if billing_info.present?
+      indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cap_cents)
+    else
+      purchase.mandate_maximum_amount_cents(fixed_rate: (fixed_rate if recovery_currency.present?))
+    end
+    canonical_cap_cents = price_cap_cents if canonical_cap_cents.zero?
+    return unless canonical_cap_cents.positive?
+
+    amount = canonical_cap_cents
+    currency = Currency::USD
+    price_rate = nil
+    if presentment_matches
+      currency = presentment.presentment_currency
+      price_rate = presentment.signup_currency_units_per_usd
+    elsif recovery_currency.present?
+      # Stripe will not register an India recurring e-mandate in USD for many Indian issuers
+      # (gp#1410), so a listed-INR membership with no stored fixing must still collect its
+      # replacement mandate in rupees, sized at today's rate.
+      currency = recovery_currency
+      price_rate = fixed_rate || get_rate(currency)
+    end
+    if price_rate.present?
+      variable_cap_cents = [canonical_cap_cents - price_cap_cents, 0].max
+      if recovery_currency.present? && billing_info.blank?
+        # The canonical cap keeps signup-rate dollars while the recovery price cap uses the
+        # current rate; FX drift between the two bases must not consume the tax/shipping
+        # headroom. Floor the variable part at the cap's own non-price part — the same
+        # pre-discount price basis mandate_maximum_amount_cents scaled, at the same rate.
+        price_basis_cents = if purchase.is_free_trial_purchase?
+          price_cap_cents
+        else
+          indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: purchase.rate_converted_to_usd.presence)
+        end
+        extras_cents = [canonical_cap_cents - price_basis_cents, 0].max
+        if extras_cents.positive? && price_basis_cents.positive? && price_cap_cents.positive?
+          # Scale the signup-basis extras to the pinned price basis so today's tax converts
+          # to today's rupees. Future FX drift stays uncovered, as on every fixed cap.
+          extras_cents = Rational(extras_cents * price_cap_cents, price_basis_cents).ceil
+        end
+        variable_cap_cents = [variable_cap_cents, extras_cents].max
+      end
+      price_part_cents = indian_card_presentment_cents(price_cap_cents, price_rate, currency)
+      if recovery_currency.present?
+        # The listed price converts to rounded USD cents and back, which can land a few
+        # paise below the exact amount the recovered fixing will bill; a cap below the
+        # fixed renewal amount guarantees a decline. Floor at the exact listed price.
+        listed_price_floor_cents = purchase.mandate_maximum_displayed_price_cents.to_i
+        listed_price_floor_cents = renewal_price_cents.to_i if listed_price_floor_cents.zero?
+        price_part_cents = [price_part_cents, listed_price_floor_cents].max
+      end
+      amount = price_part_cents +
+        indian_card_presentment_cents(variable_cap_cents, fixed_rate || get_rate(currency), currency)
+    end
+
+    interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(recurrence)
+    { amount:, currency:, interval:, interval_count: }
+  end
+
+  # Terms plus the conversion rate they were sized with. The caller stores the rate beside
+  # the mandate it creates (SetupIntent metadata) and validates with it later: the cached
+  # rate refreshes hourly, and a refresh between setup and validation must not reject the
+  # mandate the buyer just approved.
+  def indian_card_mandate_terms_with_rate(
+    billing_info: nil,
+    authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED
+  )
+    2.times do
+      terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:)
+      return [terms, nil] if terms.blank? || terms[:currency] == Currency::USD
+
+      rate = get_rate(terms[:currency])
+      pinned = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, fixed_rate: rate)
+      # A concurrent re-fixing can flip the terms currency between the two reads; the rate
+      # must belong to the currency it prices, so retry, then give up on pinning.
+      return [pinned, rate] if pinned.present? && pinned[:currency] == terms[:currency]
+    end
+
+    [indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:), nil]
+  end
+
+  def future_subscription_charge?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    return false if charges_completed?
+    return true if current_subscription_price_cents(authenticated_offer_code_buyer:).positive?
+
+    discount = original_purchase&.purchase_offer_code_discount
+    discount&.duration_in_billing_cycles.present? && renewal_pre_discount_total_cents.positive?
+  end
+
+  def indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: nil)
+    displayed_price_cents = purchase.mandate_maximum_displayed_price_cents
+    displayed_price_cents = renewal_price_cents if displayed_price_cents.zero?
+    displayed_currency = purchase[:displayed_price_currency_type].presence || link.price_currency_type
+    get_usd_cents(displayed_currency, displayed_price_cents, rate: fixed_rate)
+  end
+
+  def indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cents)
+    purchase.indian_card_mandate_amount_for_billing_info(
+      billing_info,
+      price_cents,
+      buyer_vat_id: business_vat_id
+    )
+  end
+
+  def indian_card_presentment_cents(canonical_cents, currency_units_per_usd, currency)
+    amount = BigDecimal(canonical_cents.to_s) * BigDecimal(currency_units_per_usd.to_s)
+    amount /= 100 if is_currency_type_single_unit?(currency)
+    amount.ceil
+  end
+
+  # A listed-currency fixing is only current while its fixed price equals the plan's listed
+  # price: a plan change can move the price while the canonical USD value coincidentally
+  # stays equal (price and rate moving together), and a mandate approved off that row would
+  # authorize the old amount. Cross-currency (quote-lane) fixings have no listed price to
+  # compare and keep the canonical-only match.
+  def indian_card_presentment_price_current?(presentment, purchase)
+    displayed_currency = (purchase[:displayed_price_currency_type].presence || link.price_currency_type).to_s.downcase
+    if displayed_currency == presentment.presentment_currency
+      # Every price the current plan can legitimately fix: the signup price, this cycle's
+      # discounted price, and the post-discount full price (a renewal re-fixes to it when a
+      # limited-duration discount ends). A plan change moves all of them away.
+      plan_price_candidates = [
+        purchase.displayed_price_cents.to_i,
+        current_subscription_price_cents.to_i,
+        renewal_pre_discount_total_cents.to_i,
+      ].select(&:positive?)
+      return true if plan_price_candidates.empty?
+
+      plan_price_candidates.include?(presentment.presentment_price_cents)
+    else
+      # A cross-currency (quote-lane) row carries no listed price to compare; it is current
+      # only while renewals still bill the signup price it was fixed from. After a
+      # limited-duration discount ends, a mandate approved off the row would be sized and
+      # denominated for terms the renewal no longer uses. Free signups fixed their row from
+      # renewal terms, so they have no signup price to hold against it.
+      signup_price_cents = purchase.displayed_price_cents.to_i
+      return true unless signup_price_cents.positive?
+
+      current_subscription_price_cents.to_i == signup_price_cents
+    end
+  end
+
+  # The gp#1410 recovery shape: only a membership whose renewals can re-fix in rupees
+  # (product and original purchase both listed in INR) may fall back to INR mandate terms —
+  # a mandate the renewal lane cannot bill would strand the subscription after reauth.
+  def indian_card_recovery_presentment_currency
+    return unless india_card_mandate_reliability_enabled?
+
+    purchase = original_purchase
+    return if purchase.nil?
+
+    currency = Currency::INR
+    return unless link.price_currency_type.to_s.downcase == currency
+    displayed_currency = purchase[:displayed_price_currency_type].presence || link.price_currency_type
+    return unless displayed_currency.to_s.downcase == currency
+    return unless indian_card_renewal_presentment_supported?(currency)
+
+    currency
+  end
+
+  # The renewal lane refuses to invent a buyer-currency amount without a stored row, so a
+  # completed INR reauthorization must record the listed-INR fixing — otherwise the first
+  # renewal after a successful reauthorization pauses the subscription again.
+  def record_indian_card_mandate_presentment!
+    currency = indian_card_recovery_presentment_currency
+    return if currency.blank?
+
+    # Record the price the renewal will actually bill — the currently authorized renewal
+    # amount, not the signup price, which stays discounted after a limited-duration
+    # discount ends. The signup canonical and rate apply only while the two agree.
+    purchase = original_purchase
+    presentment_price_cents = current_subscription_price_cents.to_i
+    presentment_price_cents = renewal_pre_discount_total_cents.to_i if presentment_price_cents.zero?
+    return unless presentment_price_cents.positive?
+
+    canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
+    rate = BigDecimal(purchase.rate_converted_to_usd.to_s, exception: false)
+    unless presentment_price_cents == purchase.displayed_price_cents.to_i &&
+           canonical_price_cents.positive? && rate&.positive?
+      rate = BigDecimal(get_rate(currency).to_s, exception: false)
+      return unless rate&.positive?
+
+      canonical_price_cents = get_usd_cents(currency, presentment_price_cents, rate:)
+    end
+    return unless canonical_price_cents.positive?
+
+    with_lock do
+      current = current_later_charge_presentment
+      if current.present?
+        # A same-currency fixing at the plan's current price stays authoritative: FX
+        # re-fixing keeps the price and only moves the canonical value, which the renewal
+        # lane re-fixes itself. At any other price the mandate was approved off recovery
+        # terms, so the row must be superseded even when its canonical value matches.
+        return if current.presentment_currency == currency &&
+                  current.presentment_price_cents == presentment_price_cents
+        # Keep a cross-currency row exactly when indian_card_mandate_terms would bill it —
+        # the mandate was then approved in that row's currency, not in the recovery
+        # currency. Same predicate set as presentment_matches.
+        return if current.presentment_currency != currency &&
+                  current.canonical_price_cents == LaterChargePresentment.canonical_price_cents_for(purchase) &&
+                  indian_card_renewal_presentment_supported?(current.presentment_currency) &&
+                  indian_card_presentment_price_current?(current, purchase)
+      end
+
+      later_charge_presentments.create!(
+        processor: StripeChargeProcessor.charge_processor_id,
+        presentment_currency: currency,
+        presentment_price_cents:,
+        canonical_price_cents:,
+        signup_currency_units_per_usd: rate,
+        effective_from: Time.current
+      )
+    end
+  rescue ActiveRecord::RecordInvalid => e
+    # The reauthorization already succeeded; a failed fixing only delays recovery until the
+    # next renewal pauses again, so report it instead of failing the buyer's update.
+    ErrorNotifier.notify(e, subscription: external_id)
+    nil
+  end
+
+  def indian_card_renewal_presentment_supported?(currency)
+    merchant_account = renewal_merchant_account
+    StripeChargeProcessor.indian_card_mandate_currency_supported?(currency) &&
+      StripeChargeProcessor.charge_minor_units_compatible?(currency) &&
+      Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account) &&
+      Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(
+        merchant_account,
+        presentment_currency: currency
+      )
+  end
+
+  def renewal_merchant_account
+    seller&.merchant_account(StripeChargeProcessor.charge_processor_id) ||
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+  end
+
+  def indian_card_mandate_source_purchase(card_id)
+    scope = purchases.left_joins(:processor_payment_intent, :charge)
+                     .where(credit_card_id: card_id, purchase_state: Purchase::NON_GIFT_SUCCESS_STATES)
+                     .where(
+                       "purchases.stripe_transaction_id IS NOT NULL OR " \
+                       "purchases.processor_setup_intent_id IS NOT NULL OR " \
+                       "processor_payment_intents.id IS NOT NULL OR " \
+                       "charges.stripe_payment_intent_id IS NOT NULL"
+                     )
+    scope.is_indian_card_mandate_registration.order(created_at: :desc, id: :desc).first || scope.order(created_at: :desc, id: :desc).first
+  end
+
+  def indian_card_mandate_for(card_id)
+    card = credit_card_to_charge
+    return [nil, "missing", nil] unless card&.id == card_id
+    # An active mandate for the old plan cannot authorize the new renewal terms.
+    return [nil, "missing", nil] if indian_card_mandate_requires_reauthorization?
+
+    merchant_account = renewal_merchant_account
+    return [nil, "missing", nil] if merchant_account.nil?
+
+    if stripe_mandate_id.present? && card.processor_payment_method_id.present?
+      mandate = ChargeProcessor.get_mandate(merchant_account, stripe_mandate_id)
+      status = mandate&.status || "missing"
+      raise "Unknown Stripe mandate status: #{status}" unless status.in?(%w[active inactive pending missing])
+
+      unless StripeChargeProcessor.mandate_matches_payment_method?(mandate, card.processor_payment_method_id)
+        ErrorNotifier.notify(
+          "Stored Indian card mandate does not match the subscription payment method",
+          subscription: external_id
+        ) if mandate.present?
+        return [nil, "missing", nil]
+      end
+
+      return [mandate, status, nil]
+    end
+
+    source = indian_card_mandate_source_purchase(card_id)
+    return [nil, "missing", nil] if source.nil? || StripeIntentChargeRouting.direct_charge_account?(source.merchant_account)
+
+    mandate, status = source&.retrieve_indian_card_mandate || [nil, "missing"]
+    [mandate, status, source]
+  end
+
+  def refresh_indian_card_mandate!
+    card = credit_card_to_charge
+    return "missing" if card.nil?
+    unless card.requires_mandate?
+      clear_indian_card_mandate_state!(expected_credit_card_id: card.id)
+      return "active"
+    end
+
+    mandate, status, source = indian_card_mandate_for(card.id)
+    if source.present?
+      source.record_indian_card_mandate_status!(status, mandate_id: mandate&.id)
+    else
+      update_renewal_for_indian_card_mandate!(
+        status,
+        expected_credit_card_id: card.id,
+        mandate_id: mandate&.id
+      )
+    end
+    status
   end
 
   # Public: Charge the user and create a new purchase
@@ -450,9 +917,40 @@ class Subscription < ApplicationRecord
     Feature.active?(:membership_renewal_reminders, seller)
   end
 
-  def unsubscribe_and_fail!
+  def unsubscribe_and_fail!(preserve_access_for_mandate_failure: true)
+    if preserve_access_for_mandate_failure && india_card_mandate_reliability_enabled? && !renewal_disabled_due_to_indian_card_mandate?
+      card_id = credit_card_to_charge&.id
+      current_period_started_at = end_time_of_last_paid_period || created_at
+      mandate_failure = if card_id.present?
+        latest_failure = purchases.failed
+                                  .where(credit_card_id: card_id)
+                                  .where("created_at >= ?", current_period_started_at)
+                                  .order(created_at: :desc, id: :desc)
+                                  .first
+        latest_failure if latest_failure&.indian_card_mandate_error_status.present?
+      end
+      if mandate_failure.present?
+        begin
+          current_status = refresh_indian_card_mandate!
+          reload
+          return :mandate_recovered if current_status == "active" && !renewal_disabled_due_to_indian_card_mandate?
+        rescue ChargeProcessorError => e
+          ErrorNotifier.notify(e, subscription: external_id)
+          update_renewal_for_indian_card_mandate!(
+            mandate_failure.indian_card_mandate_error_status,
+            expected_credit_card_id: card_id,
+            notify_buyer: true
+          )
+        end
+        return :mandate_invalid
+      end
+    end
+
     with_lock do
       return if failed_at.present?
+      if preserve_access_for_mandate_failure && india_card_mandate_reliability_enabled?
+        return if renewal_disabled_due_to_indian_card_mandate?
+      end
 
       was_recently_failed = purchases.failed.where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago).exists?
 
@@ -494,7 +992,7 @@ class Subscription < ApplicationRecord
   def deactivate!
     self.deactivated_at = Time.current
     save!
-    original_purchase&.remove_from_audience_member_details
+    original_purchase&.schedule_audience_member_refresh
 
     after_commit do
       DeactivateIntegrationsWorker.perform_async(original_purchase.id)
@@ -862,7 +1360,7 @@ class Subscription < ApplicationRecord
       self.cancelled_by_buyer = false
       self.failed_at = nil unless pending_cancellation
       save!
-      original_purchase&.add_to_audience_member_details
+      original_purchase&.schedule_audience_member_refresh
 
       if is_deactivated
         # Calculate by how much time do we need to delay the workflow installments
@@ -1067,7 +1565,8 @@ class Subscription < ApplicationRecord
       else
         purchases.order(:created_at).last
       end
-    last_purchase&.failed?
+    last_purchase&.failed? &&
+      (!renewal_disabled_due_to_indian_card_mandate? || last_purchase.indian_card_mandate_error_status.blank?)
   end
 
   def status
@@ -1077,6 +1576,9 @@ class Subscription < ApplicationRecord
       "pending_failure"
     elsif pending_cancellation?
       "pending_cancellation"
+    elsif renewal_disabled_due_to_indian_card_mandate? && india_card_mandate_reliability_enabled? &&
+          (original_purchase.nil? || future_subscription_charge?)
+      "payment_method_update_required"
     else
       "alive"
     end
@@ -1347,7 +1849,7 @@ class Subscription < ApplicationRecord
     end
 
     def update_original_purchase_audience_member_details
-      original_purchase&.add_to_audience_member_details
+      original_purchase&.schedule_audience_member_refresh
     end
 
     def sync_inventory_counter_caches_for_purchases

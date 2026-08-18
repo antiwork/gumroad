@@ -361,6 +361,19 @@ describe ContactingCreatorMailer do
           expect(mail.body.encoded).to include "Submit additional information"
         end
 
+        # The link outlives the deadline on purpose — check_if_needs_redirect refuses the late save,
+        # not the token expiry.
+        it "mints a link that still resolves after the deadline it quotes" do
+          mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+          token = mail.body.decoded[%r{/purchases/([^/?"]+)/dispute_evidence}, 1]
+          expect(token).to be_present
+
+          travel_to(dispute_evidence.seller_response_due_at + 1.hour) do
+            found = Purchase.find_by_secure_external_id(token, scope: Purchases::DisputeEvidenceController::SECURE_ID_SCOPE)
+            expect(found).to eq(purchase)
+          end
+        end
+
         # Hours are computed when the mail renders, not when it is enqueued, and
         # CreateMissingDisputeEvidenceJob backdates windows to a few hours to beat the processor's
         # cutoff. A notice queued with an hour left can therefore render with none, and asking for

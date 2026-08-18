@@ -30,6 +30,7 @@ describe CheckoutController, type: :controller, inertia: true do
         request_apple_pay_merchant_tokens: false,
         payment_element_wallets: false,
         flat_payment_methods: false,
+        india_card_mandate_reliability: false,
         elements_options: nil,
       )
       expect(inertia.props[:checkout]).to eq({
@@ -1075,6 +1076,70 @@ describe CheckoutController, type: :controller, inertia: true do
         # referrer). Suppression only applies when the out-of-range shape is the sole cause,
         # so this mixed failure must still be reported.
         expect(ErrorNotifier).to have_received(:notify)
+      end
+
+      it "rejects items that omit product.id without emptying the existing cart" do
+        product = create(:product)
+        cart = create(:cart, user: controller.logged_in_user)
+        create(:cart_product, cart:, product:)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  option_id: "iJrFhe1dZwE2jeq1HS9scg==",
+                  price: 2000,
+                  quantity: 1
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.not_to change { cart.alive_cart_products.count }
+
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to eq("A product in your cart is missing. Refresh the page and try again.")
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      it "rejects a mixed cart of valid and flattened items without persisting the valid item" do
+        existing_product = create(:product)
+        valid_product = create(:product)
+        cart = create(:cart, user: controller.logged_in_user)
+        existing_cart_product = create(:cart_product, cart:, product: existing_product)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  product: { id: valid_product.external_id },
+                  price: valid_product.price_cents,
+                  quantity: 1,
+                  rent: false,
+                  referrer: "direct",
+                  url_parameters: {}
+                },
+                {
+                  price: 2000,
+                  quantity: 1
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.not_to change { cart.alive_cart_products.count }
+
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to eq("A product in your cart is missing. Refresh the page and try again.")
+        expect(ErrorNotifier).not_to have_received(:notify)
+        expect(cart.reload.alive_cart_products).to contain_exactly(existing_cart_product)
+        expect(cart.alive_cart_products.where(product: valid_product)).to be_empty
       end
 
       it "returns an error when cart contains more than allowed number of cart products" do

@@ -364,7 +364,7 @@ To overcome this:
 ```ruby
 # Run this in a rails console
 purchase = Purchase.last
-BlockedObject.browser_guid.active.find_by(guid: purchase.browser_guid).destroy
+PlatformBlock.browser_guid.active.find_by(object_value: purchase.browser_guid).destroy
 purchase.destroy
 ```
 

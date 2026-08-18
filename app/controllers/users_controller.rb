@@ -6,6 +6,9 @@ class UsersController < ApplicationController
 
   include PageMeta::Favicon, PageMeta::User
   include RendersCustomHtmlPages
+  include CurrencyHelper
+
+  self.buyer_currency_footer_actions = %w[show coffee].freeze
 
   before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data landing_iframe_content landing_version landing_products]
 
@@ -49,7 +52,7 @@ class UsersController < ApplicationController
     # Skipped for pages that reference no price: the build is uncached, per-request work for up
     # to Pages::ProfileData::MAX_ITEMS products, and a page with no reference cannot consume it.
     prices_referenced = Pages::ProductPrices.referenced_in?(@user.custom_html)
-    prices = prices_referenced ? Pages::ProductPrices.build(@user, ip: request.remote_ip) : {}
+    prices = prices_referenced ? Pages::ProductPrices.build(@user, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request)) : {}
     interpolated = Pages::Interpolator.interpolate_profile(@user.custom_html, profile: @user, prices:)
     render html: profile_custom_html_document(
       interpolated,
@@ -130,6 +133,7 @@ class UsersController < ApplicationController
     render inertia: "Users/SubscribePreview", props: {
       avatar_url: @user.resized_avatar_url(size: 240),
       title: @user.name_or_username,
+      bio: @user.bio.presence,
     }
   end
 

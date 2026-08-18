@@ -152,6 +152,11 @@ stale_transient_suppression_sweep:
   class: StaleTransientSuppressionSweepJob
   queue: low
   description: Clears stale TRANSIENT SendGrid bounce/block suppressions for users active since the failure (bounded, logged; never touches spam reports or unsubscribes)
+refresh_high_volume_seller_fee_eligibility:
+  cron: "45 4 * * *" # UTC 04:45 — after the suppression sweep, off payout/report hours
+  class: RefreshHighVolumeSellerFeeEligibilityJob
+  queue: low
+  description: Recomputes the cached month-to-date GMV flag for the 5%-after-$20k seller fee
 purge_old_deleted_asset_previews: # Duration: 1min
   cron: "30 10 * * *" # UTC 10:30
   class: PurgeOldDeletedAssetPreviewsWorker
@@ -218,10 +223,10 @@ auto_topup_negative_destination_balances:
   queue: low
   description: Dry-run (flag-gated) top-up of the Stripe-side gap for negative destination balances; zeroing the internal ledger row stays a human decision
 alert_on_stalled_post_email_blasts:
-  cron: "40 11 * * *" # UTC 11:40
+  cron: "40 5,11,17,23 * * *" # every 6h — under daily scans, a blast requested in the 4h before the scan is below the stall threshold that day and past the 24h resume window the next, so it can never be auto-resumed
   class: AlertOnStalledPostEmailBlastsJob
   queue: low
-  description: Reports email blasts that started sending hours ago and never completed, so a killed blast job is found before a seller writes in
+  description: Reports email blasts that started sending hours ago and never completed and, behind a flag, auto-resumes the safe ones (gumroad-private#2106)
 alert_on_stripe_dob_drift:
   cron: "30 12 * * 1" # UTC 12:30 Monday
   class: AlertOnStripeDobDriftJob

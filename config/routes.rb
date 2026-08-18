@@ -145,6 +145,8 @@ Rails.application.routes.draw do
         member do
           post :preview
           post :send, action: :send_email
+          post :schedule
+          post :unschedule
         end
       end
       resources :workflows, only: [:index, :show] do
@@ -194,6 +196,17 @@ Rails.application.routes.draw do
         namespace :app_attest do
           resources :challenges, only: [:create]
           resources :attestations, only: [:create]
+        end
+      end
+
+      # Gumhead points its Anthropic base URL at /v2/gumhead, so its
+      # runtime's /v1/messages calls land on these routes; the model key
+      # stays server-side and every call is metered per seller (see
+      # Api::V2::Gumhead::MessagesController).
+      namespace :gumhead do
+        scope "v1" do
+          post "messages", to: "messages#create"
+          post "messages/count_tokens", to: "messages#count_tokens"
         end
       end
     end
@@ -483,7 +496,11 @@ Rails.application.routes.draw do
             end
           end
 
-          resources :products, only: [:index, :show]
+          resources :products, only: [:index, :show] do
+            member do
+              get "files/:file_id/download_url", action: :file_download, as: :file_download
+            end
+          end
         end
 
         namespace :grmc do

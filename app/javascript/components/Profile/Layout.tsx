@@ -18,10 +18,14 @@ import { WithTooltip } from "$app/components/WithTooltip";
 type LayoutProps = {
   creatorProfile: CreatorProfile;
   hideFollowForm?: boolean;
+  // Off by default: this layout also runs the product editor's preview and the profile settings
+  // preview, where a buyer currency control belongs to nobody and a reload discards unsaved edits.
+  currencySelector?: boolean | undefined;
+  shownCurrency?: string | null | undefined;
   children?: React.ReactNode;
 };
 
-export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps) => {
+export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shownCurrency, children }: LayoutProps) => {
   const cartItemsCount = useCartItemsCount();
   const appDomain = useAppDomain();
   const loggedInUser = useLoggedInUser();
@@ -90,7 +94,11 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
       </header>
       <main className="flex flex-1 flex-col">
         {children}
-        <PoweredByFooter className="mx-auto w-full max-w-6xl" />
+        <PoweredByFooter
+          className="mx-auto w-full max-w-6xl"
+          currencySelector={currencySelector}
+          shownCurrency={shownCurrency}
+        />
       </main>
     </div>
   );

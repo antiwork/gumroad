@@ -58,6 +58,13 @@ const UpdateProductResponseFields = () => (
           "Warning about offer codes that became invalid for the product, or custom HTML that has no buy element.",
         condition: "present when there is an advisory warning after the update",
       },
+      {
+        name: "file_id_mappings",
+        type: "object",
+        description:
+          "Map of client file ids (files[][id] or files[][external_id]) to the canonical ProductFile id. Use this after attaching a newly uploaded file so a follow-up variant or rich_content write can reference it without GET-diffing the file list.",
+        condition: "present when at least one files entry remapped a client id",
+      },
     ])}
   </ApiResponseFields>
 );

@@ -137,7 +137,7 @@ describe CreateIndiaSalesReportJob do
 
       described_class.new.perform(6, 2023)
 
-      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "India Sales Reporting", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "India Sales Reporting", anything, "green", anything)
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

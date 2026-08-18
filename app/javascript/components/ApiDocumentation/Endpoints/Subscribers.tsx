@@ -22,8 +22,8 @@ export const GetSubscribers = () => (
           in the past.
         </p>
         <p>
-          A subscription's status can be one of: alive, pending_cancellation, pending_failure, failed_payment,
-          fixed_subscription_period_ended, cancelled.
+          A subscription's status can be one of: alive, payment_method_update_required, pending_cancellation,
+          pending_failure, failed_payment, fixed_subscription_period_ended, cancelled.
         </p>
       </>
     }

@@ -55,11 +55,25 @@ class Subscription::RestartAtCheckoutService
         paypal_order_id: params[:paypal_order_id],
         stripe_customer_id: params[:stripe_customer_id],
         stripe_setup_intent_id: params[:stripe_setup_intent_id],
+        contact_info:,
         offer_code: new_offer_code,
         clear_discount: original_discount.present? && new_offer_code.blank?,
         submitted_pre_discount_price_cents: params[:submitted_pre_discount_price_cents],
         once_per_cart_discount_allocation: params[:once_per_cart_discount_allocation],
       }.compact
+    end
+
+    def contact_info
+      purchase_params = params[:purchase] || {}
+      {
+        email: purchase_params[:email],
+        full_name: purchase_params[:full_name],
+        street_address: purchase_params[:street_address],
+        country: purchase_params[:country],
+        state: purchase_params[:state],
+        zip_code: purchase_params[:zip_code],
+        city: purchase_params[:city],
+      }.compact.presence
     end
 
     def default_variant_ids

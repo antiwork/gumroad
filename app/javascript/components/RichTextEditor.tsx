@@ -267,6 +267,7 @@ export const useRichTextEditor = ({
   className,
   editable = true,
   extensions = [],
+  allowUpsells = true,
   onChange,
   onCreate,
   onInputNonImageFiles,
@@ -278,6 +279,9 @@ export const useRichTextEditor = ({
   initialValue: Content;
   editable?: boolean | undefined;
   extensions?: Extensions | undefined;
+  // First-class Pages publish as static HTML with no client JS, and Page#content
+  // sanitization drops <upsell-card>. Keep the insert off that surface.
+  allowUpsells?: boolean | undefined;
   onChange?: ((newValue: string) => void) | undefined;
   onCreate?: ((editor: Editor) => void) | undefined;
   onInputNonImageFiles?: (files: File[]) => void;
@@ -298,7 +302,11 @@ export const useRichTextEditor = ({
     }
   }
 
-  const allExtensions = [...extensions, ...(placeholder ? [Placeholder.configure({ placeholder })] : []), UpsellCard];
+  const allExtensions = [
+    ...extensions,
+    ...(placeholder ? [Placeholder.configure({ placeholder })] : []),
+    ...(allowUpsells ? [UpsellCard] : []),
+  ];
   const dedupedExtensions = allExtensions.filter(
     (ext, index) => allExtensions.findIndex((e) => e.name === ext.name) === index,
   );
@@ -450,12 +458,14 @@ export const RichTextEditorToolbar = ({
   editor,
   custom,
   productId,
+  allowUpsells = true,
   color = "primary",
   className,
 }: {
   custom?: React.ReactNode;
   editor: Editor;
   productId?: string;
+  allowUpsells?: boolean;
   color?: "primary" | "ghost";
   className?: string;
 }) => {
@@ -679,12 +689,14 @@ export const RichTextEditorToolbar = ({
                           )}
                         </React.Fragment>
                       ))}
-                      <PopoverClose asChild>
-                        <MenuListItem onClick={() => setIsUpsellModalOpen(true)}>
-                          <CartPlus className="size-5" />
-                          <span>Upsell</span>
-                        </MenuListItem>
-                      </PopoverClose>
+                      {allowUpsells ? (
+                        <PopoverClose asChild>
+                          <MenuListItem onClick={() => setIsUpsellModalOpen(true)}>
+                            <CartPlus className="size-5" />
+                            <span>Upsell</span>
+                          </MenuListItem>
+                        </PopoverClose>
+                      ) : null}
                       {productId ? (
                         <PopoverClose asChild>
                           <MenuListItem onClick={() => setIsReviewModalOpen(true)}>
@@ -719,11 +731,13 @@ export const RichTextEditorToolbar = ({
           />
         </div>
       </div>
-      <UpsellSelectModal
-        isOpen={isUpsellModalOpen}
-        onClose={() => setIsUpsellModalOpen(false)}
-        onInsert={handleUpsellInsert}
-      />
+      {allowUpsells ? (
+        <UpsellSelectModal
+          isOpen={isUpsellModalOpen}
+          onClose={() => setIsUpsellModalOpen(false)}
+          onInsert={handleUpsellInsert}
+        />
+      ) : null}
       {productId ? (
         <TestimonialSelectModal
           isOpen={isReviewModalOpen}
@@ -765,6 +779,7 @@ export const RichTextEditor = ({
   onChange,
   onCreate,
   extensions,
+  allowUpsells = true,
 }: {
   id?: string;
   className?: string;
@@ -775,6 +790,7 @@ export const RichTextEditor = ({
   onChange?: (newValue: string) => void;
   onCreate?: (editor: Editor) => void;
   extensions?: Extensions;
+  allowUpsells?: boolean;
 }) => {
   const editor = useRichTextEditor({
     id,
@@ -786,12 +802,17 @@ export const RichTextEditor = ({
     onChange,
     onCreate,
     extensions,
+    allowUpsells,
   });
 
   return (
     <div className="grid min-h-56 grid-rows-[max-content_1fr] rounded" data-gumroad-ignore>
       {editor ? (
-        <RichTextEditorToolbar editor={editor} className="rounded-t rounded-b-none border border-b-0 border-border" />
+        <RichTextEditorToolbar
+          editor={editor}
+          allowUpsells={allowUpsells}
+          className="rounded-t rounded-b-none border border-b-0 border-border"
+        />
       ) : null}
       <EditorContent className="rich-text" editor={editor} />
     </div>

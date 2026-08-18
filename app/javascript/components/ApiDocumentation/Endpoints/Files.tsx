@@ -212,7 +212,7 @@ export const AttachFile = () => (
   -d "native_type=digital" \\
   -d "name=My product" \\
   -d "price=500" \\
-  -d "files[][url]=https://gumroad-specials.s3.amazonaws.com/attachments/A-m3CDDC5dlrSdKZp0RFhA==/9f2c1b7d6e4a/original/course.pdf" \\
+  -d "files[][url]=FILE_URL" \\
   -X POST`}
       </CodeSnippet>
       <CodeSnippet caption="Gumroad CLI (upload + attach in one call)">
@@ -229,15 +229,27 @@ export const AttachFile = () => (
         canonical <code>file_url</code>. Entries without a <code>url</code> are dropped (and the file they point to is
         deleted).
       </p>
+      <p>
+        New files may include a client <code>id</code> or <code>external_id</code> (the CLI uses{" "}
+        <code>cli-upload-…</code>). A successful PUT then returns top-level <code>file_id_mappings</code> from that
+        client id to the canonical ProductFile id. The key is omitted when nothing remapped.
+      </p>
       <CodeSnippet caption="Attach on update (PUT /v2/products/:id) — preserve existing files">
         {`curl https://api.gumroad.com/v2/products/PRODUCT_ID \\
   -d "access_token=ACCESS_TOKEN" \\
   -d "files[][id]=EXISTING_FILE_ID_1" \\
-  -d "files[][url]=https://gumroad-specials.s3.amazonaws.com/attachments/A-m3CDDC5dlrSdKZp0RFhA==/aaaa1111/original/existing1.pdf" \\
+  -d "files[][url]=EXISTING_FILE_URL_1" \\
   -d "files[][id]=EXISTING_FILE_ID_2" \\
-  -d "files[][url]=https://gumroad-specials.s3.amazonaws.com/attachments/A-m3CDDC5dlrSdKZp0RFhA==/bbbb2222/original/existing2.pdf" \\
-  -d "files[][url]=https://gumroad-specials.s3.amazonaws.com/attachments/A-m3CDDC5dlrSdKZp0RFhA==/9f2c1b7d6e4a/original/course.pdf" \\
+  -d "files[][url]=EXISTING_FILE_URL_2" \\
+  -d "files[][external_id]=cli-upload-1" \\
+  -d "files[][url]=NEW_FILE_URL" \\
   -X PUT`}
+      </CodeSnippet>
+      <CodeSnippet caption="Example response (truncated):">
+        {`{
+  "success": true,
+  "file_id_mappings": { "cli-upload-1": "NEW_FILE_ID" }
+}`}
       </CodeSnippet>
       <CodeSnippet caption="Gumroad CLI (append a file, keep existing attachments)">
         gumroad products update PRODUCT_ID --file ./course.pdf

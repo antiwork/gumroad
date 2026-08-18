@@ -25,6 +25,11 @@ type Currency = {
 
 export const currencyCodeList: CurrencyCode[] = Object.keys(currenciesMap);
 
+// Narrows a currency code that came from outside the app (a cookie, a query parameter, a server
+// response) before it is used to index the currency table.
+export const isCurrencyCode = (code: string): code is CurrencyCode =>
+  Object.prototype.hasOwnProperty.call(currenciesMap, code);
+
 export const findCurrencyByCode = (code: CurrencyCode): Currency => {
   const spec = currenciesMap[code];
   return {
@@ -108,7 +113,6 @@ export const formatMinorUnitPriceWithIntl = (
   subunitToUnit?: number | null,
 ): string => {
   const currency = currencyCode.toUpperCase();
-  const formatter = new Intl.NumberFormat("en-US", { style: "currency", currency });
   // Prefer the backend's authoritative subunit_to_unit (the Money gem's value, which is
   // the single source of truth and is non-ISO for some currencies, e.g. KRW/HUF/IDR use
   // 100). Only fall back to the currencies.json heuristic when the caller didn't pass it.
@@ -121,7 +125,18 @@ export const formatMinorUnitPriceWithIntl = (
           )?.[1];
           return configuredCurrency && "single_unit" in configuredCurrency && configuredCurrency.single_unit ? 1 : 100;
         })();
-  return formatter.format(amountMinorUnits / resolvedSubunitToUnit);
+  const units = amountMinorUnits / resolvedSubunitToUnit;
+  // Match USD checkout amounts by dropping .00 on whole units. Fractional values
+  // use the currency's own convention, so KRW stays whole even though Gumroad stores it in 100 subunits.
+  const currencyFractionDigits = new Intl.NumberFormat("en-US", { style: "currency", currency }).resolvedOptions()
+    .maximumFractionDigits;
+  const fractionDigits = Number.isInteger(units) ? 0 : currencyFractionDigits;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(units);
 };
 
 export type BuyerLocalCurrencyContext = {

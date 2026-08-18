@@ -874,8 +874,10 @@ class SubscriptionTest < ActiveSupport::TestCase
         stripe_customer_id: "cus_TLK5KncEpdGdIH"
       )
       subscription = create_subscription(link: product, user: buyer, credit_card: indian_cc)
-      create_membership_purchase(is_original_subscription_purchase: true, link: product, variant_attributes: [product.default_tier],
-                                 price_cents: 5_00, subscription:, purchaser: buyer, credit_card: indian_cc)
+      registration = create_membership_purchase(is_original_subscription_purchase: true, link: product, variant_attributes: [product.default_tier],
+                                                price_cents: 5_00, subscription:, purchaser: buyer, credit_card: indian_cc,
+                                                stripe_transaction_id: "ch_3SOdR0IBOqvOFDrf1jPbSPdX")
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, product.user)
 
       assert_changes -> { Purchase.count }, from: Purchase.count, to: Purchase.count + 1 do
         subscription.charge!
@@ -884,9 +886,12 @@ class SubscriptionTest < ActiveSupport::TestCase
       subscription.reload
       latest_purchase = Purchase.last
 
+      assert_equal registration, subscription.indian_card_mandate_source_purchase(indian_cc.id)
       assert_equal "in_progress", latest_purchase.purchase_state
       assert_equal indian_cc, subscription.credit_card
       assert_equal latest_purchase.credit_card, subscription.credit_card
+    ensure
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, product.user) if product.present?
     end
   end
 
@@ -3228,6 +3233,15 @@ class SubscriptionTest < ActiveSupport::TestCase
 
   test "#status returns 'pending_failure' for a subscription in a grace period" do
     subscription = create_subscription
+    create_purchase(link: subscription.link, subscription:, is_original_subscription_purchase: true, purchase_state: "successful")
+    travel_to 1.month.from_now
+    create_purchase(link: subscription.link, subscription:, purchase_state: "failed")
+
+    assert_equal "pending_failure", subscription.status
+  end
+
+  test "#status keeps pending failure before pending cancellation" do
+    subscription = create_subscription(cancelled_at: 2.months.from_now)
     create_purchase(link: subscription.link, subscription:, is_original_subscription_purchase: true, purchase_state: "successful")
     travel_to 1.month.from_now
     create_purchase(link: subscription.link, subscription:, purchase_state: "failed")

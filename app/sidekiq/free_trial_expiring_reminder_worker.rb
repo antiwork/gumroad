@@ -8,6 +8,7 @@ class FreeTrialExpiringReminderWorker
     subscription = Subscription.find(subscription_id)
     return unless subscription.alive?(include_pending_cancellation: false) &&
                   subscription.in_free_trial? &&
+                  !(subscription.renewal_disabled_due_to_indian_card_mandate? && subscription.india_card_mandate_reliability_enabled?) &&
                   !subscription.is_test_subscription?
 
 

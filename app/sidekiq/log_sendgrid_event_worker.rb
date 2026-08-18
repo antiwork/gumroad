@@ -1,26 +1,12 @@
 # frozen_string_literal: true
 
+# No-op stub so payloads already in the low queue / retry set drain cleanly
+# after EmailEvent's removal. Delete once a post-removal deploy has aged out
+# the retry window.
 class LogSendgridEventWorker
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :low
+  sidekiq_options retry: 0, queue: :low
 
-  def perform(params)
-    events = params["_json"]
-    # Handling potential SendGrid weirdness where sometimes it might not give us an array.
-    events = [events] unless events.is_a?(Array)
-
-    events.each do |event|
-      event_type = event["event"]
-      next unless %w[open click].include?(event_type)
-
-      timestamp = Time.zone.at(event["timestamp"])
-
-      case event_type
-      when "open"
-        EmailEvent.log_open_event(event["email"], timestamp)
-      when "click"
-        EmailEvent.log_click_event(event["email"], timestamp)
-      end
-    end
+  def perform(*)
   end
 end

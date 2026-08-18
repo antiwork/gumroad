@@ -59,6 +59,15 @@ class Purchase::SyncStatusWithChargeProcessorService
                          !charge.try(:refunded) && !charge.try(:refunded?) && !charge.try(:disputed)
       charge_succeeded &&= @charge_outcome == :succeeded if @require_final_charge_status
 
+      if charge_succeeded && @charge_outcome == :succeeded && charge.flow_of_funds.nil? &&
+         !purchase.stripe_charge_processor? && purchase.is_part_of_combined_charge?
+        # Non-Stripe processors never produce a flow of funds (PaypalCharge deliberately skips
+        # building one), so "nil, wait for settlement" would wait forever. Synthesize the same
+        # simple flow of funds the normal success path does in Purchase#load_flow_of_funds,
+        # sized to the whole combined charge because the split below divides by it.
+        charge.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.charge.amount_cents)
+      end
+
       if charge_succeeded && charge.flow_of_funds.nil? && (purchase.is_part_of_combined_charge? || purchase.buyer_presentment?)
         # The charge succeeded but the processor has not produced the balance transaction the flow
         # of funds is read from, so retry later rather than failing a purchase whose money moved.

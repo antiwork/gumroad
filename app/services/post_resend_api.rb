@@ -57,7 +57,6 @@ class PostResendApi
       create_email_info_records
       update_delivery_statistics
       send_push_notifications
-      upsert_email_events_documents
     end
 
     true
@@ -249,10 +248,6 @@ class PostResendApi
         sent_at: Time.current,
       }
       EmailInfo.create_with(base_attributes).insert_all!(attributes)
-    end
-
-    def upsert_email_events_documents
-      EmailEvent.log_send_events(@recipients.map { _1[:email] }, Time.current)
     end
 
     def log_mail_debug_info(email, recipient)

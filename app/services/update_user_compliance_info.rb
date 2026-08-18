@@ -97,6 +97,9 @@ class UpdateUserComplianceInfo
         end
       end
 
+      birthday_error = invalid_birthday_error
+      return { success: false, error_message: birthday_error } if birthday_error
+
       old_compliance_info = current_compliance_info
       compliance_info_changed = compliance_info_changed?(old_compliance_info)
       old_compliance_info.reload if old_compliance_info.persisted? && encrypted_compliance_info_params_present?
@@ -194,7 +197,7 @@ class UpdateUserComplianceInfo
           country_code: new_compliance_info.legal_entity_country_code,
         )
       end
-      new_compliance_info.birthday = Date.new(compliance_params[:dob_year].to_i, compliance_params[:dob_month].to_i, compliance_params[:dob_day].to_i) if compliance_params[:dob_year].present? && compliance_params[:dob_year].to_i > 0
+      new_compliance_info.birthday = parsed_birthday if parsed_birthday
       new_compliance_info.skip_stripe_job_on_create = true
       new_compliance_info.phone =                   compliance_params[:phone]                   if compliance_params[:phone].present?
       new_compliance_info.business_phone =          compliance_params[:business_phone]          if compliance_params[:business_phone].present?
@@ -260,9 +263,25 @@ class UpdateUserComplianceInfo
     end
 
     def birthday_changed?(old_compliance_info)
-      compliance_params[:dob_year].present? &&
-        compliance_params[:dob_year].to_i > 0 &&
-        old_compliance_info.birthday != Date.new(compliance_params[:dob_year].to_i, compliance_params[:dob_month].to_i, compliance_params[:dob_day].to_i)
+      birthday = parsed_birthday
+      birthday.present? && old_compliance_info.birthday != birthday
+    end
+
+    # Year present but month/day not a real calendar date (June 31, month 0, ...).
+    # Date.new raises Date::Error on those; the payments settings form 500s if we let it.
+    def invalid_birthday_error
+      return if compliance_params[:dob_year].blank? || compliance_params[:dob_year].to_i <= 0
+      return if parsed_birthday
+
+      "Please enter a valid date of birth"
+    end
+
+    def parsed_birthday
+      year = compliance_params[:dob_year]
+      return if year.blank? || year.to_i <= 0
+
+      y, m, d = year.to_i, compliance_params[:dob_month].to_i, compliance_params[:dob_day].to_i
+      Date.new(y, m, d) if Date.valid_date?(y, m, d)
     end
 
     def compliance_info_value(compliance_info, field)

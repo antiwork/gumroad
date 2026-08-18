@@ -26,6 +26,7 @@ class AssetPreview < ApplicationRecord
   # Shrink too-large image covers in the background so variant generation on
   # later renders stays fast.
   after_create_commit :enqueue_oversized_image_resize
+  after_create_commit :enqueue_retina_variant_process
 
   # Update updated_at of product to regenerate the sitemap in RefreshSitemapMonthlyWorker
   belongs_to :link, touch: true, optional: true
@@ -112,9 +113,26 @@ class AssetPreview < ApplicationRecord
 
   def retina_variant
     return unless file.attached?
-    Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
-      file.variant(resize_to_limit: [retina_width, nil]).processed
+
+    file.variant(resize_to_limit: [retina_width, nil])
+  end
+
+  # Worker-only. `.processed` runs ImageMagick; request paths must not call this.
+  def generate_retina_variant!
+    return unless file.attached? && should_post_process?
+
+    variant = retina_variant
+    return variant.processed.url if variant_processed?(variant)
+
+    url = Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
+      variant.processed.url
     end
+    Rails.cache.write("attachment_#{file.id}_retina_url", url)
+    url
+  rescue StandardError => e
+    # Re-raise so ProcessAssetPreviewRetinaWorker's retries fire on transient failures.
+    Rails.logger.warn("AssetPreview#generate_retina_variant! failed for asset_preview #{id}: #{e.message}")
+    raise
   end
 
   # True when the attached image is larger than covers ever render and should
@@ -128,20 +146,12 @@ class AssetPreview < ApplicationRecord
     width.to_i > MAX_IMAGE_DIMENSION || height.to_i > MAX_IMAGE_DIMENSION
   end
 
-  # Replaces an oversized image cover with a copy resized down to
-  # MAX_IMAGE_DIMENSION on its longest side. Runs from
-  # ResizeOversizedAssetPreviewWorker, never on a web request: with very
-  # large originals (the motivating case was a 254 MB, 18000px-wide PNG) the
-  # download + resize takes long enough to blow the request timeout, which is
-  # exactly the failure this exists to prevent.
+  # Worker-only: download + resize of a huge original blows the request timeout.
   def resize_oversized_image!
     return unless oversized_image?
 
-    # Remember which blob we are resizing. Resizing a huge original can take
-    # a while (that slowness is the whole reason this runs in a background
-    # job), and the cover can be replaced or deleted in the meantime. Without
-    # this check the job would attach its resized copy of the OLD image,
-    # silently clobbering the seller's newer cover.
+    # Resize can take a while; the cover may be replaced or deleted. Without
+    # this id check we'd attach a resized copy of the OLD image.
     source_blob_id = file.blob.id
 
     resized = file.variant(resize_to_limit: [MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION]).processed
@@ -158,18 +168,11 @@ class AssetPreview < ApplicationRecord
 
     attached_resized_copy = false
     begin
-      # with_lock reloads the record, so the deleted flag below reflects what
-      # is in the database right now. Locking the asset_previews row alone is
-      # not quite enough, though: a write to the cover's attachment lands in
-      # the active_storage_attachments table without touching this record's
-      # lock. So we also take a row lock on the attachment itself — any
-      # concurrent update or delete of that attachment blocks until this
-      # transaction commits. That closes the window where a change could land
-      # between the blob check and the attach. (Today, "replacing" a cover
-      # actually creates a NEW asset_previews row and soft-deletes the old one
-      # via mark_deleted! — an update on this row, serialized by with_lock —
-      # so the attachment lock is defense in depth for any future path that
-      # re-attaches on an existing row.)
+      # with_lock reloads, so deleted? is current. Also lock the attachment:
+      # a write there does not touch this row's lock, so a replace can land
+      # between the blob check and attach. Today's replace path creates a new
+      # row + mark_deleted! (serialized by with_lock); the attachment lock is
+      # defense in depth for a future re-attach-in-place.
       with_lock do
         attachment = ActiveStorage::Attachment.lock.find_by(record: self, name: "file")
         if !deleted? && attachment&.blob_id == source_blob_id
@@ -178,12 +181,9 @@ class AssetPreview < ApplicationRecord
         end
       end
     ensure
-      # Two ways we can end up here without having attached the resized copy:
-      # the cover changed (or was deleted) while we were resizing, or
-      # something raised after the upload. Either way, clean up the resized
-      # blob instead of leaving it orphaned in storage — purge_later so a
-      # storage hiccup here can't mask an in-flight exception, and so Sidekiq
-      # retries of this job don't pile up one orphan per attempt.
+      # Cover changed during resize, or we raised after upload. purge_later so
+      # a storage hiccup here cannot mask the exception, and retries don't
+      # orphan one blob per attempt.
       resized_blob.purge_later unless attached_resized_copy
     end
 
@@ -226,42 +226,18 @@ class AssetPreview < ApplicationRecord
     url
   end
 
-  # A still image to show for this cover before playback starts.
-  # For embedded players (YouTube/Vimeo) this is the thumbnail the platform
-  # provides via oEmbed. For video files uploaded directly to Gumroad we ask
-  # ActiveStorage for a preview — a frame ffmpeg extracts from the video — so
-  # the product page can show that frame instead of a black rectangle while
-  # the player is idle. Returns nil for images (they don't need a poster) and
-  # when no preview can be generated (e.g. ffmpeg missing or a corrupt file);
-  # the player then falls back to the old black idle state.
+  # nil (images, missing ffmpeg, corrupt file) → player stays black.
   def thumbnail_url
     return oembed_thumbnail_url if oembed
 
     video_poster_url
   end
 
-  # Generating a poster means downloading the video and running ffmpeg, which
-  # can take a while for large files. That work never happens on a web
-  # request thread: GenerateVideoPosterWorker is enqueued when the cover is
-  # created and does the generation in the background. Renders only ever read
-  # an already-generated result.
-  #
-  # Where that result lives matters. In production the cache store is namespaced
-  # by the deploy revision (config/environments/production.rb:
-  # `namespace: ENV.fetch("REVISION")`), so every deploy is a full cache clear —
-  # a poster kept only in Rails.cache disappears on every deploy. Hence the read
-  # order:
-  #
-  #   1. Rails.cache, a memo for the URL string of a poster we have already
-  #      confirmed, so the common render costs no queries;
-  #   2. otherwise the blob's persisted preview_image, which is a real database
-  #      record and survives deploys — a cache miss must never hide a poster we
-  #      demonstrably have;
-  #   3. otherwise nil, and enqueue a generation so the poster appears on later
-  #      views (the player shows its plain idle state this time).
-  #
-  # Failures cache an empty-string sentinel for an hour so the worker's retries
-  # don't re-download and re-run ffmpeg on a video ffmpeg cannot preview.
+  # Generation (download + ffmpeg) is off the request path.
+  # Production cache is namespaced by deploy REVISION, so a cache-only poster
+  # vanishes every deploy. Read: Rails.cache → persisted preview_image
+  # (survives deploys) → nil and enqueue. Empty-string sentinel for 1 hour
+  # so retries don't re-run ffmpeg on a video it cannot preview.
   FAILED_POSTER_SENTINEL = ""
   FAILED_POSTER_RETRY_INTERVAL = 1.hour
 
@@ -271,41 +247,25 @@ class AssetPreview < ApplicationRecord
     cached = Rails.cache.read(video_poster_cache_key)
     return cached if cached.present?
 
-    # Cache miss, or the failure sentinel: read through to the persisted preview.
-    # This is what makes a poster survive a deploy — unlike the cache, the
-    # preview_image attachment is a real database record pointing at a real
-    # object in storage. We're on a web request, so this only reports a poster
-    # whose resized copy already exists; it never stops to make one (see
-    # persisted_video_poster_url).
+    # Cache miss or sentinel: persisted preview only — never generate here.
     persisted = persisted_video_poster_url
     if persisted.present?
       Rails.cache.write(video_poster_cache_key, persisted)
       return persisted
     end
 
-    # The sentinel means generation already tried and ffmpeg couldn't preview
-    # this blob, so don't queue another attempt until it expires.
+    # Sentinel: ffmpeg already failed; wait for expiry before requeue.
     return nil unless cached.nil?
 
-    # Nothing generated yet — covers created before poster support existed land
-    # here. Kick off a background generation so the poster shows up on
-    # subsequent views; this view renders without one.
     GenerateVideoPosterWorker.perform_async(id)
     nil
   end
 
-  # The URL of the poster frame ActiveStorage has already persisted for this
-  # video, or nil if it hasn't persisted one. Returns nil rather than raising if
-  # the attachment record exists but its URL can't be built (a half-written
-  # preview shouldn't 500 a product page — a missing poster only costs us the
-  # nicety of a preview frame).
+  # Already-persisted poster URL, or nil. Rescues URL-build failures so a
+  # half-written preview cannot 500 a product page.
   #
-  # Pass process: true only from background work. The poster is stored at full
-  # size and we serve a resized copy of it, and asking ActiveStorage for that
-  # resized copy's URL when it doesn't exist yet makes it right there and then:
-  # download the poster, run the image processor, upload the result. That is
-  # fine in a worker and unacceptable on a web request, where a page full of
-  # covers would do it once per cover while the request waits.
+  # process: true only from a worker. variant.processed generates the resized
+  # copy inline; a page of covers would do that once per cover.
   def persisted_video_poster_url(process: false)
     blob = file.blob
     return nil unless blob&.preview_image&.attached?
@@ -390,12 +350,24 @@ class AssetPreview < ApplicationRecord
 
     style ||= default_style
 
-    Rails.cache.fetch("attachment_#{file.id}_#{style}_url") do
-      if style == :retina
-        retina_variant.url
-      else
-        file.url
+    if style == :retina
+      variant = retina_variant
+      if variant && variant_processed?(variant)
+        return Rails.cache.fetch("attachment_#{file.id}_retina_url") { variant.url }
       end
+
+      enqueue_retina_variant_process
+
+      # Inline workers finish during enqueue. Re-read so this call and the
+      # next one return the same URL.
+      variant = retina_variant
+      if variant && variant_processed?(variant)
+        Rails.cache.fetch("attachment_#{file.id}_retina_url") { variant.url }
+      else
+        Rails.cache.fetch("attachment_#{file.id}_original_url") { file.url }
+      end
+    else
+      Rails.cache.fetch("attachment_#{file.id}_#{style}_url") { file.url }
     end
   rescue
     file.url
@@ -450,26 +422,25 @@ class AssetPreview < ApplicationRecord
       "attachment_#{file.id}_poster_url"
     end
 
-    # Whether the resized copy of the persisted poster already exists, so that
-    # asking for its URL is a lookup instead of an image-processing run. Rails
-    # records every resized copy it has made in active_storage_variant_records
-    # (config.active_storage.track_variants, on by default), so this is one
-    # indexed row read.
-    #
-    # Returning false when we can't tell is deliberate: the caller then reports
-    # "no poster yet", which enqueues GenerateVideoPosterWorker unless the
-    # failure sentinel is still live, and the worker makes the resized copy off
-    # the request path.
-    def resized_poster_exists?(variant)
+    # Lookup, not an image-processing run. false when we can't tell: the caller
+    # reports "no poster" and the worker makes the resized copy off-request.
+    def variant_processed?(variant)
       return false unless ActiveStorage.track_variants
 
       variant.blob.variant_records.exists?(variation_digest: variant.variation.digest)
     end
+    alias_method :resized_poster_exists?, :variant_processed?
 
     def enqueue_video_poster_generation
       return unless file.attached? && file.video?
 
       GenerateVideoPosterWorker.perform_async(id)
+    end
+
+    def enqueue_retina_variant_process
+      return unless file.attached? && should_post_process?
+
+      ProcessAssetPreviewRetinaWorker.perform_async(id)
     end
 
     def enqueue_oversized_image_resize
