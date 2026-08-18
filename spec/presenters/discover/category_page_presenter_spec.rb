@@ -39,7 +39,7 @@ describe Discover::CategoryPagePresenter do
       expect(data["@type"]).to eq("BreadcrumbList")
       expect(data["itemListElement"]).to eq(
         [
-          { "@type" => "ListItem", "position" => 1, "name" => "Discover", "item" => "#{discover_host}/" },
+          { "@type" => "ListItem", "position" => 1, "name" => "Discover", "item" => "#{discover_host}/discover" },
           { "@type" => "ListItem", "position" => 2, "name" => "Software Development", "item" => "#{discover_host}/software-development" },
           { "@type" => "ListItem", "position" => 3, "name" => "Programming", "item" => "#{discover_host}/software-development/programming" },
         ]

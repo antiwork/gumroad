@@ -18,9 +18,17 @@ describe LoginsController, type: :controller, inertia: true do
       expect(response).to be_successful
       expect(inertia.component).to eq("Logins/New")
       expect(inertia.props[:current_user]).to be_nil
-      expect(inertia.props[:title]).to eq("Log In")
+      expect(inertia.props[:title]).to eq("Log in to Gumroad")
       expect(inertia.props[:email]).to be_nil
       expect(inertia.props[:application_name]).to be_nil
+    end
+
+    it "pins the login canonical to DOMAIN when requested on another valid host" do
+      @request.host = "127.0.0.1"
+
+      get :new
+
+      expect(controller.send(:meta_tags)["canonical"][:href]).to eq("#{PROTOCOL}://#{DOMAIN}/login")
     end
 
     it "embeds passkey login options and stores the challenge in the session" do
