@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Persistent query loop for prod_query.sh. Booted once via `rails runner`,
 # then serves spooled queries without paying Rails boot per call.
 #
@@ -35,12 +37,23 @@ loop do
   end
   last_job = Time.now
   id = File.basename(job, ".rb")
-  code = File.read(job)
-  # Taken marker BEFORE deleting the job: the client must be able to tell
+  # Taken marker BEFORE the job leaves in/: the client must be able to tell
   # "never picked up" (safe to re-run one-shot) from "executed or executing"
   # (must not re-run) at every instant.
   FileUtils.touch(File.join(OUT_DIR, "#{id}.taken"))
-  File.delete(job)
+  # Claim by atomic rename. The booter lock and the pid check are both
+  # best-effort, so two loops can briefly coexist — and the client's fallback
+  # can rm the job while we pick it up. rename lets exactly one consumer win;
+  # a read-then-delete here would double-execute in the first race and crash
+  # the loop with ENOENT in either.
+  claimed = "#{job}.claimed"
+  begin
+    File.rename(job, claimed)
+  rescue Errno::ENOENT
+    next
+  end
+  code = File.read(claimed)
+  File.delete(claimed)
   out_path = File.join(OUT_DIR, "#{id}.out")
   err_path = File.join(OUT_DIR, "#{id}.err")
   rc_path = File.join(OUT_DIR, "#{id}.rc")
@@ -62,10 +75,10 @@ loop do
     end
     status = 0
     begin
-      Timeout.timeout(JOB_LIMIT) { eval(code, TOPLEVEL_BINDING) } # rubocop:disable Security/Eval
+      Timeout.timeout(JOB_LIMIT) { eval(code, TOPLEVEL_BINDING) }
     rescue SystemExit => e
       status = e.status
-    rescue Exception => e # rubocop:disable Lint/RescueException
+    rescue Exception => e
       warn "#{e.class}: #{e.message}"
       e.backtrace&.first(10)&.each { |line| warn line }
       status = 1
