@@ -41,4 +41,41 @@ describe LinksController, type: :controller, inertia: true do
       expect(inertia.component).to eq("Products/Iframe/Show")
     end
   end
+
+  describe "GET search virtual default-products (gp#2196)" do
+    let(:stubbed_search) do
+      { total: 1, filetypes_data: [], tags_data: [], taxonomy_attributes_data: [], products: Link.none }
+    end
+
+    it "rejects default-products when the seller has profile sections and the flag is off" do
+      create(:seller_profile_products_section, seller:)
+      expect(controller).not_to receive(:search_products)
+
+      get :search, params: { user_id: seller.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+
+      expect(response.parsed_body).to include("total" => 0, "products" => [])
+    end
+
+    it "accepts default-products when the seller has profile sections and the storefront flag is on" do
+      create(:seller_profile_products_section, seller:)
+      Feature.activate_user(:default_product_page_to_storefront, seller)
+      allow(controller).to receive(:search_products).and_return(stubbed_search)
+
+      get :search, params: { user_id: seller.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+
+      expect(response).to have_http_status(:ok)
+      expect(controller).to have_received(:search_products)
+      expect(response.parsed_body["total"]).to eq(1)
+    end
+
+    it "still rejects default-products when the flag is on for a different seller" do
+      Feature.activate_user(:default_product_page_to_storefront, create(:user))
+      create(:seller_profile_products_section, seller:)
+      expect(controller).not_to receive(:search_products)
+
+      get :search, params: { user_id: seller.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+
+      expect(response.parsed_body).to include("total" => 0, "products" => [])
+    end
+  end
 end

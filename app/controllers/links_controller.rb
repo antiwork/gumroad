@@ -254,16 +254,13 @@ class LinksController < ApplicationController
     if in_section
       user = User.find_by_external_id(search_params[:user_id])
       section = user && user.seller_profile_products_sections.find_by_external_id(search_params[:section_id])
-      # The profile page can show a virtual "default products section" (all of the creator's
-      # live products) when the creator has products but hasn't saved any profile sections yet.
-      # That section has no database row, so when the frontend fetches more results for it,
-      # accept its well-known id and search across all the creator's profile products (leaving
-      # `section` nil below does exactly that). Guarded on the creator still having no saved
-      # sections so this id can't be used to bypass a customized profile layout.
+      # Virtual default-products has no DB row. Accept it when the seller has no
+      # on-profile sections, or when the product-page storefront flag is on (that
+      # page emits this id even if the profile itself is customized).
       searching_default_products_section =
         user.present? &&
         search_params[:section_id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID &&
-        user.seller_profile_sections.on_profile.none?
+        (user.seller_profile_sections.on_profile.none? || Feature.active?(:default_product_page_to_storefront, user))
       return render json: { total: 0, filetypes_data: [], tags_data: [], taxonomy_attributes_data: [], products: [] } if user.nil? || (section.nil? && !searching_default_products_section && search_params[:ids].blank?)
       search_params[:section] = section if section
       search_params[:is_alive_on_profile] = true

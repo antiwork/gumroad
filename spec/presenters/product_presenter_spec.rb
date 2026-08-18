@@ -264,6 +264,14 @@ describe ProductPresenter do
         expect(props[:creator_profile]).to be_present
         expect(props[:sections].map { _1[:id] }).to include(ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID)
       end
+
+      it "includes the default section when the seller has profile sections but the product has none" do
+        create(:seller_profile_products_section, seller:)
+
+        props = presenter.default_storefront_product_props(**base_kwargs)
+
+        expect(props[:sections].map { _1[:id] }).to include(ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID)
+      end
     end
 
     it "merges discover_props for discover layout" do
