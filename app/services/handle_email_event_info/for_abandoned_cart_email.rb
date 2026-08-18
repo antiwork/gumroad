@@ -33,6 +33,8 @@ class HandleEmailEventInfo::ForAbandonedCartEmail
     end
 
     def handle_open_event!(installment)
+      EmailEngagementDynamoStore.record_open(**common_event_attributes(installment))
+
       open_event = CreatorEmailOpenEvent.where(common_event_attributes(installment)).last
       if open_event.present?
         open_event.add_to_set(open_timestamps: Time.current)
@@ -46,6 +48,8 @@ class HandleEmailEventInfo::ForAbandonedCartEmail
 
     def handle_click_event!(installment)
       return if email_event_info.click_url_as_mongo_key.blank?
+
+      EmailEngagementDynamoStore.record_click(**common_event_attributes(installment), click_url: email_event_info.click_url_as_mongo_key)
 
       summary = CreatorEmailClickSummary.where(installment_id: installment.id).last
       if summary.present?
