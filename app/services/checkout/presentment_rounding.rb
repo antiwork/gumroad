@@ -1,38 +1,15 @@
 # frozen_string_literal: true
 
-# Rounds a buyer-currency total so it keeps the price ending the seller chose in USD:
-# a $9.99 cart quotes €8,99 rather than €8,53, and a $10 cart quotes €9 rather than €8,53.
-# This happens at the moment the quote is minted.
+# Mirror the seller's USD ending onto the buyer-currency quote at mint time
+# ($9.99 → €8,99, not €8,53). Use the converted TOTAL's ending (tax included),
+# not the bare product price.
 #
-# Mirroring the seller's own ending, rather than picking from a menu of "good" endings, is
-# the rule Gumroad wants: the seller decided what their price should look like, and a buyer
-# paying in euros should see the same decision expressed in euros. It also means we never
-# have to defend a chosen set of endings — the ending is whatever the seller already picked.
-# The ending mirrored is the one on the USD total being converted, so a cart with tax keeps
-# the total's ending (the .49 of an $11.49 total), not the bare product price's.
+# Mint time, not charge time: the charged amount must be the total the buyer
+# confirmed. Seller proceeds/tax/shipping stay canonical USD; the delta lands
+# on Gumroad (charge_presentments.rounding_delta_cents).
 #
-# Why quote-mint time and not charge time: the buyer decides against the amount the
-# checkout shows them. Rounding after that decision — on the way to the processor —
-# changes the amount charged without changing the amount displayed, which both misses
-# the entire point of a nicer price and breaks the invariant the buyer-currency feature
-# is built around (the charged amount is exactly the total the buyer confirmed). So the
-# rounding happens once, before the quote is signed, and the rounded amount is what is
-# displayed, itemized, locked into the quote token, and charged.
-#
-# The seller's proceeds, tax, shipping, balances and payouts are all canonical USD
-# amounts and are untouched by this: the whole rounding difference lands on Gumroad's
-# side of the presentment charge (see Charge::PresentmentOrchestrator), and is recorded
-# as charge_presentments.rounding_delta_cents so it can be monitored alongside
-# foreign-exchange drift.
-#
-# Direction is NEAREST occurrence of that ending, never ceiling. Measured against 2,159
-# real charge_presentments amounts (July 2026, on an earlier version of this rule that
-# aimed at a fixed menu of endings): a nearest rule was very slightly in the buyer's
-# favour on balance (signed mean -0.13%), whereas always rounding up to the next
-# occurrence was a +2.06% average price increase. The grids have changed since, but the
-# asymmetry has not: always-up is a price rise on international buyers wearing a rounding
-# algorithm's clothes. If we ever want that spread we should take it explicitly as a
-# pricing decision, not as a side effect of making prices look nicer.
+# Direction is NEAREST, never ceiling — always-up is a price rise on
+# international buyers, not a rounding side effect.
 class Checkout::PresentmentRounding
   include CurrencyHelper
 
@@ -62,65 +39,35 @@ class Checkout::PresentmentRounding
   ZERO_DECIMAL_STEP = 100
   ZERO_DECIMAL_MAX_PERCENT = 3
 
-  # Rounding rides along with the seller's buyer-local-currency setup and is on by
-  # default for those sellers, with its own opt-out. Opt-in would give us a
-  # self-selected minority of sellers and no read on whether the feature does anything.
-  #
-  # Fee-waived sales are excluded. The rounding difference is absorbed out of Gumroad's
-  # share of the charge, so there has to BE a share: on a sale where Gumroad's fee is
-  # waived (Gumroad Day, or the per-seller waiver flag) a Stripe-Connect seller's charge
-  # can leave Gumroad nothing, and rounding down would have to come out of the seller's
-  # money. Those sales quote the exact converted amount instead.
+  # On by default for buyer-local-currency sellers (own opt-out). Fee-waived
+  # sales are excluded: the delta is absorbed from Gumroad's share, and a
+  # waived Stripe-Connect charge can leave nothing — rounding down would
+  # come out of the seller.
   def self.enabled_for?(seller)
     Checkout::BuyerCurrencyEligibility.seller_enabled?(seller) &&
       !seller.disable_buyer_currency_rounding? &&
       !seller.waive_gumroad_fee_on_new_sales?
   end
 
-  # Returns the amount to quote and how far it moved. A zero delta means "charge the
-  # exact converted amount" — every path that cannot round safely returns that rather
-  # than raising, because a checkout must never fail over a cosmetic price ending.
+  # Zero delta = charge the exact converted amount. Unsafe paths return that
+  # rather than raise — checkout must not fail over a cosmetic ending.
   #
-  # canonical_total_cents is the USD total being converted, and it is what supplies the
-  # ending to mirror: its cents (99 for a $9.99 cart, 0 for a $10 one) are the ending the
-  # quoted amount is pulled onto.
-  #
-  # max_downward_cents is how much of the charge Gumroad is known to be able to give up:
-  # rounding DOWN is absorbed out of Gumroad's share of the charge, and the seller's
-  # proceeds must come out identical either way, so the amount can never fall further
-  # than that. Callers pass the presentment-currency value of the share they can prove
-  # exists at quote time (see Checkout::BuyerCurrencyQuote).
-  #
-  # This cap is a prediction, not a guarantee: a fee waiver can begin between the quote and
-  # the charge, leaving no Gumroad share behind the round-down this sized. That is why
-  # Charge::PresentmentOrchestrator re-checks the reduction against the fee actually
-  # computed on the purchases and refuses the charge if the fee no longer covers it.
+  # Ending comes from canonical_total_cents (USD). max_downward_cents is
+  # Gumroad's presentment-currency share at quote time (BuyerCurrencyQuote);
+  # it is a prediction — PresentmentOrchestrator re-checks the real fee and
+  # refuses if a waiver landed between quote and charge.
   def self.round(presentment_total_cents:, canonical_total_cents:, currency:, max_downward_cents:)
     new(presentment_total_cents:, canonical_total_cents:, currency:, max_downward_cents:).round
   end
 
-  # The part of the charge Gumroad is guaranteed to be holding, and so the most a
-  # round-down may take. It counts only the flat Gumroad fee on the cart's price and tips,
-  # deliberately ignoring everything else Gumroad ends up with (the fixed fee, processor
-  # fees, taxes we remit) — a floor is what this needs to be, not an accurate total.
-  # Returns 0 when the seller pays no percentage fee, which keeps rounding down off for
-  # those sales rather than funding it out of the seller's money.
+  # Floor of what a round-down may take: flat Gumroad fee on price+tips only
+  # (not fixed fee, processor fees, remitted tax). Zero when the seller pays
+  # no percentage fee.
   #
-  # Tips belong in the base because Gumroad's percentage fee is charged on them: a tip
-  # makes a product's price "customizable" rather than adding a line beside it, so the
-  # buyer submits one tip-inclusive price, that becomes Purchase#price_cents, and
-  # Purchase#calculate_fees takes its percentage from that whole amount. A tip-heavy cart
-  # therefore has a proportionally larger Gumroad share, not a smaller one. The
-  # presentment_rounding spec asserts this cap against the real fee calculation, so if the
-  # tip ever stops being part of the fee base a test fails rather than a round-down
-  # silently reaching into the seller's money.
-  #
-  # Brazilian Stripe Connect sellers are the exception the fee percentages cannot see:
-  # Purchase#calculate_fees zeroes fee_cents outright for those accounts, so Gumroad takes
-  # nothing from the charge and there is no share for a round-down to come out of. They are
-  # otherwise buyer-currency eligible, so without this the cap would claim absorption
-  # capacity that does not exist and the reduction would land on the seller's proceeds.
-  # Those sales quote the exact converted amount instead.
+  # Tips are in the fee base (customizable price → Purchase#price_cents).
+  # Brazilian Stripe Connect zeroes fee_cents in calculate_fees — they are
+  # otherwise buyer-currency eligible, so without the early return the cap
+  # would claim absorption that does not exist.
   def self.absorbable_gumroad_cents(seller:, canonical_price_and_tip_cents:, merchant_account: nil)
     return 0 if merchant_account&.is_a_brazilian_stripe_connect_account?
 
