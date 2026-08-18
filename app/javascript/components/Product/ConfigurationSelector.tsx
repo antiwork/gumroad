@@ -530,13 +530,10 @@ const CallDateAndTimeSelector = ({
             justifyContent: "space-between",
           }}
         >
-          <span>Select a date</span>
+          <label htmlFor={dateSelectId}>Select a date</label>
           {isLoading ? <LoadingSpinner /> : null}
         </h4>
         <Fieldset>
-          <FieldsetTitle>
-            <Label htmlFor={dateSelectId}>Date</Label>
-          </FieldsetTitle>
           <Select
             id={dateSelectId}
             value={selectedDateValue}
@@ -556,18 +553,18 @@ const CallDateAndTimeSelector = ({
               );
             })}
           </Select>
+          <Calendar
+            locale={{ code: "en-US" }}
+            mode="single"
+            selected={selectedStartTime}
+            startMonth={firstAvailableStartTime ?? new Date()}
+            endMonth={lastAvailability ? new Date(lastAvailability.end_time) : new Date()}
+            disabled={(date) => !isAvailableOnDate(date)}
+            onSelect={(date) => {
+              if (date) setSelectedDateFromReactCalendar(date);
+            }}
+          />
         </Fieldset>
-        <Calendar
-          locale={{ code: "en-US" }}
-          mode="single"
-          selected={selectedStartTime}
-          startMonth={firstAvailableStartTime ?? new Date()}
-          endMonth={lastAvailability ? new Date(lastAvailability.end_time) : new Date()}
-          disabled={(date) => !isAvailableOnDate(date)}
-          onSelect={(date) => {
-            if (date) setSelectedDateFromReactCalendar(date);
-          }}
-        />
       </section>
       {selectedStartTime ? (
         <section>

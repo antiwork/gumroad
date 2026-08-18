@@ -94,7 +94,7 @@ describe("CallDateAndTimeSelector", () => {
 
     const { selections } = renderCallSelector();
 
-    const dateSelect = await screen.findByLabelText("Date");
+    const dateSelect = await screen.findByLabelText("Select a date");
     if (!(dateSelect instanceof HTMLSelectElement)) throw new Error("expected a native date <select>");
     expect(dateSelect.disabled).toBe(false);
     expect(Array.from(dateSelect.options).map((option) => option.text)).toEqual([
