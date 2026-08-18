@@ -3,6 +3,7 @@ import { Stripe, StripeCardElement, StripeElements } from "@stripe/stripe-js";
 import { prepareBraintreePaymentMethodData } from "$app/data/braintree_payment_method_data";
 import {
   confirmCardIfNeeded,
+  type FutureChargesBillingInfo,
   type PaymentElementBillingDetailsCollection,
   prepareCardPaymentMethodData,
   preparePaymentElementPaymentMethodData,
@@ -235,7 +236,11 @@ export async function getPaymentMethodResult(
 }
 
 // FIXME: see above
-type ReusableOptions = { products: Product[] };
+type ReusableOptions = {
+  products: Product[];
+  billingInfo?: FutureChargesBillingInfo | null;
+  mandateReliabilitySetup?: boolean;
+};
 export async function getReusablePaymentMethodResult(
   selected: SavedSelectedPaymentMethod,
   options: ReusableOptions,
@@ -256,7 +261,7 @@ export async function getReusablePaymentMethodResult(
 
 export async function getReusablePaymentMethodResult(
   selected: SelectedPaymentMethod,
-  { products }: ReusableOptions,
+  { products, billingInfo, mandateReliabilitySetup }: ReusableOptions,
 ): Promise<SavedPaymentMethodResult | PayPalPaymentMethodResult | ReusableNewCardPaymentMethodResult> {
   const data = await getPaymentMethodResult(selected);
 
@@ -273,9 +278,17 @@ export async function getReusablePaymentMethodResult(
         return { type: "new", cardParamsResult: data.cardParamsResult };
       }
       const { cardParamsResult } = data;
+      const paymentMethodBillingInfo = products.some((product) => product.requireShipping)
+        ? billingInfo
+        : (cardParamsResult.cardParams.elementBillingAddress ??
+          cardParamsResult.cardParams.wallet?.billingAddress ??
+          billingInfo);
       const cardParams = await prepareFutureCharges({
         products,
         cardParams: data.cardParamsResult.cardParams,
+        email: "email" in selected ? selected.email : null,
+        billingInfo: paymentMethodBillingInfo ?? null,
+        ...(mandateReliabilitySetup === undefined ? {} : { mandateReliabilitySetup }),
       }).then(confirmCardIfNeeded);
       if (cardParams.status === "success") {
         return {
@@ -305,11 +318,24 @@ export const getPaymentRequestPaymentMethodResult = (
 
 export const getReusablePaymentRequestPaymentMethodResult = async (
   paymentRequestParams: PaymentRequestPaymentMethodParams,
-  { products }: { products: Product[] },
+  {
+    products,
+    email,
+    billingInfo = null,
+    mandateReliabilitySetup,
+  }: {
+    products: Product[];
+    email: string | null;
+    billingInfo?: FutureChargesBillingInfo | null;
+    mandateReliabilitySetup?: boolean;
+  },
 ): Promise<ReusablePaymentRequestPaymentMethodResult> => {
   const cardParams = await prepareFutureCharges({
     products,
     cardParams: paymentRequestParams,
+    email,
+    billingInfo,
+    ...(mandateReliabilitySetup === undefined ? {} : { mandateReliabilitySetup }),
   }).then(confirmCardIfNeeded);
 
   if (cardParams.status === "success") {

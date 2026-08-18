@@ -14,7 +14,7 @@ class Api::V2::LinksController < Api::V2::BaseController
   RESULTS_PER_PAGE = 10
   # Product-level refund policies accept the account-level periods plus "inherit",
   # which disables the product override and falls back to the account default.
-  PRODUCT_REFUND_PERIOD_ALLOWED_VALUES = (["inherit"] + Api::V2::RefundPoliciesController::REFUND_PERIOD_ALLOWED_VALUES).freeze
+  PRODUCT_REFUND_PERIOD_ALLOWED_VALUES = (%w[inherit none] + Api::V2::RefundPoliciesController::REFUND_PERIOD_ALLOWED_VALUES).freeze
   MISSING_BUY_AFFORDANCE_WARNING = "The custom landing page does not include a buy element, so buyers may not be able to purchase this product. " \
                                    'Add an element with data-gumroad-action="buy" or post a gumroad:checkout message.'
 
@@ -359,6 +359,7 @@ class Api::V2::LinksController < Api::V2::BaseController
         return render_response(false, message: "'modified' is not an accepted parameter on files[]; it is an internal save-path flag.")
       end
       existing_files_by_id = @product.product_files.alive.index_by(&:external_id)
+      @known_existing_file_ids = existing_files_by_id.keys
       new_files = []
       params[:files].each do |f|
         existing = f[:id].present? ? existing_files_by_id[f[:id]] : nil
@@ -402,6 +403,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     previous_custom_html = nil
     sanitization_report = nil
+    file_id_mappings = {}
     begin
       ActiveRecord::Base.transaction do
         # Lock the product row so concurrent custom_html PUTs serialize their
@@ -476,7 +478,9 @@ class Api::V2::LinksController < Api::V2::BaseController
         flag_changed = @product.has_same_rich_content_for_all_variants? != rich_content_flag_was
 
         unless @normalized_files.nil?
-          referenced_existing_ids = @normalized_files.filter_map { |f| f[:id] if f[:id].present? }
+          # Unknown client ids (cli-upload-*) are creates. Only ids that matched
+          # an alive file before this request can be a concurrent delete.
+          referenced_existing_ids = @normalized_files.filter_map { |f| f[:id] if f[:id].present? && @known_existing_file_ids&.include?(f[:id]) }
           if referenced_existing_ids.any?
             locked_alive_ids = @product.product_files.alive.lock.map(&:external_id)
             missing_ids = referenced_existing_ids - locked_alive_ids
@@ -486,7 +490,7 @@ class Api::V2::LinksController < Api::V2::BaseController
           validate_file_embed_conflicts!(skip_variant_embeds: flag_changed && @product.has_same_rich_content_for_all_variants? && !@normalized_rich_content.nil?)
 
           rich_content_params = build_rich_content_params
-          SaveFilesService.perform(@product, { files: @normalized_files }, rich_content_params)
+          file_id_mappings = SaveFilesService.perform(@product, { files: @normalized_files }, rich_content_params) || {}
         end
 
         @product.save!
@@ -542,6 +546,7 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
 
     additional_info = params.key?(:custom_html) ? { previous_custom_html: previous_custom_html, sanitization_report: sanitization_report } : {}
+    additional_info[:file_id_mappings] = file_id_mappings if file_id_mappings.present?
     warnings = [check_offer_code_validity]
     if params[:custom_html].present?
       # Profiles share the sanitizer, so buy-affordance warnings stay in the product API.
@@ -673,6 +678,14 @@ class Api::V2::LinksController < Api::V2::BaseController
       render_response(false, message: "You do not have access to custom HTML pages.")
     end
 
+    # Only the persisted product decides: `update` never applies a native_type param,
+    # so trusting it would let a digital product slip past this check (the model would
+    # then silently coerce 0 to 7). On create @product is nil, rejecting "none" for
+    # every creatable type — physical products can't be created via this API.
+    def product_allows_no_refunds?
+      @product&.is_physical?
+    end
+
     # Validates the product-level refund policy params shared by create and
     # update. Returns an error message string, or nil when the params are valid.
     def validate_product_refund_policy_params
@@ -689,6 +702,9 @@ class Api::V2::LinksController < Api::V2::BaseController
         end
         if refund_period == "inherit" && params[:refund_fine_print].present?
           return "refund_fine_print cannot be set when refund_period is 'inherit'; the account-level policy's fine print applies."
+        end
+        if refund_period == "none" && !product_allows_no_refunds?
+          return Api::V2::RefundPoliciesController::NO_REFUNDS_NOT_ALLOWED_MESSAGE
         end
       end
 

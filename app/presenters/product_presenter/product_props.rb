@@ -187,7 +187,10 @@ class ProductPresenter::ProductProps
     def refund_policy_props
       if seller.account_level_refund_policy_enabled?
         {
-          title: seller.refund_policy.title,
+          # The account-level policy has no product context of its own, so resolve the
+          # title against this product: a leftover 0-day row still reads "No refunds
+          # allowed" on physical products, matching what the purchase will snapshot.
+          title: seller.refund_policy.title(for_physical: product.is_physical?),
           fine_print: seller.refund_policy.fine_print.present? ? ActionController::Base.helpers.simple_format(seller.refund_policy.fine_print) : nil,
           updated_at: seller.refund_policy.updated_at.to_date,
         }

@@ -686,11 +686,20 @@ describe("requiresPaymentElementReusablePaymentMethod", () => {
 });
 
 describe("requiresReusablePaymentMethodForCardCollection", () => {
-  it("routes recurring products through reusable setup for Payment Element card collection", () => {
+  it("routes recurring products through reusable setup only for Payment Element or the mandate flag", () => {
     const recurringState = state({ products: [product({ recurrence: "monthly" })] });
 
     expect(requiresReusablePaymentMethodForCardCollection(recurringState, true)).toBe(true);
     expect(requiresReusablePaymentMethodForCardCollection(recurringState, false)).toBe(false);
+    expect(
+      requiresReusablePaymentMethodForCardCollection(
+        state({
+          checkoutPayment: { ...cardElementConfig, india_card_mandate_reliability: true },
+          products: [product({ recurrence: "monthly" })],
+        }),
+        false,
+      ),
+    ).toBe(true);
   });
 
   it("does not create a reusable card before setup-mode Payment Element collection", () => {

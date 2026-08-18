@@ -66,7 +66,7 @@ module SearchProducts
       end
 
       # These reach ES as `terms` clauses, which reject a nested structure with a 400.
-      %i[tags filetypes ids taxonomy_attribute_filters].each do |key|
+      %i[tags filetypes ids exclude_ids taxonomy_attribute_filters].each do |key|
         next unless search_params[key].is_a?(Array)
 
         search_params[key] = search_params[key].filter_map { |element| scalar_search_value(element)&.to_s }

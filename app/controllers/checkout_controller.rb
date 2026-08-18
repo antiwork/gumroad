@@ -37,6 +37,12 @@ class CheckoutController < ApplicationController
       return redirect_to checkout_path, alert: "You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart."
     end
 
+    # Reject invalid items before the transaction; skipping them during filtering
+    # would mark every existing cart product deleted.
+    if items.any? { |item| item[:product].blank? || item[:product][:id].blank? }
+      return redirect_to checkout_path, alert: "A product in your cart is missing. Refresh the page and try again."
+    end
+
     ActiveRecord::Base.transaction do
       browser_guid = cookies[:_gumroad_guid]
       cart = Cart.fetch_by(user: logged_in_user, browser_guid:) || Cart.new(user: logged_in_user, browser_guid:)

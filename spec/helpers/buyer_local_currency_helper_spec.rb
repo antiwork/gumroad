@@ -289,6 +289,27 @@ describe CurrencyHelper do
       expect(props).to include(display_mode: "default", buyer_currency_shown: "usd")
     end
 
+    it "hides an unsupported platform mandate currency for a membership" do
+      membership = create(:subscription_product, user: seller, price_cents: 1000, price_currency_type: Currency::USD)
+      platform_merchant_account = create(
+        :merchant_account,
+        user: nil,
+        currency: Currency::USD,
+        charge_processor_merchant_id: "acct_india_mandate_display"
+      )
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+      allow(helper).to receive(:buyer_currency_merchant_account).with(seller).and_return(platform_merchant_account)
+      allow(helper).to receive(:buyer_currency_for_ip).and_return(Currency::AUD)
+
+      props = helper.buyer_currency_display_props(product: membership, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "default", buyer_currency_shown: Currency::USD)
+    ensure
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    end
+
     it "shows the buyer currency for a product priced in a third currency, which the charge path does present" do
       # What the seller priced in does not decide this: the charge converts the cart's
       # canonical USD total into the buyer's currency whichever currency was listed.

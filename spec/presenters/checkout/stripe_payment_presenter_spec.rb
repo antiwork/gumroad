@@ -70,20 +70,21 @@ describe Checkout::StripePaymentPresenter do
     checkout_product_for(product, **overrides)
   end
 
-  def card_element_fallback(reason, request_apple_pay_merchant_tokens: false)
-    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, payment_element_wallets: false, flat_payment_methods: false, elements_options: nil }
+  def card_element_fallback(reason, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false)
+    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, india_card_mandate_reliability:, payment_element_wallets: false, flat_payment_methods: false, elements_options: nil }
   end
 
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, recurring_upi_registration: false, direct_listed_card: false, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, recurring_upi_registration: false, direct_listed_card: false, disable_wallets: false, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
       recurring_upi_registration:,
       disable_wallets:,
       request_apple_pay_merchant_tokens:,
+      india_card_mandate_reliability:,
       payment_element_wallets:,
       flat_payment_methods:,
       elements_options: {
@@ -106,12 +107,13 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
       disable_wallets:,
       request_apple_pay_merchant_tokens:,
+      india_card_mandate_reliability:,
       payment_element_wallets:,
       flat_payment_methods:,
       elements_options: {
@@ -142,13 +144,28 @@ describe Checkout::StripePaymentPresenter do
     expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props)
   end
 
+  it "exposes the India mandate flag for one eligible seller" do
+    seller = create(:user)
+    product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+      .to eq(payment_element_props(india_card_mandate_reliability: true))
+  ensure
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) if seller
+  end
+
   it "selects Stripe Payment Element for a flagged single-seller direct-charge checkout" do
     seller = create(:user, check_merchant_account_is_linked: true)
     product = create(:product, user: seller, price_cents: 1234)
     create(:merchant_account_stripe_connect, user: seller)
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
 
     expect(stripe_payment_props(add_products: [checkout_product_for(product)])).to eq(payment_element_props)
+  ensure
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) if seller
   end
 
   it "selects Stripe Payment Element even when the buyer has a saved card" do
@@ -411,6 +428,7 @@ describe Checkout::StripePaymentPresenter do
       fallback_reason: "buyer_currency_presentment_unsupported",
       disable_wallets: true,
       request_apple_pay_merchant_tokens: false,
+      india_card_mandate_reliability: false,
       payment_element_wallets: false,
       flat_payment_methods: false,
       elements_options: nil,

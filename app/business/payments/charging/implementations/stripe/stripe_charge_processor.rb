@@ -23,6 +23,8 @@ class StripeChargeProcessor
   REFUND_REASON_FRAUDULENT = "fraudulent"
 
   MANDATE_PREFIX = "Mandate-"
+  INDIA_CARD_MANDATE_RELIABILITY_FEATURE = :india_card_mandate_reliability
+  INDIA_CARD_MANDATE_CURRENCIES = %w[inr usd eur gbp sgd cad chf sek aed jpy nok myr hkd].freeze
   UPI_PAYMENT_METHOD_UPDATE_MESSAGE = "Your saved UPI payment method can no longer be used. Please update your payment method to continue your membership."
   # Stripe does not echo UPI mandate_options, so finalization validates this server-authored copy.
   UPI_RECURRING_MAX_AMOUNT_METADATA_KEY = "gumroad_upi_max_amount_cents"
@@ -47,6 +49,46 @@ class StripeChargeProcessor
 
   def self.charge_processor_id
     "stripe"
+  end
+
+  def self.mandate_matches_payment_method?(mandate, payment_method_id)
+    return false if mandate.blank? || payment_method_id.blank?
+
+    mandate_payment_method = mandate.payment_method
+    mandate_payment_method = mandate_payment_method.id if mandate_payment_method.respond_to?(:id)
+    mandate_payment_method == payment_method_id
+  end
+
+  def self.indian_card_mandate_reference(subscription_external_id)
+    # Stripe rejects a reference that an earlier mandate attempt already used.
+    "#{MANDATE_PREFIX}#{subscription_external_id}-#{SecureRandom.hex}"
+  end
+
+  def self.indian_card_mandate_reference_for_subscription?(reference, subscription_external_id)
+    subscription_reference = "#{MANDATE_PREFIX}#{subscription_external_id}"
+    # Accept SetupIntents created with the old format during a deploy.
+    reference == subscription_reference || reference.to_s.start_with?("#{subscription_reference}-")
+  end
+
+  def self.indian_card_mandate_interval(recurrence)
+    case recurrence
+    when "yearly"
+      ["year", 1]
+    when "quarterly"
+      ["month", 3]
+    when "biannually"
+      ["month", 6]
+    when "monthly"
+      ["month", 1]
+    when "every_two_years"
+      ["sporadic", nil]
+    else
+      ["sporadic", 1]
+    end
+  end
+
+  def self.indian_card_mandate_currency_supported?(currency)
+    INDIA_CARD_MANDATE_CURRENCIES.include?(currency.to_s.downcase)
   end
 
   # Gumroad stores some currencies in non-ISO minor units (e.g. KRW is stored as 1/100 won —
@@ -239,6 +281,16 @@ class StripeChargeProcessor
     end
   end
 
+  def get_mandate(mandate_id, merchant_account: nil)
+    with_stripe_error_handler do
+      if merchant_migrated?(merchant_account)
+        Stripe::Mandate.retrieve(mandate_id, { stripe_account: merchant_account.charge_processor_merchant_id })
+      else
+        Stripe::Mandate.retrieve(mandate_id)
+      end
+    end
+  end
+
   def setup_future_charges!(merchant_account, chargeable, mandate_options: nil)
     params = {
       payment_method_types: ["card"],
@@ -305,14 +357,24 @@ class StripeChargeProcessor
     params[:fx_quote] = stripe_fx_quote_id if stripe_fx_quote_id.present?
     params.merge!(confirm: true) if off_session
 
-    params.merge!(mandate_options) if mandate_options.present? && !upi_autopay
-
-    params.merge!(chargeable.stripe_charge_params)
-
     # Off-session recurring charges on Indian cards use e-mandates:
     # https://stripe.com/docs/india-recurring-payments?integration=paymentIntents-setupIntents
+    mandate = if off_session && chargeable.requires_mandate? && !upi_autopay
+      if chargeable.respond_to?(:validated_stripe_mandate_id) && chargeable.validated_stripe_mandate_id.present?
+        chargeable.validated_stripe_mandate_id
+      # A PaymentMethod chargeable carries the SetupIntent submitted for this checkout. A
+      # stored CreditCard carries historical intent IDs that can describe another subscription.
+      elsif mandate_options.blank? || chargeable.is_a?(StripeChargeablePaymentMethod)
+        get_mandate_id_from_chargeable(chargeable, merchant_account)
+      end
+    end
+
+    # Stripe does not update a mandate. Use the mandate from a completed SetupIntent instead
+    # of asking the PaymentIntent to create different terms.
+    params.merge!(mandate_options) if mandate_options.present? && !upi_autopay && mandate.blank?
+    params.merge!(chargeable.stripe_charge_params)
+
     if off_session && chargeable.requires_mandate? && !upi_autopay
-      mandate = get_mandate_id_from_chargeable(chargeable, merchant_account)
       if mandate.present?
         params.merge!(mandate:)
       elsif mandate_expected

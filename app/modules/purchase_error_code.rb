@@ -72,6 +72,8 @@ module PurchaseErrorCode
   # We fail these ourselves instead of submitting them to Stripe, because Indian issuers
   # decline mandate-less recurring charges (as transaction_not_allowed) every time.
   INDIA_CARD_MANDATE_MISSING = "india_card_mandate_missing"
+  INDIA_CARD_MANDATE_INACTIVE = "india_card_mandate_inactive"
+  INDIA_CARD_MANDATE_PENDING = "india_card_mandate_pending"
   # Purchase#not_double_charged matched a SUCCESSFUL prior purchase — unlike its
   # in-progress/settling cases, the buyer can resolve this one: the client offers a "buy again"
   # confirmation and retries with confirmed_duplicate_purchase, which widens only this check.
@@ -259,6 +261,9 @@ module PurchaseErrorCode
                                                     PROCESSOR_INVALID_REQUEST,
                                                     PROCESSING_ERROR,
                                                     CREDIT_CARD_NOT_PROVIDED,
+                                                    INDIA_CARD_MANDATE_MISSING,
+                                                    INDIA_CARD_MANDATE_INACTIVE,
+                                                    INDIA_CARD_MANDATE_PENDING,
                                                   ])
 
   UNBLOCK_BUYER_ERROR_CODES = FRAUD_RELATED_ERROR_CODES + [TEMPORARILY_BLOCKED_EMAIL_ADDRESS]

@@ -992,6 +992,69 @@ describe Subscription::UpdaterService, :vcr do
               expect(Purchase.find_by_secure_external_id(response[:purchase][:id], scope: "confirm")).to eq(@subscription.purchases.in_progress.last)
               expect(PostToPingEndpointsWorker.jobs.size).to eq(0)
             end
+
+            it "pauses renewal while a paid plan change waits for card confirmation",
+               vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/changing_the_price_on_a_PWYW_tier/to_a_price_that_is_higher/when_the_card_requires_e-mandate/charges_the_difference_and_returns_proper_SCA_response" } do
+              Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+              mandate = Stripe::Mandate.construct_from(
+                id: "mandate_old_terms",
+                status: "active",
+                payment_method: @subscription.credit_card.processor_payment_method_id
+              )
+              @subscription.update!(stripe_mandate_id: mandate.id)
+              allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+              params = @params.merge(
+                price_range: 7_99,
+                perceived_price_cents: 7_99,
+                perceived_upgrade_price_cents: 3_38,
+              )
+              expect(CustomerLowPriorityMailer).not_to receive(:subscription_indian_card_mandate_invalid)
+
+              response = Subscription::UpdaterService.new(
+                subscription: @subscription,
+                gumroad_guid: @gumroad_guid,
+                params:,
+                logged_in_user: @user,
+                remote_ip: @remote_ip,
+              ).perform
+
+              expect(response).to include(success: true, requires_card_action: true)
+              expect(@subscription.reload.original_purchase).not_to eq(@original_purchase)
+              expect(@subscription).to be_renewal_disabled_due_to_indian_card_mandate
+              expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+              expect(@subscription.purchases.is_upgrade_purchase.in_progress).to exist
+            ensure
+              Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+            end
+
+            it "pauses renewal after a changed-terms charge succeeds without card action",
+               vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/changing_the_price_on_a_PWYW_tier/to_a_price_that_is_higher/when_the_card_requires_e-mandate/charges_the_difference_and_returns_proper_SCA_response" } do
+              Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+              @subscription.update!(stripe_mandate_id: "mandate_old_terms")
+              params = @params.merge(
+                price_range: 7_99,
+                perceived_price_cents: 7_99,
+                perceived_upgrade_price_cents: 3_38,
+              )
+              service = Subscription::UpdaterService.new(
+                subscription: @subscription,
+                gumroad_guid: @gumroad_guid,
+                params:,
+                logged_in_user: @user,
+                remote_ip: @remote_ip,
+              )
+              allow(service).to receive(:charge_user!).and_return(success: true)
+              expect(CustomerLowPriorityMailer).not_to receive(:subscription_indian_card_mandate_invalid)
+
+              response = service.perform
+
+              expect(response).to eq(success: true)
+              expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+              expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+              expect(@subscription.stripe_mandate_id).to eq("mandate_old_terms")
+            ensure
+              Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+            end
           end
         end
 
@@ -1221,6 +1284,28 @@ describe Subscription::UpdaterService, :vcr do
 
             expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(nil, nil, ResourceSubscription::SUBSCRIPTION_UPDATED_RESOURCE_NAME, @subscription.id, params)
           end
+
+          it "requires a new Indian card mandate when the free-trial plan changes its terms",
+             vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/updating_during_a_free_trial/upgrading/upgrades_the_user_immediately_and_does_not_charge_them" } do
+            @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)
+            allow(@subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+            allow(@subscription).to receive(:indian_card_mandate_terms).and_return(
+              { amount: 6_00, currency: Currency::USD, interval: "month", interval_count: 3 },
+              { amount: 10_50, currency: Currency::USD, interval: "month", interval_count: 3 }
+            )
+
+            result = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: upgrade_tier_params.merge(perceived_upgrade_price_cents: 0),
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+
+            expect(result[:success]).to be(true)
+            expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+            expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+          end
         end
 
         context "downgrade" do
@@ -1295,6 +1380,39 @@ describe Subscription::UpdaterService, :vcr do
           expect(@original_purchase.state).to eq "CA"
           expect(@original_purchase.zip_code).to eq "12345"
           expect(@original_purchase.country).to eq "United States"
+        end
+
+        it "compares saved-card mandate terms from the stored billing address",
+           vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/setting_contact_info/sets_the_contact_info_on_the_original_purchase" } do
+          @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)
+          @original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
+          Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+          previous_terms = { amount: 10_00, currency: Currency::USD, interval: "month", interval_count: 3 }
+          updated_terms = previous_terms.merge(amount: 10_75)
+          expect(@subscription).to receive(:indian_card_mandate_terms).with(
+            billing_info: hash_including("country" => "United States", "state" => "CA", "zip_code" => "94107"),
+            authenticated_offer_code_buyer: @user
+          ).ordered.and_return(previous_terms)
+          expect(@subscription).to receive(:indian_card_mandate_terms).with(
+            billing_info: hash_including(country: "United States", state: "NY", zip_code: "10001"),
+            authenticated_offer_code_buyer: @user
+          ).ordered.and_return(updated_terms)
+          params = update_contact_info_params.deep_merge(
+            contact_info: { state: "NY", zip_code: "10001" }
+          )
+
+          result = described_class.new(
+            subscription: @subscription,
+            gumroad_guid: @gumroad_guid,
+            params:,
+            logged_in_user: @user,
+            remote_ip: @remote_ip
+          ).perform
+
+          expect(result[:success]).to be(true)
+          expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+        ensure
+          Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
         end
 
         context "also updating plan" do
@@ -2643,6 +2761,57 @@ describe Subscription::UpdaterService, :vcr do
           end
         end
       end
+
+      it "requires new mandate terms when a restart applies a seller price change",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/when_the_price_has_changed/charges_the_current_price" } do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)
+        @subscription.update!(
+          cancelled_at: @originally_subscribed_at + 3.months,
+          cancelled_by_buyer: true,
+          stripe_mandate_id: "mandate_old_price"
+        )
+        travel_to(@originally_subscribed_at + 4.months)
+        mandate = Stripe::Mandate.construct_from(
+          id: "mandate_old_price",
+          status: "active",
+          payment_method: @credit_card.processor_payment_method_id
+        )
+        allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+        allow(@subscription).to receive(:send_restart_notifications!)
+        new_price_cents = @original_tier_quarterly_price.price_cents + 1_00
+        @original_tier_quarterly_price.update!(price_cents: new_price_cents)
+        params = {
+          price_id: @quarterly_product_price.external_id,
+          variants: [@original_tier.external_id],
+          quantity: 1,
+          use_existing_card: true,
+          perceived_price_cents: new_price_cents,
+          perceived_upgrade_price_cents: new_price_cents,
+        }
+
+        service = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params:,
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        )
+        service.original_purchase = @subscription.original_purchase
+        expect(service.send(:price_changed?)).to be(true)
+        allow(service).to receive(:charge_user!).and_return(success: true)
+
+        expect do
+          result = service.perform
+
+          expect(result[:success]).to be(true)
+        end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
+        expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+        expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+        expect(@subscription.stripe_mandate_id).to eq("mandate_old_price")
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
     end
 
     context "non-tiered membership subscription" do
@@ -3044,6 +3213,44 @@ describe Subscription::UpdaterService, :vcr do
         expect(new_purchase.purchase_offer_code_discount).to be_nil
       end
 
+      it "requires new mandate terms when a restart clears the discount",
+         vcr: { cassette_name: "Subscription_UpdaterService/_perform/inventory_counter_cache/does_not_double-count_when_resubscribing_with_a_tier_change" } do
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+        @credit_card.update!(card_country: Compliance::Countries::IND.alpha2)
+        @subscription.update!(stripe_mandate_id: "mandate_discounted_terms")
+        mandate = Stripe::Mandate.construct_from(
+          id: "mandate_discounted_terms",
+          status: "active",
+          payment_method: @credit_card.processor_payment_method_id
+        )
+        allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+        allow(@subscription).to receive(:send_restart_notifications!)
+        full_price = @product.price_cents + @original_tier_quarterly_price.price_cents
+        allow(@subscription).to receive(:indian_card_mandate_terms).and_return(
+          { amount: full_price * 75 / 100, currency: Currency::USD, interval: "month", interval_count: 3 },
+          { amount: full_price, currency: Currency::USD, interval: "month", interval_count: 3 }
+        )
+        service = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            clear_discount: true,
+            perceived_price_cents: full_price,
+            perceived_upgrade_price_cents: full_price,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        )
+        allow(service).to receive(:should_charge_user?).and_return(false)
+
+        expect(service.perform).to include(success: true)
+        expect(@subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+        expect(@subscription).to be_indian_card_mandate_requires_reauthorization
+        expect(@subscription.stripe_mandate_id).to eq("mandate_discounted_terms")
+      ensure
+        Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
       it "updates the discount when the seller changed the offer code percentage" do
         original_discount = @subscription.original_purchase.purchase_offer_code_discount
         expect(original_discount.offer_code_amount).to eq(25)
@@ -3326,6 +3533,700 @@ describe Subscription::UpdaterService, :vcr do
         expect(original_tier.reload.sales_count_for_inventory_cache.to_i).to eq(original_tier_after_deactivate)
         expect(new_tier.reload.sales_count_for_inventory_cache.to_i).to eq(new_tier_after_deactivate + 1)
       end
+    end
+  end
+
+  describe "Indian card mandate validation" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:subscription_product, user: seller) }
+    let(:merchant_account) do
+      create(
+        :merchant_account,
+        user: nil,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        charge_processor_merchant_id: nil
+      )
+    end
+    let(:subscription) { create(:subscription, link: product) }
+    let!(:original_purchase) do
+      create(
+        :membership_purchase,
+        link: product,
+        subscription:,
+        is_original_subscription_purchase: true,
+        merchant_account:
+      )
+    end
+    let(:replacement_card) do
+      CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_replacement",
+        processor_payment_method_id: "pm_replacement",
+        stripe_fingerprint: "fingerprint_replacement",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        card_country: Compliance::Countries::IND.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030,
+        json_data: { stripe_setup_intent_id: "seti_replacement" }
+      )
+    end
+    let(:stripe_chargeable) do
+      StripeChargeablePaymentMethod.new(
+        "pm_replacement",
+        zip_code: "12345",
+        product_permalink: product.unique_permalink
+      )
+    end
+    let(:mandate_options) do
+      terms = subscription.indian_card_mandate_terms
+      Stripe::StripeObject.construct_from(
+        amount_type: "maximum",
+        amount: terms[:amount],
+        currency: terms[:currency],
+        reference: StripeChargeProcessor.indian_card_mandate_reference(subscription.external_id),
+        interval: terms[:interval],
+        interval_count: terms[:interval_count],
+        supported_types: ["india"]
+      )
+    end
+    let(:service) do
+      described_class.new(
+        subscription:,
+        params: {},
+        logged_in_user: nil,
+        gumroad_guid: "guid",
+        remote_ip: "127.0.0.1"
+      ).tap do |instance|
+        instance.original_purchase = original_purchase
+        instance.chargeable = instance_double(Chargeable, get_chargeable_for: stripe_chargeable)
+      end
+    end
+
+    before do
+      allow(MerchantAccount).to receive(:gumroad)
+        .with(StripeChargeProcessor.charge_processor_id)
+        .and_return(merchant_account)
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    end
+
+    after do
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+    end
+
+    it "accepts an active mandate and clears the renewal stop" do
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      subscription.reload
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_active",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_active",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+      expect(subscription).to receive(:indian_card_mandate_terms).with(
+        billing_info: nil,
+        authenticated_offer_code_buyer: nil,
+        fixed_rate: nil
+      ).and_call_original
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      expect(stripe_chargeable.validated_stripe_mandate_id).to eq("mandate_active")
+      expect(subscription.reload.credit_card).to eq(replacement_card)
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+      expect(subscription.stripe_mandate_id).to eq("mandate_active")
+    end
+
+    it "validates against the rate stamped on the setup intent after a cache refresh" do
+      product.update_column(:price_currency_type, Currency::INR)
+      original_purchase.update_columns(
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 80_000,
+        price_cents: 10_00,
+        total_transaction_cents: 10_00,
+        rate_converted_to_usd: "80"
+      )
+      currencies = Redis::Namespace.new(:currencies, redis: $redis)
+      currencies.set("INR", "80")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      subscription.reload
+
+      terms, mandate_rate = subscription.indian_card_mandate_terms_with_rate
+      expect(terms).to include(currency: Currency::INR)
+      expect(mandate_rate).to eq("80.0")
+      stamped_mandate_options = Stripe::StripeObject.construct_from(
+        amount_type: "maximum",
+        amount: terms[:amount],
+        currency: terms[:currency],
+        reference: StripeChargeProcessor.indian_card_mandate_reference(subscription.external_id),
+        interval: terms[:interval],
+        interval_count: terms[:interval_count],
+        supported_types: ["india"]
+      )
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_inr_pinned",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: {
+          gumroad_subscription_id: subscription.external_id,
+          gumroad_mandate_rate: mandate_rate
+        },
+        card_mandate_options: stamped_mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_inr_pinned",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      currencies.set("INR", "85")
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      subscription.reload
+      expect(subscription.stripe_mandate_id).to eq("mandate_inr_pinned")
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    end
+
+    it "restores the renewal fixing after a prorated upgrade re-fixes its own amount" do
+      product.update_column(:price_currency_type, Currency::INR)
+      original_purchase.update_columns(
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 80_000,
+        price_cents: 10_00,
+        total_transaction_cents: 10_00,
+        rate_converted_to_usd: "80"
+      )
+      Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      subscription.reload
+      terms = subscription.indian_card_mandate_terms
+      stamped_mandate_options = Stripe::StripeObject.construct_from(
+        amount_type: "maximum",
+        amount: terms[:amount],
+        currency: terms[:currency],
+        reference: StripeChargeProcessor.indian_card_mandate_reference(subscription.external_id),
+        interval: terms[:interval],
+        interval_count: terms[:interval_count],
+        supported_types: ["india"]
+      )
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_inr_upgrade",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: stamped_mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_inr_upgrade",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      # The fixing exists before the charge, so a required-INR upgrade can proceed.
+      expect(subscription.reload.current_later_charge_presentment).to have_attributes(
+        presentment_price_cents: 80_000
+      )
+
+      # The prorated upgrade re-fixed its own amount during the charge.
+      subscription.later_charge_presentments.create!(
+        processor: StripeChargeProcessor.charge_processor_id,
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 30_000,
+        canonical_price_cents: 3_75,
+        signup_currency_units_per_usd: BigDecimal("80"),
+        effective_from: Time.current
+      )
+
+      service.send(:record_mandate_presentment_after_charge!)
+
+      expect(subscription.reload.current_later_charge_presentment).to have_attributes(
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 80_000
+      )
+    end
+
+    it "recovers a listed-INR membership with no stored fixing through an INR reauthorization" do
+      product.update_column(:price_currency_type, Currency::INR)
+      original_purchase.update_columns(
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 80_000,
+        price_cents: 10_00,
+        total_transaction_cents: 10_00,
+        rate_converted_to_usd: "80"
+      )
+      Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      subscription.reload
+
+      expect(subscription.indian_card_mandate_terms).to include(currency: Currency::INR)
+
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_inr_recovery",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_inr_recovery",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      subscription.reload
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+      expect(subscription.stripe_mandate_id).to eq("mandate_inr_recovery")
+      expect(subscription.current_later_charge_presentment).to have_attributes(
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 80_000,
+        canonical_price_cents: 10_00
+      )
+    end
+
+    it "rejects a replacement card without an active mandate" do
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: nil,
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: mandate_options
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(
+        Subscription::UpdateFailed,
+        "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+      )
+    end
+
+    it "does not require a replacement mandate when no future charge exists" do
+      allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(0)
+      expect(ChargeProcessor).not_to receive(:get_setup_intent)
+
+      expect(service.send(:validate_indian_card_mandate!, replacement_card)).to eq(
+        clear_mandate_stop: true,
+        stripe_mandate_id: nil
+      )
+    end
+
+    it "requires a replacement mandate when a temporary discount makes the current price zero" do
+      allow(subscription).to receive(:current_subscription_price_cents).and_return(0)
+      allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(10_00)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: create(:offer_code, products: [product]),
+        offer_code_amount: 100,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 10_00,
+        duration_in_billing_cycles: 1
+      )
+      expect(ChargeProcessor).to receive(:get_setup_intent).and_return(nil)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(Subscription::UpdateFailed)
+    end
+
+    it "does not require a replacement mandate when a permanent discount makes every renewal free" do
+      allow(subscription).to receive(:current_subscription_price_cents).and_return(0)
+      allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(10_00)
+      original_purchase.create_purchase_offer_code_discount!(
+        offer_code: create(:offer_code, products: [product]),
+        offer_code_amount: 100,
+        offer_code_is_percent: true,
+        pre_discount_minimum_price_cents: 10_00,
+        duration_in_billing_cycles: nil
+      )
+      expect(ChargeProcessor).not_to receive(:get_setup_intent)
+
+      expect(service.send(:validate_indian_card_mandate!, replacement_card)).to eq(
+        clear_mandate_stop: true,
+        stripe_mandate_id: nil
+      )
+    end
+
+    it "requires reauthorization for an immediate zero-charge plan update with a later paid renewal" do
+      previous_terms = { amount: 10_00, currency: Currency::USD, interval: "month", interval_count: 1 }
+      current_terms = previous_terms.merge(amount: 20_00)
+      allow(service).to receive(:apply_plan_change_immediately?).and_return(true)
+      allow(service).to receive(:should_charge_user?).and_return(false)
+      allow(service).to receive(:future_subscription_charge?).and_return(true)
+      allow(subscription).to receive(:indian_card_mandate_terms).and_return(current_terms)
+
+      expect(
+        service.send(
+          :saved_card_update_requires_reauthorization?,
+          previous_terms,
+          plan_or_price_changed: true,
+          mandate_billing_info_changed: false
+        )
+      ).to be(true)
+    end
+
+    it "requires reauthorization when a seller price change applies during restart", vcr: false do
+      previous_terms = { amount: 10_00, currency: Currency::USD, interval: "month", interval_count: 1 }
+      current_terms = previous_terms.merge(amount: 20_00)
+      allow(service).to receive(:apply_plan_change_immediately?).and_return(false)
+      allow(service).to receive(:future_subscription_charge?).and_return(true)
+      allow(subscription).to receive(:indian_card_mandate_terms).and_return(current_terms)
+
+      expect(
+        service.send(
+          :saved_card_update_requires_reauthorization?,
+          previous_terms,
+          plan_or_price_changed: true,
+          mandate_billing_info_changed: false,
+          seller_price_changed: true
+        )
+      ).to be(true)
+    end
+
+    it "does not log buyer contact data when prices do not match", vcr: false do
+      service.params.merge!(
+        contact_info: { email: "buyer@example.com", full_name: "Buyer Name" },
+        perceived_price_cents: 20_00,
+        perceived_upgrade_price_cents: 20_00
+      )
+      allow(service).to receive(:new_price_cents).and_return(10_00)
+      allow(service).to receive(:amount_owed).and_return(10_00)
+      test_logger = double
+      allow(service).to receive(:logger).and_return(test_logger)
+      expect(test_logger).to receive(:info).with(
+        "SubscriptionUpdater: Error updating subscription - perceived prices do not match: id: #{subscription.external_id} ; new_price_cents: 1000 ; amount_owed: 1000"
+      )
+
+      expect do
+        service.send(:validate_perceived_prices_match)
+      end.to raise_error(Subscription::UpdateFailed, "The price just changed! Refresh the page for the updated price.")
+    end
+
+    it "does not treat unchanged billing data as new mandate terms", vcr: false do
+      original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
+      service.params[:contact_info] = { country: "US", state: "CA", zip_code: "94107" }
+
+      expect(service.send(:mandate_billing_info_changed?)).to be(false)
+    end
+
+    it "detects changed billing data for new mandate terms", vcr: false do
+      original_purchase.update!(country: "United States", state: "CA", zip_code: "94107")
+      service.params[:contact_info] = { country: "US", state: "NY", zip_code: "10001" }
+
+      expect(service.send(:mandate_billing_info_changed?)).to be(true)
+    end
+
+    it "requires reauthorization when saved-card billing details change the renewal terms" do
+      previous_terms = { amount: 10_00, currency: Currency::USD, interval: "month", interval_count: 1 }
+      current_terms = previous_terms.merge(amount: 10_75)
+      service.params[:contact_info] = { country: "United States", state: "CA", zip_code: "94107" }
+      allow(service).to receive(:future_subscription_charge?).and_return(true)
+      allow(service).to receive(:should_charge_user?).and_return(false)
+      expect(subscription).to receive(:indian_card_mandate_terms).with(
+        billing_info: service.params[:contact_info],
+        authenticated_offer_code_buyer: nil
+      ).and_return(current_terms)
+
+      expect(
+        service.send(
+          :saved_card_update_requires_reauthorization?,
+          previous_terms,
+          plan_or_price_changed: false,
+          mandate_billing_info_changed: true
+        )
+      ).to be(true)
+    end
+
+    it "rejects a replacement mandate for a different payment method" do
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_other_card",
+        payment_method_id: "pm_other",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_other_card",
+        status: "active",
+        payment_method: "pm_other"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(Subscription::UpdateFailed)
+    end
+
+    it "rejects a replacement SetupIntent for a different customer" do
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_active",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_other",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: mandate_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_active",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(Subscription::UpdateFailed)
+    end
+
+    it "rejects mandate terms that do not match the subscription" do
+      mismatched_options = Stripe::StripeObject.construct_from(mandate_options.to_h.merge(amount: mandate_options.amount + 1))
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_active",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: mismatched_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_active",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(Subscription::UpdateFailed)
+    end
+
+    it "rejects a mandate reference for a different subscription" do
+      mismatched_options = Stripe::StripeObject.construct_from(
+        mandate_options.to_h.merge(
+          reference: StripeChargeProcessor.indian_card_mandate_reference("different-subscription")
+        )
+      )
+      setup_intent = instance_double(
+        StripeSetupIntent,
+        succeeded?: true,
+        mandate: "mandate_active",
+        payment_method_id: "pm_replacement",
+        customer_id: "cus_replacement",
+        usage: "off_session",
+        metadata: { gumroad_subscription_id: subscription.external_id },
+        card_mandate_options: mismatched_options
+      )
+      mandate = Stripe::Mandate.construct_from(
+        id: "mandate_active",
+        status: "active",
+        payment_method: "pm_replacement"
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(mandate)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(Subscription::UpdateFailed)
+    end
+
+    it "does not apply Stripe mandate checks to a non-Stripe card" do
+      braintree_card = instance_double(CreditCard, stripe_charge_processor?: false)
+
+      expect(service.send(:validate_indian_card_mandate!, braintree_card)).to eq(
+        clear_mandate_stop: true,
+        stripe_mandate_id: nil
+      )
+    end
+
+    it "rejects a saved-card restart without an active mandate" do
+      allow(subscription).to receive(:credit_card_to_charge).and_return(replacement_card)
+      allow(subscription).to receive(:indian_card_mandate_for).with(replacement_card.id).and_return([nil, "missing", original_purchase])
+
+      expect do
+        service.send(:validate_saved_indian_card_mandate!)
+      end.to raise_error(
+        Subscription::UpdateFailed,
+        "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+      )
+    end
+
+    it "does not reuse the old mandate after a scheduled plan changes its terms" do
+      subscription.update!(credit_card: replacement_card)
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      subscription.reload
+      expect(ChargeProcessor).not_to receive(:get_mandate)
+
+      expect do
+        service.send(:validate_saved_indian_card_mandate!)
+      end.to raise_error(
+        Subscription::UpdateFailed,
+        "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+      )
+    end
+
+    it "validates the saved card when an active subscription has a mandate stop" do
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      service = described_class.new(
+        subscription:,
+        params: { use_existing_card: true },
+        logged_in_user: nil,
+        gumroad_guid: "guid",
+        remote_ip: "127.0.0.1"
+      )
+      allow(service).to receive(:validate_params)
+      allow(service).to receive(:same_plan_and_price?).and_return(true)
+      allow(service).to receive(:success_message).and_return("Your membership has been updated.")
+      expect(service).to receive(:validate_saved_indian_card_mandate!).and_raise(
+        Subscription::UpdateFailed,
+        "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+      )
+
+      result = service.perform
+
+      expect(result).to include(
+        success: false,
+        error_message: "We could not verify this card for recurring payments. Please update the payment method before you restart this subscription."
+      )
+    end
+
+    it "rejects an unsupported replacement before it clears an existing mandate stop" do
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      service.params[:use_existing_card] = false
+      allow(service).to receive(:validate_params)
+      allow(service).to receive(:get_chargeable)
+      allow(CreditCard).to receive(:create).and_return(replacement_card)
+      allow(service).to receive(:indian_card_mandate_validation_required?).and_return(false)
+      allow(service).to receive(:validate_indian_card_mandate!).and_return(
+        clear_mandate_stop: true,
+        stripe_mandate_id: nil
+      )
+      allow(service).to receive(:same_plan_and_price?).and_return(true)
+      allow(seller).to receive(:supports_card?).and_return(false)
+
+      result = service.perform
+
+      expect(result).to include(
+        success: false,
+        error_message: "The payment method saved on this membership is no longer supported by the creator. Please use a different payment method (your card was not charged)."
+      )
+      expect(subscription.reload).to be_renewal_disabled_due_to_indian_card_mandate
+    end
+
+    it "clears the stop for a saved-card restart with no future charge" do
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      allow(subscription).to receive(:credit_card_to_charge).and_return(replacement_card)
+      allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(0)
+      allow(subscription).to receive(:current_subscription_price_cents).and_return(0)
+      expect(subscription).to receive(:clear_indian_card_mandate_state!).with(expected_credit_card_id: replacement_card.id)
+      expect(subscription).not_to receive(:indian_card_mandate_for)
+
+      service.send(:validate_saved_indian_card_mandate!)
+    end
+
+    it "clears the stop when the effective saved card needs no India mandate" do
+      replacement_card.update!(card_country: Compliance::Countries::USA.alpha2)
+      subscription.update!(credit_card: replacement_card, stripe_mandate_id: "mandate_old_card")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+
+      service.send(:validate_saved_indian_card_mandate!)
+
+      expect(subscription.reload.stripe_mandate_id).to be_nil
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription).not_to be_indian_card_mandate_requires_reauthorization
+    end
+
+    it "clears the stop when a saved-card restart has an active mandate" do
+      mandate = Stripe::Mandate.construct_from(id: "mandate_active", status: "active", payment_method: "pm_replacement")
+      allow(subscription).to receive(:credit_card_to_charge).and_return(replacement_card)
+      allow(subscription).to receive(:indian_card_mandate_for).with(replacement_card.id).and_return([mandate, "active", original_purchase])
+      expect(subscription).to receive(:update_renewal_for_indian_card_mandate!).with(
+        "active",
+        expected_credit_card_id: replacement_card.id,
+        mandate_id: "mandate_active"
+      )
+
+      service.send(:validate_saved_indian_card_mandate!)
+    end
+
+    it "returns an update error when Stripe cannot retrieve the mandate" do
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(ChargeProcessorUnavailableError.new("Stripe unavailable"))
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ChargeProcessorUnavailableError), subscription: subscription.external_id)
+
+      expect do
+        service.send(:validate_indian_card_mandate!, replacement_card)
+      end.to raise_error(
+        Subscription::UpdateFailed,
+        "We could not verify this card for recurring payments. Please try the card again or use a different payment method."
+      )
+    end
+
+    it "clears stale mandate state when validation is disabled" do
+      subscription.update!(stripe_mandate_id: "mandate_old")
+      subscription.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      subscription.reload
+      Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+
+      mandate_validation = service.send(:validate_indian_card_mandate!, replacement_card)
+      service.send(:update_subscription_credit_card!, replacement_card, **mandate_validation)
+
+      expect(subscription.reload.credit_card).to eq(replacement_card)
+      expect(subscription).not_to be_renewal_disabled_due_to_indian_card_mandate
+      expect(subscription.stripe_mandate_id).to be_nil
     end
   end
 end
