@@ -15,16 +15,27 @@ set -e
 : "${PROD_CONTAINER_FILTER:=puma-*}"
 : "${PROD_DB_HOST_VAR:=DATABASE_WORKER_REPLICA1_HOST}"
 : "${PROD_AWS_PROFILE:=gumroad-prod}"
-: "${PROD_SSH_CONTROL_PATH:=$HOME/.ssh/cm-gr-bastion}"
+: "${PROD_SSH_CONTROL_PATH:=$HOME/.ssh/cm-gr-%C}"
 : "${PROD_IP_CACHE:=$HOME/.cache/gumroad-prod-console/last_ip}"
 : "${PROD_IP_CACHE_TTL:=600}"
 
 # Extra ssh flags. Must stay flags on the `ssh` binary — `timeout` cannot
 # execute a shell function (it would 127 every probe).
+#
+# The ControlPath keeps ssh's %C token (hash of local host, remote host, port,
+# user): mux reuse keys on the socket path alone, so a fixed name would let a
+# changed PROD_BASTION silently reuse the master to the old bastion.
+#
+# ServerAlive* bounds a dead master: without it, a network change or laptop
+# sleep leaves a half-dead socket that every later ssh attaches to and hangs
+# on (kernel TCP keepalive takes ~2h). With it, the master kills itself in
+# ~30s and ControlMaster=auto builds a fresh one.
 SSH_MUX_OPTS=(
   -o ControlMaster=auto
   -o "ControlPath=$PROD_SSH_CONTROL_PATH"
   -o ControlPersist=8h
+  -o ServerAliveInterval=15
+  -o ServerAliveCountMax=2
 )
 
 if command -v timeout >/dev/null 2>&1; then
