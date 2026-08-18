@@ -442,6 +442,26 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.direct_listed_amount?).to eq(true)
   end
 
+  it "falls back from the listed lane when the order spans another seller" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                     displayed_price_currency_type: Currency::CAD,
+                     rate_converted_to_usd: "0.8")
+    other_seller = create(:user)
+    order.purchases << purchase
+    order.purchases << create(:purchase,
+                              link: create(:product, user: other_seller, price_currency_type: Currency::CAD),
+                              seller: other_seller,
+                              purchase_state: "in_progress",
+                              ip_address: "203.0.113.1",
+                              displayed_price_currency_type: Currency::CAD,
+                              rate_converted_to_usd: "0.8")
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+  end
+
   it "falls back from the listed lane when the charge purchases belong to more than one seller" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)

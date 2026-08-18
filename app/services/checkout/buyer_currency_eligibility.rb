@@ -345,6 +345,7 @@ class Checkout::BuyerCurrencyEligibility
       listed_lane = listed_in_buyer_currency.all? &&
         purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
         purchases.all? { _1.seller_id == seller.id } &&
+        !multi_seller_order? &&
         self.class.listed_currency_direct_charge_enabled?(seller) &&
         listed_currency_displayed?(buyer_currency) &&
         purchases.none? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? } &&
