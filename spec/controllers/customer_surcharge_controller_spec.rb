@@ -156,6 +156,23 @@ describe CustomerSurchargeController, :vcr do
       expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
     end
 
+    it "keeps the quoted buyer currency available for a mixed listed-currency cart" do
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+
+      post "calculate_all", params: {
+        products: [
+          { permalink: @product.unique_permalink, price: 100, quantity: 1 },
+          { permalink: cad_product.unique_permalink, price: 100, quantity: 1 },
+        ],
+        buyer_currency: Currency::CAD,
+      }, as: :json
+
+      expect(response.parsed_body.fetch("buyer_currency_quote")).to include("currency" => Currency::CAD)
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).to include(Currency::CAD)
+    end
+
     it "omits a requested currency that failed to quote" do
       allow(Checkout::BuyerCurrencyQuote).to receive(:create).and_return(nil)
 

@@ -104,7 +104,7 @@ class CustomerSurchargeController < ApplicationController
     )
     available = available_buyer_currencies(quotable_cart ? quote_line_items.filter_map(&:product).uniq : [])
     # What is left can still fail for a reason specific to one currency (a settlement mismatch
-    # on the seller's account, a product already priced in it). Don't advertise the one we just
+    # on the seller's account, or a cart uniformly listed in it). Don't advertise the one we just
     # attempted to quote; the checkout tells the buyer their choice was refused.
     if quote_currency.present? && quote_currency != Currency::USD && quote_props.nil?
       available = available.reject { |entry| entry[:code] == quote_currency }
@@ -279,9 +279,25 @@ class CustomerSurchargeController < ApplicationController
 
       codes = [Currency::USD] + CURRENCY_CHOICES.keys.map(&:to_s)
       codes.uniq.filter_map do |code|
-        next unless products.all? { |product| currency_offered_for?(product, code) }
+        next unless currency_offered_for_cart?(products, code)
 
         { code:, label: (CURRENCY_CHOICES.dig(code, :display_format) || code.upcase) }
+      end
+    end
+
+    def currency_offered_for_cart?(products, code)
+      return true if code == Currency::USD
+
+      # A cart entirely listed in this currency uses the direct-listed lane (or stays
+      # unquoted). A mixed cart instead quotes its canonical USD total, so its already-listed
+      # lines must not remove a currency that the remaining lines can settle.
+      return false unless products.any? do |product|
+        product.price_currency_type.to_s.downcase != code.to_s.downcase
+      end
+
+      products.all? do |product|
+        product.price_currency_type.to_s.downcase == code.to_s.downcase ||
+          currency_offered_for?(product, code)
       end
     end
 
