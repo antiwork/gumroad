@@ -15,16 +15,32 @@ set -e
 : "${PROD_CONTAINER_FILTER:=puma-*}"
 : "${PROD_DB_HOST_VAR:=DATABASE_WORKER_REPLICA1_HOST}"
 : "${PROD_AWS_PROFILE:=gumroad-prod}"
-: "${PROD_SSH_CONTROL_PATH:=$HOME/.ssh/cm-gr-bastion}"
-: "${PROD_IP_CACHE:=$HOME/.cache/gumroad-prod-console/last_ip}"
+: "${PROD_SSH_CONTROL_PATH:=$HOME/.ssh/cm-gr-%C}"
+# Key the cache file by discovery scope. A cached IP only means something for
+# the bastion/security-group/container combination that selected it; a shared
+# file would let a config change reuse a host outside the new scope (the
+# docker probe alone cannot catch that when the bastion stays the same).
+cache_scope=$(printf '%s' "$PROD_BASTION|$PROD_SECURITY_GROUP|$PROD_CONTAINER_FILTER" | cksum | cut -d' ' -f1)
+: "${PROD_IP_CACHE:=$HOME/.cache/gumroad-prod-console/last_ip.$cache_scope}"
 : "${PROD_IP_CACHE_TTL:=600}"
 
 # Extra ssh flags. Must stay flags on the `ssh` binary — `timeout` cannot
 # execute a shell function (it would 127 every probe).
+#
+# The ControlPath keeps ssh's %C token (hash of local host, remote host, port,
+# user): mux reuse keys on the socket path alone, so a fixed name would let a
+# changed PROD_BASTION silently reuse the master to the old bastion.
+#
+# ServerAlive* bounds a dead master: without it, a network change or laptop
+# sleep leaves a half-dead socket that every later ssh attaches to and hangs
+# on (kernel TCP keepalive takes ~2h). With it, the master kills itself in
+# ~30s and ControlMaster=auto builds a fresh one.
 SSH_MUX_OPTS=(
   -o ControlMaster=auto
   -o "ControlPath=$PROD_SSH_CONTROL_PATH"
   -o ControlPersist=8h
+  -o ServerAliveInterval=15
+  -o ServerAliveCountMax=2
 )
 
 if command -v timeout >/dev/null 2>&1; then
@@ -43,8 +59,16 @@ else
   }
 fi
 
+# BSD stat wants -f %m, GNU stat wants -c %Y. Chaining them with || is not
+# enough: GNU's -f is filesystem mode, which still prints for an existing file
+# and would pollute the captured value with a multi-line block. Probe the GNU
+# form silently first, then run whichever form this system supports.
 file_mtime() {
-  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"
+  if stat -c %Y "$1" >/dev/null 2>&1; then
+    stat -c %Y "$1"
+  else
+    stat -f %m "$1"
+  fi
 }
 
 # Last-good private IP. Skip EC2 discovery when that host still answers.
@@ -295,10 +319,22 @@ encoded=$(printf '%s\n' "$ruby_code" | base64 | tr -d '\n')
 record_success() {
   # Remember last-good only after the query succeeded, and only for
   # auto-selected hosts. A PROD_INSTANCE_IP pin is per-invocation — caching it
-  # would stick later unpinned calls on that box. A host that passed docker-true
-  # but failed boot/DB must not become last-good either.
+  # would stick later unpinned calls on that box. The cache is an
+  # optimization: a failed write must not turn the successful query into a
+  # nonzero exit.
   if [ -z "${PROD_INSTANCE_IP:-}" ]; then
-    write_instance_cache "$instance_ip"
+    write_instance_cache "$instance_ip" \
+      || >&2 echo "Warning: could not write $PROD_IP_CACHE (continuing)."
+  fi
+}
+
+record_failure() {
+  # Drop the cache on any failed run. The docker-true probe cannot tell a
+  # host that fails Rails boot/DB from a healthy one that ran a bad query, so
+  # keeping the entry would re-select a broken host on every call until the
+  # TTL expires. Worst case of dropping is one extra discovery after a typo.
+  if [ -z "${PROD_INSTANCE_IP:-}" ]; then
+    rm -f "$PROD_IP_CACHE"
   fi
 }
 
@@ -417,12 +453,20 @@ REMOTE
     # (rc 96), or the transport dropped mid-flight (rc 255, spool state
     # unknown). Do not re-run: even read-only code should not silently
     # execute twice.
+    record_failure
     exit "$loop_rc"
   fi
   >&2 echo "Runner loop never took the query; falling back to one-shot rails runner."
 fi
 
+query_rc=0
 LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" "admin@$PROD_BASTION" \
-  'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running") bash -c "echo '"$encoded"' | base64 --decode | DATABASE_HOST=\$'"$PROD_DB_HOST_VAR"' bundle exec rails runner -"'
+  'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running") bash -c "echo '"$encoded"' | base64 --decode | DATABASE_HOST=\$'"$PROD_DB_HOST_VAR"' bundle exec rails runner -"' \
+  || query_rc=$?
+
+if [ "$query_rc" -ne 0 ]; then
+  record_failure
+  exit "$query_rc"
+fi
 
 record_success
