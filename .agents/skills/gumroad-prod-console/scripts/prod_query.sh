@@ -19,16 +19,13 @@ set -e
 : "${PROD_IP_CACHE:=$HOME/.cache/gumroad-prod-console/last_ip}"
 : "${PROD_IP_CACHE_TTL:=600}"
 
-# Reuse one TCP+auth session to the bastion (ControlPersist). LC_PAPER is still
-# sent per hop, so the jump host can change without dropping the mux.
-bastion_ssh() {
-  ssh -o SendEnv=LC_PAPER \
-      -o StrictHostKeyChecking=accept-new \
-      -o ControlMaster=auto \
-      -o "ControlPath=$PROD_SSH_CONTROL_PATH" \
-      -o ControlPersist=8h \
-      "$@"
-}
+# Extra ssh flags. Must stay flags on the `ssh` binary — `timeout` cannot
+# execute a shell function (it would 127 every probe).
+SSH_MUX_OPTS=(
+  -o ControlMaster=auto
+  -o "ControlPath=$PROD_SSH_CONTROL_PATH"
+  -o ControlPersist=8h
+)
 
 if command -v timeout >/dev/null 2>&1; then
   probe_timeout() { timeout "$@"; }
@@ -62,7 +59,7 @@ try_cached_instance() {
     *) return 1 ;;
   esac
   remaining=8
-  if LC_PAPER="$ip" probe_timeout "$remaining" bastion_ssh -o ConnectTimeout=5 \
+  if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" -o ConnectTimeout=5 \
       "admin@$PROD_BASTION" \
       'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
       >/dev/null 2>&1; then
@@ -164,7 +161,7 @@ if [ -n "$need_discovery" ]; then
       break
     fi
     [ "$remaining" -gt 20 ] && remaining=20 || true
-    if LC_PAPER="$ip" probe_timeout "$remaining" bastion_ssh \
+    if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" \
         -o ConnectTimeout=10 "admin@$PROD_BASTION" \
         'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
         >/dev/null 2>"$probe_err"; then
@@ -228,7 +225,7 @@ if [ -n "$need_discovery" ]; then
         [ "$remaining" -gt 60 ] && remaining=60 || true
         connect_timeout=$(( remaining / 3 ))
         [ "$connect_timeout" -lt 5 ] && connect_timeout=5 || true
-        if LC_PAPER="$ip" probe_timeout "$remaining" bastion_ssh \
+        if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" \
             -o ConnectTimeout="$connect_timeout" "admin@$PROD_BASTION" \
             'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
             >/dev/null 2>&1; then
@@ -271,7 +268,7 @@ if [ -n "$need_discovery" ]; then
     [ "$remaining" -gt 20 ] && remaining=20 || true
     if [ "$remaining" -lt 5 ]; then
       >&2 echo "Skipped clearing outdated bastion host keys for:$stale_key_ips (out of selection budget)."
-    elif LC_PAPER="$instance_ip" probe_timeout "$remaining" bastion_ssh \
+    elif LC_PAPER="$instance_ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" \
         -o ConnectTimeout=10 "admin@$PROD_BASTION" \
         "$keygen_cmd" >/dev/null 2>&1; then
       >&2 echo "Cleared outdated bastion host keys for:$stale_key_ips"
@@ -296,5 +293,5 @@ write_instance_cache "$instance_ip"
 
 encoded=$(printf '%s\n' "$ruby_code" | base64 | tr -d '\n')
 
-LC_PAPER="$instance_ip" bastion_ssh "admin@$PROD_BASTION" \
+LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" "admin@$PROD_BASTION" \
   'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running") bash -c "echo '"$encoded"' | base64 --decode | DATABASE_HOST=\$'"$PROD_DB_HOST_VAR"' bundle exec rails runner -"'
