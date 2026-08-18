@@ -289,9 +289,16 @@ if [ -n "$need_discovery" ]; then
 fi
 
 >&2 echo "Connecting to $instance_ip via $PROD_BASTION..."
-write_instance_cache "$instance_ip"
 
 encoded=$(printf '%s\n' "$ruby_code" | base64 | tr -d '\n')
 
 LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" "admin@$PROD_BASTION" \
   'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running") bash -c "echo '"$encoded"' | base64 --decode | DATABASE_HOST=\$'"$PROD_DB_HOST_VAR"' bundle exec rails runner -"'
+
+# Remember last-good only after rails runner succeeded (set -e), and only for
+# auto-selected hosts. A PROD_INSTANCE_IP pin is per-invocation — caching it
+# would stick later unpinned calls on that box. A host that passed docker-true
+# but failed boot/DB must not become last-good either.
+if [ -z "${PROD_INSTANCE_IP:-}" ]; then
+  write_instance_cache "$instance_ip"
+fi
