@@ -4925,6 +4925,40 @@ class LinksControllerShowTest < ActionController::TestCase
     assert page["props"]["product"].present?
   end
 
+  test "GET show renders Products/Profile/Show when the seller has the product page storefront enabled" do
+    seller = create_user(product_page_storefront_enabled: true)
+    link = create_product(user: seller)
+    @request.host = URI.parse(seller.subdomain_with_protocol).host
+    @request.headers["X-Inertia"] = "true"
+    get :show, params: { id: link.to_param }
+    assert_response :success
+    page = inertia_page
+    assert_equal "Products/Profile/Show", page["component"]
+    assert page["props"]["creator_profile"].present?
+    assert page["props"]["product"].present?
+  end
+
+  test "GET show keeps the standalone page when the seller turned the product page storefront off" do
+    seller = create_user(product_page_storefront_enabled: false)
+    link = create_product(user: seller)
+    @request.host = URI.parse(seller.subdomain_with_protocol).host
+    @request.headers["X-Inertia"] = "true"
+    get :show, params: { id: link.to_param }
+    assert_response :success
+    assert_equal "Products/Show", inertia_page["component"]
+  end
+
+  test "GET show keeps the standalone page for the storefront-enabled seller's own view" do
+    seller = create_user(product_page_storefront_enabled: true)
+    link = create_product(user: seller)
+    sign_in seller
+    @request.host = URI.parse(seller.subdomain_with_protocol).host
+    @request.headers["X-Inertia"] = "true"
+    get :show, params: { id: link.to_param }
+    assert_response :success
+    assert_equal "Products/Show", inertia_page["component"]
+  end
+
   test "GET show renders Products/Discover/Show with taxonomy props for discover layout" do
     link = create_product(user: @user)
     @request.headers["X-Inertia"] = "true"
@@ -6456,6 +6490,58 @@ class LinksControllerSearchTest < ActionController::TestCase
     get :search, params: { user_id: @creator.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
 
     assert_equal({ "total" => 0, "tags_data" => [], "filetypes_data" => [], "taxonomy_attributes_data" => [], "products" => [] }, response.parsed_body)
+  end
+
+  test "GET search accepts the default products section id when the creator has only non-product sections" do
+    setting_and_ordering_setup
+    @recommended_by = nil
+    @on_profile = true
+    @section.destroy!
+    create_seller_profile_posts_section(seller: @creator)
+    Link.import(force: true, refresh: true)
+
+    get :search, params: { user_id: @creator.external_id, section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
+
+    assert_response :success
+    assert_equal 1, response.parsed_body["total"]
+    assert_equal [product_json(@sao_product, "profile")], response.parsed_body["products"]
+  end
+
+  test "GET search honors exclude_ids on the default products section" do
+    setting_and_ordering_setup
+    @recommended_by = nil
+    @on_profile = true
+    @section.destroy!
+    create_seller_profile_posts_section(seller: @creator)
+    Link.import(force: true, refresh: true)
+
+    get :search, params: {
+      user_id: @creator.external_id,
+      section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID,
+      exclude_ids: [@sao_product.external_id],
+    }
+
+    assert_response :success
+    assert_equal 0, response.parsed_body["total"]
+    assert_equal [], response.parsed_body["products"]
+  end
+
+  test "GET search ignores crafted nested exclude_ids instead of 500ing" do
+    setting_and_ordering_setup
+    @recommended_by = nil
+    @on_profile = true
+    @section.destroy!
+    create_seller_profile_posts_section(seller: @creator)
+    Link.import(force: true, refresh: true)
+
+    get :search, params: {
+      user_id: @creator.external_id,
+      section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID,
+      exclude_ids: { "a" => [@sao_product.external_id] },
+    }
+
+    assert_response :success
+    assert_equal 1, response.parsed_body["total"]
   end
 
   test "GET search searches only for recommendable products" do

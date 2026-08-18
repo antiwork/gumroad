@@ -274,6 +274,7 @@ describe ProfilePresenter do
             background_color: seller.seller_profile.background_color,
             highlight_color: seller.seller_profile.highlight_color,
             profile_picture_blob_id: nil,
+            product_page_storefront_enabled: seller.product_page_storefront_enabled?,
           },
           editable_profile: {
             **ProfileSectionsPresenter.new(seller:, query: seller.seller_profile_sections.on_profile).props(request:, pundit_user:, seller_custom_domain_url: nil),

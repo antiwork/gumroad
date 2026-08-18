@@ -213,6 +213,124 @@ describe ProductPresenter do
     end
   end
 
+  describe "product page storefront catalog" do
+    let(:request) { ActionDispatch::TestRequest.create }
+    let(:seller) { create(:user, product_page_storefront_enabled: true) }
+    let(:visitor_pundit_user) { SellerContext.logged_out }
+    let(:membership) { create(:membership_product, user: seller) }
+
+    before do
+      # A second published product so the catalog has something beyond the membership itself.
+      create(:product, user: seller)
+      allow_any_instance_of(ProfileSectionsPresenter).to receive(:section_search_results).and_return({ total: 2, filetypes_data: [], tags_data: [], products: [] })
+    end
+
+    it "shows the seller's catalog on a product page with no curated sections" do
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].size).to eq(1)
+      expect(props[:sections].first[:id]).to eq(ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID)
+      expect(props[:main_section_index]).to eq(0)
+    end
+
+    it "shows the catalog for non-membership products too" do
+      product = create(:product, user: seller)
+
+      props = described_class.new(product:, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].size).to eq(1)
+      expect(props[:sections].first[:id]).to eq(ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID)
+    end
+
+    it "shows the virtual catalog when the seller has only non-product profile sections" do
+      create(:seller_profile_posts_section, seller:)
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].size).to eq(1)
+      expect(props[:sections].first[:id]).to eq(ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID)
+    end
+
+    it "shows the seller's saved profile products sections when they have customized their profile" do
+      section = create(:seller_profile_products_section, seller:)
+      create(:seller_profile_posts_section, seller:)
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].map { _1[:id] }).to eq([section.external_id])
+    end
+
+    it "keeps curated per-page sections when the seller configured them" do
+      section = create(:seller_profile_products_section, seller:, product: membership)
+      membership.update!(sections: [section.id])
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].map { _1[:id] }).to eq([section.external_id])
+    end
+
+    it "does not inject the catalog when the seller turned the storefront rendering off" do
+      seller.update!(product_page_storefront_enabled: false)
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections]).to eq([])
+    end
+
+    it "does not inject the catalog on discover-layout product pages" do
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil, layout: Product::Layout::DISCOVER)
+
+      expect(props[:sections]).to eq([])
+    end
+
+    it "does not inject the catalog for the seller's own view" do
+      props = described_class.new(product: membership, request:, pundit_user: SellerContext.new(user: seller, seller:)).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections]).to eq([])
+    end
+
+    it "omits the product the buyer is already viewing" do
+      other = create(:product, user: seller, name: "Beautiful widget")
+      allow_any_instance_of(ProfileSectionsPresenter).to receive(:section_search_results).and_return(
+        { total: 2, filetypes_data: [], tags_data: [], products: [membership.id, other.id] }
+      )
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      cards = props[:sections].first[:search_results][:products]
+      expect(cards.map { _1[:name] }).to eq(["Beautiful widget"])
+      expect(cards.map { _1[:id] }).not_to include(membership.external_id)
+      expect(props[:sections].first[:search_results][:total]).to eq(1)
+      expect(props[:sections].first[:exclude_ids]).to eq([membership.external_id])
+    end
+
+    it "shrinks the total when the current product falls beyond the fetched page" do
+      other = create(:product, user: seller, name: "Beautiful widget")
+      allow_any_instance_of(ProfileSectionsPresenter).to receive(:section_search_results).and_return(
+        { total: 3, filetypes_data: [], tags_data: [], products: [other.id] }
+      )
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].first[:search_results][:total]).to eq(2)
+      expect(props[:sections].first[:exclude_ids]).to eq([membership.external_id])
+    end
+
+    it "keeps the total when a saved section's search never counted the current product" do
+      other = create(:product, user: seller, name: "Beautiful widget")
+      # add_new_products: false so the lazily-created membership is not auto-appended to
+      # shown_products — the section's search genuinely never counts it.
+      create(:seller_profile_products_section, seller:, shown_products: [other.id], add_new_products: false)
+      allow_any_instance_of(ProfileSectionsPresenter).to receive(:section_search_results).and_return(
+        { total: 5, filetypes_data: [], tags_data: [], products: [other.id] }
+      )
+
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+
+      expect(props[:sections].first[:search_results][:total]).to eq(5)
+    end
+  end
+
   describe "layout-specific props methods" do
     let(:request) { ActionDispatch::TestRequest.create }
     let(:pundit_user) { SellerContext.new(user: @user, seller: @user) }
