@@ -4948,6 +4948,17 @@ class LinksControllerShowTest < ActionController::TestCase
     assert_equal "Products/Show", inertia_page["component"]
   end
 
+  test "GET show keeps the standalone page for the storefront-enabled seller's own view" do
+    seller = create_user(product_page_storefront_enabled: true)
+    link = create_product(user: seller)
+    sign_in seller
+    @request.host = URI.parse(seller.subdomain_with_protocol).host
+    @request.headers["X-Inertia"] = "true"
+    get :show, params: { id: link.to_param }
+    assert_response :success
+    assert_equal "Products/Show", inertia_page["component"]
+  end
+
   test "GET show renders Products/Discover/Show with taxonomy props for discover layout" do
     link = create_product(user: @user)
     @request.headers["X-Inertia"] = "true"

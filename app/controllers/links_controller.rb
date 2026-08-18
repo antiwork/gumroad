@@ -210,10 +210,11 @@ class LinksController < ApplicationController
         else
           if params[:embed] || params[:overlay]
             render inertia: "Products/Iframe/Show", props: presenter.iframe_product_props(**presenter_props)
-          elsif @product.user.product_page_storefront_enabled?
+          elsif @product.user.product_page_storefront_enabled? && pundit_user&.seller != @product.user
             # Storefront-wrapped product page (gumroad-private#2196): profile header above the
             # product, catalog below (injected in ProductPresenter#product_page_props). Same
-            # component the `layout=profile` branch above renders.
+            # component the `layout=profile` branch above renders. The seller's own view keeps
+            # the standalone page — the presenter suppresses the catalog for owners anyway.
             render inertia: "Products/Profile/Show", props: presenter.profile_product_props(**presenter_props)
           else
             render inertia: "Products/Show", props: presenter.product_page_props(**presenter_props)

@@ -124,10 +124,31 @@ class ProductPresenter
       before = results[:products].size
       results[:products] = results[:products].reject { |card| card[:id] == product.external_id }
       dropped = before - results[:products].size
-      results[:total] -= dropped if results[:total].present? && dropped.positive?
+      if results[:total].present?
+        if dropped.positive?
+          results[:total] -= dropped
+        elsif current_product_in_section_total?(section)
+          # The product sits beyond the fetched page: `exclude_ids` pagination will never
+          # return it, so the total must shrink here or the grid keeps requesting an empty
+          # final page.
+          results[:total] -= 1
+        end
+      end
       section[:exclude_ids] = [product.external_id]
     end
     sections
+  end
+
+  # Mirrors the section's ES query (is_alive_on_profile + shown_products) and the sold-out
+  # filtering in ProfileSectionsPresenter#section_props, so we only shrink the total when the
+  # search actually counted the current product.
+  def current_product_in_section_total?(section)
+    return false unless product.alive? && !product.archived?
+    return false if product.hide_sold_out_variants? && product.remaining_for_sale_count == 0
+    return true if section[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID
+
+    saved_section = user.seller_profile_products_sections.find_by_external_id(section[:id])
+    saved_section.present? && saved_section.shown_products.include?(product.id)
   end
 
   def covers
