@@ -91,7 +91,7 @@ class ProductPresenter
       sections: product.sections.filter_map { |id| sections_props[:sections].find { |section| section[:id] === ObfuscateIds.encrypt(id) } },
       main_section_index: product.main_section_index || 0,
     }
-    if show_storefront_catalog?(rendered_sections: props[:sections])
+    if show_storefront_catalog?(rendered_sections: props[:sections], layout: kwargs[:layout])
       # Product sections only: the virtual default-products section must be injected even when
       # the seller's profile has non-product sections, and LinksController#search mirrors this
       # query when accepting its id for pagination.
@@ -105,10 +105,11 @@ class ProductPresenter
 
   # Buyers landing on a shared product link see the rest of the catalog below the product
   # (gumroad-private#2196) unless the seller curated per-page sections or turned the storefront
-  # rendering off. The seller's own view keeps the empty, editing-shaped payload for the
-  # section editor.
-  def show_storefront_catalog?(rendered_sections:)
+  # rendering off. Discover product pages keep their own recommendation context, and the
+  # seller's own view keeps the empty, editing-shaped payload for the section editor.
+  def show_storefront_catalog?(rendered_sections:, layout: nil)
     user.product_page_storefront_enabled? &&
+      layout != Product::Layout::DISCOVER &&
       rendered_sections.empty? &&
       pundit_user&.seller != user
   end

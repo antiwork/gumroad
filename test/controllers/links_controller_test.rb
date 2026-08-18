@@ -6515,6 +6515,24 @@ class LinksControllerSearchTest < ActionController::TestCase
     assert_equal [], response.parsed_body["products"]
   end
 
+  test "GET search ignores crafted nested exclude_ids instead of 500ing" do
+    setting_and_ordering_setup
+    @recommended_by = nil
+    @on_profile = true
+    @section.destroy!
+    create_seller_profile_posts_section(seller: @creator)
+    Link.import(force: true, refresh: true)
+
+    get :search, params: {
+      user_id: @creator.external_id,
+      section_id: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID,
+      exclude_ids: { "a" => [@sao_product.external_id] },
+    }
+
+    assert_response :success
+    assert_equal 1, response.parsed_body["total"]
+  end
+
   test "GET search searches only for recommendable products" do
     setting_and_ordering_setup
     bad = create_product(name: "Previously-owned weasel")

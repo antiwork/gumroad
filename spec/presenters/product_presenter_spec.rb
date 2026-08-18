@@ -277,6 +277,12 @@ describe ProductPresenter do
       expect(props[:sections]).to eq([])
     end
 
+    it "does not inject the catalog on discover-layout product pages" do
+      props = described_class.new(product: membership, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil, layout: Product::Layout::DISCOVER)
+
+      expect(props[:sections]).to eq([])
+    end
+
     it "does not inject the catalog for the seller's own view" do
       props = described_class.new(product: membership, request:, pundit_user: SellerContext.new(user: seller, seller:)).product_page_props(seller_custom_domain_url: nil)
 

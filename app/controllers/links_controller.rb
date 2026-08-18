@@ -272,8 +272,14 @@ class LinksController < ApplicationController
       search_params[:sort] = ProductSortKey::PAGE_LAYOUT if search_params[:sort] == "default" || search_params[:sort].nil?
       search_params[:ids]&.map! { ObfuscateIds.decrypt(_1) }
       if search_params[:exclude_ids].present?
-        exclude_ids = Array(search_params[:exclude_ids]).filter_map { ObfuscateIds.decrypt(_1) }
-        search_params[:exclude_ids] = exclude_ids if exclude_ids.any?
+        # Always overwrite (or drop) the key: leaving a crafted nested structure in place would
+        # reach ES as a `terms` clause and 400 (→ public 500).
+        exclude_ids = Array(search_params[:exclude_ids]).filter_map { _1.is_a?(String) ? ObfuscateIds.decrypt(_1) : nil }
+        if exclude_ids.any?
+          search_params[:exclude_ids] = exclude_ids
+        else
+          search_params.delete(:exclude_ids)
+        end
       end
     else
       search_params[:sort] = ProductSortKey::FEATURED if search_params[:sort] == "default"
