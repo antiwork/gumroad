@@ -82,6 +82,7 @@ type Props = {
     is_in_free_trial: boolean;
     is_test: boolean;
     is_overdue_for_charge: boolean;
+    payment_method_update_required: boolean;
     is_gift: boolean;
     is_installment_plan: boolean;
     current_recurrence_available: boolean;
@@ -446,8 +447,16 @@ export default function SubscriptionsManage() {
         </CardContent>
       ) : null}
 
+      {subscription.payment_method_update_required ? (
+        <CardContent>
+          <Alert variant="warning" className="grow">
+            Automatic renewals are paused. You keep access in the meantime; update your payment method below to resume.
+          </Alert>
+        </CardContent>
+      ) : null}
+
       {!subscription.is_installment_plan ? (
-        <CardContent style={{ display: "grid", gap: "1rem", gridTemplateColumns: "1fr" }}>
+        <CardContent className="grid grid-cols-1 gap-4 empty:hidden">
           <ConfigurationSelector
             product={configurationSelectorProduct}
             selection={selection}

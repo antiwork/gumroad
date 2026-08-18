@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_08_125734) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2570,6 +2570,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_125734) do
     t.string "token"
     t.datetime "token_expires_at"
     t.string "business_vat_id", limit: 191
+    t.string "stripe_mandate_id"
     t.index ["cancelled_at"], name: "index_subscriptions_on_cancelled_at"
     t.index ["deactivated_at"], name: "index_subscriptions_on_deactivated_at"
     t.index ["ended_at"], name: "index_subscriptions_on_ended_at"

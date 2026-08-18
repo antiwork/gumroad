@@ -26,15 +26,20 @@ class Purchase::LaterChargePresentmentService
 
   include CurrencyHelper
 
-  attr_reader :charge, :merchant_account, :purchases, :amount_cents, :gumroad_amount_cents, :fallback_reason, :required_currency
+  attr_reader :charge, :merchant_account, :purchases, :amount_cents, :gumroad_amount_cents, :fallback_reason,
+              :required_currency, :required_currency_error_code, :required_currency_error_message
 
-  def initialize(merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, charge: nil, required_currency: nil)
+  def initialize(merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, charge: nil, required_currency: nil,
+                 required_currency_error_code: PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED,
+                 required_currency_error_message: StripeChargeProcessor::UPI_PAYMENT_METHOD_UPDATE_MESSAGE)
     @charge = charge
     @merchant_account = merchant_account
     @purchases = purchases
     @amount_cents = amount_cents
     @gumroad_amount_cents = gumroad_amount_cents
     @required_currency = required_currency&.to_s&.downcase
+    @required_currency_error_code = required_currency_error_code
+    @required_currency_error_message = required_currency_error_message
   end
 
   # Returns a Result in the stored currency, or nil to leave the caller charging canonical USD.
@@ -227,8 +232,8 @@ class Purchase::LaterChargePresentmentService
         end
 
         raise ChargeProcessorCardError.new(
-          PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED,
-          StripeChargeProcessor::UPI_PAYMENT_METHOD_UPDATE_MESSAGE
+          required_currency_error_code,
+          required_currency_error_message
         )
       end
 

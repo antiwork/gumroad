@@ -128,7 +128,13 @@ class GenerateCanadaSalesReportJob
       s3_object.upload_file(temp_file)
       s3_signed_url = s3_object.presigned_url(:get, expires_in: 1.week.to_i).to_s
 
-      InternalNotificationWorker.perform_async("payments", "Canada Sales Fees Reporting", "Canada #{year}-#{month} sales fees report is ready - #{s3_signed_url}", "green")
+      InternalNotificationWorker.perform_async(
+        "payments",
+        "Canada Sales Fees Reporting",
+        "Canada #{year}-#{month} sales fees report is ready - #{s3_signed_url}",
+        "green",
+        { "s3_attachments" => [{ "bucket" => REPORTING_S3_BUCKET, "key" => s3_report_key, "filename" => s3_filename }] }
+      )
     ensure
       temp_file.close
     end

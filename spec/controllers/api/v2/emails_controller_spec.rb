@@ -677,6 +677,286 @@ describe Api::V2::EmailsController do
     end
   end
 
+  describe "POST 'schedule'" do
+    before do
+      @installment = create(:audience_installment, seller: @user)
+      @action = :schedule
+      @params = { id: @installment.external_id, to_be_published_at: 1.day.from_now.to_s }
+    end
+
+    it_behaves_like "authorized oauth v1 api method"
+    it_behaves_like "authorized oauth v1 api method only for edit_emails scope"
+
+    describe "when logged in with edit_emails scope" do
+      before do
+        @token = create_access_token("edit_emails")
+        @params.merge!(access_token: @token.token)
+        allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
+      end
+
+      it "schedules a draft email at the given time" do
+        freeze_time do
+          expect do
+            post @action, params: @params
+          end.to change { InstallmentRule.count }.by(1)
+
+          expect(response.parsed_body["success"]).to eq(true)
+          expect(@installment.reload.ready_to_publish?).to be(true)
+          expect(@installment.published?).to be(false)
+          expect(PublishScheduledPostJob).to have_enqueued_sidekiq_job(@installment.id, 1).at(1.day.from_now)
+        end
+      end
+
+      it "schedules an email owned through one of the seller's products" do
+        product_owned_installment = create_product_owned_installment
+
+        post @action, params: @params.merge(id: product_owned_installment.external_id)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(product_owned_installment.reload.ready_to_publish?).to be(true)
+      end
+
+      it "does not return another seller's installment" do
+        other = create(:audience_installment, seller: create(:user))
+
+        post @action, params: @params.merge(id: other.external_id)
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(other.reload.ready_to_publish?).to be(false)
+      end
+
+      it "returns an error when the time is in the past" do
+        post @action, params: @params.merge(to_be_published_at: 1.day.ago.to_s)
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+      end
+
+      it "returns an error for an already-sent email" do
+        @installment.update!(published_at: Time.current)
+        create(:blast, post: @installment)
+
+        post @action, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The email has already been sent."
+        }.as_json)
+      end
+
+      it "returns an error for a profile-only post that is already published" do
+        @installment.update!(published_at: Time.current)
+
+        post @action, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The email has already been sent."
+        }.as_json)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+      end
+
+      it "reschedules an already-scheduled email to a new time" do
+        scheduled = create(
+          :scheduled_installment,
+          seller: @user,
+          link: nil,
+          installment_type: Installment::AUDIENCE_TYPE
+        )
+
+        freeze_time do
+          expect do
+            post @action, params: @params.merge(id: scheduled.external_id, to_be_published_at: 2.days.from_now.to_s)
+          end.not_to change { InstallmentRule.count }
+
+          expect(scheduled.reload.ready_to_publish?).to be(true)
+          expect(PublishScheduledPostJob).to have_enqueued_sidekiq_job(scheduled.id, 2).at(2.days.from_now)
+        end
+      end
+
+      it "sends an email that is scheduled again after being unscheduled" do
+        freeze_time do
+          post @action, params: @params
+          post :unschedule, params: @params
+          post @action, params: @params.merge(to_be_published_at: 2.days.from_now.to_s)
+
+          expect(response.parsed_body["success"]).to eq(true)
+          rule = @installment.reload.installment_rule
+          expect(rule).to be_alive
+          expect(@installment.ready_to_publish?).to be(true)
+          expect(PublishScheduledPostJob).to have_enqueued_sidekiq_job(@installment.id, rule.version).at(2.days.from_now)
+
+          PublishScheduledPostJob.new.perform(@installment.id, rule.version)
+          expect(@installment.reload).to be_published
+          expect(PostEmailBlast.where(post: @installment)).to exist
+        end
+      end
+
+      it "rejects a past time when re-scheduling an unscheduled email" do
+        post @action, params: @params
+        post :unschedule, params: @params
+        post @action, params: @params.merge(to_be_published_at: 1.day.ago.to_s)
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "Please select a date and time in the future."
+        }.as_json)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+        expect(@installment.installment_rule).to be_deleted
+      end
+
+      it "returns an error when to_be_published_at is missing" do
+        post @action, params: @params.except(:to_be_published_at)
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The to_be_published_at parameter is required."
+        }.as_json)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+      end
+
+      it "returns an error when to_be_published_at is not a valid time" do
+        post @action, params: @params.merge(to_be_published_at: "not-a-time")
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "Please provide a valid date and time."
+        }.as_json)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+      end
+    end
+
+    it "grants schedule access with the account scope used by the CLI" do
+      token = create_access_token("account")
+      allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
+
+      post @action, params: @params.merge(access_token: token.token)
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(@installment.reload.ready_to_publish?).to be(true)
+    end
+  end
+
+  describe "POST 'unschedule'" do
+    before do
+      @installment = create(
+        :scheduled_installment,
+        seller: @user,
+        link: nil,
+        installment_type: Installment::AUDIENCE_TYPE
+      )
+      @action = :unschedule
+      @params = { id: @installment.external_id }
+    end
+
+    it_behaves_like "authorized oauth v1 api method"
+    it_behaves_like "authorized oauth v1 api method only for edit_emails scope"
+
+    describe "when logged in with edit_emails scope" do
+      before do
+        @token = create_access_token("edit_emails")
+        @params.merge!(access_token: @token.token)
+      end
+
+      it "turns a scheduled email back into a draft" do
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+        expect(@installment.reload.installment_rule).to be_deleted
+      end
+
+      it "cancels a schedule even when installment validations fail" do
+        @installment.update_column(:message, "<p><br></p>")
+        expect(@installment.reload).not_to be_valid
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+        expect(@installment.installment_rule).to be_deleted
+      end
+
+      it "cancels a schedule whose publish time has already passed" do
+        @installment.installment_rule.update_column(:to_be_published_at, 1.hour.ago)
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@installment.reload.ready_to_publish?).to be(false)
+        expect(@installment.installment_rule).to be_deleted
+      end
+
+      it "does not delete the rule when the installment cannot be saved" do
+        allow_any_instance_of(Installment).to receive(:save!).and_raise(
+          ActiveRecord::RecordNotSaved.new("failed", @installment)
+        )
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(@installment.reload.ready_to_publish?).to be(true)
+        expect(@installment.installment_rule).to be_alive
+      end
+
+      it "leaves a draft email alone" do
+        draft = create(:audience_installment, seller: @user)
+
+        post @action, params: @params.merge(id: draft.external_id)
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "This email is not scheduled."
+        }.as_json)
+        expect(draft.reload.ready_to_publish?).to be(false)
+      end
+
+      it "does not unschedule an email that is already published" do
+        @installment.update!(published_at: Time.current)
+        create(:blast, post: @installment)
+
+        post @action, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The email has already been sent."
+        }.as_json)
+        expect(@installment.reload).to be_published
+        expect(@installment.ready_to_publish?).to be(true)
+        expect(@installment.installment_rule).to be_alive
+      end
+
+      it "does not report success if the publish job ran while waiting for the row lock" do
+        allow_any_instance_of(Installment).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          receiver = original.receiver
+          if receiver.id == @installment.id && !@publish_job_ran
+            @publish_job_ran = true
+            PublishScheduledPostJob.new.perform(@installment.id, @installment.installment_rule.version)
+          end
+          original.call(*args, &block)
+        end
+
+        post @action, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "The email has already been sent."
+        }.as_json)
+        expect(@installment.reload).to be_published
+        expect(PostEmailBlast.where(post: @installment)).to exist
+      end
+    end
+
+    it "grants unschedule access with the account scope used by the CLI" do
+      token = create_access_token("account")
+
+      post @action, params: @params.merge(access_token: token.token)
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(@installment.reload.ready_to_publish?).to be(false)
+    end
+  end
+
   describe "DELETE 'destroy'" do
     before do
       @installment = create(:audience_installment, seller: @user)

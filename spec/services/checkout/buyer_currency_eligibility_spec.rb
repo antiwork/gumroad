@@ -44,6 +44,8 @@ describe Checkout::BuyerCurrencyEligibility do
     Feature.deactivate_user(:buyer_local_currency, seller)
     Feature.deactivate_user(described_class::FEATURE_NAME, seller)
     Feature.deactivate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    Feature.deactivate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+    Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
   end
 
   it "allows the PR1 Stripe test-mode direct-charge path" do
@@ -83,7 +85,13 @@ describe Checkout::BuyerCurrencyEligibility do
   end
 
   it "allows the PR1 Stripe test-mode Gumroad platform-account path" do
-    platform_merchant_account = create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::USD)
+    platform_merchant_account = create(
+      :merchant_account,
+      user: nil,
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      charge_processor_merchant_id: "acct_buyer_currency_platform",
+      currency: Currency::USD
+    )
     purchase.update!(merchant_account: platform_merchant_account)
 
     platform_decision = described_class.new(order:,
@@ -98,6 +106,45 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(platform_decision).to be_eligible
     expect(platform_decision.currency).to eq(Currency::CAD)
     expect(platform_decision.fallback_reason).to be_nil
+  end
+
+  context "with India card mandate reliability enabled for a membership" do
+    let(:product) { create(:subscription_product, user: seller, price_currency_type: Currency::USD) }
+
+    before do
+      Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::AUD)
+    end
+
+    it "falls back before quoting an unsupported platform mandate currency" do
+      platform_merchant_account = create(
+        :merchant_account,
+        user: nil,
+        currency: Currency::USD,
+        charge_processor_merchant_id: "acct_india_mandate_eligibility"
+      )
+      purchase.update!(merchant_account: platform_merchant_account)
+
+      platform_decision = described_class.new(
+        order:,
+        seller:,
+        merchant_account: platform_merchant_account,
+        chargeable:,
+        purchases:,
+        params:,
+        setup_future_charges:,
+        off_session:
+      ).decision
+
+      expect(platform_decision).not_to be_eligible
+      expect(platform_decision.fallback_reason).to eq(:unsupported_indian_card_mandate_currency)
+    end
+
+    it "keeps direct Connect outside the mandate currency gate" do
+      expect(decision).to be_eligible
+      expect(decision.currency).to eq(Currency::AUD)
+    end
   end
 
   it "falls back when the internal rollout flag is disabled" do

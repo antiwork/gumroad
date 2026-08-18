@@ -331,7 +331,13 @@ class CreateGlobalSalesTaxSummaryReportJob
       s3_signed_url = s3_object.presigned_url(:get, expires_in: 1.week.to_i).to_s
 
       AccountingMailer.global_sales_tax_summary_report(month, year, s3_signed_url).deliver_now
-      InternalNotificationWorker.perform_async("payments", "Global Sales Tax Summary Report", "Global sales tax summary report for #{year}-#{month} is ready - #{s3_signed_url}", "green")
+      InternalNotificationWorker.perform_async(
+        "payments",
+        "Global Sales Tax Summary Report",
+        "Global sales tax summary report for #{year}-#{month} is ready - #{s3_signed_url}",
+        "green",
+        { "s3_attachments" => [{ "bucket" => REPORTING_S3_BUCKET, "key" => s3_report_key, "filename" => s3_filename }] }
+      )
 
       Rails.logger.info(
         "#{self.class.name}: csv_write_complete " \

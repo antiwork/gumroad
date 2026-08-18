@@ -57,7 +57,7 @@ export type PaymentRequestPaymentMethodParams = {
   email: string | null;
   zip_code: string | null;
 };
-export type ReusableCardPaymentMethodParams = { stripe_customer_id: string; stripe_setup_intent_id: string } & Omit<
+export type ReusableCardPaymentMethodParams = { stripe_customer_id: string; stripe_setup_intent_id?: string } & Omit<
   CardPaymentMethodParams,
   "reusable"
 > & {
@@ -65,7 +65,7 @@ export type ReusableCardPaymentMethodParams = { stripe_customer_id: string; stri
   };
 export type ReusablePaymentRequestPaymentMethodParams = {
   stripe_customer_id: string;
-  stripe_setup_intent_id: string;
+  stripe_setup_intent_id?: string;
 } & Omit<PaymentRequestPaymentMethodParams, "reusable"> & {
     reusable: true;
   };

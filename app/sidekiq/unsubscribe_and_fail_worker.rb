@@ -10,6 +10,9 @@ class UnsubscribeAndFailWorker
               subscription.is_test_subscription ||
               !subscription.overdue_for_charge?
 
-    subscription.unsubscribe_and_fail!
+    result = subscription.unsubscribe_and_fail!
+    if result == :mandate_recovered && subscription.reload.overdue_for_charge?
+      RecurringChargeWorker.perform_async(subscription.id)
+    end
   end
 end

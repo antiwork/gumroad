@@ -145,6 +145,8 @@ Rails.application.routes.draw do
         member do
           post :preview
           post :send, action: :send_email
+          post :schedule
+          post :unschedule
         end
       end
       resources :workflows, only: [:index, :show] do

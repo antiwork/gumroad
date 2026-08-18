@@ -125,24 +125,76 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
       expect(@subscription_with_purchaser.reload.credit_card).to eq @credit_card
     end
 
-    it "allows updating the subscription's credit card to an Indian card which requires SCA and mandate" do
-      visit "/subscriptions/#{@subscription_with_purchaser.external_id}/manage?token=#{@subscription_with_purchaser.token}"
+    it "keeps renewal stopped when replacement Indian card mandate retries remain pending" do
+      Feature.activate_user(
+        StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE,
+        @subscription_with_purchaser.seller
+      )
+      allow_any_instance_of(Stripe::SetupIntentsController).to receive(:mandate_options_for_stripe).and_call_original
+      @credit_card = create(
+        :credit_card,
+        chargeable: build(:chargeable, card: StripePaymentMethodHelper.success_indian_card_mandate)
+      )
+      @subscription_with_purchaser.update!(credit_card: @credit_card)
+      @purchase.update!(credit_card: @credit_card, card_country: "IN")
+      @subscription_with_purchaser.update_flag!(:renewal_disabled_due_to_indian_card_mandate, true, true)
+      @subscription_with_purchaser.update_flag!(:indian_card_mandate_requires_reauthorization, true, true)
+      travel_back
+      setup_subscription_token(subscription: @subscription_with_purchaser)
+      setup_intent_ids = []
+      allow(ChargeProcessor).to receive(:setup_future_charges!).and_wrap_original do |method, *args, **kwargs|
+        setup_intent = method.call(*args, **kwargs)
+        setup_intent_ids << setup_intent.id
+        setup_intent
+      end
+      allow(ChargeProcessor).to receive(:get_mandate).and_wrap_original do |method, *args|
+        stripe_mandate = method.call(*args)
+        Stripe::Mandate.construct_from(stripe_mandate.to_hash.merge(status: "pending"))
+      end
+      2.times do
+        visit "/subscriptions/#{@subscription_with_purchaser.external_id}/manage?token=#{@subscription_with_purchaser.token}"
 
-      click_on "Use a different card?"
+        expect(page).to have_alert(text: "Automatic renewals are paused. You keep access in the meantime; update your payment method below to resume.")
+        click_on "Use a different card?"
 
-      fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success_indian_card_mandate))
-      click_on "Update membership"
-      wait_for_ajax
-      sleep 1
-      within_sca_frame do
-        find_and_click("button:enabled", text: /COMPLETE/)
+        fill_in_credit_card(number: CardParamsSpecHelper.card_number(:success_indian_card_mandate))
+        click_on "Update membership"
+        wait_for_ajax
+        sleep 1
+        within_sca_frame do
+          find_and_click("button:enabled", text: /COMPLETE/)
+        end
+
+        expect(page).to have_alert(text: "We could not verify this card for recurring payments. Please try the card again or use a different payment method.")
       end
 
-      expect(page).to have_alert(text: "Your membership has been updated.")
-      expect(@subscription_with_purchaser.reload.credit_card).not_to eq @credit_card
-      expect(@subscription_with_purchaser.credit_card).to be
-      expect(@subscription_with_purchaser.credit_card.stripe_setup_intent_id).to be_present
-      expect(Stripe::SetupIntent.retrieve(@subscription_with_purchaser.credit_card.stripe_setup_intent_id).mandate).to be_present
+      setup_intents = setup_intent_ids.map { Stripe::SetupIntent.retrieve(_1) }
+      references = setup_intents.map { _1.payment_method_options.card.mandate_options.reference }
+      expect(references.uniq.size).to eq(2)
+      expect(references).to all(satisfy do |reference|
+        StripeChargeProcessor.indian_card_mandate_reference_for_subscription?(
+          reference,
+          @subscription_with_purchaser.external_id
+        )
+      end)
+      setup_intents.each do |setup_intent|
+        mandate = Stripe::Mandate.retrieve(setup_intent.mandate)
+        expect(mandate.status).to be_in(%w[pending active])
+        expect(mandate.payment_method).to eq(setup_intent.payment_method)
+      end
+      expect(@subscription_with_purchaser.reload.credit_card).to eq(@credit_card)
+      expect(@subscription_with_purchaser.stripe_mandate_id).to be_nil
+      expect(@subscription_with_purchaser).to be_renewal_disabled_due_to_indian_card_mandate
+      expect(@subscription_with_purchaser).to be_indian_card_mandate_requires_reauthorization
+      expect(@subscription_with_purchaser.alive?(include_pending_cancellation: false)).to be(true)
+      expect do
+        RecurringChargeWorker.new.perform(@subscription_with_purchaser.id)
+      end.not_to change(Purchase, :count)
+    ensure
+      Feature.deactivate_user(
+        StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE,
+        @subscription_with_purchaser.seller
+      )
     end
 
     context "changing plans" do

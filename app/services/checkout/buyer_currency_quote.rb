@@ -599,6 +599,13 @@ class Checkout::BuyerCurrencyQuote
                          MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
       return unless merchant_account&.stripe_charge_processor?
       return unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account, seller:)
+      if charge_line_items.any? { _1.product.is_recurring_billing? }
+        return unless Checkout::BuyerCurrencyEligibility.indian_card_mandate_presentment_supported?(
+          seller:,
+          merchant_account:,
+          currency: buyer_currency
+        )
+      end
       # Checked per charge, and last, because the learned mismatch marker is scoped to both the
       # account and the presentment currency: a mismatch learned for this account's EUR must not
       # suppress quoting for its GBP, nor for a seller charging on a different account. Sellers

@@ -106,7 +106,7 @@ class Purchase::BaseService
 
       subscription = purchase.subscription
       if subscription&.is_resubscription_pending_confirmation?
-        subscription.unsubscribe_and_fail!
+        subscription.unsubscribe_and_fail!(preserve_access_for_mandate_failure: false)
         subscription.update_flag!(:is_resubscription_pending_confirmation, false, true)
       elsif purchase.is_upgrade_purchase?
         new_original_purchase = subscription.original_purchase
@@ -114,6 +114,7 @@ class Purchase::BaseService
         new_original_purchase.update_flag!(:is_archived_original_subscription_purchase, true, true)
         previous_original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
         subscription.last_payment_option.update!(price: previous_original_purchase.price) if previous_original_purchase.price.present?
+        subscription.restore_indian_card_mandate_after_failed_reauthorization!(expected_credit_card_id: purchase.credit_card_id)
       end
     end
 
