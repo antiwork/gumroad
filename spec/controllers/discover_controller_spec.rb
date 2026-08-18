@@ -450,7 +450,8 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["meta-property-og-type"][:content]).to eq("website")
         expect(meta_tags["meta-property-og-description"][:content]).to eq(default_description)
         expect(meta_tags["meta-name-description"][:content]).to eq(default_description)
-        expect(meta_tags["canonical"][:href]).to eq("#{discover_domain_with_protocol}/")
+        expect(meta_tags["title"][:inner_content]).to eq("Discover digital products from independent creators | Gumroad")
+        expect(meta_tags["canonical"][:href]).to eq("#{discover_domain_with_protocol}/discover")
       end
 
       it "sets the proper meta tags when a search query was submitted" do
@@ -459,7 +460,7 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["title"][:inner_content]).to eq("Search results for \"tests\" | Gumroad")
         expect(meta_tags["meta-property-og-description"][:content]).to eq(default_description)
         expect(meta_tags["meta-name-description"][:content]).to eq(default_description)
-        expect(meta_tags["canonical"][:href]).to eq("#{discover_domain_with_protocol}/?query=tests")
+        expect(meta_tags["canonical"][:href]).to eq("#{discover_domain_with_protocol}/discover?query=tests")
       end
 
       it "sets the SEO title and description when only taxonomy is present" do
@@ -522,7 +523,7 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["title"][:inner_content]).to eq("Professional 3D Modeling Assets | Gumroad")
         expect(meta_tags["meta-property-og-description"][:content]).to eq(description)
         expect(meta_tags["meta-name-description"][:content]).to eq(description)
-        expect(meta_tags["canonical"][:href]).to eq("#{discover_domain_with_protocol}/?tags=3d+models")
+        expect(meta_tags["canonical"][:href]).to eq("#{discover_domain_with_protocol}/discover?tags=3d+models")
       end
 
       it "sets the proper meta tags when a specific tag has been selected with different formatting" do
@@ -533,7 +534,7 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["title"][:inner_content]).to eq("Professional 3D Modeling Assets | Gumroad")
         expect(meta_tags["meta-property-og-description"][:content]).to eq(description)
         expect(meta_tags["meta-name-description"][:content]).to eq(description)
-        expect(meta_tags["canonical"][:href]).to eq("#{discover_domain_with_protocol}/?tags=3d+models")
+        expect(meta_tags["canonical"][:href]).to eq("#{discover_domain_with_protocol}/discover?tags=3d+models")
       end
 
       context "meta description total count" do

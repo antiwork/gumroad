@@ -33,7 +33,10 @@ type BaseSection = {
 };
 
 type ProductsSection = BaseSection &
-  Pick<SavedProductsSection, "type" | "show_filters" | "default_product_sort"> & { search_results: SearchResults };
+  Pick<SavedProductsSection, "type" | "show_filters" | "default_product_sort"> & {
+    search_results: SearchResults;
+    exclude_ids?: string[];
+  };
 
 export type Post = { id: string; slug: string; name: string; published_at: string | null };
 type PostsSection = BaseSection & {
@@ -103,6 +106,7 @@ const ProductsSectionView = ({
     sort: section.default_product_sort,
     user_id: creatorProfile.external_id,
     section_id: section.id,
+    ...(section.exclude_ids?.length ? { exclude_ids: section.exclude_ids } : {}),
   };
   const [state, dispatch] = useSearchReducer({
     params: defaultParams,

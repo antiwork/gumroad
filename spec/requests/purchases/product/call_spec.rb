@@ -47,7 +47,7 @@ describe "Call", type: :system, js: true do
       end
 
       within_section "Select a time" do
-        choose "01:00 PM"
+        choose "01:00 PM", allow_label_click: true
       end
 
       expect(page).to have_text("You selected Tuesday, October 1 at 01:00 PM")
@@ -102,7 +102,7 @@ describe "Call", type: :system, js: true do
           choose "$20"
           click_on "Next Month"
           click_on "1", match: :first
-          choose "01:00 PM"
+          choose "01:00 PM", allow_label_click: true
           expect(page).to have_text("You selected Tuesday, October 1 at 01:00 PM")
           click_on "Save changes"
         end

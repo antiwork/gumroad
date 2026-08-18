@@ -174,5 +174,26 @@ describe ProductPresenter::PublicApiProps do
         expect(props[:refund_policy][:fine_print]).to include("<p>", "<br />")
       end
     end
+
+    describe "refund_policy with a leftover 0-day account-level policy" do
+      before do
+        seller.update!(refund_policy_enabled: true)
+        seller.refund_policy.update_columns(max_refund_period_in_days: 0)
+      end
+
+      context "when the product is physical" do
+        let(:product) { create(:product, :is_physical, user: seller) }
+
+        it "keeps the no-refunds title the purchase will snapshot" do
+          expect(props[:refund_policy][:title]).to eq("No refunds allowed")
+        end
+      end
+
+      context "when the product is digital" do
+        it "floors the title to the 7-day guarantee" do
+          expect(props[:refund_policy][:title]).to eq("7-day money back guarantee")
+        end
+      end
+    end
   end
 end

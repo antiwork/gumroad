@@ -14,6 +14,7 @@ type SearchRequestType = {
   rating: number;
   user_id: string;
   section_id: string;
+  exclude_ids: string[];
   recommended_by: string;
   query: string;
   taxonomy: string;

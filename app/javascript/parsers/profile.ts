@@ -26,4 +26,5 @@ export type ProfileSettings = {
   background_color: string;
   highlight_color: string;
   profile_picture_blob_id: string | null;
+  product_page_storefront_enabled: boolean;
 };

@@ -20,7 +20,9 @@ class LoginsController < Devise::SessionsController
   def new
     return redirect_to login_path(next: request.referrer) if params[:next].blank? && request_referrer_is_a_valid_after_login_path?
 
-    set_meta_tag(title: "Log In")
+    set_meta_tag(title: "Log in to Gumroad")
+    set_meta_tag(name: "description", content: "Log in to your Gumroad account to access your dashboard, library, and sales.")
+    set_meta_tag(tag_name: "link", rel: "canonical", href: "#{UrlService.domain_with_protocol}#{login_path}", head_key: "canonical")
     auth_presenter = AuthPresenter.new(params:, application: @application)
     render inertia: "Logins/New", props: auth_presenter.login_props.merge(
       is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?,

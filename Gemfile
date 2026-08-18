@@ -88,6 +88,7 @@ gem "aws-sdk-elastictranscoder", "~> 1.39"
 gem "aws-sdk-autoscaling", "~> 1.84"
 gem "aws-sdk-mediaconvert", "~> 1.96"
 gem "aws-sdk-sns", "~> 1.57"
+gem "aws-sdk-dynamodb", "~> 1.100"
 # End AWS SDK Gems
 gem "bootsnap", "~> 1.15", require: false
 gem "braintree", "~> 4.9"

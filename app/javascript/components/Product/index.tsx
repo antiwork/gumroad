@@ -291,6 +291,7 @@ export const Product = ({
   configurationSelectorRef,
   wishlists = [],
   disableAnalytics,
+  hideSellerByline,
 }: {
   product: Product;
   purchase: Purchase | null;
@@ -302,6 +303,9 @@ export const Product = ({
   configurationSelectorRef?: React.MutableRefObject<ConfigurationSelectorHandle | null>;
   wishlists?: WishlistForProduct[];
   disableAnalytics?: boolean;
+  // The storefront-wrapped product page renders the profile header directly above, which
+  // already shows the same avatar and name — the byline is redundant there.
+  hideSellerByline?: boolean | undefined;
 }) => {
   const [pageLoaded, setPageLoaded] = React.useState(false);
   const [checkoutUrlForModal, setCheckoutUrlForModal] = React.useState<string | null>(null);
@@ -395,14 +399,17 @@ export const Product = ({
     return true;
   };
 
-  const sellerByline = product.seller ? (
-    <AuthorByline
-      name={product.seller.name}
-      profileUrl={product.seller.profile_url}
-      avatarUrl={product.seller.avatar_url}
-      isTopCreator={product.seller.is_verified}
-    />
-  ) : null;
+  // The storefront-wrapped page's profile header already shows the seller, but not a
+  // collaborator — keep the byline when there is one so the "with X" context survives.
+  const sellerByline =
+    product.seller && !(hideSellerByline && !product.collaborating_user) ? (
+      <AuthorByline
+        name={product.seller.name}
+        profileUrl={product.seller.profile_url}
+        avatarUrl={product.seller.avatar_url}
+        isTopCreator={product.seller.is_verified}
+      />
+    ) : null;
 
   const showPrice =
     !product.recurrences &&
