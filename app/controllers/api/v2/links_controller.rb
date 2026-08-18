@@ -678,10 +678,12 @@ class Api::V2::LinksController < Api::V2::BaseController
       render_response(false, message: "You do not have access to custom HTML pages.")
     end
 
+    # Only the persisted product decides: `update` never applies a native_type param,
+    # so trusting it would let a digital product slip past this check (the model would
+    # then silently coerce 0 to 7). On create @product is nil, rejecting "none" for
+    # every creatable type — physical products can't be created via this API.
     def product_allows_no_refunds?
-      return true if @product&.is_physical?
-
-      params[:native_type].to_s == Link::NATIVE_TYPE_PHYSICAL
+      @product&.is_physical?
     end
 
     # Validates the product-level refund policy params shared by create and

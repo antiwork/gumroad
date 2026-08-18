@@ -21,6 +21,16 @@ describe Api::V2::LinksController do
       expect(@product.reload.product_refund_policy_enabled).to be(false)
     end
 
+    it "rejects no-refunds on a digital product even when native_type claims physical" do
+      # update never applies native_type, so trusting the param would skip the error
+      # and let the model silently coerce the requested 0 days to 7.
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_period: "none", native_type: Link::NATIVE_TYPE_PHYSICAL }
+
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq("refund_period \"none\" is only allowed for physical products.")
+      expect(@product.reload.product_refund_policy_enabled).to be(false)
+    end
+
     it "enables a product-level refund policy with a period and fine print" do
       put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, refund_period: "7", refund_fine_print: "Refunds within a week." }
 
