@@ -627,6 +627,14 @@ class LinksControllerSellerAreaTest < ActionController::TestCase
     assert_equal false, page["props"]["show_orientation_text"]
   end
 
+  test "GET new marks mobile app web view when display=mobile_app" do
+    @request.headers["X-Inertia"] = "true"
+    get :new, params: { display: "mobile_app" }
+
+    assert_response :success
+    assert_equal true, inertia_page["props"]["is_mobile_app_web_view"]
+  end
+
   # --- POST create ------------------------------------------------------------
 
   test "POST create calls authorize with LinkPolicy for Link" do
