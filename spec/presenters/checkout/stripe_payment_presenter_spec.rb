@@ -40,6 +40,7 @@ describe Checkout::StripePaymentPresenter do
         # The product's own pricing currency, mirroring CheckoutPresenter#product_common,
         # which sets currency_code on every real add_products entry.
         currency_code: product.price_currency_type.to_s.downcase,
+        exchange_rate: 0.8,
         require_shipping: product.require_shipping?,
         installment_plan: product.installment_plan.present? ? {
           number_of_installments: product.installment_plan.number_of_installments,
@@ -1717,6 +1718,26 @@ describe Checkout::StripePaymentPresenter do
           disable_wallets: true,
         )
       )
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps a same-currency cart with split exchange rates on the canonical USD element" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
+      second_product = create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 2500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("24.48.0.1", "Canada")
+
+      first = checkout_product_for(product)
+      first[:product][:exchange_rate] = 0.8
+      second = checkout_product_for(second_product)
+      second[:product][:exchange_rate] = 0.9
+      expect(stripe_payment_props(add_products: [first, second], ip: "24.48.0.1")).to eq(payment_element_client_confirm_props)
     ensure
       if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)

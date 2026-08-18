@@ -344,10 +344,12 @@ class Checkout::BuyerCurrencyEligibility
     if listed_in_buyer_currency.any?
       listed_lane = listed_in_buyer_currency.all? &&
         purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
+        purchases.all? { _1.seller_id == seller.id } &&
         self.class.listed_currency_direct_charge_enabled?(seller) &&
         listed_currency_displayed?(buyer_currency) &&
         purchases.none? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? } &&
-        purchases.none? { _1.tip&.value_cents.to_i.positive? || _1.shipping_cents.to_i.positive? }
+        purchases.none? { _1.tip&.value_cents.to_i.positive? || _1.shipping_cents.to_i.positive? } &&
+        listed_lane_rates_uniform?(purchases)
 
       if listed_lane
         return eligible(currency: buyer_currency, direct_listed_amount: true)
@@ -467,6 +469,13 @@ class Checkout::BuyerCurrencyEligibility
     def listed_currency_displayed?(currency)
       params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT &&
         params[:payment_element_mount_currency].to_s.downcase == currency
+    end
+
+    def listed_lane_rates_uniform?(purchases)
+      rates = purchases.map { _1.rate_converted_to_usd.presence }
+      return true if rates.none?
+
+      rates.all? && rates.map(&:to_s).uniq.one? && rates.first.to_d.positive?
     end
 
     def eligible(currency:, direct_listed_amount: nil)

@@ -535,7 +535,13 @@ class Checkout::StripePaymentPresenter
       return false if buyer_currency.blank? || buyer_currency == Currency::USD
       return false unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
 
-      items.all? { _1[:product_currency] == buyer_currency }
+      items.all? { _1[:product_currency] == buyer_currency } &&
+        listed_lane_rates_uniform?(items)
+    end
+
+    def listed_lane_rates_uniform?(items)
+      rates = items.map { _1[:exchange_rate].to_f }
+      rates.all?(&:positive?) && rates.uniq.one?
     end
 
     def method_forced_element_currency
@@ -597,6 +603,7 @@ class Checkout::StripePaymentPresenter
           native_type: product.native_type,
           buyer_currency_display: buyer_currency_display_props(product:, price_cents: cart_product.price, ip:),
           product_currency: product.price_currency_type.to_s.downcase,
+          exchange_rate: listed_exchange_rate_for(product.price_currency_type),
           ppp_discounted: product.ppp_details(ip).present?,
           has_customizable_price: cart_line_buyer_can_name_price?(cart_product)
         )
@@ -624,6 +631,7 @@ class Checkout::StripePaymentPresenter
           # currency_code is the product's own pricing currency (price_currency_type), set by
           # CheckoutPresenter#product_common on every add_products entry.
           product_currency: product[:currency_code].to_s.downcase.presence,
+          exchange_rate: product[:exchange_rate],
           ppp_discounted: product[:ppp_details].present?,
           has_customizable_price: buyer_can_name_price?(checkout_product)
         )
@@ -705,7 +713,7 @@ class Checkout::StripePaymentPresenter
 
     # quantity defaults to 1: price_cents is always the per-unit price, and the only current
     # consumer of quantity (the Klarna amount-window total) must not undercount multi-unit carts.
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, is_physical:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false, has_customizable_price: false)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, is_physical:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, exchange_rate: nil, ppp_discounted: false, has_customizable_price: false)
       {
         seller:,
         price_cents:,
@@ -719,8 +727,14 @@ class Checkout::StripePaymentPresenter
         native_type:,
         buyer_currency_display:,
         product_currency:,
+        exchange_rate:,
         ppp_discounted:,
         has_customizable_price:,
       }
+    end
+
+    # Same formula CheckoutPresenter#product_common uses for the client helper.
+    def listed_exchange_rate_for(currency)
+      get_rate(currency).to_f / (is_currency_type_single_unit?(currency) ? 100 : 1)
     end
 end
