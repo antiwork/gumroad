@@ -655,8 +655,7 @@ class Checkout::BuyerCurrencyQuote
         record_settlement_currency_mismatch(quote_merchant_account, buyer_currency)
         raise
       end
-      converted_total_cents = presentment_total_cents_for(charge_line_items, quote.fx_rate, buyer_currency)
-      return if converted_total_cents.nil?
+      converted_total_cents = presentment_cents_for(charge_canonical_total_cents, quote.fx_rate, buyer_currency)
       # Give the converted total the same price ending the seller chose in USD ($9.99 →
       # €8,99, $10 → €9), HERE, before the token is signed, so the rounded amount is the one
       # the checkout displays, the buyer confirms, and the charge uses. Rounding any later
@@ -693,7 +692,7 @@ class Checkout::BuyerCurrencyQuote
       else
         presentment_cents_for(current_canonical_total_cents, quote.fx_rate, buyer_currency)
       end
-      line_allocations = line_allocations_for(charge_line_items, converted_total_cents, rounding.delta_cents, fx_rate: quote.fx_rate, buyer_currency:)
+      line_allocations = line_allocations_for(charge_line_items, converted_total_cents, rounding.delta_cents)
       future_installments_presentment_total_cents = 0
       later_charge_presentments = charge_line_items.each_with_index.filter_map do |line_item, index|
         next if line_item.later_charge_kind.blank?
@@ -776,12 +775,7 @@ class Checkout::BuyerCurrencyQuote
     # A raise from the allocator (a difference with no non-tax component to carry it) is
     # caught by #create's rescue, which drops the whole cart back to canonical USD — a
     # cosmetic price ending must never break a checkout.
-    def line_allocations_for(charge_line_items, converted_total_cents, rounding_delta_cents, fx_rate:, buyer_currency:)
-      listed = charge_line_items.select { listed_in_buyer_currency?(_1, buyer_currency) }
-      if listed.any? && listed.size != charge_line_items.size
-        return mixed_listing_allocations(charge_line_items, rounding_delta_cents, fx_rate, buyer_currency)
-      end
-
+    def line_allocations_for(charge_line_items, converted_total_cents, rounding_delta_cents)
       Charge::PresentmentAllocator.allocate_lines(
         presentment_total_cents: converted_total_cents,
         rounding_delta_cents:,
@@ -921,74 +915,5 @@ class Checkout::BuyerCurrencyQuote
       raise ArgumentError, "FX rate must be positive" unless fx_rate.positive?
 
       ((BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD)) / fx_rate * subunit_to_unit(currency)).round
-    end
-
-    # A mixed listing (CAD + USD) cannot convert the summed USD basis: that FX-round-trips
-    # the already-listed CAD line. Listed lines invert through the rate they were converted
-    # with; USD lines use the Stripe quote. Uniform carts keep the single-sum conversion.
-    def presentment_total_cents_for(charge_line_items, fx_rate, buyer_currency)
-      listed = charge_line_items.select { listed_in_buyer_currency?(_1, buyer_currency) }
-      if listed.any? && listed.size != charge_line_items.size
-        return unless listed.all? { _1.listed_currency_rate.to_d.positive? }
-
-        charge_line_items.sum { |line| presentment_cents_for_line(line, fx_rate, buyer_currency) }
-      else
-        presentment_cents_for(charge_line_items.sum(&:canonical_total_cents), fx_rate, buyer_currency)
-      end
-    end
-
-    def presentment_cents_for_line(line, fx_rate, buyer_currency)
-      rate = line.listed_currency_rate.to_d if line.listed_currency_rate.present?
-      if listed_in_buyer_currency?(line, buyer_currency) && rate&.positive?
-        extras = line.canonical_total_cents - line.price_cents
-        listed_price = (BigDecimal(line.price_cents.to_s) * rate).round
-        extras.zero? ? listed_price : listed_price + presentment_cents_for(extras, fx_rate, buyer_currency)
-      else
-        presentment_cents_for(line.canonical_total_cents, fx_rate, buyer_currency)
-      end
-    end
-
-    def mixed_listing_allocations(charge_line_items, rounding_delta_cents, fx_rate, buyer_currency)
-      allocations = charge_line_items.map { |line| allocation_from_line_presentment(line, fx_rate, buyer_currency) }
-      if rounding_delta_cents.to_i != 0 && allocations.any?
-        first = allocations.first
-        allocations[0] = LineAllocation.new(
-          permalink: first.permalink,
-          presentment_price_cents: first.presentment_price_cents + rounding_delta_cents.to_i,
-          presentment_tip_cents: first.presentment_tip_cents,
-          presentment_seller_tax_cents: first.presentment_seller_tax_cents,
-          presentment_gumroad_tax_cents: first.presentment_gumroad_tax_cents,
-          presentment_shipping_cents: first.presentment_shipping_cents,
-          presentment_total_cents: first.presentment_total_cents + rounding_delta_cents.to_i
-        )
-      end
-      allocations
-    end
-
-    def allocation_from_line_presentment(line, fx_rate, buyer_currency)
-      extras = lambda { |cents| cents.to_i.zero? ? 0 : presentment_cents_for(cents, fx_rate, buyer_currency) }
-      rate = line.listed_currency_rate.to_d if line.listed_currency_rate.present?
-      price = if listed_in_buyer_currency?(line, buyer_currency) && rate&.positive?
-        (BigDecimal(line.price_cents.to_s) * rate).round
-      else
-        extras[line.price_cents]
-      end
-      tip = extras[line.tip_cents]
-      seller_tax = extras[line.seller_tax_cents]
-      gumroad_tax = extras[line.gumroad_tax_cents]
-      shipping = extras[line.shipping_cents]
-      LineAllocation.new(
-        permalink: line.permalink,
-        presentment_price_cents: price,
-        presentment_tip_cents: tip,
-        presentment_seller_tax_cents: seller_tax,
-        presentment_gumroad_tax_cents: gumroad_tax,
-        presentment_shipping_cents: shipping,
-        presentment_total_cents: price + tip + seller_tax + gumroad_tax + shipping
-      )
-    end
-
-    def listed_in_buyer_currency?(line, buyer_currency)
-      line.product.price_currency_type.to_s.downcase == buyer_currency.to_s.downcase
     end
 end

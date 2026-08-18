@@ -161,7 +161,9 @@ export const getCheckoutListedCurrencyDisplay = (
   // Only the pricing/plan fields are read, so callers can pass cart items directly and tests
   // don't have to build a whole product.
   cartItems: readonly {
-    product: Pick<CartItem["product"], "currency_code" | "exchange_rate">;
+    product: Pick<CartItem["product"], "currency_code" | "exchange_rate"> & {
+      creator?: Pick<CartItem["product"]["creator"], "id">;
+    };
     pay_in_installments?: boolean;
     recurrence?: string | null;
   }[],
@@ -196,6 +198,7 @@ export const getCheckoutListedCurrencyDisplay = (
     // reload left them split, converting shared USD rows (tax, shipping) with any one of them
     // could disagree with the charge, so fall back instead of guessing.
     if (product.exchange_rate !== firstProduct.exchange_rate) return null;
+    if ((product.creator?.id ?? null) !== (firstProduct.creator?.id ?? null)) return null;
   }
   if (!(listedCurrency.subunit_to_unit > 0)) return null;
 

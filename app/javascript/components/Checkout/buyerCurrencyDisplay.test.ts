@@ -355,6 +355,15 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     });
   });
 
+  it("stays in canonical USD when same-currency items come from two sellers", () => {
+    expect(
+      getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [
+        { product: { currency_code: "brl", exchange_rate: 5.45, creator: { id: "seller-a" } } },
+        { product: { currency_code: "brl", exchange_rate: 5.45, creator: { id: "seller-b" } } },
+      ]),
+    ).toBeNull();
+  });
+
   it("stays in canonical USD for an empty cart or one mixing pricing currencies", () => {
     expect(getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [])).toBeNull();
     // One USD line beside a BRL line means the server mounted the canonical USD element, so
