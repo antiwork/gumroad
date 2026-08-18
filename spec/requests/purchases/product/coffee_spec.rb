@@ -23,7 +23,7 @@ describe "Coffee", type: :system, js: true do
 
       expect(page).to_not have_radio_button
 
-      expect(page).to have_field("Price", with: "1")
+      expect(page).to have_field("Name a fair price", with: "1")
 
       click_on "Donate"
       expect(page).to have_current_path("/checkout")
@@ -31,10 +31,10 @@ describe "Coffee", type: :system, js: true do
       within_cart_item "Buy me a coffee!" do
         expect(page).to have_text("US$1")
         select_disclosure "Edit" do
-          fill_in "Price", with: ""
+          fill_in "Name a fair price", with: ""
           click_on "Save changes"
-          expect(find_field("Price")["aria-invalid"]).to eq("true")
-          fill_in "Price", with: "2"
+          expect(find_field("Name a fair price")["aria-invalid"]).to eq("true")
+          fill_in "Name a fair price", with: "2"
           click_on "Save changes"
         end
         expect(page).to have_text("US$2")
@@ -56,10 +56,10 @@ describe "Coffee", type: :system, js: true do
 
     it "rejects zero price" do
       visit coffee.long_url
-      fill_in "Price", with: "0"
+      fill_in "Name a fair price", with: "0"
 
       click_on "Donate"
-      expect(find_field("Price")["aria-invalid"]).to eq("true")
+      expect(find_field("Name a fair price")["aria-invalid"]).to eq("true")
     end
   end
 
@@ -77,7 +77,7 @@ describe "Coffee", type: :system, js: true do
       expect(page).to have_radio_button("$2", checked: false)
       expect(page).to have_radio_button("$3", checked: false)
       expect(page).to have_radio_button("Other", checked: false)
-      expect(page).to_not have_field("Price")
+      expect(page).to_not have_field("Name a fair price")
 
       choose "$2"
 
@@ -104,7 +104,7 @@ describe "Coffee", type: :system, js: true do
     it "allows custom amount purchases" do
       visit coffee.long_url
       choose "Other"
-      fill_in "Price", with: "100"
+      fill_in "Name a fair price", with: "100"
 
       click_on "Tip"
       fill_checkout_form(coffee)
