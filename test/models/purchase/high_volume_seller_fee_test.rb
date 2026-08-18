@@ -87,6 +87,18 @@ class Purchase::HighVolumeSellerFeeTest < ActiveSupport::TestCase
     assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
   end
 
+  test "a refund with no seller does not enqueue the nightly full-fleet refresh" do
+    purchase = create_purchase(link: @product, seller: @seller, price_cents: 1000)
+    purchase.update_columns(seller_id: nil)
+    purchase.reload
+    RefreshHighVolumeSellerFeeEligibilityJob.clear
+
+    purchase.send(:refresh_high_volume_fee_eligibility)
+    purchase.send(:enqueue_high_volume_fee_eligibility_refresh)
+
+    assert_empty RefreshHighVolumeSellerFeeEligibilityJob.jobs
+  end
+
   test "paypal order fee uses the volume rate for an eligible seller on a direct sale only" do
     mark_volume_eligible!(@seller)
 

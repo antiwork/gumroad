@@ -3655,15 +3655,20 @@ class Purchase < ApplicationRecord
   end
 
   def enqueue_high_volume_fee_eligibility_refresh
+    return if seller_id.blank?
+
     RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id)
   end
 
   def refresh_high_volume_fee_eligibility
+    return if seller.nil?
+
     seller.refresh_high_volume_fee_eligibility!
   rescue => e
     # Never fail the refund over the fee cache; fall back to the async repair.
+    # Do not enqueue a blank seller_id — that is the job's nightly full-fleet sentinel.
     Rails.logger.error("high_volume_fee sync refresh failed for seller #{seller_id}: #{e.message}")
-    RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id)
+    RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id) if seller_id.present?
   end
 
   def free_purchase?
