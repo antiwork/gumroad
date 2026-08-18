@@ -104,7 +104,15 @@ describe SignupController, type: :controller, inertia: true do
       expect(tags["title"][:inner_content]).to eq("Sign up for Gumroad")
       expect(description).to eq("Create a free Gumroad account. Sell digital products, memberships, and courses with no monthly fee. Direct sales: 10% + 50¢. Discover: 30%.")
       expect(description).not_to match(/10% \+ 50¢ per sale/)
-      expect(tags["canonical"][:href]).to eq(signup_url)
+      expect(tags["canonical"][:href]).to eq("#{PROTOCOL}://#{DOMAIN}/signup")
+    end
+
+    it "pins the signup canonical to DOMAIN when requested on another valid host" do
+      @request.host = "127.0.0.1"
+
+      get :new
+
+      expect(controller.send(:meta_tags)["canonical"][:href]).to eq("#{PROTOCOL}://#{DOMAIN}/signup")
     end
   end
 
