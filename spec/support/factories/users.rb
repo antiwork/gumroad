@@ -19,6 +19,7 @@ FactoryBot.define do
       skip_enabling_two_factor_authentication { true }
       tipping_enabled { false }
       discover_boost_enabled { false }
+      product_page_storefront_enabled { false }
     end
 
     after(:build) do |user, evaluator|
@@ -33,6 +34,7 @@ FactoryBot.define do
       end
       user.update_column(:flags, user.flags ^ User.flag_mapping["flags"][:tipping_enabled]) unless evaluator.tipping_enabled
       user.update_column(:flags, user.flags ^ User.flag_mapping["flags"][:discover_boost_enabled]) unless evaluator.discover_boost_enabled
+      user.update_column(:flags, user.flags ^ User.flag_mapping["flags"][:product_page_storefront_enabled]) unless evaluator.product_page_storefront_enabled
     end
 
     factory :buyer_user do

@@ -361,6 +361,7 @@ class User < ApplicationRecord
   before_create :enable_two_factor_authentication
   before_create :enable_tipping
   before_create :enable_discover_boost
+  before_create :enable_product_page_storefront
   before_create :set_refund_fee_notice_shown
   before_create :set_refund_policy_enabled
   after_create :create_global_affiliate!
@@ -424,6 +425,7 @@ class User < ApplicationRecord
             55 => :ach_payments_enabled, # Seller opt-in (checkout settings page): offers ACH Direct Debit (us_bank_account) at checkout. Off by default — ACH settles in ~4 business days and content only delivers on settlement, which surprises buyers of time-sensitive digital products (gumroad-private#1143).
             56 => :gifting_disabled, # Seller opt-out (checkout settings page): removes the "Give as a gift" option at checkout for all of this seller's products (gumroad-private#1191).
             57 => :content_moderation_disabled, # Admin-only: exempts every product this seller creates from automated content moderation, including ones that don't exist yet. Link#content_moderation_disabled only covers products that already exist when support grants it (gumroad-private#1742).
+            58 => :product_page_storefront_enabled, # Product pages render inside the creator's storefront (profile header above, catalog below). Defaulted on for new accounts only, so lift can be measured against existing creators before enabling for all (gumroad-private#2196). Sellers can turn it off in profile settings.
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -1636,6 +1638,12 @@ class User < ApplicationRecord
 
     def enable_discover_boost
       self.discover_boost_enabled = true
+    end
+
+    # New accounts only (gumroad-private#2196): existing creators keep the standalone product
+    # page until lift is measured, so this must not be backfilled onto old rows.
+    def enable_product_page_storefront
+      self.product_page_storefront_enabled = true
     end
 
     def set_refund_fee_notice_shown

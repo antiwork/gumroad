@@ -25,7 +25,10 @@ class ProfileSectionsPresenter
     @query = query
   end
 
-  def props(request:, pundit_user:, seller_custom_domain_url:, editing: pundit_user.seller == seller, include_default_products_section: false)
+  # `omit_product` drops that product from every products section (the product-page storefront
+  # catalog passes the product the buyer is already viewing) and keeps `total` consistent with
+  # the omission.
+  def props(request:, pundit_user:, seller_custom_domain_url:, editing: pundit_user.seller == seller, include_default_products_section: false, omit_product: nil)
     sections = query.to_a
 
     props = {
@@ -37,7 +40,7 @@ class ProfileSectionsPresenter
       show_ratings_filter: seller.links.alive.display_product_reviews.exists?,
       creator_profile: ProfilePresenter.new(seller:, pundit_user:).creator_profile,
       sections: cached_sections.map do |props|
-        section_props(sections.find { _1.external_id == props[:id] }, cached_props: props, request:, pundit_user:, seller_custom_domain_url:, editing:)
+        section_props(sections.find { _1.external_id == props[:id] }, cached_props: props, request:, pundit_user:, seller_custom_domain_url:, editing:, omit_product:)
       end
     }
     # New creators who haven't customized their profile yet get a virtual products section so
@@ -49,7 +52,7 @@ class ProfileSectionsPresenter
        !editing &&
        self.class.default_products_section_available?(seller:, sections:)
       default_section = cached_default_products_section
-      props[:sections] = [section_props(nil, cached_props: default_section, request:, pundit_user:, seller_custom_domain_url:, editing: false)]
+      props[:sections] = [section_props(nil, cached_props: default_section, request:, pundit_user:, seller_custom_domain_url:, editing: false, omit_product:)]
     end
     if editing
       props[:products] = seller.products.alive.not_archived.select(:id, :name).map { { id: ObfuscateIds.encrypt(_1.id), name: _1.name } }
@@ -129,7 +132,7 @@ class ProfileSectionsPresenter
     # revenue fields, and `curated_product_ids`, which the controller decrypts before use.
     VISITOR_SEARCH_PARAMS = %i[query tags filetypes min_price max_price rating sort from size recommended_by].freeze
 
-    def section_props(section, cached_props:, request:, pundit_user:, seller_custom_domain_url:, editing:)
+    def section_props(section, cached_props:, request:, pundit_user:, seller_custom_domain_url:, editing:, omit_product: nil)
       params = normalize_search_param_values!(request.query_parameters.slice(*VISITOR_SEARCH_PARAMS))
       # `editing` selects the owner/editing payload shape. Product visibility (hiding sold-out
       # products) instead follows the real viewer, so the seller still sees every product on their
@@ -161,6 +164,19 @@ class ProfileSectionsPresenter
                          { bundle_products: { product: [:tiers, { variant_categories_alive: :alive_variants }], variant: [] } }
                        )
                        .find(cached_props[:search_results][:products])
+        if omit_product
+          before = products.size
+          products = products.reject { |product| product.id == omit_product.id }
+          if before > products.size
+            cached_props[:search_results][:total] -= before - products.size
+          elsif omit_product_in_search_total?(section, omit_product)
+            # The product sits beyond the fetched page: `exclude_ids` pagination will never
+            # return it, so the total must shrink here or the grid keeps requesting an empty
+            # final page.
+            cached_props[:search_results][:total] -= 1
+          end
+          cached_props[:exclude_ids] = [omit_product.external_id]
+        end
         if !viewer_is_owner
           filtered_count = products.count { |product| product.hide_sold_out_variants? && product.remaining_for_sale_count == 0 }
           products = products.reject { |product| product.hide_sold_out_variants? && product.remaining_for_sale_count == 0 }
@@ -195,6 +211,16 @@ class ProfileSectionsPresenter
           .sort_by { |wishlist| cached_props[:shown_wishlists].index(wishlist[:id]) }
       end
       cached_props
+    end
+
+    # Mirrors the section's ES query so we only shrink the total when the search counted the
+    # omitted product. No sold-out check: ES totals include sold-out products, so a sold-out
+    # omitted product beyond the fetched page must still shrink the total.
+    def omit_product_in_search_total?(section, omit_product)
+      return false unless omit_product.alive? && !omit_product.archived?
+      return omit_product.user_id == seller.id if section.nil?
+
+      section.shown_products.include?(omit_product.id)
     end
 
     def section_search_results(section, params: {})
