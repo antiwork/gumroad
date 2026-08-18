@@ -350,28 +350,45 @@ if [ -z "$loop_alive" ]; then
 fi
 echo "__QUERY_B64__" | base64 --decode > "$BASE/in/$job_id.rb.tmp"
 mv "$BASE/in/$job_id.rb.tmp" "$BASE/in/$job_id.rb"
-deadline=$(( $(date +%s) + 360 ))
+# Two-phase deadline keyed on the loop's .taken marker. QUEUE time (loop boot
+# ~15s + earlier jobs, each capped at 300s) must not eat the EXECUTION budget,
+# or a query behind a slow neighbour gets re-run one-shot while still running.
+queue_deadline=$(( $(date +%s) + 420 ))
+exec_deadline=
 while [ ! -f "$BASE/out/$job_id.rc" ]; do
-  if [ "$(date +%s)" -ge "$deadline" ]; then
-    rm -f "$BASE/in/$job_id.rb"
-    echo "gumclaw runner loop timed out; see $BASE/loop.log on the host" >&2
-    exit 97
+  now=$(date +%s)
+  if [ -z "$exec_deadline" ] && [ -f "$BASE/out/$job_id.taken" ]; then
+    exec_deadline=$(( now + 360 ))
   fi
-  # Loop provably dead (pid gone, boot window expired, job still spooled):
-  # bail now instead of burning the full deadline before the fallback.
-  if [ -f "$BASE/in/$job_id.rb" ] \
-     && ! { [ -f "$BASE/loop.pid" ] && kill -0 "$(cat "$BASE/loop.pid" 2>/dev/null)" 2>/dev/null; } \
-     && [ $(( $(date +%s) - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -ge 180 ]; then
-    rm -f "$BASE/in/$job_id.rb"
-    echo "gumclaw runner loop is not running; see $BASE/loop.log on the host" >&2
-    exit 97
+  if [ -n "$exec_deadline" ]; then
+    if [ "$now" -ge "$exec_deadline" ]; then
+      # Taken but no result: the query may still be executing. Never re-run.
+      echo "gumclaw runner loop took the query but produced no result; NOT re-running. See $BASE/loop.log on the host" >&2
+      rm -f "$BASE/out/$job_id.taken"
+      exit 96
+    fi
+  else
+    dead_loop=
+    if ! { [ -f "$BASE/loop.pid" ] && kill -0 "$(cat "$BASE/loop.pid" 2>/dev/null)" 2>/dev/null; } \
+       && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -ge 180 ]; then
+      dead_loop=1
+    fi
+    if [ "$now" -ge "$queue_deadline" ] || [ -n "$dead_loop" ]; then
+      # Job still spooled, never picked up — remove it and tell the client a
+      # one-shot re-run is safe. The sentinel goes on stderr because exit
+      # codes cannot be trusted here: the query's own rc passes through this
+      # script verbatim, so ANY reserved number could collide with it.
+      rm -f "$BASE/in/$job_id.rb"
+      echo "GUMCLAW_LOOP_FALLBACK_OK: query was never picked up" >&2
+      exit 97
+    fi
   fi
   sleep 0.2
 done
 cat "$BASE/out/$job_id.out" 2>/dev/null
 cat "$BASE/out/$job_id.err" >&2 2>/dev/null
 rc=$(cat "$BASE/out/$job_id.rc")
-rm -f "$BASE/out/$job_id.out" "$BASE/out/$job_id.err" "$BASE/out/$job_id.rc"
+rm -f "$BASE/out/$job_id.out" "$BASE/out/$job_id.err" "$BASE/out/$job_id.rc" "$BASE/out/$job_id.taken"
 exit "$rc"
 REMOTE
 )
@@ -380,21 +397,29 @@ REMOTE
   remote_script=${remote_script//__DB_HOST_VAR__/$PROD_DB_HOST_VAR}
   remote_b64=$(printf '%s\n' "$remote_script" | base64 | tr -d '\n')
 
+  loop_err=$(mktemp)
   set +e
   LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" "admin@$PROD_BASTION" \
-    'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) bash -c "echo '"$remote_b64"' | base64 --decode | bash"'
+    'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) bash -c "echo '"$remote_b64"' | base64 --decode | bash"' \
+    2>"$loop_err"
   loop_rc=$?
   set -e
+  cat "$loop_err" >&2
+  fallback_ok=
+  grep -q "GUMCLAW_LOOP_FALLBACK_OK" "$loop_err" && fallback_ok=1
+  rm -f "$loop_err"
   if [ "$loop_rc" -eq 0 ]; then
     record_success
     exit 0
   fi
-  if [ "$loop_rc" -ne 97 ] && [ "$loop_rc" -ne 255 ]; then
-    # The loop ran the query and the QUERY failed. Do not re-run it on the
-    # cold path — even read-only code should not silently execute twice.
+  if [ -z "$fallback_ok" ]; then
+    # Anything else — the query ran and failed, or it may still be executing
+    # (rc 96), or the transport dropped mid-flight (rc 255, spool state
+    # unknown). Do not re-run: even read-only code should not silently
+    # execute twice.
     exit "$loop_rc"
   fi
-  >&2 echo "Runner loop unavailable (rc=$loop_rc); falling back to one-shot rails runner."
+  >&2 echo "Runner loop never took the query; falling back to one-shot rails runner."
 fi
 
 LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" "admin@$PROD_BASTION" \

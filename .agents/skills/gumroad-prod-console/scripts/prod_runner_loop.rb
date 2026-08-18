@@ -36,6 +36,10 @@ loop do
   last_job = Time.now
   id = File.basename(job, ".rb")
   code = File.read(job)
+  # Taken marker BEFORE deleting the job: the client must be able to tell
+  # "never picked up" (safe to re-run one-shot) from "executed or executing"
+  # (must not re-run) at every instant.
+  FileUtils.touch(File.join(OUT_DIR, "#{id}.taken"))
   File.delete(job)
   out_path = File.join(OUT_DIR, "#{id}.out")
   err_path = File.join(OUT_DIR, "#{id}.err")
@@ -48,6 +52,14 @@ loop do
   child = fork do
     $stdout.reopen(File.open("#{out_path}.tmp", "w"))
     $stderr.reopen(File.open("#{err_path}.tmp", "w"))
+    # AR is cleared pre-fork, but the boot-time $redis client still holds the
+    # parent's socket; concurrent use across forks corrupts its protocol the
+    # same way it does MySQL's. Closing forces a clean reconnect on next use.
+    begin
+      $redis&.close
+    rescue StandardError
+      nil
+    end
     status = 0
     begin
       Timeout.timeout(JOB_LIMIT) { eval(code, TOPLEVEL_BINDING) } # rubocop:disable Security/Eval
