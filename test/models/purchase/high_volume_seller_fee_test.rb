@@ -53,6 +53,20 @@ class Purchase::HighVolumeSellerFeeTest < ActiveSupport::TestCase
     assert_empty RefreshHighVolumeSellerFeeEligibilityJob.jobs
   end
 
+  test "a sale refreshes synchronously when a concurrent refund cleared the eligibility the in-memory seller still shows" do
+    create_purchase(link: @product, seller: @seller, price_cents: 2_000_000)
+    mark_volume_eligible!(@seller)
+    concurrent_refund_view = User.find(@seller.id)
+    concurrent_refund_view.high_volume_fee_month = nil
+    concurrent_refund_view.save!(validate: false)
+    RefreshHighVolumeSellerFeeEligibilityJob.clear
+
+    create_purchase(link: @product, seller: @seller, price_cents: 1000)
+
+    assert @seller.reload.high_volume_fee_eligible?
+    assert_empty RefreshHighVolumeSellerFeeEligibilityJob.jobs
+  end
+
   test "a successful sale for an already-eligible seller enqueues the async refresh" do
     mark_volume_eligible!(@seller)
     RefreshHighVolumeSellerFeeEligibilityJob.clear
