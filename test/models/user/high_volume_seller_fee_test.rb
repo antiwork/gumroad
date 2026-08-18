@@ -104,6 +104,15 @@ class User::HighVolumeSellerFeeTest < ActiveSupport::TestCase
     assert_equal [:lock, :sum], log
   end
 
+  test "refresh on an instance dirtied by a NULL-json_data accessor read does not raise from lock!" do
+    seller = create_user
+    seller.update_columns(json_data: nil)
+    fresh = User.find(seller.id)
+    fresh.high_volume_fee_eligible? # reading a json_data accessor on a NULL row dirties it
+
+    assert_nothing_raised { fresh.refresh_high_volume_fee_eligibility! }
+  end
+
   private
     def mark_volume_eligible!(seller)
       seller.high_volume_fee_month = Time.current.strftime("%Y-%m")

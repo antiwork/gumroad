@@ -287,7 +287,10 @@ class User < ApplicationRecord
 
   # with_lock so the SUM and the write are atomic per seller: without it a refresh
   # holding a pre-refund SUM can commit after the refund's refresh and restore 5%.
+  # reload first: lock! raises on dirty records, and merely reading a json_data
+  # accessor on a NULL json_data row dirties it (concerns/json_data.rb).
   def refresh_high_volume_fee_eligibility!
+    reload
     with_lock do
       eligible = month_to_date_gross_sales_cents >= HIGH_VOLUME_FEE_THRESHOLD_CENTS
       new_month = eligible ? Time.current.strftime("%Y-%m") : nil
