@@ -158,7 +158,9 @@ describe CustomerSurchargeController, :vcr do
 
     it "keeps the quoted buyer currency available for a mixed listed-currency cart" do
       cad_product = create(:product, user: @user, price_currency_type: Currency::CAD)
-      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate) do |currency|
+        currency == Currency::CAD ? "0.8" : "1"
+      end
 
       post "calculate_all", params: {
         products: [
