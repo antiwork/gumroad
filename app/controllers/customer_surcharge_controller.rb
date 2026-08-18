@@ -287,6 +287,8 @@ class CustomerSurchargeController < ApplicationController
     end
 
     def currency_offered_for_cart?(line_items, code)
+      # USD is the canonical charge currency every cart can settle in, so it is always
+      # offered; the gates below only decide which extra currencies join it.
       return true if code == Currency::USD
 
       # A cart entirely listed in this currency uses the direct-listed lane (or stays
