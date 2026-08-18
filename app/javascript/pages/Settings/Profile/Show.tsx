@@ -457,8 +457,8 @@ export default function SettingsPage() {
                   label="Show your storefront on product pages"
                 />
                 <FieldsetDescription>
-                  Product pages display your profile header above the product and the rest of your products below it,
-                  so buyers landing on a shared link can browse your whole store.
+                  Product pages display your profile header above the product and the rest of your products below it, so
+                  buyers landing on a shared link can browse your whole store.
                 </FieldsetDescription>
               </Fieldset>
               {loggedInUser?.policies.settings_profile.manage_social_connections ? (
