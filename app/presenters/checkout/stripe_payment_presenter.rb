@@ -512,6 +512,8 @@ class Checkout::StripePaymentPresenter
       return false if items.empty?
 
       sellers = items.map { _1[:seller] }
+      # One ConfirmationToken funds one PaymentIntent, so prepare rejects a multi-seller cart.
+      return false unless sellers.uniq.one?
       return false unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
       return false unless sellers.all? { Checkout::BuyerCurrencyEligibility.listed_currency_direct_charge_enabled?(_1) }
 

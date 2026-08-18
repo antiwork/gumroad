@@ -1706,6 +1706,25 @@ describe Checkout::StripePaymentPresenter do
       end
     end
 
+    it "keeps a multi-seller CAD cart on the canonical USD element" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
+      other_seller, other_product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 2500)
+      [seller, other_seller].each do |current_seller|
+        activate_buyer_currency_flags(current_seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, current_seller)
+      end
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("24.48.0.1", "Canada")
+
+      add_products = [checkout_product_for(product), checkout_product_for(other_product)]
+      expect(stripe_payment_props(add_products:, ip: "24.48.0.1")).to eq(payment_element_props)
+    ensure
+      [seller, other_seller].compact.each do |current_seller|
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, current_seller)
+        deactivate_buyer_currency_flags(current_seller)
+      end
+    end
+
     it "keeps that CAD listing on the USD element while the direct-listed ramp is off" do
       seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
       activate_buyer_currency_flags(seller)
