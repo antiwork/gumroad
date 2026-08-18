@@ -285,14 +285,18 @@ class User < ApplicationRecord
     sales.paid.where("purchases.created_at >= ?", Time.current.beginning_of_month).sum(:price_cents)
   end
 
+  # with_lock so the SUM and the write are atomic per seller: without it a refresh
+  # holding a pre-refund SUM can commit after the refund's refresh and restore 5%.
   def refresh_high_volume_fee_eligibility!
-    eligible = month_to_date_gross_sales_cents >= HIGH_VOLUME_FEE_THRESHOLD_CENTS
-    new_month = eligible ? Time.current.strftime("%Y-%m") : nil
-    return eligible if high_volume_fee_month == new_month
-
-    self.high_volume_fee_month = new_month
-    save!(validate: false)
-    eligible
+    with_lock do
+      eligible = month_to_date_gross_sales_cents >= HIGH_VOLUME_FEE_THRESHOLD_CENTS
+      new_month = eligible ? Time.current.strftime("%Y-%m") : nil
+      if high_volume_fee_month != new_month
+        self.high_volume_fee_month = new_month
+        save!(validate: false)
+      end
+      eligible
+    end
   end
 
   attr_blockable :email

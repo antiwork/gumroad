@@ -45,9 +45,28 @@ class Purchase::HighVolumeSellerFeeTest < ActiveSupport::TestCase
     assert_equal Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND, purchase.send(:gumroad_flat_fee_per_thousand)
   end
 
-  test "a successful purchase enqueues an eligibility refresh for the seller" do
+  test "a sale that crosses the threshold makes the seller eligible before the next fee calculation" do
+    RefreshHighVolumeSellerFeeEligibilityJob.clear
+    create_purchase(link: @product, seller: @seller, price_cents: 2_000_000)
+
+    assert @seller.reload.high_volume_fee_eligible?
+    assert_empty RefreshHighVolumeSellerFeeEligibilityJob.jobs
+  end
+
+  test "a successful sale for an already-eligible seller enqueues the async refresh" do
+    mark_volume_eligible!(@seller)
+    RefreshHighVolumeSellerFeeEligibilityJob.clear
     create_purchase(link: @product, seller: @seller, price_cents: 1000)
 
+    assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
+  end
+
+  test "a successful sale keeps the async pre-warm when the flag is off" do
+    Feature.deactivate(:high_volume_seller_fee)
+    RefreshHighVolumeSellerFeeEligibilityJob.clear
+    create_purchase(link: @product, seller: @seller, price_cents: 2_000_000)
+
+    assert_not @seller.reload.high_volume_fee_eligible?
     assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
   end
 

@@ -3657,7 +3657,14 @@ class Purchase < ApplicationRecord
   def enqueue_high_volume_fee_eligibility_refresh
     return if seller_id.blank?
 
-    RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id)
+    # A sale that crosses $20k must lower the very next sale's fee, so refresh
+    # synchronously while the seller is below the cached threshold. Already-eligible
+    # sellers can't change state on a sale; flag-off keeps the async pre-warm.
+    if seller && Feature.active?(:high_volume_seller_fee, seller) && !seller.high_volume_fee_eligible?
+      refresh_high_volume_fee_eligibility
+    else
+      RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id)
+    end
   end
 
   def refresh_high_volume_fee_eligibility

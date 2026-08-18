@@ -94,6 +94,16 @@ class User::HighVolumeSellerFeeTest < ActiveSupport::TestCase
     end
   end
 
+  test "refresh reads the sales SUM inside the seller row lock so concurrent refreshes serialize" do
+    log = []
+    @seller.define_singleton_method(:with_lock) { |&blk| log << :lock; blk.call }
+    @seller.define_singleton_method(:month_to_date_gross_sales_cents) { log << :sum; 0 }
+
+    @seller.refresh_high_volume_fee_eligibility!
+
+    assert_equal [:lock, :sum], log
+  end
+
   private
     def mark_volume_eligible!(seller)
       seller.high_volume_fee_month = Time.current.strftime("%Y-%m")
