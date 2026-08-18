@@ -16,7 +16,12 @@ set -e
 : "${PROD_DB_HOST_VAR:=DATABASE_WORKER_REPLICA1_HOST}"
 : "${PROD_AWS_PROFILE:=gumroad-prod}"
 : "${PROD_SSH_CONTROL_PATH:=$HOME/.ssh/cm-gr-%C}"
-: "${PROD_IP_CACHE:=$HOME/.cache/gumroad-prod-console/last_ip}"
+# Key the cache file by discovery scope. A cached IP only means something for
+# the bastion/security-group/container combination that selected it; a shared
+# file would let a config change reuse a host outside the new scope (the
+# docker probe alone cannot catch that when the bastion stays the same).
+cache_scope=$(printf '%s' "$PROD_BASTION|$PROD_SECURITY_GROUP|$PROD_CONTAINER_FILTER" | cksum | cut -d' ' -f1)
+: "${PROD_IP_CACHE:=$HOME/.cache/gumroad-prod-console/last_ip.$cache_scope}"
 : "${PROD_IP_CACHE_TTL:=600}"
 
 # Extra ssh flags. Must stay flags on the `ssh` binary — `timeout` cannot
@@ -303,13 +308,28 @@ fi
 
 encoded=$(printf '%s\n' "$ruby_code" | base64 | tr -d '\n')
 
+query_rc=0
 LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" "admin@$PROD_BASTION" \
-  'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running") bash -c "echo '"$encoded"' | base64 --decode | DATABASE_HOST=\$'"$PROD_DB_HOST_VAR"' bundle exec rails runner -"'
+  'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running") bash -c "echo '"$encoded"' | base64 --decode | DATABASE_HOST=\$'"$PROD_DB_HOST_VAR"' bundle exec rails runner -"' \
+  || query_rc=$?
 
-# Remember last-good only after rails runner succeeded (set -e), and only for
-# auto-selected hosts. A PROD_INSTANCE_IP pin is per-invocation — caching it
-# would stick later unpinned calls on that box. A host that passed docker-true
-# but failed boot/DB must not become last-good either.
-if [ -z "${PROD_INSTANCE_IP:-}" ]; then
-  write_instance_cache "$instance_ip"
+# A PROD_INSTANCE_IP pin is per-invocation — it never reads or writes the
+# shared cache, so nothing to maintain here.
+if [ -n "${PROD_INSTANCE_IP:-}" ]; then
+  exit "$query_rc"
 fi
+
+if [ "$query_rc" -ne 0 ]; then
+  # Drop the cache on any failed run. The docker-true probe cannot tell a
+  # host that fails Rails boot/DB from a healthy one that ran a bad query, so
+  # keeping the entry would re-select a broken host on every call until the
+  # TTL expires. Worst case of dropping is one extra discovery after a typo.
+  rm -f "$PROD_IP_CACHE"
+  exit "$query_rc"
+fi
+
+# Remember last-good only after rails runner succeeded, and only for
+# auto-selected hosts. The cache is an optimization: a failed write must not
+# turn the successful query into a nonzero exit.
+write_instance_cache "$instance_ip" \
+  || >&2 echo "Warning: could not write $PROD_IP_CACHE (continuing)."
