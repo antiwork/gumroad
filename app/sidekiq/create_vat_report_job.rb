@@ -154,7 +154,13 @@ class CreateVatReportJob
       s3_signed_url = s3_object.presigned_url(:get, expires_in: 1.week.to_i).to_s
 
       AccountingMailer.vat_report(quarter, year, s3_signed_url).deliver_now
-      InternalNotificationWorker.perform_async("payments", "VAT Reporting", "Q#{quarter} #{year} VAT report is ready - #{s3_signed_url}", "green")
+      InternalNotificationWorker.perform_async(
+        "payments",
+        "VAT Reporting",
+        "Q#{quarter} #{year} VAT report is ready - #{s3_signed_url}",
+        "green",
+        { "s3_attachments" => [{ "bucket" => REPORTING_S3_BUCKET, "key" => s3_report_key, "filename" => File.basename(s3_report_key) }] }
+      )
     ensure
       temp_file.close
     end
