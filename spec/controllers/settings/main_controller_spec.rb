@@ -388,6 +388,18 @@ describe Settings::MainController, type: :controller, inertia: true do
           expect(seller.refund_policy.fine_print).to eq("This is a fine print")
         end
 
+        it "rejects fine print that denies refunds with a visible error" do
+          allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
+            { "choices" => [{ "message" => { "content" => %({"no_refunds": true}) } }] }
+          )
+
+          put :update, params: { user: { seller_refund_policy: { max_refund_period_in_days: "30", fine_print: "All sales are final. No refunds." } } }
+          expect(response).to redirect_to(settings_main_path)
+          expect(flash[:alert]).to eq("Fine print cannot state that refunds are not allowed")
+
+          expect(seller.refund_policy.reload.fine_print).to be_nil
+        end
+
         context "when seller_refund_policy_disabled_for_all feature flag is set to true" do
           before do
             Feature.activate(:seller_refund_policy_disabled_for_all)
