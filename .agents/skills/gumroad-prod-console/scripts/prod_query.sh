@@ -15,6 +15,68 @@ set -e
 : "${PROD_CONTAINER_FILTER:=puma-*}"
 : "${PROD_DB_HOST_VAR:=DATABASE_WORKER_REPLICA1_HOST}"
 : "${PROD_AWS_PROFILE:=gumroad-prod}"
+: "${PROD_SSH_CONTROL_PATH:=$HOME/.ssh/cm-gr-bastion}"
+: "${PROD_IP_CACHE:=$HOME/.cache/gumroad-prod-console/last_ip}"
+: "${PROD_IP_CACHE_TTL:=600}"
+
+# Reuse one TCP+auth session to the bastion (ControlPersist). LC_PAPER is still
+# sent per hop, so the jump host can change without dropping the mux.
+bastion_ssh() {
+  ssh -o SendEnv=LC_PAPER \
+      -o StrictHostKeyChecking=accept-new \
+      -o ControlMaster=auto \
+      -o "ControlPath=$PROD_SSH_CONTROL_PATH" \
+      -o ControlPersist=8h \
+      "$@"
+}
+
+if command -v timeout >/dev/null 2>&1; then
+  probe_timeout() { timeout "$@"; }
+elif command -v gtimeout >/dev/null 2>&1; then
+  probe_timeout() { gtimeout "$@"; }
+else
+  probe_timeout() {
+    local dur=$1; shift
+    "$@" & local pid=$!
+    ( sleep "$dur"; kill -TERM "$pid" 2>/dev/null ) & local watcher=$!
+    disown "$watcher" 2>/dev/null
+    wait "$pid" 2>/dev/null; local rc=$?
+    kill -TERM "$watcher" 2>/dev/null
+    return $rc
+  }
+fi
+
+file_mtime() {
+  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"
+}
+
+# Last-good private IP. Skip EC2 discovery when that host still answers.
+try_cached_instance() {
+  [ -f "$PROD_IP_CACHE" ] || return 1
+  local age ip remaining
+  age=$(( $(date +%s) - $(file_mtime "$PROD_IP_CACHE") ))
+  [ "$age" -ge "$PROD_IP_CACHE_TTL" ] && return 1
+  ip=$(tr -d '[:space:]' < "$PROD_IP_CACHE")
+  case "$ip" in
+    [0-9]*.[0-9]*.[0-9]*.[0-9]*) ;;
+    *) return 1 ;;
+  esac
+  remaining=8
+  if LC_PAPER="$ip" probe_timeout "$remaining" bastion_ssh -o ConnectTimeout=5 \
+      "admin@$PROD_BASTION" \
+      'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
+      >/dev/null 2>&1; then
+    instance_ip="$ip"
+    >&2 echo "Using cached instance $instance_ip (${age}s old)"
+    return 0
+  fi
+  return 1
+}
+
+write_instance_cache() {
+  mkdir -p "$(dirname "$PROD_IP_CACHE")"
+  printf '%s\n' "$1" > "$PROD_IP_CACHE"
+}
 
 # Non-interactive shells (e.g. Claude Code's Bash tool) don't source .zshrc,
 # so an AWS_PROFILE export there won't reach this script. Fall back to the
@@ -39,21 +101,25 @@ else
   exit 1
 fi
 
-# Preflight: AWS credentials for EC2 lookup.
-if ! aws sts get-caller-identity >/dev/null 2>&1; then
-  echo "Error: AWS credentials not configured." >&2
-  echo "Run 'aws configure', set AWS_PROFILE, or export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY." >&2
-  echo "You also need SSH access to $PROD_BASTION." >&2
-  exit 1
-fi
-
-# Pick a healthy instance in the production security group.
-# Honor an explicit override first (set PROD_INSTANCE_IP to pin a host, e.g.
-# when you already know a specific instance is healthy or sick).
+# Preflight only when we still need EC2 discovery. A warm cache or an explicit
+# pin can hop without AWS.
+need_discovery=1
 if [ -n "${PROD_INSTANCE_IP:-}" ]; then
   instance_ip="$PROD_INSTANCE_IP"
+  need_discovery=
   >&2 echo "Using PROD_INSTANCE_IP override: $instance_ip"
-else
+elif try_cached_instance; then
+  need_discovery=
+fi
+
+if [ -n "$need_discovery" ]; then
+  if ! aws sts get-caller-identity >/dev/null 2>&1; then
+    echo "Error: AWS credentials not configured." >&2
+    echo "Run 'aws configure', set AWS_PROFILE, or export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY." >&2
+    echo "You also need SSH access to $PROD_BASTION." >&2
+    exit 1
+  fi
+
   # List all running instances, oldest first (oldest is warmest, but any works).
   # Only running instances: stopped or terminating ones have no private IP
   # (the CLI prints "None"), and probing those would waste 20 seconds each.
@@ -66,30 +132,6 @@ else
   if [ -z "$candidate_ips" ]; then
     echo "Error: No running instance found in security group $PROD_SECURITY_GROUP" >&2
     exit 1
-  fi
-
-  # Bound each probe so a hung docker exec can't stall the whole run. GNU
-  # coreutils `timeout` does this on Linux, but macOS — where many of us run
-  # this from a laptop — ships no `timeout` (and often no `gtimeout` either).
-  # A missing binary would exit 127 and be misread as "instance unhealthy",
-  # failing every candidate and killing the console entirely. So resolve a real
-  # timeout binary if present, else fall back to a small pure-bash timer.
-  if command -v timeout >/dev/null 2>&1; then
-    probe_timeout() { timeout "$@"; }
-  elif command -v gtimeout >/dev/null 2>&1; then
-    probe_timeout() { gtimeout "$@"; }
-  else
-    probe_timeout() {
-      local dur=$1; shift
-      "$@" & local pid=$!
-      ( sleep "$dur"; kill -TERM "$pid" 2>/dev/null ) & local watcher=$!
-      # Drop the watcher from the job table so killing it below doesn't print a
-      # "Terminated" notice on every successful probe.
-      disown "$watcher" 2>/dev/null
-      wait "$pid" 2>/dev/null; local rc=$?
-      kill -TERM "$watcher" 2>/dev/null
-      return $rc
-    }
   fi
 
   # Probe each candidate with a cheap 20s check and take the first one that
@@ -122,7 +164,7 @@ else
       break
     fi
     [ "$remaining" -gt 20 ] && remaining=20 || true
-    if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
+    if LC_PAPER="$ip" probe_timeout "$remaining" bastion_ssh \
         -o ConnectTimeout=10 "admin@$PROD_BASTION" \
         'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
         >/dev/null 2>"$probe_err"; then
@@ -186,7 +228,7 @@ else
         [ "$remaining" -gt 60 ] && remaining=60 || true
         connect_timeout=$(( remaining / 3 ))
         [ "$connect_timeout" -lt 5 ] && connect_timeout=5 || true
-        if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
+        if LC_PAPER="$ip" probe_timeout "$remaining" bastion_ssh \
             -o ConnectTimeout="$connect_timeout" "admin@$PROD_BASTION" \
             'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
             >/dev/null 2>&1; then
@@ -229,8 +271,8 @@ else
     [ "$remaining" -gt 20 ] && remaining=20 || true
     if [ "$remaining" -lt 5 ]; then
       >&2 echo "Skipped clearing outdated bastion host keys for:$stale_key_ips (out of selection budget)."
-    elif LC_PAPER="$instance_ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER \
-        -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "admin@$PROD_BASTION" \
+    elif LC_PAPER="$instance_ip" probe_timeout "$remaining" bastion_ssh \
+        -o ConnectTimeout=10 "admin@$PROD_BASTION" \
         "$keygen_cmd" >/dev/null 2>&1; then
       >&2 echo "Cleared outdated bastion host keys for:$stale_key_ips"
     else
@@ -250,8 +292,9 @@ else
 fi
 
 >&2 echo "Connecting to $instance_ip via $PROD_BASTION..."
+write_instance_cache "$instance_ip"
 
 encoded=$(printf '%s\n' "$ruby_code" | base64 | tr -d '\n')
 
-LC_PAPER="$instance_ip" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "admin@$PROD_BASTION" \
+LC_PAPER="$instance_ip" bastion_ssh "admin@$PROD_BASTION" \
   'sudo docker exec -i $(sudo docker ps -aqf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running") bash -c "echo '"$encoded"' | base64 --decode | DATABASE_HOST=\$'"$PROD_DB_HOST_VAR"' bundle exec rails runner -"'

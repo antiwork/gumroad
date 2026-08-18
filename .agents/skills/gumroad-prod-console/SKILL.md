@@ -27,6 +27,8 @@ Multi-line queries: write a temp `.rb` file, pass its path. Bash tool timeout is
 
 Follow-up queries are cheap — start scoped (one record, one field), then drill in as the investigation clarifies. Avoid the urge to return everything in a single large query.
 
+Warm hops: `prod_query.sh` multiplexes SSH to the bastion (`ControlPersist`) and reuses the last-good instance IP for 10 minutes (`PROD_IP_CACHE_TTL`). A second query should skip EC2 discovery. Pin with `PROD_INSTANCE_IP` to skip it entirely. Tracked in gumroad-private#2197.
+
 ## Safety
 
 - **Read-only.** Never write, update, or delete.
