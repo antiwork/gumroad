@@ -356,23 +356,46 @@ if [ -n "$runner_loop_ok" ]; then
   remote_script=$(cat <<'REMOTE'
 set -u
 BASE=/tmp/gumclaw-runner
+
+# The loop evals whatever lands in in/ with THIS shell's privileges, and /tmp
+# is world-writable inside the container. Refuse a spool tree someone else
+# pre-created (symlink or foreign owner) — otherwise a lower-privileged
+# process could plant loop.rb or job files for a higher-privileged loop.
+# The -L re-check after mkdir catches a symlink swapped in between the two.
+mkdir -p "$BASE"
+if [ -L "$BASE" ] || [ ! -d "$BASE" ] || [ "$(stat -c %u "$BASE")" != "$(id -u)" ]; then
+  echo "GUMCLAW_LOOP_FALLBACK_OK: spool dir $BASE is a symlink or owned by someone else" >&2
+  exit 97
+fi
+chmod 700 "$BASE"
 mkdir -p "$BASE/in" "$BASE/out"
+
+# flock is required for the single-booter lock below; without it the loop
+# path cannot boot safely, and the one-shot path costs only the Rails boot.
+if ! command -v flock >/dev/null 2>&1; then
+  echo "GUMCLAW_LOOP_FALLBACK_OK: flock unavailable in container" >&2
+  exit 97
+fi
+
 job_id=$(date +%s)-$$-$RANDOM
 new_sum=$(echo "__LOOP_B64__" | base64 --decode | md5sum | awk '{print $1}')
 
 # PID-reuse guard: loop.pid can outlive its process (SIGKILL, crash), and a
-# recycled PID can belong to anything — this shell runs as root, so a blind
-# kill could hit a puma worker. Only treat the PID as ours when its cmdline
-# still names our loop script.
+# recycled PID can belong to anything — this shell can run as root, so a
+# blind kill could hit a puma worker. Only treat a PID as ours when its
+# cmdline still names our loop script.
+pid_is_loop() {
+  [ -n "$1" ] && grep -qaF "$BASE/loop.rb" "/proc/$1/cmdline" 2>/dev/null
+}
 loop_pid_alive() {
   local pid
   pid=$(cat "$BASE/loop.pid" 2>/dev/null) || return 1
-  [ -n "$pid" ] || return 1
-  grep -qaF "$BASE/loop.rb" "/proc/$pid/cmdline" 2>/dev/null
+  pid_is_loop "$pid"
 }
 
 loop_alive=
-if loop_pid_alive; then
+live_pid=$(cat "$BASE/loop.pid" 2>/dev/null || echo "")
+if pid_is_loop "$live_pid"; then
   loop_alive=1
   # A live loop running stale code stays stale until the host recycles —
   # replace it so client and loop can never disagree on the job contract.
@@ -387,33 +410,51 @@ if loop_pid_alive; then
       echo "GUMCLAW_LOOP_FALLBACK_OK: stale loop is busy; deferring replacement" >&2
       exit 97
     fi
-    kill "$(cat "$BASE/loop.pid")" 2>/dev/null
+    # Signal only the PID we validated above, and wait for it to exit before
+    # spooling: a still-running old loop uses the OLD job contract and could
+    # claim the job this run is about to spool.
+    kill "$live_pid" 2>/dev/null
+    tries=0
+    while pid_is_loop "$live_pid" && [ "$tries" -lt 50 ]; do
+      sleep 0.2
+      tries=$(( tries + 1 ))
+    done
+    if pid_is_loop "$live_pid"; then
+      echo "GUMCLAW_LOOP_FALLBACK_OK: stale loop did not exit; deferring replacement" >&2
+      exit 97
+    fi
     rm -f "$BASE/loop.pid" "$BASE/starting"
     loop_alive=
   fi
 fi
 if [ -z "$loop_alive" ]; then
   # One booter at a time: concurrent cold callers would each boot a loop and
-  # all but one exit after wasting a full Rails boot. noclobber makes the
-  # claim atomic — a bare check-then-write let simultaneous callers all pass
-  # the check. A lock older than 180s is a crashed booter; clear it so it
-  # cannot wedge the warm path forever.
-  now=$(date +%s)
-  if [ -f "$BASE/starting" ] && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -ge 180 ]; then
-    rm -f "$BASE/starting"
-  fi
-  if (set -o noclobber; echo "$now" > "$BASE/starting") 2>/dev/null; then
-    # Lock winner writes loop.rb — losers must not overwrite it mid-boot with
+  # all but one exit after wasting a full Rails boot. flock serializes the
+  # whole decide-and-boot step and cannot go stale (the kernel releases it
+  # when the holder exits), so the age check on `starting` — which outlives a
+  # successful boot on purpose, for the client's dead-loop grace below — runs
+  # with no takeover race. Boot rc 2 = the loop script could not be written.
+  (
+    flock -n 9 || exit 0
+    now=$(date +%s)
+    if [ -f "$BASE/starting" ] && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -lt 180 ]; then
+      exit 0
+    fi
+    echo "$now" > "$BASE/starting"
+    # Lock holder writes loop.rb — losers must not overwrite it mid-boot with
     # their own version. A failed write (e.g. ENOSPC) would boot a truncated
-    # script: release the lock and tell the client a one-shot re-run is safe.
+    # script: release the claim and tell the client a one-shot re-run is safe.
     if ! echo "__LOOP_B64__" | base64 --decode > "$BASE/loop.rb"; then
       rm -f "$BASE/loop.rb" "$BASE/starting"
-      echo "GUMCLAW_LOOP_FALLBACK_OK: could not write the loop script" >&2
-      exit 97
+      exit 2
     fi
     # No cd: bundle needs the app's Gemfile, i.e. the container WORKDIR the
     # one-shot path already relies on.
     ( DATABASE_HOST="$__DB_HOST_VAR__" nohup bundle exec rails runner "$BASE/loop.rb" > "$BASE/loop.log" 2>&1 & )
+  ) 9>"$BASE/boot.lock"
+  if [ "$?" -eq 2 ]; then
+    echo "GUMCLAW_LOOP_FALLBACK_OK: could not write the loop script" >&2
+    exit 97
   fi
 fi
 # A partial spool write (e.g. ENOSPC) must never be published — the loop
@@ -428,7 +469,8 @@ mv "$BASE/in/$job_id.rb.tmp" "$BASE/in/$job_id.rb"
 # Two-phase deadline keyed on the loop's .taken marker. QUEUE time (loop boot
 # ~15s + earlier jobs, each capped at 300s) must not eat the EXECUTION budget,
 # or a query behind a slow neighbour gets re-run one-shot while still running.
-queue_deadline=$(( $(date +%s) + 420 ))
+spool_time=$(date +%s)
+queue_deadline=$(( spool_time + 420 ))
 exec_deadline=
 while [ ! -f "$BASE/out/$job_id.rc" ]; do
   now=$(date +%s)
@@ -444,7 +486,11 @@ while [ ! -f "$BASE/out/$job_id.rc" ]; do
     fi
   else
     dead_loop=
+    # The 10s grace covers the flock winner's window between taking the boot
+    # lock and writing `starting`: a missing file reads as age-infinite and
+    # would otherwise trip this check on the very first poll.
     if ! loop_pid_alive \
+       && [ $(( now - spool_time )) -ge 10 ] \
        && [ $(( now - $(cat "$BASE/starting" 2>/dev/null || echo 0) )) -ge 180 ]; then
       dead_loop=1
     fi

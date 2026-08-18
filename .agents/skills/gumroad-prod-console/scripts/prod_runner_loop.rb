@@ -15,6 +15,11 @@ OUT_DIR = File.join(BASE, "out")
 PID_FILE = File.join(BASE, "loop.pid")
 IDLE_LIMIT = Integer(ENV.fetch("GUMCLAW_RUNNER_IDLE_LIMIT", "1800"))
 JOB_LIMIT = Integer(ENV.fetch("GUMCLAW_RUNNER_JOB_LIMIT", "300"))
+GC_INTERVAL = 300
+# Abandoned spool files (client died before consuming its result, or spooled
+# a job nobody served) accumulate forever and can fill the container's /tmp.
+# Reap anything well past every client deadline (420s queue + 360s exec).
+STALE_SPOOL_AGE = 3600
 
 FileUtils.mkdir_p(IN_DIR)
 FileUtils.mkdir_p(OUT_DIR)
@@ -34,10 +39,20 @@ end
 File.write(PID_FILE, Process.pid.to_s)
 
 last_job = Time.now
+last_gc = Time.now
 loop do
   job = Dir[File.join(IN_DIR, "*.rb")].min
   if job.nil?
     break if Time.now - last_job > IDLE_LIMIT
+    if Time.now - last_gc > GC_INTERVAL
+      last_gc = Time.now
+      cutoff = Time.now - STALE_SPOOL_AGE
+      Dir[File.join(OUT_DIR, "*")].concat(Dir[File.join(IN_DIR, "*")]).each do |stale|
+        File.delete(stale) if File.mtime(stale) < cutoff
+      rescue StandardError
+        nil
+      end
+    end
     sleep 0.2
     next
   end
