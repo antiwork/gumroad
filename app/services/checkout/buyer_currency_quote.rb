@@ -225,6 +225,15 @@ class Checkout::BuyerCurrencyQuote
     new(line_items:, canonical_total_cents:, ip: nil).cart_quotable?
   end
 
+  # A cart with every line already listed in the buyer's currency takes the direct-listed lane.
+  # Any other listing shape can use this quote lane once the separate cart and settlement gates
+  # pass, including a cart that mixes a buyer-currency listing with a USD listing.
+  def self.buyer_currency_listing_quotable?(line_items:, buyer_currency:)
+    line_items.any? do |line_item|
+      line_item.product.price_currency_type.to_s.downcase != buyer_currency.to_s.downcase
+    end
+  end
+
   def self.normalize_requested_currency(currency)
     code = currency.to_s.downcase.presence
     code if code && CURRENCY_CHOICES.key?(code)
@@ -443,13 +452,7 @@ class Checkout::BuyerCurrencyQuote
     buyer_currency = currency.presence || buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
-    # A cart whose every line is already listed in the buyer currency uses the listed-amount
-    # lane (or stays unquoted). Mixed listing is one USD basis — quote all of it, including
-    # the already-listed lines (gumroad-private#1433). Shape gates ran in `cart_quotable?`.
-    listed_in_buyer_currency = line_items.map do |line_item|
-      line_item.product.price_currency_type.to_s.downcase == buyer_currency.to_s.downcase
-    end
-    return if listed_in_buyer_currency.any? && listed_in_buyer_currency.all?
+    return unless self.class.buyer_currency_listing_quotable?(line_items:, buyer_currency:)
 
     charge_quotes = line_items_by_seller.map do |seller_id, seller_line_items|
       charge_quote_for(seller: sellers_by_id.fetch(seller_id), charge_line_items: seller_line_items, buyer_currency:)

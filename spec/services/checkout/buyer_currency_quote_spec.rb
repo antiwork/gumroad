@@ -762,8 +762,11 @@ describe Checkout::BuyerCurrencyQuote do
 
     it "quotes a mixed cart when only one item is priced in the buyer's currency" do
       cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
+      line_items = line_items_for(product, cad_product)
 
-      result = described_class.create(line_items: line_items_for(product, cad_product), canonical_total_cents: 20_00, ip: "24.48.0.1")
+      expect(described_class.buyer_currency_listing_quotable?(line_items:, buyer_currency: Currency::CAD)).to be(true)
+
+      result = described_class.create(line_items:, canonical_total_cents: 20_00, ip: "24.48.0.1")
 
       expect(result).to have_attributes(currency: Currency::CAD, canonical_total_cents: 20_00)
       expect(StripeFxQuote).to have_received(:create)
