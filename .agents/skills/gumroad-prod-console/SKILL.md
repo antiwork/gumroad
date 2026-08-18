@@ -29,6 +29,8 @@ Follow-up queries are cheap — start scoped (one record, one field), then drill
 
 Warm hops: `prod_query.sh` multiplexes SSH to the bastion (`ControlPersist`) and reuses the last-good instance IP for 10 minutes (`PROD_IP_CACHE_TTL`). A second query should skip EC2 discovery. Pin with `PROD_INSTANCE_IP` to skip it entirely. Tracked in gumroad-private#2197.
 
+Persistent runner: the first replica-default query on a host boots a long-lived `rails runner` loop (`scripts/prod_runner_loop.rb`) inside the puma container; later queries are spooled to it and skip Rails boot entirely (~1s warm vs ~14s one-shot). The loop forks per query, keeps stdout/stderr separate, idles out after 30 minutes without work, and is replaced automatically when the local `prod_runner_loop.rb` changes. Non-default `PROD_DB_HOST_VAR` sessions (primary writes) always take the one-shot path; `PROD_NO_RUNNER_LOOP=1` opts out.
+
 ## Safety
 
 - **Read-only.** Never write, update, or delete.
