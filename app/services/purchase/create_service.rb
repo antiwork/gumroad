@@ -20,7 +20,7 @@ class Purchase::CreateService < Purchase::BaseService
 
   def perform
     unless @product.allow_parallel_purchases?
-      inventory_semaphore = SuoSemaphore.product_inventory(@product.id, acquisition_timeout: INVENTORY_LOCK_ACQUISITION_TIMEOUT)
+      inventory_semaphore = inventory_lock_client
       inventory_lock_token = inventory_semaphore.lock
       if inventory_lock_token.nil?
         Rails.logger.warn("Could not acquire lock for product_inventory semaphore (product id: #{@product.id})")
@@ -223,6 +223,15 @@ class Purchase::CreateService < Purchase::BaseService
 
     def is_gift?
       !!params[:is_gift]
+    end
+
+    def inventory_lock_client
+      extra = { acquisition_timeout: INVENTORY_LOCK_ACQUISITION_TIMEOUT }
+      if @product.native_type == Link::NATIVE_TYPE_CALL
+        SuoSemaphore.seller_call_inventory(@product.user_id, extra)
+      else
+        SuoSemaphore.product_inventory(@product.id, extra)
+      end
     end
 
     def should_check_for_restartable_subscription?
