@@ -213,11 +213,9 @@ class ProfileSectionsPresenter
       cached_props
     end
 
-    # Mirrors the section's ES query (is_alive_on_profile + shown_products) so we only shrink
-    # the total when the search actually counted the omitted product. Deliberately no sold-out
-    # check: ES totals include sold-out products (the sold-out reject above only prunes the
-    # fetched page and decrements the total for what it pruned), so a sold-out omitted product
-    # beyond the page is still in the total and must still shrink it.
+    # Mirrors the section's ES query so we only shrink the total when the search counted the
+    # omitted product. No sold-out check: ES totals include sold-out products, so a sold-out
+    # omitted product beyond the fetched page must still shrink the total.
     def omit_product_in_search_total?(section, omit_product)
       return false unless omit_product.alive? && !omit_product.archived?
       return omit_product.user_id == seller.id if section.nil?
