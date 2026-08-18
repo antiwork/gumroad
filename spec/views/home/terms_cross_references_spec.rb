@@ -211,6 +211,8 @@ describe "app/views/home/terms.html.erb cross-references" do
   it "keeps the section numbers the help center cites" do
     expect(source).to include('id="section-11-3"')
     expect(subsections["11.3"]).to match(/Holds on Funds/)
+    expect(source).to include('id="section-11-4"')
+    expect(subsections["11.4"]).to match(/Changing Payout Country/)
     expect(sections[22]).to match(/COPYRIGHT INFRINGEMENT/)
 
     articles = Rails.root.glob("app/views/help_center/articles/contents/*.html.erb")
@@ -220,6 +222,8 @@ describe "app/views/home/terms.html.erb cross-references" do
     expect(suspension).to include("gumroad.com/terms#section-11-3")
     expect(suspension).to match(/Section#{sp}+11\.3/o)
     expect(articles.fetch("_155-things-you-cant-sell-on-gumroad.html.erb")).to match(/section#{sp}+11\.3/o)
+    expect(articles.fetch("_13-getting-paid.html.erb")).to include("gumroad.com/terms#section-11-4")
+    expect(articles.fetch("_260-your-payout-settings-page.html.erb")).to include("gumroad.com/terms#section-11-4")
     expect(articles.fetch("_286-how-do-i-report-a-gumroad-creator.html.erb")).to match(/Section#{sp}+22#{sp}+of/o)
 
     # Same section-word alternation as the Terms scans, so a new article citing "SECTIONS 11.3 and
@@ -228,7 +232,7 @@ describe "app/views/home/terms.html.erb cross-references" do
     cited = articles.values
                     .flat_map { |body| body.scan(/(?:#{section_word})#{sp}+(\d{1,2}(?:\.\d{1,2})?)(?!\d)/) }
                     .flatten.uniq
-    expect(cited.sort).to eq(["11.3", "22"]),
+    expect(cited.sort).to eq(["11.3", "11.4", "22"]),
                           "help articles cite Terms sections #{cited.sort.inspect}. A number new to " \
                           "this list needs asserting above against the heading it points at."
   end
