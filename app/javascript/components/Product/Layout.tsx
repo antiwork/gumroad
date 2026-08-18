@@ -140,6 +140,7 @@ export const Layout = (
   props: Props & {
     cart?: boolean;
     hasHero?: boolean;
+    hideSellerByline?: boolean;
   },
 ) => {
   const { product, purchase, discount_code: discountCode, cart, hasHero, wishlists, main_section_index } = props;
@@ -162,6 +163,7 @@ export const Layout = (
         ctaButtonRef={ctaButtonRef}
         configurationSelectorRef={configurationSelectorRef}
         wishlists={wishlists}
+        hideSellerByline={props.hideSellerByline}
       />
     </>
   );
