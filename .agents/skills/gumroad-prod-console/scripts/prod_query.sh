@@ -59,8 +59,16 @@ else
   }
 fi
 
+# BSD stat wants -f %m, GNU stat wants -c %Y. Chaining them with || is not
+# enough: GNU's -f is filesystem mode, which still prints for an existing file
+# and would pollute the captured value with a multi-line block. Probe the GNU
+# form silently first, then run whichever form this system supports.
 file_mtime() {
-  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"
+  if stat -c %Y "$1" >/dev/null 2>&1; then
+    stat -c %Y "$1"
+  else
+    stat -f %m "$1"
+  fi
 }
 
 # Last-good private IP. Skip EC2 discovery when that host still answers.
