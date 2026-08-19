@@ -16,8 +16,6 @@ export type LoggedInUser = {
   can_create_brand_account: boolean;
   has_payout_setup_to_port: boolean;
   policies: Record<string, Record<string, boolean>>;
-  is_gumroad_admin: boolean;
-  is_impersonating: boolean;
 };
 
 export type Seller = {

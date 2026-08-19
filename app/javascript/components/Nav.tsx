@@ -1,10 +1,8 @@
-import { ArrowRight, CheckCircle, Menu, X } from "@boxicons/react";
+import { CheckCircle, Menu, X } from "@boxicons/react";
 import * as React from "react";
-import typia from "typia";
 
 import { escapeRegExp } from "$app/utils";
 import { classNames } from "$app/utils/classNames";
-import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { TeamMembership } from "$app/components/LoggedInUser";
@@ -203,32 +201,6 @@ export const NavSection = ({ children }: { children: React.ReactNode }) => {
   const nav = useNav();
   const isOpen = !!nav?.open;
   return <section className={classNames("mb-4 hidden lg:grid", { grid: isOpen })}>{children}</section>;
-};
-
-export const UnbecomeDropdownItem = () => {
-  const makeRequest = asyncVoid(async (ev: React.MouseEvent<HTMLAnchorElement>) => {
-    ev.preventDefault();
-
-    try {
-      const response = await request({ method: "DELETE", accept: "json", url: Routes.admin_unimpersonate_path() });
-      if (response.ok) {
-        const responseData = typia.assert<{ redirect_to: string }>(await response.json());
-        window.location.href = responseData.redirect_to;
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Something went wrong.", "error");
-    }
-  });
-
-  return (
-    <NavLinkDropdownItem
-      text="Unbecome"
-      icon={<ArrowRight pack="filled" className="mx-1 size-5" />}
-      href="#"
-      onClick={makeRequest}
-    />
-  );
 };
 
 export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembership: TeamMembership }) => {

@@ -7,7 +7,7 @@ import { CreateBrandAccountModal } from "$app/components/CreateBrandAccountModal
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavLink, NavLinkDropdownItem, NavLinkDropdownMembershipItem, UnbecomeDropdownItem } from "$app/components/Nav";
+import { NavLink, NavLinkDropdownItem, NavLinkDropdownMembershipItem } from "$app/components/Nav";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
 
@@ -74,7 +74,6 @@ function NavbarFooter() {
               Logout
             </Link>
           </MenuItem>
-          {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
         </Menu>
       </DashboardNavProfilePopover>
       <CreateBrandAccountModal

@@ -935,7 +935,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     def serialize_admin_links(user, merchant_account)
       # admin_user/admin_purchases links were dropped with the admin web UI;
-      # the CLI renders only the keys present.
+      # Helper/CLI still use impersonate. Other keys render only when present.
       links = {
         impersonate: admin_impersonate_url(user_identifier: user.external_id, host: UrlService.domain_with_protocol)
       }

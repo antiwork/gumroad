@@ -47,8 +47,6 @@ const asUser = (id: string): LoggedInUser => ({
     user: { view_store_agent: false, use_store_agent: false },
   },
   promotedNavItems: [],
-  isGumroadAdmin: false,
-  isImpersonating: false,
   lazyLoadOffscreenDiscoverImages: false,
 });
 

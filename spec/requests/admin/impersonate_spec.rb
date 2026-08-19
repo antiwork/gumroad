@@ -2,8 +2,8 @@
 
 require "spec_helper"
 
-# The admin web UI is gone; impersonation is entered via a direct GET (the
-# internal admin API and the profile nav link here) and exited from the nav.
+# The admin web UI is gone; impersonation is entered via a direct GET
+# (Helper / CLI admin_links) and cleared via DELETE unimpersonate or logout.
 describe "Impersonate", type: :request do
   include Devise::Test::IntegrationHelpers
 
@@ -67,5 +67,13 @@ describe "Impersonate", type: :request do
     get admin_impersonate_path(user_identifier: seller.email)
 
     expect(response).to redirect_to(root_path)
+  end
+
+  it "redirects logged-out visitors to login" do
+    sign_out admin
+
+    get admin_impersonate_path(user_identifier: seller.email)
+
+    expect(response).to redirect_to(login_path(next: admin_impersonate_path))
   end
 end

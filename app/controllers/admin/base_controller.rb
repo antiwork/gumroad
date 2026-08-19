@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 # The admin web UI was removed; this controller keeps the two team-member
-# entry points that other surfaces still link to: impersonation (linked from
-# the internal admin API payloads and the profile nav) and the Stripe
-# dashboard redirect.
+# entry points that other surfaces still link to: GET impersonate (Helper
+# and CLI admin_links) and the Stripe dashboard redirect.
 class Admin::BaseController < ApplicationController
   include Impersonate
 
