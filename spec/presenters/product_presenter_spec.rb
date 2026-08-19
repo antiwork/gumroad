@@ -419,7 +419,7 @@ describe ProductPresenter do
     let!(:asset_previews) { create_list(:asset_preview, 2, link: product) }
     let!(:thumbnail) { create(:thumbnail, product:) }
     let!(:refund_policy) { create(:product_refund_policy, product:, seller: product.user) }
-    let!(:other_refund_policy) { create(:product_refund_policy, product: create(:product, user: product.user, name: "Other product"), max_refund_period_in_days: 0, fine_print: "This is another refund policy") }
+    let!(:other_refund_policy) { create(:product_refund_policy, product: create(:product, user: product.user, name: "Other product"), max_refund_period_in_days: 7, fine_print: "This is another refund policy") }
     let!(:variant_category) { create(:variant_category, link: product, title: "Version") }
     let!(:version1) { create(:variant, variant_category:, name: "Version 1", description: "I am version 1") }
     let!(:version2) { create(:variant, variant_category:, name: "Version 2", price_difference_cents: 100, max_purchase_count: 100) }
@@ -496,10 +496,6 @@ describe ProductPresenter do
             discover_fee_per_thousand: 300,
             refund_policy: {
               allowed_refund_periods_in_days: [
-                {
-                  key: 0,
-                  value: "No refunds allowed"
-                },
                 {
                   key: 7,
                   value: "7-day money back guarantee"
@@ -612,10 +608,10 @@ describe ProductPresenter do
           refund_policies: [
             {
               id: other_refund_policy.external_id,
-              title: "No refunds allowed",
+              title: "7-day money back guarantee",
               fine_print: "This is another refund policy",
               product_name: "Other product",
-              max_refund_period_in_days: 0,
+              max_refund_period_in_days: 7,
             }
           ],
           is_tiered_membership: false,
@@ -706,6 +702,25 @@ describe ProductPresenter do
         expect(product_data[:has_same_rich_content_for_all_variants]).to eq(true)
         expect(product_data[:variants].map { _1[:rich_content] }).to all(eq([]))
         expect(product_data[:rich_content].map { _1[:id] }).to include(product_page.external_id)
+      end
+    end
+
+    context "with a leftover 0-day account-level refund policy" do
+      before do
+        product.user.refund_policy.update_columns(max_refund_period_in_days: 0)
+      end
+
+      it "resolves the seller policy preview against the product's physicality" do
+        physical_product = create(:product, :is_physical, user: product.user)
+
+        expect(described_class.new(product: physical_product, request:).edit_props[:seller_refund_policy]).to eq(
+          title: "No refunds allowed",
+          fine_print: nil,
+        )
+        expect(presenter.edit_props[:seller_refund_policy]).to eq(
+          title: "7-day money back guarantee",
+          fine_print: nil,
+        )
       end
     end
 
@@ -857,10 +872,6 @@ describe ProductPresenter do
               product_refund_policy_enabled: false,
               refund_policy: {
                 allowed_refund_periods_in_days: [
-                  {
-                    key: 0,
-                    value: "No refunds allowed"
-                  },
                   {
                     key: 7,
                     value: "7-day money back guarantee"
@@ -1166,10 +1177,6 @@ describe ProductPresenter do
               discover_fee_per_thousand: 100,
               refund_policy: {
                 allowed_refund_periods_in_days: [
-                  {
-                    key: 0,
-                    value: "No refunds allowed"
-                  },
                   {
                     key: 7,
                     value: "7-day money back guarantee"

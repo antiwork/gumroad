@@ -83,21 +83,16 @@ describe Api::V2::RefundPoliciesController do
         )
       end
 
-      it "updates the refund period to none" do
+      it "rejects the refund period none" do
         seller.refund_policy.update!(max_refund_period_in_days: 30)
 
         put :update, params: { access_token: token.token, refund_period: "none" }
 
-        expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(0)
         expect(response.parsed_body).to eq(
-          "success" => true,
-          "refund_policy" => {
-            "refund_period" => "none",
-            "title" => "No refunds allowed",
-            "fine_print" => nil,
-            "in_effect" => true,
-          }
+          "success" => false,
+          "message" => "Refund period must be one of: 7, 14, 30, 183."
         )
+        expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
       end
 
       it "rejects an invalid refund period with the allowed values" do
@@ -107,7 +102,7 @@ describe Api::V2::RefundPoliciesController do
 
         expect(response.parsed_body).to eq(
           "success" => false,
-          "message" => "Refund period must be one of: none, 7, 14, 30, 183."
+          "message" => "Refund period must be one of: 7, 14, 30, 183."
         )
         expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
       end
@@ -119,7 +114,7 @@ describe Api::V2::RefundPoliciesController do
 
         expect(response.parsed_body).to eq(
           "success" => false,
-          "message" => "Refund period must be one of: none, 7, 14, 30, 183."
+          "message" => "Refund period must be one of: 7, 14, 30, 183."
         )
         expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
       end
@@ -144,6 +139,23 @@ describe Api::V2::RefundPoliciesController do
         expect(response.parsed_body).to eq(
           "success" => false,
           "message" => "Fine print is too long (maximum is 3000 characters)"
+        )
+        refund_policy = seller.refund_policy.reload
+        expect(refund_policy.max_refund_period_in_days).to eq(30)
+        expect(refund_policy.fine_print).to eq("Existing fine print")
+      end
+
+      it "rejects fine print that denies refunds" do
+        allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
+          { "choices" => [{ "message" => { "content" => %({"no_refunds": true}) } }] }
+        )
+        seller.refund_policy.update_columns(max_refund_period_in_days: 30, fine_print: "Existing fine print")
+
+        put :update, params: { access_token: token.token, refund_period: "14", fine_print: "All sales are final. No refunds." }
+
+        expect(response.parsed_body).to eq(
+          "success" => false,
+          "message" => "Fine print cannot state that refunds are not allowed"
         )
         refund_policy = seller.refund_policy.reload
         expect(refund_policy.max_refund_period_in_days).to eq(30)

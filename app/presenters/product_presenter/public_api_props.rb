@@ -131,7 +131,10 @@ class ProductPresenter::PublicApiProps
       return nil if policy.nil?
 
       {
-        title: policy.title,
+        # Product context matters for the account-level policy: a leftover 0-day row
+        # still means "No refunds allowed" on physical products (matching the purchase
+        # snapshot). For a product-level policy this matches its own default.
+        title: policy.title(for_physical: product.is_physical?),
         # Mirror the rendered product page, which wraps the fine print with
         # simple_format (ProductPresenter::ProductProps) and renders it as HTML.
         fine_print: policy.fine_print.present? ? ActionController::Base.helpers.simple_format(policy.fine_print) : nil,
