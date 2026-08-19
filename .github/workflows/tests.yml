@@ -1129,9 +1129,9 @@ jobs:
             BUILD_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
               "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds?commit=$COMMIT_SHA&include_retried_jobs=true")
 
-            # The require-approval gate has no dependencies (see .buildkite/pipeline.yml), so it
-            # is unblockable while the build still reports "running" — filtering on
-            # `.blocked == true` would miss it. Inspect the gate job's state directly instead.
+            # The gate job only exists once every earlier step (image builds, asset compiles)
+            # has passed; until then the build reports "running". Select the build by either
+            # state and inspect the gate job directly, retrying until it is actually blocked.
             BUILD_NUMBER=$(echo "$BUILD_DATA" | jq -r --arg commit "$COMMIT_SHA" '[.[] | select(.commit == $commit and (.state == "running" or .state == "blocked"))] | sort_by(.created_at) | last | .number // empty')
 
             if [ -z "$BUILD_NUMBER" ]; then
