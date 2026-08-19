@@ -1807,6 +1807,21 @@ describe "PurchaseRefunds", :vcr do
         expect(renewal.reload.stripe_refunded).to be(true)
         expect(original_license.reload).not_to be_disabled
       end
+
+      it "keeps the refund recorded if license disable fails" do
+        license = attach_license!(@purchase)
+        allow_any_instance_of(License).to receive(:disable!).and_raise(ActiveRecord::RecordNotSaved.new("boom"))
+        allow(ErrorNotifier).to receive(:notify)
+        flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @purchase.price_cents)
+
+        expect(@purchase.refund_purchase!(flow_of_funds, @user.id)).to be(true)
+        expect(@purchase.reload.stripe_refunded).to be(true)
+        expect(license.reload).not_to be_disabled
+        expect(ErrorNotifier).to have_received(:notify).with(
+          "Failed to disable license after refund",
+          hash_including(context: hash_including(purchase_id: @purchase.id))
+        )
+      end
     end
   end
 
