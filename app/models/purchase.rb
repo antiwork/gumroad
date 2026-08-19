@@ -2310,6 +2310,7 @@ class Purchase < ApplicationRecord
     end
 
     giftee_purchase.save!
+    giftee_purchase.disable_attached_license_if_fully_refunded! unless is_partially_refunded
   end
 
   def mark_product_purchases_as_refunded!(is_partially_refunded:)
@@ -2320,6 +2321,7 @@ class Purchase < ApplicationRecord
         product_purchase.update!(stripe_partially_refunded: true)
       else
         product_purchase.update!(stripe_refunded: true)
+        product_purchase.disable_attached_license_if_fully_refunded!
       end
     end
   end

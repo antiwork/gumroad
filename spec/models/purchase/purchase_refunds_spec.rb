@@ -1741,6 +1741,7 @@ describe "PurchaseRefunds", :vcr do
 
       context "when gifter purchase is fully refunded" do
         before do
+          create(:license, purchase: @giftee_purchase, link:)
           flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @gifter_purchase.price_cents)
           @gifter_purchase.refund_purchase!(flow_of_funds, @gifter_purchase.link.user.id)
         end
@@ -1752,6 +1753,59 @@ describe "PurchaseRefunds", :vcr do
         it "sets the stripe_partially_refunded of giftee purchase to false" do
           expect(@giftee_purchase.reload.stripe_partially_refunded).to eq false
         end
+
+        it "disables the giftee license" do
+          expect(@giftee_purchase.reload.license).to be_disabled
+        end
+      end
+    end
+  end
+
+  describe "license disable on refund" do
+    def attach_license!(purchase)
+      create(:license, purchase:, link: purchase.link)
+    end
+
+    describe "ordinary refunds" do
+      before do
+        @initial_balance = 200
+        @user = create(:user)
+        @product = create(:product, user: @user)
+        @purchase = create(:purchase_in_progress, link: @product, chargeable: create(:chargeable))
+        @purchase.process!
+        @purchase.mark_successful!
+        create(:balance, user: @user, amount_cents: @initial_balance)
+      end
+
+      it "disables the license on a full refund" do
+        license = attach_license!(@purchase)
+        expect(ChargeProcessor).to receive(:refund!).and_call_original
+
+        @purchase.refund_and_save!(@user.id)
+
+        expect(license.reload).to be_disabled
+      end
+
+      it "does not disable the license on a partial refund" do
+        license = attach_license!(@purchase)
+        expect(ChargeProcessor).to receive(:refund!).and_call_original
+
+        @purchase.refund_and_save!(@user.id, amount_cents: @purchase.price_cents / 2)
+
+        expect(@purchase.reload.stripe_partially_refunded).to be(true)
+        expect(license.reload).not_to be_disabled
+      end
+
+      it "does not disable the original license when a renewal is refunded" do
+        original = create(:membership_purchase)
+        original_license = attach_license!(original)
+        renewal = create(:recurring_membership_purchase, subscription: original.subscription, link: original.link)
+        expect(ChargeProcessor).to receive(:refund!).and_call_original
+
+        renewal.refund_and_save!(original.seller.id)
+
+        expect(renewal.reload.stripe_refunded).to be(true)
+        expect(original_license.reload).not_to be_disabled
       end
     end
   end
@@ -1833,6 +1887,36 @@ describe "PurchaseRefunds", :vcr do
         expect(subscription.cancelled?).to eq true
         expect(subscription.deactivated?).to eq true
       end
+    end
+
+    it "disables the license" do
+      license = create(:license, purchase: @purchase, link: @purchase.link)
+      expect(ChargeProcessor).to receive(:refund!).and_call_original
+
+      @purchase.refund_for_fraud!(create(:admin_user).id)
+
+      expect(license.reload).to be_disabled
+    end
+
+    it "disables the license when retried on an already-refunded purchase" do
+      license = create(:license, purchase: @purchase, link: @purchase.link)
+      @purchase.update_columns(stripe_refunded: true)
+      allow(@purchase).to receive(:refund_and_save!).and_return(nil)
+
+      expect(@purchase.refund_for_fraud!(create(:admin_user).id)).to be(true)
+
+      expect(license.reload).to be_disabled
+    end
+
+    it "disables the original license when a renewal is refunded for fraud" do
+      original = create(:membership_purchase)
+      original_license = create(:license, purchase: original, link: original.link)
+      renewal = create(:recurring_membership_purchase, subscription: original.subscription, link: original.link)
+      expect(ChargeProcessor).to receive(:refund!).and_call_original
+
+      expect(renewal.refund_for_fraud!(create(:admin_user).id)).to be(true)
+
+      expect(original_license.reload).to be_disabled
     end
   end
 

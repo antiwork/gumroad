@@ -339,6 +339,7 @@ class Purchase
       decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed?
       mark_product_purchases_as_refunded!(is_partially_refunded: self.stripe_partially_refunded?)
       save!
+      disable_attached_license_if_fully_refunded!(for_fraud: is_for_fraud)
       reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed
       reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded
       debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
@@ -401,6 +402,7 @@ class Purchase
         refunds << refund
       end
       save!
+      disable_attached_license_if_fully_refunded!
       Credit.create_for_vat_exclusive_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
       debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived
       # refund can be nil here (build_partial_full_refund may return nothing). Pass the
@@ -528,7 +530,27 @@ class Purchase
 
     subscription.cancel_effective_immediately! if subscription.present? && !subscription.deactivated?
     ContactingCreatorMailer.purchase_refunded_for_fraud(id).deliver_later(queue: "default") unless seller.suspended?
+    # Covers already-refunded retries: refund_and_save! is a no-op then, so the
+    # in-transaction hook above never ran.
+    disable_attached_license_if_fully_refunded!(for_fraud: true)
     true
+  end
+
+  # /v2/licenses/verify rejects disabled keys but not stripe_refunded, so a
+  # refunded purchase otherwise keeps a working key until the seller disables it.
+  def disable_attached_license_if_fully_refunded!(for_fraud: false)
+    return unless stripe_refunded?
+
+    license_to_disable = if is_recurring_subscription_charge
+      return unless for_fraud
+
+      subscription&.original_purchase&.license
+    else
+      linked_license
+    end
+    return if license_to_disable.blank? || license_to_disable.disabled?
+
+    license_to_disable.disable!
   end
 
   def buyer_presentment_refund_blocked?
