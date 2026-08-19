@@ -81,7 +81,10 @@ class RefundPolicy < ApplicationRecord
     end
 
     def parse_no_refunds_classification(response)
-      value = JSON.parse(response.dig("choices", 0, "message", "content")).fetch("no_refunds")
+      parsed = JSON.parse(response.dig("choices", 0, "message", "content"))
+      raise TypeError unless parsed.is_a?(Hash)
+
+      value = parsed.fetch("no_refunds")
       return value if value == true || value == false
 
       true
