@@ -48,9 +48,12 @@ class EmailEngagementDynamoStore
     end
 
     def client
-      # An explicit endpoint is always passed because the global Aws.config
-      # endpoint override points at S3/MinIO in development and test.
-      @client ||= Aws::DynamoDB::Client.new(endpoint: ENV["DYNAMODB_ENDPOINT"].presence)
+      # An explicit endpoint is always passed: the global Aws.config endpoint
+      # points at MinIO in development and test, and the SDK raises at
+      # construction when the option is present but nil.
+      @client ||= Aws::DynamoDB::Client.new(
+        endpoint: GlobalConfig.get("DYNAMODB_ENDPOINT", "https://dynamodb.#{AWS_DEFAULT_REGION}.amazonaws.com")
+      )
     end
 
     def table_name
