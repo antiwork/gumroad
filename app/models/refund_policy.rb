@@ -27,7 +27,10 @@ class RefundPolicy < ApplicationRecord
 
   # Skip when the selected window is already "No refunds allowed" — the title
   # matches. A positive window plus "all sales are final" is the contradiction.
-  validate :fine_print_cannot_claim_no_refunds, if: -> { fine_print.present? && fine_print_changed? && refunds_guaranteed? }
+  # Re-run when the period changes too: a 0-day policy can legally say "no
+  # refunds", and flipping it to 7/14/30/183 without touching the text would
+  # otherwise keep that claim next to a guaranteed window.
+  validate :fine_print_cannot_claim_no_refunds, if: -> { fine_print.present? && (fine_print_changed? || max_refund_period_in_days_changed?) && refunds_guaranteed? }
 
   def title
     ALLOWED_REFUND_PERIODS_IN_DAYS[max_refund_period_in_days]

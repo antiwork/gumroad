@@ -181,12 +181,25 @@ describe ProductRefundPolicy do
       expect(refund_policy.valid?).to be true
     end
 
-    it "skips moderation when the fine print is unchanged" do
+    it "skips moderation when the fine print and period are unchanged" do
       refund_policy.update_columns(fine_print: "All sales are final. No refunds.")
+      refund_policy.reload
       expect(OpenAI::Client).not_to receive(:new)
-      refund_policy.max_refund_period_in_days = 14
 
       expect(refund_policy.valid?).to be true
+    end
+
+    it "rejects a period-only change from 0 days onto existing no-refunds fine print" do
+      stub_fine_print_moderation(true)
+      refund_policy.update_columns(
+        fine_print: "All sales are final. No refunds.",
+        max_refund_period_in_days: 0
+      )
+      refund_policy.reload
+      refund_policy.max_refund_period_in_days = 14
+
+      expect(refund_policy.valid?).to be false
+      expect(refund_policy.errors.full_messages).to include("Fine print cannot state that refunds are not allowed")
     end
 
     it "fails open when the moderation call errors" do
