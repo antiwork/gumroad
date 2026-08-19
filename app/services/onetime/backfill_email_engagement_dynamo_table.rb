@@ -22,6 +22,7 @@
 class Onetime::BackfillEmailEngagementDynamoTable
   MONGO_BATCH_SIZE = 1_000
   DYNAMO_BATCH_SIZE = 25 # BatchWriteItem hard limit
+  PROGRESS_INTERVAL = 100_000 # docs between progress lines
   SCAN_PAGE_SIZE = 1_000
   MAX_WRITE_ATTEMPTS = 8
   OPENS_CURSOR_KEY = "onetime_backfill_email_engagement_opens_last_id"
@@ -159,7 +160,17 @@ class Onetime::BackfillEmailEngagementDynamoTable
 
       def each_mongo_batch(model, cursor_key)
         last_id = $redis.get(cursor_key)
-        processed = 0
+        # The denominator is snapshotted once per backfill (NX) because live
+        # dual-writes keep growing the collection; the cumulative counter
+        # advances atomically with the cursor, so the percentage survives
+        # restarts with at most one re-processed batch of drift. Chasing docs
+        # written after the snapshot can push the final percentage slightly
+        # past 100 — that's the swept tail, not an error.
+        $redis.set("#{cursor_key}_total", model.collection.estimated_document_count, nx: true)
+        total = $redis.get("#{cursor_key}_total").to_i
+        run_started_at = Time.current
+        run_processed = 0
+
         loop do
           criteria = model.all.read(mode: :secondary_preferred).order(_id: :asc).limit(MONGO_BATCH_SIZE)
           criteria = criteria.where(_id: { "$gt" => BSON::ObjectId.from_string(last_id) }) if last_id
@@ -167,12 +178,23 @@ class Onetime::BackfillEmailEngagementDynamoTable
           break if docs.empty?
 
           yield docs
-          processed += docs.size
+          run_processed += docs.size
           last_id = docs.last._id.to_s
-          $redis.set(cursor_key, last_id)
-          puts "#{model.name}: #{processed} docs this run, through #{last_id}" if (processed % 100_000).zero?
+          _, cumulative = $redis.multi do |transaction|
+            transaction.set(cursor_key, last_id)
+            transaction.incrby("#{cursor_key}_processed", docs.size)
+          end
+          report_progress(model, cumulative.to_i, total, run_processed, run_started_at) if (run_processed % PROGRESS_INTERVAL).zero?
         end
-        puts "#{model.name}: done, #{processed} docs this run."
+        puts "#{model.name}: done, #{run_processed} docs this run."
+      end
+
+      def report_progress(model, cumulative, total, run_processed, run_started_at)
+        percent = total.zero? ? 100.0 : cumulative * 100.0 / total
+        elapsed = Time.current - run_started_at
+        rate = elapsed.positive? ? run_processed / elapsed : 0
+        remaining_hours = rate.positive? ? [(total - cumulative), 0].max / rate / 1.hour : 0
+        puts format("%s: %d/%d (%.1f%%) — %d docs/s, ~%.1fh remaining", model.name, cumulative, total, percent, rate, remaining_hours)
       end
 
       def open_item(doc)
