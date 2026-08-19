@@ -57,7 +57,7 @@ def configure_vcr
   VCR.configure do |config|
     config.cassette_library_dir = File.join(Rails.root, "spec", "support", "fixtures", "vcr_cassettes")
     config.hook_into :webmock
-    config.ignore_hosts "gumroad-specs.s3.amazonaws.com", "s3.amazonaws.com", "codeclimate.com", "mongo", "redis", "elasticsearch", "minio"
+    config.ignore_hosts "gumroad-specs.s3.amazonaws.com", "s3.amazonaws.com", "codeclimate.com", "mongo", "redis", "elasticsearch", "minio", "dynamodb"
     config.ignore_hosts "api.knapsackpro.com"
     config.ignore_hosts "googlechromelabs.github.io"
     config.ignore_hosts "storage.googleapis.com"
@@ -263,6 +263,7 @@ RSpec.configure do |config|
     [
       Thread.new { prepare_mysql },
       Thread.new { ElasticsearchSetup.prepare_test_environment },
+      Thread.new { DynamodbSetup.prepare_test_environment },
       Thread.new do
         routes_dir = Rails.root.join("app", "javascript", "utils")
         routes_file = routes_dir.join("routes.js")

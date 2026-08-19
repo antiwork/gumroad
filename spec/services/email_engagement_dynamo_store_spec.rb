@@ -162,7 +162,10 @@ describe EmailEngagementDynamoStore do
   describe ".client" do
     it "defaults to the regional DynamoDB endpoint when DYNAMODB_ENDPOINT is unset" do
       described_class.client = nil
+      endpoint_was = ENV.delete("DYNAMODB_ENDPOINT")
       expect(described_class.client.config.endpoint.to_s).to eq("https://dynamodb.#{AWS_DEFAULT_REGION}.amazonaws.com")
+    ensure
+      ENV["DYNAMODB_ENDPOINT"] = endpoint_was if endpoint_was
     end
 
     it "honors DYNAMODB_ENDPOINT when set" do
