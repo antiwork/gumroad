@@ -472,6 +472,31 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           end
         end
 
+        describe "user has a bank account and a Stripe Connect account" do
+          before do
+            all_params.merge!(
+              bank_account: {
+                type: AchAccount.name,
+                account_number: "000123456789",
+                account_number_confirmation: "000123456789",
+                routing_number: "110000000",
+                account_holder_full_name: "gumbot"
+              }
+            )
+            create(:merchant_account_stripe_connect, user:)
+          end
+
+          it "does not create a gumroad-managed Stripe account next to Connect" do
+            expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+            put :update, params: all_params
+
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
+          end
+        end
+
         describe "user has only a stale hollow merchant account" do
           before do
             all_params.merge!(

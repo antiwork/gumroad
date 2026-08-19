@@ -1838,8 +1838,10 @@ module StripeMerchantAccountManager
 
   def self.blocks_new_managed_account?(user)
     user.merchant_accounts.alive.stripe.any? do |ma|
-      next true if ma.charge_processor_alive?
+      # Connect is a different path — create_account has always ignored it.
+      # Check first: a live Connect row is charge_processor_alive?.
       next if ma.is_a_stripe_connect_account?
+      next true if ma.charge_processor_alive?
 
       ma.charge_processor_merchant_id.present? || ma.created_at > STALE_HOLLOW_ACCOUNT_AGE.ago
     end
