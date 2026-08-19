@@ -8,6 +8,11 @@
 #   Onetime::BackfillEmailEngagementDynamoTable.recompute_counters!  # rerun until it reports 0 adjustments
 #   Onetime::BackfillEmailEngagementDynamoTable.verify!
 #
+# Or pilot a single seller first:
+#
+#   Onetime::BackfillEmailEngagementDynamoTable.backfill_seller!(seller_id)
+#   Onetime::BackfillEmailEngagementDynamoTable.verify_seller!(seller_id)
+#
 # The dual-write flag must be on before the first phase starts: Mongo then
 # strictly contains every live item, so overwriting on key collision is safe.
 # Item phases checkpoint the last Mongo ObjectId in Redis and resume from it.
@@ -38,36 +43,68 @@ class Onetime::BackfillEmailEngagementDynamoTable
     # corrects SUMMARY and URL# counters by the difference. Deltas (not
     # absolute writes) because live events keep incrementing concurrently.
     def recompute_counters!
-      tallies = Hash.new { |h, k| h[k] = { opens: 0, clickers: 0, urls: Hash.new(0) } }
-      current = Hash.new { |h, k| h[k] = { opens: 0, clickers: 0, urls: Hash.new(0) } }
+      tallies = Hash.new { |h, k| h[k] = new_tally }
+      current = Hash.new { |h, k| h[k] = new_tally }
+      scan_all_items { |item| classify_item(item, tallies[item["pk"]], current[item["pk"]]) }
 
-      scan_all_items do |item|
-        pk = item["pk"]
-        sk = item["sk"]
-        if sk == EmailEngagementDynamoStore::SUMMARY_SORT_KEY
-          current[pk][:opens] = item["open_count"].to_i
-          current[pk][:clickers] = item["click_count"].to_i
-        elsif sk.start_with?("OPEN#")
-          tallies[pk][:opens] += 1
-        elsif sk.start_with?("CLICKER#")
-          tallies[pk][:clickers] += 1
-        elsif sk.start_with?("CLICK#")
-          tallies[pk][:urls][item["click_url"]] += 1
-        elsif sk.start_with?("URL#")
-          current[pk][:urls][item["click_url"]] = item["click_count"].to_i
-        end
-      end
-
-      adjustments = 0
-      (tallies.keys | current.keys).each do |pk|
-        adjustments += apply_delta(pk, EmailEngagementDynamoStore::SUMMARY_SORT_KEY, "open_count", tallies[pk][:opens] - current[pk][:opens])
-        adjustments += apply_delta(pk, EmailEngagementDynamoStore::SUMMARY_SORT_KEY, "click_count", tallies[pk][:clickers] - current[pk][:clickers])
-        (tallies[pk][:urls].keys | current[pk][:urls].keys).each do |url|
-          adjustments += apply_delta(pk, store.url_sort_key(url), "click_count", tallies[pk][:urls][url] - current[pk][:urls][url], click_url: url)
-        end
-      end
+      adjustments = (tallies.keys | current.keys).sum { |pk| apply_deltas(pk, tallies[pk], current[pk]) }
       puts "#{adjustments} counter adjustments applied; rerun until this reports 0."
       adjustments
+    end
+
+    # Pilot: backfill a single seller's installments end-to-end (items plus a
+    # per-partition counter recompute), then compare with verify_seller!.
+    # Rerunnable at any time; the full backfill later re-puts identical items.
+    def backfill_seller!(seller_id)
+      installment_ids = Installment.where(seller_id:).ids
+      installment_ids.each do |installment_id|
+        CreatorEmailOpenEvent.where(installment_id:).read(mode: :secondary_preferred).each_slice(MONGO_BATCH_SIZE) do |docs|
+          write_items(docs.filter_map { open_item(_1) })
+        end
+        CreatorEmailClickEvent.where(installment_id:).read(mode: :secondary_preferred).each_slice(MONGO_BATCH_SIZE) do |docs|
+          write_items(docs.flat_map { click_items(_1) })
+        end
+        recompute_installment!(installment_id)
+      end
+      puts "Backfilled #{installment_ids.size} installments for seller #{seller_id}; compare with verify_seller!(#{seller_id})."
+      installment_ids.size
+    end
+
+    # Three-way comparison per installment. The invariant is DynamoDB ==
+    # counts derived from the Mongo documents; Mongo's stored click summary is
+    # reported alongside but is not the correctness bar — its cache-guarded
+    # counters have drifted historically.
+    def verify_seller!(seller_id)
+      mismatches = []
+      Installment.where(seller_id:).ids.each do |installment_id|
+        pk = store.partition_key(installment_id)
+        mongo_opens = CreatorEmailOpenEvent.where(installment_id:).count
+        click_rows = CreatorEmailClickEvent.where(installment_id:).pluck(:mailer_method, :mailer_args, :click_url).uniq
+        next if mongo_opens.zero? && click_rows.empty?
+
+        mongo_docs = {
+          opens: mongo_opens,
+          clicks: click_rows.map { |mailer_method, mailer_args, _| [mailer_method, mailer_args] }.uniq.size,
+          urls: click_rows.group_by { |_, _, url| url }.transform_values(&:size),
+        }
+        summary = store.client.get_item(
+          table_name: store.table_name,
+          key: { "pk" => pk, "sk" => EmailEngagementDynamoStore::SUMMARY_SORT_KEY },
+          consistent_read: true
+        ).item || {}
+        dynamo = { opens: summary["open_count"].to_i, clicks: summary["click_count"].to_i, urls: {} }
+        query_partition(pk, sk_prefix: "URL#") { |item| dynamo[:urls][item["click_url"]] = item["click_count"].to_i }
+
+        next if dynamo == mongo_docs
+        mismatches << {
+          installment_id:,
+          dynamo:,
+          mongo_docs:,
+          mongo_stored_clicks: CreatorEmailClickSummary.where(installment_id:).last&.total_unique_clicks.to_i,
+        }
+      end
+      puts mismatches.empty? ? "Seller #{seller_id}: every installment matches the Mongo documents." : "#{mismatches.size} mismatches: #{mismatches.first(20).inspect}"
+      mismatches
     end
 
     def verify!(sample_size: 1_000)
@@ -172,6 +209,65 @@ class Onetime::BackfillEmailEngagementDynamoTable
             raise "Unprocessed items remain after #{MAX_WRITE_ATTEMPTS} attempts" if attempt == MAX_WRITE_ATTEMPTS - 1
             sleep(2**attempt * 0.1)
           end
+        end
+      end
+
+      def new_tally
+        { opens: 0, clickers: 0, urls: Hash.new(0) }
+      end
+
+      def classify_item(item, tally, current)
+        sk = item["sk"]
+        if sk == EmailEngagementDynamoStore::SUMMARY_SORT_KEY
+          current[:opens] = item["open_count"].to_i
+          current[:clickers] = item["click_count"].to_i
+        elsif sk.start_with?("OPEN#")
+          tally[:opens] += 1
+        elsif sk.start_with?("CLICKER#")
+          tally[:clickers] += 1
+        elsif sk.start_with?("CLICK#")
+          tally[:urls][item["click_url"]] += 1
+        elsif sk.start_with?("URL#")
+          current[:urls][item["click_url"]] = item["click_count"].to_i
+        end
+      end
+
+      def apply_deltas(pk, tally, current)
+        adjustments = apply_delta(pk, EmailEngagementDynamoStore::SUMMARY_SORT_KEY, "open_count", tally[:opens] - current[:opens])
+        adjustments += apply_delta(pk, EmailEngagementDynamoStore::SUMMARY_SORT_KEY, "click_count", tally[:clickers] - current[:clickers])
+        (tally[:urls].keys | current[:urls].keys).each do |url|
+          adjustments += apply_delta(pk, store.url_sort_key(url), "click_count", tally[:urls][url] - current[:urls][url], click_url: url)
+        end
+        adjustments
+      end
+
+      def recompute_installment!(installment_id)
+        pk = store.partition_key(installment_id)
+        tally = new_tally
+        current = new_tally
+        query_partition(pk) { |item| classify_item(item, tally, current) }
+        apply_deltas(pk, tally, current)
+      end
+
+      def query_partition(pk, sk_prefix: nil, &block)
+        key_condition = "pk = :pk"
+        values = { ":pk" => pk }
+        if sk_prefix
+          key_condition += " AND begins_with(sk, :sk_prefix)"
+          values[":sk_prefix"] = sk_prefix
+        end
+        last_evaluated_key = nil
+        loop do
+          response = store.client.query(
+            table_name: store.table_name,
+            key_condition_expression: key_condition,
+            expression_attribute_values: values,
+            exclusive_start_key: last_evaluated_key,
+            consistent_read: true
+          )
+          response.items.each(&block)
+          last_evaluated_key = response.last_evaluated_key
+          break if last_evaluated_key.blank?
         end
       end
 
