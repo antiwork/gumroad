@@ -4,7 +4,10 @@
 # CreatorEmailClickEvent / CreatorEmailClickSummary Mongo collections.
 #
 # Partition key `pk` (S, the stringified installment id), sort key `sk` (S), one of:
-#   SUMMARY                    — open_count / click_count counters for the installment
+#   SUMMARY                    — open_count / click_count / click_pair_count counters;
+#                                click_pair_count (unique recipient+url pairs) is what the
+#                                dashboard's "Clicks" has historically shown, click_count is
+#                                true unique clickers
 #   OPEN#<recipient>           — one item per recipient who opened
 #   CLICKER#<recipient>        — claims the recipient's first click; drives click_count
 #   CLICK#<recipient>#<url>    — one item per recipient + url first click
@@ -36,6 +39,7 @@ class EmailEngagementDynamoStore
         next unless put_click_item(installment_id:, mailer_method:, mailer_args:, click_url:, recipient:)
 
         increment_url_click_count(installment_id:, click_url:)
+        increment_summary(installment_id:, attribute: "click_pair_count")
         # The conditional marker put is both the "has this recipient clicked
         # anything?" check and the claim, so concurrent first clicks on
         # different urls can't double-increment the counter.
