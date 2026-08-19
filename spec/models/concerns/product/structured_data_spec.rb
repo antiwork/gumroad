@@ -175,6 +175,21 @@ describe Product::StructuredData do
           end
         end
 
+        context "when the product is priced in a zero-decimal currency" do
+          before do
+            product.update!(price_currency_type: "jpy", price_cents: 14_800)
+          end
+
+          it "falls back to the native major-unit price when no conversion rate is available" do
+            allow_any_instance_of(described_class).to receive(:cached_rate).and_return(nil)
+
+            offer = product.structured_data["offers"]
+
+            expect(offer["priceCurrency"]).to eq("JPY")
+            expect(offer["price"]).to eq(14_800.0)
+          end
+        end
+
         context "when the product is pay-what-you-want with no minimum" do
           before do
             product.price_cents = 0

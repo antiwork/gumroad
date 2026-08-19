@@ -89,7 +89,7 @@ module Product::StructuredData
         "availability" => availability_for_schema_org,
         "url" => url
       }
-      offer["price"] = display_cents / 100.0 unless display_cents.nil?
+      offer["price"] = display_cents / subunit_to_unit(currency).to_f unless display_cents.nil?
       offer
     end
 

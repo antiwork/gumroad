@@ -5629,6 +5629,17 @@ class LinksControllerShowTest < ActionController::TestCase
     assert_not html_doc.css("meta[property='product:price:currency'][content='USD']").empty?
   end
 
+  test "GET show emits product:price:amount in major units for a zero-decimal currency" do
+    product = create_product(user: @user, price_currency_type: "jpy", price_cents: 14_800)
+
+    get :show, params: { id: product.unique_permalink }
+
+    assert_response :success
+    html_doc = Nokogiri::HTML(response.body)
+    assert_not html_doc.css("meta[property='product:price:amount'][content='14800.0']").empty?
+    assert_not html_doc.css("meta[property='product:price:currency'][content='JPY']").empty?
+  end
+
   test "GET show sets canonical and og:url meta tags for product without reviews" do
     product = create_product(user: @user)
     get :show, params: { id: product.unique_permalink }
