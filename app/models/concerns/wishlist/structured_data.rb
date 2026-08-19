@@ -45,7 +45,7 @@ module Wishlist::StructuredData
       unless price_cents.nil?
         item["offers"] = {
           "@type" => "Offer",
-          "price" => (price_cents / subunit_to_unit(product.price_currency_type).to_f).round(2),
+          "price" => (price_cents / unit_scaling_factor(product.price_currency_type).to_f).round(2),
           "priceCurrency" => product.price_currency_type.upcase,
           "url" => url
         }
