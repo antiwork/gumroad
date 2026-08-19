@@ -1,23 +1,59 @@
-# Domain lens: digital products can no longer use a 0-day / "no refunds" policy
+# Domain lens: leftover hollow Stripe merchant rows blocking payout-setup retries
 
-This PR floors non-physical refund policies from 0 days to 7 days. Physical products may still forbid refunds. New purchases snapshot the effective period; existing purchase snapshots stay as stored. Public API rejects `none` except for physical products.
+This PR changes when Settings → Payments will create a Gumroad-managed Stripe account.
+Leftover alive `MerchantAccount` rows with no Stripe id and no `charge_processor_alive_at`
+used to make the form report success while `create_account` skipped. The fix discards
+stale hollow managed-account rows and keeps blocking live or mid-flight rows. Connect
+is not a managed account.
 
-Review as a money-path eligibility widening (more buyers can request refunds). Numbered checks:
+This is a money/risk eligibility change (payout rail provisioning), not a refund-policy
+change. Review as a payout-setup / merchant-registration gate.
 
-1. **Money-repricing / refund-eligibility sweep.** Grep every caller of `effective_max_refund_period_in_days`, `max_refund_period_in_days`, `refund_policy`, `within_refund_period?`, and the purchase snapshot writer. For each call site: does it set a PRICE, decide whether a refund is allowed, or render a period? Confirm DISPLAY and ENFORCEMENT resolve identically for digital products whose stored policy is still 0. A 7-day receipt with a 0-day refund gate (or the inverse) is a P0/P1.
+Numbered checks:
 
-2. **Where the floor is applied vs where the snapshot is written.** Purchase#create snapshots the period. Existing purchases keep the old snapshot. Confirm refund-request time uses the SNAPSHOT, not a live recompute that would silently reopen already-closed 0-day sales — or, if live recompute is intended, that it is stated and tested. Name which path is live.
+1. **Predicate completeness.** Enumerate every `MerchantAccount` shape: hollow leftover
+   (nil Stripe id, nil alive_at), mid-flight hollow (same, younger than
+   `STALE_HOLLOW_ACCOUNT_AGE`), live managed (Stripe id + alive), deleted leftover,
+   Stripe Connect (`is_a_stripe_connect_account?`), charge-processor-dead but still
+   holding a Stripe id. For each: does `blocks_new_managed_account?` and
+   `discard_stale_hollow_managed_accounts!` agree? Discarding a live or mid-flight
+   row, or leaving a stale hollow row blocking, is a P0/P1.
 
-3. **Physical vs digital classification completeness.** Enumerate every product shape: digital, physical, bundle-of-digital, bundle-with-physical, coffee/membership/subscription, preorder, gift, coffee, commission, call. A "not physical" floor that treats a mixed bundle as physical (or vice versa) is a silent hole. Demand the predicate used (`native_type`, `is_physical`, bundle contents) and whether ANY member being physical is enough.
+2. **Connect short-circuit.** `create_account` has always ignored Connect. Confirm a
+   live Connect row does NOT block a new managed account AND is NOT discarded. A
+   Connect-as-managed false positive skips payouts; discarding Connect is irreversible.
 
-4. **API + editor + account-level + product-level + bundle-level all share the same floor.** PUT `/v2/refund_policy` rejects `none`; PUT/POST `/v2/products` rejects `none` unless physical. Check seller settings, product editor, bundle editor, presenter option lists, and `as_json`. A dropped option in the UI with a still-accepted 0 in the write path (or the inverse) is a P1.
+3. **Mid-flight window.** `Stripe::Account.create` runs AFTER `user.with_lock` releases.
+   The age guard is what stops a second request from discarding the in-flight row and
+   calling Stripe twice. Confirm `STALE_HOLLOW_ACCOUNT_AGE` is load-bearing: deleting
+   the constant / treating all hollow rows as discardable must redden a spec. An
+   8-day/1-year leftover spec does not pin the 10-minute bound.
 
-5. **Abuse / seller-circumvention.** Can a seller still persist 0 via: raw API, product copy, import, unpublished draft then publish, switching native_type physical→digital after setting 0, account-level 0 inherited by a new digital product, or a stored 0 that is never rewritten? The floor must apply at READ/EFFECTIVE time, not only at the last write.
+4. **Call-site sweep.** Grep every caller of `blocks_new_managed_account?`,
+   `create_account`, `user_has_stripe_connect_merchant_account?`, and the payments
+   controller `stripe_connect_account.blank?` gate. Does any money path still treat
+   "any alive MerchantAccount" as "payouts are set up"? DISPLAY vs CHARGE/provision
+   must resolve identically.
 
-6. **Sibling filters still apply.** Refund / chargeback / revoked / gift / test-purchase / risk-blockable scopes must still bind the newly-eligible 7-day digital purchases. Check `Purchase::Blockable` and any "no refunds" short-circuit that keyed on period==0.
+5. **Cleanup side effects.** `discard_stale_hollow_managed_accounts!` calls
+   `cleanup_failed_merchant_account`. For a hollow row with no Stripe id, confirm it
+   does not call `Stripe::Account.delete` on nil, and `mark_deleted!` is the only
+   write. A hollow row that somehow has a Stripe id must not be discarded by this
+   helper.
 
-7. **Help-center / API docs / presenter copy reach claims.** Enumerate every surface that still says sellers can forbid refunds on digital goods. Overclaim and underclaim are both findings if a customer or agent would treat them as truth.
+6. **Onetime repair service.** `CleanupWedgedStripeMerchantAccounts` must stay
+   idempotent, dry-run-safe if it has that mode, and must not delete live or
+   mid-flight rows. Scan-set vs discard-set must match the runtime predicate.
 
-8. **Specs are load-bearing.** For each new example, name the previous-variant mutation that must redden it (floor deleted; floor applied to physical; snapshot still writes 0; API accepts `none` for digital). A spec that stays green under that mutation is vacuous.
+7. **Time-boundary specs.** Examples that pin `created_at: N.ago` vs
+   `STALE_HOLLOW_ACCOUNT_AGE.ago` need `travel_to` or a literal age that sits between
+   the old and new bound. A spec that derives its fixture from the same constant is
+   vacuous for the constant's VALUE.
 
-Do NOT run the test suite. Static review only. Do not modify files. Produce READY-TO-MERGE or CHANGES-REQUIRED with P0/P1 file:line + one-line fix.
+8. **Specs are load-bearing.** Name the previous-variant mutation that must redden
+   each new example (Connect treated as managed; young hollow discarded; stale hollow
+   still blocking; `Stripe::Account.create` still called on mid-flight). A spec that
+   stays green under that mutation is vacuous.
+
+Do NOT run the test suite. Static review only. Do not modify files. Produce
+READY-TO-MERGE or CHANGES-REQUIRED with P0/P1 file:line + one-line fix.
