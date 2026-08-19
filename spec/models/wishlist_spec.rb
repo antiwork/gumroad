@@ -152,6 +152,16 @@ describe Wishlist do
       )
     end
 
+    it "emits the native major-unit price for a zero-decimal currency" do
+      product = create(:product, price_currency_type: "jpy", price_cents: 14_800)
+      create(:wishlist_product, wishlist:, product:)
+
+      offer = wishlist.structured_data["itemListElement"].first["item"]["offers"]
+
+      expect(offer["price"]).to eq(14_800.0)
+      expect(offer["priceCurrency"]).to eq("JPY")
+    end
+
     it "returns an empty hash when there are no alive products" do
       create(:wishlist_product, wishlist:, deleted_at: Time.current)
 

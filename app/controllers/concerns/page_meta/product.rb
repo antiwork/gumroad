@@ -4,6 +4,7 @@ module PageMeta::Product
   extend ActiveSupport::Concern
 
   include PageMeta::Base
+  include CurrencyHelper
 
   private
     def set_product_page_meta(product)
@@ -25,7 +26,9 @@ module PageMeta::Product
       # Product::StructuredData applies the same nil guard for its "price" field.
       price_cents = product.price_cents
       unless price_cents.nil?
-        set_meta_tag(property: "product:price:amount", content: (price_cents / 100.0).round(2))
+        # JPY is stored in major units (subunit_to_unit == 1); a hardcoded 100
+        # would publish one-hundredth of the listed price.
+        set_meta_tag(property: "product:price:amount", content: (price_cents / subunit_to_unit(product.price_currency_type).to_f).round(2))
         set_meta_tag(property: "product:price:currency", content: product.price_currency_type.upcase)
       end
 

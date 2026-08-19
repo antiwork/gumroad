@@ -2,6 +2,7 @@
 
 module Wishlist::StructuredData
   extend ActiveSupport::Concern
+  include CurrencyHelper
 
   SCHEMA_ORG_CONTEXT = "https://schema.org"
 
@@ -44,7 +45,7 @@ module Wishlist::StructuredData
       unless price_cents.nil?
         item["offers"] = {
           "@type" => "Offer",
-          "price" => (price_cents / 100.0).round(2),
+          "price" => (price_cents / subunit_to_unit(product.price_currency_type).to_f).round(2),
           "priceCurrency" => product.price_currency_type.upcase,
           "url" => url
         }
