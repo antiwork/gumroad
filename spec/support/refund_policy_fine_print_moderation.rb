@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# The restored fine-print classifier hits OpenAI on every RefundPolicy save
+# The restored fine-print classifier hits OpenRouter on every RefundPolicy save
 # with present fine print. Default it off so factories and unrelated specs
 # do not make live calls. Specs that exercise the gate call
 # `enable_fine_print_no_refunds_moderation!` and stub the client themselves.

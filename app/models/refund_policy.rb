@@ -40,6 +40,8 @@ class RefundPolicy < ApplicationRecord
       }
     }
   }.freeze
+  OPENROUTER_URI_BASE = "https://openrouter.ai/api/v1"
+  FINE_PRINT_CLASSIFICATION_MODEL = "openai/gpt-5.6-luna"
 
   # Skip when the selected window is already "No refunds allowed" — the title
   # matches. A positive window plus "all sales are final" is the contradiction.
@@ -61,7 +63,7 @@ class RefundPolicy < ApplicationRecord
   end
 
   # A completed-but-unparseable response fails closed. Transport/outage
-  # errors still fail open so an OpenAI blip never blocks saves. Do not
+  # errors still fail open so an OpenRouter blip never blocks saves. Do not
   # rescue StandardError here: a nil/scalar completed body raises
   # NoMethodError on #dig, and treating that as an outage fail-opens.
   # Faraday::ParsingError is a completed body we could not read — fail closed.
@@ -114,13 +116,13 @@ class RefundPolicy < ApplicationRecord
     end
 
     def ask_ai_fine_print_classification
-      OpenAI::Client.new.chat(
+      openrouter_client.chat(
         parameters: {
           messages: [
             { role: "system", content: fine_print_classifier_instructions },
             { role: "user", content: { untrusted_fine_print: fine_print }.to_json },
           ],
-          model: "gpt-4o-mini",
+          model: FINE_PRINT_CLASSIFICATION_MODEL,
           temperature: 0.0,
           max_tokens: 20,
           response_format: FINE_PRINT_NO_REFUNDS_RESPONSE_FORMAT,
@@ -129,13 +131,20 @@ class RefundPolicy < ApplicationRecord
     end
 
     def ask_ai(prompt)
-      OpenAI::Client.new.chat(
+      openrouter_client.chat(
         parameters: {
           messages: [{ role: "user", content: prompt }],
-          model: "gpt-4o-mini",
+          model: FINE_PRINT_CLASSIFICATION_MODEL,
           temperature: 0.0,
           max_tokens: 10
         }
+      )
+    end
+
+    def openrouter_client
+      OpenAI::Client.new(
+        access_token: GlobalConfig.get("OPENROUTER_API_KEY"),
+        uri_base: OPENROUTER_URI_BASE,
       )
     end
 end

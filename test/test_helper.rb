@@ -176,7 +176,7 @@ module ActiveSupport
       ActiveStorage::Current.url_options = { protocol: "https", host: "localhost", port: nil }
 
       # Mirror spec/support/refund_policy_fine_print_moderation.rb: the
-      # classifier hits OpenAI on every RefundPolicy save with fine print.
+      # classifier hits OpenRouter on every RefundPolicy save with fine print.
       # Default it off so factories and unrelated tests never make the call.
       # Tests that exercise the gate should unstub and stub the client.
       RefundPolicy.any_instance.stubs(:fine_print_claims_no_refunds?).returns(false)

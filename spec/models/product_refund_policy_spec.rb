@@ -149,7 +149,7 @@ describe ProductRefundPolicy do
   end
 
   describe "fine print no-refunds moderation" do
-    # Default suite stub is off (no live OpenAI). Turn the gate back on
+    # Default suite stub is off (no live OpenRouter). Turn the gate back on
     # first so factory create + later valid? hit the real classifier.
     before do
       enable_fine_print_no_refunds_moderation!
@@ -162,6 +162,22 @@ describe ProductRefundPolicy do
       allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
         { "choices" => [{ "message" => { "content" => %({"no_refunds": #{no_refunds}}) } }] }
       )
+    end
+
+    it "routes moderation through OpenRouter with the Luna classifier" do
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+      client = instance_double(OpenAI::Client)
+      expect(OpenAI::Client).to receive(:new).with(
+        access_token: "sk-or-test",
+        uri_base: RefundPolicy::OPENROUTER_URI_BASE,
+      ).and_return(client)
+      expect(client).to receive(:chat).with(
+        parameters: hash_including(model: RefundPolicy::FINE_PRINT_CLASSIFICATION_MODEL)
+      ).and_return({ "choices" => [{ "message" => { "content" => '{"no_refunds": false}' } }] })
+
+      refund_policy.fine_print = "Refunds are only issued for duplicate purchases."
+
+      expect(refund_policy.valid?).to be true
     end
 
     it "rejects fine print that denies refunds on a positive window" do
@@ -266,6 +282,7 @@ describe ProductRefundPolicy do
       user_message = captured[:messages].find { |message| message[:role] == "user" }
       expect(system_message[:content]).not_to include(injection)
       expect(JSON.parse(user_message[:content])).to eq("untrusted_fine_print" => injection)
+      expect(captured[:model]).to eq(RefundPolicy::FINE_PRINT_CLASSIFICATION_MODEL)
       expect(captured.dig(:response_format, :type)).to eq("json_schema")
       expect(captured.dig(:response_format, :json_schema, :strict)).to be true
     end
