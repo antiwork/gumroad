@@ -325,27 +325,17 @@ class SettingsPresenter
         end
     end
 
-    # What the payout settings page needs to know about the legal-guardian requirement.
-    #
-    # Always a hash, never nil, and every key is always present — an omitted key arrives in the
-    # component as `undefined` rather than false, which reads as truthy in a `!== null` style guard
-    # and would render the section to sellers who must never see it.
-    #
-    # `required` and `unsupported` are separate rather than one tri-state because they drive
-    # different copy for different people: a US 15-year-old is asked for a guardian, while a
-    # 15-year-old somewhere our payment partner offers no guardian path is told that no guardian
-    # would help. Deriving one from the other in the component would put that decision in two places.
+    # Always a complete hash: an omitted key is `undefined` in the component and
+    # truthy under `!== null`, which would show this section to sellers who must
+    # never see it. `required` and `unsupported` stay separate — they drive
+    # different copy (US minor vs no-guardian-path country).
     def legal_guardian_details(user_compliance_info)
       guardian = user_compliance_info.guardian
 
-      # A seller paid through a Stripe account they connected themselves is never asked. There is no
-      # Gumroad-managed account for a guardian to go on and Stripe verifies that account under its
-      # own agreement with them.
-      #
-      # Read through the same predicate the payout gate exempts on, not the broader
-      # has_stripe_account_connected?: a Brazilian connected account cannot be paid out by Stripe,
-      # so the gate does NOT exempt it, and the broader check here would hide this section from a
-      # minor the gate is blocking — the one outcome this requirement must not cause.
+      # Self-connected Stripe: never ask (no Gumroad-managed account for a guardian).
+      # Same predicate as the payout gate, not has_stripe_account_connected?: a
+      # Brazilian Connect account is not payable by Stripe, so the gate still
+      # applies — the broader check would hide this from the minor the gate blocks.
       if StripePayoutProcessor.pays_user_via_stripe_connect?(seller)
         return { required: false, unsupported: false, blocking_payouts: false, guardian: nil }
       end
@@ -356,34 +346,16 @@ class SettingsPresenter
       {
         required:,
         unsupported:,
-        # Whether the GUARDIAN requirement is what is holding payouts up — not whether payouts are
-        # held up at all. A seller who has filled in nothing yet is unpayable for reasons that have
-        # nothing to do with a guardian, and this flag drives guardian copy only.
-        #
-        # Read through legal_guardian_requirement_met?, the same predicate the payout gate reads,
-        # rather than recomputed from the two flags above, so the page cannot tell a seller their
-        # guardian is sorted while Payouts.is_user_payable disagrees.
+        # Guardian-requirement hold only — not "payouts blocked for any reason".
+        # Same predicate as the payout gate, not recomputed from the flags above.
         blocking_payouts: !user_compliance_info.legal_guardian_requirement_met?,
         guardian: guardian.present? && guardian.alive? ? GuardianPresenter.new(guardian).props : nil,
       }
     end
 
-    # True when the most recent Stripe account-creation attempt failed because Stripe
-    # rejected the seller's postal code. The failure leaves a breadcrumb payout note
-    # (written by StripeMerchantAccountManager, authored by the Gumroad admin account)
-    # that the retry pipeline also keys off; it's soft-deleted when a later attempt
-    # succeeds, so an alive note usually means the block is current.
-    #
-    # One wrinkle: in the account-creation path the note is only cleared when an
-    # attempt SUCCEEDS. If the seller corrects their address and the next attempt
-    # fails for an unrelated reason (say, a bad bank account number), the old
-    # postal-code note is still alive even though the corrected postal code was
-    # never rejected. To avoid blaming an address the seller already fixed, only
-    # treat the note as current when it postdates the seller's latest
-    # compliance-info save (changing the payments form writes a fresh
-    # UserComplianceInfo record — records are immutable and replaced on edit). If
-    # the corrected postal code is in fact still invalid, the next attempt records
-    # a fresh note and the banner comes back.
+    # Newest alive admin postal-code payout note. Notes clear only on SUCCESS, so a
+    # later unrelated failure leaves the old note alive. Treat it as current only
+    # when it postdates the latest UserComplianceInfo (form save replaces the row).
     def postal_code_rejected_by_stripe?
       note = seller.comments
             .with_type_payout_note
@@ -398,20 +370,10 @@ class SettingsPresenter
       compliance_info.nil? || note.created_at >= compliance_info.created_at
     end
 
-    # The bank-account counterpart of postal_code_rejected_by_stripe?. Returns the newest payout
-    # note describing a rejection of the bank details the seller currently has saved, or nil.
-    #
-    # Freshness is anchored on the active bank account's own created_at: entering different bank
-    # details creates a NEW BankAccount row (UpdatePayoutMethod replaces rather than edits, even
-    # for identical digits), so a note older than that row is about details the seller has already
-    # replaced and must not be blamed.
-    #
-    # No alive bank account means no rejected details to complain about, so the banner stays hidden.
-    # Every path that records one of these notes has a bank row saved at the time, so nil really
-    # means the seller LEFT bank payouts: switching to PayPal deletes the bank row and nothing ever
-    # soft-deletes the note, since notes are only cleared on a SUCCESSFUL sync. Defaulting to "show"
-    # would give a seller with working PayPal payouts a permanent banner demanding they fix a bank
-    # account they deliberately removed.
+    # Newest bank-rejection note for the current bank row, or nil.
+    # Freshness is the active BankAccount#created_at: UpdatePayoutMethod always
+    # inserts a new row. No alive bank account → nil (PayPal switch deletes the
+    # row and never clears the note; showing would nag a working PayPal seller).
     def current_bank_sync_failure_note
       bank_account = seller.active_bank_account
       return nil if bank_account.nil?
@@ -483,15 +445,8 @@ class SettingsPresenter
       stripe_rejected = (stripe_account&.stripe_rejected? || false) &&
         !seller.user_compliance_info_requests.requested.exists?
 
-      # Tells the rejected-account banner what will happen to the seller's
-      # remaining balance, so the copy doesn't point at flows that can't work:
-      # - "stripe_hold": Stripe disabled payouts on the rejected account, so the
-      #   money moves only if Stripe releases it.
-      # - "auto_payout": we'll pay the balance out automatically on the normal
-      #   schedule (rejected accounts bypass the usual $100 minimum).
-      # - "too_small": the balance is under the $1 transfer floor and can't be sent.
-      # A zero balance stays nil so the banner doesn't mention a balance that
-      # doesn't exist (the rejection email is likewise silent about it).
+      # Zero balance → nil (don't mention a missing balance). Rejected accounts
+      # bypass the $100 minimum; too_small is the $1 transfer floor.
       stripe_rejected_balance_status = nil
       stripe_rejected_formatted_balance = nil
       stripe_rejected_payout_date = nil
@@ -560,28 +515,14 @@ class SettingsPresenter
         }
       end
 
-      # Same asynchronous rejection as the postal code above, for the bank details. Stripe can
-      # refuse the account the seller saved while the settings page still reports a clean save, so
-      # without this the only notice is an email — and on a paid product the publish button stays
-      # blocked with a "connect a payment method" error that reads as unrelated.
-      #
-      # Not gated on a missing Stripe account like the postal banner: update_bank_account requires
-      # a live account, so gating it would hide the banner from exactly the sellers a bank
-      # rejection hits. The terminal-rejection banner does take precedence, since it already tells
-      # that seller their whole account is finished.
-      #
-      # Ordering matches bank_rejection_kind_for: narrowest claim first. A block names one specific
-      # account, terminal covers the account, format only covers how it was typed. Each branch says
-      # the same thing as the email sent on that same path, because the retry job owns the
-      # terminality decision and a second opinion here would contradict the mail the seller just
-      # received. An abandoned_reason we have no copy for means the retries stopped for something
-      # that is not the seller's bank details to act on, so say nothing.
+      # Bank details can fail after a clean settings save. Do not gate on a missing
+      # Stripe account (unlike postal): update_bank_account needs a live account.
+      # Terminal-rejection banner wins. Order matches bank_rejection_kind_for
+      # (narrowest first); copy must match the email. Unknown abandoned_reason → skip.
       if !stripe_rejected && (bank_note = current_bank_sync_failure_note)
         abandoned_reason = bank_note.json_data["abandoned_reason"]
         bank_message = if StripeMerchantAccountManager.bank_account_blocked_note?(bank_note)
-          # Both this and the terminal branch below ask for a different account, but only this copy
-          # states the details were fine — the gumroad-private#1476 seller re-saved a valid account
-          # for three months because nothing ever said so.
+          # Same ask as the terminal branch, but this copy says the details were fine.
           "Our payment partner won't accept the bank account you added, and there's nothing wrong with the details you entered — re-entering them or waiting won't help. Please add a different bank account. If it's the only account you have, contact support and we'll look into it with you."
         elsif StripeMerchantAccountManager.bank_details_terminal_rejection_note?(bank_note)
           "Our payment partner won't accept the bank account you entered, so it can't be used for payouts. This won't clear on its own, and re-entering the same account won't help. Please add a different bank account."
