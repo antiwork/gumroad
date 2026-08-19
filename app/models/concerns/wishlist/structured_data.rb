@@ -40,13 +40,17 @@ module Wishlist::StructuredData
 
       # A live product can have no live Price record (e.g. rent-only after its
       # rental price was removed) — skip the offer rather than crash the page,
-      # same nil guard as PageMeta::Product.
+      # same nil guard as PageMeta::Product. The currency can also be NULL on
+      # legacy rows, and NULL matches a stale Price row whose own currency is
+      # NULL, so a price can survive a blank currency; an amount with no
+      # currency is meaningless, so skip the offer for those rows too.
       price_cents = product.price_cents
-      unless price_cents.nil?
+      currency = product.price_currency_type
+      unless price_cents.nil? || currency.blank?
         item["offers"] = {
           "@type" => "Offer",
-          "price" => (price_cents / unit_scaling_factor(product.price_currency_type).to_f).round(2),
-          "priceCurrency" => product.price_currency_type.upcase,
+          "price" => (price_cents / unit_scaling_factor(currency).to_f).round(2),
+          "priceCurrency" => currency.upcase,
           "url" => url
         }
       end

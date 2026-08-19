@@ -22,4 +22,22 @@ describe "product page with a NULL price_currency_type", type: :request do
     expect(response).to have_http_status(:ok)
     expect(response.body).to include("application/ld+json")
   end
+
+  context "when a stale Price row's currency is NULL too" do
+    before do
+      # A NULL link currency matches a NULL Price-row currency, so
+      # price_cents survives and reaches the price meta tag block.
+      product.prices.alive.each { |price| price.update_column(:currency, nil) }
+    end
+
+    it "renders the page and skips the price meta tags" do
+      expect(product.reload.price_cents).to be_present
+
+      get "http://#{seller.subdomain}/l/#{product.unique_permalink}"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).not_to include("product:price:amount")
+      expect(response.body).not_to include("product:price:currency")
+    end
+  end
 end
