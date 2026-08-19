@@ -114,6 +114,7 @@ class Onetime::BackfillEmailEngagementDynamoTable
         mongo_docs = {
           opens: mongo_opens,
           clicks: click_rows.map { |mailer_method, mailer_args, _| [mailer_method, mailer_args] }.uniq.size,
+          pairs: click_rows.size,
           urls: click_rows.group_by { |_, _, url| url }.transform_values(&:size),
         }
         summary = store.client.get_item(
@@ -121,7 +122,7 @@ class Onetime::BackfillEmailEngagementDynamoTable
           key: { "pk" => pk, "sk" => EmailEngagementDynamoStore::SUMMARY_SORT_KEY },
           consistent_read: true
         ).item || {}
-        dynamo = { opens: summary["open_count"].to_i, clicks: summary["click_count"].to_i, urls: {} }
+        dynamo = { opens: summary["open_count"].to_i, clicks: summary["click_count"].to_i, pairs: summary["click_pair_count"].to_i, urls: {} }
         query_partition(pk, sk_prefix: "URL#") { |item| dynamo[:urls][item["click_url"]] = item["click_count"].to_i }
 
         next if dynamo == mongo_docs
@@ -136,6 +137,11 @@ class Onetime::BackfillEmailEngagementDynamoTable
       mismatches
     end
 
+    # The gate compares DynamoDB against the Mongo documents (open docs and
+    # click-pair docs). Mongo's stored total_unique_clicks is reported on
+    # mismatch rows but never enforced: concurrent url-prefetch bursts have
+    # historically inflated it past the true clicker count, and it drifts a
+    # little from the pair-doc count for the same reason.
     def verify!(sample_size: 1_000)
       mismatches = []
       CreatorEmailClickSummary.all.read(mode: :secondary_preferred).limit(sample_size).each do |summary|
@@ -144,10 +150,13 @@ class Onetime::BackfillEmailEngagementDynamoTable
           table_name: store.table_name,
           key: { "pk" => pk, "sk" => EmailEngagementDynamoStore::SUMMARY_SORT_KEY }
         ).item || {}
-        mongo_opens = CreatorEmailOpenEvent.where(installment_id: summary.installment_id).count
-        expected = { clicks: summary.total_unique_clicks.to_i, opens: mongo_opens }
-        actual = { clicks: dynamo["click_count"].to_i, opens: dynamo["open_count"].to_i }
-        mismatches << { installment_id: summary.installment_id, expected:, actual: } if expected != actual
+        expected = {
+          opens: CreatorEmailOpenEvent.where(installment_id: summary.installment_id).count,
+          pairs: CreatorEmailClickEvent.where(installment_id: summary.installment_id).count,
+        }
+        actual = { opens: dynamo["open_count"].to_i, pairs: dynamo["click_pair_count"].to_i }
+        next if expected == actual
+        mismatches << { installment_id: summary.installment_id, expected:, actual:, mongo_stored_clicks: summary.total_unique_clicks.to_i }
       end
       puts mismatches.empty? ? "All #{sample_size} sampled installments match." : "#{mismatches.size} mismatches: #{mismatches.first(20).inspect}"
       mismatches
@@ -263,7 +272,7 @@ class Onetime::BackfillEmailEngagementDynamoTable
       end
 
       def new_tally
-        { opens: 0, clickers: 0, urls: Hash.new(0) }
+        { opens: 0, clickers: 0, pairs: 0, urls: Hash.new(0) }
       end
 
       def classify_item(item, tally, current)
@@ -271,11 +280,13 @@ class Onetime::BackfillEmailEngagementDynamoTable
         if sk == EmailEngagementDynamoStore::SUMMARY_SORT_KEY
           current[:opens] = item["open_count"].to_i
           current[:clickers] = item["click_count"].to_i
+          current[:pairs] = item["click_pair_count"].to_i
         elsif sk.start_with?("OPEN#")
           tally[:opens] += 1
         elsif sk.start_with?("CLICKER#")
           tally[:clickers] += 1
         elsif sk.start_with?("CLICK#")
+          tally[:pairs] += 1
           tally[:urls][item["click_url"]] += 1
         elsif sk.start_with?("URL#")
           current[:urls][item["click_url"]] = item["click_count"].to_i
@@ -285,6 +296,7 @@ class Onetime::BackfillEmailEngagementDynamoTable
       def apply_deltas(pk, tally, current)
         adjustments = apply_delta(pk, EmailEngagementDynamoStore::SUMMARY_SORT_KEY, "open_count", tally[:opens] - current[:opens])
         adjustments += apply_delta(pk, EmailEngagementDynamoStore::SUMMARY_SORT_KEY, "click_count", tally[:clickers] - current[:clickers])
+        adjustments += apply_delta(pk, EmailEngagementDynamoStore::SUMMARY_SORT_KEY, "click_pair_count", tally[:pairs] - current[:pairs])
         (tally[:urls].keys | current[:urls].keys).each do |url|
           adjustments += apply_delta(pk, store.url_sort_key(url), "click_count", tally[:urls][url] - current[:urls][url], click_url: url)
         end

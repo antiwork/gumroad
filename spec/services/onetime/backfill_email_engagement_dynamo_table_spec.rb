@@ -145,12 +145,15 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
 
       adjustments = described_class.recompute_counters!
 
-      # open_count is off by one (2 items vs 1); click_count matches; URL# item is missing entirely.
-      expect(adjustments).to eq(2)
+      # open_count is off by one (2 items vs 1); click_count matches; the pair
+      # count and the URL# item are missing entirely.
+      expect(adjustments).to eq(3)
       updates = requests.select { _1[:operation_name] == :update_item }.map { _1[:params] }
       open_fix = updates.find { _1[:expression_attribute_names] == { "#counter" => "open_count" } }
       expect(open_fix[:key]["sk"].values.first).to eq("SUMMARY")
       expect(open_fix[:expression_attribute_values][":delta"]).to eq(n: "1")
+      pair_fix = updates.find { _1[:expression_attribute_names] == { "#counter" => "click_pair_count" } }
+      expect(pair_fix[:expression_attribute_values][":delta"]).to eq(n: "1")
       url_fix = updates.find { _1[:key]["sk"].values.first == "URL##{url_digest}" }
       expect(url_fix[:update_expression]).to include("if_not_exists(click_url, :click_url)")
       expect(url_fix[:expression_attribute_values][":delta"]).to eq(n: "1")
@@ -162,7 +165,7 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
         { "pk" => "123", "sk" => "CLICKER#aaa" },
         { "pk" => "123", "sk" => "CLICK#aaa#u1", "click_url" => click_url },
         { "pk" => "123", "sk" => "URL##{url_digest}", "click_url" => click_url, "click_count" => 1 },
-        { "pk" => "123", "sk" => "SUMMARY", "open_count" => 1, "click_count" => 1 },
+        { "pk" => "123", "sk" => "SUMMARY", "open_count" => 1, "click_count" => 1, "click_pair_count" => 1 },
       ]
       client.stub_responses(:scan, { items: scan_items, last_evaluated_key: nil })
 
@@ -222,7 +225,7 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
       installment = create(:installment)
       CreatorEmailOpenEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, open_count: 2)
       CreatorEmailClickEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, click_url:, click_count: 1)
-      client.stub_responses(:get_item, { item: { "pk" => installment.id.to_s, "sk" => "SUMMARY", "open_count" => 1, "click_count" => 1 } })
+      client.stub_responses(:get_item, { item: { "pk" => installment.id.to_s, "sk" => "SUMMARY", "open_count" => 1, "click_count" => 1, "click_pair_count" => 1 } })
       client.stub_responses(:query, { items: [{ "pk" => installment.id.to_s, "sk" => "URL##{url_digest}", "click_url" => click_url, "click_count" => 1 }], last_evaluated_key: nil })
 
       expect(described_class.verify_seller!(installment.seller_id)).to eq([])
@@ -233,29 +236,40 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
       CreatorEmailClickSummary.create!(installment_id: installment.id, total_unique_clicks: 9, urls: {})
       CreatorEmailOpenEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, open_count: 1)
       CreatorEmailClickEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, click_url:, click_count: 1)
-      client.stub_responses(:get_item, { item: { "pk" => installment.id.to_s, "sk" => "SUMMARY", "open_count" => 1, "click_count" => 2 } })
+      client.stub_responses(:get_item, { item: { "pk" => installment.id.to_s, "sk" => "SUMMARY", "open_count" => 1, "click_count" => 2, "click_pair_count" => 1 } })
       client.stub_responses(:query, { items: [{ "pk" => installment.id.to_s, "sk" => "URL##{url_digest}", "click_url" => click_url, "click_count" => 1 }], last_evaluated_key: nil })
 
       mismatch = described_class.verify_seller!(installment.seller_id).sole
-      expect(mismatch[:dynamo]).to eq(opens: 1, clicks: 2, urls: { click_url => 1 })
-      expect(mismatch[:mongo_docs]).to eq(opens: 1, clicks: 1, urls: { click_url => 1 })
+      expect(mismatch[:dynamo]).to eq(opens: 1, clicks: 2, pairs: 1, urls: { click_url => 1 })
+      expect(mismatch[:mongo_docs]).to eq(opens: 1, clicks: 1, pairs: 1, urls: { click_url => 1 })
       expect(mismatch[:mongo_stored_clicks]).to eq(9)
     end
   end
 
   describe ".verify!" do
-    it "reports installments whose DynamoDB counters disagree with Mongo" do
+    it "reports installments whose DynamoDB counters disagree with the Mongo documents" do
       CreatorEmailClickSummary.create!(installment_id: 123, total_unique_clicks: 5, urls: {})
       CreatorEmailOpenEvent.create!(installment_id: 123, mailer_method:, mailer_args:, open_count: 1)
-      client.stub_responses(:get_item, { item: { "pk" => "123", "sk" => "SUMMARY", "open_count" => 1, "click_count" => 4 } })
+      CreatorEmailClickEvent.create!(installment_id: 123, mailer_method:, mailer_args:, click_url:, click_count: 1)
+      client.stub_responses(:get_item, { item: { "pk" => "123", "sk" => "SUMMARY", "open_count" => 1, "click_pair_count" => 3 } })
 
       mismatches = described_class.verify!(sample_size: 10)
 
       expect(mismatches.sole).to eq(
         installment_id: 123,
-        expected: { clicks: 5, opens: 1 },
-        actual: { clicks: 4, opens: 1 }
+        expected: { opens: 1, pairs: 1 },
+        actual: { opens: 1, pairs: 3 },
+        mongo_stored_clicks: 5
       )
+    end
+
+    it "does not enforce Mongo's stored click counter when the documents match" do
+      CreatorEmailClickSummary.create!(installment_id: 123, total_unique_clicks: 5, urls: {})
+      CreatorEmailOpenEvent.create!(installment_id: 123, mailer_method:, mailer_args:, open_count: 1)
+      CreatorEmailClickEvent.create!(installment_id: 123, mailer_method:, mailer_args:, click_url:, click_count: 1)
+      client.stub_responses(:get_item, { item: { "pk" => "123", "sk" => "SUMMARY", "open_count" => 1, "click_pair_count" => 1 } })
+
+      expect(described_class.verify!(sample_size: 10)).to eq([])
     end
   end
 end

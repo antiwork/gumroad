@@ -90,11 +90,11 @@ describe EmailEngagementDynamoStore do
       expect(requests).to be_empty
     end
 
-    it "records a first-ever click with the url total, the clicker marker, the summary click count, and a compensating open" do
+    it "records a first-ever click with the url total, the pair count, the clicker marker, the summary click count, and a compensating open" do
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
       expect(requests.map { _1[:operation_name] }).to eq(
-        [:put_item, :update_item, :put_item, :update_item, :put_item, :update_item]
+        [:put_item, :update_item, :update_item, :put_item, :update_item, :put_item, :update_item]
       )
 
       click_put = requests[0][:params]
@@ -109,36 +109,41 @@ describe EmailEngagementDynamoStore do
       expect(url_update[:update_expression]).to eq("ADD click_count :one SET click_url = :click_url")
       expect(plain(url_update[:expression_attribute_values][":click_url"])).to eq(click_url)
 
-      marker_put = requests[2][:params]
+      pair_update = requests[2][:params]
+      expect(plain_hash(pair_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
+      expect(pair_update[:expression_attribute_names]).to eq("#counter" => "click_pair_count")
+
+      marker_put = requests[3][:params]
       expect(plain(marker_put[:item]["pk"])).to eq("123")
       expect(plain(marker_put[:item]["sk"])).to eq("CLICKER##{recipient_digest}")
       expect(plain(marker_put[:item]["mailer_args"])).to eq(mailer_args)
       expect(marker_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      summary_click_update = requests[3][:params]
+      summary_click_update = requests[4][:params]
       expect(plain_hash(summary_click_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(summary_click_update[:expression_attribute_names]).to eq("#counter" => "click_count")
 
-      open_put = requests[4][:params]
+      open_put = requests[5][:params]
       expect(plain(open_put[:item]["pk"])).to eq("123")
       expect(plain(open_put[:item]["sk"])).to eq("OPEN##{recipient_digest}")
       expect(plain(open_put[:item]["open_count"])).to eq(1)
       expect(open_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      summary_open_update = requests[5][:params]
+      summary_open_update = requests[6][:params]
       expect(plain_hash(summary_open_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(summary_open_update[:expression_attribute_names]).to eq("#counter" => "open_count")
     end
 
-    it "does not increment the summary click count when the recipient has clicked another url before" do
+    it "counts the pair but not the summary click count when the recipient has clicked another url before" do
       # The click item put succeeds; the clicker marker already exists, as does the open item.
       client.stub_responses(:put_item, [{}, "ConditionalCheckFailedException", "ConditionalCheckFailedException"])
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests.map { _1[:operation_name] }).to eq([:put_item, :update_item, :put_item, :put_item])
+      expect(requests.map { _1[:operation_name] }).to eq([:put_item, :update_item, :update_item, :put_item, :put_item])
       expect(plain(requests[1][:params][:key]["sk"])).to eq("URL##{url_digest}")
-      expect(plain(requests[2][:params][:item]["sk"])).to eq("CLICKER##{recipient_digest}")
+      expect(requests[2][:params][:expression_attribute_names]).to eq("#counter" => "click_pair_count")
+      expect(plain(requests[3][:params][:item]["sk"])).to eq("CLICKER##{recipient_digest}")
     end
 
     it "counts nothing on a repeat click of the same url by the same recipient" do
