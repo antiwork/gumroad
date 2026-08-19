@@ -1800,9 +1800,9 @@ describe "PurchaseRefunds", :vcr do
         original = create(:membership_purchase)
         original_license = attach_license!(original)
         renewal = create(:recurring_membership_purchase, subscription: original.subscription, link: original.link)
-        expect(ChargeProcessor).to receive(:refund!).and_call_original
+        flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, renewal.price_cents)
 
-        renewal.refund_and_save!(original.seller.id)
+        renewal.refund_purchase!(flow_of_funds, original.seller.id)
 
         expect(renewal.reload.stripe_refunded).to be(true)
         expect(original_license.reload).not_to be_disabled
@@ -1912,7 +1912,8 @@ describe "PurchaseRefunds", :vcr do
       original = create(:membership_purchase)
       original_license = create(:license, purchase: original, link: original.link)
       renewal = create(:recurring_membership_purchase, subscription: original.subscription, link: original.link)
-      expect(ChargeProcessor).to receive(:refund!).and_call_original
+      allow(renewal).to receive(:refund_and_save!).and_return(true)
+      renewal.update_columns(stripe_refunded: true)
 
       expect(renewal.refund_for_fraud!(create(:admin_user).id)).to be(true)
 

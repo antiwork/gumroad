@@ -538,19 +538,23 @@ class Purchase
 
   # /v2/licenses/verify rejects disabled keys but not stripe_refunded, so a
   # refunded purchase otherwise keeps a working key until the seller disables it.
+  # Look up the License row by purchase_id: Purchase#license_key is nil when the
+  # product is not currently flagged licensed, and Purchase#license remaps a
+  # renewal onto the original purchase's key.
   def disable_attached_license_if_fully_refunded!(for_fraud: false)
     return unless stripe_refunded?
 
-    license_to_disable = if is_recurring_subscription_charge
-      return unless for_fraud
-
-      subscription&.original_purchase&.license
+    targets = []
+    if is_recurring_subscription_charge
+      targets << subscription&.original_purchase&.license if for_fraud
     else
-      linked_license
+      targets << License.find_by(purchase_id: id)
+      if is_gift_sender_purchase && gift_given&.giftee_purchase_id
+        targets << License.find_by(purchase_id: gift_given.giftee_purchase_id)
+      end
     end
-    return if license_to_disable.blank? || license_to_disable.disabled?
 
-    license_to_disable.disable!
+    targets.compact.uniq.each { |license| license.disable! unless license.disabled? }
   end
 
   def buyer_presentment_refund_blocked?
