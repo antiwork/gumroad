@@ -160,7 +160,8 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
       # item but no SUMMARY, so open_count gets a +1 correction.
       client.stub_responses(:query, { items: [{ "pk" => pk, "sk" => "OPEN##{recipient_digest}" }], last_evaluated_key: nil })
 
-      described_class.backfill_seller!(installment.seller_id)
+      expect { described_class.backfill_seller!(installment.seller_id) }
+        .to output(%r{\[1/1\] installment #{installment.id} done \(1 docs\) — 100\.0% \(1/1 docs\)}).to_stdout
 
       written = requests.select { _1[:operation_name] == :batch_write_item }.flat_map { written_items(_1) }
       expect(written.map { _1["pk"] }.uniq).to eq([pk])
@@ -169,6 +170,28 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
       expect(summary_fix[:key]["sk"].values.first).to eq("SUMMARY")
       expect(summary_fix[:expression_attribute_names]).to eq("#counter" => "open_count")
       expect(summary_fix[:expression_attribute_values][":delta"]).to eq(n: "1")
+    end
+  end
+
+  describe ".backfill_installment!" do
+    it "loads a single installment's docs and recomputes its counters, leaving siblings alone" do
+      installment = create(:installment)
+      sibling = create(:installment)
+      CreatorEmailOpenEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, open_count: 1)
+      CreatorEmailClickEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, click_url:, click_count: 1)
+      CreatorEmailOpenEvent.create!(installment_id: sibling.id, mailer_method:, mailer_args: "[7, 7]", open_count: 1)
+      client.stub_responses(:query, { items: [], last_evaluated_key: nil })
+
+      docs = described_class.backfill_installment!(installment.id)
+
+      expect(docs).to eq(2)
+      written = requests.select { _1[:operation_name] == :batch_write_item }.flat_map { written_items(_1) }
+      expect(written.map { _1["pk"] }.uniq).to eq([installment.id.to_s])
+      expect(written.map { _1["sk"] }).to contain_exactly(
+        "OPEN##{recipient_digest}",
+        "CLICK##{recipient_digest}##{url_digest}",
+        "CLICKER##{recipient_digest}"
+      )
     end
   end
 

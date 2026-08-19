@@ -8,10 +8,11 @@
 #   Onetime::BackfillEmailEngagementDynamoTable.recompute_counters!  # rerun until it reports 0 adjustments
 #   Onetime::BackfillEmailEngagementDynamoTable.verify!
 #
-# Or pilot a single seller first:
+# Or pilot a single seller (or a single installment) first:
 #
 #   Onetime::BackfillEmailEngagementDynamoTable.backfill_seller!(seller_id)
 #   Onetime::BackfillEmailEngagementDynamoTable.verify_seller!(seller_id)
+#   Onetime::BackfillEmailEngagementDynamoTable.backfill_installment!(installment_id)
 #
 # The dual-write flag must be on before the first phase starts: Mongo then
 # strictly contains every live item, so overwriting on key collision is safe.
@@ -57,17 +58,44 @@ class Onetime::BackfillEmailEngagementDynamoTable
     # Rerunnable at any time; the full backfill later re-puts identical items.
     def backfill_seller!(seller_id)
       installment_ids = Installment.where(seller_id:).ids
-      installment_ids.each do |installment_id|
-        CreatorEmailOpenEvent.where(installment_id:).read(mode: :secondary_preferred).each_slice(MONGO_BATCH_SIZE) do |docs|
-          write_items(docs.filter_map { open_item(_1) })
-        end
-        CreatorEmailClickEvent.where(installment_id:).read(mode: :secondary_preferred).each_slice(MONGO_BATCH_SIZE) do |docs|
-          write_items(docs.flat_map { click_items(_1) })
-        end
-        recompute_installment!(installment_id)
+      doc_counts = installment_ids.index_with do |installment_id|
+        CreatorEmailOpenEvent.where(installment_id:).count + CreatorEmailClickEvent.where(installment_id:).count
+      end
+      total_docs = doc_counts.values.sum
+      processed_docs = 0
+
+      installment_ids.each_with_index do |installment_id, index|
+        backfill_installment!(installment_id, quiet: true)
+        processed_docs += doc_counts[installment_id]
+        percent = total_docs.zero? ? 100.0 : processed_docs * 100.0 / total_docs
+        puts format("[%d/%d] installment %d done (%d docs) — %.1f%% (%d/%d docs)",
+                    index + 1, installment_ids.size, installment_id, doc_counts[installment_id],
+                    percent, processed_docs, total_docs)
       end
       puts "Backfilled #{installment_ids.size} installments for seller #{seller_id}; compare with verify_seller!(#{seller_id})."
       installment_ids.size
+    end
+
+    # Backfill a single installment (items plus its counter recompute).
+    def backfill_installment!(installment_id, quiet: false)
+      docs = 0
+      progress = lambda do |batch|
+        crossed = docs / 100_000 > (docs - batch.size) / 100_000
+        puts "  installment #{installment_id}: #{docs} docs..." if crossed
+      end
+      CreatorEmailOpenEvent.where(installment_id:).read(mode: :secondary_preferred).each_slice(MONGO_BATCH_SIZE) do |batch|
+        write_items(batch.filter_map { open_item(_1) })
+        docs += batch.size
+        progress.call(batch)
+      end
+      CreatorEmailClickEvent.where(installment_id:).read(mode: :secondary_preferred).each_slice(MONGO_BATCH_SIZE) do |batch|
+        write_items(batch.flat_map { click_items(_1) })
+        docs += batch.size
+        progress.call(batch)
+      end
+      recompute_installment!(installment_id)
+      puts "Backfilled installment #{installment_id} (#{docs} docs); counters recomputed." unless quiet
+      docs
     end
 
     # Three-way comparison per installment. The invariant is DynamoDB ==
