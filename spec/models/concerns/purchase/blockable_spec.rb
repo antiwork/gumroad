@@ -2233,7 +2233,7 @@ describe Purchase::Blockable do
 
       context "when the seller's refund policy is 'No refunds allowed' (0 days)" do
         before do
-          seller.refund_policy.update_columns(max_refund_period_in_days: 0)
+          seller.refund_policy.update!(max_refund_period_in_days: 0)
         end
 
         it "bumps the refund period to 30 days" do
@@ -2265,7 +2265,7 @@ describe Purchase::Blockable do
 
       context "when the audit comment fails to save" do
         before do
-          seller.refund_policy.update_columns(max_refund_period_in_days: 0)
+          seller.refund_policy.update!(max_refund_period_in_days: 0)
           allow(seller.comments).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
         end
 

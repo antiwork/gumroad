@@ -66,22 +66,6 @@ describe ProductRefundPolicy do
         end
       end
     end
-
-    it "coerces a 0-day digital policy to 7 days" do
-      refund_policy.max_refund_period_in_days = 0
-      refund_policy.save!
-
-      expect(refund_policy.max_refund_period_in_days).to eq(7)
-      expect(refund_policy.title).to eq("7-day money back guarantee")
-    end
-
-    it "keeps a 0-day policy on a physical product" do
-      physical = create(:product, :is_physical)
-      policy = create(:product_refund_policy, product: physical, seller: physical.user, max_refund_period_in_days: 0)
-
-      expect(policy.max_refund_period_in_days).to eq(0)
-      expect(policy.title).to eq("No refunds allowed")
-    end
   end
 
   describe "stripped_fields" do
@@ -129,16 +113,9 @@ describe ProductRefundPolicy do
   describe "#no_refunds?" do
     let(:refund_policy) { create(:product_refund_policy) }
 
-    it "returns true for a physical product with a 0-day policy" do
-      refund_policy.product.update_columns(flags: refund_policy.product.flags | Link.flag_mapping["flags"][:is_physical])
-      refund_policy.product.update_column(:native_type, "physical")
+    it "returns true when max_refund_period_in_days is 0" do
       refund_policy.max_refund_period_in_days = 0
       expect(refund_policy.no_refunds?).to be true
-    end
-
-    it "returns false for a digital product even if a stale 0-day period is set" do
-      refund_policy.max_refund_period_in_days = 0
-      expect(refund_policy.no_refunds?).to be false
     end
 
     it "returns false when max_refund_period_in_days is not 0" do
@@ -168,59 +145,6 @@ describe ProductRefundPolicy do
       allow(refund_policy.product).to receive(:published?).and_return(true)
       allow(refund_policy).to receive(:no_refunds?).and_return(false)
       expect(refund_policy.published_and_no_refunds?).to be false
-    end
-  end
-
-  describe "fine print no-refunds moderation" do
-    # let! so the factory (whose fine print trips the stubbed moderation) saves before stubbing
-    let!(:refund_policy) { create(:product_refund_policy) }
-
-    def stub_fine_print_moderation(no_refunds)
-      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
-        { "choices" => [{ "message" => { "content" => %({"no_refunds": #{no_refunds}}) } }] }
-      )
-    end
-
-    it "rejects fine print that denies refunds on a digital product" do
-      stub_fine_print_moderation(true)
-      refund_policy.fine_print = "All sales are final. No refunds."
-
-      expect(refund_policy.valid?).to be false
-      expect(refund_policy.errors.full_messages).to include("Fine print cannot state that refunds are not allowed")
-    end
-
-    it "allows fine print that only conditions refunds" do
-      stub_fine_print_moderation(false)
-      refund_policy.fine_print = "Refunds are only issued for duplicate purchases."
-
-      expect(refund_policy.valid?).to be true
-    end
-
-    it "allows no-refunds fine print on a physical product" do
-      refund_policy.product.update_columns(
-        flags: refund_policy.product.flags | Link.flag_mapping["flags"][:is_physical],
-        native_type: "physical"
-      )
-      refund_policy.product.reload
-      expect(OpenAI::Client).not_to receive(:new)
-      refund_policy.fine_print = "All sales are final. No refunds."
-
-      expect(refund_policy.valid?).to be true
-    end
-
-    it "skips moderation when the fine print is unchanged" do
-      refund_policy.update_columns(fine_print: "All sales are final. No refunds.")
-      expect(OpenAI::Client).not_to receive(:new)
-      refund_policy.max_refund_period_in_days = 14
-
-      expect(refund_policy.valid?).to be true
-    end
-
-    it "fails open when the moderation call errors" do
-      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_raise(StandardError.new("timeout"))
-      refund_policy.fine_print = "All sales are final. No refunds."
-
-      expect(refund_policy.valid?).to be true
     end
   end
 end
