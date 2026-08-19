@@ -60,11 +60,13 @@ class RefundPolicy < ApplicationRecord
     }
   end
 
-  # A completed-but-unparseable response fails closed. The call itself
-  # failing still fails open so an outage never blocks saves.
+  # A completed-but-unparseable response fails closed. Transport/outage
+  # errors still fail open so an OpenAI blip never blocks saves. Do not
+  # rescue StandardError here: a nil/scalar completed body raises
+  # NoMethodError on #dig, and treating that as an outage fail-opens.
   def fine_print_claims_no_refunds?
     parse_no_refunds_classification(ask_ai_fine_print_classification)
-  rescue StandardError => e
+  rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Faraday::ParsingError, Net::ReadTimeout => e
     Rails.logger.warn("Error moderating fine print for refund policy #{id}: #{e.message}")
     false
   end
@@ -81,6 +83,8 @@ class RefundPolicy < ApplicationRecord
     end
 
     def parse_no_refunds_classification(response)
+      raise TypeError unless response.is_a?(Hash)
+
       parsed = JSON.parse(response.dig("choices", 0, "message", "content"))
       raise TypeError unless parsed.is_a?(Hash)
 
