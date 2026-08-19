@@ -8,14 +8,20 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
   let(:click_url) { "https://example&#46;com/a" }
   let(:url_digest) { Digest::SHA256.hexdigest(click_url) }
 
+  def progress_keys
+    [described_class::OPENS_CURSOR_KEY, described_class::CLICKS_CURSOR_KEY].flat_map do |key|
+      [key, "#{key}_total", "#{key}_processed"]
+    end
+  end
+
   before do
     EmailEngagementDynamoStore.client = client
-    $redis.del(described_class::OPENS_CURSOR_KEY, described_class::CLICKS_CURSOR_KEY)
+    $redis.del(*progress_keys)
   end
 
   after do
     EmailEngagementDynamoStore.client = nil
-    $redis.del(described_class::OPENS_CURSOR_KEY, described_class::CLICKS_CURSOR_KEY)
+    $redis.del(*progress_keys)
   end
 
   def requests
@@ -64,6 +70,22 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
 
       expect(written_items(requests.sole).sole["pk"]).to eq("2")
       expect($redis.get(described_class::OPENS_CURSOR_KEY)).to eq(second._id.to_s)
+    end
+
+    it "continues the progress percentage across a restart" do
+      first = CreatorEmailOpenEvent.create!(installment_id: 1, mailer_method:, mailer_args: "[1, 1]", open_count: 1)
+      CreatorEmailOpenEvent.create!(installment_id: 2, mailer_method:, mailer_args: "[2, 2]", open_count: 1)
+      # State left behind by an interrupted earlier run: 5 of 10 docs done.
+      $redis.set(described_class::OPENS_CURSOR_KEY, first._id.to_s)
+      $redis.set("#{described_class::OPENS_CURSOR_KEY}_total", 10)
+      $redis.set("#{described_class::OPENS_CURSOR_KEY}_processed", 5)
+      stub_const("#{described_class}::PROGRESS_INTERVAL", 1)
+
+      expect { described_class.backfill_opens! }
+        .to output(%r{CreatorEmailOpenEvent: 6/10 \(60\.0%\)}).to_stdout
+
+      expect($redis.get("#{described_class::OPENS_CURSOR_KEY}_processed")).to eq("6")
+      expect($redis.get("#{described_class::OPENS_CURSOR_KEY}_total")).to eq("10")
     end
 
     it "retries unprocessed items before giving up" do
