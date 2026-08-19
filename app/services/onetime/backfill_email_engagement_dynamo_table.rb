@@ -249,7 +249,7 @@ class Onetime::BackfillEmailEngagementDynamoTable
         apply_deltas(pk, tally, current)
       end
 
-      def query_partition(pk, sk_prefix: nil)
+      def query_partition(pk, sk_prefix: nil, &block)
         key_condition = "pk = :pk"
         values = { ":pk" => pk }
         if sk_prefix
@@ -265,7 +265,7 @@ class Onetime::BackfillEmailEngagementDynamoTable
             exclusive_start_key: last_evaluated_key,
             consistent_read: true
           )
-          response.items.each { |item| yield item }
+          response.items.each(&block)
           last_evaluated_key = response.last_evaluated_key
           break if last_evaluated_key.blank?
         end
