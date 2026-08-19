@@ -3,7 +3,7 @@
 # Dual-write adapter for the DynamoDB table replacing the CreatorEmailOpenEvent /
 # CreatorEmailClickEvent / CreatorEmailClickSummary Mongo collections.
 #
-# Partition key `installment_id` (N), sort key `sk` (S), one of:
+# Partition key `pk` (S, the stringified installment id), sort key `sk` (S), one of:
 #   SUMMARY                    — open_count / click_count counters for the installment
 #   OPEN#<recipient>           — one item per recipient who opened
 #   CLICK#<recipient>#<url>    — one item per recipient + url first click
@@ -53,15 +53,17 @@ class EmailEngagementDynamoStore
       "#{ENV["DYNAMODB_TABLE_PREFIX"]}#{TABLE_BASE_NAME}"
     end
 
+    # Staging and production tables are Terraform-owned (antiwork/infrastructure#998)
+    # and deletion-protected; this bootstrap is for dev, test, and branch apps.
     def create_table!
       client.create_table(
         table_name:,
         attribute_definitions: [
-          { attribute_name: "installment_id", attribute_type: "N" },
+          { attribute_name: "pk", attribute_type: "S" },
           { attribute_name: "sk", attribute_type: "S" },
         ],
         key_schema: [
-          { attribute_name: "installment_id", key_type: "HASH" },
+          { attribute_name: "pk", key_type: "HASH" },
           { attribute_name: "sk", key_type: "RANGE" },
         ],
         billing_mode: "PAY_PER_REQUEST"
@@ -70,6 +72,10 @@ class EmailEngagementDynamoStore
 
     # The backfill must derive identical keys from the Mongo documents, so key
     # derivation is public and must not change while Mongo remains around.
+    def partition_key(installment_id)
+      installment_id.to_i.to_s
+    end
+
     def recipient_digest(mailer_method:, mailer_args:)
       Digest::SHA256.hexdigest("#{mailer_method}\n#{mailer_args}")
     end
@@ -121,7 +127,7 @@ class EmailEngagementDynamoStore
         client.put_item(
           table_name:,
           item: {
-            "installment_id" => installment_id,
+            "pk" => partition_key(installment_id),
             "sk" => open_sort_key(mailer_method:, mailer_args:),
             "mailer_method" => mailer_method,
             "mailer_args" => mailer_args,
@@ -129,7 +135,7 @@ class EmailEngagementDynamoStore
             "first_open_at" => now,
             "last_open_at" => now,
           },
-          condition_expression: "attribute_not_exists(installment_id)"
+          condition_expression: "attribute_not_exists(pk)"
         )
         increment_summary(installment_id:, attribute: "open_count")
       rescue Aws::DynamoDB::Errors::ConditionalCheckFailedException
@@ -140,7 +146,7 @@ class EmailEngagementDynamoStore
         client.put_item(
           table_name:,
           item: {
-            "installment_id" => installment_id,
+            "pk" => partition_key(installment_id),
             "sk" => "CLICK##{recipient}##{url_digest(click_url)}",
             "mailer_method" => mailer_method,
             "mailer_args" => mailer_args,
@@ -148,7 +154,7 @@ class EmailEngagementDynamoStore
             "click_count" => 1,
             "first_click_at" => timestamp,
           },
-          condition_expression: "attribute_not_exists(installment_id)"
+          condition_expression: "attribute_not_exists(pk)"
         )
         true
       rescue Aws::DynamoDB::Errors::ConditionalCheckFailedException
@@ -158,8 +164,8 @@ class EmailEngagementDynamoStore
       def recipient_clicked_any_url?(installment_id:, recipient:)
         client.query(
           table_name:,
-          key_condition_expression: "installment_id = :installment_id AND begins_with(sk, :sk_prefix)",
-          expression_attribute_values: { ":installment_id" => installment_id, ":sk_prefix" => "CLICK##{recipient}#" },
+          key_condition_expression: "pk = :pk AND begins_with(sk, :sk_prefix)",
+          expression_attribute_values: { ":pk" => partition_key(installment_id), ":sk_prefix" => "CLICK##{recipient}#" },
           select: "COUNT",
           limit: 1,
           consistent_read: true
@@ -186,7 +192,7 @@ class EmailEngagementDynamoStore
       end
 
       def item_key(installment_id, sort_key)
-        { "installment_id" => installment_id, "sk" => sort_key }
+        { "pk" => partition_key(installment_id), "sk" => sort_key }
       end
 
       def timestamp
