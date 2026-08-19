@@ -934,11 +934,10 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
 
     def serialize_admin_links(user, merchant_account)
-      # admin_user/admin_purchases links were dropped with the admin web UI;
-      # the CLI renders only the keys present.
-      links = {
-        impersonate: admin_impersonate_url(user_identifier: user.external_id, host: UrlService.domain_with_protocol)
-      }
+      # admin_user/admin_purchases/impersonate links were dropped with the
+      # admin web UI and unused seller impersonation; the CLI renders only
+      # the keys present.
+      links = {}
 
       if merchant_account&.charge_processor_merchant_id
         links[:stripe_dashboard] = admin_redirect_to_stripe_dashboard_url(user_identifier: user.external_id, host: UrlService.domain_with_protocol)

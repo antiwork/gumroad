@@ -390,24 +390,6 @@ describe LoginsController, type: :controller, inertia: true do
       expect(response.cookies.key?("last_viewed_dashboard")).to eq(true)
       expect(response.cookies["last_viewed_dashboard"]).to be_nil
     end
-
-    context "when impersonating" do
-      let(:admin) { create(:admin_user) }
-
-      before do
-        sign_in admin
-        controller.impersonate_user(user)
-      end
-
-      it "resets impersonated user" do
-        expect(controller.impersonated_user).to eq(user)
-
-        get :destroy
-
-        expect(controller.impersonated_user).to be_nil
-        expect($redis.get(RedisKey.impersonated_user(admin.id))).to be_nil
-      end
-    end
   end
 
   describe "DELETE destroy" do
@@ -432,24 +414,6 @@ describe LoginsController, type: :controller, inertia: true do
 
       expect(response.cookies.key?("last_viewed_dashboard")).to eq(true)
       expect(response.cookies["last_viewed_dashboard"]).to be_nil
-    end
-
-    context "when impersonating" do
-      let(:admin) { create(:admin_user) }
-
-      before do
-        sign_in admin
-        controller.impersonate_user(user)
-      end
-
-      it "resets impersonated user" do
-        expect(controller.impersonated_user).to eq(user)
-
-        delete :destroy
-
-        expect(controller.impersonated_user).to be_nil
-        expect($redis.get(RedisKey.impersonated_user(admin.id))).to be_nil
-      end
     end
   end
 end

@@ -353,7 +353,6 @@ class LinksController < ApplicationController
   def increment_views
     skip = is_bot?
     skip |= logged_in_user.present? && (@product.user_id == current_seller.id || logged_in_user.is_team_member?)
-    skip |= impersonating_user&.id
 
     unless skip
       create_product_page_view(

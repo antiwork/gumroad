@@ -1,31 +1,9 @@
 # frozen_string_literal: true
 
-# The admin web UI was removed; this controller keeps the two team-member
-# entry points that other surfaces still link to: impersonation (linked from
-# the internal admin API payloads and the profile nav) and the Stripe
-# dashboard redirect.
+# The admin web UI was removed; this controller keeps the team-member
+# Stripe dashboard redirect that the internal admin API still links to.
 class Admin::BaseController < ApplicationController
-  include Impersonate
-
   before_action :require_admin!
-
-  def impersonate
-    user = find_user(params[:user_identifier])
-
-    if user
-      impersonate_user(user)
-      redirect_to products_path
-    else
-      flash[:alert] = "User not found"
-      redirect_to root_path
-    end
-  end
-
-  def unimpersonate
-    stop_impersonating_user
-
-    render json: { redirect_to: root_url }
-  end
 
   def redirect_to_stripe_dashboard
     user = find_user(params[:user_identifier])

@@ -2,7 +2,7 @@
 
 module ProcessRefund
   private
-    def process_refund(seller:, user:, purchase_external_id:, amount:, impersonating: false)
+    def process_refund(seller:, user:, purchase_external_id:, amount:)
       # We don't support commas in refund amount
       # Reference: https://github.com/gumroad/web/pull/17747
       return render json: { success: false, message: "Commas not supported in refund amount." } if amount&.include?(",")
@@ -12,7 +12,7 @@ module ProcessRefund
 
       begin
         if purchase.refund!(refunding_user_id: user.id, amount:)
-          purchase.seller.update!(refund_fee_notice_shown: true) unless impersonating
+          purchase.seller.update!(refund_fee_notice_shown: true)
           render json: { success: true, id: purchase.external_id, message: "Purchase successfully refunded.", partially_refunded: purchase.stripe_partially_refunded? }
         else
           render json: { success: false, message: purchase.errors.full_messages.to_sentence }

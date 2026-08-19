@@ -8,7 +8,6 @@ class LoginsController < Devise::SessionsController
   skip_before_action :check_suspended
   before_action :block_json_request, only: :new
   after_action :clear_dashboard_preference, only: :destroy
-  before_action :reset_impersonated_user, only: :destroy
   before_action :set_noindex_header, only: :new, if: -> { params[:next]&.start_with?("/oauth/authorize") }
 
   before_action :set_csrf_meta_tags

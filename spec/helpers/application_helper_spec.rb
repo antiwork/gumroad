@@ -5,19 +5,14 @@ require "spec_helper"
 describe ApplicationHelper do
   describe "#current_user_props" do
     let(:admin) { create(:admin_user, username: "gumroadian") }
-    let(:seller) { create(:named_seller) }
 
     it "returns the current user props" do
-      expect(current_user_props(admin, seller)).to eq(
-                                                     {
-                                                       name: "gumroadian",
-                                                       avatar_url: admin.avatar_url,
-                                                       impersonated_user: {
-                                                         name: "Seller",
-                                                         avatar_url: seller.avatar_url,
-                                                       },
-                                                     }
-                                                   )
+      expect(current_user_props(admin)).to eq(
+        {
+          name: "gumroadian",
+          avatar_url: admin.avatar_url,
+        }
+      )
     end
   end
 

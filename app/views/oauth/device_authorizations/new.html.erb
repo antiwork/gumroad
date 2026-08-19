@@ -9,7 +9,7 @@
       <h2>Authorization denied</h2>
       <p>The application will not receive access to your account.</p>
     </header>
-  <% elsif @error_message.blank? && @device_authorization.present? && @device_authorization.approvable? && user_signed_in? && !impersonating? %>
+  <% elsif @error_message.blank? && @device_authorization.present? && @device_authorization.approvable? && user_signed_in? %>
     <header class="flex flex-col gap-4 p-4 text-center">
       <div>
         <%= image_tag @device_authorization.oauth_application.icon_url || image_path("gumroad_app.png"), size: "72" %>

@@ -198,27 +198,6 @@ describe "OAuth device authorizations", type: :request do
       expect(device_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
     end
 
-    it "blocks approval while the signed-in admin is impersonating another user" do
-      body = create_device_code
-      admin = create(:admin_user)
-      sign_in admin
-      $redis.set(RedisKey.impersonated_user(admin.id), user.id)
-
-      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
-
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to include("Stop impersonating before authorizing an OAuth application.")
-      expect(response.body).not_to include("This application will be able to:")
-
-      expect do
-        submit_device_authorization(body["user_code"], decision: "approve")
-      end.not_to change { Doorkeeper::AccessToken.count }
-
-      expect(response).to have_http_status(:unprocessable_entity)
-      expect(OauthDeviceAuthorization.last).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
-    ensure
-      $redis.del(RedisKey.impersonated_user(admin.id)) if defined?(admin) && admin&.persisted?
-    end
   end
 
   describe "POST /oauth/device and POST /oauth/token" do

@@ -9,7 +9,7 @@ class Api::Internal::Installments::PreviewEmailsController < Api::Internal::Base
     return e404_json unless installment
     authorize installment, :preview?
 
-    installment.send_preview_email(impersonating_user || logged_in_user)
+    installment.send_preview_email(logged_in_user)
     head :ok
   rescue Installment::PreviewEmailError => e
     render json: { message: e.message }, status: :unprocessable_entity

@@ -35,7 +35,7 @@ class AudienceController < Sellers::BaseController
                  .permit(:followers, :customers, :affiliates)
                  .to_hash
 
-    Exports::AudienceExportWorker.perform_async(current_seller.id, (impersonating_user || current_seller).id, options)
+    Exports::AudienceExportWorker.perform_async(current_seller.id, current_seller.id, options)
 
     head :ok
   end

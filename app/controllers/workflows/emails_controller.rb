@@ -52,7 +52,7 @@ class Workflows::EmailsController < Sellers::BaseController
     end
 
     def preview_recipient
-      impersonating_user || logged_in_user
+      logged_in_user
     end
 
     def installments_params

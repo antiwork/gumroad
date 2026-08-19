@@ -28,32 +28,6 @@ describe "User profile page", type: :system, js: true do
       end
     end
 
-    it "allows impersonating from the profile page when logged in as Gumroad admin" do
-      admin = create(:user, is_team_member: true)
-      sign_in admin
-      visit "/#{creator.username}"
-      click_on "Impersonate"
-      expect(page).to have_current_path("/products")
-      select_disclosure "#{creator.display_name}" do
-        expect(page).to have_menuitem("Unbecome")
-      end
-      toggle_disclosure "#{creator.display_name}", expand: false
-      # Profile starts under "Everything else" until the seller uses it (DashboardNav).
-      within("nav[aria-label='Main']") { click_on "Everything else" }
-      click_on "Profile"
-
-      logout
-      sleep 1 # Since logout doesn't seem to immediately invalidate the session
-      visit "/#{creator.username}"
-      expect(page).to_not have_text("Impersonate")
-      expect(page).to_not have_text("Unbecome")
-
-      login_as(creator)
-      refresh
-      expect(page).to_not have_text("Impersonate")
-      expect(page).to_not have_text("Unbecome")
-    end
-
     describe "viewing products" do
       it "displays the lowest cost variant's price for a product with variants" do
         recreate_model_indices(Link)

@@ -6,7 +6,6 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
   protect_from_forgery
 
   include CsrfTokenInjector
-  include Impersonate
 
   before_action :authenticate_user!
   before_action :set_application_params, only: %i[create update]

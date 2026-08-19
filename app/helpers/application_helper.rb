@@ -23,14 +23,10 @@ module ApplicationHelper
     )
   end
 
-  def current_user_props(current_user, impersonated_user)
+  def current_user_props(current_user)
     {
       name: current_user.display_name,
-      avatar_url: current_user.avatar_url,
-      impersonated_user: impersonated_user.present? ? {
-        name: impersonated_user.display_name,
-        avatar_url: impersonated_user.avatar_url
-      } : nil
+      avatar_url: current_user.avatar_url
     }
   end
 

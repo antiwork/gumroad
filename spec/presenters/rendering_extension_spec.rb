@@ -155,8 +155,6 @@ describe "RenderingExtension" do
                     use_store_agent: true,
                   }
                 },
-                is_gumroad_admin: false,
-                is_impersonating: true,
                 promoted_nav_items: [],
                 lazy_load_offscreen_discover_images: false,
               },
@@ -209,7 +207,7 @@ describe "RenderingExtension" do
       end
 
       def controller
-        OpenStruct.new(is_mobile?: true, impersonating?: true, http_accept_language: HttpAcceptLanguage::Parser.new(""))
+        OpenStruct.new(is_mobile?: true, http_accept_language: HttpAcceptLanguage::Parser.new(""))
       end
 
       def font_url(font_name)

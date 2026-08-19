@@ -754,25 +754,6 @@ describe PurchasesController, :vcr do
           end
         end
 
-        context "when admin is signed in and impersonates seller" do
-          before do
-            @admin_user = create(:admin_user)
-            sign_in @admin_user
-            controller.impersonate_user(seller)
-          end
-
-          it "queues sidekiq job for the admin" do
-            get :export
-
-            export = SalesExport.last!
-            expect(export.recipient).to eq(@admin_user)
-
-            expect(Exports::Sales::CreateAndEnqueueChunksWorker).to have_enqueued_sidekiq_job(export.id)
-            expect(flash[:notice]).to eq("You will receive an email in your inbox with the data you've requested shortly.")
-            expect(response).to redirect_to(customers_path)
-            expect(response).to have_http_status(:see_other)
-          end
-        end
       end
 
       context "when sales data is smaller than threshold" do

@@ -26,18 +26,9 @@ describe Api::Mobile::BaseController do
     end
   end
 
-  context "as admin user" do
-    let(:user) { create(:user) }
+  it "uses the API user as the current resource owner" do
+    get(:index, params:)
 
-    before do
-      @request.params["access_token"] = access_token
-    end
-
-    it "impersonates" do
-      controller.impersonate_user(user)
-      get(:index, params:)
-
-      expect(controller.current_resource_owner).to eq(user)
-    end
+    expect(controller.current_resource_owner).to eq(admin_user)
   end
 end

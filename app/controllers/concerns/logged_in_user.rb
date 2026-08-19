@@ -9,6 +9,6 @@ module LoggedInUser
 
   # Usage of current_user is restricted to ensure current_user is not used accidentaly instead of current_seller
   def logged_in_user
-    impersonated_user || current_user
+    current_user
   end
 end

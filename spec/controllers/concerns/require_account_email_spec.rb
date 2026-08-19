@@ -42,12 +42,6 @@ describe RequireAccountEmail, type: :controller do
       get :index
       expect(response).to be_successful
     end
-
-    it "does not redirect when the user is being impersonated" do
-      allow(controller).to receive(:impersonating?).and_return(true)
-      get :index
-      expect(response).to be_successful
-    end
   end
 
   context "when the logged-in user has an unconfirmed email pending" do

@@ -117,7 +117,7 @@ class AffiliatesController < Sellers::BaseController
 
     result = Exports::AffiliateExportService.export(
       seller: current_seller,
-      recipient: impersonating_user || current_seller,
+      recipient: current_seller,
     )
 
     if result

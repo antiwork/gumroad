@@ -12,7 +12,7 @@ class ApplicationController < ActionController::Base
   include CustomDomainRouteBuilder
   include CsrfTokenInjector
   include TwoFactorAuthenticationValidator
-  include Impersonate
+  include CurrentApiUser
   include CurrentSeller
   include UtmLinkTracking
   include RackMiniProfilerAuthorization
@@ -33,7 +33,7 @@ class ApplicationController < ActionController::Base
   before_action :redirect_to_custom_subdomain
 
   before_action :set_signup_referrer, if: -> { logged_in_user.nil? }
-  before_action :check_suspended, if: -> { logged_in_user.present? && logged_in_user.suspended? && !impersonating? && !request.get? && !request.head? }
+  before_action :check_suspended, if: -> { logged_in_user.present? && logged_in_user.suspended? && !request.get? && !request.head? }
 
   before_action :set_gumroad_guid
 
@@ -200,7 +200,6 @@ class ApplicationController < ActionController::Base
 
     def show_passkey_setup_prompt?
       logged_in_user.present? &&
-        !impersonating? &&
         cookies[:is_gumroad_mobile_app].blank? &&
         session[PROMPT_PASSKEY_SETUP_SESSION_KEY] == logged_in_user.id &&
         logged_in_user.role_owner_for?(current_seller) &&

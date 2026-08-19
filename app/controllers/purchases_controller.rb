@@ -257,7 +257,7 @@ class PurchasesController < ApplicationController
 
   def refund
     authorize [:audience, Purchase]
-    process_refund(seller: current_seller, user: logged_in_user, purchase_external_id: params[:id], amount: params[:amount], impersonating: impersonating?)
+    process_refund(seller: current_seller, user: logged_in_user, purchase_external_id: params[:id], amount: params[:amount])
   end
 
   def revoke_access
@@ -329,7 +329,7 @@ class PurchasesController < ApplicationController
 
     tempfile = Exports::PurchaseExportService.export(
       seller: current_seller,
-      recipient: impersonating_user || logged_in_user,
+      recipient: logged_in_user,
       filters: params.slice(:start_time, :end_time, :product_ids, :variant_ids),
       force_async: params[:force_async].present?,
       in_seller_time_zone: params[:in_seller_time_zone].present?,
