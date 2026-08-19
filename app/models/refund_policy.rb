@@ -64,11 +64,14 @@ class RefundPolicy < ApplicationRecord
   # errors still fail open so an OpenAI blip never blocks saves. Do not
   # rescue StandardError here: a nil/scalar completed body raises
   # NoMethodError on #dig, and treating that as an outage fail-opens.
+  # Faraday::ParsingError is a completed body we could not read — fail closed.
   def fine_print_claims_no_refunds?
     parse_no_refunds_classification(ask_ai_fine_print_classification)
-  rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Faraday::ParsingError, Net::ReadTimeout => e
+  rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ServerError, Net::ReadTimeout => e
     Rails.logger.warn("Error moderating fine print for refund policy #{id}: #{e.message}")
     false
+  rescue Faraday::ParsingError
+    true
   end
 
   private

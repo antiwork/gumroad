@@ -389,6 +389,7 @@ describe Settings::MainController, type: :controller, inertia: true do
         end
 
         it "rejects fine print that denies refunds with a visible error" do
+          enable_fine_print_no_refunds_moderation!
           allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
             { "choices" => [{ "message" => { "content" => %({"no_refunds": true}) } }] }
           )

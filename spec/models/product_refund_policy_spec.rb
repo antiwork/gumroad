@@ -149,7 +149,13 @@ describe ProductRefundPolicy do
   end
 
   describe "fine print no-refunds moderation" do
-    # let! so the factory (whose fine print trips the stubbed moderation) saves before stubbing
+    # Default suite stub is off (no live OpenAI). Turn the gate back on
+    # first so factory create + later valid? hit the real classifier.
+    before do
+      enable_fine_print_no_refunds_moderation!
+      stub_fine_print_moderation(false)
+    end
+
     let!(:refund_policy) { create(:product_refund_policy) }
 
     def stub_fine_print_moderation(no_refunds)
@@ -231,6 +237,14 @@ describe ProductRefundPolicy do
 
     it "fails closed when the completed classifier body is not a Hash" do
       allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(nil)
+      refund_policy.fine_print = "All sales are final. No refunds."
+
+      expect(refund_policy.valid?).to be false
+      expect(refund_policy.errors.full_messages).to include("Fine print cannot state that refunds are not allowed")
+    end
+
+    it "fails closed when Faraday cannot parse the completed classifier body" do
+      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_raise(Faraday::ParsingError.new("not json"))
       refund_policy.fine_print = "All sales are final. No refunds."
 
       expect(refund_policy.valid?).to be false

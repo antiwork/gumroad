@@ -66,6 +66,7 @@ describe SellerRefundPolicy do
     end
 
     it "rejects fine print that denies refunds on a positive window" do
+      enable_fine_print_no_refunds_moderation!
       allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
         { "choices" => [{ "message" => { "content" => %({"no_refunds": true}) } }] }
       )
@@ -77,6 +78,7 @@ describe SellerRefundPolicy do
     end
 
     it "allows fine print that only conditions refunds" do
+      enable_fine_print_no_refunds_moderation!
       allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
         { "choices" => [{ "message" => { "content" => %({"no_refunds": false}) } }] }
       )
@@ -87,6 +89,7 @@ describe SellerRefundPolicy do
     end
 
     it "allows no-refunds fine print on a 0-day account policy" do
+      enable_fine_print_no_refunds_moderation!
       refund_policy.max_refund_period_in_days = 0
       expect(OpenAI::Client).not_to receive(:new)
       refund_policy.fine_print = "All sales are final. No refunds."
