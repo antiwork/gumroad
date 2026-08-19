@@ -13,7 +13,7 @@ class Api::Mobile::BaseController < ApplicationController
   MOBILE_TOKEN = GlobalConfig.get("MOBILE_TOKEN")
 
   def current_resource_owner
-    current_api_user
+    impersonated_user || current_api_user
   end
 
   private

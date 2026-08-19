@@ -34,6 +34,15 @@ describe Api::Internal::Installments::PreviewEmailsController do
       )
     end
 
+    it "sends a preview email to the impersonated Gumroad admin" do
+      gumroad_admin = create(:admin_user)
+      sign_in(gumroad_admin)
+      controller.impersonate_user(seller)
+      expect_any_instance_of(Installment).to receive(:send_preview_email).with(gumroad_admin)
+
+      post :create, params: { id: installment.external_id }, as: :json
+    end
+
     it "returns an error when the email service raises ResendApiResponseError" do
       allow(PostEmailApi).to receive(:process).and_raise(ResendApiResponseError, "Application not found")
 

@@ -121,7 +121,7 @@ class EmailsController < Sellers::BaseController
         seller: current_seller,
         params:,
         installment: @installment,
-        preview_email_recipient: logged_in_user
+        preview_email_recipient: impersonating_user || logged_in_user
       )
 
       is_new_record = @installment.nil?

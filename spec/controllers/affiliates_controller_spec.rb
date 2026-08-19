@@ -283,6 +283,23 @@ describe AffiliatesController, type: :controller, inertia: true do
           expect(flash[:warning]).to eq("You will receive an email with the data you've requested.")
           expect(response).to redirect_to(affiliates_path)
         end
+
+        context "when admin is signed in and impersonates seller" do
+          let(:admin_user) { create(:admin_user) }
+
+          before do
+            sign_in admin_user
+            controller.impersonate_user(seller)
+          end
+
+          it "queues sidekiq job for the admin" do
+            get :export
+
+            expect(Exports::AffiliateExportWorker).to have_enqueued_sidekiq_job(seller.id, admin_user.id)
+            expect(flash[:warning]).to eq("You will receive an email with the data you've requested.")
+            expect(response).to redirect_to(affiliates_path)
+          end
+        end
       end
     end
   end

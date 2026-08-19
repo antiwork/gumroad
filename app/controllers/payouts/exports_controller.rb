@@ -9,7 +9,7 @@ class Payouts::ExportsController < Sellers::BaseController
   def create
     authorize :balance, :export?
 
-    ExportPayoutData.perform_async(@payout_ids, logged_in_user.id)
+    ExportPayoutData.perform_async(@payout_ids, impersonating_user&.id || logged_in_user.id)
 
     head :ok
   end

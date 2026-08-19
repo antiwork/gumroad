@@ -52,6 +52,8 @@ module Events
 
   private
     def create_event(args)
+      return if impersonating?
+
       event_class = case args[:event_name]
                     when "signup"
                       SignupEvent

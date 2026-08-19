@@ -79,15 +79,30 @@ describe ApplicationController do
 
     context "with admin signed" do
       let(:admin) { create(:admin_user) }
+      let(:user) { create(:user) }
 
       before do
         sign_in admin
       end
 
-      it "returns an event" do
-        stubbed_cookie
-        event = controller.create_user_event("service_charge")
-        expect(event).to_not be(nil)
+      context "with admin becoming user" do
+        before do
+          controller.impersonate_user(user)
+        end
+
+        it "does not return an event" do
+          stubbed_cookie
+          event = controller.create_user_event("service_charge")
+          expect(event).to be(nil)
+        end
+      end
+
+      context "without admin becoming user" do
+        it "returns an event" do
+          stubbed_cookie
+          event = controller.create_user_event("service_charge")
+          expect(event).to_not be(nil)
+        end
       end
     end
 

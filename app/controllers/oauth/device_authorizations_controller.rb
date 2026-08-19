@@ -69,6 +69,8 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
         @error_message = "This code has expired."
       elsif !@device_authorization.pending? && !terminal_for_current_user?
         @error_message = "This code is invalid or expired."
+      elsif user_signed_in? && impersonating?
+        @error_message = "Stop impersonating before authorizing an OAuth application."
       end
     end
 
@@ -165,7 +167,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
     end
 
     def device_authorization_owned_by_current_user?
-      user_signed_in? && @device_authorization.resource_owner_id == current_user.id
+      user_signed_in? && !impersonating? && @device_authorization.resource_owner_id == current_user.id
     end
 
     def oauth_scope_description(scope)

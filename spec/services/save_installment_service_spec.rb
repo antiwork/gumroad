@@ -221,7 +221,7 @@ describe SaveInstallmentService do
       )
     end
 
-    it "sends a preview email to the given recipient" do
+    it "sends a preview email to the impersonated user" do
       gumroad_admin = create(:admin_user)
       expect_any_instance_of(Installment).to receive(:send_preview_email).with(gumroad_admin)
 

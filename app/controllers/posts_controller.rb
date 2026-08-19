@@ -91,6 +91,7 @@ class PostsController < ApplicationController
 
     skip = is_bot?
     skip |= logged_in_user.present? && (@post.seller_id == current_seller.id || logged_in_user.is_team_member?)
+    skip |= impersonating_user&.id
 
     create_post_event(@post) unless skip
 

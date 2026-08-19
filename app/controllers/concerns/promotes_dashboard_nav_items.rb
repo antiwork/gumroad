@@ -55,6 +55,7 @@ module PromotesDashboardNavItems
       # rows opt out of prefetching for this reason (a click adopts the prefetch and sends nothing
       # of its own); this is the server-side half of that guard.
       return false if request.headers["Purpose"] == "prefetch"
+      return false if impersonating?
       # Storefronts are served from seller subdomains and custom domains, where a slugged page can
       # collide with a dashboard path. Only the app's own hosts render this nav.
       return false unless GumroadDomainConstraint.matches?(request)

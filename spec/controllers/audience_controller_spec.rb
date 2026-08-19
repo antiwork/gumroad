@@ -108,5 +108,21 @@ describe AudienceController, inertia: true do
 
       expect(response).to have_http_status(:ok)
     end
+
+    context "when admin is signed in and impersonates seller" do
+      let(:admin_user) { create(:admin_user) }
+
+      before do
+        sign_in admin_user
+        controller.impersonate_user(seller)
+      end
+
+      it "queues sidekiq job for the admin" do
+        post :export, params: { options: options }, as: :json
+        expect(Exports::AudienceExportWorker).to have_enqueued_sidekiq_job(seller.id, admin_user.id, options)
+
+        expect(response).to have_http_status(:ok)
+      end
+    end
   end
 end

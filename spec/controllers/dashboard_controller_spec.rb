@@ -39,6 +39,16 @@ describe DashboardController, type: :controller, inertia: true do
       expect(inertia.props[:prompt_passkey_setup]).to be(false)
     end
 
+    it "does not surface the passkey setup prompt while impersonating" do
+      sign_in create(:admin_user)
+      controller.impersonate_user(seller)
+      session[:prompt_passkey_setup] = seller.id
+
+      get :index
+
+      expect(inertia.props[:prompt_passkey_setup]).to be(false)
+    end
+
     context "when seller has no activity" do
       it "renders the page" do
         get :index

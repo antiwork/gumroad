@@ -161,6 +161,18 @@ describe PromotesDashboardNavItems, type: :request do
     expect(response).to be_successful
   end
 
+  it "records nothing while an admin is impersonating the seller" do
+    # An admin clicking around a seller's dashboard is not the seller using it, and the writes would
+    # land on the seller's own row permanently.
+    admin = create(:admin_user)
+    sign_in admin
+    allow_any_instance_of(ApplicationController).to receive(:impersonated_user).and_return(seller)
+
+    get workflows_path
+
+    expect(seller.reload.dashboard_nav_promotions).to be_empty
+  end
+
   it "records nothing on a request that is not on a Gumroad host" do
     # Seller subdomains and custom domains serve storefronts, where a slugged page can collide with a
     # dashboard path and would otherwise credit the row to a passing buyer.

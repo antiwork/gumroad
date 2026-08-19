@@ -6194,6 +6194,14 @@ class LinksControllerIncrementViewsTest < ActionController::TestCase
 
     assert_equal 0, ElasticsearchIndexerWorker.jobs.size
   end
+
+  test "POST increment_views does not record page view for an admin becoming user" do
+    sign_in create_admin_user
+    @controller.impersonate_user(@user)
+    post :increment_views, params: { id: @increment_product.to_param }
+
+    assert_equal 0, ElasticsearchIndexerWorker.jobs.size
+  end
 end
 
 class LinksControllerWithoutEmailTest < ActionController::TestCase

@@ -32,7 +32,13 @@ export type Seller = {
   };
 };
 
+export type ImpersonatedUser = {
+  name: string;
+  avatar_url: string;
+};
+
 export type CurrentUser = {
   name: string;
   avatar_url: string;
+  impersonated_user: ImpersonatedUser | null;
 };

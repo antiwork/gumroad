@@ -4,7 +4,7 @@ module RequireAccountEmail
   extend ActiveSupport::Concern
 
   included do
-    before_action :require_account_email, if: -> { logged_in_user.present? && logged_in_user.email.blank? && logged_in_user.unconfirmed_email.blank? }
+    before_action :require_account_email, if: -> { logged_in_user.present? && logged_in_user.email.blank? && logged_in_user.unconfirmed_email.blank? && !impersonating? }
   end
 
   private
