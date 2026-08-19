@@ -9035,6 +9035,27 @@ describe StripeMerchantAccountManager, :vcr do
         end
       end
     end
+
+    describe "user has a stale leftover merchant account with no Stripe id" do
+      let(:user) { create(:user) }
+      let(:user_compliance_info) { create(:user_compliance_info, user:) }
+      let(:bank_account) { create(:ach_account_stripe_succeed, user:) }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+
+      before do
+        user_compliance_info
+        bank_account
+        tos_agreement
+        create(:merchant_account, user:, charge_processor_merchant_id: nil, charge_processor_alive_at: nil, created_at: 1.year.ago)
+      end
+
+      it "discards the leftover row and creates a real account" do
+        expect { subject.create_account(user, passphrase: "1234") }.not_to raise_error
+        expect(user.reload.stripe_account).to be_present
+        expect(user.merchant_accounts.alive.stripe.count).to eq(1)
+        expect(user.stripe_account.charge_processor_merchant_id).to be_present
+      end
+    end
   end
 
   describe "#update_account" do

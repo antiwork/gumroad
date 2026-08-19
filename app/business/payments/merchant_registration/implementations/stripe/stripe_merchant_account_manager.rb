@@ -168,6 +168,12 @@ module StripeMerchantAccountManager
   # below the 25% share that makes someone a reportable beneficial owner in the first place.
   FULLY_ACCOUNTED_OWNERSHIP_PERCENT = 99.5
 
+  # A just-created local row (Stripe::Account.create still in flight) must keep
+  # blocking a second create. Older leftover rows with no Stripe id do not —
+  # they are failed creates that never cleaned up, and counting them as an
+  # existing account permanently skips self-serve retries.
+  STALE_HOLLOW_ACCOUNT_AGE = 10.minutes
+
   def self.create_account(user, passphrase:, from_admin: false, notify: true)
     tos_agreement = nil
     user_compliance_info = nil
@@ -179,10 +185,11 @@ module StripeMerchantAccountManager
     user.with_lock do
       raise MerchantRegistrationUserNotReadyError.new(user.id, "is not supported yet") unless user.native_payouts_supported?
 
+      discard_stale_hollow_managed_accounts!(user)
       user_has_a_merchant_account = if from_admin
         user_has_stripe_connect_merchant_account?(user)
       else
-        user.merchant_accounts.alive.stripe.find { |ma| !ma.is_a_stripe_connect_account? }.present?
+        blocks_new_managed_account?(user)
       end
       raise MerchantRegistrationUserAlreadyHasAccountError.new(user.id, StripeChargeProcessor.charge_processor_id) if user_has_a_merchant_account
       raise MerchantRegistrationUserNotReadyError.new(user.id, "has not agreed to TOS") if user.tos_agreements.empty?
@@ -1828,6 +1835,27 @@ module StripeMerchantAccountManager
     end
     merchant_account.mark_deleted!
   end
+
+  def self.blocks_new_managed_account?(user)
+    user.merchant_accounts.alive.stripe.any? do |ma|
+      next true if ma.charge_processor_alive?
+      next if ma.is_a_stripe_connect_account?
+
+      ma.charge_processor_merchant_id.present? || ma.created_at > STALE_HOLLOW_ACCOUNT_AGE.ago
+    end
+  end
+
+  def self.discard_stale_hollow_managed_accounts!(user)
+    user.merchant_accounts.alive.stripe.each do |ma|
+      next if ma.is_a_stripe_connect_account?
+      next if ma.charge_processor_alive?
+      next if ma.charge_processor_merchant_id.present?
+      next if ma.created_at > STALE_HOLLOW_ACCOUNT_AGE.ago
+
+      cleanup_failed_merchant_account(ma)
+    end
+  end
+  private_class_method :discard_stale_hollow_managed_accounts!
 
   # Strongbox decrypts (account number, tax ids) return ASCII-8BIT (binary) strings. When the
   # Stripe gem serializes the params it concatenates them with the other UTF-8 fields; if a
