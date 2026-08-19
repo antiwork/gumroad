@@ -245,50 +245,9 @@ describe Purchase::CreateService, :vcr do
             buyer:
           ).perform
 
-          expect(purchase.purchase_refund_policy.max_refund_period_in_days).to eq(7)
-          expect(purchase.purchase_refund_policy.title).to eq("7-day money back guarantee")
+          expect(purchase.purchase_refund_policy.max_refund_period_in_days).to eq(0)
+          expect(purchase.purchase_refund_policy.title).to eq("No refunds allowed")
           expect(purchase.purchase_refund_policy.fine_print).to eq(nil)
-        end
-
-        context "when the product is physical" do
-          let(:product) { create(:physical_product, user:, price_cents: price) }
-          let(:params) do
-            base_params[:purchase].merge!(
-              card_data_handling_mode: "stripejs.0",
-              credit_card_zipcode: zip_code,
-              chargeable: successful_card_chargeable,
-              full_name: "Edgar Gumstein",
-              street_address: "123 Gum Road",
-              country: "US",
-              state: "CA",
-              city: "San Francisco",
-              zip_code: "94117"
-            )
-            base_params
-          end
-
-          before do
-            product.update_columns(
-              flags: product.flags | Link.flag_mapping["flags"][:is_physical],
-              native_type: "physical"
-            )
-            product.reload
-            # Leftover pre-migration row: the model now coerces 0→7 on save.
-            user.refund_policy.update_columns(max_refund_period_in_days: 0)
-          end
-
-          it "keeps a stored 0-day account policy" do
-            expect(product.is_physical?).to eq(true)
-
-            purchase, _ = Purchase::CreateService.new(
-              product:,
-              params:,
-              buyer:
-            ).perform
-
-            expect(purchase.purchase_refund_policy.max_refund_period_in_days).to eq(0)
-            expect(purchase.purchase_refund_policy.title).to eq("No refunds allowed")
-          end
         end
       end
     end

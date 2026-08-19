@@ -28,8 +28,8 @@ class Settings::MainController < Settings::BaseController
     current_seller.update_product_level_support_emails!(params[:user][:product_level_support_emails])
 
     redirect_to settings_main_path, status: :see_other, notice: "Your account has been updated!"
-  rescue ActiveRecord::RecordInvalid => e
-    error_message = e.record.errors.full_messages.to_sentence.presence ||
+  rescue ActiveRecord::RecordInvalid
+    error_message = current_seller.errors.full_messages.to_sentence.presence ||
       "Something broke. We're looking into what happened. Sorry about this!"
     redirect_to settings_main_path, alert: error_message
   rescue StandardError => e

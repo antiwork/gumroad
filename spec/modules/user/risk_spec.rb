@@ -355,13 +355,12 @@ describe User::Risk do
         expect(comment.author_name).to eq("enforce_refund_policy_for_seller_based_on_dispute_rate")
       end
 
-      it "still does not allow a no-refunds policy after enforcement is cleared" do
+      it "allows the seller to pick a no-refunds policy again" do
         seller.clear_refund_policy_enforcement!
 
         refund_policy = seller.reload.refund_policy
         refund_policy.max_refund_period_in_days = 0
         expect(refund_policy.valid?).to be true
-        expect(refund_policy.max_refund_period_in_days).to eq(7)
       end
     end
 

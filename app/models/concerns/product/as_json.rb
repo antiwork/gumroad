@@ -190,7 +190,7 @@ module Product::AsJson
     def product_refund_policy_api_json
       if product_refund_policy_enabled? && product_refund_policy.present?
         {
-          "refund_period" => product_refund_policy.effective_max_refund_period_in_days.zero? ? "none" : product_refund_policy.effective_max_refund_period_in_days.to_s,
+          "refund_period" => product_refund_policy.max_refund_period_in_days.zero? ? "none" : product_refund_policy.max_refund_period_in_days.to_s,
           "title" => product_refund_policy.title,
           "fine_print" => product_refund_policy.fine_print,
           "inherited" => false,
