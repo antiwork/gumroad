@@ -197,7 +197,6 @@ describe "OAuth device authorizations", type: :request do
       expect(response.body).to include("This code has expired.")
       expect(device_authorization.reload).to have_attributes(status: OauthDeviceAuthorization::STATUS_PENDING, resource_owner: nil)
     end
-
   end
 
   describe "POST /oauth/device and POST /oauth/token" do

@@ -753,7 +753,6 @@ describe PurchasesController, :vcr do
             expect_correct_csv(email.body.parts.last.body.to_s)
           end
         end
-
       end
 
       context "when sales data is smaller than threshold" do

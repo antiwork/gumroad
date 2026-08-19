@@ -283,7 +283,6 @@ describe AffiliatesController, type: :controller, inertia: true do
           expect(flash[:warning]).to eq("You will receive an email with the data you've requested.")
           expect(response).to redirect_to(affiliates_path)
         end
-
       end
     end
   end
