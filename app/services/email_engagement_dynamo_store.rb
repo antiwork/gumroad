@@ -50,7 +50,14 @@ class EmailEngagementDynamoStore
     end
 
     def table_name
-      "#{ENV["DYNAMODB_TABLE_PREFIX"]}#{TABLE_BASE_NAME}"
+      "#{table_prefix}#{TABLE_BASE_NAME}"
+    end
+
+    # Production and staging default to the Terraform-owned <env>- tables;
+    # DYNAMODB_TABLE_PREFIX overrides for dev lanes and branch apps.
+    def table_prefix
+      ENV["DYNAMODB_TABLE_PREFIX"].presence ||
+        (Rails.env.production? || Rails.env.staging? ? "#{Rails.env}-" : "")
     end
 
     # Staging and production tables are Terraform-owned (antiwork/infrastructure#998)

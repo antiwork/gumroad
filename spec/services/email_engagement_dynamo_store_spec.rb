@@ -171,6 +171,22 @@ describe EmailEngagementDynamoStore do
     ensure
       ENV.delete("DYNAMODB_TABLE_PREFIX")
     end
+
+    it "defaults to the Terraform-owned per-environment table in production and staging" do
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
+      expect(described_class.table_name).to eq("production-email_engagement")
+
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("staging"))
+      expect(described_class.table_name).to eq("staging-email_engagement")
+    end
+
+    it "lets DYNAMODB_TABLE_PREFIX override the environment default for branch apps" do
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("staging"))
+      ENV["DYNAMODB_TABLE_PREFIX"] = "branchapp-foo-"
+      expect(described_class.table_name).to eq("branchapp-foo-email_engagement")
+    ensure
+      ENV.delete("DYNAMODB_TABLE_PREFIX")
+    end
   end
 
   describe ".partition_key" do
