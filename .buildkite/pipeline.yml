@@ -44,6 +44,11 @@ steps:
 
   - block: "Approval required for production deployment"
     key: require-approval
+    # Explicitly empty: a block step with no depends_on implicitly waits for every earlier
+    # step (~17 min of image builds and asset compiles), so the tests workflow's unblock job
+    # burned retries on "no build found". The deploy step's own depends_on still holds
+    # deploys until compile-assets passes; the gate itself has no reason to wait.
+    depends_on: ~
     branches: "main"
     prompt: "Are you sure you want to proceed with the deployment?"
     blocked_state: running

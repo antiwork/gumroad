@@ -1129,26 +1129,34 @@ jobs:
             BUILD_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
               "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds?commit=$COMMIT_SHA&include_retried_jobs=true")
 
-            # Extract the latest build number that is currently blocked for this commit
-            BUILD_NUMBER=$(echo "$BUILD_DATA" | jq -r --arg commit "$COMMIT_SHA" '[.[] | select(.commit == $commit and .blocked == true)] | sort_by(.created_at) | last | .number // empty')
+            # The require-approval gate has no dependencies (see .buildkite/pipeline.yml), so it
+            # is unblockable while the build still reports "running" — filtering on
+            # `.blocked == true` would miss it. Inspect the gate job's state directly instead.
+            BUILD_NUMBER=$(echo "$BUILD_DATA" | jq -r --arg commit "$COMMIT_SHA" '[.[] | select(.commit == $commit and (.state == "running" or .state == "blocked"))] | sort_by(.created_at) | last | .number // empty')
 
             if [ -z "$BUILD_NUMBER" ]; then
-              echo "No blocked Buildkite build found for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG."
+              echo "No running or blocked Buildkite build found for commit $COMMIT_SHA on pipeline $ORG_SLUG/$PIPELINE_SLUG."
               exit 1
             fi
 
-            echo "Found blocked Buildkite build number: $BUILD_NUMBER. Fetching job details..."
+            echo "Found Buildkite build number: $BUILD_NUMBER. Fetching job details..."
             # Fetch detailed data for the specific build to get job IDs
             BUILD_DETAIL_DATA=$(curl -s -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
                "https://api.buildkite.com/v2/organizations/$ORG_SLUG/pipelines/$PIPELINE_SLUG/builds/$BUILD_NUMBER")
 
-            # Extract the job ID for the block step with key "require-approval"
-            BLOCK_JOB_ID=$(echo "$BUILD_DETAIL_DATA" | jq -r '.jobs[] | select(.type == "manual" and .step_key == "require-approval") | .id // empty')
+            BLOCK_JOB_STATE=$(echo "$BUILD_DETAIL_DATA" | jq -r '[.jobs[] | select(.type == "manual" and .step_key == "require-approval")] | first | .state // empty')
 
-            if [ -z "$BLOCK_JOB_ID" ]; then
-              echo "No block job with key 'require-approval' found in build $BUILD_NUMBER."
+            if [ "$BLOCK_JOB_STATE" = "unblocked" ]; then
+              echo "Block job 'require-approval' in build $BUILD_NUMBER is already unblocked. Nothing to do."
+              exit 0
+            fi
+
+            if [ "$BLOCK_JOB_STATE" != "blocked" ]; then
+              echo "Block job 'require-approval' in build $BUILD_NUMBER is not unblockable yet (state: ${BLOCK_JOB_STATE:-absent})."
               exit 1
             fi
+
+            BLOCK_JOB_ID=$(echo "$BUILD_DETAIL_DATA" | jq -r '[.jobs[] | select(.type == "manual" and .step_key == "require-approval")] | first | .id // empty')
 
             echo "Found block job ID: $BLOCK_JOB_ID for build $BUILD_NUMBER. Attempting to unblock job..."
             # Send the unblock request using PUT to the job-specific endpoint
