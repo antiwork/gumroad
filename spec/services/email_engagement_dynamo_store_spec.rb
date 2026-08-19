@@ -90,32 +90,30 @@ describe EmailEngagementDynamoStore do
       expect(requests).to be_empty
     end
 
-    it "records a first-ever click with the url total, the summary click count, and a compensating open" do
-      client.stub_responses(:query, { count: 0 })
-
+    it "records a first-ever click with the url total, the clicker marker, the summary click count, and a compensating open" do
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
       expect(requests.map { _1[:operation_name] }).to eq(
-        [:query, :put_item, :update_item, :update_item, :put_item, :update_item]
+        [:put_item, :update_item, :put_item, :update_item, :put_item, :update_item]
       )
 
-      query = requests[0][:params]
-      expect(query[:key_condition_expression]).to eq("pk = :pk AND begins_with(sk, :sk_prefix)")
-      expect(plain_hash(query[:expression_attribute_values])).to eq(":pk" => "123", ":sk_prefix" => "CLICK##{recipient_digest}#")
-      expect(query[:select]).to eq("COUNT")
-      expect(query[:consistent_read]).to be(true)
-
-      click_put = requests[1][:params]
+      click_put = requests[0][:params]
       expect(plain(click_put[:item]["pk"])).to eq("123")
       expect(plain(click_put[:item]["sk"])).to eq("CLICK##{recipient_digest}##{url_digest}")
       expect(plain(click_put[:item]["click_url"])).to eq(click_url)
       expect(plain(click_put[:item]["click_count"])).to eq(1)
       expect(click_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      url_update = requests[2][:params]
+      url_update = requests[1][:params]
       expect(plain_hash(url_update[:key])).to eq("pk" => "123", "sk" => "URL##{url_digest}")
       expect(url_update[:update_expression]).to eq("ADD click_count :one SET click_url = :click_url")
       expect(plain(url_update[:expression_attribute_values][":click_url"])).to eq(click_url)
+
+      marker_put = requests[2][:params]
+      expect(plain(marker_put[:item]["pk"])).to eq("123")
+      expect(plain(marker_put[:item]["sk"])).to eq("CLICKER##{recipient_digest}")
+      expect(plain(marker_put[:item]["mailer_args"])).to eq(mailer_args)
+      expect(marker_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
       summary_click_update = requests[3][:params]
       expect(plain_hash(summary_click_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
@@ -133,27 +131,26 @@ describe EmailEngagementDynamoStore do
     end
 
     it "does not increment the summary click count when the recipient has clicked another url before" do
-      client.stub_responses(:query, { count: 1 })
-      # The click item put succeeds; the compensating open put finds an existing open item.
-      client.stub_responses(:put_item, [{}, "ConditionalCheckFailedException"])
+      # The click item put succeeds; the clicker marker already exists, as does the open item.
+      client.stub_responses(:put_item, [{}, "ConditionalCheckFailedException", "ConditionalCheckFailedException"])
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests.map { _1[:operation_name] }).to eq([:query, :put_item, :update_item, :put_item])
-      expect(plain(requests[2][:params][:key]["sk"])).to eq("URL##{url_digest}")
+      expect(requests.map { _1[:operation_name] }).to eq([:put_item, :update_item, :put_item, :put_item])
+      expect(plain(requests[1][:params][:key]["sk"])).to eq("URL##{url_digest}")
+      expect(plain(requests[2][:params][:item]["sk"])).to eq("CLICKER##{recipient_digest}")
     end
 
     it "counts nothing on a repeat click of the same url by the same recipient" do
-      client.stub_responses(:query, { count: 1 })
       client.stub_responses(:put_item, "ConditionalCheckFailedException")
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests.map { _1[:operation_name] }).to eq([:query, :put_item])
+      expect(requests.map { _1[:operation_name] }).to eq([:put_item])
     end
 
     it "notifies instead of raising when DynamoDB fails" do
-      client.stub_responses(:query, "ProvisionedThroughputExceededException")
+      client.stub_responses(:put_item, "ProvisionedThroughputExceededException")
       expect(ErrorNotifier).to receive(:notify).with(kind_of(Aws::Errors::ServiceError))
 
       expect do

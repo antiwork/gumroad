@@ -6,12 +6,12 @@
 # Partition key `pk` (S, the stringified installment id), sort key `sk` (S), one of:
 #   SUMMARY                    — open_count / click_count counters for the installment
 #   OPEN#<recipient>           — one item per recipient who opened
+#   CLICKER#<recipient>        — claims the recipient's first click; drives click_count
 #   CLICK#<recipient>#<url>    — one item per recipient + url first click
 #   URL#<url>                  — unique-click total for one url
 # <recipient> and <url> are SHA256 hex digests (raw values are attributes on the
-# items). CLICK keys are recipient-first so "has this recipient clicked anything?"
-# is a begins_with query; per-url totals are separate items rather than a map on
-# SUMMARY so link-heavy posts can't grow SUMMARY toward the 400KB item cap.
+# items). Per-url totals are separate items rather than a map on SUMMARY so
+# link-heavy posts can't grow SUMMARY toward the 400KB item cap.
 class EmailEngagementDynamoStore
   TABLE_BASE_NAME = "email_engagement"
   SUMMARY_SORT_KEY = "SUMMARY"
@@ -30,14 +30,18 @@ class EmailEngagementDynamoStore
       with_dual_write_guard do
         installment_id = installment_id.to_i
         recipient = recipient_digest(mailer_method:, mailer_args:)
-        first_click_for_recipient = !recipient_clicked_any_url?(installment_id:, recipient:)
 
         # A repeat click of the same url by the same recipient counts nothing,
         # matching the Mongo path's early return.
         next unless put_click_item(installment_id:, mailer_method:, mailer_args:, click_url:, recipient:)
 
         increment_url_click_count(installment_id:, click_url:)
-        increment_summary(installment_id:, attribute: "click_count") if first_click_for_recipient
+        # The conditional marker put is both the "has this recipient clicked
+        # anything?" check and the claim, so concurrent first clicks on
+        # different urls can't double-increment the counter.
+        if put_clicker_marker(installment_id:, mailer_method:, mailer_args:, recipient:)
+          increment_summary(installment_id:, attribute: "click_count")
+        end
         # A click implies an open; compensates for blocked tracking pixels.
         ensure_open_item(installment_id:, mailer_method:, mailer_args:)
       end
@@ -97,6 +101,10 @@ class EmailEngagementDynamoStore
 
     def click_sort_key(mailer_method:, mailer_args:, click_url:)
       "CLICK##{recipient_digest(mailer_method:, mailer_args:)}##{url_digest(click_url)}"
+    end
+
+    def clicker_sort_key(mailer_method:, mailer_args:)
+      "CLICKER##{recipient_digest(mailer_method:, mailer_args:)}"
     end
 
     def url_sort_key(click_url)
@@ -168,15 +176,21 @@ class EmailEngagementDynamoStore
         false
       end
 
-      def recipient_clicked_any_url?(installment_id:, recipient:)
-        client.query(
+      def put_clicker_marker(installment_id:, mailer_method:, mailer_args:, recipient:)
+        client.put_item(
           table_name:,
-          key_condition_expression: "pk = :pk AND begins_with(sk, :sk_prefix)",
-          expression_attribute_values: { ":pk" => partition_key(installment_id), ":sk_prefix" => "CLICK##{recipient}#" },
-          select: "COUNT",
-          limit: 1,
-          consistent_read: true
-        ).count.positive?
+          item: {
+            "pk" => partition_key(installment_id),
+            "sk" => "CLICKER##{recipient}",
+            "mailer_method" => mailer_method,
+            "mailer_args" => mailer_args,
+            "first_click_at" => timestamp,
+          },
+          condition_expression: "attribute_not_exists(pk)"
+        )
+        true
+      rescue Aws::DynamoDB::Errors::ConditionalCheckFailedException
+        false
       end
 
       def increment_url_click_count(installment_id:, click_url:)
