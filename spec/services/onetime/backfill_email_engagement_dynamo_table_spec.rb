@@ -149,6 +149,55 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
     end
   end
 
+  describe ".backfill_seller!" do
+    it "loads only the seller's installments and recomputes their counters from the partition" do
+      installment = create(:installment)
+      other_installment = create(:installment)
+      CreatorEmailOpenEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, open_count: 1)
+      CreatorEmailOpenEvent.create!(installment_id: other_installment.id, mailer_method:, mailer_args: "[7, 7]", open_count: 1)
+      pk = installment.id.to_s
+      # The partition query used by the per-installment recompute sees the open
+      # item but no SUMMARY, so open_count gets a +1 correction.
+      client.stub_responses(:query, { items: [{ "pk" => pk, "sk" => "OPEN##{recipient_digest}" }], last_evaluated_key: nil })
+
+      described_class.backfill_seller!(installment.seller_id)
+
+      written = requests.select { _1[:operation_name] == :batch_write_item }.flat_map { written_items(_1) }
+      expect(written.map { _1["pk"] }.uniq).to eq([pk])
+
+      summary_fix = requests.select { _1[:operation_name] == :update_item }.map { _1[:params] }.sole
+      expect(summary_fix[:key]["sk"].values.first).to eq("SUMMARY")
+      expect(summary_fix[:expression_attribute_names]).to eq("#counter" => "open_count")
+      expect(summary_fix[:expression_attribute_values][":delta"]).to eq(n: "1")
+    end
+  end
+
+  describe ".verify_seller!" do
+    it "reports nothing when DynamoDB matches the Mongo documents" do
+      installment = create(:installment)
+      CreatorEmailOpenEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, open_count: 2)
+      CreatorEmailClickEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, click_url:, click_count: 1)
+      client.stub_responses(:get_item, { item: { "pk" => installment.id.to_s, "sk" => "SUMMARY", "open_count" => 1, "click_count" => 1 } })
+      client.stub_responses(:query, { items: [{ "pk" => installment.id.to_s, "sk" => "URL##{url_digest}", "click_url" => click_url, "click_count" => 1 }], last_evaluated_key: nil })
+
+      expect(described_class.verify_seller!(installment.seller_id)).to eq([])
+    end
+
+    it "reports installments where DynamoDB disagrees with the document-derived counts" do
+      installment = create(:installment)
+      CreatorEmailClickSummary.create!(installment_id: installment.id, total_unique_clicks: 9, urls: {})
+      CreatorEmailOpenEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, open_count: 1)
+      CreatorEmailClickEvent.create!(installment_id: installment.id, mailer_method:, mailer_args:, click_url:, click_count: 1)
+      client.stub_responses(:get_item, { item: { "pk" => installment.id.to_s, "sk" => "SUMMARY", "open_count" => 1, "click_count" => 2 } })
+      client.stub_responses(:query, { items: [{ "pk" => installment.id.to_s, "sk" => "URL##{url_digest}", "click_url" => click_url, "click_count" => 1 }], last_evaluated_key: nil })
+
+      mismatch = described_class.verify_seller!(installment.seller_id).sole
+      expect(mismatch[:dynamo]).to eq(opens: 1, clicks: 2, urls: { click_url => 1 })
+      expect(mismatch[:mongo_docs]).to eq(opens: 1, clicks: 1, urls: { click_url => 1 })
+      expect(mismatch[:mongo_stored_clicks]).to eq(9)
+    end
+  end
+
   describe ".verify!" do
     it "reports installments whose DynamoDB counters disagree with Mongo" do
       CreatorEmailClickSummary.create!(installment_id: 123, total_unique_clicks: 5, urls: {})
