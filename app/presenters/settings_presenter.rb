@@ -371,9 +371,9 @@ class SettingsPresenter
     end
 
     # Newest bank-rejection note for the current bank row, or nil.
-    # Freshness is the active BankAccount#created_at: UpdatePayoutMethod always
-    # inserts a new row. No alive bank account → nil (PayPal switch deletes the
-    # row and never clears the note; showing would nag a working PayPal seller).
+    # Freshness is the active BankAccount#created_at: replacing bank details
+    # inserts a new row (holder-name-only updates in place). No alive bank
+    # account → nil (PayPal switch deletes the row and never clears the note).
     def current_bank_sync_failure_note
       bank_account = seller.active_bank_account
       return nil if bank_account.nil?
