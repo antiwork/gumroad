@@ -25,6 +25,10 @@ class RefundPolicy < ApplicationRecord
 
   validates :max_refund_period_in_days, inclusion: { in: ALLOWED_REFUND_PERIODS_IN_DAYS.keys }
 
+  # Skip when the selected window is already "No refunds allowed" — the title
+  # matches. A positive window plus "all sales are final" is the contradiction.
+  validate :fine_print_cannot_claim_no_refunds, if: -> { fine_print.present? && fine_print_changed? && refunds_guaranteed? }
+
   def title
     ALLOWED_REFUND_PERIODS_IN_DAYS[max_refund_period_in_days]
   end
@@ -36,4 +40,50 @@ class RefundPolicy < ApplicationRecord
       title:,
     }
   end
+
+  # Fails open so an OpenAI outage never blocks saves.
+  def fine_print_claims_no_refunds?
+    response = ask_ai(fine_print_no_refunds_prompt)
+    JSON.parse(response.dig("choices", 0, "message", "content"))["no_refunds"]
+  rescue => e
+    Rails.logger.warn("Error moderating fine print for refund policy #{id}: #{e.message}")
+    false
+  end
+
+  private
+    def refunds_guaranteed?
+      max_refund_period_in_days.to_i.positive?
+    end
+
+    def fine_print_cannot_claim_no_refunds
+      return unless fine_print_claims_no_refunds?
+
+      errors.add(:fine_print, "cannot state that refunds are not allowed")
+    end
+
+    def fine_print_no_refunds_prompt
+      <<~PROMPT
+        This refund policy guarantees buyers "#{title}". Return {"no_refunds": true} only if you
+        are 100% confident the fine print asserts that refunds are never given at all (e.g.
+        "no refunds", "all sales are final", "this product is non-refundable"), contradicting
+        that guarantee. Fine print that only conditions or limits refunds (e.g. "no refunds
+        after the refund window", "refunds only for duplicate purchases") is allowed: return
+        {"no_refunds": false}.
+
+        <refund policy fine print>
+          #{fine_print}
+        </refund policy fine print>
+      PROMPT
+    end
+
+    def ask_ai(prompt)
+      OpenAI::Client.new.chat(
+        parameters: {
+          messages: [{ role: "user", content: prompt }],
+          model: "gpt-4o-mini",
+          temperature: 0.0,
+          max_tokens: 10
+        }
+      )
+    end
 end

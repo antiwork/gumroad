@@ -147,4 +147,53 @@ describe ProductRefundPolicy do
       expect(refund_policy.published_and_no_refunds?).to be false
     end
   end
+
+  describe "fine print no-refunds moderation" do
+    # let! so the factory (whose fine print trips the stubbed moderation) saves before stubbing
+    let!(:refund_policy) { create(:product_refund_policy) }
+
+    def stub_fine_print_moderation(no_refunds)
+      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
+        { "choices" => [{ "message" => { "content" => %({"no_refunds": #{no_refunds}}) } }] }
+      )
+    end
+
+    it "rejects fine print that denies refunds on a positive window" do
+      stub_fine_print_moderation(true)
+      refund_policy.fine_print = "All sales are final. No refunds."
+
+      expect(refund_policy.valid?).to be false
+      expect(refund_policy.errors.full_messages).to include("Fine print cannot state that refunds are not allowed")
+    end
+
+    it "allows fine print that only conditions refunds" do
+      stub_fine_print_moderation(false)
+      refund_policy.fine_print = "Refunds are only issued for duplicate purchases."
+
+      expect(refund_policy.valid?).to be true
+    end
+
+    it "allows no-refunds fine print when the selected period is already 0 days" do
+      refund_policy.max_refund_period_in_days = 0
+      expect(OpenAI::Client).not_to receive(:new)
+      refund_policy.fine_print = "All sales are final. No refunds."
+
+      expect(refund_policy.valid?).to be true
+    end
+
+    it "skips moderation when the fine print is unchanged" do
+      refund_policy.update_columns(fine_print: "All sales are final. No refunds.")
+      expect(OpenAI::Client).not_to receive(:new)
+      refund_policy.max_refund_period_in_days = 14
+
+      expect(refund_policy.valid?).to be true
+    end
+
+    it "fails open when the moderation call errors" do
+      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_raise(StandardError.new("timeout"))
+      refund_policy.fine_print = "All sales are final. No refunds."
+
+      expect(refund_policy.valid?).to be true
+    end
+  end
 end

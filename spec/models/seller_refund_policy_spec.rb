@@ -64,6 +64,35 @@ describe SellerRefundPolicy do
         expect(refund_policy.valid?).to be true
       end
     end
+
+    it "rejects fine print that denies refunds on a positive window" do
+      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
+        { "choices" => [{ "message" => { "content" => %({"no_refunds": true}) } }] }
+      )
+      refund_policy.max_refund_period_in_days = 30
+      refund_policy.fine_print = "All sales are final. No refunds."
+
+      expect(refund_policy.valid?).to be false
+      expect(refund_policy.errors.full_messages).to include("Fine print cannot state that refunds are not allowed")
+    end
+
+    it "allows fine print that only conditions refunds" do
+      allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
+        { "choices" => [{ "message" => { "content" => %({"no_refunds": false}) } }] }
+      )
+      refund_policy.max_refund_period_in_days = 30
+      refund_policy.fine_print = "Refunds are only issued for duplicate purchases."
+
+      expect(refund_policy.valid?).to be true
+    end
+
+    it "allows no-refunds fine print on a 0-day account policy" do
+      refund_policy.max_refund_period_in_days = 0
+      expect(OpenAI::Client).not_to receive(:new)
+      refund_policy.fine_print = "All sales are final. No refunds."
+
+      expect(refund_policy.valid?).to be true
+    end
   end
 
   describe "stripped_fields" do
