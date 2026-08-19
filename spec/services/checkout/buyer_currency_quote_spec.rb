@@ -367,6 +367,34 @@ describe Checkout::BuyerCurrencyQuote do
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller)
       end
 
+      it "returns nil when one seller's lines are all priced in the buyer's currency" do
+        # That seller's charge is refused by charge-time eligibility (all-listed, not the
+        # direct-listed lane on a multi-seller order), so minting a token here would fail the
+        # buyer's payment closed with BuyerCurrencyQuoteInvalid on every retry. The cart must
+        # fall back to canonical USD instead.
+        cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
+        line_items = line_items_for(cad_product, other_seller_product)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        expect(described_class.buyer_currency_listing_quotable?(line_items:, buyer_currency: Currency::CAD)).to be(false)
+
+        result = described_class.create(line_items:, canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        expect(result).to be_nil
+      end
+
+      it "quotes a multi-seller cart when every seller's charge mixes in another currency" do
+        cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
+        line_items = line_items_for(product, cad_product, other_seller_product)
+
+        expect(described_class.buyer_currency_listing_quotable?(line_items:, buyer_currency: Currency::CAD)).to be(true)
+
+        result = described_class.create(line_items:, canonical_total_cents: 25_00, ip: "24.48.0.1")
+
+        expect(result).to have_attributes(currency: Currency::CAD, canonical_total_cents: 25_00)
+        expect(result.charges.map { _1.seller.id }).to eq([seller.id, other_seller.id])
+      end
+
       it "locks one quote per seller and reports their sum as the cart total" do
         # Each seller becomes one charge (one PaymentIntent), so each gets its own FX quote:
         # $10 → CA$12.50 and $5 → CA$6.25, and the buyer is shown CA$18.75.

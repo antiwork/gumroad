@@ -291,9 +291,10 @@ class CustomerSurchargeController < ApplicationController
       # offered; the gates below only decide which extra currencies join it.
       return true if code == Currency::USD
 
-      # A cart entirely listed in this currency uses the direct-listed lane (or stays
-      # unquoted). A mixed cart instead quotes its canonical USD total, so its already-listed
-      # lines must not remove a currency that the remaining lines can settle.
+      # A charge entirely listed in this currency uses the direct-listed lane (or stays
+      # unquoted). A mixed charge instead quotes its canonical USD total, so its already-listed
+      # lines must not remove a currency that the remaining lines can settle. Grouped per
+      # seller inside the predicate, matching how the quote is minted and honored per charge.
       return false unless Checkout::BuyerCurrencyQuote.buyer_currency_listing_quotable?(line_items:, buyer_currency: code)
 
       line_items.all? do |line_item|

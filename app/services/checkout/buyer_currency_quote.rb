@@ -228,9 +228,19 @@ class Checkout::BuyerCurrencyQuote
   # A cart with every line already listed in the buyer's currency takes the direct-listed lane.
   # Any other listing shape can use this quote lane once the separate cart and settlement gates
   # pass, including a cart that mixes a buyer-currency listing with a USD listing.
+  #
+  # Decided per prospective CHARGE (per seller), not per cart: eligibility refuses an
+  # all-listed charge at charge time, so a multi-seller cart where one seller's lines are all
+  # in the buyer's currency must not be quoted — the token would be minted here and then
+  # refused there, failing the buyer's payment closed (BuyerCurrencyQuoteInvalid) on every
+  # retry. Such a cart falls back to canonical USD instead.
   def self.buyer_currency_listing_quotable?(line_items:, buyer_currency:)
-    line_items.any? do |line_item|
-      line_item.product.price_currency_type.to_s.downcase != buyer_currency.to_s.downcase
+    return false if line_items.blank?
+
+    line_items.group_by { _1.product.user_id }.each_value.all? do |charge_line_items|
+      charge_line_items.any? do |line_item|
+        line_item.product.price_currency_type.to_s.downcase != buyer_currency.to_s.downcase
+      end
     end
   end
 
