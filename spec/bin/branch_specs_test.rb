@@ -472,6 +472,19 @@ check(
   expect_specs: %w[spec/models/widget_spec.rb],
 )
 
+# A tape-only change has no mapped spec left after ignore. Escalate so a
+# re-recorded or malformed cassette cannot merge with an empty Relevant run.
+check(
+  "VCR cassette-only diff escalates",
+  base_files: {
+    "spec/support/fixtures/vcr_cassettes/Widget/example.yml" => "old",
+  },
+  head_files: {
+    "spec/support/fixtures/vcr_cassettes/Widget/example.yml" => "new",
+  },
+  expect_escalate: true,
+)
+
 # Real helper changes under spec/support still need the full suite.
 check(
   "unmapped spec/support helper still escalates",

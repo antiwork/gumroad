@@ -181,7 +181,11 @@ changed.merge(git("diff", "--name-only", "#{merge_base}..HEAD")) if merge_base
 changed.merge(git("diff", "--name-only", "HEAD"))
 changed.merge(git("ls-files", "--others", "--exclude-standard"))
 
+cassette_in_diff = changed.any? { |path| path.start_with?("spec/support/fixtures/vcr_cassettes/") }
 changed.reject! { |path| IGNORED_PATTERNS.any? { |re| re.match?(path) } }
+# Cassettes ride along with a mapped spec without forcing Slow. A cassette-only
+# diff has nothing left to attribute, so escalate rather than run zero specs.
+escalate!("cassette-only diff: map to the owning spec or add run-all-specs") if changed.empty? && cassette_in_diff
 
 unmappable = changed.select do |path|
   ESCALATE_PATTERNS.any? { |re| re.match?(path) } && !CONFIG_SPEC_MAP.key?(path)
