@@ -7,6 +7,68 @@ describe Radar::ValueListSyncService do
 
   let(:value_list) { double("ValueList", id: "rsl_123") }
 
+  before do
+    allow(described_class).to receive(:enabled?).and_return(true)
+  end
+
+  describe ".enabled?" do
+    before do
+      allow(described_class).to receive(:enabled?).and_call_original
+    end
+
+    it "is disabled outside production so the shared Stripe test account's lists are never written" do
+      expect(described_class.enabled?).to be(false)
+    end
+
+    it "is enabled in production" do
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
+
+      expect(described_class.enabled?).to be(true)
+    end
+
+    it "can be forced on with ENABLE_RADAR_VALUE_LIST_SYNC" do
+      allow(GlobalConfig).to receive(:get).with("ENABLE_RADAR_VALUE_LIST_SYNC").and_return("1")
+
+      expect(described_class.enabled?).to be(true)
+    end
+  end
+
+  describe "when sync is disabled" do
+    before do
+      allow(described_class).to receive(:enabled?).and_return(false)
+    end
+
+    it "does not touch Stripe Radar from add_block" do
+      platform_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "testfingerprint1")
+
+      expect(Stripe::Radar::ValueList).not_to receive(:list)
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      expect(service.add_block(platform_block)).to be(false)
+    end
+
+    it "does not touch Stripe Radar from remove_block" do
+      platform_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "cleared@example.com")
+      platform_block.update_columns(blocked_at: nil, expires_at: nil)
+
+      expect(Stripe::Radar::ValueList).not_to receive(:list)
+      expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
+
+      expect(service.remove_block(platform_block)).to be(false)
+    end
+
+    it "does not touch Stripe Radar from the daily syncs" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "blocked@example.com")
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "testfingerprint2")
+
+      expect(Stripe::Radar::ValueList).not_to receive(:list)
+      expect(Stripe::Radar::ValueList).not_to receive(:create)
+
+      service.sync_blocked_emails
+      service.sync_blocked_cards
+    end
+  end
+
   describe "#sync_blocked_emails" do
     before do
       allow(Stripe::Radar::ValueList).to receive(:list)

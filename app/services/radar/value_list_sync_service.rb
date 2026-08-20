@@ -17,8 +17,18 @@ class Radar::ValueListSyncService
     LIST_FOR_TYPE.key?(object_type)
   end
 
+  # Radar value lists are durable account-wide state, and every non-production environment
+  # (dev, CI, cassette recording, branch apps) shares one Stripe test account. A block-buyer
+  # flow leaking through here once blocked the 4242 test card's fingerprint for the whole
+  # account and every checkout spec declined until the item was deleted by hand.
+  def self.enabled?
+    Rails.env.production? || GlobalConfig.get("ENABLE_RADAR_VALUE_LIST_SYNC").present?
+  end
+
   # A stale removal keeps rejecting a legitimate buyer; adds can wait for the daily sync.
   def remove_block(platform_block)
+    return false unless self.class.enabled?
+
     list_config = LIST_FOR_TYPE[platform_block.object_type]
     return false if list_config.nil?
     return false if platform_block.reload.blocked_at.present?
@@ -45,6 +55,8 @@ class Radar::ValueListSyncService
   # Without this, only the removal recovered and a block added mid-removal stayed unenforced
   # until the daily sync.
   def add_block(platform_block)
+    return false unless self.class.enabled?
+
     list_config = LIST_FOR_TYPE[platform_block.object_type]
     return false if list_config.nil?
     return false if platform_block.reload.blocked_at.nil?
@@ -66,6 +78,8 @@ class Radar::ValueListSyncService
   end
 
   def sync_blocked_emails
+    return unless self.class.enabled?
+
     value_list = find_or_create_list(**LIST_FOR_TYPE[PlatformBlock::TYPES[:email]])
 
     blocked_emails = PlatformBlock.email.active.where("blocked_at >= ?", SYNC_WINDOW.ago)
@@ -86,6 +100,8 @@ class Radar::ValueListSyncService
   end
 
   def sync_blocked_cards
+    return unless self.class.enabled?
+
     value_list = find_or_create_list(**LIST_FOR_TYPE[PlatformBlock::TYPES[:charge_processor_fingerprint]])
 
     blocked_cards = PlatformBlock.charge_processor_fingerprint.active
