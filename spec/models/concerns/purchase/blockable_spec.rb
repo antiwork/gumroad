@@ -2241,6 +2241,21 @@ describe Purchase::Blockable do
 
           expect(seller.refund_policy.reload.max_refund_period_in_days).to eq(30)
         end
+
+        it "clears stale no-refunds fine print so enforcement can commit" do
+          seller.refund_policy.update!(fine_print: "All sales are final. No refunds.")
+          allow_any_instance_of(RefundPolicy).to receive(:fine_print_claims_no_refunds?).and_return(true)
+
+          expect do
+            purchase.enforce_refund_policy_for_seller_based_on_dispute_rate!
+          end.to change { seller.comments.count }.by(1)
+            .and have_enqueued_mail(ContactingCreatorMailer, :refund_policy_enforced_notification).with(seller.id)
+
+          refund_policy = seller.refund_policy.reload
+          expect(refund_policy.max_refund_period_in_days).to eq(30)
+          expect(refund_policy.fine_print).to be_nil
+          expect(seller.reload.refund_policy_enforced?).to be(true)
+        end
       end
 
       context "when the seller's refund policy already allows refunds" do

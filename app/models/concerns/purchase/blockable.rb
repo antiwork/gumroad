@@ -586,7 +586,10 @@ module Purchase::Blockable
       # so bump it to the enforced minimum. Longer periods the seller already offers are fine.
       refund_policy = seller.refund_policy
       if refund_policy.present? && refund_policy.max_refund_period_in_days.zero?
-        refund_policy.update!(max_refund_period_in_days: User::ENFORCED_MIN_REFUND_PERIOD_IN_DAYS)
+        refund_policy.update!(
+          max_refund_period_in_days: User::ENFORCED_MIN_REFUND_PERIOD_IN_DAYS,
+          fine_print: nil,
+        )
       end
 
       seller.comments.create!(

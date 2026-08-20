@@ -190,4 +190,21 @@ describe PurchaseRefundPolicy do
       end
     end
   end
+
+  describe "#determine_max_refund_period_in_days" do
+    it "routes fallback classification through OpenRouter with the Luna model" do
+      refund_policy = build(:purchase_refund_policy, title: "Refunds within fourteen days", max_refund_period_in_days: nil)
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+      client = instance_double(OpenAI::Client)
+      expect(OpenAI::Client).to receive(:new).with(
+        access_token: "sk-or-test",
+        uri_base: RefundPolicy::OPENROUTER_URI_BASE,
+      ).and_return(client)
+      expect(client).to receive(:chat).with(
+        parameters: hash_including(model: RefundPolicy::FINE_PRINT_CLASSIFICATION_MODEL)
+      ).and_return({ "choices" => [{ "message" => { "content" => "14" } }] })
+
+      expect(refund_policy.determine_max_refund_period_in_days).to eq(14)
+    end
+  end
 end
