@@ -131,7 +131,7 @@ class Settings::PaymentsController < Settings::BaseController
 
     # Once the user has submitted all their information, and a bank account record was created for them,
     # we can create a stripe merchant account for them if they don't already have one.
-    if current_seller.active_bank_account && current_seller.merchant_accounts.stripe.alive.empty? && current_seller.native_payouts_supported?
+    if current_seller.active_bank_account && current_seller.native_payouts_supported? && current_seller.stripe_connect_account.blank? && !StripeMerchantAccountManager.blocks_new_managed_account?(current_seller)
       begin
         StripeMerchantAccountManager.create_account(current_seller, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
       rescue Stripe::StripeError, MerchantRegistrationUserNotReadyError => e

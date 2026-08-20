@@ -87,7 +87,6 @@ module Onetime
         scope = MerchantAccount
                   .where(charge_processor_id: StripeChargeProcessor.charge_processor_id)
                   .where(charge_processor_alive_at: nil, charge_processor_deleted_at: nil, deleted_at: nil)
-                  .where.not(charge_processor_merchant_id: nil)
                   .where("created_at < ?", MIN_AGE.ago)
         scope = scope.where(id: merchant_account_ids) if merchant_account_ids.present?
         scope

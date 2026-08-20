@@ -9035,6 +9035,82 @@ describe StripeMerchantAccountManager, :vcr do
         end
       end
     end
+
+    describe ".blocks_new_managed_account?" do
+      it "does not treat a live Stripe Connect account as a managed account" do
+        user = create(:user)
+        create(:merchant_account_stripe_connect, user:)
+
+        expect(described_class.blocks_new_managed_account?(user)).to eq(false)
+      end
+
+      it "blocks a live managed account" do
+        user = create(:user)
+        create(:merchant_account, user:, charge_processor_merchant_id: "acct_test_live_managed")
+
+        expect(described_class.blocks_new_managed_account?(user)).to eq(true)
+      end
+
+      it "blocks a leftover managed account that already has a Stripe id" do
+        user = create(:user)
+        create(:merchant_account, user:, charge_processor_merchant_id: "acct_test_leftover_id", charge_processor_alive_at: nil)
+
+        expect(described_class.blocks_new_managed_account?(user)).to eq(true)
+      end
+
+      it "does not block a stale hollow leftover with no Stripe id" do
+        user = create(:user)
+        create(:merchant_account, user:, charge_processor_merchant_id: nil, charge_processor_alive_at: nil, created_at: 1.year.ago)
+
+        expect(described_class.blocks_new_managed_account?(user)).to eq(false)
+      end
+
+      it "blocks a young hollow leftover still inside the mid-flight window" do
+        user = create(:user)
+        create(:merchant_account, user:, charge_processor_merchant_id: nil, charge_processor_alive_at: nil, created_at: 5.minutes.ago)
+
+        expect(described_class.blocks_new_managed_account?(user)).to eq(true)
+      end
+    end
+
+    describe "user has a stale leftover merchant account with no Stripe id" do
+      let(:user) { create(:user) }
+      let(:user_compliance_info) { create(:user_compliance_info, user:) }
+      let(:bank_account) { create(:ach_account_stripe_succeed, user:) }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+
+      before do
+        user_compliance_info
+        bank_account
+        tos_agreement
+        create(:merchant_account, user:, charge_processor_merchant_id: nil, charge_processor_alive_at: nil, created_at: 1.year.ago)
+      end
+
+      it "discards the leftover row and creates a real account" do
+        expect { subject.create_account(user, passphrase: "1234") }.not_to raise_error
+        expect(user.reload.stripe_account).to be_present
+        expect(user.merchant_accounts.alive.stripe.count).to eq(1)
+        expect(user.stripe_account.charge_processor_merchant_id).to be_present
+      end
+    end
+
+    describe "user has a young hollow leftover still inside the mid-flight window" do
+      let(:user) { create(:user) }
+      let(:user_compliance_info) { create(:user_compliance_info, user:) }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+
+      before do
+        user_compliance_info
+        tos_agreement
+        create(:merchant_account, user:, charge_processor_merchant_id: nil, charge_processor_alive_at: nil, created_at: 5.minutes.ago)
+      end
+
+      it "does not discard the in-flight row or call Stripe" do
+        expect(Stripe::Account).not_to receive(:create)
+        expect { subject.create_account(user, passphrase: "1234") }.to raise_error(MerchantRegistrationUserAlreadyHasAccountError)
+        expect(user.merchant_accounts.alive.stripe.count).to eq(1)
+      end
+    end
   end
 
   describe "#update_account" do
