@@ -24,19 +24,13 @@ class Checkout::BuyerCurrencyEligibility
   # with the purchase's stored rate.
   LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME = :checkout_listed_currency_direct_charge
 
-  # This lane's own ramp for memberships. Separate from FEATURE_NAME because a membership is
-  # the first shape where a buyer-currency amount outlives the checkout that agreed it, and
-  # because turning it on starts a recurring obligation rather than a single charge — so it
-  # ramps independently and can be pulled without taking buyer-currency charging away from
-  # the one-off checkouts that already have it (gumroad-private#1322).
+  # Memberships get their own ramp because the buyer-currency amount outlives checkout.
+  # Pulling it stops new memberships; renewals keep billing the stored fixed amount.
   SUBSCRIPTION_FEATURE_NAME = :buyer_currency_subscriptions
 
-  # Some local payment methods only work in a single currency: iDEAL and Bancontact
-  # charges must be made in euros; UPI charges must be made in rupees. When a checkout wants one of these
-  # methods, the payment method itself decides the presentment currency — there is
-  # nothing to detect from the buyer's location. This registry maps each such
-  # payment method (Stripe payment method type string) to the currency it forces.
-  # To support a new forced-currency method, add it here.
+  # Some local payment methods force their own currency: iDEAL/Bancontact use EUR,
+  # UPI uses INR, and Pix uses BRL. The method, not buyer location, decides the
+  # presentment currency.
   FORCED_CURRENCY_PAYMENT_METHODS = {
     "ideal" => Currency::EUR,
     "bancontact" => Currency::EUR,
@@ -47,12 +41,9 @@ class Checkout::BuyerCurrencyEligibility
     "pix" => Currency::BRL,
   }.freeze
 
-  # Per-method production launch flags for the forced-currency local methods. Stripe test
-  # mode keeps every registry method available for QA regardless of these flags; in live
-  # mode a method is offered only when its own launch flag is active for the seller (on
-  # top of the buyer-currency seller flags checked by seller_enabled?). Each method gets
-  # its own flag so it can ramp and roll back independently — iDEAL first, then the rest
-  # of the #5362 Phase 4 cohort.
+  # Live-mode launch flags for forced-currency methods. Test mode keeps every
+  # registry method available for QA; live mode requires the method's own seller
+  # flag, so each method can ramp and roll back independently.
   LOCAL_METHOD_LAUNCH_FEATURES = {
     "ideal" => :checkout_local_method_ideal,
     "bancontact" => :checkout_local_method_bancontact,
@@ -166,35 +157,17 @@ class Checkout::BuyerCurrencyEligibility
     seller.present? && Feature.active?(DESTINATION_CHARGE_FEATURE_NAME, seller)
   end
 
-  # Quote must be minted on the same account the PaymentIntent is created on —
-  # Stripe only honours a quote in the account that minted it.
-  #
-  # Direct / no-Stripe: the merchant_account we were handed. Destination: Stripe
-  # creates the intent on the platform, so the quote belongs there too. Minting
-  # on the seller's Custom account and creating the intent on the platform is
-  # the pairing Stripe rejects.
-  #
-  # NOT gated on DESTINATION_CHARGE_FEATURE_NAME. Which account to mint on is a
-  # fact about how Stripe creates the intent. The forced-currency lane
-  # (iDEAL/Bancontact/UPI/Pix) already does destination charges; gating would
-  # leave it minting on the seller Custom for a platform intent. The flag only
-  # governs whether the CARD lane may quote a destination charge
-  # (#supported_merchant_account?).
+  # Quotes must be minted on the account that creates the PaymentIntent. For
+  # destination charges that is the platform account, not the seller's Custom
+  # account. Do not gate this on DESTINATION_CHARGE_FEATURE_NAME: forced-currency
+  # methods already create destination charges and need the same routing.
   def self.fx_quote_merchant_account(merchant_account)
     settlement_merchant_account(merchant_account)
   end
 
-  # Companion to #fx_quote_merchant_account: the connected account this
-  # PaymentIntent will pay out via transfer_data[destination], or nil when there
-  # is no transfer. Stripe requires the quote to declare usage.payment.destination
-  # and matches it against the intent — missing or extra destination is a hard
-  # charge-time failure.
-  #
-  # Destination = Gumroad-managed Custom (user present, not Stripe Connect).
-  # Connect and no-Stripe charges have no transfer → nil.
-  #
-  # Same as the routing: NOT gated on the destination ramp. Forced-currency
-  # already creates destination charges.
+  # Quotes must declare the intent's transfer_data[destination]; missing or extra
+  # destination is a charge-time failure. Only Gumroad-managed Custom accounts
+  # produce a transfer destination, and forced-currency methods already use it.
   def self.fx_quote_destination_account_id(merchant_account)
     return nil if merchant_account.blank?
     return nil if merchant_account.is_a_stripe_connect_account?
@@ -214,46 +187,28 @@ class Checkout::BuyerCurrencyEligibility
   end
 
   def self.usd_settling_merchant_account?(merchant_account, presentment_currency:, seller: nil)
-    # Asked of the account the quote is minted on (#fx_quote_merchant_account).
-    # Destination charges convert presentment → PLATFORM settlement at charge
-    # time; the later transfer is a second conversion no FX quote covers, so
-    # the seller's own settlement currency is ignored — a EUR-settling seller
-    # can still be quoted.
+    # Ask the account that mints the quote. For destination charges, the later
+    # transfer to the seller is a separate conversion no FX quote covers.
     quote_account = fx_quote_merchant_account(merchant_account)
     return false unless usd_holding_merchant_account?(quote_account)
 
-    # Stored currency is Stripe's default_currency ("usd"), not per-intent
-    # settlement. Multi-currency settlement is per currency (platform settles
-    # EUR in EUR after iDEAL/SEPA; everything else still USD). Once Stripe
-    # rejects a quote, the mismatch is recorded on the merchant account for
-    # that presentment currency and we skip the doomed FX round-trip (up to
-    # 2s per visit) until the marker expires. Other currencies keep quoting.
+    # Stored currency is Stripe's default, not per-intent settlement. A fresh
+    # mismatch marker means Stripe already rejected this currency, so skip that
+    # FX round trip while other currencies keep quoting.
     !quote_account&.settlement_currency_mismatch_active?(presentment_currency)
   end
 
-  # Weaker settlement question: does the account HOLD its balance in USD
-  # (stored default_currency)? Ignores the mismatch marker — that only means
-  # "an FX quote to USD for this currency will be rejected", not that a
-  # forced-currency charge (EUR product + iDEAL, no FX quote) will fail.
-  # Gating this lane on the marker is what turned iDEAL dark platform-wide
-  # on 2026-07-23 (gumroad-private#933).
+  # Only asks whether the default balance is USD. Ignore the FX-quote mismatch
+  # marker: forced-currency direct-listed charges mint no quote, so that marker
+  # must not darken methods like iDEAL.
   def self.usd_holding_merchant_account?(merchant_account)
     return false if merchant_account.blank?
 
     merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
   end
 
-  # The account a PaymentIntent for this seller is actually CREATED on.
-  #
-  # Gumroad charges sellers two different ways (see StripeChargeProcessor):
-  #
-  #   Stripe Connect sellers (direct charges): the intent is created ON the seller's own
-  #   connected account.
-  #
-  #   Everyone else (destination charges): the intent is created on the GUMROAD PLATFORM
-  #   account, and the seller's account only appears as `transfer_data[destination]` — it
-  #   receives a transfer after the charge settles.
-  #
+  # Account that creates the PaymentIntent: Stripe Connect charges use the seller
+  # account; destination charges use the platform account and transfer afterward.
   # Returns nil only if the platform account row is missing.
   def self.settlement_merchant_account(merchant_account)
     return merchant_account if merchant_account.blank? || merchant_account.is_a_stripe_connect_account?
