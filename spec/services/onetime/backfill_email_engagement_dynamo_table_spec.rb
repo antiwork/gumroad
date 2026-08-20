@@ -271,5 +271,16 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
 
       expect(described_class.verify!(sample_size: 10)).to eq([])
     end
+
+    it "expects the deduplicated pair count when Mongo holds duplicate click docs" do
+      CreatorEmailClickSummary.create!(installment_id: 123, total_unique_clicks: 2, urls: {})
+      CreatorEmailOpenEvent.create!(installment_id: 123, mailer_method:, mailer_args:, open_count: 1)
+      # Two docs for the same recipient+url pair: possible in production because
+      # the unique click_index was never built there.
+      2.times { CreatorEmailClickEvent.create!(installment_id: 123, mailer_method:, mailer_args:, click_url:, click_count: 1) }
+      client.stub_responses(:get_item, { item: { "pk" => "123", "sk" => "SUMMARY", "open_count" => 1, "click_pair_count" => 1 } })
+
+      expect(described_class.verify!(sample_size: 10)).to eq([])
+    end
   end
 end
