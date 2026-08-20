@@ -6,13 +6,13 @@ import { assertResponseError } from "$app/utils/request";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 
-export const useReviewVideoUploader = () => {
+export const useReviewVideoUploader = ({ preview }: { preview?: boolean } = {}) => {
   const loggedInUser = useLoggedInUser();
   const [uploadContext, setUploadContext] = useState<ReviewVideoUploadContext | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loggedInUser) return;
+    if (preview || !loggedInUser) return;
     let isMounted = true;
 
     const initializeUploader = async () => {
@@ -32,7 +32,7 @@ export const useReviewVideoUploader = () => {
     return () => {
       isMounted = false;
     };
-  }, [loggedInUser]);
+  }, [loggedInUser, preview]);
 
   const { evaporateUploader, s3UploadConfig } = useConfigureEvaporate({
     aws_access_key_id: uploadContext?.aws_access_key_id ?? "",
