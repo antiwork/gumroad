@@ -433,5 +433,12 @@ describe CreatorHomePresenter do
         { download_url: CreatorHomePresenter::GUMHEAD_DOWNLOAD_URL }
       )
     end
+
+    it "omits gumhead when the seller has dismissed the promo" do
+      Feature.activate_user(:gumhead, seller)
+      seller.update!(has_dismissed_gumhead_promo: true)
+
+      expect(presenter.creator_home_props).not_to have_key(:gumhead)
+    end
   end
 end

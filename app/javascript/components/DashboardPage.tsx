@@ -24,6 +24,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PasskeySetupPrompt } from "$app/components/PasskeySetupPrompt";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
+import { showAlert } from "$app/components/server-components/Alert";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
 import { Alert } from "$app/components/ui/Alert";
@@ -36,8 +37,11 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
-import gumheadAnimation from "$assets/images/gumhead-idle.webp";
-import gumheadImage from "$assets/images/gumhead.png";
+import gumheadBlink from "$assets/images/gumhead-blink.png";
+import gumheadLand from "$assets/images/gumhead-land.png";
+import gumheadLift from "$assets/images/gumhead-lift.png";
+import gumheadPeek from "$assets/images/gumhead-peek.png";
+import gumheadRebound from "$assets/images/gumhead-rebound.png";
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
 
 type ProductRow = {
@@ -350,6 +354,22 @@ export const DashboardPage = ({
     });
   };
 
+  const [gumheadDismissed, setGumheadDismissed] = React.useState<boolean>(false);
+  const dismissGumhead = async () => {
+    setGumheadDismissed(true);
+    try {
+      const response = await request({
+        method: "POST",
+        url: Routes.dashboard_dismiss_gumhead_promo_path(),
+        accept: "json",
+      });
+      if (!response.ok) throw new Error();
+    } catch {
+      setGumheadDismissed(false);
+      showAlert("Sorry, something went wrong. Please try again.", "error");
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -424,43 +444,95 @@ export const DashboardPage = ({
         </div>
       ) : null}
 
-      {gumhead ? (
+      {gumhead && !gumheadDismissed ? (
         <div className="grid gap-4 p-4 md:p-8">
-          <Card className="shadow-[0.25rem_0.25rem_0_var(--color-pink)]">
-            <CardContent className="items-center sm:flex-nowrap">
-              <picture className="shrink-0">
-                <source srcSet={gumheadImage} media="(prefers-reduced-motion: reduce)" />
-                <img
-                  src={gumheadAnimation}
-                  alt=""
-                  width={380}
-                  height={363}
-                  className="h-28 w-auto -rotate-3 object-contain drop-shadow-[0.25rem_0.25rem_0_rgb(0_0_0/0.25)] transition-transform duration-200 hover:rotate-3 md:-mt-12 md:h-32"
-                />
-              </picture>
-              <div className="grid min-w-0 flex-1 gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl">Meet Gumhead</h2>
-                  <Pill size="small" className="border-black bg-pink text-black">
-                    Mac app
-                  </Pill>
+          <div className="group relative mt-16">
+            {/* Behind the card (painted before it), so only the top of the mascot peeks over the edge.
+                On hover it rises 42px: the hidden portion is 44px (80px tall, 36px above the edge), but
+                the sprite carries ~1px of transparent bottom margin at this size and the border line is
+                the ground — 2px less lands the feet on the line instead of hovering above it. The springy
+                bezier gives the little jump. Touch devices have no hover, so coarse pointers get the
+                raised, blinking state outright. */}
+            <div
+              aria-hidden
+              className="absolute -top-9 left-8 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-safe:group-hover:-translate-y-[42px] pointer-coarse:-translate-y-[42px]"
+            >
+              <img
+                src={gumheadPeek}
+                alt=""
+                width={250}
+                height={240}
+                className="h-20 w-auto motion-safe:group-hover:animate-gumhead-settle"
+              />
+              <img
+                src={gumheadBlink}
+                alt=""
+                width={250}
+                height={240}
+                className="absolute inset-0 h-20 w-auto opacity-0 motion-safe:group-hover:animate-gumhead-blink pointer-coarse:motion-safe:animate-gumhead-blink"
+              />
+              {/* Drag-sprite frames from the Gumhead app, shown once in sequence while the
+                  mascot flies: lifted-and-surprised, landing squash, rebound, then the idle
+                  base fades back in. Hidden except during the hover entrance. The drag art
+                  fills its canvas more than the idle art, so these render at 72px against
+                  the 80px base — same visual mass — bottom-anchored to keep feet level. */}
+              <img
+                src={gumheadLift}
+                alt=""
+                width={232}
+                height={230}
+                className="absolute bottom-0 left-1 h-18 w-auto opacity-0 motion-safe:group-hover:animate-gumhead-lift"
+              />
+              <img
+                src={gumheadLand}
+                alt=""
+                width={232}
+                height={230}
+                className="absolute bottom-0 left-1 h-18 w-auto opacity-0 motion-safe:group-hover:animate-gumhead-land"
+              />
+              <img
+                src={gumheadRebound}
+                alt=""
+                width={232}
+                height={230}
+                className="absolute bottom-0 left-1 h-18 w-auto opacity-0 motion-safe:group-hover:animate-gumhead-rebound"
+              />
+            </div>
+            <Card className="relative shadow-[0.25rem_0.25rem_0_var(--color-pink)]">
+              <CardContent className="pr-14 md:p-6 md:pr-14">
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  onClick={() => void dismissGumhead()}
+                  className="absolute top-2 right-2 flex size-10 cursor-pointer items-center justify-center rounded border-0 bg-transparent p-0 text-muted transition-colors hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+                <div className="grid min-w-0 flex-1 gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl">Meet Gumhead</h2>
+                    <Pill size="small" className="border-black bg-yellow text-black">
+                      Beta
+                    </Pill>
+                  </div>
+                  <p className="max-w-prose text-muted">
+                    A desktop companion for your Mac. Drop a folder on it. Gumhead looks inside, tells you what could
+                    sell, drafts a product, and asks before anything goes live.
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-3">
+                    {/* The build is arm64-only and the URL is a direct ZIP. Dropping the
+                        Apple Silicon note from the caption is a deliberate owner call
+                        (2026-08): Intel Macs are a shrinking slice. Revisit if failed
+                        installs show up in support. */}
+                    <NavigationButton href={gumhead.download_url} color="primary" target="_blank" rel="noreferrer">
+                      Download for Mac
+                    </NavigationButton>
+                    <span className="text-sm text-muted">Windows coming soon</span>
+                  </div>
                 </div>
-                <p className="text-muted">
-                  Drop a folder on your Mac. Gumhead looks inside, tells you what could sell, drafts a product, and asks
-                  before anything goes live.
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <NavigationButton href={gumhead.download_url} color="primary" target="_blank" rel="noreferrer">
-                    Download for Mac
-                  </NavigationButton>
-                  {/* The build ships only the arm64 slice (app binary and bundled
-                      Node runtime). Drop the Apple Silicon note when a universal
-                      build exists — the download URL stays the same. */}
-                  <span className="text-sm text-muted">Apple Silicon &middot; Windows coming soon</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       ) : null}
 

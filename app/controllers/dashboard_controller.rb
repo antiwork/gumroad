@@ -66,4 +66,14 @@ class DashboardController < Sellers::BaseController
 
     head :ok
   end
+
+  def dismiss_gumhead_promo
+    authorize :dashboard
+
+    # Atomic bit write: `update!` would persist the whole in-memory flags integer and could
+    # clobber a concurrent flag change on this row (payout, 2FA, and moderation bits live there).
+    current_seller.update_flag!(:has_dismissed_gumhead_promo, true, true)
+
+    head :ok
+  end
 end
