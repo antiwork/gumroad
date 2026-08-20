@@ -366,7 +366,7 @@ export const DashboardPage = ({
       if (!response.ok) throw new Error();
     } catch {
       setGumheadDismissed(false);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
+      showAlert("The banner could not be hidden. Check your connection and try again.", "error");
     }
   };
 
@@ -447,12 +447,10 @@ export const DashboardPage = ({
       {gumhead && !gumheadDismissed ? (
         <div className="grid gap-4 p-4 md:p-8">
           <div className="group relative mt-16">
-            {/* Behind the card (painted before it), so only the top of the mascot peeks over the edge.
-                On hover it rises 42px: the hidden portion is 44px (80px tall, 36px above the edge), but
-                the sprite carries ~1px of transparent bottom margin at this size and the border line is
-                the ground — 2px less lands the feet on the line instead of hovering above it. The springy
-                bezier gives the little jump. Touch devices have no hover, so coarse pointers get the
-                raised, blinking state outright. */}
+            {/* Painted before the card so the mascot peeks from behind its top edge. The 42px
+                rise leaves the feet resting on the card border (the hidden portion is 44px, and
+                the sprite has ~1px of transparent bottom margin at this size). Touch devices
+                have no hover, so coarse pointers get the raised, blinking state outright. */}
             <div
               aria-hidden
               className="absolute -top-9 left-8 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-safe:group-hover:-translate-y-[42px] pointer-coarse:-translate-y-[42px]"
@@ -471,11 +469,9 @@ export const DashboardPage = ({
                 height={240}
                 className="absolute inset-0 h-20 w-auto opacity-0 motion-safe:group-hover:animate-gumhead-blink pointer-coarse:motion-safe:animate-gumhead-blink"
               />
-              {/* Drag-sprite frames from the Gumhead app, shown once in sequence while the
-                  mascot flies: lifted-and-surprised, landing squash, rebound, then the idle
-                  base fades back in. Hidden except during the hover entrance. The drag art
-                  fills its canvas more than the idle art, so these render at 72px against
-                  the 80px base — same visual mass — bottom-anchored to keep feet level. */}
+              {/* Drag frames from the Gumhead app, shown once in sequence during the hover
+                  entrance. The drag art fills its canvas more than the idle art, so 72px
+                  here carries the same visual mass as the 80px base. */}
               <img
                 src={gumheadLift}
                 alt=""
@@ -520,10 +516,8 @@ export const DashboardPage = ({
                     sell, drafts a product, and asks before anything goes live.
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-3">
-                    {/* The build is arm64-only and the URL is a direct ZIP. Dropping the
-                        Apple Silicon note from the caption is a deliberate owner call
-                        (2026-08): Intel Macs are a shrinking slice. Revisit if failed
-                        installs show up in support. */}
+                    {/* The ZIP is arm64-only. Leaving the requirement out of the caption is a
+                        deliberate owner call (2026-08); revisit if failed installs show up. */}
                     <NavigationButton href={gumhead.download_url} color="primary" target="_blank" rel="noreferrer">
                       Download for Mac
                     </NavigationButton>
