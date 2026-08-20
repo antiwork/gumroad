@@ -224,13 +224,9 @@ module CurrencyHelper
     # path reads, so the preview equals the amount charged. Allow it before the listed-currency
     # guard below, which would otherwise hide the one converted price we do honour.
     return true if buyer_currency.to_s.downcase == Currency::USD
-    # The charge presents in the buyer's currency for any listing currency except the buyer's
-    # own, so what the seller priced in does not decide this. The excluded case is a product
-    # already listed in the buyer's currency: converting it to USD and back through an FX
-    # quote returns something near but not equal to the listed price, so that cart is withheld
-    # from quoting and charged canonical USD on a card checkout (only the method-forced lanes
-    # such as iDEAL charge the listed price directly). Same rule as
-    # Checkout::BuyerCurrencyQuote#quotable_product?.
+    # An individual product already listed in the buyer's currency is not quoteable, because
+    # converting it through USD can change its listed price. Uniform carts use the direct-listed
+    # lane; CustomerSurchargeController separately permits mixed carts to quote one USD total.
     return false if product_currency.to_s.downcase == buyer_currency.to_s.downcase
     # The same product shapes Checkout::BuyerCurrencyQuote#quotable_product? refuses to quote.
     # Each of these charges an amount that can differ from the cart total a quote would lock

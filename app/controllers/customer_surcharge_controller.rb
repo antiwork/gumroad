@@ -102,9 +102,9 @@ class CustomerSurchargeController < ApplicationController
       line_items: quote_line_items,
       canonical_total_cents: quote_line_items.sum(&:canonical_total_cents)
     )
-    available = available_buyer_currencies(quotable_cart ? quote_line_items.filter_map(&:product).uniq : [])
+    available = available_buyer_currencies(quotable_cart ? quote_line_items : [])
     # What is left can still fail for a reason specific to one currency (a settlement mismatch
-    # on the seller's account, a product already priced in it). Don't advertise the one we just
+    # on the seller's account, or a cart uniformly listed in it). Don't advertise the one we just
     # attempted to quote; the checkout tells the buyer their choice was refused.
     if quote_currency.present? && quote_currency != Currency::USD && quote_props.nil?
       available = available.reject { |entry| entry[:code] == quote_currency }
@@ -272,16 +272,34 @@ class CustomerSurchargeController < ApplicationController
       { sales_tax_result:, shipping_rate:, rate: }
     end
 
-    def available_buyer_currencies(products)
+    def available_buyer_currencies(line_items)
+      products = line_items.filter_map(&:product).uniq
       unless products.present? && products.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1.user) }
         return [{ code: Currency::USD, label: CURRENCY_CHOICES.dig(Currency::USD, :display_format) || Currency::USD.upcase }]
       end
 
       codes = [Currency::USD] + CURRENCY_CHOICES.keys.map(&:to_s)
       codes.uniq.filter_map do |code|
-        next unless products.all? { |product| currency_offered_for?(product, code) }
+        next unless currency_offered_for_cart?(line_items, code)
 
         { code:, label: (CURRENCY_CHOICES.dig(code, :display_format) || code.upcase) }
+      end
+    end
+
+    def currency_offered_for_cart?(line_items, code)
+      # USD is the canonical charge currency every cart can settle in, so it is always
+      # offered; the gates below only decide which extra currencies join it.
+      return true if code == Currency::USD
+
+      # A charge entirely listed in this currency uses the direct-listed lane (or stays
+      # unquoted). A mixed charge instead quotes its canonical USD total, so its already-listed
+      # lines must not remove a currency that the remaining lines can settle. Grouped per
+      # seller inside the predicate, matching how the quote is minted and honored per charge.
+      return false unless Checkout::BuyerCurrencyQuote.buyer_currency_listing_quotable?(line_items:, buyer_currency: code)
+
+      line_items.all? do |line_item|
+        product = line_item.product
+        product.price_currency_type.to_s.downcase == code.to_s.downcase || currency_offered_for?(product, code)
       end
     end
 

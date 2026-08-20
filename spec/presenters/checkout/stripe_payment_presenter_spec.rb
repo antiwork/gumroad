@@ -40,6 +40,7 @@ describe Checkout::StripePaymentPresenter do
         # The product's own pricing currency, mirroring CheckoutPresenter#product_common,
         # which sets currency_code on every real add_products entry.
         currency_code: product.price_currency_type.to_s.downcase,
+        exchange_rate: 0.8,
         require_shipping: product.require_shipping?,
         installment_plan: product.installment_plan.present? ? {
           number_of_installments: product.installment_plan.number_of_installments,
@@ -1697,6 +1698,69 @@ describe Checkout::StripePaymentPresenter do
       if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
         deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "mounts a multi-item cart uniformly priced in CAD as one direct-listed CAD element" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
+      second_product = create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 2500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("24.48.0.1", "Canada")
+
+      add_products = [checkout_product_for(product), checkout_product_for(second_product)]
+      expect(stripe_payment_props(add_products:, ip: "24.48.0.1")).to eq(
+        payment_element_client_confirm_props(
+          currency: Currency::CAD,
+          presentment_amount_cents: 4000,
+          direct_listed_card: true,
+          disable_wallets: true,
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps a same-currency cart with split exchange rates on the canonical USD element" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
+      second_product = create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 2500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("24.48.0.1", "Canada")
+
+      first = checkout_product_for(product)
+      first[:product][:exchange_rate] = 0.8
+      second = checkout_product_for(second_product)
+      second[:product][:exchange_rate] = 0.9
+      expect(stripe_payment_props(add_products: [first, second], ip: "24.48.0.1")).to eq(payment_element_client_confirm_props)
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps a multi-seller CAD cart on the canonical USD element" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
+      other_seller, other_product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 2500)
+      [seller, other_seller].each do |current_seller|
+        activate_buyer_currency_flags(current_seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, current_seller)
+      end
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("24.48.0.1", "Canada")
+
+      add_products = [checkout_product_for(product), checkout_product_for(other_product)]
+      expect(stripe_payment_props(add_products:, ip: "24.48.0.1")).to eq(payment_element_props)
+    ensure
+      [seller, other_seller].compact.each do |current_seller|
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, current_seller)
+        deactivate_buyer_currency_flags(current_seller)
       end
     end
 

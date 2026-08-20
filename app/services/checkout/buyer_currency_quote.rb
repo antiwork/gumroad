@@ -225,6 +225,28 @@ class Checkout::BuyerCurrencyQuote
     new(line_items:, canonical_total_cents:, ip: nil).cart_quotable?
   end
 
+  # A cart with every line already listed in the buyer's currency takes the direct-listed lane.
+  # Any other listing shape can use this quote lane once the separate cart and settlement gates
+  # pass, including a cart that mixes a buyer-currency listing with a USD listing.
+  #
+  # Decided per prospective CHARGE (per seller), not per cart: eligibility refuses an
+  # all-listed charge at charge time, so a multi-seller cart where one seller's lines are all
+  # in the buyer's currency must not be quoted — the token would be minted here and then
+  # refused there, failing the buyer's payment closed (BuyerCurrencyQuoteInvalid) on every
+  # retry. Such a cart falls back to canonical USD instead.
+  def self.buyer_currency_listing_quotable?(line_items:, buyer_currency:)
+    return false if line_items.blank?
+    # Same reason cart_quotable? guards this: a caller can hand over a line built from a product
+    # lookup that found nothing, and a public entry point must fall back rather than raise.
+    return false if line_items.any? { _1.product.nil? }
+
+    line_items.group_by { _1.product.user_id }.each_value.all? do |charge_line_items|
+      charge_line_items.any? do |line_item|
+        line_item.product.price_currency_type.to_s.downcase != buyer_currency.to_s.downcase
+      end
+    end
+  end
+
   def self.normalize_requested_currency(currency)
     code = currency.to_s.downcase.presence
     code if code && CURRENCY_CHOICES.key?(code)
@@ -443,10 +465,7 @@ class Checkout::BuyerCurrencyQuote
     buyer_currency = currency.presence || buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
-    # Converting a listing already priced in the buyer's own currency through USD and back
-    # returns something near but not equal to the price on the page, so that cart is withheld.
-    # The rest of the per-line gates are currency-independent and ran in `cart_quotable?`.
-    return unless line_items.all? { |line_item| quotable_line_item?(line_item, buyer_currency:) }
+    return unless self.class.buyer_currency_listing_quotable?(line_items:, buyer_currency:)
 
     charge_quotes = line_items_by_seller.map do |seller_id, seller_line_items|
       charge_quote_for(seller: sellers_by_id.fetch(seller_id), charge_line_items: seller_line_items, buyer_currency:)

@@ -150,7 +150,7 @@ export const getCheckoutBuyerCurrencyQuoteToken = (
 //
 // Returns null (canonical USD display, today's behavior) unless the server chose this lane AND the
 // payment the buyer has actually selected will go through it AND the cart still has the
-// single-item, priced-in-that-currency shape the lane assumes.
+// uniformly-priced-in-that-currency shape the lane assumes.
 //
 // The payment-selection gates matter as much as the cart shape, and for the same reason as on the
 // FX-quoted lane above: only a new card confirmed through the Payment Element reaches this
@@ -159,9 +159,12 @@ export const getCheckoutBuyerCurrencyQuoteToken = (
 export const getCheckoutListedCurrencyDisplay = (
   checkoutPayment: CheckoutPaymentConfig,
   // Only the pricing/plan fields are read, so callers can pass cart items directly and tests
-  // don't have to build a whole product.
+  // don't have to build a whole product. creator stays required, though: made optional, the
+  // multi-seller check below would compare undefined to undefined and silently pass.
   cartItems: readonly {
-    product: Pick<CartItem["product"], "currency_code" | "exchange_rate">;
+    product: Pick<CartItem["product"], "currency_code" | "exchange_rate"> & {
+      creator: Pick<CartItem["product"]["creator"], "id">;
+    };
     pay_in_installments?: boolean;
     recurrence?: string | null;
   }[],
@@ -179,23 +182,33 @@ export const getCheckoutListedCurrencyDisplay = (
   // still mounts product price only, so shipping carts must not claim listed-currency display.
   if (checkoutPayment.elements_options.direct_listed_card && (hasTip || hasShipping)) return null;
   if (usingSavedCard || paymentMethod !== "card") return null;
-  if (cartItems.length !== 1) return null;
+  if (cartItems.length === 0) return null;
 
-  const item = cartItems[0];
-  const product = item?.product;
-  if (!product) return null;
-  // These fields are editable while the server-owned checkout config remains fixed. Only the
-  // narrowly configured recurring UPI lane may keep listed-currency display for a subscription.
-  if (item.pay_in_installments) return null;
-  if (!!item.recurrence !== isRecurringUpiPaymentConfig(checkoutPayment)) return null;
-  if (product.currency_code !== listedCurrency.currency) return null;
-  // A zero or missing rate would make every converted row 0; fall back to canonical USD instead.
-  if (!(product.exchange_rate > 0)) return null;
+  const firstProduct = cartItems[0]?.product;
+  if (!firstProduct) return null;
+  for (const item of cartItems) {
+    const product = item.product;
+    // These fields are editable while the server-owned checkout config remains fixed. Only the
+    // narrowly configured recurring UPI lane may keep listed-currency display for a subscription.
+    if (item.pay_in_installments) return null;
+    if (!!item.recurrence !== isRecurringUpiPaymentConfig(checkoutPayment)) return null;
+    if (product.currency_code !== listedCurrency.currency) return null;
+    // A zero or missing rate would make every converted row 0; fall back to canonical USD instead.
+    if (!(product.exchange_rate > 0)) return null;
+    // All items share the currency, so their server-provided rates should be identical; if a
+    // reload left them split, converting shared USD rows (tax, shipping) with any one of them
+    // could disagree with the charge, so fall back instead of guessing.
+    if (product.exchange_rate !== firstProduct.exchange_rate) return null;
+    // One ConfirmationToken funds one PaymentIntent, so prepare refuses a multi-seller cart
+    // (Checkout::StripePaymentPresenter#direct_listed_card_shape?); don't display a lane it
+    // will reject.
+    if (product.creator.id !== firstProduct.creator.id) return null;
+  }
   if (!(listedCurrency.subunit_to_unit > 0)) return null;
 
   return {
-    currencyCode: product.currency_code,
-    rate: product.exchange_rate,
+    currencyCode: firstProduct.currency_code,
+    rate: firstProduct.exchange_rate,
     subunitToUnit: listedCurrency.subunit_to_unit,
   };
 };
