@@ -609,8 +609,8 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
     it "charges the existing subscription price" do
       visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
       within find(:radio_button, text: "First Tier") do
-        expect(page).to_not have_selector("[role='status']", text: "Your current plan is $5.99 every 3 months, based on previous pricing.")
-        expect(page).to have_text("$5.99 every 3 months")
+        expect(page).to have_selector("[role='status']", text: "Your current plan is $5.99 every 3 months, based on previous pricing.")
+        expect(page).to have_text("$50 every 3 months")
       end
 
       click_on "Update membership"
@@ -620,6 +620,28 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
       within find(:radio_button, text: "First Tier") do
         expect(page).to have_selector("[role='status']", text: "Your current plan is $5.99 every 3 months, based on previous pricing.")
         expect(page).to have_text("$50 every 3 months")
+      end
+    end
+
+    context "when increasing seats after the seller raised the seat price" do
+      before do
+        setup_subscription(quantity: 2)
+        travel_to(@originally_subscribed_at + 1.month)
+        setup_subscription_token
+        @subscription.last_purchase.update(succeeded_at: 1.year.ago)
+        @subscription.original_purchase.variant_attributes.first.prices.find_by!(recurrence: "quarterly").update!(price_cents: 5000)
+      end
+
+      it "lets the buyer complete the seat change at the current price" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        fill_in "Seats", with: 3
+
+        expect(page).to have_selector("[role='status']", text: "Changing the number of seats will update your subscription to the current price of $50 every 3 months per seat.")
+        expect(page).to have_text("You'll be charged US$150")
+
+        click_on "Update membership"
+        expect(page).to have_alert(text: "Your membership has been updated.")
       end
     end
   end

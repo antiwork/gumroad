@@ -8,6 +8,7 @@ import { updateSubscription } from "$app/data/subscription";
 import {
   initialSubscriptionUnitPrice,
   selectedSubscriptionTotal,
+  subscriptionAmountDueToday,
   subscriptionPWYWMinimumUnitPrice,
   withOncePerCartMinimum,
 } from "$app/pages/Subscriptions/price";
@@ -197,13 +198,16 @@ export default function SubscriptionsManage() {
   );
   const requirePayment = price > 0;
   const noChangesToCurrentPlan = noChangesToNonPriceOptions && (!isPWYW || price === subscription.price);
-  let amountDueToday =
-    (subscription.alive || subscription.pending_cancellation) &&
-    !subscription.is_overdue_for_charge &&
-    (price < subscription.price || subscription.is_in_free_trial || noChangesToCurrentPlan)
-      ? 0
-      : Math.max(price - subscription.prorated_discount_price_cents, 0);
-  if (amountDueToday > 0) amountDueToday = Math.max(amountDueToday, getMinPriceCents(product.currency_code));
+  const amountDueToday = subscriptionAmountDueToday({
+    newPriceCents: price,
+    currentPriceCents: subscription.price,
+    proratedDiscountCents: subscription.prorated_discount_price_cents,
+    minimumPriceCents: getMinPriceCents(product.currency_code),
+    isOverdueForCharge: subscription.is_overdue_for_charge,
+    isInFreeTrial: subscription.is_in_free_trial,
+    isAliveOrPendingCancellation: subscription.alive || subscription.pending_cancellation,
+    noChangesToCurrentPlan,
+  });
 
   // Mirrors `Subscription::UpdaterService#apply_plan_change_immediately?`. Reading this off
   // `amountDueToday` is not equivalent: the server floors a chargeable change to the product

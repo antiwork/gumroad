@@ -1018,6 +1018,20 @@ describe CheckoutPresenter do
         expect(result[:request_apple_pay_merchant_tokens]).to eq(true)
       end
 
+      it "exposes current tier prices when an alive subscription is overdue",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+        @subscription.update!(cancelled_at: nil)
+        @purchase.update!(succeeded_at: 1.year.ago)
+        @tier_price.update!(price_cents: 29_900)
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+        current_option = result[:product][:options].find { _1[:id] == @default_tier.external_id }
+
+        expect(result[:subscription][:is_overdue_for_charge]).to eq(true)
+        expect(result[:subscription][:price]).to eq(@original_price_cents)
+        expect(current_option[:recurrence_price_values]["monthly"][:price_cents]).to eq(29_900)
+      end
+
       it "does not return a deleted original offer code discount",
          vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
         offer_code = create(:offer_code, products: [@product])

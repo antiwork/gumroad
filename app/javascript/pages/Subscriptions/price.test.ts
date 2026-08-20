@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   initialSubscriptionUnitPrice,
   selectedSubscriptionTotal,
+  subscriptionAmountDueToday,
   subscriptionPWYWMinimumUnitPrice,
   withOncePerCartMinimum,
 } from "$app/pages/Subscriptions/price";
@@ -70,5 +71,50 @@ describe("subscription pricing", () => {
 
     expect(unitPrice).toBe(900);
     expect(selectedSubscriptionTotal({ unitPrice, quantity: 1, discount: null, minimumPrice: 99 })).toBe(900);
+  });
+
+  it("charges the new plan total when the membership is overdue", () => {
+    expect(
+      subscriptionAmountDueToday({
+        newPriceCents: 179_400,
+        currentPriceCents: 105_600,
+        proratedDiscountCents: 26_400,
+        minimumPriceCents: 99,
+        isOverdueForCharge: true,
+        isInFreeTrial: false,
+        isAliveOrPendingCancellation: true,
+        noChangesToCurrentPlan: false,
+      }),
+    ).toBe(179_400);
+  });
+
+  it("does not subtract proration from a same-plan overdue retry", () => {
+    expect(
+      subscriptionAmountDueToday({
+        newPriceCents: 105_600,
+        currentPriceCents: 105_600,
+        proratedDiscountCents: 26_400,
+        minimumPriceCents: 99,
+        isOverdueForCharge: true,
+        isInFreeTrial: false,
+        isAliveOrPendingCancellation: true,
+        noChangesToCurrentPlan: true,
+      }),
+    ).toBe(105_600);
+  });
+
+  it("still prorates an in-period upgrade", () => {
+    expect(
+      subscriptionAmountDueToday({
+        newPriceCents: 1_794,
+        currentPriceCents: 1_198,
+        proratedDiscountCents: 1_000,
+        minimumPriceCents: 99,
+        isOverdueForCharge: false,
+        isInFreeTrial: false,
+        isAliveOrPendingCancellation: true,
+        noChangesToCurrentPlan: false,
+      }),
+    ).toBe(794);
   });
 });

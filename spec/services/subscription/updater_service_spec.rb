@@ -681,6 +681,51 @@ describe Subscription::UpdaterService, :vcr do
               expect(plan_change.perceived_price_cents).to eq 599
             end
           end
+
+          context "when overdue after a seat price raise" do
+            before do
+              setup_subscription(quantity: 4)
+              @original_tier_quarterly_price.update!(price_cents: 29_900)
+              @subscription.last_purchase.update!(succeeded_at: 1.year.ago)
+            end
+
+            it "charges the current tier total, not the honored total" do
+              result = Subscription::UpdaterService.new(
+                subscription: @subscription,
+                gumroad_guid: @gumroad_guid,
+                params: same_plan_params.merge(
+                  quantity: 6,
+                  perceived_price_cents: 179_400,
+                  perceived_upgrade_price_cents: 179_400,
+                ),
+                logged_in_user: @user,
+                remote_ip: @remote_ip,
+              ).perform
+
+              expect(result[:success]).to eq(true)
+              expect(@subscription.reload.original_purchase.displayed_price_cents).to eq 179_400
+              expect(@subscription.original_purchase.quantity).to eq 6
+              expect(@subscription.last_successful_charge.displayed_price_cents).to eq 179_400
+            end
+
+            it "rejects the honored-price perceived total the manage page used to send" do
+              result = Subscription::UpdaterService.new(
+                subscription: @subscription,
+                gumroad_guid: @gumroad_guid,
+                params: same_plan_params.merge(
+                  quantity: 6,
+                  perceived_price_cents: 3_594,
+                  perceived_upgrade_price_cents: 3_594,
+                ),
+                logged_in_user: @user,
+                remote_ip: @remote_ip,
+              ).perform
+
+              expect(result[:success]).to eq(false)
+              expect(result[:error_message]).to eq "The price just changed! Refresh the page for the updated price."
+              expect(@subscription.reload.original_purchase.quantity).to eq 4
+            end
+          end
         end
 
         context "when the membership was cancelled by the creator" do

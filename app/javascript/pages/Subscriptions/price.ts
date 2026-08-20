@@ -43,3 +43,32 @@ export const selectedSubscriptionTotal = ({
   const discountedTotal = Math.max(total - amount, 0);
   return withOncePerCartMinimum(discountedTotal, discount, minimumPrice);
 };
+
+// Mirrors Subscription::UpdaterService#amount_owed. Overdue charges the new plan
+// total with no proration; a same-plan retry still sends the honored total.
+export const subscriptionAmountDueToday = ({
+  newPriceCents,
+  currentPriceCents,
+  proratedDiscountCents,
+  minimumPriceCents,
+  isOverdueForCharge,
+  isInFreeTrial,
+  isAliveOrPendingCancellation,
+  noChangesToCurrentPlan,
+}: {
+  newPriceCents: number;
+  currentPriceCents: number;
+  proratedDiscountCents: number;
+  minimumPriceCents: number;
+  isOverdueForCharge: boolean;
+  isInFreeTrial: boolean;
+  isAliveOrPendingCancellation: boolean;
+  noChangesToCurrentPlan: boolean;
+}) => {
+  if (isOverdueForCharge || newPriceCents === 0) return newPriceCents;
+  if (isAliveOrPendingCancellation && (newPriceCents < currentPriceCents || isInFreeTrial || noChangesToCurrentPlan)) {
+    return 0;
+  }
+  const owed = Math.max(newPriceCents - proratedDiscountCents, 0);
+  return owed > 0 ? Math.max(owed, minimumPriceCents) : 0;
+};
