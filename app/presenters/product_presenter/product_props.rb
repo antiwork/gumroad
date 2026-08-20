@@ -46,7 +46,7 @@ class ProductPresenter::ProductProps
         summary: product.custom_summary.presence,
         attributes: attributes_props,
         description_html: product.html_safe_description,
-        currency_code: product.price_currency_type.downcase,
+        currency_code: (product.price_currency_type.presence || Currency::USD).downcase,
         price_cents: product.price_cents,
         buyer_currency_display:,
         **buyer_local_price_props(product:, original_price_cents:, buyer_currency_display:),
@@ -145,7 +145,7 @@ class ProductPresenter::ProductProps
           average: product.average_rating,
         } : nil,
         price: bundle_product.standalone_price_cents,
-        currency_code: product.price_currency_type.downcase,
+        currency_code: (product.price_currency_type.presence || Currency::USD).downcase,
         thumbnail_url: product.thumbnail_alive&.url,
         native_type: product.native_type,
         url: url_for_product_page(product, request:, recommended_by:, layout:),
@@ -187,10 +187,7 @@ class ProductPresenter::ProductProps
     def refund_policy_props
       if seller.account_level_refund_policy_enabled?
         {
-          # The account-level policy has no product context of its own, so resolve the
-          # title against this product: a leftover 0-day row still reads "No refunds
-          # allowed" on physical products, matching what the purchase will snapshot.
-          title: seller.refund_policy.title(for_physical: product.is_physical?),
+          title: seller.refund_policy.title,
           fine_print: seller.refund_policy.fine_print.present? ? ActionController::Base.helpers.simple_format(seller.refund_policy.fine_print) : nil,
           updated_at: seller.refund_policy.updated_at.to_date,
         }

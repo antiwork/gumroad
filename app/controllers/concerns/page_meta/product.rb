@@ -4,6 +4,7 @@ module PageMeta::Product
   extend ActiveSupport::Concern
 
   include PageMeta::Base
+  include CurrencyHelper
 
   private
     def set_product_page_meta(product)
@@ -23,10 +24,16 @@ module PageMeta::Product
       # product whose rental price was removed), in which case price_cents is nil.
       # Skip the price meta tags rather than crash the whole product page —
       # Product::StructuredData applies the same nil guard for its "price" field.
+      # The currency can be NULL on legacy rows, and a price can survive a
+      # blank currency when a stale Price row's currency is NULL too — skip
+      # both tags rather than crash or publish an amount with no currency.
       price_cents = product.price_cents
-      unless price_cents.nil?
-        set_meta_tag(property: "product:price:amount", content: (price_cents / 100.0).round(2))
-        set_meta_tag(property: "product:price:currency", content: product.price_currency_type.upcase)
+      currency = product.price_currency_type
+      unless price_cents.nil? || currency.blank?
+        # JPY is stored in major units (unit_scaling_factor == 1); a hardcoded 100
+        # would publish one-hundredth of the listed price.
+        set_meta_tag(property: "product:price:amount", content: (price_cents / unit_scaling_factor(currency).to_f).round(2))
+        set_meta_tag(property: "product:price:currency", content: currency.upcase)
       end
 
       set_open_graph_meta(product, product_description:, canonical_url:)

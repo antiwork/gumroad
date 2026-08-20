@@ -5,7 +5,6 @@ class ProductRefundPolicy < RefundPolicy
 
   validates :product, presence: true, uniqueness: true
   validate :product_must_belong_to_seller
-  before_validation :forbid_no_refunds_on_digital_products
 
   scope :for_visible_and_not_archived_products, -> { joins(:product).merge(Link.visible_and_not_archived) }
 
@@ -13,14 +12,10 @@ class ProductRefundPolicy < RefundPolicy
     {
       fine_print:,
       id: external_id,
-      max_refund_period_in_days: effective_max_refund_period_in_days,
+      max_refund_period_in_days:,
       product_name: product.name,
       title:,
     }
-  end
-
-  def allows_no_refunds?
-    product&.is_physical?
   end
 
   def published_and_no_refunds?
@@ -93,13 +88,6 @@ class ProductRefundPolicy < RefundPolicy
   end
 
   private
-    def forbid_no_refunds_on_digital_products
-      return if allows_no_refunds?
-      return unless max_refund_period_in_days == NO_REFUNDS_PERIOD_IN_DAYS
-
-      self.max_refund_period_in_days = MINIMUM_DIGITAL_REFUND_PERIOD_IN_DAYS
-    end
-
     def no_refunds_prompt
       prompt = <<~PROMPT
         Analyze this refund policy and return {"no_refunds": true} if you are 100% confident

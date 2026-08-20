@@ -103,6 +103,10 @@ describe SettingsPresenter do
             refund_policy_enforced: false,
             allowed_refund_periods_in_days: [
               {
+                key: 0,
+                value: "No refunds allowed"
+              },
+              {
                 key: 7,
                 value: "7-day money back guarantee"
               },

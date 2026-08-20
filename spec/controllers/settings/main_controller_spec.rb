@@ -375,7 +375,7 @@ describe Settings::MainController, type: :controller, inertia: true do
     describe "seller refund policy" do
       context "when enabled" do
         before do
-          seller.refund_policy.update_columns(max_refund_period_in_days: 0)
+          seller.refund_policy.update!(max_refund_period_in_days: 0)
         end
 
         it "updates the seller refund policy fine print" do
@@ -389,6 +389,7 @@ describe Settings::MainController, type: :controller, inertia: true do
         end
 
         it "rejects fine print that denies refunds with a visible error" do
+          enable_fine_print_no_refunds_moderation!
           allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
             { "choices" => [{ "message" => { "content" => %({"no_refunds": true}) } }] }
           )
@@ -419,7 +420,7 @@ describe Settings::MainController, type: :controller, inertia: true do
       context "when not enabled" do
         before do
           seller.update!(refund_policy_enabled: false)
-          seller.refund_policy.update_columns(max_refund_period_in_days: 0)
+          seller.refund_policy.update!(max_refund_period_in_days: 0)
         end
 
         it "does not update the seller refund policy" do

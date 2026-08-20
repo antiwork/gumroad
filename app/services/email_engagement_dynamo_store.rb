@@ -3,15 +3,18 @@
 # Dual-write adapter for the DynamoDB table replacing the CreatorEmailOpenEvent /
 # CreatorEmailClickEvent / CreatorEmailClickSummary Mongo collections.
 #
-# Partition key `installment_id` (N), sort key `sk` (S), one of:
-#   SUMMARY                    — open_count / click_count counters for the installment
+# Partition key `pk` (S, the stringified installment id), sort key `sk` (S), one of:
+#   SUMMARY                    — open_count / click_count / click_pair_count counters;
+#                                click_pair_count (unique recipient+url pairs) is what the
+#                                dashboard's "Clicks" has historically shown, click_count is
+#                                true unique clickers
 #   OPEN#<recipient>           — one item per recipient who opened
+#   CLICKER#<recipient>        — claims the recipient's first click; drives click_count
 #   CLICK#<recipient>#<url>    — one item per recipient + url first click
 #   URL#<url>                  — unique-click total for one url
 # <recipient> and <url> are SHA256 hex digests (raw values are attributes on the
-# items). CLICK keys are recipient-first so "has this recipient clicked anything?"
-# is a begins_with query; per-url totals are separate items rather than a map on
-# SUMMARY so link-heavy posts can't grow SUMMARY toward the 400KB item cap.
+# items). Per-url totals are separate items rather than a map on SUMMARY so
+# link-heavy posts can't grow SUMMARY toward the 400KB item cap.
 class EmailEngagementDynamoStore
   TABLE_BASE_NAME = "email_engagement"
   SUMMARY_SORT_KEY = "SUMMARY"
@@ -30,38 +33,55 @@ class EmailEngagementDynamoStore
       with_dual_write_guard do
         installment_id = installment_id.to_i
         recipient = recipient_digest(mailer_method:, mailer_args:)
-        first_click_for_recipient = !recipient_clicked_any_url?(installment_id:, recipient:)
 
         # A repeat click of the same url by the same recipient counts nothing,
         # matching the Mongo path's early return.
         next unless put_click_item(installment_id:, mailer_method:, mailer_args:, click_url:, recipient:)
 
         increment_url_click_count(installment_id:, click_url:)
-        increment_summary(installment_id:, attribute: "click_count") if first_click_for_recipient
+        increment_summary(installment_id:, attribute: "click_pair_count")
+        # The conditional marker put is both the "has this recipient clicked
+        # anything?" check and the claim, so concurrent first clicks on
+        # different urls can't double-increment the counter.
+        if put_clicker_marker(installment_id:, mailer_method:, mailer_args:, recipient:)
+          increment_summary(installment_id:, attribute: "click_count")
+        end
         # A click implies an open; compensates for blocked tracking pixels.
         ensure_open_item(installment_id:, mailer_method:, mailer_args:)
       end
     end
 
     def client
-      # An explicit endpoint is always passed because the global Aws.config
-      # endpoint override points at S3/MinIO in development and test.
-      @client ||= Aws::DynamoDB::Client.new(endpoint: ENV["DYNAMODB_ENDPOINT"].presence)
+      # An explicit endpoint is always passed: the global Aws.config endpoint
+      # points at MinIO in development and test, and the SDK raises at
+      # construction when the option is present but nil.
+      @client ||= Aws::DynamoDB::Client.new(
+        endpoint: GlobalConfig.get("DYNAMODB_ENDPOINT", "https://dynamodb.#{AWS_DEFAULT_REGION}.amazonaws.com")
+      )
     end
 
     def table_name
-      "#{ENV["DYNAMODB_TABLE_PREFIX"]}#{TABLE_BASE_NAME}"
+      "#{table_prefix}#{TABLE_BASE_NAME}"
     end
 
+    # Production and staging default to the Terraform-owned <env>- tables;
+    # DYNAMODB_TABLE_PREFIX overrides for dev lanes and branch apps.
+    def table_prefix
+      ENV["DYNAMODB_TABLE_PREFIX"].presence ||
+        (Rails.env.production? || Rails.env.staging? ? "#{Rails.env}-" : "")
+    end
+
+    # Staging and production tables are Terraform-owned (antiwork/infrastructure#998)
+    # and deletion-protected; this bootstrap is for dev, test, and branch apps.
     def create_table!
       client.create_table(
         table_name:,
         attribute_definitions: [
-          { attribute_name: "installment_id", attribute_type: "N" },
+          { attribute_name: "pk", attribute_type: "S" },
           { attribute_name: "sk", attribute_type: "S" },
         ],
         key_schema: [
-          { attribute_name: "installment_id", key_type: "HASH" },
+          { attribute_name: "pk", key_type: "HASH" },
           { attribute_name: "sk", key_type: "RANGE" },
         ],
         billing_mode: "PAY_PER_REQUEST"
@@ -70,6 +90,10 @@ class EmailEngagementDynamoStore
 
     # The backfill must derive identical keys from the Mongo documents, so key
     # derivation is public and must not change while Mongo remains around.
+    def partition_key(installment_id)
+      installment_id.to_i.to_s
+    end
+
     def recipient_digest(mailer_method:, mailer_args:)
       Digest::SHA256.hexdigest("#{mailer_method}\n#{mailer_args}")
     end
@@ -84,6 +108,10 @@ class EmailEngagementDynamoStore
 
     def click_sort_key(mailer_method:, mailer_args:, click_url:)
       "CLICK##{recipient_digest(mailer_method:, mailer_args:)}##{url_digest(click_url)}"
+    end
+
+    def clicker_sort_key(mailer_method:, mailer_args:)
+      "CLICKER##{recipient_digest(mailer_method:, mailer_args:)}"
     end
 
     def url_sort_key(click_url)
@@ -121,7 +149,7 @@ class EmailEngagementDynamoStore
         client.put_item(
           table_name:,
           item: {
-            "installment_id" => installment_id,
+            "pk" => partition_key(installment_id),
             "sk" => open_sort_key(mailer_method:, mailer_args:),
             "mailer_method" => mailer_method,
             "mailer_args" => mailer_args,
@@ -129,7 +157,7 @@ class EmailEngagementDynamoStore
             "first_open_at" => now,
             "last_open_at" => now,
           },
-          condition_expression: "attribute_not_exists(installment_id)"
+          condition_expression: "attribute_not_exists(pk)"
         )
         increment_summary(installment_id:, attribute: "open_count")
       rescue Aws::DynamoDB::Errors::ConditionalCheckFailedException
@@ -140,7 +168,7 @@ class EmailEngagementDynamoStore
         client.put_item(
           table_name:,
           item: {
-            "installment_id" => installment_id,
+            "pk" => partition_key(installment_id),
             "sk" => "CLICK##{recipient}##{url_digest(click_url)}",
             "mailer_method" => mailer_method,
             "mailer_args" => mailer_args,
@@ -148,22 +176,28 @@ class EmailEngagementDynamoStore
             "click_count" => 1,
             "first_click_at" => timestamp,
           },
-          condition_expression: "attribute_not_exists(installment_id)"
+          condition_expression: "attribute_not_exists(pk)"
         )
         true
       rescue Aws::DynamoDB::Errors::ConditionalCheckFailedException
         false
       end
 
-      def recipient_clicked_any_url?(installment_id:, recipient:)
-        client.query(
+      def put_clicker_marker(installment_id:, mailer_method:, mailer_args:, recipient:)
+        client.put_item(
           table_name:,
-          key_condition_expression: "installment_id = :installment_id AND begins_with(sk, :sk_prefix)",
-          expression_attribute_values: { ":installment_id" => installment_id, ":sk_prefix" => "CLICK##{recipient}#" },
-          select: "COUNT",
-          limit: 1,
-          consistent_read: true
-        ).count.positive?
+          item: {
+            "pk" => partition_key(installment_id),
+            "sk" => "CLICKER##{recipient}",
+            "mailer_method" => mailer_method,
+            "mailer_args" => mailer_args,
+            "first_click_at" => timestamp,
+          },
+          condition_expression: "attribute_not_exists(pk)"
+        )
+        true
+      rescue Aws::DynamoDB::Errors::ConditionalCheckFailedException
+        false
       end
 
       def increment_url_click_count(installment_id:, click_url:)
@@ -186,7 +220,7 @@ class EmailEngagementDynamoStore
       end
 
       def item_key(installment_id, sort_key)
-        { "installment_id" => installment_id, "sk" => sort_key }
+        { "pk" => partition_key(installment_id), "sk" => sort_key }
       end
 
       def timestamp

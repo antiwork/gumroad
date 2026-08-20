@@ -44,8 +44,8 @@ describe SellerRefundPolicy do
       it "does not allow setting the refund period to 0 days" do
         refund_policy.max_refund_period_in_days = 0
 
-        expect(refund_policy.valid?).to be true
-        expect(refund_policy.max_refund_period_in_days).to eq(7)
+        expect(refund_policy.valid?).to be false
+        expect(refund_policy.errors[:max_refund_period_in_days].first).to include("at least 7 days")
       end
 
       it "allows refund periods of 7 days or more" do
@@ -58,18 +58,19 @@ describe SellerRefundPolicy do
     end
 
     context "when the seller does not have an enforced refund policy" do
-      it "coerces a 0-day period to 7 days" do
+      it "allows setting the refund period to 0 days" do
         refund_policy.max_refund_period_in_days = 0
 
         expect(refund_policy.valid?).to be true
-        expect(refund_policy.max_refund_period_in_days).to eq(7)
       end
     end
 
-    it "rejects fine print that denies refunds" do
+    it "rejects fine print that denies refunds on a positive window" do
+      enable_fine_print_no_refunds_moderation!
       allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
         { "choices" => [{ "message" => { "content" => %({"no_refunds": true}) } }] }
       )
+      refund_policy.max_refund_period_in_days = 30
       refund_policy.fine_print = "All sales are final. No refunds."
 
       expect(refund_policy.valid?).to be false
@@ -77,10 +78,21 @@ describe SellerRefundPolicy do
     end
 
     it "allows fine print that only conditions refunds" do
+      enable_fine_print_no_refunds_moderation!
       allow_any_instance_of(OpenAI::Client).to receive(:chat).and_return(
         { "choices" => [{ "message" => { "content" => %({"no_refunds": false}) } }] }
       )
+      refund_policy.max_refund_period_in_days = 30
       refund_policy.fine_print = "Refunds are only issued for duplicate purchases."
+
+      expect(refund_policy.valid?).to be true
+    end
+
+    it "allows no-refunds fine print on a 0-day account policy" do
+      enable_fine_print_no_refunds_moderation!
+      refund_policy.max_refund_period_in_days = 0
+      expect(OpenAI::Client).not_to receive(:new)
+      refund_policy.fine_print = "All sales are final. No refunds."
 
       expect(refund_policy.valid?).to be true
     end

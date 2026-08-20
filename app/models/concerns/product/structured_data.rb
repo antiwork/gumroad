@@ -82,14 +82,19 @@ module Product::StructuredData
       # what the feed submitted for the same product. On conversion failure, fall back
       # to the native price/currency rather than showing a currency with no price.
       display_cents = usd_cents || price_cents
-      currency = usd_cents.nil? ? price_currency_type.upcase : "USD"
+      # to_s: legacy rows can hold a NULL price_currency_type. schema.org wants
+      # an ISO 4217 code here, so a blank currency drops the key instead of
+      # 500ing the page or publishing "". The price goes with it: recurring and
+      # tiered products can keep an amount from stale Price rows even when the
+      # currency is blank, and an amount with no currency is meaningless.
+      currency = usd_cents.nil? ? price_currency_type.to_s.upcase : "USD"
       offer = {
         "@type" => "Offer",
-        "priceCurrency" => currency,
+        "priceCurrency" => currency.presence,
         "availability" => availability_for_schema_org,
         "url" => url
-      }
-      offer["price"] = display_cents / 100.0 unless display_cents.nil?
+      }.compact
+      offer["price"] = display_cents / unit_scaling_factor(currency).to_f unless display_cents.nil? || currency.blank?
       offer
     end
 

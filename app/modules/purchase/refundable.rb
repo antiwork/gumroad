@@ -368,6 +368,10 @@ class Purchase
       end
 
       true
+    end.tap do |refunded|
+      # After commit: ChargeProcessor.refund! has already moved the money.
+      # A failed license write must not roll back stripe_refunded.
+      disable_attached_license_if_fully_refunded!(for_fraud: is_for_fraud) if refunded
     end
   end
 
@@ -409,6 +413,8 @@ class Purchase
       # is committed/visible and would miss it.
       CustomerMailer.partial_refund(email, link.id, id, gross_refund_amount_cents, formatted_refund_state, refund&.presentment_amount_cents, refund&.presentment_currency).deliver_later(queue: "critical")
       true
+    end.tap do |refunded|
+      disable_attached_license_if_fully_refunded! if refunded
     end
   end
 
@@ -528,7 +534,50 @@ class Purchase
 
     subscription.cancel_effective_immediately! if subscription.present? && !subscription.deactivated?
     ContactingCreatorMailer.purchase_refunded_for_fraud(id).deliver_later(queue: "default") unless seller.suspended?
+    # Covers already-refunded retries: refund_and_save! is a no-op then, so the
+    # post-commit hook on refund_purchase! never ran.
+    disable_attached_license_if_fully_refunded!(for_fraud: true)
     true
+  end
+
+  # /v2/licenses/verify rejects disabled keys but not stripe_refunded, so a
+  # refunded purchase otherwise keeps a working key until the seller disables it.
+  # Look up the License row by purchase_id: Purchase#license_key is nil when the
+  # product is not currently flagged licensed, and Purchase#license remaps a
+  # renewal onto the original purchase's key.
+  # Must run after the refund transaction commits — disable! is a separate
+  # write, and a failure here must not undo stripe_refunded after the processor
+  # has already returned the money.
+  def disable_attached_license_if_fully_refunded!(for_fraud: false)
+    purchases = [self]
+    purchases.concat(product_purchases.to_a) if is_bundle_purchase?
+
+    purchases.each do |purchase|
+      next unless purchase.stripe_refunded?
+
+      targets = []
+      if purchase.is_recurring_subscription_charge
+        targets << purchase.subscription&.original_purchase&.license if for_fraud
+      else
+        targets << License.find_by(purchase_id: purchase.id)
+        if purchase.is_gift_sender_purchase && purchase.gift_given&.giftee_purchase_id
+          targets << License.find_by(purchase_id: purchase.gift_given.giftee_purchase_id)
+        end
+      end
+
+      targets.compact.uniq.each { |license| license.disable! unless license.disabled? }
+    end
+  rescue StandardError => e
+    logger.error "Failed to disable license after refund for purchase #{id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(
+      "Failed to disable license after refund",
+      context: {
+        purchase_id: id,
+        purchase_external_id: external_id,
+        error_class: e.class.name,
+        error: e.message,
+      }
+    )
   end
 
   def buyer_presentment_refund_blocked?

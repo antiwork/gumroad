@@ -50,7 +50,7 @@ describe EmailEngagementDynamoStore do
 
       open_upsert = requests.first[:params]
       expect(open_upsert[:table_name]).to eq("email_engagement")
-      expect(plain_hash(open_upsert[:key])).to eq("installment_id" => 123, "sk" => "OPEN##{recipient_digest}")
+      expect(plain_hash(open_upsert[:key])).to eq("pk" => "123", "sk" => "OPEN##{recipient_digest}")
       expect(open_upsert[:update_expression]).to include("ADD open_count :one")
       expect(open_upsert[:update_expression]).to include("first_open_at = if_not_exists(first_open_at, :now)")
       expect(plain(open_upsert[:expression_attribute_values][":mailer_method"])).to eq(mailer_method)
@@ -58,7 +58,7 @@ describe EmailEngagementDynamoStore do
       expect(open_upsert[:return_values]).to eq("ALL_OLD")
 
       summary_update = requests.last[:params]
-      expect(plain_hash(summary_update[:key])).to eq("installment_id" => 123, "sk" => "SUMMARY")
+      expect(plain_hash(summary_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(summary_update[:update_expression]).to eq("ADD #counter :one")
       expect(summary_update[:expression_attribute_names]).to eq("#counter" => "open_count")
     end
@@ -90,73 +90,92 @@ describe EmailEngagementDynamoStore do
       expect(requests).to be_empty
     end
 
-    it "records a first-ever click with the url total, the summary click count, and a compensating open" do
-      client.stub_responses(:query, { count: 0 })
-
+    it "records a first-ever click with the url total, the pair count, the clicker marker, the summary click count, and a compensating open" do
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
       expect(requests.map { _1[:operation_name] }).to eq(
-        [:query, :put_item, :update_item, :update_item, :put_item, :update_item]
+        [:put_item, :update_item, :update_item, :put_item, :update_item, :put_item, :update_item]
       )
 
-      query = requests[0][:params]
-      expect(query[:key_condition_expression]).to eq("installment_id = :installment_id AND begins_with(sk, :sk_prefix)")
-      expect(plain_hash(query[:expression_attribute_values])).to eq(":installment_id" => 123, ":sk_prefix" => "CLICK##{recipient_digest}#")
-      expect(query[:select]).to eq("COUNT")
-      expect(query[:consistent_read]).to be(true)
-
-      click_put = requests[1][:params]
+      click_put = requests[0][:params]
+      expect(plain(click_put[:item]["pk"])).to eq("123")
       expect(plain(click_put[:item]["sk"])).to eq("CLICK##{recipient_digest}##{url_digest}")
       expect(plain(click_put[:item]["click_url"])).to eq(click_url)
       expect(plain(click_put[:item]["click_count"])).to eq(1)
-      expect(click_put[:condition_expression]).to eq("attribute_not_exists(installment_id)")
+      expect(click_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      url_update = requests[2][:params]
-      expect(plain_hash(url_update[:key])).to eq("installment_id" => 123, "sk" => "URL##{url_digest}")
+      url_update = requests[1][:params]
+      expect(plain_hash(url_update[:key])).to eq("pk" => "123", "sk" => "URL##{url_digest}")
       expect(url_update[:update_expression]).to eq("ADD click_count :one SET click_url = :click_url")
       expect(plain(url_update[:expression_attribute_values][":click_url"])).to eq(click_url)
 
-      summary_click_update = requests[3][:params]
-      expect(plain_hash(summary_click_update[:key])).to eq("installment_id" => 123, "sk" => "SUMMARY")
+      pair_update = requests[2][:params]
+      expect(plain_hash(pair_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
+      expect(pair_update[:expression_attribute_names]).to eq("#counter" => "click_pair_count")
+
+      marker_put = requests[3][:params]
+      expect(plain(marker_put[:item]["pk"])).to eq("123")
+      expect(plain(marker_put[:item]["sk"])).to eq("CLICKER##{recipient_digest}")
+      expect(plain(marker_put[:item]["mailer_args"])).to eq(mailer_args)
+      expect(marker_put[:condition_expression]).to eq("attribute_not_exists(pk)")
+
+      summary_click_update = requests[4][:params]
+      expect(plain_hash(summary_click_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(summary_click_update[:expression_attribute_names]).to eq("#counter" => "click_count")
 
-      open_put = requests[4][:params]
+      open_put = requests[5][:params]
+      expect(plain(open_put[:item]["pk"])).to eq("123")
       expect(plain(open_put[:item]["sk"])).to eq("OPEN##{recipient_digest}")
       expect(plain(open_put[:item]["open_count"])).to eq(1)
-      expect(open_put[:condition_expression]).to eq("attribute_not_exists(installment_id)")
+      expect(open_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      summary_open_update = requests[5][:params]
-      expect(plain_hash(summary_open_update[:key])).to eq("installment_id" => 123, "sk" => "SUMMARY")
+      summary_open_update = requests[6][:params]
+      expect(plain_hash(summary_open_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(summary_open_update[:expression_attribute_names]).to eq("#counter" => "open_count")
     end
 
-    it "does not increment the summary click count when the recipient has clicked another url before" do
-      client.stub_responses(:query, { count: 1 })
-      # The click item put succeeds; the compensating open put finds an existing open item.
-      client.stub_responses(:put_item, [{}, "ConditionalCheckFailedException"])
+    it "counts the pair but not the summary click count when the recipient has clicked another url before" do
+      # The click item put succeeds; the clicker marker already exists, as does the open item.
+      client.stub_responses(:put_item, [{}, "ConditionalCheckFailedException", "ConditionalCheckFailedException"])
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests.map { _1[:operation_name] }).to eq([:query, :put_item, :update_item, :put_item])
-      expect(plain(requests[2][:params][:key]["sk"])).to eq("URL##{url_digest}")
+      expect(requests.map { _1[:operation_name] }).to eq([:put_item, :update_item, :update_item, :put_item, :put_item])
+      expect(plain(requests[1][:params][:key]["sk"])).to eq("URL##{url_digest}")
+      expect(requests[2][:params][:expression_attribute_names]).to eq("#counter" => "click_pair_count")
+      expect(plain(requests[3][:params][:item]["sk"])).to eq("CLICKER##{recipient_digest}")
     end
 
     it "counts nothing on a repeat click of the same url by the same recipient" do
-      client.stub_responses(:query, { count: 1 })
       client.stub_responses(:put_item, "ConditionalCheckFailedException")
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests.map { _1[:operation_name] }).to eq([:query, :put_item])
+      expect(requests.map { _1[:operation_name] }).to eq([:put_item])
     end
 
     it "notifies instead of raising when DynamoDB fails" do
-      client.stub_responses(:query, "ProvisionedThroughputExceededException")
+      client.stub_responses(:put_item, "ProvisionedThroughputExceededException")
       expect(ErrorNotifier).to receive(:notify).with(kind_of(Aws::Errors::ServiceError))
 
       expect do
         described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
       end.not_to raise_error
+    end
+  end
+
+  describe ".client" do
+    it "defaults to the regional DynamoDB endpoint when DYNAMODB_ENDPOINT is unset" do
+      described_class.client = nil
+      expect(described_class.client.config.endpoint.to_s).to eq("https://dynamodb.#{AWS_DEFAULT_REGION}.amazonaws.com")
+    end
+
+    it "honors DYNAMODB_ENDPOINT when set" do
+      described_class.client = nil
+      ENV["DYNAMODB_ENDPOINT"] = "http://localhost:8123"
+      expect(described_class.client.config.endpoint.to_s).to eq("http://localhost:8123")
+    ensure
+      ENV.delete("DYNAMODB_ENDPOINT")
     end
   end
 
@@ -169,19 +188,48 @@ describe EmailEngagementDynamoStore do
     ensure
       ENV.delete("DYNAMODB_TABLE_PREFIX")
     end
+
+    it "defaults to the Terraform-owned per-environment table in production and staging" do
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
+      expect(described_class.table_name).to eq("production-email_engagement")
+
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("staging"))
+      expect(described_class.table_name).to eq("staging-email_engagement")
+    end
+
+    it "lets DYNAMODB_TABLE_PREFIX override the environment default for branch apps" do
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("staging"))
+      ENV["DYNAMODB_TABLE_PREFIX"] = "branchapp-foo-"
+      expect(described_class.table_name).to eq("branchapp-foo-email_engagement")
+    ensure
+      ENV.delete("DYNAMODB_TABLE_PREFIX")
+    end
+  end
+
+  describe ".partition_key" do
+    it "stringifies the installment id" do
+      expect(described_class.partition_key(123)).to eq("123")
+      expect(described_class.partition_key("123")).to eq("123")
+    end
   end
 
   describe ".create_table!" do
-    it "creates the on-demand table keyed by installment id and sort key" do
+    it "creates the on-demand table with the generic pk/sk string key schema" do
       described_class.create_table!
 
       request = requests.sole
       expect(request[:operation_name]).to eq(:create_table)
       expect(request[:params][:table_name]).to eq("email_engagement")
       expect(request[:params][:billing_mode]).to eq("PAY_PER_REQUEST")
+      expect(request[:params][:attribute_definitions]).to eq(
+        [
+          { attribute_name: "pk", attribute_type: "S" },
+          { attribute_name: "sk", attribute_type: "S" },
+        ]
+      )
       expect(request[:params][:key_schema]).to eq(
         [
-          { attribute_name: "installment_id", key_type: "HASH" },
+          { attribute_name: "pk", key_type: "HASH" },
           { attribute_name: "sk", key_type: "RANGE" },
         ]
       )

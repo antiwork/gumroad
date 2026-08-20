@@ -95,8 +95,6 @@ export type LoggedInUser = {
    * not in the core set renders under "Everything else" until they use it.
    */
   promotedNavItems: string[];
-  isGumroadAdmin: boolean;
-  isImpersonating: boolean;
   /**
    * This is a temporary feature flag to enable lazy loading for offscreen images on discover page
    * It should be removed once lazy loading is fully rolled out.
@@ -118,8 +116,6 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     policies: Policies;
     promoted_nav_items: string[];
     confirmed: boolean;
-    is_gumroad_admin: boolean;
-    is_impersonating: boolean;
     lazy_load_offscreen_discover_images: boolean;
   } | null>(data);
   if (parsed == null) return null;
@@ -134,8 +130,6 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     hasPayoutSetupToPort: parsed.has_payout_setup_to_port,
     policies: parsed.policies,
     promotedNavItems: parsed.promoted_nav_items,
-    isGumroadAdmin: parsed.is_gumroad_admin,
-    isImpersonating: parsed.is_impersonating,
     lazyLoadOffscreenDiscoverImages: parsed.lazy_load_offscreen_discover_images,
   };
 };
