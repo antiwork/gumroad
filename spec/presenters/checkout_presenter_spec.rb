@@ -1300,6 +1300,25 @@ describe CheckoutPresenter do
           expect(displayed_tier_price).to eq new_price
         end
       end
+
+      context "when the subscription is overdue for charge" do
+        it "displays the current tier price so a seat change matches update_current_plan!" do
+          @subscription.update!(cancelled_at: nil, failed_at: nil, deactivated_at: nil)
+
+          travel_to(2.months.from_now) do
+            new_price = @original_price_cents + 500
+            @tier_price.update!(price_cents: new_price)
+
+            result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+            expect(result[:subscription][:is_overdue_for_charge]).to eq(true)
+            expect(result[:subscription][:alive]).to eq(true)
+            expect(result[:subscription][:price]).to eq(@original_price_cents)
+            displayed_tier_price = result[:product][:options][0][:recurrence_price_values]["monthly"][:price_cents]
+            expect(displayed_tier_price).to eq(new_price)
+          end
+        end
+      end
     end
 
     it "returns an auto-renewal discount after the original discount duration is exhausted" do
