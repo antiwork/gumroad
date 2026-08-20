@@ -152,7 +152,11 @@ class Onetime::BackfillEmailEngagementDynamoTable
         ).item || {}
         expected = {
           opens: CreatorEmailOpenEvent.where(installment_id: summary.installment_id).count,
-          pairs: CreatorEmailClickEvent.where(installment_id: summary.installment_id).count,
+          # Deduplicated: the unique click_index was never built in production,
+          # so the collection holds duplicate docs that DynamoDB's keyed items
+          # collapse by design (10-30% of docs on large blasts).
+          pairs: CreatorEmailClickEvent.where(installment_id: summary.installment_id)
+                                       .pluck(:mailer_method, :mailer_args, :click_url).uniq.size,
         }
         actual = { opens: dynamo["open_count"].to_i, pairs: dynamo["click_pair_count"].to_i }
         next if expected == actual
