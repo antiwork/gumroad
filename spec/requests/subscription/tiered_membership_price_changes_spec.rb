@@ -609,12 +609,13 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
     it "charges the existing subscription price" do
       visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
       within find(:radio_button, text: "First Tier") do
-        expect(page).to_not have_selector("[role='status']", text: "Your current plan is $5.99 every 3 months, based on previous pricing.")
-        expect(page).to have_text("$5.99 every 3 months")
+        expect(page).to have_selector("[role='status']", text: "Your current plan is $5.99 every 3 months, based on previous pricing.")
+        expect(page).to have_text("$50 every 3 months")
       end
 
       click_on "Update membership"
       expect(page).to have_alert(text: "Your membership has been updated.")
+      expect(@subscription.reload.purchases.successful.last.displayed_price_cents).to eq 5_99
 
       visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
       within find(:radio_button, text: "First Tier") do
