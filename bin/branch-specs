@@ -119,6 +119,9 @@ IGNORED_PATTERNS = [
   %r{\.md\z},
   %r{\A\.agents/},
   %r{\A\.claude/},
+  # Recorded HTTP, not helpers. A cassette-only diff must not force Slow;
+  # the spec that plays the tape is already in the selection (or unchanged).
+  %r{\Aspec/support/fixtures/vcr_cassettes/},
 ].freeze
 
 # Above this many selected files the full suite's parallelism wins anyway.
@@ -178,7 +181,11 @@ changed.merge(git("diff", "--name-only", "#{merge_base}..HEAD")) if merge_base
 changed.merge(git("diff", "--name-only", "HEAD"))
 changed.merge(git("ls-files", "--others", "--exclude-standard"))
 
+cassette_in_diff = changed.any? { |path| path.start_with?("spec/support/fixtures/vcr_cassettes/") }
 changed.reject! { |path| IGNORED_PATTERNS.any? { |re| re.match?(path) } }
+# Cassettes ride along with a mapped spec without forcing Slow. A cassette-only
+# diff has nothing left to attribute, so escalate rather than run zero specs.
+escalate!("cassette-only diff: map to the owning spec or add run-all-specs") if changed.empty? && cassette_in_diff
 
 unmappable = changed.select do |path|
   ESCALATE_PATTERNS.any? { |re| re.match?(path) } && !CONFIG_SPEC_MAP.key?(path)
@@ -328,6 +335,9 @@ changed.each do |path|
          File.exist?(path.sub(/\.(ts|tsx)\z/, '.test.\1')))
     # Covered by vitest, which lint_js runs on every PR (npm test). A
     # co-located .test file is that module's suite; neither needs rspec.
+    next
+  elsif path == "bin/branch-specs" || path == "spec/bin/branch_specs_test.rb"
+    # Standalone ruby test (ruby spec/bin/branch_specs_test.rb), not rspec.
     next
   elsif path.match?(%r{\A(lib|app)/.*\.rb\z}) &&
         (by_content = specs_mentioning(File.basename(path, ".rb"))).any?
