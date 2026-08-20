@@ -454,6 +454,32 @@ check_invalid_path_bytes_rejected(
   head_files: { "app/views/customer_mailer/_footer.html.erb" => "new" },
 )
 
+# VCR tapes are recordings, not helpers. Pairing one with a mapped spec
+# must not force the full suite (the escalate that put refund-only PRs
+# onto 50 Slow checkout shards).
+check(
+  "VCR cassette with a mapped spec does not escalate",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+    "spec/support/fixtures/vcr_cassettes/Widget/example.yml" => "old",
+  },
+  head_files: {
+    "app/models/widget.rb" => "new",
+    "spec/models/widget_spec.rb" => "#{SPEC_STUB}# changed\n",
+    "spec/support/fixtures/vcr_cassettes/Widget/example.yml" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+# Real helper changes under spec/support still need the full suite.
+check(
+  "unmapped spec/support helper still escalates",
+  base_files: { "spec/support/mystery_helpers.rb" => "old" },
+  head_files: { "spec/support/mystery_helpers.rb" => "new" },
+  expect_escalate: true,
+)
+
 if $failures.empty?
   puts "#{$count} checks passed"
 else
