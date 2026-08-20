@@ -23,6 +23,13 @@ class SalesRelatedProductsInfo < ApplicationRecord
   # many products the buyer owns.
   SALES_COUNT_UPSERT_BATCH_SIZE = 100
 
+  # Concurrent upserts deadlock against each other often enough to matter (a multi-item
+  # cart fires one job per purchase, all landing here at once). Retrying is the remedy
+  # rather than avoidance: under REPEATABLE READ the losing statement is InnoDB's chosen
+  # victim, not a symptom of bad SQL. Keep the ceiling low — this sleeps a Sidekiq thread.
+  UPSERT_CONTENTION_RETRIES = 3
+  UPSERT_CONTENTION_BASE_BACKOFF = 0.05
+
   # Applies +1 (or -1) to the pairwise sales counter between `product_id` and each of
   # `related_product_ids`, creating the pair row if it does not exist yet.
   #
@@ -64,9 +71,14 @@ class SalesRelatedProductsInfo < ApplicationRecord
     # than going negative.
     new_sales_count = increment ? 1 : 0
 
-    pair_product_ids.each_slice(SALES_COUNT_UPSERT_BATCH_SIZE) do |slice|
-      values_sql = slice.map do |related_product_id|
-        smaller_id, larger_id = [product_id, related_product_id].sort
+    # Sorted so that two overlapping statements — the norm for a multi-item cart, whose jobs
+    # derive near-identical pair sets — take their row locks in the same order. This does not
+    # address the insert-intention conflict at the tail of the clustered index, which is what
+    # the retry below is for; it removes the separate lock-ordering deadlock on top of it.
+    pairs = pair_product_ids.map { [product_id, _1].minmax }.sort
+
+    pairs.each_slice(SALES_COUNT_UPSERT_BATCH_SIZE) do |slice|
+      values_sql = slice.map do |smaller_id, larger_id|
         "(#{[smaller_id, larger_id, new_sales_count, now_string, now_string].join(', ')})"
       end.join(", ")
 
@@ -78,7 +90,24 @@ class SalesRelatedProductsInfo < ApplicationRecord
         VALUES #{values_sql}
         ON DUPLICATE KEY UPDATE sales_count = sales_count + (#{sales_count_change}), updated_at = #{now_string};
       SQL
+      execute_upsert_with_contention_retry(query)
+    end
+  end
+
+  # Retries are per statement, so slices that already committed are never replayed. Safe
+  # because a deadlocked (or lock-wait-timed-out) statement rolls back whole and this runs
+  # outside any wrapping transaction: nothing was counted, so nothing can double-count.
+  def self.execute_upsert_with_contention_retry(query)
+    attempts = 0
+    begin
       ApplicationRecord.connection.execute(query)
+    rescue ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout
+      attempts += 1
+      raise if attempts > UPSERT_CONTENTION_RETRIES
+
+      # Jittered so two statements retrying against each other don't line up again.
+      sleep(UPSERT_CONTENTION_BASE_BACKOFF * (2**(attempts - 1)) * (0.5 + Kernel.rand))
+      retry
     end
   end
 
