@@ -298,7 +298,11 @@ class Checkout::BuyerCurrencyEligibility
     # the whole cart into the buyer currency instead of falling presentment back to USD.
     if listed_in_buyer_currency.any?
       listed_lane = listed_in_buyer_currency.all? &&
+        # The snapshotted currency, not the product's current one: a seller who repriced into
+        # the buyer's currency later would otherwise get USD cents sent as the buyer's.
         purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
+        # One ConfirmationToken funds one PaymentIntent, so a cart spanning sellers cannot
+        # charge listed amounts and falls back to canonical USD per seller.
         purchases.all? { _1.seller_id == seller.id } &&
         !multi_seller_order? &&
         self.class.listed_currency_direct_charge_enabled?(seller) &&
@@ -427,6 +431,9 @@ class Checkout::BuyerCurrencyEligibility
         params[:payment_element_mount_currency].to_s.downcase == currency
     end
 
+    # Charge::DirectListedPresentment allocates the charge-level Gumroad amount per purchase
+    # using each purchase's stored rate, so split rates would allocate against two bases.
+    # Same-currency lines normally share one rate; if they don't, fall back rather than pick.
     def listed_lane_rates_uniform?(purchases)
       rates = purchases.map { _1.rate_converted_to_usd.presence }
       rates.all? && rates.map(&:to_s).uniq.one? && rates.first.to_d.positive?

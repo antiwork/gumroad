@@ -299,11 +299,12 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     },
   });
 
-  const brlCartItems = (overrides: { currencyCode?: CurrencyCode; exchangeRate?: number } = {}) => [
+  const brlCartItems = (overrides: { currencyCode?: CurrencyCode; exchangeRate?: number; creatorId?: string } = {}) => [
     {
       product: {
         currency_code: overrides.currencyCode ?? "brl",
         exchange_rate: overrides.exchangeRate ?? 5.45,
+        creator: { id: overrides.creatorId ?? "seller-a" },
       },
     },
   ];
@@ -358,8 +359,8 @@ describe("getCheckoutListedCurrencyDisplay", () => {
   it("stays in canonical USD when same-currency items come from two sellers", () => {
     expect(
       getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [
-        { product: { currency_code: "brl", exchange_rate: 5.45, creator: { id: "seller-a" } } },
-        { product: { currency_code: "brl", exchange_rate: 5.45, creator: { id: "seller-b" } } },
+        ...brlCartItems(),
+        ...brlCartItems({ creatorId: "seller-b" }),
       ]),
     ).toBeNull();
   });
@@ -414,7 +415,9 @@ describe("getCheckoutListedCurrencyDisplay", () => {
   });
 
   it("stays in canonical USD for installment and ordinary subscription carts", () => {
-    const brlItem = { product: { currency_code: "brl" as const, exchange_rate: 5.45 } };
+    const brlItem = {
+      product: { currency_code: "brl" as const, exchange_rate: 5.45, creator: { id: "seller-a" } },
+    };
     expect(
       getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [{ ...brlItem, pay_in_installments: true }]),
     ).toBeNull();
@@ -426,7 +429,10 @@ describe("getCheckoutListedCurrencyDisplay", () => {
   it("renders INR for the server-selected recurring UPI registration lane", () => {
     expect(
       getCheckoutListedCurrencyDisplay(recurringUpiPayment(), [
-        { product: { currency_code: "inr", exchange_rate: 85.4 }, recurrence: "monthly" },
+        {
+          product: { currency_code: "inr", exchange_rate: 85.4, creator: { id: "seller-a" } },
+          recurrence: "monthly",
+        },
       ]),
     ).toEqual({ currencyCode: "inr", rate: 85.4, subunitToUnit: 100 });
   });

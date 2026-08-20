@@ -539,6 +539,9 @@ class Checkout::StripePaymentPresenter
         listed_lane_rates_uniform?(items)
     end
 
+    # A zero rate would render every converted row as 0. Uniformity is not implied by the
+    # currency test above: on the add_products path exchange_rate arrives in the request
+    # payload rather than being recomputed here, so stale props can split it across lines.
     def listed_lane_rates_uniform?(items)
       rates = items.map { _1[:exchange_rate].to_f }
       rates.all?(&:positive?) && rates.uniq.one?

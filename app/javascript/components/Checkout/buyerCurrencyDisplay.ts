@@ -159,10 +159,11 @@ export const getCheckoutBuyerCurrencyQuoteToken = (
 export const getCheckoutListedCurrencyDisplay = (
   checkoutPayment: CheckoutPaymentConfig,
   // Only the pricing/plan fields are read, so callers can pass cart items directly and tests
-  // don't have to build a whole product.
+  // don't have to build a whole product. creator stays required, though: made optional, the
+  // multi-seller check below would compare undefined to undefined and silently pass.
   cartItems: readonly {
     product: Pick<CartItem["product"], "currency_code" | "exchange_rate"> & {
-      creator?: Pick<CartItem["product"]["creator"], "id">;
+      creator: Pick<CartItem["product"]["creator"], "id">;
     };
     pay_in_installments?: boolean;
     recurrence?: string | null;
@@ -198,7 +199,10 @@ export const getCheckoutListedCurrencyDisplay = (
     // reload left them split, converting shared USD rows (tax, shipping) with any one of them
     // could disagree with the charge, so fall back instead of guessing.
     if (product.exchange_rate !== firstProduct.exchange_rate) return null;
-    if ((product.creator?.id ?? null) !== (firstProduct.creator?.id ?? null)) return null;
+    // One ConfirmationToken funds one PaymentIntent, so prepare refuses a multi-seller cart
+    // (Checkout::StripePaymentPresenter#direct_listed_card_shape?); don't display a lane it
+    // will reject.
+    if (product.creator.id !== firstProduct.creator.id) return null;
   }
   if (!(listedCurrency.subunit_to_unit > 0)) return null;
 

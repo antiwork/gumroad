@@ -353,6 +353,19 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
+    it "refuses a listing check whose line item carries no product" do
+      # The surcharge controller reaches buyer_currency_listing_quotable? without cart_quotable?
+      # having screened the lines, so the predicate has to answer instead of raising.
+      orphan_line = described_class::LineItem.new(
+        permalink: "gone", product: nil,
+        price_cents: 5_00, tip_cents: 0, seller_tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0
+      )
+
+      expect(
+        described_class.buyer_currency_listing_quotable?(line_items: line_items_for(product) + [orphan_line], buyer_currency: Currency::CAD)
+      ).to be(false)
+    end
+
     context "with a cart spanning several sellers" do
       let(:other_seller) { create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true) }
       let(:other_seller_product) { create(:product, user: other_seller, price_cents: 5_00, price_currency_type: Currency::USD) }

@@ -236,6 +236,9 @@ class Checkout::BuyerCurrencyQuote
   # retry. Such a cart falls back to canonical USD instead.
   def self.buyer_currency_listing_quotable?(line_items:, buyer_currency:)
     return false if line_items.blank?
+    # Same reason cart_quotable? guards this: a caller can hand over a line built from a product
+    # lookup that found nothing, and a public entry point must fall back rather than raise.
+    return false if line_items.any? { _1.product.nil? }
 
     line_items.group_by { _1.product.user_id }.each_value.all? do |charge_line_items|
       charge_line_items.any? do |line_item|
