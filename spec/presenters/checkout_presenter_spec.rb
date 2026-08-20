@@ -1316,6 +1316,20 @@ describe CheckoutPresenter do
           displayed_tier_price = result[:product][:options][0][:recurrence_price_values]["monthly"][:price_cents]
           expect(displayed_tier_price).to eq(new_price)
         end
+
+        it "keeps the honored recurrence price when the seller has retired that recurrence",
+           vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+          @subscription.update!(cancelled_at: nil, failed_at: nil, deactivated_at: nil)
+          @purchase.update!(succeeded_at: 1.year.ago)
+          @product.prices.alive.is_buy.find_by!(recurrence: @subscription.recurrence).mark_deleted!
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+          expect(result[:subscription][:is_overdue_for_charge]).to eq(true)
+          expect(result[:subscription][:current_recurrence_available]).to eq(false)
+          displayed_tier_price = result[:product][:options][0][:recurrence_price_values]["monthly"][:price_cents]
+          expect(displayed_tier_price).to eq(@original_price_cents)
+        end
       end
     end
 

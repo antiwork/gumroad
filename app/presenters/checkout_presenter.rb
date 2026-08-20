@@ -229,9 +229,10 @@ class CheckoutPresenter
       price_cents: subscription.current_plan_displayed_price_cents(authenticated_offer_code_buyer: logged_in_user) / subscription.original_purchase.quantity,
     }
     current_recurrence_alive = product.recurrence_price_enabled?(subscription.recurrence)
-    # Plan changes reprice at the current catalog; same-plan retries still use the honored total.
-    show_current_prices = subscription.deactivated? || subscription.overdue_for_charge? ||
-      (subscription.alive? && current_recurrence_alive)
+    # Overdue plan/seat changes reprice at the live catalog only when that recurrence is
+    # still offered. A retired recurrence is only present via subscription_attrs.
+    show_current_prices = subscription.deactivated? ||
+      (current_recurrence_alive && (subscription.alive? || subscription.overdue_for_charge?))
     options = (variant_category = product.variant_categories_alive.first) ? variant_category.variants.in_order.alive.map do
       |variant| show_current_prices ? variant.to_option : variant.to_option(subscription_attrs: tier_attrs)
     end : []
