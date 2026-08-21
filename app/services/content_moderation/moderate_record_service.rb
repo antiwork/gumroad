@@ -158,8 +158,8 @@ class ContentModeration::ModerateRecordService
     content = content.class.new(text: content.text, image_urls: []) if @skip_images
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
 
-    previous_page_urls = previous_page_image_urls
     if entity_type == :page && content.image_urls.size > ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS
+      previous_page_urls = previous_page_image_urls
       if preexisting_over_budget_without_growth?(content, previous_page_urls)
         # A live storefront catalog that already exceeds the cap must stay
         # editable (1:1 cover swaps, copy tweaks) without raising the cap for
