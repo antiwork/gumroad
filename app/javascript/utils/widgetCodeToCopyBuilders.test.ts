@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildAnalyticsCodeToCopy,
-  permalinkFromProductUrl,
-} from "$app/utils/widgetCodeToCopyBuilders";
+import { buildAnalyticsCodeToCopy, permalinkFromProductUrl } from "$app/utils/widgetCodeToCopyBuilders";
 
 describe("permalinkFromProductUrl", () => {
   it("takes the last path segment of a product URL", () => {
@@ -26,8 +23,6 @@ describe("buildAnalyticsCodeToCopy", () => {
         scriptBaseUrl: "https://gumroad.com",
         productUrl: "https://example.gumroad.com/l/demo",
       }),
-    ).toBe(
-      `<script async src="https://gumroad.com/js/gumroad-analytics.js" data-gumroad-product="demo"></script>`,
-    );
+    ).toBe(`<script async src="https://gumroad.com/js/gumroad-analytics.js" data-gumroad-product="demo"></script>`);
   });
 });
