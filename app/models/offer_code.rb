@@ -610,8 +610,14 @@ class OfferCode < ApplicationRecord
     end
 
     def reindex_associated_products(products_to_reindex: applicable_products + excluded_products)
-      products_to_reindex.each do |product|
-        product.enqueue_index_update_for(["offer_codes"])
+      # A universal code's applicable set is every alive product, so running the
+      # per-product index updates inline after_commit blows the request timeout
+      # for large catalogs. Enqueue them as background jobs after the row commits.
+      product_ids = products_to_reindex.map(&:id)
+      AfterCommitEverywhere.after_commit do
+        SendToElasticsearchWorker.perform_bulk(
+          product_ids.map { |product_id| [product_id, "update", ["offer_codes"]] }
+        )
       end
     end
 

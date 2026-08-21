@@ -1394,20 +1394,21 @@ describe OfferCode do
       it "reindexes products when they are excluded from a universal offer code" do
         universal_offer_code = create(:universal_offer_code, user: creator)
 
-        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
         universal_offer_code.update!(excluded_products: [product1])
       end
 
       it "reindexes associated products when offer code is updated" do
-        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
-        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
 
         offer_code.update(amount_cents: 500)
       end
 
       it "reindexes associated products when offer code code is changed" do
-        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
-        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
 
         offer_code.update(code: "NEWYEAR2025")
       end
@@ -1421,8 +1422,8 @@ describe OfferCode do
       end
 
       it "reindexes associated products when offer code is destroyed" do
-        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
-        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
 
         offer_code.destroy
       end
@@ -1436,8 +1437,8 @@ describe OfferCode do
       end
 
       it "only reindexes products that exist" do
-        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
-        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
 
         offer_code.send(:reindex_associated_products)
       end
