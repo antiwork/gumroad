@@ -40,6 +40,7 @@ describe EmbeddedJavascriptsController do
       expect(response.body).to include("analytics_token")
       expect(response.body).to include("/increment_views.gif")
       expect(response.body).to include("parsed.origin + parsed.pathname")
+      expect(response.body).to include('img.referrerPolicy = "origin"')
       expect(response.body).not_to include("params.set(\"view_url\", location.href)")
       expect(response.body).not_to include("data-gumroad-analytics-token")
 

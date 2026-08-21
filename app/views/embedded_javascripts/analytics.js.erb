@@ -32,5 +32,6 @@
   params.set("view_url", viewUrl);
 
   var img = new Image();
+  img.referrerPolicy = "origin";
   img.src = origin + "/links/" + encodeURIComponent(id) + "/increment_views.gif?" + params.toString();
 })();
