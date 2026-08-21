@@ -30,7 +30,7 @@ class WidgetPresenter
   def affiliated_products
     @affiliated_products ||= if user_signed_in?
       seller.directly_affiliated_products
-            .select("name, custom_permalink, unique_permalink, affiliates.id AS affiliate_id")
+            .select("links.id, name, custom_permalink, unique_permalink, affiliates.id AS affiliate_id")
             .order("affiliates.created_at DESC")
     else
       Link.none
