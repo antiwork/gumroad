@@ -6,7 +6,7 @@ import typia from "typia";
 
 import { usePersistentExternalScript } from "$app/hooks/usePersistentExternalScript";
 import { classNames } from "$app/utils/classNames";
-import { buildOverlayCodeToCopy, buildEmbedCodeToCopy } from "$app/utils/widgetCodeToCopyBuilders";
+import { buildAnalyticsCodeToCopy, buildOverlayCodeToCopy, buildEmbedCodeToCopy } from "$app/utils/widgetCodeToCopyBuilders";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -142,6 +142,7 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
   const [selectedTab, setSelectedTab] = React.useState<Tab>("overlay");
   const overlayTabpanelUID = React.useId();
   const embedTabpanelUID = React.useId();
+  const analyticsTabpanelUID = React.useId();
 
   const productSelect = (
     <ProductSelect
@@ -159,6 +160,7 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
         setTab={setSelectedTab}
         overlayTabpanelUID={overlayTabpanelUID}
         embedTabpanelUID={embedTabpanelUID}
+        analyticsTabpanelUID={analyticsTabpanelUID}
       />
       <div
         role="tabpanel"
@@ -175,6 +177,14 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
       >
         {display_product_select ? productSelect : null}
         <EmbedPanel selectedProduct={selectedProduct} />
+      </div>
+      <div
+        role="tabpanel"
+        id={analyticsTabpanelUID}
+        className={classNames("grid gap-6 rounded-sm border bg-background p-4", selectedTab !== "analytics" && "hidden")}
+      >
+        {display_product_select ? productSelect : null}
+        <AnalyticsPanel selectedProduct={selectedProduct} />
       </div>
     </div>
   );
@@ -270,6 +280,24 @@ const EmbedPanel = ({ selectedProduct }: PanelProps) => {
           </div>
         ) : null}
       </div>
+      <CodeContainer codeToCopy={codeToCopy} />
+    </>
+  );
+};
+
+const AnalyticsPanel = ({ selectedProduct }: PanelProps) => {
+  const [codeToCopy, setCodeToCopy] = React.useState("");
+
+  React.useEffect(() => {
+    const { script_base_url: scriptBaseUrl, url: productUrl } = selectedProduct;
+    setCodeToCopy(buildAnalyticsCodeToCopy({ scriptBaseUrl, productUrl }));
+  }, [selectedProduct]);
+
+  return (
+    <>
+      <p>
+        Paste this on any page you sell from. It counts a view in your Gumroad analytics when someone loads that page.
+      </p>
       <CodeContainer codeToCopy={codeToCopy} />
     </>
   );

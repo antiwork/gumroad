@@ -38,6 +38,13 @@ describe "Widget Page scenario", js: true, type: :system do
       copy_button.click
       expect(page).to have_content("Copied!")
     end
+
+    it "allows to copy analytics code for the demo product" do
+      visit("/widgets")
+      select_tab("Analytics")
+
+      expect(page).to have_field("Widget code", with: %(<script async src="#{UrlService.root_domain_with_protocol}/js/gumroad-analytics.js" data-gumroad-product="#{@demo_product.unique_permalink}"></script>))
+    end
   end
 
   context "when seller is logged in" do

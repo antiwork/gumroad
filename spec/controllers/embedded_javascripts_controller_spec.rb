@@ -27,4 +27,14 @@ describe EmbeddedJavascriptsController do
       expect(response.body).to include("/js/gumroad-embed-bundle.js")
     end
   end
+
+  describe "analytics" do
+    it "returns a drop-in tracking script" do
+      get :analytics, format: :js
+
+      expect(response.media_type).to eq("application/javascript")
+      expect(response.body).to include("data-gumroad-product")
+      expect(response.body).to include("/increment_views.gif")
+    end
+  end
 end

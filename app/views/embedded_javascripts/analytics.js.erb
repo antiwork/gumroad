@@ -1,0 +1,22 @@
+(function () {
+  var script = document.currentScript;
+  if (!script || !script.src) return;
+
+  var id = script.getAttribute("data-gumroad-product");
+  var origin;
+  try {
+    var src = new URL(script.src);
+    origin = src.origin;
+    if (!id) id = src.searchParams.get("id");
+  } catch (e) {
+    return;
+  }
+  if (!id || !origin) return;
+
+  var params = new URLSearchParams();
+  params.set("referrer", document.referrer || location.href);
+  params.set("view_url", location.href);
+
+  var img = new Image();
+  img.src = origin + "/links/" + encodeURIComponent(id) + "/increment_views.gif?" + params.toString();
+})();

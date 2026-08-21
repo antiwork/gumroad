@@ -6202,6 +6202,24 @@ class LinksControllerIncrementViewsTest < ActionController::TestCase
 
     assert_equal 0, ElasticsearchIndexerWorker.jobs.size
   end
+
+  test "GET increment_views.gif records a page view and returns a gif" do
+    sign_out @user
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, referrer: "https://landing.example/post", view_url: "https://landing.example/post" }
+
+    assert_response :success
+    assert_equal "image/gif", @response.media_type
+    assert ElasticsearchIndexerWorker.jobs.any? { |job| job["args"][0] == "index" && job["args"][1]["class_name"] == "ProductPageView" },
+           "Expected ElasticsearchIndexerWorker to index a ProductPageView"
+  end
+
+  test "GET increment_views.gif does not record page view for bots" do
+    @request.env["HTTP_USER_AGENT"] = "EventMachine HttpClient"
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif }
+
+    assert_response :success
+    assert_equal 0, ElasticsearchIndexerWorker.jobs.size
+  end
 end
 
 class LinksControllerWithoutEmailTest < ActionController::TestCase

@@ -18,6 +18,7 @@ class LinksController < ApplicationController
   DEFAULT_PRICE = 500
   PRICE_INPUT_MAX_LENGTH = 64
   PRICE_INPUT_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
+  TRANSPARENT_1X1_GIF = "GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xFF\xFF\xFF!\xF9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;".b.freeze
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
 
@@ -364,7 +365,12 @@ class LinksController < ApplicationController
       )
     end
 
-    render json: { success: true }
+    if request.format.gif?
+      expires_now
+      send_data TRANSPARENT_1X1_GIF, type: "image/gif", disposition: "inline"
+    else
+      render json: { success: true }
+    end
   end
 
   def track_user_action
