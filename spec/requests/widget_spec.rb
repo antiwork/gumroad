@@ -43,7 +43,7 @@ describe "Widget Page scenario", js: true, type: :system do
       visit("/widgets")
       select_tab("Analytics")
 
-      expect(page).to have_field("Widget code", with: %(<script async src="#{UrlService.root_domain_with_protocol}/js/gumroad-analytics.js?id=#{@demo_product.unique_permalink}"></script>))
+      expect(page).to have_field("Widget code", with: %(<script async referrerpolicy="origin" src="#{UrlService.root_domain_with_protocol}/js/gumroad-analytics.js?id=#{@demo_product.unique_permalink}"></script>))
     end
   end
 
