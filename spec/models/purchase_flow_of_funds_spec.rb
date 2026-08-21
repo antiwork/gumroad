@@ -27,7 +27,7 @@ describe Purchase do
 
     context "when the processor charge has no flow of funds but the purchase IS buyer-presentment" do
       it "keeps the nil flow of funds instead of relabelling the buyer-currency charge as dollars" do
-        create(:purchase_presentment, purchase:)
+        create(:purchase_presentment, purchase:, charge_presentment: nil)
         processor_charge = OpenStruct.new(flow_of_funds: nil)
 
         purchase.send(:load_flow_of_funds, processor_charge)
