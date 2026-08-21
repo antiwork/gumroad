@@ -4606,7 +4606,8 @@ class Purchase < ApplicationRecord
       # the existing nil path rather than being relabelled as dollars. If another processor
       # ever gains buyer-currency support, this line has to build the flow of funds from that
       # processor's own amounts instead of assuming dollars.
-      processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, self.total_transaction_cents) unless buyer_presentment?
+      flow_amount_cents = is_part_of_combined_charge? ? charge.amount_cents : self.total_transaction_cents
+      processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, flow_amount_cents) unless buyer_presentment?
       self.flow_of_funds = if is_part_of_combined_charge?
         build_flow_of_funds_from_combined_charge(processor_charge.flow_of_funds)
       else

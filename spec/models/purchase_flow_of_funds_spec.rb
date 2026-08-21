@@ -4,11 +4,7 @@ require "spec_helper"
 
 describe Purchase do
   describe "#load_flow_of_funds" do
-    # load_flow_of_funds is private; exercised directly. GUMROAD-1D9: a Stripe charge whose
-    # balance transaction isn't attached to its charge wrapper arrives with a nil flow of
-    # funds, and the historical fallback only covered non-Stripe processors, so the purchase
-    # raised NoMethodError during MarkSuccessfulService and the captured charge was left
-    # stranded. The fallback now also applies to non-presentment Stripe purchases.
+    # load_flow_of_funds is private; exercised directly to cover nil processor flows.
     let(:purchase) { create(:purchase) } # defaults to Stripe charge processor
 
     context "when the processor charge has no flow of funds and the purchase is not buyer-presentment" do
@@ -22,6 +18,24 @@ describe Purchase do
         expect(purchase.flow_of_funds.issued_amount.cents).to eq(purchase.total_transaction_cents)
         expect(purchase.flow_of_funds.settled_amount.cents).to eq(purchase.total_transaction_cents)
         expect(purchase.flow_of_funds.gumroad_amount.cents).to eq(purchase.total_transaction_cents)
+      end
+    end
+
+    context "when a combined-charge processor charge has no flow of funds" do
+      it "synthesises the shared charge flow from the whole charge before splitting the purchase share" do
+        sibling_product = create(:product, user: purchase.seller, price_cents: 20_00)
+        sibling = create(:purchase, link: sibling_product, seller: purchase.seller)
+        charge = create(:charge, seller: purchase.seller, merchant_account: purchase.merchant_account,
+                                 amount_cents: purchase.total_transaction_cents + sibling.total_transaction_cents)
+        charge.purchases << [purchase, sibling]
+        purchase.update!(is_part_of_combined_charge: true)
+        sibling.update!(is_part_of_combined_charge: true)
+        processor_charge = OpenStruct.new(flow_of_funds: nil)
+
+        purchase.send(:load_flow_of_funds, processor_charge)
+
+        expect(processor_charge.flow_of_funds.issued_amount.cents).to eq(charge.amount_cents)
+        expect(purchase.flow_of_funds.issued_amount.cents).to eq(purchase.total_transaction_cents)
       end
     end
 
