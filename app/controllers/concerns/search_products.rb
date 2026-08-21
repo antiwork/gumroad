@@ -65,8 +65,18 @@ module SearchProducts
         search_params[:ids] = search_params[:ids].split(",").map(&:strip)
       end
 
-      # These reach ES as `terms` clauses, which reject a nested structure with a 400.
-      %i[tags filetypes ids exclude_ids taxonomy_attribute_filters].each do |key|
+      if search_params[:curated_product_ids].is_a?(String)
+        # An empty string is the client encoding of `[]` (Discover pagination without
+        # curation) — split yields [], which `.map` at the call site leaves as an empty
+        # curation. Same as nil.
+        search_params[:curated_product_ids] = search_params[:curated_product_ids].split(",").map(&:strip)
+      elsif search_params[:curated_product_ids].is_a?(ActionController::Parameters) || search_params[:curated_product_ids].is_a?(Hash)
+        search_params[:curated_product_ids] = search_params[:curated_product_ids].values
+      end
+
+      # These reach ES as `terms` clauses (or a curated boost) that reject a nested structure
+      # with a 400, or a NoMethodError at the call site.
+      %i[tags filetypes ids exclude_ids taxonomy_attribute_filters curated_product_ids].each do |key|
         next unless search_params[key].is_a?(Array)
 
         search_params[key] = search_params[key].filter_map { |element| scalar_search_value(element)&.to_s }
