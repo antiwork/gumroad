@@ -321,6 +321,30 @@ describe DashboardController, type: :controller, inertia: true do
     end
   end
 
+  describe "POST dismiss_gumhead_promo" do
+    it_behaves_like "authorize called for action", :post, :dismiss_gumhead_promo do
+      let(:record) { :dashboard }
+    end
+
+    it "dismisses the Gumhead promo" do
+      expect(seller.has_dismissed_gumhead_promo?).to be(false)
+
+      post :dismiss_gumhead_promo
+
+      expect(response).to have_http_status(:ok)
+      expect(seller.reload.has_dismissed_gumhead_promo?).to be(true)
+    end
+
+    it "succeeds when the promo is already dismissed" do
+      seller.update!(has_dismissed_gumhead_promo: true)
+
+      post :dismiss_gumhead_promo
+
+      expect(response).to have_http_status(:ok)
+      expect(seller.reload.has_dismissed_gumhead_promo?).to be(true)
+    end
+  end
+
   describe "GET download_tax_form" do
     it_behaves_like "authorize called for action", :get, :download_tax_form do
       let(:record) { :dashboard }

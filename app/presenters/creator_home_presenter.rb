@@ -132,6 +132,7 @@ class CreatorHomePresenter
   private
     def gumhead_props
       return {} unless Feature.active?(GUMHEAD_FEATURE, seller)
+      return {} if seller.has_dismissed_gumhead_promo?
 
       { gumhead: { download_url: GUMHEAD_DOWNLOAD_URL } }
     end
