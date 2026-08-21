@@ -6203,19 +6203,30 @@ class LinksControllerIncrementViewsTest < ActionController::TestCase
     assert_equal 0, ElasticsearchIndexerWorker.jobs.size
   end
 
-  test "GET increment_views.gif records a page view with the sanitized external page URL" do
+  test "GET increment_views.gif records a page view with the authenticated source URL" do
     sign_out @user
     source_url = "https://landing.example"
-    sanitized_view_url = "https://landing.example/post"
     @request.env["HTTP_REFERER"] = source_url
-    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token(source_url:), view_url: sanitized_view_url, referrer: sanitized_view_url }
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token(source_url:) }
 
     assert_response :success
     assert_equal "image/gif", @response.media_type
     assert ElasticsearchIndexerWorker.jobs.any? { |job| job["args"][0] == "index" && job["args"][1]["class_name"] == "ProductPageView" },
            "Expected ElasticsearchIndexerWorker to index a ProductPageView"
-    assert_equal sanitized_view_url, ElasticsearchIndexerWorker.jobs.last["args"][1]["body"]["url"]
-    assert_equal sanitized_view_url, ElasticsearchIndexerWorker.jobs.last["args"][1]["body"]["referrer"]
+    assert_equal source_url, ElasticsearchIndexerWorker.jobs.last["args"][1]["body"]["url"]
+    assert_equal source_url, ElasticsearchIndexerWorker.jobs.last["args"][1]["body"]["referrer"]
+  end
+
+  test "GET increment_views.gif ignores spoofed attribution parameters" do
+    sign_out @user
+    source_url = "https://landing.example"
+    @request.env["HTTP_REFERER"] = source_url
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token(source_url:), view_url: "https://evil.example/post", referrer: "https://evil.example/referrer" }
+
+    assert_response :success
+    assert_equal "image/gif", @response.media_type
+    assert_equal source_url, ElasticsearchIndexerWorker.jobs.last["args"][1]["body"]["url"]
+    assert_equal source_url, ElasticsearchIndexerWorker.jobs.last["args"][1]["body"]["referrer"]
   end
 
   test "GET increment_views.gif replays only the same script-load token into the same page view id" do

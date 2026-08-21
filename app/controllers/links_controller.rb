@@ -354,6 +354,7 @@ class LinksController < ApplicationController
   def increment_views
     source_url = request.referrer if request.get?
     analytics_view_payload = @product.analytics_view_token_payload(params[:analytics_token], source_url:) if request.get?
+    external_analytics_source_url = analytics_view_payload&.fetch("source_url")
     skip = is_bot?
     skip |= logged_in_user.present? && (@product.user_id == current_seller.id || logged_in_user.is_team_member?)
     skip |= impersonating_user&.id
@@ -362,9 +363,9 @@ class LinksController < ApplicationController
     unless skip
       create_product_page_view(
         user_id: logged_in_user&.id,
-        referrer: (request.get? ? params[:referrer].presence : nil) || source_url || Array.wrap(params[:referrer]).compact_blank.last || request.referrer,
+        referrer: external_analytics_source_url || Array.wrap(params[:referrer]).compact_blank.last || request.referrer,
         was_product_recommended: ActiveModel::Type::Boolean.new.cast(params[:was_product_recommended]),
-        view_url: (request.get? ? params[:view_url].presence : nil) || source_url || params[:view_url] || request.env["PATH_INFO"],
+        view_url: external_analytics_source_url || params[:view_url] || request.env["PATH_INFO"],
         id: request.get? ? external_analytics_view_id(analytics_view_payload:) : SecureRandom.uuid
       )
     end
