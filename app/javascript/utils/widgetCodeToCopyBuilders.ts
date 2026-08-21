@@ -38,10 +38,13 @@ export const permalinkFromProductUrl = (productUrl: string): string => {
 export const buildAnalyticsCodeToCopy = ({
   scriptBaseUrl,
   productUrl,
+  analyticsScriptToken,
 }: {
   scriptBaseUrl: string;
   productUrl: string;
+  analyticsScriptToken: string;
 }) => {
   const permalink = permalinkFromProductUrl(productUrl);
-  return `<script async referrerpolicy="origin" src="${scriptBaseUrl}/js/gumroad-analytics.js?id=${encodeURIComponent(permalink)}"></script>`;
+  const params = new URLSearchParams({ id: permalink, token: analyticsScriptToken });
+  return `<script async referrerpolicy="origin" src="${scriptBaseUrl}/js/gumroad-analytics.js?${params.toString()}"></script>`;
 };

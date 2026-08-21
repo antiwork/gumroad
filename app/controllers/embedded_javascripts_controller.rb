@@ -18,7 +18,7 @@ class EmbeddedJavascriptsController < ApplicationController
 
   def analytics
     @product = Link.fetch(params[:id]) if params[:id].present?
-    @analytics_token = @product&.analytics_view_token(source_url: request.referrer) if request.referrer.present?
+    @analytics_token = @product&.analytics_view_token(source_url: request.referrer) if request.referrer.present? && @product&.analytics_script_token?(params[:token])
     expires_now
     render :analytics, layout: false, content_type: "application/javascript"
   end

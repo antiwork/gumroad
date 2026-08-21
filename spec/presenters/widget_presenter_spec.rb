@@ -12,7 +12,8 @@ describe WidgetPresenter do
       name: product.name,
       url:,
       gumroad_domain_url:,
-      script_base_url: UrlService.root_domain_with_protocol
+      script_base_url: UrlService.root_domain_with_protocol,
+      analytics_script_token: product.analytics_script_token
     }
   end
 

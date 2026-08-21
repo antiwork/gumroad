@@ -289,8 +289,8 @@ const AnalyticsPanel = ({ selectedProduct }: PanelProps) => {
   const [codeToCopy, setCodeToCopy] = React.useState("");
 
   React.useEffect(() => {
-    const { script_base_url: scriptBaseUrl, url: productUrl } = selectedProduct;
-    setCodeToCopy(buildAnalyticsCodeToCopy({ scriptBaseUrl, productUrl }));
+    const { script_base_url: scriptBaseUrl, url: productUrl, analytics_script_token: analyticsScriptToken } = selectedProduct;
+    setCodeToCopy(buildAnalyticsCodeToCopy({ scriptBaseUrl, productUrl, analyticsScriptToken }));
   }, [selectedProduct]);
 
   return (

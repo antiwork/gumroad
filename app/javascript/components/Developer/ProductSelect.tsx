@@ -7,6 +7,7 @@ import { Select } from "$app/components/ui/Select";
 export type Product = {
   name: string;
   script_base_url: string;
+  analytics_script_token: string;
   url: string;
   gumroad_domain_url: string;
 };
