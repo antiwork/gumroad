@@ -4598,11 +4598,15 @@ class Purchase < ApplicationRecord
     def load_flow_of_funds(processor_charge)
       # Synthesising a US dollar flow of funds from the canonical total would be wrong for a
       # buyer-currency (presentment) charge, where the money actually moved in the buyer's
-      # currency. It is safe here because the guard restricts it to non-Stripe processors, and
-      # only Stripe charges can be presentment charges today. If another processor ever gains
-      # buyer-currency support, this line has to build the flow of funds from that processor's
-      # own amounts instead of assuming dollars.
-      processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, self.total_transaction_cents) if StripeChargeProcessor.charge_processor_id != charge_processor_id
+      # currency. Only Stripe charges can be presentment charges today, so the fallback was
+      # historically gated to non-Stripe processors; but a Stripe charge whose balance
+      # transaction isn't attached to its charge wrapper (see StripeCharge#build_flow_of_funds)
+      # can also arrive here with a nil flow of funds, and when it is not a presentment charge
+      # the money moved in USD, so the same simple fallback is safe. A presentment charge keeps
+      # the existing nil path rather than being relabelled as dollars. If another processor
+      # ever gains buyer-currency support, this line has to build the flow of funds from that
+      # processor's own amounts instead of assuming dollars.
+      processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, self.total_transaction_cents) unless buyer_presentment?
       self.flow_of_funds = if is_part_of_combined_charge?
         build_flow_of_funds_from_combined_charge(processor_charge.flow_of_funds)
       else
