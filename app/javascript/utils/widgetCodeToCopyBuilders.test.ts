@@ -23,6 +23,6 @@ describe("buildAnalyticsCodeToCopy", () => {
         scriptBaseUrl: "https://gumroad.com",
         productUrl: "https://example.gumroad.com/l/demo",
       }),
-    ).toBe(`<script async src="https://gumroad.com/js/gumroad-analytics.js?id=demo"></script>`);
+    ).toBe(`<script async referrerpolicy="origin" src="https://gumroad.com/js/gumroad-analytics.js?id=demo"></script>`);
   });
 });

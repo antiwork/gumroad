@@ -43,5 +43,5 @@ export const buildAnalyticsCodeToCopy = ({
   productUrl: string;
 }) => {
   const permalink = permalinkFromProductUrl(productUrl);
-  return `<script async src="${scriptBaseUrl}/js/gumroad-analytics.js?id=${encodeURIComponent(permalink)}"></script>`;
+  return `<script async referrerpolicy="origin" src="${scriptBaseUrl}/js/gumroad-analytics.js?id=${encodeURIComponent(permalink)}"></script>`;
 };

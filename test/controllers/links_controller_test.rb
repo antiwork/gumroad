@@ -6203,23 +6203,25 @@ class LinksControllerIncrementViewsTest < ActionController::TestCase
     assert_equal 0, ElasticsearchIndexerWorker.jobs.size
   end
 
-  test "GET increment_views.gif records a page view and returns a gif with a valid analytics token" do
+  test "GET increment_views.gif records a page view with the sanitized external page URL" do
     sign_out @user
-    source_url = "https://landing.example/post"
+    source_url = "https://landing.example"
+    sanitized_view_url = "https://landing.example/post"
     @request.env["HTTP_REFERER"] = source_url
-    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token(source_url:) }
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token(source_url:), view_url: sanitized_view_url, referrer: sanitized_view_url }
 
     assert_response :success
     assert_equal "image/gif", @response.media_type
     assert ElasticsearchIndexerWorker.jobs.any? { |job| job["args"][0] == "index" && job["args"][1]["class_name"] == "ProductPageView" },
            "Expected ElasticsearchIndexerWorker to index a ProductPageView"
-    assert_equal source_url, ElasticsearchIndexerWorker.jobs.last["args"][1]["body"]["url"]
+    assert_equal sanitized_view_url, ElasticsearchIndexerWorker.jobs.last["args"][1]["body"]["url"]
+    assert_equal sanitized_view_url, ElasticsearchIndexerWorker.jobs.last["args"][1]["body"]["referrer"]
   end
 
-  test "GET increment_views.gif replays the same source-bound token into the same page view id" do
+  test "GET increment_views.gif replays only the same script-load token into the same page view id" do
     sign_out @user
     source_url = "https://landing.example/post"
-    token = @increment_product.analytics_view_token(source_url:)
+    token = @increment_product.analytics_view_token(source_url:, event_id: "script-load-1")
 
     @request.env["HTTP_REFERER"] = source_url
     get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: token }
@@ -6230,6 +6232,11 @@ class LinksControllerIncrementViewsTest < ActionController::TestCase
     second_id = ElasticsearchIndexerWorker.jobs.last["args"][1]["id"]
 
     assert_equal first_id, second_id
+
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token(source_url:, event_id: "script-load-2") }
+    third_id = ElasticsearchIndexerWorker.jobs.last["args"][1]["id"]
+
+    assert_not_equal first_id, third_id
   end
 
   test "GET increment_views.gif does not record page view without a valid analytics token" do

@@ -14,10 +14,22 @@
   }
   if (!id || !token || !origin) return;
 
+  function analyticsUrl(url) {
+    try {
+      var parsed = new URL(url);
+      return parsed.origin + parsed.pathname;
+    } catch (e) {
+      return "";
+    }
+  }
+
+  var viewUrl = analyticsUrl(location.href);
+  var referrer = analyticsUrl(document.referrer) || viewUrl;
+
   var params = new URLSearchParams();
   params.set("analytics_token", token);
-  params.set("referrer", document.referrer || location.href);
-  params.set("view_url", location.href);
+  params.set("referrer", referrer);
+  params.set("view_url", viewUrl);
 
   var img = new Image();
   img.src = origin + "/links/" + encodeURIComponent(id) + "/increment_views.gif?" + params.toString();
