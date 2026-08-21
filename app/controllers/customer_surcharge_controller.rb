@@ -106,7 +106,8 @@ class CustomerSurchargeController < ApplicationController
     # What is left can still fail for a reason specific to one currency (a settlement mismatch
     # on the seller's account, or a cart uniformly listed in it). Don't advertise the one we just
     # attempted to quote; the checkout tells the buyer their choice was refused.
-    if quote_currency.present? && quote_currency != Currency::USD && quote_props.nil?
+    if quote_currency.present? && quote_currency != Currency::USD && quote_props.nil? &&
+       !direct_listed_currency_offered_for_cart?(quote_line_items, quote_currency)
       available = available.reject { |entry| entry[:code] == quote_currency }
     end
 
@@ -291,6 +292,8 @@ class CustomerSurchargeController < ApplicationController
       # offered; the gates below only decide which extra currencies join it.
       return true if code == Currency::USD
 
+      return true if direct_listed_currency_offered_for_cart?(line_items, code)
+
       # A charge entirely listed in this currency uses the direct-listed lane (or stays
       # unquoted). A mixed charge instead quotes its canonical USD total, so its already-listed
       # lines must not remove a currency that the remaining lines can settle. Grouped per
@@ -313,5 +316,9 @@ class CustomerSurchargeController < ApplicationController
         product:,
         product_currency: product.price_currency_type
       )
+    end
+
+    def direct_listed_currency_offered_for_cart?(line_items, code)
+      Checkout::BuyerCurrencyEligibility.direct_listed_line_items_eligible?(line_items:, buyer_currency: code)
     end
 end

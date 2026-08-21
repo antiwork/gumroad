@@ -80,6 +80,28 @@ class Checkout::BuyerCurrencyEligibility
     seller.present? && Feature.active?(LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
   end
 
+  def self.direct_listed_line_items_eligible?(line_items:, buyer_currency:)
+    return false if line_items.blank?
+
+    currency = buyer_currency.to_s.downcase
+    return false if currency.blank? || currency == Currency::USD
+    return false unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
+    return false if line_items.any? { _1.product.blank? }
+    return false unless line_items.all? { _1.product.price_currency_type.to_s.downcase == currency }
+
+    seller_ids = line_items.map { _1.product.user_id }.uniq
+    return false unless seller_ids.one?
+
+    seller = line_items.first.product.user
+    return false unless seller_enabled?(seller)
+    return false unless listed_currency_direct_charge_enabled?(seller)
+    return false if line_items.any? { _1.later_charge_kind.present? }
+    return false if line_items.any? { _1.tip_cents.to_i.positive? || _1.shipping_cents.to_i.positive? }
+
+    rates = line_items.map { _1.listed_currency_rate.presence }
+    rates.all? && rates.map(&:to_s).uniq.one? && rates.first.to_d.positive?
+  end
+
   # Whether a method-forced surface for `currency` is available to card or Link in this
   # eligibility check: always in Stripe test mode, and in live mode when at least one
   # registry method forcing that currency has its launch flag active. The presenter and
