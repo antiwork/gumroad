@@ -6203,9 +6203,9 @@ class LinksControllerIncrementViewsTest < ActionController::TestCase
     assert_equal 0, ElasticsearchIndexerWorker.jobs.size
   end
 
-  test "GET increment_views.gif records a page view and returns a gif" do
+  test "GET increment_views.gif records a page view and returns a gif with a valid analytics token" do
     sign_out @user
-    get :increment_views, params: { id: @increment_product.to_param, format: :gif, referrer: "https://landing.example/post", view_url: "https://landing.example/post" }
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token, referrer: "https://landing.example/post", view_url: "https://landing.example/post" }
 
     assert_response :success
     assert_equal "image/gif", @response.media_type
@@ -6213,9 +6213,28 @@ class LinksControllerIncrementViewsTest < ActionController::TestCase
            "Expected ElasticsearchIndexerWorker to index a ProductPageView"
   end
 
+  test "GET increment_views.gif does not record page view without a valid analytics token" do
+    sign_out @user
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: "invalid" }
+
+    assert_response :success
+    assert_equal "image/gif", @response.media_type
+    assert_equal 0, ElasticsearchIndexerWorker.jobs.size
+  end
+
+  test "GET increment_views.gif does not record page view with another product's analytics token" do
+    sign_out @user
+    other_product = create_product
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: other_product.analytics_view_token }
+
+    assert_response :success
+    assert_equal "image/gif", @response.media_type
+    assert_equal 0, ElasticsearchIndexerWorker.jobs.size
+  end
+
   test "GET increment_views.gif does not record page view for bots" do
     @request.env["HTTP_USER_AGENT"] = "EventMachine HttpClient"
-    get :increment_views, params: { id: @increment_product.to_param, format: :gif }
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token }
 
     assert_response :success
     assert_equal 0, ElasticsearchIndexerWorker.jobs.size

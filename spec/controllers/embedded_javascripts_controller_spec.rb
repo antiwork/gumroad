@@ -34,6 +34,8 @@ describe EmbeddedJavascriptsController do
 
       expect(response.media_type).to eq("application/javascript")
       expect(response.body).to include("data-gumroad-product")
+      expect(response.body).to include("data-gumroad-analytics-token")
+      expect(response.body).to include("analytics_token")
       expect(response.body).to include("/increment_views.gif")
     end
   end

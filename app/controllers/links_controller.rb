@@ -355,6 +355,7 @@ class LinksController < ApplicationController
     skip = is_bot?
     skip |= logged_in_user.present? && (@product.user_id == current_seller.id || logged_in_user.is_team_member?)
     skip |= impersonating_user&.id
+    skip |= request.get? && !@product.analytics_view_token?(params[:analytics_token])
 
     unless skip
       create_product_page_view(

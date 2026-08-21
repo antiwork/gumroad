@@ -3,17 +3,20 @@
   if (!script || !script.src) return;
 
   var id = script.getAttribute("data-gumroad-product");
+  var token = script.getAttribute("data-gumroad-analytics-token");
   var origin;
   try {
     var src = new URL(script.src);
     origin = src.origin;
     if (!id) id = src.searchParams.get("id");
+    if (!token) token = src.searchParams.get("token");
   } catch (e) {
     return;
   }
-  if (!id || !origin) return;
+  if (!id || !token || !origin) return;
 
   var params = new URLSearchParams();
+  params.set("analytics_token", token);
   params.set("referrer", document.referrer || location.href);
   params.set("view_url", location.href);
 

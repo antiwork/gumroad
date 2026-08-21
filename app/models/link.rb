@@ -4,6 +4,8 @@ require "zip/filesystem"
 
 class Link < ApplicationRecord
   has_paper_trail
+  ANALYTICS_VIEW_TOKEN_PURPOSE = :external_landing_page_view
+
   # Moving the definition of these flags will cause an error.
   include FlagShihTzu
   include ActionView::Helpers::SanitizeHelper
@@ -894,6 +896,19 @@ class Link < ApplicationRecord
 
   def self.fetch(unique_permalink, user: nil)
     Link.by_user(user).visible.find_by(unique_permalink:)
+  end
+
+  def analytics_view_token
+    self.class.analytics_view_verifier.generate({ product_id: id }, purpose: ANALYTICS_VIEW_TOKEN_PURPOSE)
+  end
+
+  def analytics_view_token?(token)
+    payload = self.class.analytics_view_verifier.verified(token.to_s, purpose: ANALYTICS_VIEW_TOKEN_PURPOSE)
+    payload.is_a?(Hash) && payload["product_id"] == id
+  end
+
+  def self.analytics_view_verifier
+    Rails.application.message_verifier(:product_analytics_view)
   end
 
   def can_gift?
