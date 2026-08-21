@@ -44,6 +44,7 @@ describe ProfilePresenter do
           subdomain: seller.subdomain,
           is_verified: false,
           can_edit: true,
+          hide_follow_widget: false,
           follow_recaptcha_site_key: FollowRecaptcha.site_key,
         }
       )
@@ -54,6 +55,12 @@ describe ProfilePresenter do
 
       expect(described_class.new(pundit_user:, seller: seller.reload).creator_profile[:follow_recaptcha_site_key]).to be_nil
     end
+
+    it "reflects hide_follow_widget from the seller's profile" do
+      seller.seller_profile.update!(hide_follow_widget: true)
+      expect(described_class.new(pundit_user:, seller: seller.reload).creator_profile[:hide_follow_widget]).to eq(true)
+    end
+
 
     it "includes the follow CAPTCHA key for a seller who has not been reviewed" do
       expect(seller.user_risk_state).to eq("not_reviewed")
@@ -295,6 +302,15 @@ describe ProfilePresenter do
       )
       expect(props[:profile_settings]).not_to have_key(:username)
     end
+
+    it "exposes hide_follow_widget on profile_settings and flips with the seller's choice" do
+      Link.import(force: true, refresh: true)
+      expect(presenter.profile_settings_props(request:)[:profile_settings][:hide_follow_widget]).to eq(false)
+
+      seller.seller_profile.update!(hide_follow_widget: true)
+      expect(described_class.new(pundit_user:, seller: seller.reload).profile_settings_props(request:)[:profile_settings][:hide_follow_widget]).to eq(true)
+    end
+
 
     describe "email_confirmation" do
       it "is nil when the seller's email is confirmed" do

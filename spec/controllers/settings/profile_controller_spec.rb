@@ -78,6 +78,13 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       )
     end
 
+    it "persists hide_follow_widget on the seller's profile" do
+      put :update, params: { seller_profile: { hide_follow_widget: true } }
+
+      expect(response).to have_http_status :see_other
+      expect(seller.reload.seller_profile.hide_follow_widget).to eq(true)
+    end
+
     it "leaves the other design fields alone when only one is sent" do
       seller.seller_profile.update!(background_color: "#ffffff", highlight_color: "#ff90e8", font: "ABC Favorit")
 

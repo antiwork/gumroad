@@ -19,6 +19,10 @@ class ProfilePresenter
       subdomain: seller.subdomain,
       is_verified: !!seller.verified,
       can_edit: can_edit_profile?,
+      # Public profile: creator can hide the header Follow (email signup) widget entirely.
+      # The frontend also hides it on its own when the profile has zero sections, so this
+      # flag is opt-out only.
+      hide_follow_widget: seller.seller_profile.hide_follow_widget,
       # Non-nil only when this seller's subscribe form has to pass a CAPTCHA
       # (see FollowRecaptcha). The follow form executes the challenge with this
       # key and FollowersController verifies the resulting token against the
@@ -68,6 +72,7 @@ class ProfilePresenter
           highlight_color: HexColorValidator.normalize(seller.seller_profile.highlight_color),
           profile_picture_blob_id: seller.avatar.signed_id,
           product_page_storefront_enabled: seller.product_page_storefront_enabled?,
+          hide_follow_widget: seller.seller_profile.hide_follow_widget,
         },
         editable_profile: shared_profile_props(seller_custom_domain_url: nil, request:),
         # Version stamp for optimistic concurrency: the editor sends it back on save so the server

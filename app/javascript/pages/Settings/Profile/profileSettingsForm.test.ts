@@ -15,6 +15,7 @@ const settings = (overrides: Partial<ProfileSettingsForm> = {}): ProfileSettings
   background_color: "#ffffff",
   highlight_color: "#ff90e8",
   product_page_storefront_enabled: false,
+  hide_follow_widget: false,
   ...overrides,
 });
 
@@ -53,6 +54,15 @@ describe("profile settings synchronization", () => {
     const rebased = rebaseProfileSettings(current, baseline, incoming);
 
     expect(changedProfileSettings(rebased, incoming)).toEqual({ bio: "Local bio edit" });
+  });
+
+  it("tracks hide_follow_widget as a changed setting", () => {
+    const baseline = settings();
+    const current = settings({ hide_follow_widget: true });
+
+    expect(changedProfileSettings(current, baseline)).toEqual({ hide_follow_widget: true });
+    expect(rebaseProfileSettings(current, baseline, settings()).hide_follow_widget).toBe(true);
+    expect(rebaseProfileSettings(settings(), baseline, settings({ hide_follow_widget: true })).hide_follow_widget).toBe(true);
   });
 
   it("matches the live primary-button foreground for saturated backgrounds", () => {

@@ -8,6 +8,7 @@ export type ProfileSettingsForm = {
   highlight_color: string;
   profile_picture_blob_id: string | null;
   product_page_storefront_enabled: boolean;
+  hide_follow_widget: boolean;
 };
 
 export const profileThemeColors = (backgroundColor: string, highlightColor: string) => {
@@ -40,6 +41,7 @@ export const changedProfileSettings = (
   if (current.product_page_storefront_enabled !== baseline.product_page_storefront_enabled) {
     changes.product_page_storefront_enabled = current.product_page_storefront_enabled;
   }
+  if (current.hide_follow_widget !== baseline.hide_follow_widget) changes.hide_follow_widget = current.hide_follow_widget;
   return changes;
 };
 
@@ -65,4 +67,8 @@ export const rebaseProfileSettings = (
     current.product_page_storefront_enabled === previousBaseline.product_page_storefront_enabled
       ? incoming.product_page_storefront_enabled
       : current.product_page_storefront_enabled,
+  hide_follow_widget:
+    current.hide_follow_widget === previousBaseline.hide_follow_widget
+      ? incoming.hide_follow_widget
+      : current.hide_follow_widget,
 });

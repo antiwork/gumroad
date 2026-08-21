@@ -147,7 +147,7 @@ const PublicProfile = (props: Props) => {
 };
 
 export const Profile = (props: Props) => (
-  <Layout creatorProfile={props.creator_profile} hideFollowForm={!props.sections.length} currencySelector>
+  <Layout creatorProfile={props.creator_profile} hideFollowForm={!!props.creator_profile.hide_follow_widget || !props.sections.length} currencySelector>
     <PublicProfile {...props} />
   </Layout>
 );

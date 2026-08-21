@@ -359,7 +359,7 @@ export default function SettingsPage() {
             <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
             <link rel="stylesheet" href={seller_fonts_css_source} />
             <div inert>
-              <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
+              <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount || profileSettings.hide_follow_widget}>
                 <EditProfile
                   {...editableProfile}
                   creator_profile={previewCreatorProfile}
@@ -456,11 +456,22 @@ export default function SettingsPage() {
                   disabled={!canUpdate}
                   label="Show your storefront on product pages"
                 />
-                <FieldsetDescription>
-                  Product pages display your profile header above the product and the rest of your products below it, so
-                  buyers landing on a shared link can browse your whole store.
-                </FieldsetDescription>
-              </Fieldset>
+                <Fieldset>
+                  <ToggleSettingRow
+                    value={profileSettings.hide_follow_widget}
+                    onChange={(value) => updateProfileSettings({ hide_follow_widget: value })}
+                    disabled={!canUpdate}
+                    label="Hide the Follow button on your public profile"
+                  />
+                </Fieldset>
+                <Fieldset>
+                  <ToggleSettingRow
+                    value={profileSettings.product_page_storefront_enabled}
+                    onChange={(value) => updateProfileSettings({ product_page_storefront_enabled: value })}
+                    disabled={!canUpdate}
+                    label="Show your storefront on product pages"
+                  />
+                </Fieldset>
               {loggedInUser?.policies.settings_profile.manage_social_connections ? (
                 <Fieldset>
                   <FieldsetTitle>Social links</FieldsetTitle>
