@@ -65,6 +65,27 @@ describe("computeInitialCheckout", () => {
     expect(result.beginCheckoutEvents.map((e) => e.action)).toEqual(["begin_checkout", "begin_checkout"]);
   });
 
+  it("reports per-unit product prices and a quantity-adjusted checkout total", () => {
+    const products = [
+      { ...makeProductToAdd({ permalink: "a", creatorId: "seller-1", price: 500 }), quantity: 3 },
+      { ...makeProductToAdd({ permalink: "b", creatorId: "seller-1", price: 250 }), quantity: 1 },
+    ];
+
+    const result = computeInitialCheckout(makeArgs(products));
+
+    expect(result.beginCheckoutEvents).toEqual([
+      {
+        action: "begin_checkout",
+        seller_id: "seller-1",
+        price: 17.5,
+        products: [
+          { permalink: "a", name: baseProduct.name, quantity: 3, price: 5 },
+          { permalink: "b", name: baseProduct.name, quantity: 1, price: 2.5 },
+        ],
+      },
+    ]);
+  });
+
   it("is pure: repeated invocations on a shared multi-product array produce identical results (the render-loop regression + no input mutation)", () => {
     // Multi-element + a stable reference: if the function mutated the caller's
     // array (e.g. an in-place reverse), successive calls would diverge. A

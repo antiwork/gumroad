@@ -128,12 +128,15 @@ export const computeInitialCheckout = ({
     }
 
     for (const [creatorId, creatorCart] of creatorCarts) {
-      const products = creatorCart.map((item) => ({
-        permalink: item.product.permalink,
-        name: item.product.name,
-        quantity: item.quantity,
-        price: convertToUSD(item, getDiscountedPrice(initialCart, item).price) / 100.0,
-      }));
+      const products = creatorCart.map((item) => {
+        const linePriceUsd = convertToUSD(item, getDiscountedPrice(initialCart, item).price) / 100.0;
+        return {
+          permalink: item.product.permalink,
+          name: item.product.name,
+          quantity: item.quantity,
+          price: linePriceUsd / item.quantity,
+        };
+      });
       beginCheckoutEvents.push({
         action: "begin_checkout",
         seller_id: creatorId,
