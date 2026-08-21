@@ -102,7 +102,7 @@ export function trackProductEvent(id: string | undefined, data: ProductAnalytics
 
   GoogleAnalytics.trackProductEvent(config, data);
   if (data.action !== "begin_checkout") FacebookPixel.trackProductEvent(config, data);
-  if (data.action !== "begin_checkout") TikTokPixel.trackProductEvent(config, data);
+  TikTokPixel.trackProductEvent(config, data);
 }
 
 export type SellerPurchaseEvent = {

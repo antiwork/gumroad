@@ -2,7 +2,6 @@ import loadTikTokPixelScript from "$vendor/tiktok_pixel";
 
 import {
   AnalyticsConfig,
-  BeginCheckoutEvent,
   BuyerCurrencyDisplayViewedEvent,
   GumroadEvents,
   ProductAnalyticsEvent,
@@ -10,11 +9,12 @@ import {
 
 export type TikTokPixelConfig = { tiktokPixelId: string | null };
 
-type TikTokProductAnalyticsEvent = Exclude<ProductAnalyticsEvent, BeginCheckoutEvent | BuyerCurrencyDisplayViewedEvent>;
+type TikTokProductAnalyticsEvent = Exclude<ProductAnalyticsEvent, BuyerCurrencyDisplayViewedEvent>;
 
-const TikTokEvents: Record<Exclude<GumroadEvents, "begin_checkout" | "buyer_currency_display_viewed">, string> = {
+const TikTokEvents: Record<Exclude<GumroadEvents, "buyer_currency_display_viewed">, string> = {
   viewed: "ViewContent",
   iwantthis: "AddToCart",
+  begin_checkout: "InitiateCheckout",
   purchased: "CompletePayment",
 };
 
@@ -36,6 +36,19 @@ export function trackProductEvent(config: AnalyticsConfig, data: TikTokProductAn
         currency: data.currency,
       });
     }
+  } else if (data.action === "begin_checkout") {
+    if (!config.trackFreeSales && data.price === 0) return;
+    ttq.instance(config.tiktokPixelId).track(TikTokEvents[data.action], {
+      contents: data.products.map((product) => ({
+        content_id: product.permalink,
+        content_type: "product",
+        quantity: product.quantity,
+        price: product.price,
+      })),
+      value: data.price,
+      currency: "USD",
+      content_type: "product",
+    });
   } else {
     ttq.instance(config.tiktokPixelId).track(TikTokEvents[data.action], {
       content_id: data.permalink,
