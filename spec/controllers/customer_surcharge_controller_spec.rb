@@ -184,10 +184,61 @@ describe CustomerSurchargeController, :vcr do
       post "calculate_all", params: {
         products: [{ permalink: cad_product.unique_permalink, price: 10_00, quantity: 1 }],
         buyer_currency: Currency::CAD,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
       }, as: :json
 
       expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
       expect(response.parsed_body.fetch("available_buyer_currencies")).to include(include("code" => Currency::CAD))
+    end
+
+    it "does not advertise the listed currency when the current payment element is mounted in USD" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+
+      post "calculate_all", params: {
+        products: [{ permalink: cad_product.unique_permalink, price: 10_00, quantity: 1 }],
+        buyer_currency: Currency::CAD,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::USD,
+      }, as: :json
+
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).not_to include(Currency::CAD)
+    end
+
+    it "does not advertise the listed currency for a saved-card checkout" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+
+      post "calculate_all", params: {
+        products: [{ permalink: cad_product.unique_permalink, price: 10_00, quantity: 1 }],
+        buyer_currency: Currency::CAD,
+        payment_details_source: PurchasePaymentFlow::SAVED_PAYMENT_METHOD,
+        payment_element_mount_currency: Currency::CAD,
+      }, as: :json
+
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).not_to include(Currency::CAD)
+    end
+
+    it "does not advertise the listed currency when saving the card makes the charge fall back" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+
+      post "calculate_all", params: {
+        products: [{ permalink: cad_product.unique_permalink, price: 10_00, quantity: 1 }],
+        buyer_currency: Currency::CAD,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        save_card: true,
+      }, as: :json
+
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).not_to include(Currency::CAD)
     end
 
     it "does not advertise the listed currency when the direct-listed lane is gated off" do

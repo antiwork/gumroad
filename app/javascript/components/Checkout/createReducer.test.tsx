@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
 
-import { createReducer } from "$app/components/Checkout/payment";
+import { createReducer, type CheckoutPaymentConfig } from "$app/components/Checkout/payment";
 
 const getSurcharges = vi.hoisted(() => vi.fn());
 vi.mock("$app/data/customer_surcharge", () => ({ getSurcharges }));
@@ -109,7 +109,29 @@ describe("createReducer surcharge refetches", () => {
     vi.resetAllMocks();
   });
 
-  const renderCheckout = () => renderHook(() => createReducer(initialArgs));
+  const directListedCheckoutPayment: CheckoutPaymentConfig = {
+    integration: "payment_element_client_confirm" as const,
+    fallback_reason: null,
+    recurring_upi_registration: false,
+    disable_wallets: true,
+    request_apple_pay_merchant_tokens: false,
+    payment_element_wallets: false,
+    flat_payment_methods: true,
+    elements_options: {
+      stripe_elements_mode: "payment" as const,
+      currency: "cad",
+      presentment_amount_cents: 1_000,
+      listed_currency_display: { currency: "cad", subunit_to_unit: 100 },
+      payment_method_types: ["card"],
+      payment_method_list_token: null,
+      stripe_link_enabled: false,
+      stripe_connect_account_id: null,
+      direct_listed_card: true,
+    },
+  };
+
+  const renderCheckout = (overrides: Partial<Parameters<typeof createReducer>[0]> = {}) =>
+    renderHook(() => createReducer({ ...initialArgs, ...overrides }));
 
   it("passes an abort signal to getSurcharges and aborts it when a newer change invalidates", async () => {
     const requests = stubSurchargeRequests();
@@ -211,6 +233,31 @@ describe("createReducer surcharge refetches", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(result.current[0].surcharges).toEqual({ type: "loaded", result: freshResult });
+  });
+
+  it("passes the direct-listed Payment Element mount to the surcharge request", async () => {
+    const requests = stubSurchargeRequests();
+    renderCheckout({ checkoutPayment: directListedCheckoutPayment });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    expect(requests[0]?.payload).toMatchObject({
+      payment_details_source: "payment_element",
+      payment_element_mount_currency: "cad",
+    });
+  });
+
+  it("marks saved-card surcharge requests so direct-listed currencies are not advertised", async () => {
+    const requests = stubSurchargeRequests();
+    renderCheckout({
+      checkoutPayment: directListedCheckoutPayment,
+      savedCreditCard: { type: "visa", number: "**** 4242", expiration_date: "12/30", requires_mandate: false },
+    });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    expect(requests[0]?.payload).toMatchObject({ payment_details_source: "saved_payment_method" });
+    expect(requests[0]?.payload).not.toHaveProperty("payment_element_mount_currency");
   });
 
   it("passes the selected buyer currency on the next surcharge fetch", async () => {

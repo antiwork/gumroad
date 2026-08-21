@@ -319,6 +319,10 @@ class CustomerSurchargeController < ApplicationController
     end
 
     def direct_listed_currency_offered_for_cart?(line_items, code)
+      return false unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+      return false unless params[:payment_element_mount_currency].to_s.downcase == code.to_s.downcase
+      return false if ActiveModel::Type::Boolean.new.cast(params[:save_card])
+
       Checkout::BuyerCurrencyEligibility.direct_listed_line_items_eligible?(line_items:, buyer_currency: code)
     end
 end

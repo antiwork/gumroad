@@ -826,6 +826,13 @@ export const getErrors = (state: State) => (state.status.type === "input" ? stat
 
 export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
   const isGift = state.gift !== null;
+  const paymentDetailsSource = state.usingSavedCard
+    ? "saved_payment_method"
+    : state.paymentMethod === "card" && canUseStripePaymentElementClientConfirm(state)
+      ? "payment_element"
+      : undefined;
+  const paymentElementMountCurrency =
+    paymentDetailsSource === "payment_element" ? getStripePaymentElementMountCurrency(state) : null;
   // Allocate the tip across cart lines in one pass so the per-line integers sum to the
   // tip the buyer selected — rounding each line independently can send more total tip
   // than the buyer chose (see computeTipsForLines).
@@ -853,6 +860,9 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       vat_id: state.vatId,
       postal_code: state.zipCode,
       ...(state.buyerCurrency ? { buyer_currency: state.buyerCurrency } : {}),
+      ...(paymentDetailsSource ? { payment_details_source: paymentDetailsSource } : {}),
+      ...(paymentElementMountCurrency ? { payment_element_mount_currency: paymentElementMountCurrency } : {}),
+      ...(state.willSaveCard ? { save_card: true } : {}),
     },
     abortSignal,
   );
