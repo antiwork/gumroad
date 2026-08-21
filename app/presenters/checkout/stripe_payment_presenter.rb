@@ -525,11 +525,28 @@ class Checkout::StripePaymentPresenter
       end
     end
 
-    # Selected-tier PWYW only. has_customizable_price_option? scans every alive tier, so a
-    # free selected tier of a membership that also has a PWYW tier would look customizable
-    # and mount Payment Element on a $0 checkout. Non-memberships: option.customizable_price
-    # is always false (Variant::Prices#set_customizable_price early-returns); use the product
-    # column. No recorded option on a membership → price is known (named only through a tier).
+    # The saved-cart twin of buyer_can_name_price? below. A cart line records the tier the buyer
+    # picked in `option`, so the same rule applies: what decides whether a price is still unknown
+    # is the SELECTED tier, not whether the membership happens to offer a pay-what-you-want tier
+    # somewhere. `Link#has_customizable_price_option?` answers the latter — it scans every alive
+    # tier — so a cart line on a free non-pay-what-you-want tier of a membership that also sells a
+    # pay-what-you-want tier reported a customizable price, suppressed the "not_charged"
+    # classification, and mounted the Payment Element on a checkout that charges nothing.
+    #
+    # Only a TIERED MEMBERSHIP's option carries the flag. `Variant::Prices#set_customizable_price`
+    # returns early for anything else, so an ordinary product's variants always read false even
+    # when the product itself is pay-what-you-want — reading the option there would wrongly call a
+    # real pay-what-you-want cart free. For a non-membership the product's own
+    # `customizable_price` column is authoritative, which is what has_customizable_price_option?
+    # returns for that case.
+    #
+    # A membership line with NO tier recorded reads false rather than deferring to the product.
+    # Both of the product-level answers available here are wrong for it: the tier scan inside
+    # has_customizable_price_option? is the product-wide question this method exists to stop
+    # asking (one pay-what-you-want tier would speak for a line that selected none), and the
+    # `customizable_price` column is unreliable on memberships — it can be stale-true, which is
+    # why buyer_can_name_price? guards it too. On a membership the buyer names a price only
+    # through a tier, so with no tier there is no pending amount and the price is known.
     def cart_line_buyer_can_name_price?(cart_product)
       product = cart_product.product
       return product.has_customizable_price_option? unless product.is_tiered_membership?
@@ -538,10 +555,36 @@ class Checkout::StripePaymentPresenter
       option.present? && option.customizable_price?
     end
 
-    # Product `pwyw` is not tier-aware. Memberships: selected option_id only; the product
-    # customizable_price column can be stale-true (write_customizable_price runs while
-    # is_tiered_membership is still false, and the after_save callback early-returns).
-    # No option_id → price known. Unrecognized option id → known so min/free checks still run.
+    # Whether the buyer can still name their own price for this line, which fallback_reason_for
+    # must not read as "free" (see the zero-total comment there).
+    #
+    # The product-level `pwyw` field is not enough on its own, because it is not tier-aware. For a
+    # tiered membership the TIER carries the flag, via `Variant::Prices` — so the tier is what has
+    # to be consulted, and the product column must not be trusted. A $0 pay-what-you-want
+    # membership opened through /checkout?product=… fell back to CardElement while the same product
+    # added from a saved cart did not.
+    #
+    # Note the product column can be STALE-true on a membership, which is why this reads
+    # `is_tiered_membership` before trusting `pwyw` at all. During create,
+    # `Product::Prices#write_customizable_price` runs (via `price_range=`) while
+    # `is_tiered_membership` is still false, so any membership created with a $0 starting price
+    # persists `customizable_price = true`; the `set_customizable_price` after_save callback
+    # early-returns for memberships, so nothing ever clears it. `customizable_price` is also a
+    # directly writable param on both the web and v2 API update paths. Trusting it here would mount
+    # the Payment Element on a genuinely free membership tier — the defect this method's
+    # selected-tier check exists to prevent — and would disagree with
+    # cart_line_buyer_can_name_price?, which already guards on the membership flag first.
+    #
+    # The tier-level check has to look at the tier the buyer actually SELECTED, not at every tier
+    # the product offers. `options` lists all of them, so asking "does any option allow naming a
+    # price" says yes for a membership that merely HAS a pay-what-you-want tier somewhere — which
+    # would suppress the "free" classification even when the buyer picked a genuinely free tier
+    # with no amount to charge, and mount the Payment Element on a checkout that charges nothing.
+    # `option_id` is the selected tier (CheckoutPresenter sets it from the accepted upsell, the
+    # cart item, or an upgrading subscription's current tier), so scope the check to that option.
+    # A membership with no option_id has no selected tier, and a membership's price can only be
+    # named through a tier, so there is no pending amount and the price is known — the same answer
+    # cart_line_buyer_can_name_price? gives a cart line with no option.
     def buyer_can_name_price?(checkout_product)
       product = checkout_product[:product]
       return product[:pwyw].present? unless product[:is_tiered_membership]
