@@ -63,6 +63,15 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       expect(seller.reload.name).to eq("New name")
     end
 
+    it "hides the public profile subscribe form when asked" do
+      expect(seller.hide_follow_form?).to be(false)
+
+      put :update, params: { user: { hide_follow_form: true } }
+
+      expect(response).to redirect_to(profile_path)
+      expect(seller.reload.hide_follow_form?).to be(true)
+    end
+
     it "updates the profile design fields" do
       seller.seller_profile.update!(background_color: "#ffffff", highlight_color: "#ff90e8", font: "ABC Favorit")
 

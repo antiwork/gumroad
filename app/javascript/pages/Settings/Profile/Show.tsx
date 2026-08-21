@@ -359,7 +359,10 @@ export default function SettingsPage() {
             <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
             <link rel="stylesheet" href={seller_fonts_css_source} />
             <div inert>
-              <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
+              <ProfileLayout
+                creatorProfile={previewCreatorProfile}
+                hideFollowForm={!previewSectionCount || profileSettings.hide_follow_form}
+              >
                 <EditProfile
                   {...editableProfile}
                   creator_profile={previewCreatorProfile}
@@ -459,6 +462,18 @@ export default function SettingsPage() {
                 <FieldsetDescription>
                   Product pages display your profile header above the product and the rest of your products below it, so
                   buyers landing on a shared link can browse your whole store.
+                </FieldsetDescription>
+              </Fieldset>
+              <Fieldset>
+                <ToggleSettingRow
+                  value={profileSettings.hide_follow_form}
+                  onChange={(value) => updateProfileSettings({ hide_follow_form: value })}
+                  disabled={!canUpdate}
+                  label="Hide the subscribe form on your profile"
+                />
+                <FieldsetDescription>
+                  Removes the email subscribe box from your public profile header. To redesign the whole page, use
+                  custom HTML from Pages.
                 </FieldsetDescription>
               </Fieldset>
               {loggedInUser?.policies.settings_profile.manage_social_connections ? (
