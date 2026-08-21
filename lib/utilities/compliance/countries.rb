@@ -117,10 +117,17 @@ module Compliance
     # which left those four with no payout path at all — this restores it.
     US_OUTLYING_AREAS_AS_STATES = %w[PR].freeze
 
+    # Stripe's restricted-businesses list still names Syria after OFAC revoked the
+    # comprehensive program. Checkout (and other for_select consumers) must not offer it.
+    def self.hidden_from_select?(alpha2)
+      blocked?(alpha2) || alpha2 == SYR.alpha2
+    end
+
     def self.for_select
-      ISO3166::Country.all.map do |country|
-        name = blocked?(country.alpha2) ? "#{country.common_name} (not supported)" : country.common_name
-        [country.alpha2, name]
+      ISO3166::Country.all.filter_map do |country|
+        next if hidden_from_select?(country.alpha2)
+
+        [country.alpha2, country.common_name]
       end.sort_by { |pair| pair.last }
     end
 
