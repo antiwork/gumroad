@@ -55,8 +55,7 @@ class WidgetPresenter
         name: product.name,
         script_base_url: non_affiliated_product_script_base_url,
         url: product_url(product, host: product_link_base_url),
-        gumroad_domain_url: product_url(product, host: product_link_base_url(allow_custom_domain: false)),
-        analytics_token: product.analytics_view_token
+        gumroad_domain_url: product_url(product, host: product_link_base_url(allow_custom_domain: false))
       }
     end
 
@@ -66,8 +65,7 @@ class WidgetPresenter
         name: product.name,
         script_base_url: affiliated_product_script_base_url,
         url: referral_url,
-        gumroad_domain_url: referral_url,
-        analytics_token: product.analytics_view_token
+        gumroad_domain_url: referral_url
       }
     end
 

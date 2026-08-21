@@ -3,13 +3,12 @@
   if (!script || !script.src) return;
 
   var id = script.getAttribute("data-gumroad-product");
-  var token = script.getAttribute("data-gumroad-analytics-token");
+  var token = "<%= j @analytics_token.to_s %>";
   var origin;
   try {
     var src = new URL(script.src);
     origin = src.origin;
     if (!id) id = src.searchParams.get("id");
-    if (!token) token = src.searchParams.get("token");
   } catch (e) {
     return;
   }

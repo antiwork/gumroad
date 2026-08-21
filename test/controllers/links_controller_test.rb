@@ -6205,12 +6205,31 @@ class LinksControllerIncrementViewsTest < ActionController::TestCase
 
   test "GET increment_views.gif records a page view and returns a gif with a valid analytics token" do
     sign_out @user
-    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token, referrer: "https://landing.example/post", view_url: "https://landing.example/post" }
+    source_url = "https://landing.example/post"
+    @request.env["HTTP_REFERER"] = source_url
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token(source_url:) }
 
     assert_response :success
     assert_equal "image/gif", @response.media_type
     assert ElasticsearchIndexerWorker.jobs.any? { |job| job["args"][0] == "index" && job["args"][1]["class_name"] == "ProductPageView" },
            "Expected ElasticsearchIndexerWorker to index a ProductPageView"
+    assert_equal source_url, ElasticsearchIndexerWorker.jobs.last["args"][1]["body"]["url"]
+  end
+
+  test "GET increment_views.gif replays the same source-bound token into the same page view id" do
+    sign_out @user
+    source_url = "https://landing.example/post"
+    token = @increment_product.analytics_view_token(source_url:)
+
+    @request.env["HTTP_REFERER"] = source_url
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: token }
+    first_id = ElasticsearchIndexerWorker.jobs.last["args"][1]["id"]
+
+    @request.env["HTTP_REFERER"] = source_url
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: token }
+    second_id = ElasticsearchIndexerWorker.jobs.last["args"][1]["id"]
+
+    assert_equal first_id, second_id
   end
 
   test "GET increment_views.gif does not record page view without a valid analytics token" do
@@ -6225,7 +6244,19 @@ class LinksControllerIncrementViewsTest < ActionController::TestCase
   test "GET increment_views.gif does not record page view with another product's analytics token" do
     sign_out @user
     other_product = create_product
-    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: other_product.analytics_view_token }
+    source_url = "https://landing.example/post"
+    @request.env["HTTP_REFERER"] = source_url
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: other_product.analytics_view_token(source_url:) }
+
+    assert_response :success
+    assert_equal "image/gif", @response.media_type
+    assert_equal 0, ElasticsearchIndexerWorker.jobs.size
+  end
+
+  test "GET increment_views.gif does not record page view when the token is replayed from another source" do
+    sign_out @user
+    @request.env["HTTP_REFERER"] = "https://evil.example/post"
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token(source_url: "https://landing.example/post") }
 
     assert_response :success
     assert_equal "image/gif", @response.media_type
@@ -6234,7 +6265,9 @@ class LinksControllerIncrementViewsTest < ActionController::TestCase
 
   test "GET increment_views.gif does not record page view for bots" do
     @request.env["HTTP_USER_AGENT"] = "EventMachine HttpClient"
-    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token }
+    source_url = "https://landing.example/post"
+    @request.env["HTTP_REFERER"] = source_url
+    get :increment_views, params: { id: @increment_product.to_param, format: :gif, analytics_token: @increment_product.analytics_view_token(source_url:) }
 
     assert_response :success
     assert_equal 0, ElasticsearchIndexerWorker.jobs.size

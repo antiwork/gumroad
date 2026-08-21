@@ -9,7 +9,6 @@ export type Product = {
   script_base_url: string;
   url: string;
   gumroad_domain_url: string;
-  analytics_token: string;
 };
 
 export const ProductSelect = ({

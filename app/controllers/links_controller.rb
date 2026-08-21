@@ -352,17 +352,19 @@ class LinksController < ApplicationController
   end
 
   def increment_views
+    source_url = request.referrer if request.get?
     skip = is_bot?
     skip |= logged_in_user.present? && (@product.user_id == current_seller.id || logged_in_user.is_team_member?)
     skip |= impersonating_user&.id
-    skip |= request.get? && !@product.analytics_view_token?(params[:analytics_token])
+    skip |= request.get? && !@product.analytics_view_token?(params[:analytics_token], source_url:)
 
     unless skip
       create_product_page_view(
         user_id: logged_in_user&.id,
-        referrer: Array.wrap(params[:referrer]).compact_blank.last || request.referrer,
+        referrer: source_url || Array.wrap(params[:referrer]).compact_blank.last || request.referrer,
         was_product_recommended: ActiveModel::Type::Boolean.new.cast(params[:was_product_recommended]),
-        view_url: params[:view_url] || request.env["PATH_INFO"]
+        view_url: source_url || params[:view_url] || request.env["PATH_INFO"],
+        id: request.get? ? external_analytics_view_id(source_url:) : SecureRandom.uuid
       )
     end
 
@@ -800,6 +802,10 @@ class LinksController < ApplicationController
   end
 
   private
+    def external_analytics_view_id(source_url:)
+      Digest::SHA256.hexdigest([@product.id, source_url, request.remote_ip, request.user_agent, cookies[:_gumroad_guid], Date.current.iso8601].join("\0"))
+    end
+
     def price_cents_from_units(value)
       value = value.to_s
       return if value.length > PRICE_INPUT_MAX_LENGTH || !value.match?(PRICE_INPUT_PATTERN)

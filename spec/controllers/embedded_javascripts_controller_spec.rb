@@ -29,14 +29,21 @@ describe EmbeddedJavascriptsController do
   end
 
   describe "analytics" do
-    it "returns a drop-in tracking script" do
-      get :analytics, format: :js
+    let(:product) { create(:product, unique_permalink: "demo") }
+
+    it "returns a drop-in tracking script with a source-bound token" do
+      request.env["HTTP_REFERER"] = "https://landing.example/post"
+      get :analytics, params: { id: product.unique_permalink }, format: :js
 
       expect(response.media_type).to eq("application/javascript")
-      expect(response.body).to include("data-gumroad-product")
-      expect(response.body).to include("data-gumroad-analytics-token")
+      expect(response.body).to include('src.searchParams.get("id")')
       expect(response.body).to include("analytics_token")
       expect(response.body).to include("/increment_views.gif")
+      expect(response.body).not_to include("data-gumroad-analytics-token")
+
+      token = response.body.match(/var token = "([^"]+)";/)[1]
+      expect(product.analytics_view_token?(token, source_url: "https://landing.example/post")).to eq(true)
+      expect(product.analytics_view_token?(token, source_url: "https://evil.example/post")).to eq(false)
     end
   end
 end

@@ -22,10 +22,7 @@ describe("buildAnalyticsCodeToCopy", () => {
       buildAnalyticsCodeToCopy({
         scriptBaseUrl: "https://gumroad.com",
         productUrl: "https://example.gumroad.com/l/demo",
-        analyticsToken: "signed-token",
       }),
-    ).toBe(
-      `<script async src="https://gumroad.com/js/gumroad-analytics.js" data-gumroad-product="demo" data-gumroad-analytics-token="signed-token"></script>`,
-    );
+    ).toBe(`<script async src="https://gumroad.com/js/gumroad-analytics.js?id=demo"></script>`);
   });
 });
