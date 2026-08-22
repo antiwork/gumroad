@@ -719,8 +719,10 @@ describe SendPostBlastEmailsJob, :freeze_time do
   end
 
   describe ".fully_delivered?" do
-    let(:post) { create(:audience_post, :published, seller: @seller) }
+    let(:post) { basic_post_with_audience }
     let(:blast) { create(:blast, post:, completed_at: nil, delivery_count: 0) }
+    let(:snapshot_key) { RedisKey.blast_audience_snapshot(blast.id) }
+    let(:recipient) { AudienceMember.where(seller_id: post.seller_id).sole }
 
     it "is false with no audience snapshot" do
       blast.update!(delivery_count: 3)
@@ -728,23 +730,32 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(described_class.fully_delivered?(blast)).to be(false)
     end
 
-    it "is false when delivery_count is short of the snapshot" do
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
-      blast.update!(delivery_count: 2)
+    it "is false when the snapshotted recipient has no sent_post_email row" do
+      $redis.rpush(snapshot_key, recipient.id)
+      blast.update!(delivery_count: 3)
 
       expect(described_class.fully_delivered?(blast)).to be(false)
     end
 
-    it "is true when delivery_count covers the snapshot" do
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
+    it "does not count stale sent rows toward a rebuilt audience snapshot" do
+      $redis.rpush(snapshot_key, recipient.id)
+      SentPostEmail.create!(post:, email: "previous-snapshot@example.com")
       blast.update!(delivery_count: 3)
+
+      expect(described_class.fully_delivered?(blast)).to be(false)
+    end
+
+    it "is true when sent_post_emails covers the snapshotted audience" do
+      $redis.rpush(snapshot_key, recipient.id)
+      SentPostEmail.create!(post:, email: recipient.email)
 
       expect(described_class.fully_delivered?(blast)).to be(true)
     end
 
     it "is false once completed_at is already set" do
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
-      blast.update!(delivery_count: 3, completed_at: Time.current)
+      $redis.rpush(snapshot_key, recipient.id)
+      SentPostEmail.create!(post:, email: recipient.email)
+      blast.update!(completed_at: Time.current)
 
       expect(described_class.fully_delivered?(blast)).to be(false)
     end
@@ -774,12 +785,14 @@ describe SendPostBlastEmailsJob, :freeze_time do
   end
 
   describe ".complete_if_fully_delivered!" do
-    let(:post) { create(:audience_post, :published, seller: @seller) }
+    let(:post) { basic_post_with_audience }
     let(:blast) { create(:blast, post:, completed_at: nil, delivery_count: 3) }
+    let(:recipient) { AudienceMember.where(seller_id: post.seller_id).sole }
 
-    it "stamps completed_at and drops the snapshot when delivery already covers it" do
+    it "stamps completed_at and drops the snapshot when sent rows cover the snapshot" do
       snapshot = RedisKey.blast_audience_snapshot(blast.id)
-      $redis.rpush(snapshot, [1, 2, 3])
+      $redis.rpush(snapshot, recipient.id)
+      SentPostEmail.create!(post:, email: recipient.email)
 
       expect(described_class.complete_if_fully_delivered!(blast)).to be(true)
       expect(blast.reload.completed_at).to eq(Time.current)
@@ -787,8 +800,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
 
     it "leaves an incomplete blast untouched" do
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
-      blast.update!(delivery_count: 2)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), recipient.id)
 
       expect(described_class.complete_if_fully_delivered!(blast)).to be(false)
       expect(blast.reload.completed_at).to be_nil

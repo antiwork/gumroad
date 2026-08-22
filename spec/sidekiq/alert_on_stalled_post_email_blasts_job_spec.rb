@@ -5,6 +5,16 @@ require "spec_helper"
 describe AlertOnStalledPostEmailBlastsJob do
   let(:post) { create(:installment) }
 
+  def post_with_audience
+    post = create(:audience_post, :published)
+    create(:active_follower, user: post.seller)
+    post
+  end
+
+  def snapshotted_recipient_for(blast)
+    AudienceMember.where(seller_id: blast.seller_id).sole
+  end
+
   def stalled_blast(requested_hours_ago: 6, post: self.post, delivery_count: 0, started: true)
     requested_at = requested_hours_ago.hours.ago
     create(:post_email_blast, post:, requested_at:, started_at: started ? requested_at + 1.minute : nil,
@@ -248,8 +258,10 @@ describe AlertOnStalledPostEmailBlastsJob do
     end
 
     it "stamps completed_at on a fully delivered DEAD blast instead of retrying it" do
-      blast = stalled_blast(requested_hours_ago: 6, delivery_count: 3)
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
+      blast = stalled_blast(requested_hours_ago: 6, post: post_with_audience, delivery_count: 3)
+      recipient = snapshotted_recipient_for(blast)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), recipient.id)
+      SentPostEmail.create!(post: blast.post, email: recipient.email)
       stub_sidekiq(dead: [blast.id])
 
       described_class.new.perform
@@ -264,8 +276,10 @@ describe AlertOnStalledPostEmailBlastsJob do
     end
 
     it "completes a fully delivered blast past the resume window and when the resume flag is off" do
-      blast = stalled_blast(requested_hours_ago: 30, delivery_count: 3)
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
+      blast = stalled_blast(requested_hours_ago: 30, post: post_with_audience, delivery_count: 3)
+      recipient = snapshotted_recipient_for(blast)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), recipient.id)
+      SentPostEmail.create!(post: blast.post, email: recipient.email)
       stub_sidekiq(dead: [blast.id])
 
       described_class.new.perform
@@ -275,8 +289,9 @@ describe AlertOnStalledPostEmailBlastsJob do
     end
 
     it "does not treat a partial send as fully delivered" do
-      blast = stalled_blast(requested_hours_ago: 6, delivery_count: 2)
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
+      blast = stalled_blast(requested_hours_ago: 6, post: post_with_audience, delivery_count: 3)
+      recipient = snapshotted_recipient_for(blast)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), recipient.id)
       stub_sidekiq(dead: [blast.id])
 
       described_class.new.perform

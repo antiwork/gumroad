@@ -10,8 +10,6 @@ class SendPostBlastEmailsJob
   sidekiq_options retry: 10, queue: :default
 
   # True when this blast has already handed every snapshotted recipient to an ESP.
-  # delivery_count only advances after a successful provider send, so a hard kill
-  # after the last slice leaves completed_at nil while this still returns true.
   # Missing snapshot/checkpoint => unknown, not delivered — the caller resumes.
   def self.fully_delivered?(blast)
     return false if blast.completed_at.present?
@@ -24,9 +22,23 @@ class SendPostBlastEmailsJob
 
       $redis.sdiff(checkpoint_key, sent_key).empty?
     else
-      snapshot_size = $redis.llen(RedisKey.blast_audience_snapshot(blast.id))
-      snapshot_size.positive? && blast.delivery_count >= snapshot_size
+      snapshotted_ids = $redis.lrange(RedisKey.blast_audience_snapshot(blast.id), 0, -1).map(&:to_i)
+      snapshotted_ids.present? && sent_post_emails_cover_snapshotted_audience?(blast, snapshotted_ids)
     end
+  end
+
+  def self.sent_post_emails_cover_snapshotted_audience?(blast, snapshotted_ids)
+    post = blast.post
+    emails = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+      snapshotted_ids.each_slice(REVALIDATION_SLICE_SIZE).flat_map do |ids_slice|
+        AudienceMember.filter(seller_id: post.seller_id, params: post.audience_members_filter_params, with_ids: true, ids: ids_slice).pluck(:email)
+      end
+    end.compact.uniq
+    emails.empty? || SentPostEmail.missing_emails(post:, emails:).empty?
+  end
+
+  def self.audience_load_timeout_seconds
+    ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
   end
 
   def self.mark_completed!(blast)
@@ -428,6 +440,6 @@ class SendPostBlastEmailsJob
 
     # Tunable via Redis so a stuck blast can be unblocked without a deploy.
     def audience_load_timeout_seconds
-      ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
+      self.class.audience_load_timeout_seconds
     end
 end
