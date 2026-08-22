@@ -288,6 +288,26 @@ describe AlertOnStalledPostEmailBlastsJob do
       expect(blast.reload.completed_at).to be_present
     end
 
+    it "does not complete a fully delivered blast when its sender reappears at action time" do
+      blast = stalled_blast(requested_hours_ago: 6, post: post_with_audience, delivery_count: 3)
+      recipient = snapshotted_recipient_for(blast)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      $redis.rpush(snapshot_key, recipient.id)
+      SentPostEmail.create!(post: blast.post, email: recipient.email)
+      stub_sidekiq
+      job = described_class.new
+      allow(job).to receive(:busy_blast_ids).and_return([], [blast.id])
+
+      job.perform
+
+      expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+      expect(blast.reload.completed_at).to be_nil
+      expect($redis.exists?(snapshot_key)).to be(true)
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+        expect(message).to match(/blast #{blast.id}.*UNACCOUNTED → SKIPPED \(sender reappeared/)
+      end
+    end
+
     it "does not treat a partial send as fully delivered" do
       blast = stalled_blast(requested_hours_ago: 6, post: post_with_audience, delivery_count: 3)
       recipient = snapshotted_recipient_for(blast)

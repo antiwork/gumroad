@@ -90,6 +90,10 @@ class AlertOnStalledPostEmailBlastsJob
     def resolve_action(entry, live:)
       blast = entry[:blast]
       return nil unless entry[:disposition].in?([:dead, :unaccounted])
+      # Re-read the live sets at action time — the scan's snapshots are already stale by now.
+      # A revived sender owns the snapshot/checkpoint keys until it exits.
+      return :skipped_reappeared if sender_visible_now?(blast.id)
+
       # Emails already left. Re-enqueueing restarts the audience load — the pass that
       # keeps getting buried — and is the wrong tool once delivery covers the snapshot.
       # Completing is not a send, so it is not gated on the resume flag or the 24h window.
@@ -102,9 +106,6 @@ class AlertOnStalledPostEmailBlastsJob
       return :held_past_window if blast.requested_at < AUTO_RESUME_WINDOW.ago
       return :held_already_resumed if $redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))
       return :would_resume unless live
-      # Re-read the live sets at action time — the scan's snapshots are already stale by now.
-      # Checked before the NX claim so a skip does not burn the once-per-blast marker.
-      return :skipped_reappeared if sender_visible_now?(blast.id)
 
       resume(entry) ? :resumed : :held_already_resumed
     end
