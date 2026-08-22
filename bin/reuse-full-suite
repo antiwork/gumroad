@@ -113,7 +113,11 @@ if [ -z "${PRS:-}" ]; then
 fi
 
 for pr in $PRS; do
-  HEAD=$(api "repos/$REPO/pulls/$pr" --jq .head.sha)
+  HEAD=$(api "repos/$REPO/pulls/$pr" --jq .head.sha || true)
+  if [ -z "${HEAD:-}" ]; then
+    echo "reuse-full-suite: no head for PR #$pr" >&2
+    continue
+  fi
   PR_TREE=$(tree_of "$HEAD" || true)
   if [ -z "${PR_TREE:-}" ]; then
     continue

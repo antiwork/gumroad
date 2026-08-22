@@ -100,4 +100,28 @@ out=$(GITHUB_ACTIONS=1 GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main REPO=an
 test "$out" = "reuse=true" || { echo "FAIL expected reuse=true on GHA main push got [$out]"; exit 1; }
 echo "ok allow GHA main push"
 
+# pulls/<n> 404 must emit reuse=false, not die with empty stdout.
+cat > "$FAKE/gh-fail-pull" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+jq_expr=""
+path=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--jq" ]; then jq_expr="$a"; fi
+  case "$a" in repos/*) path="$a" ;; esac
+  prev="$a"
+done
+apply() { if [ -n "$jq_expr" ]; then jq -r "$jq_expr"; else cat; fi; }
+if [[ "$path" == */git/commits/mainsha ]]; then echo '{"tree":{"sha":"TREE_MAIN"}}' | apply
+elif [[ "$path" == */commits/mainsha/pulls ]]; then echo '[{"number":1}]' | apply
+elif [[ "$path" == */pulls/1 ]]; then echo "boom" >&2; exit 1
+else echo "unexpected $path" >&2; exit 1
+fi
+EOF
+chmod +x "$FAKE/gh-fail-pull"
+out=$(REPO=antiwork/gumroad GH="$FAKE/gh-fail-pull" "$SCRIPT" mainsha || true)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false on pulls 404 got [$out]"; exit 1; }
+echo "ok pulls 404 fail-closes"
+
 echo ALL_OK
