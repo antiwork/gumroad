@@ -600,8 +600,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     result = Ai::PageSanitizer.sanitize_with_report(custom_html)
     sanitized = result.html.presence
-    candidate_page = Page.new(pageable: @product, custom_html: sanitized, moderation_preview: true)
-    candidate_page.validate
+    candidate_page = validate_custom_html_preview_candidate(@product, sanitized)
     # :base as well as :custom_html: moderation reports on :base, and a preview
     # that ignored it would call a page publishable that the real write rejects.
     errors = candidate_page.errors.where(:custom_html) + candidate_page.errors.where(:base)

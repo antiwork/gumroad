@@ -14,9 +14,9 @@
 #   (a full-HTML takeover pushed by an agent or the CLI). Only users have
 #   slugged pages.
 class Page < ApplicationRecord
-  # Set on the unsaved candidate the dry-run preview endpoints validate, so
-  # moderation reports the verdict to the caller without recording an admin note
-  # about a page that was never published.
+  # Set on the candidate the dry-run preview endpoints validate (never saved),
+  # so moderation reports the verdict to the caller without recording an admin
+  # note about a page that was never published.
   attr_accessor :moderation_preview
 
   MAX_CUSTOM_HTML_LENGTH = 500_000

@@ -337,6 +337,58 @@ describe Api::V2::LinksController do
       expect(response.parsed_body["success"]).to eq(false)
       expect(response.parsed_body["message"]).to match(/content guidelines/i)
     end
+
+    context "when moderation reviews the page image budget" do
+      let(:strategy_result) { Struct.new(:status, :reasoning, keyword_init: true) }
+      let(:over_budget_html) do
+        count = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1
+        (1..count).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+      end
+
+      before do
+        Feature.activate(:content_moderation)
+        allow(ContentModeration::Strategies::BlocklistStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::BlocklistStrategy, perform: strategy_result.new(status: "compliant", reasoning: []))
+        )
+        allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::ClassifierStrategy, perform: strategy_result.new(status: "compliant", reasoning: []))
+        )
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy, perform: strategy_result.new(status: "compliant", reasoning: []))
+        )
+      end
+
+      it "rejects new over-budget HTML when no page is live" do
+        post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: over_budget_html }
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to include("more images than we can review")
+      end
+
+      context "with a live over-budget root page" do
+        before { Page.new(pageable: @product, custom_html: over_budget_html).save!(validate: false) }
+
+        it "previews a 1:1 image src swap as publishable, agreeing with the PUT, without writing" do
+          swapped = over_budget_html.sub("https://cdn.example.com/1.png", "https://cdn.example.com/swapped.png")
+
+          post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: swapped }
+
+          expect(response.parsed_body["success"]).to eq(true)
+          expect(@product.reload.custom_html).to include("https://cdn.example.com/1.png")
+          expect(@product.custom_html).not_to include("swapped.png")
+        end
+
+        it "still rejects adding an image to the live over-budget page" do
+          extra = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 2
+          grown = over_budget_html + %(<img src="https://cdn.example.com/#{extra}.png">)
+
+          post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: grown }
+
+          expect(response.parsed_body["success"]).to eq(false)
+          expect(response.parsed_body["message"]).to include("more images than we can review")
+        end
+      end
+    end
   end
 
   describe "when the custom_html_pages feature is disabled" do
