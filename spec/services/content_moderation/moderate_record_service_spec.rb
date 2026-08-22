@@ -176,7 +176,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(product_page, :page).passed).to eq(true)
       end
 
-      it "asks the classifier to moderate every image, so no displayed image is approved unseen" do
+      it "asks the classifier to moderate every selected page image" do
         expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new)
           .with(hash_including(max_images: :all))
           .and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy,
@@ -192,33 +192,36 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         end
         let(:over_budget_page) { Page.new(pageable: seller, slug: "gallery", title: "Gallery", custom_html: over_budget_html) }
 
-        it "blocks the page instead of approving it on a subset of its images" do
-          expect(ContentModeration::Strategies::ClassifierStrategy).not_to receive(:new)
+        it "samples the page images instead of blocking on size" do
+          expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |args|
+            expect(args[:max_images]).to eq(:all)
+            expect(args[:image_urls].size).to eq(ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS)
+            expect(args[:image_urls]).to all(match(%r{\Ahttps://cdn\.example\.com/\d+\.png\z}))
+            instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                            perform: strategy_result.new(status: "compliant", reasoning: []))
+          end
 
-          result = described_class.check(over_budget_page, :page)
-
-          expect(result.passed).to eq(false)
-          expect(result.reasons).to eq(
-            ["#{described_class::TOO_MANY_IMAGES_REASON_PREFIX} " \
-             "(#{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1})"]
-          )
+          expect(described_class.check(over_budget_page, :page).passed).to eq(true)
         end
 
-        it "tells the seller the limit rather than naming a content violation" do
-          message = described_class.seller_message(described_class.check(over_budget_page, :page).reasons, "page")
+        it "does not leave an admin size note for an over-budget sample" do
+          expect(ContentModerationAdminCommentJob).not_to receive(:perform_async)
 
-          expect(message).to include("more images than we can review")
-          expect(message).to include(ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS.to_s)
-          expect(message).not_to include("content guidelines")
+          expect(described_class.check(over_budget_page, :page).passed).to eq(true)
         end
 
-        it "records the block as a note rather than as abuse history" do
-          # A big gallery is a size problem, not a content violation, and the admin
-          # trail is read as abuse history.
-          expect(ContentModerationAdminCommentJob).to receive(:perform_async)
-            .with(seller.id, /flagged but did not block/)
+        it "keeps the sample stable for identical page images" do
+          samples = []
+          allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |args|
+            samples << args[:image_urls]
+            instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                            perform: strategy_result.new(status: "compliant", reasoning: []))
+          end
 
-          described_class.check(over_budget_page, :page)
+          2.times { expect(described_class.check(over_budget_page, :page).passed).to eq(true) }
+
+          expect(samples.size).to eq(2)
+          expect(samples.first).to eq(samples.second)
         end
 
         it "lets the seller rename an already-live page that is over the limit" do
@@ -230,29 +233,36 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           expect(over_budget_page.valid?).to eq(true)
         end
 
-        it "lets a live over-budget page swap one image src without growing the set" do
+        it "samples a live over-budget page after a 1:1 image src swap" do
           over_budget_page.save!(validate: false)
           swapped = over_budget_html.sub("https://cdn.example.com/1.png", "https://cdn.example.com/swapped.png")
           over_budget_page.custom_html = swapped
 
-          expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new)
-            .with(hash_including(image_urls: ["https://cdn.example.com/swapped.png"]))
-            .and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy,
-                                        perform: strategy_result.new(status: "compliant", reasoning: [])))
+          expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |args|
+            expect(args[:image_urls].size).to eq(ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS)
+            expect(args[:image_urls]).to include("https://cdn.example.com/swapped.png")
+            expect(args[:image_urls]).to all(start_with("https://cdn.example.com/"))
+            instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                            perform: strategy_result.new(status: "compliant", reasoning: []))
+          end
 
           expect(described_class.check(over_budget_page, :page).passed).to eq(true)
         end
 
-        it "still blocks adding another image to a live over-budget page" do
+        it "samples a live over-budget page after adding another image" do
           over_budget_page.save!(validate: false)
           extra = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 2
           over_budget_page.custom_html = over_budget_html + %(<img src="https://cdn.example.com/#{extra}.png">)
 
-          expect(ContentModeration::Strategies::ClassifierStrategy).not_to receive(:new)
+          expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |args|
+            expect(args[:image_urls].size).to eq(ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS)
+            expect(args[:image_urls]).to include("https://cdn.example.com/#{extra}.png")
+            expect(args[:image_urls]).to all(start_with("https://cdn.example.com/"))
+            instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                            perform: strategy_result.new(status: "compliant", reasoning: []))
+          end
 
-          result = described_class.check(over_budget_page, :page)
-          expect(result.passed).to eq(false)
-          expect(result.reasons.first).to start_with(described_class::TOO_MANY_IMAGES_REASON_PREFIX)
+          expect(described_class.check(over_budget_page, :page).passed).to eq(true)
         end
 
         it "counts images painted through nested CSS toward the budget" do
@@ -262,9 +272,14 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           end.join("\n")
           nested_page = Page.new(pageable: seller, slug: "nested", title: "Nested", custom_html: "<style>#{nested_css}</style>")
 
-          expect(ContentModeration::Strategies::ClassifierStrategy).not_to receive(:new)
+          expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |args|
+            expect(args[:image_urls].size).to eq(ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS)
+            expect(args[:image_urls]).to all(start_with("https://cdn.example.com/"))
+            instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                            perform: strategy_result.new(status: "compliant", reasoning: []))
+          end
 
-          expect(described_class.check(nested_page, :page).passed).to eq(false)
+          expect(described_class.check(nested_page, :page).passed).to eq(true)
         end
 
         it "moderates a page that sits exactly at the limit" do
