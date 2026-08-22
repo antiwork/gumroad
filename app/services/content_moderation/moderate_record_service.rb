@@ -75,11 +75,6 @@ class ContentModeration::ModerateRecordService
     "directs buyers to message you on another platform to get it, which we don’t allow. Add the files, " \
     "videos, or written content buyers should get when they buy, then publish again."
 
-  # A page carrying more images than we will review is rejected rather than
-  # approved on a sample (see `check`), so the reason is about the page's size,
-  # not its content, and gets its own sentence saying what to change.
-  TOO_MANY_IMAGES_REASON_PREFIX = "too many images to review"
-
   # Turn raw moderation reasons (e.g. "OpenAI moderation flagged: violence
   # (score: 0.86, threshold: 0.9)" or "spam: repeated unrelated slogans") into
   # a friendly, de-duplicated phrase the seller can act on — without leaking
@@ -116,10 +111,6 @@ class ContentModeration::ModerateRecordService
       # on either way.
       "This #{noun} includes an image we can’t review, because the format is unsupported (such as an SVG data URL) " \
       "or the file is too large. Replace it with a smaller PNG, JPEG, GIF, or WebP and try again."
-    elsif rs.any? { |r| r.to_s.start_with?(TOO_MANY_IMAGES_REASON_PREFIX) }
-      "This #{noun} has more images than we can review, so we can’t publish it as is. " \
-      "Reduce it to at most #{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS} images " \
-      "(or split it across several #{noun}s) and try again."
     elsif rs.any? { |r| off_platform_fulfillment_reason?(r) }
       message = format(OFF_PLATFORM_FULFILLMENT_MESSAGE, noun: noun)
       # A run can flag off-platform fulfillment alongside another violation
@@ -158,25 +149,7 @@ class ContentModeration::ModerateRecordService
     content = content.class.new(text: content.text, image_urls: []) if @skip_images
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
 
-    if entity_type == :page && content.image_urls.size > ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS
-      previous_page_urls = previous_page_image_urls
-      if preexisting_over_budget_without_growth?(content, previous_page_urls)
-        # A live storefront catalog that already exceeds the cap must stay
-        # editable (1:1 cover swaps, copy tweaks) without raising the cap for
-        # new pages. Only newly introduced URLs are reviewed.
-        new_urls = content.image_urls - previous_page_urls
-        content = content.class.new(text: content.text, image_urls: new_urls)
-      else
-        # Approving a page approves what it DISPLAYS, so it is rejected rather than
-        # approved on a sample of its images.
-        reasons = ["#{TOO_MANY_IMAGES_REASON_PREFIX} (#{content.image_urls.size})"]
-        # `blocked: false`: the publish did stop, but the admin trail is read as
-        # abuse history, and a seller with a big gallery has not done anything
-        # wrong. The seller-facing message says what to change.
-        leave_admin_comment(reasons, blocked: false)
-        return CheckResult.new(passed: false, reasons: reasons)
-      end
-    end
+    content = sample_page_images(content) if entity_type == :page
 
     blocklist_result = ContentModeration::Strategies::BlocklistStrategy
                          .new(text: content.text, image_urls: content.image_urls)
@@ -416,18 +389,11 @@ class ContentModeration::ModerateRecordService
       end
     end
 
-    def previous_page_image_urls
-      return [] unless entity_type == :page && record.is_a?(Page) && record.persisted?
+    def sample_page_images(content)
+      limit = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS
+      return content if content.image_urls.size <= limit
 
-      snapshot = record.dup
-      snapshot.custom_html = record.custom_html_was
-      snapshot.content = record.content_was if record.has_attribute?(:content)
-      ContentModeration::ContentExtractor.new.extract_from_page(snapshot).image_urls
-    end
-
-    def preexisting_over_budget_without_growth?(content, previous_urls)
-      previous_urls.size > ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS &&
-        content.image_urls.size <= previous_urls.size
+      content.class.new(text: content.text, image_urls: content.image_urls.sample(limit))
     end
 
     def run_ai_strategies(content)
@@ -435,11 +401,9 @@ class ContentModeration::ModerateRecordService
         ContentModeration::Strategies::ClassifierStrategy.new(
           text: content.text,
           image_urls: content.image_urls,
-          # A page's images are arbitrary URLs the seller wrote into a public
-          # document, and the page is only allowed through if all of them were
-          # reviewed (`check` rejects a page over the budget), so every one gets a
-          # moderation attempt. Products and posts keep the default cap: their
-          # images come from our own uploads and their galleries are unbounded.
+          # Page image sets above the moderation budget are sampled before the
+          # strategies run. `:all` means every selected page image gets an attempt
+          # rather than being sliced again by the product/post default.
           max_images: entity_type == :page ? :all : ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE,
         ),
         # `corroborate_judgment_flags` makes a spam, off-platform-fulfillment, or
