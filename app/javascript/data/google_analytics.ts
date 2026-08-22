@@ -172,6 +172,9 @@ export function startTrackingForSeller(data: AnalyticsConfig) {
   if (!shouldTrack() || !data.googleAnalyticsId) return;
   if (typeof gtag === "undefined") loadGoogleAnalyticsScript();
 
+  // Custom landing / mobile tracking never call startTrackingForGumroad, so this
+  // path has to issue the gtag("js") bootstrap itself or seller events stay queued.
+  gtag("js", new Date());
   gtag("config", data.googleAnalyticsId, {
     groups: `seller${data.id}`,
     cookie_flags: "SameSite=None; Secure",
