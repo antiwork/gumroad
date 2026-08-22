@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Offline checks for bin/reuse-full-suite.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT="$ROOT/bin/reuse-full-suite"
+FAKE="$(mktemp -d)"
+trap 'rm -rf "$FAKE"' EXIT
+
+cat > "$FAKE/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+jq_expr=""
+path=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--jq" ]; then
+    jq_expr="$a"
+  fi
+  case "$a" in
+    repos/*) path="$a" ;;
+  esac
+  prev="$a"
+done
+apply() {
+  if [ -n "$jq_expr" ]; then
+    jq -r "$jq_expr"
+  else
+    cat
+  fi
+}
+if [[ "$path" == */git/commits/mainsha ]]; then
+  echo '{"tree":{"sha":"TREE_MAIN"}}' | apply
+elif [[ "$path" == */git/commits/prhead ]]; then
+  echo '{"tree":{"sha":"TREE_MAIN"}}' | apply
+elif [[ "$path" == */git/commits/otherhead ]]; then
+  echo '{"tree":{"sha":"TREE_OTHER"}}' | apply
+elif [[ "$path" == */commits/mainsha/pulls ]]; then
+  cat "${GH_FIXTURE_DIR}/pulls.json" | apply
+elif [[ "$path" == */pulls/1 ]]; then
+  echo '{"head":{"sha":"prhead"}}' | apply
+elif [[ "$path" == */pulls/2 ]]; then
+  echo '{"head":{"sha":"otherhead"}}' | apply
+elif [[ "$path" == *actions/runs* && "$path" == *head_sha=prhead* ]]; then
+  cat "${GH_FIXTURE_DIR}/runs-green.json" | apply
+elif [[ "$path" == *actions/runs* && "$path" == *head_sha=* ]]; then
+  echo '{"workflow_runs":[]}' | apply
+elif [[ "$path" == */actions/runs/99/jobs* ]]; then
+  cat "${GH_FIXTURE_DIR}/jobs-full.json" | apply
+else
+  echo "unexpected gh api path=$path" >&2
+  exit 1
+fi
+EOF
+chmod +x "$FAKE/gh"
+
+mkdir -p "$FAKE/fix"
+printf '[{"number":1}]\n' > "$FAKE/fix/pulls.json"
+printf '{"workflow_runs":[{"name":"Tests","conclusion":"success","id":99}]}\n' > "$FAKE/fix/runs-green.json"
+printf '{"jobs":[{"name":"Test Fast 0","conclusion":"success"},{"name":"Test Slow 0","conclusion":"success"}]}\n' > "$FAKE/fix/jobs-full.json"
+
+run() {
+  REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha
+}
+
+out=$(run)
+test "$out" = "reuse=true" || { echo "FAIL expected reuse=true got [$out]"; exit 1; }
+echo "ok same-tree full suite"
+
+printf '[{"number":2}]\n' > "$FAKE/fix/pulls.json"
+out=$(run)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false on tree mismatch got [$out]"; exit 1; }
+echo "ok different tree"
+
+printf '[]\n' > "$FAKE/fix/pulls.json"
+out=$(run)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false with no PR got [$out]"; exit 1; }
+echo "ok no PR"
+
+printf '[{"number":1}]\n' > "$FAKE/fix/pulls.json"
+printf '{"jobs":[{"name":"Test Relevant 0","conclusion":"success"}]}\n' > "$FAKE/fix/jobs-full.json"
+out=$(run)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false when only Relevant ran got [$out]"; exit 1; }
+echo "ok relevant-only is not reusable"
+
+echo ALL_OK

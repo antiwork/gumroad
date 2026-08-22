@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Decide whether this main commit can skip Fast/Slow because a PR already
+# ran the full suite on the exact same git tree.
+#
+# Prints reuse=true or reuse=false (and writes GITHUB_OUTPUT when set).
+# Never exits non-zero on a "no" — a lookup miss must re-run the suite.
+#
+# Usage:
+#   bin/reuse-full-suite <sha>
+#   REPO=antiwork/gumroad bin/reuse-full-suite <sha>
+set -euo pipefail
+
+SHA="${1:-}"
+REPO="${REPO:-${GITHUB_REPOSITORY:-antiwork/gumroad}}"
+GH="${GH:-gh}"
+
+emit() {
+  echo "reuse=$1"
+  if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    echo "reuse=$1" >> "$GITHUB_OUTPUT"
+  fi
+}
+
+if [ -z "$SHA" ]; then
+  echo "usage: bin/reuse-full-suite <sha>" >&2
+  emit false
+  exit 0
+fi
+
+api() {
+  "$GH" api "$@"
+}
+
+tree_of() {
+  api "repos/$REPO/git/commits/$1" --jq .tree.sha
+}
+
+full_suite_green() {
+  local head="$1"
+  local run_id
+  run_id=$(api "repos/$REPO/actions/runs?head_sha=$head&status=completed&per_page=20" \
+    --jq '[.workflow_runs[] | select(.name == "Tests" and .conclusion == "success")][0].id // empty')
+  if [ -z "$run_id" ]; then
+    return 1
+  fi
+  # Require at least one completed-success Fast shard and one Slow shard.
+  # Skipped Fast/Slow means that run was test_relevant only — not reusable.
+  local jobs
+  jobs=$(api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" --paginate \
+    --jq '[.jobs[] | {name, conclusion}]')
+  echo "$jobs" | python3 -c '
+import json, sys
+jobs = json.load(sys.stdin)
+def ok(prefix):
+    hits = [j for j in jobs if j.get("name", "").startswith(prefix)]
+    return any(j.get("conclusion") == "success" for j in hits) and not any(j.get("conclusion") == "failure" for j in hits)
+sys.exit(0 if ok("Test Fast") and ok("Test Slow") else 1)
+'
+}
+
+MAIN_TREE=$(tree_of "$SHA" || true)
+if [ -z "${MAIN_TREE:-}" ]; then
+  echo "reuse-full-suite: no tree for $SHA" >&2
+  emit false
+  exit 0
+fi
+
+PRS=$(api "repos/$REPO/commits/$SHA/pulls" --jq '.[].number' || true)
+if [ -z "${PRS:-}" ]; then
+  echo "reuse-full-suite: no associated PR for $SHA" >&2
+  emit false
+  exit 0
+fi
+
+for pr in $PRS; do
+  HEAD=$(api "repos/$REPO/pulls/$pr" --jq .head.sha)
+  PR_TREE=$(tree_of "$HEAD" || true)
+  if [ -z "${PR_TREE:-}" ]; then
+    continue
+  fi
+  if [ "$PR_TREE" != "$MAIN_TREE" ]; then
+    echo "reuse-full-suite: PR #$pr tree $PR_TREE != $MAIN_TREE" >&2
+    continue
+  fi
+  if full_suite_green "$HEAD"; then
+    echo "reuse-full-suite: reusing Tests from PR #$pr head $HEAD (tree $MAIN_TREE)" >&2
+    emit true
+    exit 0
+  fi
+  echo "reuse-full-suite: PR #$pr same tree but no green full suite on $HEAD" >&2
+done
+
+emit false
+exit 0
