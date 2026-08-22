@@ -18,9 +18,11 @@ class SendPostBlastEmailsJob
 
     if blast.to_non_openers?
       checkpoint_key = RedisKey.blast_non_opener_emails(blast.id)
+      sent_key = RedisKey.blast_sent_emails(blast.id)
       return false unless $redis.exists?(checkpoint_key)
+      return false if $redis.scard(sent_key) < $redis.scard(checkpoint_key)
 
-      $redis.scard(RedisKey.blast_sent_emails(blast.id)) >= $redis.scard(checkpoint_key)
+      $redis.sdiff(checkpoint_key, sent_key).empty?
     else
       snapshot_size = $redis.llen(RedisKey.blast_audience_snapshot(blast.id))
       snapshot_size.positive? && blast.delivery_count >= snapshot_size

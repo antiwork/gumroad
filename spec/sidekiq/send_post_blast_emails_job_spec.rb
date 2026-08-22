@@ -761,6 +761,16 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.sadd(sent, "b@example.com")
       expect(described_class.fully_delivered?(blast)).to be(true)
     end
+
+    it "does not count stale sent-set emails toward a rebuilt non-opener checkpoint" do
+      blast.update!(recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+      checkpoint = RedisKey.blast_non_opener_emails(blast.id)
+      sent = RedisKey.blast_sent_emails(blast.id)
+      $redis.sadd(checkpoint, "current-unsent@example.com", "current-sent@example.com")
+      $redis.sadd(sent, "current-sent@example.com", "previous-checkpoint@example.com")
+
+      expect(described_class.fully_delivered?(blast)).to be(false)
+    end
   end
 
   describe ".complete_if_fully_delivered!" do
