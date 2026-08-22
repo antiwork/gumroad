@@ -393,7 +393,29 @@ class ContentModeration::ModerateRecordService
       limit = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS
       return content if content.image_urls.size <= limit
 
-      content.class.new(text: content.text, image_urls: content.image_urls.sample(limit))
+      selected_urls = stable_page_image_sample(content.image_urls, limit)
+      if record.is_a?(Page) && record.persisted?
+        previous_urls = previous_page_image_urls
+        new_urls = content.image_urls - previous_urls
+        if new_urls.size < limit
+          selected_urls = new_urls + stable_page_image_sample(content.image_urls - new_urls, limit - new_urls.size)
+        end
+      end
+
+      content.class.new(text: content.text, image_urls: selected_urls)
+    end
+
+    def previous_page_image_urls
+      snapshot = record.dup
+      snapshot.custom_html = record.custom_html_was
+      snapshot.content = record.content_was if record.has_attribute?(:content)
+      ContentModeration::ContentExtractor.new.extract_from_page(snapshot).image_urls
+    end
+
+    def stable_page_image_sample(image_urls, limit)
+      # Stable per image set so retrying the same page cannot reshuffle coverage.
+      seed = Digest::SHA256.hexdigest(image_urls.join("\0")).to_i(16) % (2**31)
+      image_urls.sample(limit, random: Random.new(seed))
     end
 
     def run_ai_strategies(content)

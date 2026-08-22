@@ -210,6 +210,20 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           expect(described_class.check(over_budget_page, :page).passed).to eq(true)
         end
 
+        it "keeps the sample stable for identical page images" do
+          samples = []
+          allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |args|
+            samples << args[:image_urls]
+            instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                            perform: strategy_result.new(status: "compliant", reasoning: []))
+          end
+
+          2.times { expect(described_class.check(over_budget_page, :page).passed).to eq(true) }
+
+          expect(samples.size).to eq(2)
+          expect(samples.first).to eq(samples.second)
+        end
+
         it "lets the seller rename an already-live page that is over the limit" do
           over_budget_page.save!(validate: false)
           over_budget_page.title = "Renamed gallery"
@@ -226,6 +240,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
 
           expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |args|
             expect(args[:image_urls].size).to eq(ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS)
+            expect(args[:image_urls]).to include("https://cdn.example.com/swapped.png")
             expect(args[:image_urls]).to all(start_with("https://cdn.example.com/"))
             instance_double(ContentModeration::Strategies::ClassifierStrategy,
                             perform: strategy_result.new(status: "compliant", reasoning: []))
@@ -241,6 +256,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
 
           expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |args|
             expect(args[:image_urls].size).to eq(ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS)
+            expect(args[:image_urls]).to include("https://cdn.example.com/#{extra}.png")
             expect(args[:image_urls]).to all(start_with("https://cdn.example.com/"))
             instance_double(ContentModeration::Strategies::ClassifierStrategy,
                             perform: strategy_result.new(status: "compliant", reasoning: []))
