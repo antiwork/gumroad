@@ -59,15 +59,26 @@ describe PostToIndividualPingEndpointWorker do
     end
   end
 
-  it "does not raise when it encounters an internet error" do
+  it "does not raise when it encounters a retryable internet error" do
     allow(SsrfFilter).to receive(:post).and_raise(SocketError.new("socket error message"))
     messages = []
     allow(Rails.logger).to receive(:info) { |message| messages << message }
-    expect(SsrfFilter).to receive(:post).exactly(1).times
 
     PostToIndividualPingEndpointWorker.new.perform("http://example.com", { "q" => 47 })
 
-    expect(messages).to include("[SocketError] PostToIndividualPingEndpointWorker error content_type=#{Mime[:url_encoded_form]} user_id=")
+    expect(messages).to include("[SocketError] PostToIndividualPingEndpointWorker error content_type=#{Mime[:url_encoded_form]} user_id= retry_count=0")
+    expect(PostToIndividualPingEndpointWorker.jobs.size).to eq(1)
+  end
+
+  it "re-enqueues itself with backoff on a read timeout" do
+    allow(SsrfFilter).to receive(:post).and_raise(Net::ReadTimeout)
+
+    PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "q" => 47 })
+
+    expect(PostToIndividualPingEndpointWorker.jobs.size).to eq(1)
+    job = PostToIndividualPingEndpointWorker.jobs.first
+    expect(job["args"]).to eq(["http://notification.com", { "q" => 47, "retry_count" => 1 }, Mime[:url_encoded_form].to_s, nil])
+    expect(job["at"]).to be_within(5).of(PostToIndividualPingEndpointWorker::BACKOFF_STRATEGY.first.seconds.from_now.to_f)
   end
 
   it "re-raises a non-internet error" do
