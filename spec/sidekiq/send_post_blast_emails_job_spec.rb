@@ -718,6 +718,73 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe ".fully_delivered?" do
+    let(:post) { create(:audience_post, :published, seller: @seller) }
+    let(:blast) { create(:blast, post:, completed_at: nil, delivery_count: 0) }
+
+    it "is false with no audience snapshot" do
+      blast.update!(delivery_count: 3)
+
+      expect(described_class.fully_delivered?(blast)).to be(false)
+    end
+
+    it "is false when delivery_count is short of the snapshot" do
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      blast.update!(delivery_count: 2)
+
+      expect(described_class.fully_delivered?(blast)).to be(false)
+    end
+
+    it "is true when delivery_count covers the snapshot" do
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      blast.update!(delivery_count: 3)
+
+      expect(described_class.fully_delivered?(blast)).to be(true)
+    end
+
+    it "is false once completed_at is already set" do
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      blast.update!(delivery_count: 3, completed_at: Time.current)
+
+      expect(described_class.fully_delivered?(blast)).to be(false)
+    end
+
+    it "uses the per-blast sent set for a non-opener resend" do
+      blast.update!(recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+      checkpoint = RedisKey.blast_non_opener_emails(blast.id)
+      sent = RedisKey.blast_sent_emails(blast.id)
+      $redis.sadd(checkpoint, "a@example.com", "b@example.com")
+      $redis.sadd(sent, "a@example.com")
+
+      expect(described_class.fully_delivered?(blast)).to be(false)
+
+      $redis.sadd(sent, "b@example.com")
+      expect(described_class.fully_delivered?(blast)).to be(true)
+    end
+  end
+
+  describe ".complete_if_fully_delivered!" do
+    let(:post) { create(:audience_post, :published, seller: @seller) }
+    let(:blast) { create(:blast, post:, completed_at: nil, delivery_count: 3) }
+
+    it "stamps completed_at and drops the snapshot when delivery already covers it" do
+      snapshot = RedisKey.blast_audience_snapshot(blast.id)
+      $redis.rpush(snapshot, 1, 2, 3)
+
+      expect(described_class.complete_if_fully_delivered!(blast)).to be(true)
+      expect(blast.reload.completed_at).to eq(Time.current)
+      expect($redis.exists?(snapshot)).to be(false)
+    end
+
+    it "leaves an incomplete blast untouched" do
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      blast.update!(delivery_count: 2)
+
+      expect(described_class.complete_if_fully_delivered!(blast)).to be(false)
+      expect(blast.reload.completed_at).to be_nil
+    end
+  end
+
   def expect_sent_count(count)
     expect(PostSendgridApi.mails.size).to eq(count)
   end

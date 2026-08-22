@@ -39,7 +39,7 @@ class AlertOnStalledPostEmailBlastsJob
   AUTO_RESUME_WINDOW = 24.hours
 
   # Rows the run acted on (or would have) are the audit trail; message_for never truncates them.
-  AUDITED_ACTIONS = [:resumed, :would_resume, :skipped_reappeared].freeze
+  AUDITED_ACTIONS = [:resumed, :would_resume, :skipped_reappeared, :completed].freeze
 
   def perform
     scan = scan_for_stalled_blasts
@@ -90,6 +90,12 @@ class AlertOnStalledPostEmailBlastsJob
     def resolve_action(entry, live:)
       blast = entry[:blast]
       return nil unless entry[:disposition].in?([:dead, :unaccounted])
+      # Emails already left. Re-enqueueing restarts the audience load — the pass that
+      # keeps getting buried — and is the wrong tool once delivery covers the snapshot.
+      # Completing is not a send, so it is not gated on the resume flag or the 24h window.
+      if SendPostBlastEmailsJob.fully_delivered?(blast)
+        return SendPostBlastEmailsJob.complete_if_fully_delivered!(blast) ? :completed : nil
+      end
       # A DEAD entry proves its attempt chain ended; UNACCOUNTED can hide a live sender, and a
       # concurrent duplicate double-delivers a non-opener resend.
       return :held_non_opener if entry[:disposition] == :unaccounted && blast.to_non_openers?
@@ -189,6 +195,7 @@ class AlertOnStalledPostEmailBlastsJob
       action =
         case entry[:action]
         when :resumed then " → RESUMED"
+        when :completed then " → COMPLETED (already fully delivered)"
         when :would_resume then " → WOULD RESUME (dry run)"
         when :held_past_window then " → HELD (past #{AUTO_RESUME_WINDOW.inspect} resume window)"
         when :held_already_resumed then " → HELD (already auto-resumed once)"

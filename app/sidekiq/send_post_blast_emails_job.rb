@@ -9,6 +9,40 @@ class SendPostBlastEmailsJob
   # blast silently, which is what made the documented recovery a no-op (gumroad-private#1816).
   sidekiq_options retry: 10, queue: :default
 
+  # True when this blast has already handed every snapshotted recipient to an ESP.
+  # delivery_count only advances after a successful provider send, so a hard kill
+  # after the last slice leaves completed_at nil while this still returns true.
+  # Missing snapshot/checkpoint => unknown, not delivered — the caller resumes.
+  def self.fully_delivered?(blast)
+    return false if blast.completed_at.present?
+
+    if blast.to_non_openers?
+      checkpoint_key = RedisKey.blast_non_opener_emails(blast.id)
+      return false unless $redis.exists?(checkpoint_key)
+
+      $redis.scard(RedisKey.blast_sent_emails(blast.id)) >= $redis.scard(checkpoint_key)
+    else
+      snapshot_size = $redis.llen(RedisKey.blast_audience_snapshot(blast.id))
+      snapshot_size.positive? && blast.delivery_count >= snapshot_size
+    end
+  end
+
+  def self.mark_completed!(blast)
+    blast.update!(completed_at: Time.current) if blast.completed_at.nil?
+    snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+    checkpoint_key = RedisKey.blast_non_opener_emails(blast.id)
+    $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp")
+    blast
+  end
+
+  def self.complete_if_fully_delivered!(blast)
+    blast.reload
+    return false unless fully_delivered?(blast)
+
+    mark_completed!(blast)
+    true
+  end
+
   def perform(blast_id)
     @blast = PostEmailBlast.find(blast_id)
     @post = @blast.post
@@ -359,14 +393,7 @@ class SendPostBlastEmailsJob
     end
 
     def mark_blast_as_completed
-      @blast.update!(completed_at: Time.current)
-      # The blast is done, so the retry-resume snapshot and the non-opener checkpoint
-      # have served their purpose. Also remove the temporary write-in-progress keys in
-      # case a previous attempt died mid-write (they carry a TTL, but no reason to keep
-      # them around).
-      snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
-      checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
-      $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp")
+      self.class.mark_completed!(@blast)
     end
 
     # Stores email addresses in SentPostEmail, just before sending the emails.

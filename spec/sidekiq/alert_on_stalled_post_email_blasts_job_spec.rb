@@ -247,6 +247,46 @@ describe AlertOnStalledPostEmailBlastsJob do
       end
     end
 
+    it "stamps completed_at on a fully delivered DEAD blast instead of retrying it" do
+      blast = stalled_blast(requested_hours_ago: 6, delivery_count: 3)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      stub_sidekiq(dead: [blast.id])
+
+      described_class.new.perform
+
+      expect(@dead_jobs.fetch(blast.id)).not_to have_received(:retry)
+      expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+      expect(blast.reload.completed_at).to be_present
+      expect($redis.exists?(RedisKey.blast_audience_snapshot(blast.id))).to be(false)
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+        expect(message).to match(/blast #{blast.id}.*DEAD → COMPLETED/)
+      end
+    end
+
+    it "completes a fully delivered blast past the resume window and when the resume flag is off" do
+      blast = stalled_blast(requested_hours_ago: 30, delivery_count: 3)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      stub_sidekiq(dead: [blast.id])
+
+      described_class.new.perform
+
+      expect(@dead_jobs.fetch(blast.id)).not_to have_received(:retry)
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "does not treat a partial send as fully delivered" do
+      blast = stalled_blast(requested_hours_ago: 6, delivery_count: 2)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      stub_sidekiq(dead: [blast.id])
+
+      described_class.new.perform
+
+      expect(blast.reload.completed_at).to be_nil
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+        expect(message).not_to include("COMPLETED")
+      end
+    end
+
     context "when the flag is off" do
       it "never truncates action rows out of the report" do
         stub_const("#{described_class}::MAX_REPORTED", 1)
