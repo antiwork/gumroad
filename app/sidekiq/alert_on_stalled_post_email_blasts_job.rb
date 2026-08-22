@@ -98,6 +98,9 @@ class AlertOnStalledPostEmailBlastsJob
       # keeps getting buried — and is the wrong tool once delivery covers the snapshot.
       # Completing is not a send, so it is not gated on the resume flag or the 24h window.
       if SendPostBlastEmailsJob.fully_delivered?(blast)
+        # fully_delivered? can run a long audience query. Recheck before deleting the
+        # snapshot a sender that appeared mid-query now owns.
+        return :skipped_reappeared if sender_visible_now?(blast.id)
         return SendPostBlastEmailsJob.complete_if_fully_delivered!(blast) ? :completed : nil
       end
       # A DEAD entry proves its attempt chain ended; UNACCOUNTED can hide a live sender, and a
@@ -106,6 +109,8 @@ class AlertOnStalledPostEmailBlastsJob
       return :held_past_window if blast.requested_at < AUTO_RESUME_WINDOW.ago
       return :held_already_resumed if $redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))
       return :would_resume unless live
+      # Recheck immediately before the NX claim so a skip does not burn the once-per-blast marker.
+      return :skipped_reappeared if sender_visible_now?(blast.id)
 
       resume(entry) ? :resumed : :held_already_resumed
     end

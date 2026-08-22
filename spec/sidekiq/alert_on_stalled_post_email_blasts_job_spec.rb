@@ -308,6 +308,44 @@ describe AlertOnStalledPostEmailBlastsJob do
       end
     end
 
+    it "does not complete after a delivery query if the sender appears during that query" do
+      blast = stalled_blast(requested_hours_ago: 6, post: post_with_audience, delivery_count: 3)
+      recipient = snapshotted_recipient_for(blast)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      $redis.rpush(snapshot_key, recipient.id)
+      SentPostEmail.create!(post: blast.post, email: recipient.email)
+      stub_sidekiq
+      job = described_class.new
+      allow(job).to receive(:busy_blast_ids).and_return([], [], [blast.id])
+
+      job.perform
+
+      expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+      expect(blast.reload.completed_at).to be_nil
+      expect($redis.exists?(snapshot_key)).to be(true)
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+        expect(message).to match(/blast #{blast.id}.*UNACCOUNTED → SKIPPED \(sender reappeared/)
+      end
+    end
+
+    it "does not resume after a delivery miss if the sender appears before the claim" do
+      blast = stalled_blast(requested_hours_ago: 6)
+      stub_sidekiq
+      Feature.activate(:auto_resume_stalled_post_blasts)
+      job = described_class.new
+      allow(job).to receive(:busy_blast_ids).and_return([], [], [blast.id])
+
+      job.perform
+
+      expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+      expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(false)
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+        expect(message).to match(/blast #{blast.id}.*UNACCOUNTED → SKIPPED \(sender reappeared/)
+      end
+    ensure
+      Feature.deactivate(:auto_resume_stalled_post_blasts)
+    end
+
     it "does not treat a partial send as fully delivered" do
       blast = stalled_blast(requested_hours_ago: 6, post: post_with_audience, delivery_count: 3)
       recipient = snapshotted_recipient_for(blast)
