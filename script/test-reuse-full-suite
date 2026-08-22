@@ -82,4 +82,13 @@ out=$(run)
 test "$out" = "reuse=false" || { echo "FAIL expected reuse=false when only Relevant ran got [$out]"; exit 1; }
 echo "ok relevant-only is not reusable"
 
+printf '{"jobs":[{"name":"Test Fast 0","conclusion":"success"},{"name":"Test Slow 0","conclusion":"success"}]}\n' > "$FAKE/fix/jobs-full.json"
+out=$(GITHUB_ACTIONS=1 GITHUB_EVENT_NAME=pull_request_target GITHUB_REF=refs/heads/main REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false off main event got [$out]"; exit 1; }
+echo "ok refuse pull_request_target"
+
+out=$(GITHUB_ACTIONS=1 GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha)
+test "$out" = "reuse=true" || { echo "FAIL expected reuse=true on GHA main push got [$out]"; exit 1; }
+echo "ok allow GHA main push"
+
 echo ALL_OK

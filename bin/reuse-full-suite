@@ -27,6 +27,17 @@ if [ -z "$SHA" ]; then
   exit 0
 fi
 
+# Refuse to decide reuse unless this is a push to main. Fork PRs run Tests
+# via pull_request_target with a base-repo token — never skip the suite
+# from that path, even if a caller wires this script in by mistake.
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  if [ "${GITHUB_EVENT_NAME:-}" != "push" ] || [ "${GITHUB_REF:-}" != "refs/heads/main" ]; then
+    echo "reuse-full-suite: refuse off main ($GITHUB_EVENT_NAME $GITHUB_REF)" >&2
+    emit false
+    exit 0
+  fi
+fi
+
 api() {
   "$GH" api "$@"
 }
