@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
+import loadGoogleAnalyticsScript from "$vendor/google_analytics_4";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { sanitizedPageLocation, sanitizedPageReferrer, startTrackingForSeller } from "./google_analytics";
 
 vi.mock("$vendor/google_analytics_4", () => ({ default: vi.fn() }));
 
-import { sanitizedPageLocation, sanitizedPageReferrer, startTrackingForSeller } from "./google_analytics";
+const mockedLoadGoogleAnalyticsScript = vi.mocked(loadGoogleAnalyticsScript);
 
 function enableGa() {
   document.head.innerHTML = '<meta property="gr:google_analytics:enabled" content="true">';
@@ -73,17 +76,24 @@ describe("startTrackingForSeller", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
     vi.unstubAllGlobals();
+    mockedLoadGoogleAnalyticsScript.mockReset();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    mockedLoadGoogleAnalyticsScript.mockReset();
   });
 
-  it("issues gtag js before the seller config so custom landing events transmit", () => {
+  it("loads gtag for seller-only pages, then issues js before seller config so custom landing events transmit", () => {
     enableGa();
-    const gtag = stubGtag();
+    const gtag = vi.fn();
+    mockedLoadGoogleAnalyticsScript.mockImplementation(() => {
+      vi.stubGlobal("gtag", gtag);
+    });
 
     startTrackingForSeller(sellerConfig);
+
+    expect(mockedLoadGoogleAnalyticsScript).toHaveBeenCalledOnce();
 
     expect(gtag).toHaveBeenNthCalledWith(1, "js", expect.any(Date));
     expect(gtag).toHaveBeenNthCalledWith(
