@@ -445,7 +445,7 @@ export const DashboardPage = ({
       ) : null}
 
       {gumhead && !gumheadDismissed ? (
-        <div className="grid gap-4 p-4 md:p-8">
+        <div className="grid gap-4 p-4 md:px-8 md:pt-0 md:pb-8">
           <div className="group relative mt-16">
             {/* Painted before the card so the mascot peeks from behind its top edge. The 42px
                 rise leaves the feet resting on the card border (the hidden portion is 44px, and
