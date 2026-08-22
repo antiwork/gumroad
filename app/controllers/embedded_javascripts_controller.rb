@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class EmbeddedJavascriptsController < ApplicationController
-  skip_before_action :verify_authenticity_token, only: %i[overlay embed]
+  skip_before_action :verify_authenticity_token, only: %i[overlay embed analytics]
 
   def overlay
     @script_path = "/js/gumroad-bundle.js"
@@ -14,5 +14,12 @@ class EmbeddedJavascriptsController < ApplicationController
   def embed
     @script_path = "/js/gumroad-embed-bundle.js"
     render :index
+  end
+
+  def analytics
+    @product = Link.fetch(params[:id]) if params[:id].present?
+    @analytics_token = @product&.analytics_view_token(source_url: request.referrer) if request.referrer.present? && @product&.analytics_script_token?(params[:token])
+    expires_now
+    render :analytics, layout: false, content_type: "application/javascript"
   end
 end

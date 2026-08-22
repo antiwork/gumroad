@@ -25,3 +25,26 @@ export const buildEmbedCodeToCopy = ({ scriptBaseUrl, productUrl }: { scriptBase
 
   return code;
 };
+
+export const permalinkFromProductUrl = (productUrl: string): string => {
+  try {
+    const segments = new URL(productUrl).pathname.split("/").filter(Boolean);
+    return segments[segments.length - 1] ?? "";
+  } catch {
+    return "";
+  }
+};
+
+export const buildAnalyticsCodeToCopy = ({
+  scriptBaseUrl,
+  productUrl,
+  analyticsScriptToken,
+}: {
+  scriptBaseUrl: string;
+  productUrl: string;
+  analyticsScriptToken: string;
+}) => {
+  const permalink = permalinkFromProductUrl(productUrl);
+  const params = new URLSearchParams({ id: permalink, token: analyticsScriptToken });
+  return `<script async referrerpolicy="origin" src="${scriptBaseUrl}/js/gumroad-analytics.js?${params.toString()}"></script>`;
+};

@@ -4,6 +4,9 @@ require "zip/filesystem"
 
 class Link < ApplicationRecord
   has_paper_trail
+  ANALYTICS_SCRIPT_TOKEN_PURPOSE = :external_landing_page_script
+  ANALYTICS_VIEW_TOKEN_PURPOSE = :external_landing_page_view
+
   # Moving the definition of these flags will cause an error.
   include FlagShihTzu
   include ActionView::Helpers::SanitizeHelper
@@ -894,6 +897,32 @@ class Link < ApplicationRecord
 
   def self.fetch(unique_permalink, user: nil)
     Link.by_user(user).visible.find_by(unique_permalink:)
+  end
+
+  def analytics_script_token
+    self.class.analytics_view_verifier.generate({ product_id: id }, purpose: ANALYTICS_SCRIPT_TOKEN_PURPOSE)
+  end
+
+  def analytics_script_token?(token)
+    payload = self.class.analytics_view_verifier.verified(token.to_s, purpose: ANALYTICS_SCRIPT_TOKEN_PURPOSE)
+    payload.is_a?(Hash) && payload["product_id"] == id
+  end
+
+  def analytics_view_token(source_url:, event_id: SecureRandom.uuid)
+    self.class.analytics_view_verifier.generate({ product_id: id, source_url: source_url.to_s, event_id: }, purpose: ANALYTICS_VIEW_TOKEN_PURPOSE, expires_in: 10.minutes)
+  end
+
+  def analytics_view_token?(token, source_url:)
+    analytics_view_token_payload(token, source_url:).present?
+  end
+
+  def analytics_view_token_payload(token, source_url:)
+    payload = self.class.analytics_view_verifier.verified(token.to_s, purpose: ANALYTICS_VIEW_TOKEN_PURPOSE)
+    payload if payload.is_a?(Hash) && payload["product_id"] == id && payload["source_url"] == source_url.to_s && payload["event_id"].present?
+  end
+
+  def self.analytics_view_verifier
+    Rails.application.message_verifier(:product_analytics_view)
   end
 
   def can_gift?
