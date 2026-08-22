@@ -159,14 +159,23 @@ class ContentModeration::ModerateRecordService
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
 
     if entity_type == :page && content.image_urls.size > ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS
-      # Approving a page approves what it DISPLAYS, so it is rejected rather than
-      # approved on a sample of its images.
-      reasons = ["#{TOO_MANY_IMAGES_REASON_PREFIX} (#{content.image_urls.size})"]
-      # `blocked: false`: the publish did stop, but the admin trail is read as
-      # abuse history, and a seller with a big gallery has not done anything
-      # wrong. The seller-facing message says what to change.
-      leave_admin_comment(reasons, blocked: false)
-      return CheckResult.new(passed: false, reasons: reasons)
+      previous_page_urls = previous_page_image_urls
+      if preexisting_over_budget_without_growth?(content, previous_page_urls)
+        # A live storefront catalog that already exceeds the cap must stay
+        # editable (1:1 cover swaps, copy tweaks) without raising the cap for
+        # new pages. Only newly introduced URLs are reviewed.
+        new_urls = content.image_urls - previous_page_urls
+        content = content.class.new(text: content.text, image_urls: new_urls)
+      else
+        # Approving a page approves what it DISPLAYS, so it is rejected rather than
+        # approved on a sample of its images.
+        reasons = ["#{TOO_MANY_IMAGES_REASON_PREFIX} (#{content.image_urls.size})"]
+        # `blocked: false`: the publish did stop, but the admin trail is read as
+        # abuse history, and a seller with a big gallery has not done anything
+        # wrong. The seller-facing message says what to change.
+        leave_admin_comment(reasons, blocked: false)
+        return CheckResult.new(passed: false, reasons: reasons)
+      end
     end
 
     blocklist_result = ContentModeration::Strategies::BlocklistStrategy
@@ -405,6 +414,20 @@ class ContentModeration::ModerateRecordService
       when :post then extractor.extract_from_post(record)
       when :page then extractor.extract_from_page(record)
       end
+    end
+
+    def previous_page_image_urls
+      return [] unless entity_type == :page && record.is_a?(Page) && record.persisted?
+
+      snapshot = record.dup
+      snapshot.custom_html = record.custom_html_was
+      snapshot.content = record.content_was if record.has_attribute?(:content)
+      ContentModeration::ContentExtractor.new.extract_from_page(snapshot).image_urls
+    end
+
+    def preexisting_over_budget_without_growth?(content, previous_urls)
+      previous_urls.size > ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS &&
+        content.image_urls.size <= previous_urls.size
     end
 
     def run_ai_strategies(content)

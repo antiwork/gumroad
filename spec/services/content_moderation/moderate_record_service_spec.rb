@@ -230,6 +230,31 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           expect(over_budget_page.valid?).to eq(true)
         end
 
+        it "lets a live over-budget page swap one image src without growing the set" do
+          over_budget_page.save!(validate: false)
+          swapped = over_budget_html.sub("https://cdn.example.com/1.png", "https://cdn.example.com/swapped.png")
+          over_budget_page.custom_html = swapped
+
+          expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new)
+            .with(hash_including(image_urls: ["https://cdn.example.com/swapped.png"]))
+            .and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                                        perform: strategy_result.new(status: "compliant", reasoning: [])))
+
+          expect(described_class.check(over_budget_page, :page).passed).to eq(true)
+        end
+
+        it "still blocks adding another image to a live over-budget page" do
+          over_budget_page.save!(validate: false)
+          extra = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 2
+          over_budget_page.custom_html = over_budget_html + %(<img src="https://cdn.example.com/#{extra}.png">)
+
+          expect(ContentModeration::Strategies::ClassifierStrategy).not_to receive(:new)
+
+          result = described_class.check(over_budget_page, :page)
+          expect(result.passed).to eq(false)
+          expect(result.reasons.first).to start_with(described_class::TOO_MANY_IMAGES_REASON_PREFIX)
+        end
+
         it "counts images painted through nested CSS toward the budget" do
           count = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1
           nested_css = (1..count).map do |n|
