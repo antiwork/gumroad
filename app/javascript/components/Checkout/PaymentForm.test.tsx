@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,9 +14,36 @@ const paymentElementInputRender = vi.hoisted<{ setupFutureUsage: "off_session" |
   setupFutureUsage: undefined,
 }));
 
+const paypalMock = vi.hoisted<{
+  buttonsConfig: null | { onApprove: (data: { billingToken: string }) => Promise<void> };
+  createBillingAgreement: ReturnType<typeof vi.fn>;
+  getPaymentMethodResult: ReturnType<typeof vi.fn>;
+  getReusablePaymentMethodResult: ReturnType<typeof vi.fn>;
+  loadScript: ReturnType<typeof vi.fn>;
+  render: ReturnType<typeof vi.fn>;
+}>(() => ({
+  buttonsConfig: null,
+  createBillingAgreement: vi.fn(),
+  getPaymentMethodResult: vi.fn(),
+  getReusablePaymentMethodResult: vi.fn(),
+  loadScript: vi.fn(),
+  render: vi.fn(),
+}));
+
 // Keeps the render free of network and third-party scripts. The recurring UPI case captures the
 // Payment Element props, while the other scenarios are free purchases whose payment subtrees do not mount.
 vi.mock("@stripe/react-stripe-js", () => ({ useStripe: () => null }));
+vi.mock("@paypal/paypal-js", () => ({ loadScript: paypalMock.loadScript }));
+vi.mock("$app/data/paypal", () => ({
+  createBillingAgreement: paypalMock.createBillingAgreement,
+  createBillingAgreementToken: vi.fn(),
+}));
+vi.mock("$app/data/payment_method_result", () => ({
+  getPaymentMethodResult: paypalMock.getPaymentMethodResult,
+  getPaymentRequestPaymentMethodResult: vi.fn(),
+  getReusablePaymentMethodResult: paypalMock.getReusablePaymentMethodResult,
+  getReusablePaymentRequestPaymentMethodResult: vi.fn(),
+}));
 vi.mock("$app/data/braintree_client_token_data", () => ({ useBraintreeToken: () => ({ type: "not-available" }) }));
 vi.mock("$app/utils/stripe_loader", () => ({ getCheckoutStripeInstance: vi.fn(), getStripeInstance: vi.fn() }));
 vi.mock("$app/components/Checkout/CreditCardInput", () => ({
@@ -142,6 +169,31 @@ describe("PaymentForm validation-failure feedback", () => {
   beforeEach(() => {
     scrollIntoView.mockClear();
     paymentElementInputRender.setupFutureUsage = undefined;
+    paypalMock.buttonsConfig = null;
+    paypalMock.createBillingAgreement.mockReset();
+    paypalMock.getPaymentMethodResult.mockReset();
+    paypalMock.getReusablePaymentMethodResult.mockReset();
+    paypalMock.loadScript.mockReset();
+    paypalMock.render.mockReset();
+    paypalMock.loadScript.mockResolvedValue({
+      Buttons: (config: { onApprove: (data: { billingToken: string }) => Promise<void> }) => {
+        paypalMock.buttonsConfig = config;
+        return { render: paypalMock.render };
+      },
+    });
+    paypalMock.createBillingAgreement.mockResolvedValue({
+      id: "agreement-id",
+      payer: {
+        payer_info: {
+          email: "paypal-buyer@example.com",
+          payer_id: "payer-id",
+          billing_address: { country_code: "DE", postal_code: "10115" },
+          first_name: "PayPal",
+          last_name: "Buyer",
+        },
+      },
+    });
+    paypalMock.getPaymentMethodResult.mockResolvedValue({ type: "paypal", reusable: false });
     Element.prototype.scrollIntoView = scrollIntoView;
   });
   afterEach(cleanup);
@@ -225,6 +277,39 @@ describe("PaymentForm validation-failure feedback", () => {
     });
 
     expect(paymentElementInputRender.setupFutureUsage).toBe("off_session");
+  });
+
+  it("does not reuse a native PayPal agreement after PayPal changes the tax location", async () => {
+    const checkoutState = state({
+      country: "US",
+      zipCode: "10001",
+      paymentMethod: "paypal",
+      paypalClientId: "paypal-client-id",
+      status: { type: "starting" },
+      products: state().products.map((product) => ({
+        ...product,
+        price: 1_000,
+        requirePayment: true,
+        supportsPaypal: "native" as const,
+      })),
+    });
+    const dispatch = vi.fn();
+    render(
+      <LoggedInUserProvider value={null}>
+        <StateContext.Provider value={[checkoutState, dispatch] as const}>
+          <PaymentForm />
+        </StateContext.Provider>
+      </LoggedInUserProvider>,
+    );
+
+    await waitFor(() => expect(paypalMock.buttonsConfig).not.toBeNull());
+    await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token" });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "set-paypal-billing-address", country: "DE", zipCode: "10115" }),
+    );
+    expect(paypalMock.getPaymentMethodResult).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: "set-payment-method" }));
   });
 
   // Mirrors Checkout/index.tsx: tip and gift inputs render as siblings of PaymentForm, all of them
