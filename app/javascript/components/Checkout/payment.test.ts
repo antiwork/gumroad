@@ -1719,6 +1719,46 @@ describe("reduceCheckoutState", () => {
         expect(next.zipCode).toBe("H2X 1Y4");
       });
 
+      it("returns to input and queues a tax recheck when PayPal changes only the US ZIP", () => {
+        const next = reduceCheckoutState(
+          state({ status: { type: "starting" }, paymentMethod: "paypal", country: "US", zipCode: "10001" }),
+          {
+            type: "set-paypal-billing-address",
+            country: "US",
+            zipCode: "94103",
+            fullName: "PayPal Buyer",
+          },
+        );
+
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+        expect(next.country).toBe("US");
+        expect(next.zipCode).toBe("94103");
+      });
+
+      it("prefers PayPal's explicit Canadian province over a conflicting postal derivation", () => {
+        const next = reduceCheckoutState(
+          state({
+            status: { type: "starting" },
+            paymentMethod: "paypal",
+            country: "CA",
+            state: "ON",
+            zipCode: "M5V 2T6",
+          }),
+          {
+            type: "set-paypal-billing-address",
+            country: "CA",
+            zipCode: "H2X 1Y4",
+            state: "ON",
+            fullName: "PayPal Buyer",
+          },
+        );
+
+        expect(next.state).toBe("ON");
+        expect(next.surcharges.type).not.toBe("pending");
+        expect(next.status).toEqual({ type: "starting" });
+      });
+
       it("derives a Canadian province from PayPal's postal code when the province is omitted", () => {
         const next = reduceCheckoutState(
           state({
