@@ -166,13 +166,37 @@ class CustomersController < Sellers::BaseController
       sales.records
         .includes(
           :call,
-          :purchase_offer_code_discount,
+          :license,
+          :merchant_account,
+          :offer_code,
+          :preorder,
+          :price,
+          :purchaser,
+          # Lets Purchase#amount_refunded_cents take its in-memory Refund#effective?
+          # branch. Unpreloaded it runs a per-row SUM for cents_refundable.
+          :refunds,
+          :seller,
+          :shipment,
           :tip,
-          :upsell_purchase,
-          :variant_attributes,
           :url_redirect,
-          :link,
+          :variant_attributes,
+          affiliate: :affiliate_user,
+          commission_as_deposit: [:completion_purchase, { files_attachments: :blob }],
+          link: :alive_variants,
           product_review: [:response, { alive_videos: [:video_file] }],
+          purchase_custom_fields: { files_attachments: :blob },
+          purchase_offer_code_discount: :offer_code,
+          # original_product_review goes through Subscription#true_original_purchase (a different
+          # Purchase), so the top-level product_review preload never applies to memberships.
+          # :original_purchase is a separate cache; current_subscription_price_cents reads it.
+          subscription: [
+            :original_purchase,
+            {
+              last_payment_option: [:price, :installment_plan, :installment_plan_snapshot],
+              true_original_purchase: { product_review: [:response, { alive_videos: [:video_file] }] }
+            }
+          ],
+          upsell_purchase: :upsell,
           utm_link: [target_resource: [:seller, :user]]
         )
         .in_order_of(:id, sales.records.ids)
