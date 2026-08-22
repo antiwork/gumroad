@@ -8,6 +8,25 @@ class PostToIndividualPingEndpointWorker
   BACKOFF_STRATEGY = [60, 180, 600, 3600].freeze
   REQUEST_TIMEOUT_SECONDS = 5
   MAX_REDIRECTS = 3
+  # Transient connect/read failures. Permanent URL verdicts (PrivateIP, InvalidUriScheme,
+  # InvalidURIError) stay in the INTERNET_EXCEPTIONS drop path below.
+  RETRYABLE_EXCEPTIONS = [
+    SsrfFilter::UnresolvedHostname,
+    Timeout::Error,
+    Net::OpenTimeout,
+    Net::ReadTimeout,
+    Errno::ECONNREFUSED,
+    Errno::ECONNRESET,
+    Errno::ENETUNREACH,
+    Errno::EHOSTUNREACH,
+    Errno::EADDRNOTAVAIL,
+    SocketError,
+    EOFError,
+    OpenSSL::SSL::SSLError,
+    Faraday::ConnectionFailed,
+    HTTP::ConnectionError,
+    HTTP::TimeoutError
+  ].freeze
 
   def perform(post_url, params, content_type = Mime[:url_encoded_form].to_s, user_id = nil)
     retry_count = params["retry_count"] || 0
@@ -52,21 +71,16 @@ class PostToIndividualPingEndpointWorker
     Rails.logger.info("PostToIndividualPingEndpointWorker response=#{response.code} content_type=#{content_type} user_id=#{user_id}")
 
     unless response.is_a?(Net::HTTPSuccess)
-      if ERROR_CODES_TO_RETRY.include?(response.code.to_i) && retry_count < (BACKOFF_STRATEGY.length - 1)
-        PostToIndividualPingEndpointWorker.perform_in(BACKOFF_STRATEGY[retry_count].seconds, post_url, params.merge("retry_count" => retry_count + 1), content_type, user_id)
-      end
+      enqueue_retry(post_url, params, content_type, user_id, retry_count) if ERROR_CODES_TO_RETRY.include?(response.code.to_i)
     end
 
-  # An empty lookup is usually a DNS blip, not a verdict on the URL (gp#2155), so retry it on the
-  # same backoff as a 5xx. Must precede the blanket rescue: SsrfFilter::Error is in
-  # INTERNET_EXCEPTIONS, which is also why PrivateIPAddress still falls through to a plain drop.
-  rescue SsrfFilter::UnresolvedHostname => e
+  # Must precede the blanket INTERNET_EXCEPTIONS rescue: SsrfFilter::Error is in that
+  # list, so UnresolvedHostname would otherwise drop, and PrivateIPAddress must keep
+  # falling through to a plain drop.
+  rescue *RETRYABLE_EXCEPTIONS => e
     Rails.logger.info("[#{e.class}] PostToIndividualPingEndpointWorker error content_type=#{content_type} user_id=#{user_id} retry_count=#{retry_count}")
-    if retry_count < (BACKOFF_STRATEGY.length - 1)
-      PostToIndividualPingEndpointWorker.perform_in(BACKOFF_STRATEGY[retry_count].seconds, post_url, params.merge("retry_count" => retry_count + 1), content_type, user_id)
-    end
-  # rescue clause to handle connection errors. Without this, the job
-  # would fail if the user inputted post_url is invalid.
+    enqueue_retry(post_url, params, content_type, user_id, retry_count)
+  # Permanent URL / connect verdicts (private IP, bad scheme, invalid URI).
   rescue *INTERNET_EXCEPTIONS => e
     Rails.logger.info("[#{e.class}] PostToIndividualPingEndpointWorker error content_type=#{content_type} user_id=#{user_id}")
   end
@@ -74,5 +88,17 @@ class PostToIndividualPingEndpointWorker
   private
     def encode_brackets(key)
       key.to_s.gsub(/[\[\]]/) { |char| URI.encode_www_form_component(char) }
+    end
+
+    def enqueue_retry(post_url, params, content_type, user_id, retry_count)
+      return unless retry_count < (BACKOFF_STRATEGY.length - 1)
+
+      PostToIndividualPingEndpointWorker.perform_in(
+        BACKOFF_STRATEGY[retry_count].seconds,
+        post_url,
+        params.merge("retry_count" => retry_count + 1),
+        content_type,
+        user_id
+      )
     end
 end
