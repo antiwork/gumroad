@@ -11,6 +11,8 @@ export type CreatorProfile = {
   // several previews build a CreatorProfile client-side without one; a missing
   // key and a null key both mean "no challenge".
   follow_recaptcha_site_key?: string | null;
+  // Seller setting: hides the header subscribe box. Missing means shown.
+  hide_follow_form?: boolean;
   // Present only while seller_reputation_summary is enabled for the seller;
   // null when they miss the display thresholds (10+ reviews across 2+ products).
   reputation?: SellerReputation | null;
@@ -27,4 +29,5 @@ export type ProfileSettings = {
   highlight_color: string;
   profile_picture_blob_id: string | null;
   product_page_storefront_enabled: boolean;
+  hide_follow_form: boolean;
 };

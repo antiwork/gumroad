@@ -427,6 +427,7 @@ class User < ApplicationRecord
             57 => :content_moderation_disabled, # Admin-only: exempts every product this seller creates from automated content moderation, including ones that don't exist yet. Link#content_moderation_disabled only covers products that already exist when support grants it (gumroad-private#1742).
             58 => :product_page_storefront_enabled, # Product pages render inside the creator's storefront (profile header above, catalog below). Defaulted on for new accounts only, so lift can be measured against existing creators before enabling for all (gumroad-private#2196). Sellers can turn it off in profile settings.
             59 => :has_dismissed_gumhead_promo,
+            60 => :hide_follow_form, # Seller setting: hides the subscribe box in the public profile header. Custom HTML pages omit it by not including the form.
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
