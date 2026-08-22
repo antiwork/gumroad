@@ -233,6 +233,81 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
         expect(customer_ids[response].first(2)).to match_array([banana_purchase.external_id, apple_purchase.external_id])
       end
     end
+
+    context "N+1 query prevention" do
+      # Purchase#linked_license short-circuits on link.is_licensed?, so without this override the
+      # inherited purchases' licenses are never read and the license assertion passes vacuously.
+      let(:product) { create(:product, user: seller, name: "Product 1", price_cents: 100, is_licensed: true) }
+      let(:physical_product) { create(:physical_product, user: seller, name: "Physical product") }
+      let(:membership_product) { create(:membership_product, user: seller, name: "Membership") }
+      let(:installment_plan_product) { create(:product, :with_installment_plan, user: seller, name: "Installment plan product") }
+
+      before do
+        # Rails renders a single-owner preload as `WHERE x = <id>`, the same shape as the per-row
+        # query asserted against below, so every association needs at least two owners on one page.
+        stub_const("CustomersController::CUSTOMERS_PER_PAGE", 20)
+
+        purchases.each { create(:purchase_custom_field, purchase: _1, name: "Company", value: "Acme") }
+
+        # The SKU is a regression guard: preloading through variant_attributes raises
+        # AssociationNotFoundError once a Sku is in the result set.
+        3.times do
+          physical_purchase = create(:physical_purchase, seller:, link: physical_product,
+                                                         variant_attributes: [create(:sku, link: physical_product)])
+          create(:shipment, purchase: physical_purchase)
+        end
+        3.times { create(:membership_purchase, seller:, link: membership_product) }
+        # Subscription#recurrence takes the installment-plan branch for these, reading the payment
+        # option's snapshot rather than its price.
+        3.times { create(:installment_plan_purchase, seller:, link: installment_plan_product) }
+        # cents_refundable reads amount_refunded_cents, which SUMs refunds per row unless preloaded.
+        purchases.first(2).each { create(:refund, purchase: _1, amount_cents: 50) }
+
+        index_model_records(Purchase)
+      end
+
+      it "does not issue per-row association queries for the data every Sales row renders" do
+        # Pre-warm feature flags, the policy's team membership lookup and AR column caches,
+        # none of which repeat per row.
+        get :paged, params: { page: 1 }
+        expect(response).to be_successful
+
+        queries = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          sql = payload[:sql]
+          next if payload[:name] == "SCHEMA" || payload[:cached]
+          queries << sql if sql.present? && sql.start_with?("SELECT")
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          get :paged, params: { page: 1 }
+        end
+
+        expect(response).to be_successful
+        # Guards every assertion below, which pass vacuously on a short page.
+        expect(response.parsed_body["customers"].size).to eq(15)
+
+        # A batched preload reads `... IN (...)`. A bare `= <id>` is the per-row shape
+        # CustomerPresenter#customer triggers for an association load_sales does not preload.
+        {
+          "purchase custom field" => /FROM `purchase_custom_fields`.*`purchase_custom_fields`\.`purchase_id` = \d+/m,
+          "license" => /FROM `licenses`.*`licenses`\.`purchase_id` = \d+/m,
+          "subscription" => /FROM `subscriptions`.*`subscriptions`\.`id` = \d+/m,
+          "shipment" => /FROM `shipments`.*`shipments`\.`purchase_id` = \d+/m,
+          "payment option" => /FROM `payment_options`.*`payment_options`\.`id` = \d+/m,
+          "installment plan snapshot" => /FROM `installment_plan_snapshots`.*`payment_option_id` = \d+/m,
+          "refund sum" => /SUM\(`refunds`\.`amount_cents`\).*`refunds`\.`purchase_id` = \d+/m,
+          # Scoped to the flags-filtered original_purchase shape on purpose. The COUNT from
+          # remaining_charges_count and the ORDER BY from pending_failure? are known residuals
+          # that no preload fixes, and they hit the same table.
+          "subscription original purchase" => /SELECT `purchases`\.\* FROM `purchases` WHERE `purchases`\.`subscription_id` = \d+ AND \(\(`purchases`\.`flags`/m,
+        }.each do |label, per_row_pattern|
+          per_row = queries.grep(per_row_pattern)
+          expect(per_row).to be_empty,
+                             "Expected no per-row #{label} queries, got #{per_row.size}:\n#{per_row.join("\n")}"
+        end
+      end
+    end
   end
 
   describe "GET paged with active_customers_only filter" do
