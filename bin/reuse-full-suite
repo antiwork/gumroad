@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# Decide whether this main commit can skip Fast/Slow because a PR already
+# ran the full suite on the exact same git tree.
+#
+# Prints reuse=true or reuse=false (and writes GITHUB_OUTPUT when set).
+# Never exits non-zero on a "no" — a lookup miss must re-run the suite.
+#
+# Usage:
+#   bin/reuse-full-suite <sha>
+#   REPO=antiwork/gumroad bin/reuse-full-suite <sha>
+set -euo pipefail
+
+SHA="${1:-}"
+REPO="${REPO:-${GITHUB_REPOSITORY:-antiwork/gumroad}}"
+GH="${GH:-gh}"
+
+emit() {
+  echo "reuse=$1"
+  if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    echo "reuse=$1" >> "$GITHUB_OUTPUT"
+  fi
+}
+
+if [ -z "$SHA" ]; then
+  echo "usage: bin/reuse-full-suite <sha>" >&2
+  emit false
+  exit 0
+fi
+
+# Refuse to decide reuse unless this is a push to main. Fork PRs run Tests
+# via pull_request_target with a base-repo token — never skip the suite
+# from that path, even if a caller wires this script in by mistake.
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  if [ "${GITHUB_EVENT_NAME:-}" != "push" ] || [ "${GITHUB_REF:-}" != "refs/heads/main" ]; then
+    echo "reuse-full-suite: refuse off main ($GITHUB_EVENT_NAME $GITHUB_REF)" >&2
+    emit false
+    exit 0
+  fi
+fi
+
+api() {
+  "$GH" api "$@"
+}
+
+tree_of() {
+  api "repos/$REPO/git/commits/$1" --jq .tree.sha
+}
+
+run_has_full_suite() {
+  local run_id="$1"
+  local jobs
+  # Raw pages: --paginate may emit more than one JSON object.
+  jobs=$(api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" --paginate)
+  echo "$jobs" | python3 -c '
+import json, sys
+text = sys.stdin.read()
+dec = json.JSONDecoder()
+jobs = []
+idx = 0
+while idx < len(text):
+    while idx < len(text) and text[idx].isspace():
+        idx += 1
+    if idx >= len(text):
+        break
+    obj, end = dec.raw_decode(text, idx)
+    jobs.extend(obj.get("jobs", []))
+    idx = end
+def ok(prefix):
+    hits = [
+        j for j in jobs
+        if j.get("name", "").startswith(prefix)
+        and "noop" not in j.get("name", "").lower()
+    ]
+    return (
+        any(j.get("conclusion") == "success" for j in hits)
+        and not any(j.get("conclusion") == "failure" for j in hits)
+    )
+sys.exit(0 if ok("Test Fast") and ok("Test Slow") else 1)
+'
+}
+
+full_suite_green() {
+  local head="$1"
+  local run_ids
+  # Same SHA can have several successful Tests runs (push + pull_request_target
+  # noop). The newest is often the noop. Any run with green Fast+Slow counts.
+  run_ids=$(api "repos/$REPO/actions/runs?head_sha=$head&status=completed&per_page=20" --paginate \
+    --jq '.workflow_runs[] | select(.name == "Tests" and .conclusion == "success") | .id')
+  if [ -z "${run_ids:-}" ]; then
+    return 1
+  fi
+  local run_id
+  for run_id in $run_ids; do
+    if run_has_full_suite "$run_id"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+MAIN_TREE=$(tree_of "$SHA" || true)
+if [ -z "${MAIN_TREE:-}" ]; then
+  echo "reuse-full-suite: no tree for $SHA" >&2
+  emit false
+  exit 0
+fi
+
+PRS=$(api "repos/$REPO/commits/$SHA/pulls" --jq '.[].number' || true)
+if [ -z "${PRS:-}" ]; then
+  echo "reuse-full-suite: no associated PR for $SHA" >&2
+  emit false
+  exit 0
+fi
+
+for pr in $PRS; do
+  HEAD=$(api "repos/$REPO/pulls/$pr" --jq .head.sha || true)
+  if [ -z "${HEAD:-}" ]; then
+    echo "reuse-full-suite: no head for PR #$pr" >&2
+    continue
+  fi
+  PR_TREE=$(tree_of "$HEAD" || true)
+  if [ -z "${PR_TREE:-}" ]; then
+    continue
+  fi
+  if [ "$PR_TREE" != "$MAIN_TREE" ]; then
+    echo "reuse-full-suite: PR #$pr tree $PR_TREE != $MAIN_TREE" >&2
+    continue
+  fi
+  if full_suite_green "$HEAD"; then
+    echo "reuse-full-suite: reusing Tests from PR #$pr head $HEAD (tree $MAIN_TREE)" >&2
+    emit true
+    exit 0
+  fi
+  echo "reuse-full-suite: PR #$pr same tree but no green full suite on $HEAD" >&2
+done
+
+emit false
+exit 0

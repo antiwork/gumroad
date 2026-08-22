@@ -28,6 +28,10 @@ jobs:
     # test_relevant job. Full suite: every push to main (deploy gate), or a
     # PR carrying the run-all-specs label. Push events have no PR payload,
     # so the label is looked up via the commit's PRs.
+    #
+    # Fork PRs hit this job via pull_request_target (token is the base repo).
+    # No checkout here — only label lookup. Reuse of a prior Fast/Slow run
+    # lives in reuse_scope, which is main-push only.
     name: Run scope
     runs-on: ubicloud-standard-2
     needs: ci_gate
@@ -56,6 +60,35 @@ jobs:
           else
             echo "full=false" >> "$GITHUB_OUTPUT"
           fi
+
+  reuse_scope:
+    # Main-only. Asks whether this exact git tree already passed Fast+Slow on
+    # a merged PR. Isolated from pull_request_target so a fork cannot put
+    # bin/reuse-full-suite in front of a token that can read Actions.
+    name: Reuse full suite
+    runs-on: ubicloud-standard-2
+    needs: ci_gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      pull-requests: read
+      actions: read
+      contents: read
+    outputs:
+      reuse: ${{ steps.reuse.outputs.reuse }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: bin/reuse-full-suite
+          sparse-checkout-cone-mode: false
+      - id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          echo "reuse=false" >> "$GITHUB_OUTPUT"
+          REPO="$GITHUB_REPOSITORY" bin/reuse-full-suite "$SHA" || true
 
   lint_js:
     name: Lint JS/TS
@@ -551,10 +584,18 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
     runs-on: ubicloud-standard-4
-    needs: [build, run_scope]
-    # Full suite: main pushes (deploy gate) and PRs labeled run-all-specs.
-    # Everything else runs test_relevant instead.
-    if: needs.run_scope.outputs.full == 'true'
+    needs: [build, run_scope, reuse_scope]
+    # Full suite: main pushes (deploy gate) and PRs labeled run-all-specs,
+    # unless this main commit is the same tree as a PR that already passed Fast+Slow.
+    # reuse_scope is skipped off main — always() so that skip does not cancel
+    # a run-all-specs PR. Empty reuse output is not 'true', so Fast still runs.
+    if: |
+      always() &&
+      !cancelled() &&
+      needs.build.result == 'success' &&
+      needs.run_scope.result == 'success' &&
+      needs.run_scope.outputs.full == 'true' &&
+      needs.reuse_scope.outputs.reuse != 'true'
     strategy:
       fail-fast: true
       matrix:
@@ -685,10 +726,18 @@ jobs:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_slow_${{ matrix.ci_node_index }}
       WEB_REPO: antiwork/gumroad-web
     runs-on: ubicloud-standard-4
-    needs: [build, run_scope]
-    # Full suite: main pushes (deploy gate) and PRs labeled run-all-specs.
-    # Everything else runs test_relevant instead.
-    if: needs.run_scope.outputs.full == 'true'
+    needs: [build, run_scope, reuse_scope]
+    # Full suite: main pushes (deploy gate) and PRs labeled run-all-specs,
+    # unless this main commit is the same tree as a PR that already passed Fast+Slow.
+    # reuse_scope is skipped off main — always() so that skip does not cancel
+    # a run-all-specs PR. Empty reuse output is not 'true', so Slow still runs.
+    if: |
+      always() &&
+      !cancelled() &&
+      needs.build.result == 'success' &&
+      needs.run_scope.result == 'success' &&
+      needs.run_scope.outputs.full == 'true' &&
+      needs.reuse_scope.outputs.reuse != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -1098,8 +1147,20 @@ jobs:
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
     runs-on: ubicloud-standard-2
-    needs: [test_fast, test_slow, test_minitest]
-    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [run_scope, reuse_scope, test_fast, test_slow, test_minitest]
+    # Skipped Fast/Slow (reuse) must not block deploy. A needed job that is
+    # skipped fails the default success gate, so always() is required or
+    # this job never runs on the reuse path.
+    if: |
+      always() &&
+      !cancelled() &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.test_minitest.result == 'success' &&
+      needs.reuse_scope.result == 'success' &&
+      (
+        needs.reuse_scope.outputs.reuse == 'true' ||
+        (needs.test_fast.result == 'success' && needs.test_slow.result == 'success')
+      )
     steps:
       - name: Unblock corresponding Buildkite build
         uses: nick-fields/retry@v3
