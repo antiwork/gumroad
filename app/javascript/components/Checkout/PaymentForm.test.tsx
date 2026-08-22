@@ -3,7 +3,12 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { StateContext, type CheckoutPaymentConfig, type State } from "$app/components/Checkout/payment";
+import {
+  reduceCheckoutState,
+  StateContext,
+  type CheckoutPaymentConfig,
+  type State,
+} from "$app/components/Checkout/payment";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { LoggedInUserProvider } from "$app/components/LoggedInUser";
 
@@ -163,6 +168,25 @@ const renderPaymentForm = (checkoutState: State) => {
   return { ...utils, rerenderWith: (s: State) => utils.rerender(view(s)) };
 };
 
+// Applies reducer updates so a second native PayPal approval sees the new tax location.
+const StatefulPaymentForm = ({
+  initial,
+  harness,
+}: {
+  initial: State;
+  harness: { dispatch: React.Dispatch<Parameters<typeof reduceCheckoutState>[1]> };
+}) => {
+  const [checkoutState, dispatch] = React.useReducer(reduceCheckoutState, initial);
+  harness.dispatch = dispatch;
+  return (
+    <LoggedInUserProvider value={null}>
+      <StateContext.Provider value={[checkoutState, dispatch]}>
+        <PaymentForm />
+      </StateContext.Provider>
+    </LoggedInUserProvider>
+  );
+};
+
 describe("PaymentForm validation-failure feedback", () => {
   const scrollIntoView = vi.fn();
 
@@ -280,6 +304,15 @@ describe("PaymentForm validation-failure feedback", () => {
   });
 
   it("does not reuse a native PayPal agreement after PayPal changes the tax location", async () => {
+    const surchargeResult = {
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 0,
+      tax_cents: 190,
+      tax_included_cents: 0,
+      subtotal: 1_000,
+      buyer_currency_quote: null,
+    };
     const checkoutState = state({
       country: "US",
       zipCode: "10001",
@@ -293,23 +326,62 @@ describe("PaymentForm validation-failure feedback", () => {
         supportsPaypal: "native" as const,
       })),
     });
-    const dispatch = vi.fn();
-    render(
-      <LoggedInUserProvider value={null}>
-        <StateContext.Provider value={[checkoutState, dispatch] as const}>
-          <PaymentForm />
-        </StateContext.Provider>
-      </LoggedInUserProvider>,
-    );
+    paypalMock.createBillingAgreement.mockImplementation(async (token: string) => ({
+      id: token === "billing-token-2" ? "agreement-id-2" : "agreement-id-1",
+      payer: {
+        payer_info: {
+          email: "paypal-buyer@example.com",
+          payer_id: "payer-id",
+          billing_address: { country_code: "DE", postal_code: "10115" },
+          first_name: "PayPal",
+          last_name: "Buyer",
+        },
+      },
+    }));
+    const harness = {
+      dispatch: ((_action: Parameters<typeof reduceCheckoutState>[1]) => undefined) as React.Dispatch<
+        Parameters<typeof reduceCheckoutState>[1]
+      >,
+    };
+    render(<StatefulPaymentForm initial={checkoutState} harness={harness} />);
 
     await waitFor(() => expect(paypalMock.buttonsConfig).not.toBeNull());
-    await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token" });
+    await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token-1" });
 
-    expect(dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "set-paypal-billing-address", country: "DE", zipCode: "10115" }),
-    );
     expect(paypalMock.getPaymentMethodResult).not.toHaveBeenCalled();
-    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: "set-payment-method" }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "PayPal updated your tax location. Review the updated total below, then click PayPal again to continue.",
+        ),
+      ).toBeTruthy(),
+    );
+
+    // Simulate the pending tax quote landing, then the buyer clicking PayPal again.
+    harness.dispatch({
+      type: "set-value",
+      surcharges: { type: "loaded", result: surchargeResult },
+    });
+    harness.dispatch({ type: "start-payment" });
+    await waitFor(() => expect(screen.getByLabelText("Email address")).toHaveProperty("disabled", true));
+
+    await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token-2" });
+
+    await waitFor(() => expect(paypalMock.getPaymentMethodResult).toHaveBeenCalledOnce());
+    expect(paypalMock.getPaymentMethodResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "paypal-native",
+        info: expect.objectContaining({
+          billingToken: "billing-token-2",
+          agreementId: "agreement-id-2",
+        }),
+      }),
+    );
+    expect(paypalMock.getPaymentMethodResult).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        info: expect.objectContaining({ agreementId: "agreement-id-1" }),
+      }),
+    );
   });
 
   // Mirrors Checkout/index.tsx: tip and gift inputs render as siblings of PaymentForm, all of them
