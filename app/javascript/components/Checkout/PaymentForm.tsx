@@ -1328,7 +1328,7 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
           assert(data.billingToken != null, "Billing token missing");
           const result = await createBillingAgreement(data.billingToken);
           dispatch({
-            type: "set-value",
+            type: "set-paypal-billing-address",
             country: result.payer.payer_info.billing_address.country_code,
             zipCode: result.payer.payer_info.billing_address.postal_code,
             fullName: `${result.payer.payer_info.first_name ?? ""} ${result.payer.payer_info.last_name ?? ""}`,

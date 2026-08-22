@@ -1670,6 +1670,66 @@ describe("reduceCheckoutState", () => {
     // abort the payment that the address belongs to. The dedicated action invalidates the quote
     // (the held wallet payment then waits for the reload; see resolveHeldWalletPayment) while
     // leaving the in-flight status untouched.
+    describe("set-paypal-billing-address", () => {
+      it("returns to input and queues a tax recheck when PayPal changes the taxable country", () => {
+        const next = reduceCheckoutState(
+          state({ status: { type: "starting" }, paymentMethod: "paypal", country: "US", zipCode: "10001" }),
+          {
+            type: "set-paypal-billing-address",
+            country: "DE",
+            zipCode: "10115",
+            fullName: "PayPal Buyer",
+            email: "paypal-buyer@example.com",
+          },
+        );
+
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+        expect(next.country).toBe("DE");
+        expect(next.zipCode).toBe("10115");
+        expect(next.fullName).toBe("PayPal Buyer");
+        expect(next.email).toBe("paypal-buyer@example.com");
+        expect(next.warning).toBe(
+          "PayPal updated your tax location. Review the updated total below, then click PayPal again to continue.",
+        );
+      });
+
+      it("does not interrupt a same-location PayPal approval", () => {
+        const initial = state({ status: { type: "starting" }, paymentMethod: "paypal" });
+        const next = reduceCheckoutState(initial, {
+          type: "set-paypal-billing-address",
+          country: initial.country,
+          zipCode: initial.zipCode,
+          fullName: "PayPal Buyer",
+        });
+
+        expect(next.surcharges).toBe(initial.surcharges);
+        expect(next.status).toEqual({ type: "starting" });
+        expect(next.warning).toBeNull();
+      });
+
+      it("aborts an in-flight surcharges request before sending PayPal back to review", () => {
+        const abort = vi.fn();
+        const next = reduceCheckoutState(
+          state({
+            status: { type: "starting" },
+            paymentMethod: "paypal",
+            surcharges: { type: "loading", requestId: 1, abort },
+          }),
+          {
+            type: "set-paypal-billing-address",
+            country: "CA",
+            zipCode: "H2X 1Y4",
+            fullName: "PayPal Buyer",
+          },
+        );
+
+        expect(abort).toHaveBeenCalledOnce();
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+      });
+    });
+
     describe("set-wallet-billing-address", () => {
       it("invalidates surcharges on a tax-location change without cancelling the starting card payment", () => {
         for (const action of [
