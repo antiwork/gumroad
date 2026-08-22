@@ -1148,11 +1148,15 @@ jobs:
     name: Unblock deployment from Buildkite
     runs-on: ubicloud-standard-2
     needs: [run_scope, reuse_scope, test_fast, test_slow, test_minitest]
-    # Skipped Fast/Slow (reuse) must not block deploy. success() is false when
-    # a needed job is skipped, so check results explicitly.
+    # Skipped Fast/Slow (reuse) must not block deploy. A needed job that is
+    # skipped fails the default success gate, so always() is required or
+    # this job never runs on the reuse path.
     if: |
+      always() &&
+      !cancelled() &&
       github.event_name == 'push' && github.ref == 'refs/heads/main' &&
       needs.test_minitest.result == 'success' &&
+      needs.reuse_scope.result == 'success' &&
       (
         needs.reuse_scope.outputs.reuse == 'true' ||
         (needs.test_fast.result == 'success' && needs.test_slow.result == 'success')

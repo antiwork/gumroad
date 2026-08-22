@@ -46,27 +46,56 @@ tree_of() {
   api "repos/$REPO/git/commits/$1" --jq .tree.sha
 }
 
-full_suite_green() {
-  local head="$1"
-  local run_id
-  run_id=$(api "repos/$REPO/actions/runs?head_sha=$head&status=completed&per_page=20" \
-    --jq '[.workflow_runs[] | select(.name == "Tests" and .conclusion == "success")][0].id // empty')
-  if [ -z "$run_id" ]; then
-    return 1
-  fi
-  # Require at least one completed-success Fast shard and one Slow shard.
-  # Skipped Fast/Slow means that run was test_relevant only — not reusable.
+run_has_full_suite() {
+  local run_id="$1"
   local jobs
-  jobs=$(api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" --paginate \
-    --jq '[.jobs[] | {name, conclusion}]')
+  # Raw pages: --paginate may emit more than one JSON object.
+  jobs=$(api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" --paginate)
   echo "$jobs" | python3 -c '
 import json, sys
-jobs = json.load(sys.stdin)
+text = sys.stdin.read()
+dec = json.JSONDecoder()
+jobs = []
+idx = 0
+while idx < len(text):
+    while idx < len(text) and text[idx].isspace():
+        idx += 1
+    if idx >= len(text):
+        break
+    obj, end = dec.raw_decode(text, idx)
+    jobs.extend(obj.get("jobs", []))
+    idx = end
 def ok(prefix):
-    hits = [j for j in jobs if j.get("name", "").startswith(prefix)]
-    return any(j.get("conclusion") == "success" for j in hits) and not any(j.get("conclusion") == "failure" for j in hits)
+    hits = [
+        j for j in jobs
+        if j.get("name", "").startswith(prefix)
+        and "noop" not in j.get("name", "").lower()
+    ]
+    return (
+        any(j.get("conclusion") == "success" for j in hits)
+        and not any(j.get("conclusion") == "failure" for j in hits)
+    )
 sys.exit(0 if ok("Test Fast") and ok("Test Slow") else 1)
 '
+}
+
+full_suite_green() {
+  local head="$1"
+  local run_ids
+  # Same SHA can have several successful Tests runs (push + pull_request_target
+  # noop). The newest is often the noop. Any run with green Fast+Slow counts.
+  run_ids=$(api "repos/$REPO/actions/runs?head_sha=$head&status=completed&per_page=20" --paginate \
+    --jq '.workflow_runs[] | select(.name == "Tests" and .conclusion == "success") | .id')
+  if [ -z "${run_ids:-}" ]; then
+    return 1
+  fi
+  local run_id
+  for run_id in $run_ids; do
+    if run_has_full_suite "$run_id"; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 MAIN_TREE=$(tree_of "$SHA" || true)
