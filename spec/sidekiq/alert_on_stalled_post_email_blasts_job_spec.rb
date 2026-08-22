@@ -249,7 +249,7 @@ describe AlertOnStalledPostEmailBlastsJob do
 
     it "stamps completed_at on a fully delivered DEAD blast instead of retrying it" do
       blast = stalled_blast(requested_hours_ago: 6, delivery_count: 3)
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
       stub_sidekiq(dead: [blast.id])
 
       described_class.new.perform
@@ -265,7 +265,7 @@ describe AlertOnStalledPostEmailBlastsJob do
 
     it "completes a fully delivered blast past the resume window and when the resume flag is off" do
       blast = stalled_blast(requested_hours_ago: 30, delivery_count: 3)
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
       stub_sidekiq(dead: [blast.id])
 
       described_class.new.perform
@@ -276,7 +276,7 @@ describe AlertOnStalledPostEmailBlastsJob do
 
     it "does not treat a partial send as fully delivered" do
       blast = stalled_blast(requested_hours_ago: 6, delivery_count: 2)
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
       stub_sidekiq(dead: [blast.id])
 
       described_class.new.perform

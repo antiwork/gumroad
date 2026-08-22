@@ -729,21 +729,21 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
 
     it "is false when delivery_count is short of the snapshot" do
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
       blast.update!(delivery_count: 2)
 
       expect(described_class.fully_delivered?(blast)).to be(false)
     end
 
     it "is true when delivery_count covers the snapshot" do
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
       blast.update!(delivery_count: 3)
 
       expect(described_class.fully_delivered?(blast)).to be(true)
     end
 
     it "is false once completed_at is already set" do
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
       blast.update!(delivery_count: 3, completed_at: Time.current)
 
       expect(described_class.fully_delivered?(blast)).to be(false)
@@ -769,7 +769,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
     it "stamps completed_at and drops the snapshot when delivery already covers it" do
       snapshot = RedisKey.blast_audience_snapshot(blast.id)
-      $redis.rpush(snapshot, 1, 2, 3)
+      $redis.rpush(snapshot, [1, 2, 3])
 
       expect(described_class.complete_if_fully_delivered!(blast)).to be(true)
       expect(blast.reload.completed_at).to eq(Time.current)
@@ -777,7 +777,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
 
     it "leaves an incomplete blast untouched" do
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), 1, 2, 3)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), [1, 2, 3])
       blast.update!(delivery_count: 2)
 
       expect(described_class.complete_if_fully_delivered!(blast)).to be(false)
