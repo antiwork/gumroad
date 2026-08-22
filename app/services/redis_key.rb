@@ -42,6 +42,7 @@ class RedisKey
     def blast_sent_emails(blast_id) = "blast:#{blast_id}:sent_emails"
     def blast_audience_snapshot(blast_id) = "blast:#{blast_id}:audience_snapshot"
     def blast_non_opener_emails(blast_id) = "blast:#{blast_id}:non_opener_emails"
+    def blast_completion_stamp_claim(blast_id) = "blast:#{blast_id}:completion_stamp_claim"
     def stalled_blast_auto_resumed(blast_id) = "blast:#{blast_id}:auto_resumed"
     def workflow_installment_rule_version(installment_id) = "workflow_installment_rule:#{installment_id}:version"
     def workflow_installment_rule_pending_token(installment_id) = "workflow_installment_rule:#{installment_id}:pending_token"

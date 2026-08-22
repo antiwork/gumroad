@@ -67,6 +67,35 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 0
     end
 
+    it "does not start sending while the completion-stamp path owns the blast" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_completion_stamp_claim(blast.id), Time.current.iso8601)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+      expect(blast.reload.started_at).to be_nil
+      expect(blast.reload.completed_at).to be_nil
+    ensure
+      $redis.del(RedisKey.blast_completion_stamp_claim(blast.id)) if blast
+    end
+
+    it "holds the completion-stamp claim longer than the audience revalidation cap" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      $redis.set(RedisKey.audience_member_load_max_execution_time_seconds, 2.hours.to_i)
+
+      expect($redis).to receive(:set)
+        .with(RedisKey.blast_completion_stamp_claim(blast.id), Time.current.iso8601, nx: true, ex: 2.hours.to_i + 10.minutes.to_i)
+        .and_call_original
+
+      described_class.claim_completion_stamp(blast.id)
+    ensure
+      if blast
+        $redis.del(RedisKey.blast_completion_stamp_claim(blast.id))
+        $redis.del(RedisKey.audience_member_load_max_execution_time_seconds)
+      end
+    end
+
     it "records when blast started processing" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
       described_class.new.perform(blast.id)
@@ -489,6 +518,40 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(snapshot_during_run.map(&:to_i)).to match_array(expected_ids)
       expect($redis.exists?(snapshot_key)).to eq(false)
       expect(blast.reload.completed_at).to be_present
+    end
+
+    it "does not mark an empty sender complete if the completion-stamp path claims the blast during audience load" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      recipient = AudienceMember.where(seller_id: post.seller_id).sole
+      SentPostEmail.create!(post:, email: recipient.email)
+      allow(described_class).to receive(:completion_stamp_claimed?).with(blast.id).and_return(false, true)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_nil
+      expect($redis.exists?(snapshot_key)).to eq(true)
+    ensure
+      $redis.del(snapshot_key) if snapshot_key
+    end
+
+    it "stops before a provider slice if the completion-stamp path claims the blast after grouping" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      allow(described_class).to receive(:completion_stamp_claimed?).with(blast.id).and_return(false, false, true)
+      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      expect(PostSendgridApi).not_to receive(:process)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_nil
+      expect($redis.exists?(snapshot_key)).to eq(true)
+    ensure
+      $redis.del(snapshot_key) if snapshot_key
     end
 
     it "resumes from the snapshot on retry using only an id-restricted filter" do

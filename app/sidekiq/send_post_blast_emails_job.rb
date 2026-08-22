@@ -49,6 +49,24 @@ class SendPostBlastEmailsJob
     blast
   end
 
+  COMPLETION_STAMP_CLAIM_TTL_PADDING = 10.minutes
+
+  def self.claim_completion_stamp(blast_id)
+    $redis.set(RedisKey.blast_completion_stamp_claim(blast_id), Time.current.iso8601, nx: true, ex: completion_stamp_claim_ttl)
+  end
+
+  def self.completion_stamp_claim_ttl
+    audience_load_timeout_seconds + COMPLETION_STAMP_CLAIM_TTL_PADDING.to_i
+  end
+
+  def self.release_completion_stamp(blast_id)
+    $redis.del(RedisKey.blast_completion_stamp_claim(blast_id))
+  end
+
+  def self.completion_stamp_claimed?(blast_id)
+    $redis.exists?(RedisKey.blast_completion_stamp_claim(blast_id))
+  end
+
   def self.complete_if_fully_delivered!(blast)
     blast.reload
     return false unless fully_delivered?(blast)
@@ -62,6 +80,7 @@ class SendPostBlastEmailsJob
     @post = @blast.post
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
+    return if self.class.completion_stamp_claimed?(@blast.id)
 
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
@@ -81,12 +100,14 @@ class SendPostBlastEmailsJob
       remove_already_emailed_members
     end
 
+    return if self.class.completion_stamp_claimed?(@blast.id)
     return mark_blast_as_completed if @members.empty?
 
     cache = {}
     @members.each_slice(recipients_slice_size) do |members_slice|
       members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
         provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
+          return if self.class.completion_stamp_claimed?(@blast.id)
           send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
         end
       end

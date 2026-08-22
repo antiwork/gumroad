@@ -328,6 +328,26 @@ describe AlertOnStalledPostEmailBlastsJob do
       end
     end
 
+    it "does not complete when another action already owns the completion claim" do
+      blast = stalled_blast(requested_hours_ago: 6, post: post_with_audience, delivery_count: 3)
+      recipient = snapshotted_recipient_for(blast)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      $redis.rpush(snapshot_key, recipient.id)
+      $redis.set(RedisKey.blast_completion_stamp_claim(blast.id), Time.current.iso8601)
+      SentPostEmail.create!(post: blast.post, email: recipient.email)
+      stub_sidekiq
+
+      described_class.new.perform
+
+      expect(blast.reload.completed_at).to be_nil
+      expect($redis.exists?(snapshot_key)).to be(true)
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+        expect(message).not_to include("COMPLETED")
+      end
+    ensure
+      $redis.del(RedisKey.blast_completion_stamp_claim(blast.id), snapshot_key) if blast && snapshot_key
+    end
+
     it "does not resume after a delivery miss if the sender appears before the claim" do
       blast = stalled_blast(requested_hours_ago: 6)
       stub_sidekiq
