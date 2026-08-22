@@ -58,7 +58,17 @@ chmod +x "$FAKE/gh"
 mkdir -p "$FAKE/fix"
 printf '[{"number":1}]\n' > "$FAKE/fix/pulls.json"
 printf '{"workflow_runs":[{"name":"Tests","conclusion":"success","id":99}]}\n' > "$FAKE/fix/runs-green.json"
-printf '{"jobs":[{"name":"Test Fast 0","conclusion":"success"},{"name":"Test Slow 0","conclusion":"success"}]}\n' > "$FAKE/fix/jobs-full.json"
+python3 - "$FAKE/fix/jobs-full.json" <<'PY'
+import json, sys
+jobs = [
+    {"name": f"Test Fast {i}", "conclusion": "success"}
+    for i in range(18)
+] + [
+    {"name": f"Test Slow {i}", "conclusion": "success"}
+    for i in range(50)
+]
+open(sys.argv[1], "w").write(json.dumps({"jobs": jobs}) + "\n")
+PY
 printf '{"jobs":[{"name":"Test Fast 0 (internal PR noop)","conclusion":"success"},{"name":"Test Relevant 0","conclusion":"success"}]}\n' > "$FAKE/fix/jobs-noop.json"
 
 run() {
@@ -68,6 +78,33 @@ run() {
 out=$(run)
 test "$out" = "reuse=true" || { echo "FAIL expected reuse=true got [$out]"; exit 1; }
 echo "ok same-tree full suite"
+
+python3 - "$FAKE/fix/jobs-full.json" <<'PY'
+import json, sys
+jobs = [
+    {"name": f"Test Fast {i}", "conclusion": "success"}
+    for i in range(18)
+] + [
+    {"name": f"Test Slow {i}", "conclusion": "success"}
+    for i in range(49)
+]
+open(sys.argv[1], "w").write(json.dumps({"jobs": jobs}) + "\n")
+PY
+out=$(run)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false with an incomplete matrix got [$out]"; exit 1; }
+echo "ok incomplete matrix is not reusable"
+
+python3 - "$FAKE/fix/jobs-full.json" <<'PY'
+import json, sys
+jobs = [
+    {"name": f"Test Fast {i}", "conclusion": "success"}
+    for i in range(18)
+] + [
+    {"name": f"Test Slow {i}", "conclusion": "success"}
+    for i in range(50)
+]
+open(sys.argv[1], "w").write(json.dumps({"jobs": jobs}) + "\n")
+PY
 
 printf '[{"number":2}]\n' > "$FAKE/fix/pulls.json"
 out=$(run)

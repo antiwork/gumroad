@@ -65,17 +65,25 @@ while idx < len(text):
     obj, end = dec.raw_decode(text, idx)
     jobs.extend(obj.get("jobs", []))
     idx = end
-def ok(prefix):
-    hits = [
-        j for j in jobs
-        if j.get("name", "").startswith(prefix)
-        and "noop" not in j.get("name", "").lower()
-    ]
-    return (
-        any(j.get("conclusion") == "success" for j in hits)
-        and not any(j.get("conclusion") == "failure" for j in hits)
-    )
-sys.exit(0 if ok("Test Fast") and ok("Test Slow") else 1)
+import re
+EXPECTED_SHARDS = {"Test Fast": 18, "Test Slow": 50}
+
+def ok(prefix, expected_count):
+    seen = {}
+    pattern = re.compile(rf"^{re.escape(prefix)} (\d+)(?:\b|$)")
+    for job in jobs:
+        name = job.get("name", "")
+        if "noop" in name.lower():
+            continue
+        match = pattern.match(name)
+        if not match:
+            continue
+        shard = int(match.group(1))
+        if shard < expected_count:
+            seen[shard] = job.get("conclusion")
+    return all(seen.get(shard) == "success" for shard in range(expected_count))
+
+sys.exit(0 if all(ok(prefix, count) for prefix, count in EXPECTED_SHARDS.items()) else 1)
 '
 }
 
