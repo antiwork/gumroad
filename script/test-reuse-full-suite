@@ -56,70 +56,75 @@ EOF
 chmod +x "$FAKE/gh"
 
 mkdir -p "$FAKE/fix"
-printf '[{"number":1}]\n' > "$FAKE/fix/pulls.json"
-printf '{"workflow_runs":[{"name":"Tests","conclusion":"success","id":99}]}\n' > "$FAKE/fix/runs-green.json"
-python3 - "$FAKE/fix/jobs-full.json" <<'PY'
+write_workflow() {
+  python3 - "$FAKE/tests.yml" "$1" "$2" <<'PY'
+import sys
+path, fast_count, slow_count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+def numbers(count):
+    return ", ".join(str(i) for i in range(count))
+open(path, "w").write(f"""name: Tests
+jobs:
+  test_fast:
+    name: Test Fast ${{{{ matrix.ci_node_index }}}}
+    strategy:
+      matrix:
+        ci_node_total: [{fast_count}]
+        ci_node_index: [{numbers(fast_count)}]
+  test_slow:
+    name: Test Slow ${{{{ matrix.ci_node_index }}}}
+    strategy:
+      matrix:
+        ci_node_total: [{slow_count}]
+        ci_node_index: [{numbers(slow_count)}]
+""")
+PY
+}
+write_jobs() {
+  python3 - "$3" "$1" "$2" <<'PY'
 import json, sys
+path, fast_count, slow_count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
 jobs = [
     {"name": f"Test Fast {i}", "conclusion": "success"}
-    for i in range(18)
+    for i in range(fast_count)
 ] + [
     {"name": f"Test Slow {i}", "conclusion": "success"}
-    for i in range(50)
+    for i in range(slow_count)
 ]
-open(sys.argv[1], "w").write(json.dumps({"jobs": jobs}) + "\n")
+open(path, "w").write(json.dumps({"jobs": jobs}) + "\n")
 PY
+}
+write_workflow 18 50
+printf '[{"number":1}]\n' > "$FAKE/fix/pulls.json"
+printf '{"workflow_runs":[{"name":"Tests","conclusion":"success","id":99}]}\n' > "$FAKE/fix/runs-green.json"
+write_jobs 18 50 "$FAKE/fix/jobs-full.json"
 printf '{"jobs":[{"name":"Test Fast 0 (internal PR noop)","conclusion":"success"},{"name":"Test Relevant 0","conclusion":"success"}]}\n' > "$FAKE/fix/jobs-noop.json"
 
 run() {
-  REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha
+  TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha
 }
 
 out=$(run)
 test "$out" = "reuse=true" || { echo "FAIL expected reuse=true got [$out]"; exit 1; }
 echo "ok same-tree full suite"
 
-python3 - "$FAKE/fix/jobs-full.json" <<'PY'
-import json, sys
-jobs = [
-    {"name": f"Test Fast {i}", "conclusion": "success"}
-    for i in range(18)
-] + [
-    {"name": f"Test Slow {i}", "conclusion": "success"}
-    for i in range(49)
-]
-open(sys.argv[1], "w").write(json.dumps({"jobs": jobs}) + "\n")
-PY
+write_jobs 18 49 "$FAKE/fix/jobs-full.json"
 out=$(run)
 test "$out" = "reuse=false" || { echo "FAIL expected reuse=false with an incomplete matrix got [$out]"; exit 1; }
 echo "ok incomplete matrix is not reusable"
 
-python3 - "$FAKE/fix/jobs-full.json" <<'PY'
-import json, sys
-jobs = [
-    {"name": f"Test Fast {i}", "conclusion": "success"}
-    for i in range(19)
-] + [
-    {"name": f"Test Slow {i}", "conclusion": "success"}
-    for i in range(50)
-]
-open(sys.argv[1], "w").write(json.dumps({"jobs": jobs}) + "\n")
-PY
+write_workflow 18 51
+write_jobs 18 50 "$FAKE/fix/jobs-full.json"
 out=$(run)
-test "$out" = "reuse=false" || { echo "FAIL expected reuse=false after a matrix expansion got [$out]"; exit 1; }
-echo "ok expanded matrix is not silently reused"
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false when workflow matrix grew got [$out]"; exit 1; }
+echo "ok workflow matrix drift fail-closes"
 
-python3 - "$FAKE/fix/jobs-full.json" <<'PY'
-import json, sys
-jobs = [
-    {"name": f"Test Fast {i}", "conclusion": "success"}
-    for i in range(18)
-] + [
-    {"name": f"Test Slow {i}", "conclusion": "success"}
-    for i in range(50)
-]
-open(sys.argv[1], "w").write(json.dumps({"jobs": jobs}) + "\n")
-PY
+write_jobs 18 51 "$FAKE/fix/jobs-full.json"
+out=$(run)
+test "$out" = "reuse=true" || { echo "FAIL expected reuse=true with expanded workflow matrix got [$out]"; exit 1; }
+echo "ok workflow matrix counts derive from workflow"
+
+write_workflow 18 50
+write_jobs 18 50 "$FAKE/fix/jobs-full.json"
 
 printf '[{"number":2}]\n' > "$FAKE/fix/pulls.json"
 out=$(run)
@@ -144,11 +149,11 @@ test "$out" = "reuse=true" || { echo "FAIL expected reuse=true when a later run 
 echo "ok noop does not shadow a green full suite"
 
 printf '{"workflow_runs":[{"name":"Tests","conclusion":"success","id":99}]}\n' > "$FAKE/fix/runs-green.json"
-out=$(GITHUB_ACTIONS=1 GITHUB_EVENT_NAME=pull_request_target GITHUB_REF=refs/heads/main REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha)
+out=$(GITHUB_ACTIONS=1 GITHUB_EVENT_NAME=pull_request_target GITHUB_REF=refs/heads/main TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha)
 test "$out" = "reuse=false" || { echo "FAIL expected reuse=false off main event got [$out]"; exit 1; }
 echo "ok refuse pull_request_target"
 
-out=$(GITHUB_ACTIONS=1 GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha)
+out=$(GITHUB_ACTIONS=1 GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha)
 test "$out" = "reuse=true" || { echo "FAIL expected reuse=true on GHA main push got [$out]"; exit 1; }
 echo "ok allow GHA main push"
 
@@ -172,7 +177,7 @@ else echo "unexpected $path" >&2; exit 1
 fi
 EOF
 chmod +x "$FAKE/gh-fail-pull"
-out=$(REPO=antiwork/gumroad GH="$FAKE/gh-fail-pull" "$SCRIPT" mainsha || true)
+out=$(TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH="$FAKE/gh-fail-pull" "$SCRIPT" mainsha || true)
 test "$out" = "reuse=false" || { echo "FAIL expected reuse=false on pulls 404 got [$out]"; exit 1; }
 echo "ok pulls 404 fail-closes"
 

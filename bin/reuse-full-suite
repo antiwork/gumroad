@@ -65,10 +65,26 @@ while idx < len(text):
     obj, end = dec.raw_decode(text, idx)
     jobs.extend(obj.get("jobs", []))
     idx = end
-import re
-EXPECTED_SHARDS = {"Test Fast": 18, "Test Slow": 50}
+import os, re
 
-def ok(prefix, expected_count):
+def expected_shards_from_workflow():
+    path = os.environ.get("TESTS_WORKFLOW_PATH", ".github/workflows/tests.yml")
+    text = open(path).read()
+    expected = {}
+    for job_key, prefix in (("test_fast", "Test Fast"), ("test_slow", "Test Slow")):
+        job = re.search(rf"(?ms)^  {job_key}:\n(?P<block>.*?)(?=^  [A-Za-z0-9_-]+:|\Z)", text)
+        if not job:
+            raise RuntimeError(f"missing {job_key} in {path}")
+        matrix = re.search(r"(?ms)^\s+ci_node_index:\s*(\[[^\]]*\])", job.group("block"))
+        if not matrix:
+            raise RuntimeError(f"missing {job_key} ci_node_index matrix in {path}")
+        shards = sorted({int(value) for value in re.findall(r"\d+", matrix.group(1))})
+        if shards != list(range(len(shards))):
+            raise RuntimeError(f"{job_key} matrix is not zero-based contiguous: {shards}")
+        expected[prefix] = set(shards)
+    return expected
+
+def ok(prefix, expected_shards):
     seen = {}
     pattern = re.compile(rf"^{re.escape(prefix)} (\d+)(?:\b|$)")
     for job in jobs:
@@ -79,12 +95,12 @@ def ok(prefix, expected_count):
         if not match:
             continue
         shard = int(match.group(1))
-        if shard >= expected_count:
-            return False
-        seen[shard] = job.get("conclusion")
-    return all(seen.get(shard) == "success" for shard in range(expected_count))
+        if shard in expected_shards:
+            seen[shard] = job.get("conclusion")
+    return all(seen.get(shard) == "success" for shard in expected_shards)
 
-sys.exit(0 if all(ok(prefix, count) for prefix, count in EXPECTED_SHARDS.items()) else 1)
+EXPECTED_SHARDS = expected_shards_from_workflow()
+sys.exit(0 if all(ok(prefix, shards) for prefix, shards in EXPECTED_SHARDS.items()) else 1)
 '
 }
 

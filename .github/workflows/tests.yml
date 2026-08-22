@@ -80,7 +80,9 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-          sparse-checkout: bin/reuse-full-suite
+          sparse-checkout: |
+            bin/reuse-full-suite
+            .github/workflows/tests.yml
           sparse-checkout-cone-mode: false
       - id: reuse
         env:
