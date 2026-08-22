@@ -9,6 +9,7 @@ import { SavedCreditCard } from "$app/parsers/card";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
 import { assert } from "$app/utils/assert";
 import { readBuyerCurrencyPreference, writeBuyerCurrencyPreference } from "$app/utils/buyerCurrencyPreference";
+import { GST_ONLY_FALLBACK_PROVINCE, provinceForCanadianPostalCode } from "$app/utils/canadianPostalCodes";
 import { isValidEmail } from "$app/utils/email";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
@@ -214,6 +215,44 @@ export type Tip =
 const offersBuyerCurrency = (surcharges: SurchargesResponse, code: string) =>
   surcharges.available_buyer_currencies?.some((option) => option.code === code);
 
+type CheckoutTaxLocation = { country: string; state: string; zipCode: string };
+type PayPalBillingAddressTaxLocation = {
+  country: string;
+  zipCode: string | undefined;
+  state?: string | null | undefined;
+};
+
+const paypalBillingStateForCheckout = (
+  billingAddress: PayPalBillingAddressTaxLocation,
+  checkout: CheckoutTaxLocation,
+) =>
+  billingAddress.state ||
+  (billingAddress.country === "CA" ? provinceForCanadianPostalCode(billingAddress.zipCode) : null) ||
+  (billingAddress.country === checkout.country ? checkout.state : null) ||
+  (billingAddress.country === "CA" ? GST_ONLY_FALLBACK_PROVINCE : null) ||
+  "";
+
+export const paypalBillingAddressForCheckout = (
+  billingAddress: PayPalBillingAddressTaxLocation,
+  checkout: CheckoutTaxLocation,
+) => ({
+  country: billingAddress.country,
+  zipCode: billingAddress.zipCode || (billingAddress.country === checkout.country ? checkout.zipCode : ""),
+  state: paypalBillingStateForCheckout(billingAddress, checkout),
+});
+
+export const paypalBillingAddressChangesTaxLocation = (
+  billingAddress: PayPalBillingAddressTaxLocation,
+  checkout: CheckoutTaxLocation,
+) => {
+  const next = paypalBillingAddressForCheckout(billingAddress, checkout);
+  return (
+    next.country !== checkout.country ||
+    (next.country === "US" && next.zipCode !== checkout.zipCode) ||
+    (next.country === "CA" && next.state !== checkout.state)
+  );
+};
+
 export { readBuyerCurrencyPreference, writeBuyerCurrencyPreference };
 
 export type State = {
@@ -361,6 +400,7 @@ type PublicAction =
       type: "set-paypal-billing-address";
       country: string;
       zipCode: string | undefined;
+      state?: string | null | undefined;
       fullName: string;
       email?: string;
     }
@@ -1046,11 +1086,9 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       break;
     }
     case "set-paypal-billing-address": {
-      const { country, zipCode, fullName, email } = action;
-      const taxLocationChanged =
-        country !== state.country ||
-        (country === "US" && zipCode !== state.zipCode) ||
-        (state.country === "US" && country !== "US");
+      const { fullName, email } = action;
+      const billingAddress = paypalBillingAddressForCheckout(action, state);
+      const taxLocationChanged = paypalBillingAddressChangesTaxLocation(action, state);
       if (taxLocationChanged) {
         state.buyerCurrencyRemint = null;
         state.unavailableBuyerCurrency = null;
@@ -1064,9 +1102,9 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         state.warning = null;
       }
       if (state.status.type === "input") {
-        for (const key of ["country", "zipCode", "fullName", "email"]) state.status.errors.delete(key);
+        for (const key of ["country", "zipCode", "state", "fullName", "email"]) state.status.errors.delete(key);
       }
-      Object.assign(state, { country, zipCode: zipCode ?? "", fullName, ...(email ? { email } : {}) });
+      Object.assign(state, { ...billingAddress, fullName, ...(email ? { email } : {}) });
       break;
     }
     case "set-custom-field":

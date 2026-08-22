@@ -1694,6 +1694,52 @@ describe("reduceCheckoutState", () => {
         );
       });
 
+      it("returns to input and queues a tax recheck when PayPal changes the Canadian province", () => {
+        const next = reduceCheckoutState(
+          state({
+            status: { type: "starting" },
+            paymentMethod: "paypal",
+            country: "CA",
+            state: "ON",
+            zipCode: "M5V 2T6",
+          }),
+          {
+            type: "set-paypal-billing-address",
+            country: "CA",
+            zipCode: "H2X 1Y4",
+            state: "QC",
+            fullName: "PayPal Buyer",
+          },
+        );
+
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+        expect(next.country).toBe("CA");
+        expect(next.state).toBe("QC");
+        expect(next.zipCode).toBe("H2X 1Y4");
+      });
+
+      it("derives a Canadian province from PayPal's postal code when the province is omitted", () => {
+        const next = reduceCheckoutState(
+          state({
+            status: { type: "starting" },
+            paymentMethod: "paypal",
+            country: "CA",
+            state: "ON",
+            zipCode: "M5V 2T6",
+          }),
+          {
+            type: "set-paypal-billing-address",
+            country: "CA",
+            zipCode: "H2X 1Y4",
+            fullName: "PayPal Buyer",
+          },
+        );
+
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.state).toBe("QC");
+      });
+
       it("does not interrupt a same-location PayPal approval", () => {
         const initial = state({ status: { type: "starting" }, paymentMethod: "paypal" });
         const next = reduceCheckoutState(initial, {
