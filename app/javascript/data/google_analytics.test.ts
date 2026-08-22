@@ -1,6 +1,27 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { sanitizedPageLocation, sanitizedPageReferrer } from "./google_analytics";
+vi.mock("$vendor/google_analytics_4", () => ({ default: vi.fn() }));
+
+import { sanitizedPageLocation, sanitizedPageReferrer, startTrackingForSeller } from "./google_analytics";
+
+function enableGa() {
+  document.head.innerHTML = '<meta property="gr:google_analytics:enabled" content="true">';
+}
+
+function stubGtag() {
+  const gtag = vi.fn();
+  vi.stubGlobal("gtag", gtag);
+  return gtag;
+}
+
+const sellerConfig = {
+  id: "seller-1",
+  googleAnalyticsId: "G-SELLERTEST1",
+  facebookPixelId: null,
+  tiktokPixelId: null,
+  trackFreeSales: false,
+};
 
 describe("sanitizedPageLocation", () => {
   it("strips reset_password_token so it never reaches analytics (gumroad-private#1260)", () => {
@@ -45,5 +66,50 @@ describe("sanitizedPageReferrer", () => {
 
   it("drops unparseable referrers rather than forwarding them unstripped", () => {
     expect(sanitizedPageReferrer("not a url")).toBe("");
+  });
+});
+
+describe("startTrackingForSeller", () => {
+  beforeEach(() => {
+    document.head.innerHTML = "";
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("issues gtag js before the seller config so custom landing events transmit", () => {
+    enableGa();
+    const gtag = stubGtag();
+
+    startTrackingForSeller(sellerConfig);
+
+    expect(gtag).toHaveBeenNthCalledWith(1, "js", expect.any(Date));
+    expect(gtag).toHaveBeenNthCalledWith(
+      2,
+      "config",
+      "G-SELLERTEST1",
+      expect.objectContaining({ groups: "sellerseller-1", send_page_view: false }),
+    );
+    expect(gtag).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not bootstrap gtag when tracking is off", () => {
+    document.head.innerHTML = '<meta property="gr:google_analytics:enabled" content="false">';
+    const gtag = stubGtag();
+
+    startTrackingForSeller(sellerConfig);
+
+    expect(gtag).not.toHaveBeenCalled();
+  });
+
+  it("does not bootstrap gtag when the seller has no measurement id", () => {
+    enableGa();
+    const gtag = stubGtag();
+
+    startTrackingForSeller({ ...sellerConfig, googleAnalyticsId: null });
+
+    expect(gtag).not.toHaveBeenCalled();
   });
 });
