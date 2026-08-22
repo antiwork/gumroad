@@ -98,6 +98,21 @@ python3 - "$FAKE/fix/jobs-full.json" <<'PY'
 import json, sys
 jobs = [
     {"name": f"Test Fast {i}", "conclusion": "success"}
+    for i in range(19)
+] + [
+    {"name": f"Test Slow {i}", "conclusion": "success"}
+    for i in range(50)
+]
+open(sys.argv[1], "w").write(json.dumps({"jobs": jobs}) + "\n")
+PY
+out=$(run)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false after a matrix expansion got [$out]"; exit 1; }
+echo "ok expanded matrix is not silently reused"
+
+python3 - "$FAKE/fix/jobs-full.json" <<'PY'
+import json, sys
+jobs = [
+    {"name": f"Test Fast {i}", "conclusion": "success"}
     for i in range(18)
 ] + [
     {"name": f"Test Slow {i}", "conclusion": "success"}
