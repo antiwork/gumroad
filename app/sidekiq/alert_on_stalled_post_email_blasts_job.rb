@@ -98,10 +98,12 @@ class AlertOnStalledPostEmailBlastsJob
       # keeps getting buried — and is the wrong tool once delivery covers the snapshot.
       # Completing is not a send, so it is not gated on the resume flag or the 24h window.
       if SendPostBlastEmailsJob.fully_delivered?(blast)
-        # fully_delivered? can run a long audience query. Recheck before deleting the
-        # snapshot a sender that appeared mid-query now owns.
+        # Do not call complete_if_fully_delivered! here — it re-runs the same
+        # long audience query and reopens the sender-reappeared window. This
+        # query is the last one; recheck visibility, then stamp.
         return :skipped_reappeared if sender_visible_now?(blast.id)
-        return SendPostBlastEmailsJob.complete_if_fully_delivered!(blast) ? :completed : nil
+        SendPostBlastEmailsJob.mark_completed!(blast)
+        return :completed
       end
       # A DEAD entry proves its attempt chain ended; UNACCOUNTED can hide a live sender, and a
       # concurrent duplicate double-delivers a non-opener resend.
