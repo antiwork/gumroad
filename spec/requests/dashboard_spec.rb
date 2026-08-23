@@ -13,21 +13,12 @@ describe "Dashboard", js: true, type: :system do
   describe "dashboard stats" do
     before do
       create(:product, user: seller)
-      allow_any_instance_of(UserBalanceStatsService).to receive(:fetch).and_return(
+      allow_any_instance_of(UserBalanceStatsService).to receive(:fetch_overview).and_return(
         {
-          overview: {
-            balance: 10_000,
-            last_seven_days_sales_total: 5_000,
-            last_28_days_sales_total: 15_000,
-            sales_cents_total: 50_000
-          },
-          next_payout_period_data: {
-            should_be_shown_currencies_always: false,
-            minimum_payout_amount_cents: 10_000,
-            is_user_payable: false,
-            status: :not_payable
-          },
-          processing_payout_periods_data: []
+          balance: 10_000,
+          last_seven_days_sales_total: 5_000,
+          last_28_days_sales_total: 15_000,
+          sales_cents_total: 50_000
         }
       )
     end
