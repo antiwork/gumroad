@@ -525,7 +525,8 @@ export function getStripePaymentElementAmount(state: State) {
   if (
     state.checkoutPayment.integration === "payment_element_client_confirm" &&
     state.checkoutPayment.elements_options.presentment_amount_cents !== null &&
-    (!state.checkoutPayment.elements_options.direct_listed_card || directListedCardActive(state))
+    (!state.checkoutPayment.elements_options.direct_listed_card ||
+      (getSelectableDirectListedCurrency(state) !== null && state.buyerCurrency?.toLowerCase() !== "usd"))
   )
     return state.checkoutPayment.elements_options.presentment_amount_cents;
   // Buyer-currency presentment lane: the element mounts in the quote currency, so the amount
@@ -566,14 +567,48 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
 // preserves the current Element instead of remounting and wiping entered card details.
 export function getStripePaymentElementMountCurrency(state: State): string | null {
   if (state.checkoutPayment.integration === "payment_element_client_confirm") {
-    const elementsOptions = state.checkoutPayment.elements_options;
-    return elementsOptions.direct_listed_card && !directListedCardActive(state) ? "usd" : elementsOptions.currency;
+    if (getConfiguredDirectListedCurrency(state) !== null && state.surcharges.type !== "loaded") return null;
+    return getDesiredStripePaymentElementMountCurrency(state);
   }
   if (state.checkoutPayment.integration !== "payment_element") return null;
   const elementsOptions = state.checkoutPayment.elements_options;
   if (!elementsOptions.buyer_currency_presentment) return elementsOptions.currency;
   if (state.surcharges.type !== "loaded") return null;
   return getStripePaymentElementPresentment(state)?.currency ?? elementsOptions.currency;
+}
+
+export function getConfiguredDirectListedCurrency(state: Pick<State, "checkoutPayment">): string | null {
+  if (state.checkoutPayment.integration !== "payment_element_client_confirm") return null;
+
+  const options = state.checkoutPayment.elements_options;
+  const currency = options.currency.toLowerCase();
+  if (!options.direct_listed_card || options.presentment_amount_cents === null || options.presentment_amount_cents <= 0)
+    return null;
+  if (options.listed_currency_display?.currency.toLowerCase() !== currency) return null;
+
+  return currency;
+}
+
+export function getSelectableDirectListedCurrency(state: State): string | null {
+  const currency = getConfiguredDirectListedCurrency(state);
+  if (!currency || !directListedCardActive(state) || !canUseStripePaymentElementClientConfirm(state)) return null;
+
+  return currency;
+}
+
+function getDesiredStripePaymentElementMountCurrency(state: State): string | null {
+  if (state.checkoutPayment.integration !== "payment_element_client_confirm") return null;
+
+  const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
+  if (!configuredDirectListedCurrency) {
+    return state.checkoutPayment.elements_options.direct_listed_card
+      ? "usd"
+      : state.checkoutPayment.elements_options.currency;
+  }
+
+  return getSelectableDirectListedCurrency(state) !== null && state.buyerCurrency?.toLowerCase() !== "usd"
+    ? configuredDirectListedCurrency
+    : "usd";
 }
 
 function directListedCardActive(state: State) {
@@ -832,7 +867,9 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       ? "payment_element"
       : undefined;
   const paymentElementMountCurrency =
-    paymentDetailsSource === "payment_element" ? getStripePaymentElementMountCurrency(state) : null;
+    paymentDetailsSource === "payment_element" ? getDesiredStripePaymentElementMountCurrency(state) : null;
+  const paymentElementDirectListedCurrency =
+    paymentDetailsSource === "payment_element" ? getSelectableDirectListedCurrency(state) : null;
   // Allocate the tip across cart lines in one pass so the per-line integers sum to the
   // tip the buyer selected — rounding each line independently can send more total tip
   // than the buyer chose (see computeTipsForLines).
@@ -862,6 +899,9 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       ...(state.buyerCurrency ? { buyer_currency: state.buyerCurrency } : {}),
       ...(paymentDetailsSource ? { payment_details_source: paymentDetailsSource } : {}),
       ...(paymentElementMountCurrency ? { payment_element_mount_currency: paymentElementMountCurrency } : {}),
+      ...(paymentElementDirectListedCurrency
+        ? { payment_element_direct_listed_currency: paymentElementDirectListedCurrency }
+        : {}),
     },
     abortSignal,
   );
@@ -960,6 +1000,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         ("vatId" in action && action.vatId !== state.vatId) ||
         ("gift" in action && action.gift?.type !== state.gift?.type) ||
         ("buyerCurrency" in action && action.buyerCurrency !== state.buyerCurrency) ||
+        ("usingSavedCard" in action && action.usingSavedCard !== state.usingSavedCard) ||
         "products" in action ||
         "tip" in action
       ) {

@@ -10,7 +10,9 @@ import {
   computeTipForListedLines,
   computeTipsForLines,
   getChargeTodayPrice,
+  getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
+  getSelectableDirectListedCurrency,
   getStripePaymentElementAmount,
   getStripePaymentElementMountCurrency,
   getStripePaymentElementPresentment,
@@ -849,8 +851,37 @@ describe("direct-listed card element", () => {
   it("mounts with the listed currency and amount", () => {
     const s = state({ checkoutPayment: directListedCardConfig });
 
+    expect(getConfiguredDirectListedCurrency(s)).toBe("cad");
+    expect(getSelectableDirectListedCurrency(s)).toBe("cad");
     expect(getStripePaymentElementAmount(s)).toBe(1_500);
     expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("mounts with the canonical amount when the buyer selects USD", () => {
+    const s = state({ checkoutPayment: directListedCardConfig, buyerCurrency: "usd" });
+
+    expect(getSelectableDirectListedCurrency(s)).toBe("cad");
+    expect(getStripePaymentElementAmount(s)).toBe(1_000);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+
+  it("keeps the listed selection when save-card intent does not change the client-confirm charge", () => {
+    const s = state({ checkoutPayment: directListedCardConfig, buyerCurrency: "cad", willSaveCard: true });
+
+    expect(getSelectableDirectListedCurrency(s)).toBe("cad");
+    expect(getStripePaymentElementAmount(s)).toBe(1_500);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("holds both mount inputs while a direct-listed currency change is loading", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      buyerCurrency: "usd",
+      surcharges: { type: "pending" },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBeNull();
+    expect(getStripePaymentElementMountCurrency(s)).toBeNull();
   });
 
   it("remounts in canonical USD when a tip makes the direct-listed charge ineligible", () => {
@@ -872,6 +903,7 @@ describe("direct-listed card element", () => {
       },
     });
 
+    expect(getSelectableDirectListedCurrency(s)).toBeNull();
     expect(getStripePaymentElementAmount(s)).toBe(1_100);
     expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
   });

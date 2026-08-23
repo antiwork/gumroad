@@ -82,7 +82,9 @@ import {
   computeTipForListedLines,
   computeTipForPrice,
   getErrors,
+  getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
+  getSelectableDirectListedCurrency,
   getTotalPriceFromProducts,
   getTotalPriceFromSurcharges,
   isProcessing,
@@ -125,17 +127,24 @@ const currencyLabel = (code: string) =>
 // replaced (see `summarySurcharges` below). Reading the menu off the live surcharge state instead
 // would empty it for the length of the round trip, unmounting the select the buyer is focused in.
 const CurrencyPicker = ({
+  configuredDirectListedCurrency,
+  selectableDirectListedCurrency,
   isListedCurrency,
   surcharges,
   isRequoting,
 }: {
+  configuredDirectListedCurrency: string | null;
+  selectableDirectListedCurrency: string | null;
   isListedCurrency: boolean;
   surcharges: SurchargesResponse | null;
   isRequoting: boolean;
 }) => {
   const [state, dispatch] = useState();
   const uid = React.useId();
-  const options = surcharges?.available_buyer_currencies ?? [];
+  const availableOptions = surcharges?.available_buyer_currencies ?? [];
+  const options = configuredDirectListedCurrency
+    ? availableOptions.filter((option) => option.code === "usd" || option.code === configuredDirectListedCurrency)
+    : availableOptions;
   const detected = surcharges?.detected_buyer_currency ?? null;
   const preferred = state.buyerCurrency ?? detected ?? "usd";
   const value = options.some((option) => option.code === preferred)
@@ -146,9 +155,10 @@ const CurrencyPicker = ({
   const canChooseCurrency =
     options.length >= 2 &&
     state.paymentMethod === "card" &&
-    !state.willSaveCard &&
     !isWalletPaymentElementType(state.paymentElementType) &&
-    !isListedCurrency;
+    (configuredDirectListedCurrency
+      ? selectableDirectListedCurrency === configuredDirectListedCurrency
+      : !state.willSaveCard && !isListedCurrency);
 
   React.useEffect(() => {
     if (!canChooseCurrency || state.buyerCurrency == null || state.buyerCurrency === value) return;
@@ -156,7 +166,9 @@ const CurrencyPicker = ({
     dispatch({ type: "set-value", buyerCurrency: value });
   }, [canChooseCurrency, dispatch, state.buyerCurrency, value]);
 
-  // Wallet, non-card, save-card, and listed-currency paths do not honor a buyer-selected FX quote.
+  // General FX quotes stay unavailable on wallet, non-card, save-card, and listed-currency paths.
+  // A direct-listed card selector is narrower: it is available only while the current cart can
+  // charge either canonical USD or the configured listed currency.
   if (!canChooseCurrency) return null;
 
   return (
@@ -344,12 +356,16 @@ export const Checkout = ({
   const futureInstallmentsWithoutTipsTotal = getFutureInstallmentsTotal(state);
 
   const displayTipSelector = isTippingEnabled(state);
-  const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
-    cartPermalinks: cart.items.map((item) => item.product.permalink),
-    willSaveCard: state.willSaveCard,
-    paymentMethod: state.paymentMethod,
-    paymentElementType: state.paymentElementType,
-  });
+  const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
+  const selectableDirectListedCurrency = getSelectableDirectListedCurrency(state);
+  const buyerCurrencyDisplay = configuredDirectListedCurrency
+    ? null
+    : getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
+        cartPermalinks: cart.items.map((item) => item.product.permalink),
+        willSaveCard: state.willSaveCard,
+        paymentMethod: state.paymentMethod,
+        paymentElementType: state.paymentElementType,
+      });
   // The buyer-currency amounts every row of the table renders from, so the visible numbers
   // sum exactly to the locked total the buyer is charged. An unusable allocation makes
   // buyerCurrencyDisplay null above, keeping every row and the submitted token canonical.
@@ -374,8 +390,14 @@ export const Checkout = ({
   // or surcharge reload can drop the loaded canonical total below Stripe's Payment Element
   // minimum after render, at which point PaymentForm falls back to the CardElement and the charge
   // is canonical USD — so the summary must fall back with it.
+  const displayedBuyerCurrency = state.buyerCurrencyRemint
+    ? state.buyerCurrencyRemint.previousCurrency
+    : state.buyerCurrency;
+  const directListedCurrencySelected =
+    configuredDirectListedCurrency === null ||
+    (selectableDirectListedCurrency !== null && displayedBuyerCurrency?.toLowerCase() !== "usd");
   const listedCurrency =
-    buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state)
+    buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state) || !directListedCurrencySelected
       ? null
       : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cart.items, {
           usingSavedCard: state.usingSavedCard,
@@ -604,6 +626,8 @@ export const Checkout = ({
                       />
                     </footer>
                     <CurrencyPicker
+                      configuredDirectListedCurrency={configuredDirectListedCurrency}
+                      selectableDirectListedCurrency={selectableDirectListedCurrency}
                       isListedCurrency={listedCurrency != null}
                       surcharges={summarySurcharges}
                       isRequoting={isRequoting}

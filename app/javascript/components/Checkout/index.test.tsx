@@ -709,6 +709,112 @@ describe("Checkout method-forced listed-currency amounts", () => {
   });
 });
 
+describe("Checkout direct-listed currency picker", () => {
+  const directListedPayment: CheckoutPaymentConfig = {
+    integration: "payment_element_client_confirm",
+    fallback_reason: null,
+    recurring_upi_registration: false,
+    disable_wallets: true,
+    request_apple_pay_merchant_tokens: false,
+    payment_element_wallets: false,
+    flat_payment_methods: true,
+    elements_options: {
+      stripe_elements_mode: "payment",
+      currency: "cad",
+      presentment_amount_cents: 1_500,
+      listed_currency_display: { currency: "cad", subunit_to_unit: 100 },
+      direct_listed_card: true,
+      payment_method_types: ["card"],
+      payment_method_list_token: null,
+      stripe_link_enabled: false,
+      stripe_connect_account_id: null,
+    },
+  };
+  const directListedSurcharges: SurchargesResponse = {
+    vat_id_valid: false,
+    has_vat_id_input: false,
+    shipping_rate_cents: 0,
+    tax_cents: 0,
+    tax_included_cents: 0,
+    subtotal: 1_000,
+    detected_buyer_currency: "cad",
+    available_buyer_currencies: [
+      { code: "usd", label: "$ (US Dollars)" },
+      { code: "cad", label: "CA$ (Canadian Dollars)" },
+      { code: "gbp", label: "£ (British Pounds)" },
+    ],
+    buyer_currency_quote: null,
+  };
+  const directListedState = (overrides: Partial<State> = {}) =>
+    buildState({
+      checkoutPayment: directListedPayment,
+      products: [stateProduct({ price: 1_000 })],
+      surcharges: { type: "loaded", result: directListedSurcharges },
+      ...overrides,
+    });
+  const directListedCart: CartState = {
+    items: [
+      cartItem({
+        product: cartProduct({ currency_code: "cad", exchange_rate: 1.5 }),
+        price: 1_500,
+      }),
+    ],
+    discountCodes: [],
+  };
+
+  it("renders a USD and listed-currency control on the direct-listed card lane", () => {
+    const dispatch = vi.fn();
+    const { getAllByLabelText, getByLabelText } = renderCheckout(directListedState(), directListedCart, dispatch);
+    const picker = getByLabelText("Currency");
+
+    expect(Array.from(picker.querySelectorAll("option"), (option) => option.value)).toEqual(["usd", "cad"]);
+    expect(picker).toHaveProperty("value", "cad");
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$15"]);
+
+    fireEvent.change(picker, { target: { value: "usd" } });
+    expect(dispatch).toHaveBeenCalledWith({ type: "set-value", buyerCurrency: "usd" });
+  });
+
+  it("keeps the direct-listed control available while Save card is checked", () => {
+    const { getByLabelText } = renderCheckout(directListedState({ willSaveCard: true }), directListedCart);
+
+    expect(getByLabelText("Currency")).toBeTruthy();
+  });
+
+  it("renders canonical totals when USD is selected without losing the listed option", () => {
+    const { getAllByLabelText, getByLabelText } = renderCheckout(
+      directListedState({ buyerCurrency: "usd" }),
+      directListedCart,
+    );
+    const picker = getByLabelText("Currency");
+
+    expect(picker).toHaveProperty("value", "usd");
+    expect(Array.from(picker.querySelectorAll("option"), (option) => option.value)).toEqual(["usd", "cad"]);
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
+  });
+
+  it("does not expose quote-backed currencies after a tip moves the cart to canonical USD", () => {
+    const { getAllByLabelText, queryByLabelText } = renderCheckout(
+      directListedState({
+        products: [stateProduct({ price: 1_000, hasTippingEnabled: true })],
+        tip: { type: "percentage", percentage: 10 },
+      }),
+      {
+        ...directListedCart,
+        items: [
+          cartItem({
+            product: cartProduct({ currency_code: "cad", exchange_rate: 1.5, has_tipping_enabled: true }),
+            price: 1_500,
+          }),
+        ],
+      },
+    );
+
+    expect(queryByLabelText("Currency")).toBeNull();
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
+  });
+});
+
 describe("Checkout currency picker", () => {
   const quotedSurcharges: SurchargesResponse = {
     vat_id_valid: false,

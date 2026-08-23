@@ -101,6 +101,7 @@ const stubSurchargeRequests = () => {
 describe("createReducer surcharge refetches", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    document.cookie = "gumroad_buyer_currency=; path=/; max-age=0";
   });
 
   afterEach(() => {
@@ -244,6 +245,36 @@ describe("createReducer surcharge refetches", () => {
     expect(requests[0]?.payload).toMatchObject({
       payment_details_source: "payment_element",
       payment_element_mount_currency: "cad",
+      payment_element_direct_listed_currency: "cad",
+    });
+  });
+
+  it("keeps the listed selector capability while requesting USD", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () => {
+      requests[0]?.resolve(
+        surchargesResponse({
+          detected_buyer_currency: "cad",
+          available_buyer_currencies: [
+            { code: "usd", label: "$ (US Dollars)" },
+            { code: "cad", label: "CA$ (Canadian Dollars)" },
+          ],
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    act(() => result.current[1]({ type: "set-value", buyerCurrency: "usd" }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    expect(requests[1]?.payload).toMatchObject({
+      buyer_currency: "usd",
+      payment_details_source: "payment_element",
+      payment_element_mount_currency: "usd",
+      payment_element_direct_listed_currency: "cad",
     });
   });
 
@@ -258,6 +289,31 @@ describe("createReducer surcharge refetches", () => {
 
     expect(requests[0]?.payload).toMatchObject({ payment_details_source: "saved_payment_method" });
     expect(requests[0]?.payload).not.toHaveProperty("payment_element_mount_currency");
+    expect(requests[0]?.payload).not.toHaveProperty("payment_element_direct_listed_currency");
+  });
+
+  it("refetches direct-listed selector options when the buyer switches from a saved card to a new card", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout({
+      checkoutPayment: directListedCheckoutPayment,
+      savedCreditCard: { type: "visa", number: "**** 4242", expiration_date: "12/30", requires_mandate: false },
+    });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () => {
+      requests[0]?.resolve(surchargesResponse());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    act(() => result.current[1]({ type: "set-value", usingSavedCard: false }));
+    expect(result.current[0].surcharges.type).toBe("pending");
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    expect(requests[1]?.payload).toMatchObject({
+      payment_details_source: "payment_element",
+      payment_element_mount_currency: "cad",
+      payment_element_direct_listed_currency: "cad",
+    });
   });
 
   it("passes the selected buyer currency on the next surcharge fetch", async () => {
