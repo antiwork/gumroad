@@ -224,7 +224,7 @@ describe CustomerSurchargeController, :vcr do
       expect(codes).not_to include(Currency::CAD)
     end
 
-    it "does not advertise the listed currency when saving the card makes the charge fall back" do
+    it "keeps the listed currency when save-card intent does not change the client-confirm charge" do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
       cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
       allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
@@ -238,7 +238,7 @@ describe CustomerSurchargeController, :vcr do
       }, as: :json
 
       codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
-      expect(codes).not_to include(Currency::CAD)
+      expect(codes).to include(Currency::CAD)
     end
 
     it "does not advertise the listed currency when the direct-listed lane is gated off" do

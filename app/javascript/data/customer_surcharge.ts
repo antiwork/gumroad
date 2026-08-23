@@ -21,7 +21,6 @@ export type GetSurchargesRequest = {
   buyer_currency?: string;
   payment_details_source?: "payment_element" | "saved_payment_method" | undefined;
   payment_element_mount_currency?: string | null | undefined;
-  save_card?: boolean | undefined;
 };
 
 export type SurchargesResponse = {

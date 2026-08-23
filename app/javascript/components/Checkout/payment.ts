@@ -862,7 +862,6 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       ...(state.buyerCurrency ? { buyer_currency: state.buyerCurrency } : {}),
       ...(paymentDetailsSource ? { payment_details_source: paymentDetailsSource } : {}),
       ...(paymentElementMountCurrency ? { payment_element_mount_currency: paymentElementMountCurrency } : {}),
-      ...(state.willSaveCard ? { save_card: true } : {}),
     },
     abortSignal,
   );
