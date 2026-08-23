@@ -19,6 +19,17 @@ class UserBalanceStatsService
     end
   end
 
+  # The dashboard needs only the four overview scalars. Building the rest of the payload,
+  # per-payment period aggregates especially, costs ~150 queries against purchases that nobody reads.
+  def fetch_overview
+    if should_use_cache?
+      UpdateUserBalanceStatsCacheWorker.perform_async(user.id)
+      cached = read_cache
+      return cached[:overview] if cached
+    end
+    overview_stats
+  end
+
   def write_cache
     data = generate
     $redis.setex(cache_key, 48.hours.to_i, data.to_json)
@@ -41,13 +52,7 @@ class UserBalanceStatsService
         generated_at: Time.current,
         next_payout_period_data:,
         processing_payout_periods_data: user.payments.processing.order("created_at DESC").map { payout_period_data(user, _1) },
-        overview: {
-          last_payout_period_data: payout_period_data(user, user.payments.completed.last),
-          balance: user.unpaid_balance_cents,
-          last_seven_days_sales_total: user.sales_cents_total(after: 7.days.ago),
-          last_28_days_sales_total: user.sales_cents_total(after: 28.days.ago),
-          sales_cents_total: user.sales_cents_total,
-        },
+        overview: overview_stats,
       }
 
       payments = user.payments.completed
@@ -67,6 +72,15 @@ class UserBalanceStatsService
       result[:payments] = payments
 
       result
+    end
+
+    def overview_stats
+      {
+        balance: user.unpaid_balance_cents,
+        last_seven_days_sales_total: user.sales_cents_total(after: 7.days.ago),
+        last_28_days_sales_total: user.sales_cents_total(after: 28.days.ago),
+        sales_cents_total: user.sales_cents_total,
+      }
     end
 
     def read_cache
