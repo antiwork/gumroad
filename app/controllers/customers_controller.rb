@@ -11,10 +11,7 @@ class CustomersController < Sellers::BaseController
   before_action :set_on_page_type
 
   CUSTOMERS_PER_PAGE = 20
-  # Elasticsearch's index.max_result_window caps `from + size` at 10_000, so a seller
-  # with more than 10k sales cannot page past (10_000 / CUSTOMERS_PER_PAGE) without the
-  # index rejecting the request. Cap both the requested offset and the advertised page
-  # count to keep the Sales list's last page reachable instead of a 500.
+  # Keep pagination within Elasticsearch's index.max_result_window.
   MAX_RESULT_WINDOW = 10_000
 
   layout "inertia", only: [:index, :show]
@@ -84,7 +81,7 @@ class CustomersController < Sellers::BaseController
     customers_presenter = CustomersPresenter.new(
       pundit_user:,
       customers: load_sales(sales),
-      pagination: { page: params[:page].to_i + 1, pages: total_pages(sales.results.total), next: nil },
+      pagination: { page: page_offset / CUSTOMERS_PER_PAGE + 1, pages: total_pages(sales.results.total), next: nil },
       count: sales.results.total
     )
 

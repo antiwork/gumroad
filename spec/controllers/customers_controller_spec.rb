@@ -368,6 +368,7 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       body = response.parsed_body.deep_symbolize_keys
       # 30k sales at 20/page would be 1500 pages, but the ES window is only 10k hits.
       expect(body[:pagination][:pages]).to eq(500)
+      expect(body[:pagination][:page]).to eq(500)
       # Page 501 (0-indexed 500) is clamped to the last legal offset, not from+size = 14700.
       expect(requested_from).to eq(9_980)
     end
