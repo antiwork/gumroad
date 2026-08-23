@@ -169,18 +169,18 @@ const renderPaymentForm = (checkoutState: State) => {
 };
 
 // Applies reducer updates so a second native PayPal approval sees the new tax location.
-const StatefulPaymentForm = ({
-  initial,
-  harness,
-}: {
-  initial: State;
-  harness: { dispatch: React.Dispatch<Parameters<typeof reduceCheckoutState>[1]> };
-}) => {
+type CheckoutDispatch = React.Dispatch<Parameters<typeof reduceCheckoutState>[1]>;
+
+const StatefulPaymentForm = ({ initial, harness }: { initial: State; harness: { dispatch: CheckoutDispatch } }) => {
   const [checkoutState, dispatch] = React.useReducer(reduceCheckoutState, initial);
   harness.dispatch = dispatch;
+  const contextValue = React.useMemo(
+    (): NonNullable<React.ContextType<typeof StateContext>> => [checkoutState, dispatch],
+    [checkoutState, dispatch],
+  );
   return (
     <LoggedInUserProvider value={null}>
-      <StateContext.Provider value={[checkoutState, dispatch]}>
+      <StateContext.Provider value={contextValue}>
         <PaymentForm />
       </StateContext.Provider>
     </LoggedInUserProvider>
@@ -338,10 +338,8 @@ describe("PaymentForm validation-failure feedback", () => {
         },
       },
     }));
-    const harness = {
-      dispatch: ((_action: Parameters<typeof reduceCheckoutState>[1]) => undefined) as React.Dispatch<
-        Parameters<typeof reduceCheckoutState>[1]
-      >,
+    const harness: { dispatch: CheckoutDispatch } = {
+      dispatch: () => undefined,
     };
     render(<StatefulPaymentForm initial={checkoutState} harness={harness} />);
 
