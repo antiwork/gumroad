@@ -375,6 +375,7 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
 
     it "renders a 400 (not a 500) if ES still rejects an over-window query" do
       allow(PurchaseSearchService).to receive(:search).and_raise(Elasticsearch::Transport::Transport::Errors::BadRequest)
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(Elasticsearch::Transport::Transport::Errors::BadRequest))
 
       get :paged, params: { page: 501 }
 

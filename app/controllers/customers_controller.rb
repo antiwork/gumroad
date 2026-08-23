@@ -118,7 +118,9 @@ class CustomersController < Sellers::BaseController
     end
   end
 
-  def handle_search_error
+  def handle_search_error(exception)
+    ErrorNotifier.notify(exception)
+
     if action_name == "paged"
       render json: { success: false, error: "search failed" }, status: :bad_request
     else
