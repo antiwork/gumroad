@@ -21,11 +21,12 @@ class UserBalanceStatsService
 
   # The dashboard needs only the four overview scalars. Building the rest of the payload,
   # per-payment period aggregates especially, costs ~150 queries against purchases that nobody reads.
+  # A cached blob missing :overview falls through instead of returning nil.
   def fetch_overview
     if should_use_cache?
       UpdateUserBalanceStatsCacheWorker.perform_async(user.id)
-      cached = read_cache
-      return cached[:overview] if cached
+      cached_overview = read_cache&.dig(:overview)
+      return cached_overview if cached_overview
     end
     overview_stats
   end
