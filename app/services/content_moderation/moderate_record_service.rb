@@ -100,15 +100,8 @@ class ContentModeration::ModerateRecordService
     if rs.any? && rs.all? { |r| r.to_s.include?(transient) }
       "We couldn’t review this #{noun} just now (a temporary issue on our end). Please try again in a few minutes."
     elsif rs.any? && rs.all? { |r| r.to_s.include?(unsupported) }
-      # Unlike the transient branch above, retrying can never fix this: the
-      # image itself is something our review can’t read, so the seller has to
-      # change it and the copy has to say so.
-      #
-      # Format and size are both named, and no byte figure is quoted: the two
-      # ceilings differ (MAX_DATA_IMAGE_BYTES for an inline payload, OpenAI's
-      # own limit for a URL it downloads), so one number here would be wrong for
-      # whichever case the seller is actually in. "Smaller" is what they can act
-      # on either way.
+      # Don't quote a byte ceiling: MAX_DATA_IMAGE_BYTES (inline) and OpenAI's
+      # download limit differ, so one number would be wrong for the other case.
       "This #{noun} includes an image we can’t review, because the format is unsupported (such as an SVG data URL) " \
       "or the file is too large. Replace it with a smaller PNG, JPEG, GIF, or WebP and try again."
     elsif rs.any? { |r| off_platform_fulfillment_reason?(r) }
@@ -222,17 +215,10 @@ class ContentModeration::ModerateRecordService
       reason.to_s.start_with?("spam:")
     end
 
-    # The spam preset fires on the info-product writing STYLE (all-caps headline, benefit
-    # bullets, earnings framing), not on anything that makes a listing actually spam. What
-    # separates the two is whether the listing DELIVERS anything: link farms and fake listings
-    # have nothing attached. So a product with a deliverable keeps the flag as a reviewable
-    # note and publishes; an empty one still blocks, as do all the other presets, which key on
-    # concrete content rather than tone (gumroad-private#1358).
-    #
-    # A page has no deliverable of its own, so the storefront stands in for it: live products
-    # or completed sales mean the page is plausibly selling something, while a seller with
-    # neither is the link-farm-on-a-gumroad.com-subdomain shape this exists to stop. Posts have
-    # no deliverable either and are not covered here, so a spam flag on a post always blocks.
+    # Spam preset keys on info-product STYLE, not actual spam. A listing that
+    # delivers something publishes with a review note; empty ones still block
+    # (gumroad-private#1358). Pages use the seller's storefront as stand-in;
+    # posts have no deliverable, so a spam flag always blocks.
     def spam_flag_should_not_block?
       return seller_has_storefront? if entity_type == :page
 
@@ -251,13 +237,9 @@ class ContentModeration::ModerateRecordService
       user.links.alive.exists? || user.sales.successful.exists?
     end
 
-    # The stricter half of "does this listing deliver anything". Distinct from
-    # `product_has_deliverable?`, which is generous on purpose because it only gates a QUESTION
-    # we ask a model; here the same generosity would let a listing publish, so states a spammer
-    # gets for free do NOT count: a page with only a title, an empty bundle, a coffee/tip
-    # listing, a file whose upload never finished, and integrations Gumroad does not fulfil on
-    # purchase (only a Circle/Discord invite IS the deliverable; Zoom and Google Calendar are
-    # scheduling plumbing).
+    # Stricter than product_has_deliverable? (that one only gates a model
+    # question). Title-only pages, empty bundles, tips, unfinished uploads,
+    # and Zoom/Calendar plumbing do not count; Circle/Discord invites do.
     def product_has_substantive_deliverable?
       return true if record.is_physical?
       return true if record.is_bundle? && record.bundle_products.alive.any?
@@ -271,14 +253,10 @@ class ContentModeration::ModerateRecordService
       found_file = has_deliverable_file?(record, budget:) ||
         record.alive_variants.any? { |variant| has_deliverable_file?(variant, budget:) }
 
-      # Readable page content establishes a deliverable on its own, so a product
-      # that has some passes whether or not we got through its files.
       has_deliverable = found_file || has_readable_body_content?(record)
 
-      # So a rejection that only means "we ran out of time" is explicable from the logs. Its
-      # position is deliberate: outside the per-list check (one line per save, not per tier),
-      # and after the page-content half, so a product that ran out of budget on files but
-      # passed on content carries no failure-shaped warning.
+      # After the content check so a product that ran out of file budget but
+      # passed on page content does not log a failure-shaped warning.
       if !has_deliverable && budget.unchecked_file_count.positive?
         Rails.logger.warn(
           "ContentModeration: storage check budget spent with " \
@@ -290,25 +268,11 @@ class ContentModeration::ModerateRecordService
       has_deliverable
     end
 
-    # An attached file counts only when something is really in storage behind it. An alive
-    # `ProductFile` row is not proof: a save racing an unfinished multipart upload leaves a row
-    # pointing at a key that was never written, and nothing deletes it afterwards (see
-    # `ProductFile#stored_file_present?`). The save API takes each file's storage URL from the
-    # client, so a caller can submit arbitrarily many such rows.
-    #
-    # Most rows answer for themselves (analyzed file, external link, purged object) and are
-    # settled for free; only the rest cost a storage request. Those are capped by TIME, not by
-    # file count, because a count cap must pick a slice and the caller controls the list — any
-    # slice can be pushed off a real file by padding. It also can't be fixed by ordering: a
-    # genuinely stored file can be unverifiable at either end of creation order (uploaded
-    # moments ago before AnalyzeFileWorker ran, or analysis that will never succeed — retries
-    # exhausted, or a video whose metadata can't be read, see
-    # `WithFileProperties#video_analysis_failed`, which nothing revisits). Newest-first is still
-    # the right order: the freshly-uploaded file usually answers on the first request.
-    #
-    # An exhausted budget FAILS the check on purpose — "we don't know" must not pass, or the
-    # bypass reopens. It can only make an honest seller cheaper to confirm; passing always
-    # requires an object actually in storage.
+    # An alive ProductFile row is not a stored object (save racing an unfinished
+    # multipart upload; see ProductFile#stored_file_present?). Cap lookups by
+    # TIME, not count — the caller controls the list and can pad past any slice.
+    # Newest-first usually answers first. Exhausted budget fails on purpose:
+    # "we don't know" must not pass.
     def has_deliverable_file?(owner, budget:)
       unverifiable_from_row = []
 
@@ -319,15 +283,10 @@ class ContentModeration::ModerateRecordService
         end
       end
 
-      # Newest first: a freshly-uploaded file is the likeliest deliverable, so it
-      # usually answers on the first request.
       newest_first = unverifiable_from_row.sort_by { -_1.id }
 
       newest_first.each_with_index do |file, checked|
         if budget.spent?
-          # Everything from here on, including the file whose turn it was, went
-          # unrequested by this list. Handed over as records so the budget can
-          # tell a file no list ever reached from one an earlier list looked up.
           budget.record_skipped_files(newest_first.drop(checked))
           break
         end
@@ -339,12 +298,9 @@ class ContentModeration::ModerateRecordService
       false
     end
 
-    # Rich content with something in the body, ignoring title-only pages (see
-    # `product_has_substantive_deliverable?`) and blocks that deliver nothing themselves: a
-    # `posts` block with no published posts and a `fileEmbed` pointing at a missing file render
-    # nothing, and recommendations, upsells and form fields ask something OF the buyer. Each is
-    # one click to insert. A genuinely attached file is still covered, by the
-    # `alive_product_files` checks in `product_has_substantive_deliverable?`.
+    # Ignore title-only pages and blocks that deliver nothing (empty posts,
+    # missing fileEmbed, recommendations/upsells/forms). Attached files are
+    # covered by product_has_substantive_deliverable?.
     def has_readable_body_content?(product)
       has_own_body_content = ->(rich_content) do
         rich_content.has_body_content?(excluding_node_types: RichContent::NODE_TYPES_WITHOUT_OWN_CONTENT)
@@ -461,32 +417,17 @@ class ContentModeration::ModerateRecordService
       !product_has_deliverable?
     end
 
-    # Whether the product holds rich content a buyer could actually read.
-    #
-    # Deliberately NOT `Link#has_content?`: that helper counts a rich content
-    # record as content whenever its description array is non-empty, and the
-    # product editor persists a blank placeholder paragraph for a content page
-    # the seller never typed into. Under `has_content?` a completely empty
-    # listing therefore looks like it has content and would skip this preset
-    # entirely — which is one of the exact shapes the preset exists to catch.
-    # `RichContent#has_editor_content?` is the predicate that knows a bare
-    # paragraph is not readable content, while treating a page the seller gave a
-    # title as real work (the title renders in the buyer's page list).
-    #
-    # Both levels are checked regardless of which one currently owns the
-    # content, so a listing whose real pages live on a variant/tier keeps the
-    # preset off just as a product-level page does.
+    # Not Link#has_content?: the editor persists a blank placeholder paragraph,
+    # so an empty listing would look populated and skip this preset.
+    # RichContent#has_editor_content? treats a titled page as real work. Check
+    # product and variant pages.
     def has_reader_visible_content?(product)
       product.alive_rich_contents.any?(&:has_editor_content?) ||
         product.alive_variants.any? { |variant| variant.alive_rich_contents.any?(&:has_editor_content?) }
     end
 
-    # A product that sells access to a Discord server or Circle community has
-    # no files and no rich content by design: the buyer receives an invite that
-    # Gumroad sends and records (PurchaseIntegration) on purchase. That's a
-    # deliverable on Gumroad, so such a listing must never be handed to the
-    # preset — its description legitimately reads like "buy this to join my
-    # Discord".
+    # Discord/Circle: the invite IS the deliverable (PurchaseIntegration).
+    # Description will read like "join my Discord" — do not hand to the preset.
     def gumroad_managed_integration?
       record.active_integrations.exists? ||
         record.alive_variants.any? { |variant| variant.active_integrations.exists? }
