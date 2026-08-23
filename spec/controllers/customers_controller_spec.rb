@@ -352,6 +352,36 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
     end
   end
 
+  describe "GET paged with more than 10k customers" do
+    let(:product) { create(:product, user: seller) }
+
+    it "caps the advertised page count and clamps the ES `from` to the last legal window" do
+      requested_from = nil
+      allow(PurchaseSearchService).to receive(:search) do |options|
+        requested_from = options[:from]
+        double("sales", results: double("results", total: 30_000), records: Purchase.none)
+      end
+
+      get :paged, params: { page: 501 }
+
+      expect(response).to be_successful
+      body = response.parsed_body.deep_symbolize_keys
+      # 30k sales at 20/page would be 1500 pages, but the ES window is only 10k hits.
+      expect(body[:pagination][:pages]).to eq(500)
+      # Page 501 (0-indexed 500) is clamped to the last legal offset, not from+size = 14700.
+      expect(requested_from).to eq(9_980)
+    end
+
+    it "renders a 400 (not a 500) if ES still rejects an over-window query" do
+      allow(PurchaseSearchService).to receive(:search).and_raise(Elasticsearch::Transport::Transport::Errors::BadRequest)
+
+      get :paged, params: { page: 501 }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("success" => false, "error" => "search failed")
+    end
+  end
+
   describe "GET charges" do
     before do
       @product = create(:product, user: seller)
