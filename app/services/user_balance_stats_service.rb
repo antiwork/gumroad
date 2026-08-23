@@ -10,17 +10,19 @@ class UserBalanceStatsService
     @user = user
   end
 
-  def fetch
+  # The Payouts page reads only these two keys: it builds the past periods itself, off its own
+  # paginated query. A payout period costs ~30 purchase aggregates (PayoutsHelper#payout_sales_data),
+  # so the two readers here each skip the other's work.
+  def fetch_payout_periods
     if should_use_cache?
       UpdateUserBalanceStatsCacheWorker.perform_async(user.id)
-      read_cache || generate
-    else
-      generate
+      cached = read_cache
+      return cached.slice(:next_payout_period_data, :processing_payout_periods_data) if cached
     end
+    payout_periods_stats
   end
 
-  # The dashboard needs only the four overview scalars. Building the rest of the payload,
-  # per-payment period aggregates especially, costs ~150 queries against purchases that nobody reads.
+  # The dashboard renders only these four scalars.
   def fetch_overview
     if should_use_cache?
       UpdateUserBalanceStatsCacheWorker.perform_async(user.id)
@@ -47,31 +49,20 @@ class UserBalanceStatsService
   end
 
   private
+    # The cached blob is the union of what the two readers slice out of it.
     def generate
-      result = {
+      {
         generated_at: Time.current,
+        overview: overview_stats,
+        **payout_periods_stats,
+      }
+    end
+
+    def payout_periods_stats
+      {
         next_payout_period_data:,
         processing_payout_periods_data: user.payments.processing.order("created_at DESC").map { payout_period_data(user, _1) },
-        overview: overview_stats,
       }
-
-      payments = user.payments.completed
-        .displayable
-        .order("created_at DESC")
-
-      if payments.size > PayoutsPresenter::PAST_PAYMENTS_PER_PAGE
-        payments = payments.limit(PayoutsPresenter::PAST_PAYMENTS_PER_PAGE)
-        result[:is_paginating] = true
-      else
-        result[:is_paginating] = false
-      end
-      payments = payments.load
-      result[:payout_period_data] = payments.to_h do |payment|
-        [payment.id, payout_period_data(user, payment)]
-      end
-      result[:payments] = payments
-
-      result
     end
 
     def overview_stats
