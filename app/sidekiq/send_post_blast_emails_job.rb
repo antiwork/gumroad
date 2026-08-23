@@ -50,17 +50,27 @@ class SendPostBlastEmailsJob
   end
 
   COMPLETION_STAMP_CLAIM_TTL_PADDING = 10.minutes
+  COMPLETION_STAMP_RELEASE_SCRIPT = <<~LUA.squish
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+      return redis.call("del", KEYS[1])
+    else
+      return 0
+    end
+  LUA
 
   def self.claim_completion_stamp(blast_id)
-    $redis.set(RedisKey.blast_completion_stamp_claim(blast_id), Time.current.iso8601, nx: true, ex: completion_stamp_claim_ttl)
+    token = SecureRandom.uuid
+    $redis.set(RedisKey.blast_completion_stamp_claim(blast_id), token, nx: true, ex: completion_stamp_claim_ttl) ? token : nil
   end
 
   def self.completion_stamp_claim_ttl
     audience_load_timeout_seconds + COMPLETION_STAMP_CLAIM_TTL_PADDING.to_i
   end
 
-  def self.release_completion_stamp(blast_id)
-    $redis.del(RedisKey.blast_completion_stamp_claim(blast_id))
+  def self.release_completion_stamp(blast_id, token)
+    return if token.blank?
+
+    $redis.eval(COMPLETION_STAMP_RELEASE_SCRIPT, keys: [RedisKey.blast_completion_stamp_claim(blast_id)], argv: [token])
   end
 
   def self.completion_stamp_claimed?(blast_id)

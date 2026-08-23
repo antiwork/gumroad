@@ -98,7 +98,8 @@ class AlertOnStalledPostEmailBlastsJob
       # keeps getting buried — and is the wrong tool once delivery covers the snapshot.
       # Completing is not a send, so it is not gated on the resume flag or the 24h window.
       if SendPostBlastEmailsJob.fully_delivered?(blast)
-        return nil unless SendPostBlastEmailsJob.claim_completion_stamp(blast.id)
+        claim_token = SendPostBlastEmailsJob.claim_completion_stamp(blast.id)
+        return nil unless claim_token
 
         begin
           # The claim makes later senders exit before they own snapshot state; this
@@ -109,7 +110,7 @@ class AlertOnStalledPostEmailBlastsJob
           SendPostBlastEmailsJob.mark_completed!(blast)
           return :completed
         ensure
-          SendPostBlastEmailsJob.release_completion_stamp(blast.id)
+          SendPostBlastEmailsJob.release_completion_stamp(blast.id, claim_token)
         end
       end
       # A DEAD entry proves its attempt chain ended; UNACCOUNTED can hide a live sender, and a

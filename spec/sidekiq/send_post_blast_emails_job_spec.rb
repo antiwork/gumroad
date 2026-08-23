@@ -85,15 +85,29 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.set(RedisKey.audience_member_load_max_execution_time_seconds, 2.hours.to_i)
 
       expect($redis).to receive(:set)
-        .with(RedisKey.blast_completion_stamp_claim(blast.id), Time.current.iso8601, nx: true, ex: 2.hours.to_i + 10.minutes.to_i)
+        .with(RedisKey.blast_completion_stamp_claim(blast.id), kind_of(String), nx: true, ex: 2.hours.to_i + 10.minutes.to_i)
         .and_call_original
 
-      described_class.claim_completion_stamp(blast.id)
+      expect(described_class.claim_completion_stamp(blast.id)).to be_present
     ensure
       if blast
         $redis.del(RedisKey.blast_completion_stamp_claim(blast.id))
         $redis.del(RedisKey.audience_member_load_max_execution_time_seconds)
       end
+    end
+
+    it "releases only the completion claim owned by this invocation" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      claim_key = RedisKey.blast_completion_stamp_claim(blast.id)
+      stale_token = described_class.claim_completion_stamp(blast.id)
+      $redis.del(claim_key)
+      successor_token = described_class.claim_completion_stamp(blast.id)
+
+      described_class.release_completion_stamp(blast.id, stale_token)
+
+      expect($redis.get(claim_key)).to eq(successor_token)
+    ensure
+      $redis.del(RedisKey.blast_completion_stamp_claim(blast.id)) if blast
     end
 
     it "records when blast started processing" do
