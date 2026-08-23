@@ -166,6 +166,9 @@ class ContentModeration::ModerateRecordService
         content = content.class.new(text: content.text, image_urls: new_urls)
       else
         reasons = ["#{TOO_MANY_IMAGES_REASON_PREFIX} (#{content.image_urls.size})"]
+        # `blocked: false`: the publish did stop, but the admin trail is read as
+        # abuse history, and a seller with a big gallery has not done anything
+        # wrong. The seller-facing message says what to change.
         leave_admin_comment(reasons, blocked: false)
         return CheckResult.new(passed: false, reasons: reasons)
       end
