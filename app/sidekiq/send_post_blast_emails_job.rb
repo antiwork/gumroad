@@ -34,7 +34,13 @@ class SendPostBlastEmailsJob
         AudienceMember.filter(seller_id: post.seller_id, params: post.audience_members_filter_params, with_ids: true, ids: ids_slice).pluck(:email)
       end
     end.compact.uniq
-    emails.empty? || SentPostEmail.missing_emails(post:, emails:).empty?
+    return true if emails.empty?
+    # SentPostEmail is written just before the ESP call. delivery_count is the
+    # post-handoff ack from PostSendgridApi / PostResendApi, so a kill after the
+    # insert and before the provider cannot look fully delivered.
+    return false if blast.delivery_count < emails.size
+
+    SentPostEmail.missing_emails(post:, emails:).empty?
   end
 
   def self.audience_load_timeout_seconds
@@ -74,6 +80,13 @@ class SendPostBlastEmailsJob
   end
 
   SEND_ATTEMPT_CLAIM_TTL = 4.hours
+  SEND_ATTEMPT_RENEW_SCRIPT = <<~LUA.squish
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+      return redis.call("expire", KEYS[1], ARGV[2])
+    else
+      return 0
+    end
+  LUA
 
   def self.claim_send_attempt(blast_id)
     token = SecureRandom.uuid
@@ -84,6 +97,18 @@ class SendPostBlastEmailsJob
     return if token.blank?
 
     $redis.eval(COMPLETION_STAMP_RELEASE_SCRIPT, keys: [RedisKey.blast_send_attempt_claim(blast_id)], argv: [token])
+  end
+
+  def self.renew_send_attempt(blast_id, token)
+    return false if token.blank?
+
+    $redis.eval(SEND_ATTEMPT_RENEW_SCRIPT, keys: [RedisKey.blast_send_attempt_claim(blast_id)], argv: [token, SEND_ATTEMPT_CLAIM_TTL.to_i]).to_i == 1
+  end
+
+  def self.reschedule_after_send_attempt_claim(blast_id)
+    ttl = $redis.ttl(RedisKey.blast_send_attempt_claim(blast_id)).to_i
+    delay = ttl.positive? ? ttl + 5 : 30
+    perform_in(delay, blast_id)
   end
 
   def self.send_attempt_claimed?(blast_id)
@@ -107,7 +132,12 @@ class SendPostBlastEmailsJob
     @post = @blast.post
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
     send_attempt_token = self.class.claim_send_attempt(@blast.id)
-    return unless send_attempt_token
+    unless send_attempt_token
+      # A live or crashed owner still holds the NX claim. Returning here would ACK
+      # a recovered job and drop the only retry. Wait for the claim to expire.
+      self.class.reschedule_after_send_attempt_claim(@blast.id)
+      return
+    end
 
     begin
       return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
@@ -119,9 +149,11 @@ class SendPostBlastEmailsJob
       # The filter query can be expensive to run, it's better to run it on the replica DB.
       Makara::Context.release_all
       @members = load_audience_members
+      return unless still_own_send_attempt?(send_attempt_token)
 
       if @blast.to_non_openers?
         keep_emails = load_non_opener_emails
+        return unless still_own_send_attempt?(send_attempt_token)
         @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
         remove_members_already_sent_in_this_blast
       else
@@ -139,6 +171,7 @@ class SendPostBlastEmailsJob
         members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
           provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
             return if self.class.completion_stamp_claimed?(@blast.id)
+            return unless still_own_send_attempt?(send_attempt_token)
             send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
           end
         end
@@ -151,6 +184,10 @@ class SendPostBlastEmailsJob
   end
 
   private
+    def still_own_send_attempt?(token)
+      self.class.renew_send_attempt(@blast.id, token)
+    end
+
     # How long the audience snapshot survives in Redis. Long enough to cover the full
     # Sidekiq retry schedule of this job (10 retries spans roughly a day), short enough
     # that an abandoned blast doesn't hold hundreds of thousands of entries forever.

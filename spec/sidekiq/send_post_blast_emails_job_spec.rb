@@ -84,15 +84,38 @@ describe SendPostBlastEmailsJob, :freeze_time do
       end
     end
 
-    it "keeps overlapping senders from owning the same blast" do
+    it "reschedules instead of acknowledging when another sender holds the claim" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
       $redis.set(RedisKey.blast_send_attempt_claim(blast.id), SecureRandom.uuid, ex: 4.hours.to_i)
+      expect(described_class).to receive(:perform_in).with(4.hours.to_i + 5, blast.id)
 
       described_class.new.perform(blast.id)
 
       expect_sent_count 0
       expect(blast.reload.started_at).to be_nil
       expect(blast.reload.completed_at).to be_nil
+    ensure
+      $redis.del(RedisKey.blast_send_attempt_claim(blast.id)) if blast
+    end
+
+    it "stops without completing if the send-attempt lease is lost" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      allow(described_class).to receive(:renew_send_attempt).and_return(false)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_nil
+    end
+
+    it "renews only the send-attempt claim owned by this invocation" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      token = described_class.claim_send_attempt(blast.id)
+      $redis.expire(RedisKey.blast_send_attempt_claim(blast.id), 30)
+
+      expect(described_class.renew_send_attempt(blast.id, token)).to be(true)
+      expect($redis.ttl(RedisKey.blast_send_attempt_claim(blast.id))).to be > 30
+      expect(described_class.renew_send_attempt(blast.id, "other-token")).to be(false)
     ensure
       $redis.del(RedisKey.blast_send_attempt_claim(blast.id)) if blast
     end
@@ -839,11 +862,19 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(described_class.fully_delivered?(blast)).to be(false)
     end
 
-    it "is true when sent_post_emails covers the snapshotted audience" do
+    it "is true when sent_post_emails covers the snapshotted audience and delivery_count matches" do
+      $redis.rpush(snapshot_key, recipient.id)
+      SentPostEmail.create!(post:, email: recipient.email)
+      blast.update!(delivery_count: 1)
+
+      expect(described_class.fully_delivered?(blast)).to be(true)
+    end
+
+    it "is false when sent rows exist but delivery_count has not acknowledged the handoff" do
       $redis.rpush(snapshot_key, recipient.id)
       SentPostEmail.create!(post:, email: recipient.email)
 
-      expect(described_class.fully_delivered?(blast)).to be(true)
+      expect(described_class.fully_delivered?(blast)).to be(false)
     end
 
     it "is false once completed_at is already set" do

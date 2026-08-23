@@ -401,6 +401,21 @@ describe AlertOnStalledPostEmailBlastsJob do
       end
     end
 
+    it "does not complete when sent rows exist but delivery_count has not acknowledged the handoff" do
+      blast = stalled_blast(requested_hours_ago: 6, post: post_with_audience, delivery_count: 0)
+      recipient = snapshotted_recipient_for(blast)
+      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), recipient.id)
+      SentPostEmail.create!(post: blast.post, email: recipient.email)
+      stub_sidekiq(dead: [blast.id])
+
+      described_class.new.perform
+
+      expect(blast.reload.completed_at).to be_nil
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+        expect(message).not_to include("COMPLETED")
+      end
+    end
+
     context "when the flag is off" do
       it "never truncates action rows out of the report" do
         stub_const("#{described_class}::MAX_REPORTED", 1)
