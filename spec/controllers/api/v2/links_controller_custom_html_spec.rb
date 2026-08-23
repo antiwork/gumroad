@@ -358,10 +358,11 @@ describe Api::V2::LinksController do
         )
       end
 
-      it "previews new over-budget HTML by sampling the images" do
+      it "rejects new over-budget HTML when no page is live" do
         post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: over_budget_html }
 
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to include("more images than we can review")
       end
 
       context "with a live over-budget root page" do
@@ -377,13 +378,14 @@ describe Api::V2::LinksController do
           expect(@product.custom_html).not_to include("swapped.png")
         end
 
-        it "previews adding an image to the live over-budget page by sampling" do
+        it "still rejects adding an image to the live over-budget page" do
           extra = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 2
           grown = over_budget_html + %(<img src="https://cdn.example.com/#{extra}.png">)
 
           post :preview_custom_html, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: grown }
 
-          expect(response.parsed_body["success"]).to eq(true)
+          expect(response.parsed_body["success"]).to eq(false)
+          expect(response.parsed_body["message"]).to include("more images than we can review")
         end
       end
     end
