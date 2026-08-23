@@ -192,6 +192,7 @@ describe AlertOnStalledPostEmailBlastsJob do
         blast = stalled_blast(requested_hours_ago: 6)
         stub_sidekiq
         marker = RedisKey.stalled_blast_auto_resumed(blast.id)
+        allow($redis).to receive(:exists?).and_call_original
         allow($redis).to receive(:exists?).with(marker).and_return(false)
         allow($redis).to receive(:set).with(marker, anything, hash_including(nx: true)).and_return(false)
 
@@ -346,6 +347,26 @@ describe AlertOnStalledPostEmailBlastsJob do
       end
     ensure
       $redis.del(RedisKey.blast_completion_stamp_claim(blast.id), snapshot_key) if blast && snapshot_key
+    end
+
+    it "does not complete when a sender has started before it becomes visible in Sidekiq" do
+      blast = stalled_blast(requested_hours_ago: 6, post: post_with_audience, delivery_count: 3)
+      recipient = snapshotted_recipient_for(blast)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      $redis.rpush(snapshot_key, recipient.id)
+      $redis.set(RedisKey.blast_send_attempt_claim(blast.id), SecureRandom.uuid, ex: 4.hours.to_i)
+      SentPostEmail.create!(post: blast.post, email: recipient.email)
+      stub_sidekiq
+
+      described_class.new.perform
+
+      expect(blast.reload.completed_at).to be_nil
+      expect($redis.exists?(snapshot_key)).to be(true)
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+        expect(message).to match(/blast #{blast.id}.*UNACCOUNTED → SKIPPED \(sender reappeared/)
+      end
+    ensure
+      $redis.del(RedisKey.blast_send_attempt_claim(blast.id), snapshot_key) if blast && snapshot_key
     end
 
     it "does not resume after a delivery miss if the sender appears before the claim" do

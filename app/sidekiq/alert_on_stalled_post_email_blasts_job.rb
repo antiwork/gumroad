@@ -126,7 +126,7 @@ class AlertOnStalledPostEmailBlastsJob
     end
 
     def sender_visible_now?(blast_id)
-      busy_blast_ids.include?(blast_id) || queued_blast_ids.include?(blast_id) || retrying_blast_ids.include?(blast_id)
+      SendPostBlastEmailsJob.send_attempt_claimed?(blast_id) || busy_blast_ids.include?(blast_id) || queued_blast_ids.include?(blast_id) || retrying_blast_ids.include?(blast_id)
     end
 
     def resume(entry)

@@ -76,8 +76,25 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 0
       expect(blast.reload.started_at).to be_nil
       expect(blast.reload.completed_at).to be_nil
+      expect($redis.exists?(RedisKey.blast_send_attempt_claim(blast.id))).to be(false)
     ensure
-      $redis.del(RedisKey.blast_completion_stamp_claim(blast.id)) if blast
+      if blast
+        $redis.del(RedisKey.blast_completion_stamp_claim(blast.id))
+        $redis.del(RedisKey.blast_send_attempt_claim(blast.id))
+      end
+    end
+
+    it "keeps overlapping senders from owning the same blast" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_send_attempt_claim(blast.id), SecureRandom.uuid, ex: 4.hours.to_i)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+      expect(blast.reload.started_at).to be_nil
+      expect(blast.reload.completed_at).to be_nil
+    ensure
+      $redis.del(RedisKey.blast_send_attempt_claim(blast.id)) if blast
     end
 
     it "holds the completion-stamp claim longer than the audience revalidation cap" do

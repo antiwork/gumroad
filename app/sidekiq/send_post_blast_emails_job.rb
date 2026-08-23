@@ -73,6 +73,23 @@ class SendPostBlastEmailsJob
     $redis.eval(COMPLETION_STAMP_RELEASE_SCRIPT, keys: [RedisKey.blast_completion_stamp_claim(blast_id)], argv: [token])
   end
 
+  SEND_ATTEMPT_CLAIM_TTL = 4.hours
+
+  def self.claim_send_attempt(blast_id)
+    token = SecureRandom.uuid
+    $redis.set(RedisKey.blast_send_attempt_claim(blast_id), token, nx: true, ex: SEND_ATTEMPT_CLAIM_TTL.to_i) ? token : nil
+  end
+
+  def self.release_send_attempt(blast_id, token)
+    return if token.blank?
+
+    $redis.eval(COMPLETION_STAMP_RELEASE_SCRIPT, keys: [RedisKey.blast_send_attempt_claim(blast_id)], argv: [token])
+  end
+
+  def self.send_attempt_claimed?(blast_id)
+    $redis.exists?(RedisKey.blast_send_attempt_claim(blast_id))
+  end
+
   def self.completion_stamp_claimed?(blast_id)
     $redis.exists?(RedisKey.blast_completion_stamp_claim(blast_id))
   end
@@ -89,41 +106,48 @@ class SendPostBlastEmailsJob
     @blast = PostEmailBlast.find(blast_id)
     @post = @blast.post
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
-    return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
-    return if self.class.completion_stamp_claimed?(@blast.id)
+    send_attempt_token = self.class.claim_send_attempt(@blast.id)
+    return unless send_attempt_token
 
-    @blast.update!(started_at: Time.current) if @blast.started_at.nil?
+    begin
+      return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
+      return if self.class.completion_stamp_claimed?(@blast.id)
 
-    @filters = @post.audience_members_filter_params
-    # The filter query can be expensive to run, it's better to run it on the replica DB.
-    Makara::Context.release_all
-    @members = load_audience_members
+      @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
-    if @blast.to_non_openers?
-      keep_emails = load_non_opener_emails
-      @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
-      remove_members_already_sent_in_this_blast
-    else
-      # We will check each batch of emails to see if they were already messaged,
-      # but we can already remove all of the ones we know have already been emailed, ahead of time (faster).
-      # This check is only useful if the post has been published twice, or if this job is being retried.
-      remove_already_emailed_members
-    end
+      @filters = @post.audience_members_filter_params
+      # The filter query can be expensive to run, it's better to run it on the replica DB.
+      Makara::Context.release_all
+      @members = load_audience_members
 
-    return if self.class.completion_stamp_claimed?(@blast.id)
-    return mark_blast_as_completed if @members.empty?
+      if @blast.to_non_openers?
+        keep_emails = load_non_opener_emails
+        @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
+        remove_members_already_sent_in_this_blast
+      else
+        # We will check each batch of emails to see if they were already messaged,
+        # but we can already remove all of the ones we know have already been emailed, ahead of time (faster).
+        # This check is only useful if the post has been published twice, or if this job is being retried.
+        remove_already_emailed_members
+      end
 
-    cache = {}
-    @members.each_slice(recipients_slice_size) do |members_slice|
-      members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
-        provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
-          return if self.class.completion_stamp_claimed?(@blast.id)
-          send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
+      return if self.class.completion_stamp_claimed?(@blast.id)
+      return mark_blast_as_completed if @members.empty?
+
+      cache = {}
+      @members.each_slice(recipients_slice_size) do |members_slice|
+        members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
+          provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
+            return if self.class.completion_stamp_claimed?(@blast.id)
+            send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
+          end
         end
       end
-    end
 
-    mark_blast_as_completed
+      mark_blast_as_completed
+    ensure
+      self.class.release_send_attempt(@blast.id, send_attempt_token)
+    end
   end
 
   private
