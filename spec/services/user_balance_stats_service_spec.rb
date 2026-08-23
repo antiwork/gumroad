@@ -19,6 +19,74 @@ describe UserBalanceStatsService do
     end
   end
 
+  describe "#fetch_overview" do
+    let(:now) { Time.zone.local(2024, 6, 15, 12, 0, 0) }
+    let(:overview) do
+      {
+        balance: 12_34,
+        last_seven_days_sales_total: 10_00,
+        last_28_days_sales_total: 40_00,
+        sales_cents_total: 90_00,
+      }
+    end
+
+    before do
+      travel_to(now)
+      allow(user).to receive(:unpaid_balance_cents).and_return(overview[:balance])
+      allow(user).to receive(:sales_cents_total).with(no_args).and_return(overview[:sales_cents_total])
+      allow(user).to receive(:sales_cents_total).with(after: 7.days.ago).and_return(overview[:last_seven_days_sales_total])
+      allow(user).to receive(:sales_cents_total).with(after: 28.days.ago).and_return(overview[:last_28_days_sales_total])
+    end
+
+    context "when the seller is not cacheable" do
+      before { allow(instance).to receive(:should_use_cache?).and_return(false) }
+
+      it "returns the four overview scalars without building the payouts payload" do
+        expect(instance).not_to receive(:generate)
+        expect(instance.fetch_overview).to eq(overview)
+      end
+    end
+
+    context "when the seller is cacheable and the cache is cold" do
+      before { allow(instance).to receive(:should_use_cache?).and_return(true) }
+
+      it "computes the four scalars and enqueues a cache refresh" do
+        expect(instance).not_to receive(:generate)
+        expect(instance.fetch_overview).to eq(overview)
+        expect(UpdateUserBalanceStatsCacheWorker).to have_enqueued_sidekiq_job(user.id)
+      end
+    end
+
+    context "when the seller is cacheable and the cache is warm" do
+      let(:cached_payload) do
+        {
+          generated_at: now,
+          next_payout_period_data: { status: "payable" },
+          processing_payout_periods_data: [],
+          overview:,
+          payout_period_data: { 1 => { amount: 99 } },
+          payments: [],
+          is_paginating: false,
+        }
+      end
+
+      before do
+        allow(instance).to receive(:should_use_cache?).and_return(true)
+        $redis.setex(instance.send(:cache_key), 48.hours.to_i, cached_payload.to_json)
+      end
+
+      it "returns only the nested overview hash" do
+        expect(instance).not_to receive(:generate)
+        expect(instance).not_to receive(:overview_stats)
+        result = instance.fetch_overview
+        expect(result).to eq(overview)
+        expect(result.keys).to match_array(overview.keys)
+        expect(result).not_to have_key(:payout_period_data)
+        expect(UpdateUserBalanceStatsCacheWorker).to have_enqueued_sidekiq_job(user.id)
+      end
+    end
+  end
+
   describe "#fetch" do
     let(:fetched) { instance.fetch }
 
