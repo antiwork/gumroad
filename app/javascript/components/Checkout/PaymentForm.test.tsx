@@ -19,8 +19,13 @@ const paymentElementInputRender = vi.hoisted<{ setupFutureUsage: "off_session" |
   setupFutureUsage: undefined,
 }));
 
+type PayPalButtonsConfig = {
+  onApprove: (data: { billingToken: string }) => Promise<void>;
+  onClick?: (data: Record<string, never>, actions: { resolve: () => void; reject: () => void }) => unknown;
+};
+
 const paypalMock = vi.hoisted<{
-  buttonsConfig: null | { onApprove: (data: { billingToken: string }) => Promise<void> };
+  buttonsConfig: null | PayPalButtonsConfig;
   createBillingAgreement: ReturnType<typeof vi.fn>;
   getPaymentMethodResult: ReturnType<typeof vi.fn>;
   getReusablePaymentMethodResult: ReturnType<typeof vi.fn>;
@@ -170,9 +175,17 @@ const renderPaymentForm = (checkoutState: State) => {
 
 // Applies reducer updates so a second native PayPal approval sees the new tax location.
 type CheckoutDispatch = React.Dispatch<Parameters<typeof reduceCheckoutState>[1]>;
+type CheckoutAction = Parameters<typeof reduceCheckoutState>[1];
+type CheckoutHarness = { dispatch: CheckoutDispatch; actions: CheckoutAction[] };
 
-const StatefulPaymentForm = ({ initial, harness }: { initial: State; harness: { dispatch: CheckoutDispatch } }) => {
-  const [checkoutState, dispatch] = React.useReducer(reduceCheckoutState, initial);
+const StatefulPaymentForm = ({ initial, harness }: { initial: State; harness: CheckoutHarness }) => {
+  const [checkoutState, rawDispatch] = React.useReducer(reduceCheckoutState, initial);
+  const actionsRef = React.useRef(harness.actions);
+  actionsRef.current = harness.actions;
+  const dispatch = React.useCallback((action: CheckoutAction) => {
+    actionsRef.current.push(action);
+    rawDispatch(action);
+  }, []);
   harness.dispatch = dispatch;
   const contextValue = React.useMemo(
     (): NonNullable<React.ContextType<typeof StateContext>> => [checkoutState, dispatch],
@@ -200,7 +213,7 @@ describe("PaymentForm validation-failure feedback", () => {
     paypalMock.loadScript.mockReset();
     paypalMock.render.mockReset();
     paypalMock.loadScript.mockResolvedValue({
-      Buttons: (config: { onApprove: (data: { billingToken: string }) => Promise<void> }) => {
+      Buttons: (config: PayPalButtonsConfig) => {
         paypalMock.buttonsConfig = config;
         return { render: paypalMock.render };
       },
@@ -318,6 +331,7 @@ describe("PaymentForm validation-failure feedback", () => {
       zipCode: "10001",
       paymentMethod: "paypal",
       paypalClientId: "paypal-client-id",
+      customFieldValues: { "field-1": "Nick" },
       status: { type: "starting" },
       products: state().products.map((product) => ({
         ...product,
@@ -338,8 +352,9 @@ describe("PaymentForm validation-failure feedback", () => {
         },
       },
     }));
-    const harness: { dispatch: CheckoutDispatch } = {
+    const harness: CheckoutHarness = {
       dispatch: () => undefined,
+      actions: [],
     };
     render(<StatefulPaymentForm initial={checkoutState} harness={harness} />);
 
@@ -355,12 +370,14 @@ describe("PaymentForm validation-failure feedback", () => {
       ).toBeTruthy(),
     );
 
-    // Simulate the pending tax quote landing, then the buyer clicking PayPal again.
+    // Pending tax quote lands, then the buyer clicks the same PayPal button again.
     harness.dispatch({
       type: "set-value",
       surcharges: { type: "loaded", result: surchargeResult },
     });
-    harness.dispatch({ type: "start-payment" });
+    const click = paypalMock.buttonsConfig?.onClick;
+    if (click === undefined) throw new Error("expected PayPal onClick");
+    await click({}, { resolve() {}, reject() {} });
     await waitFor(() => expect(screen.getByLabelText("Email address")).toHaveProperty("disabled", true));
 
     await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token-2" });
@@ -380,6 +397,67 @@ describe("PaymentForm validation-failure feedback", () => {
         info: expect.objectContaining({ agreementId: "agreement-id-1" }),
       }),
     );
+  });
+
+  it("clears a leftover native PayPal payment method when the next approval changes tax location", async () => {
+    const leftoverPayment = { type: "paypal", reusable: false, leftover: true };
+    const checkoutState = state({
+      country: "US",
+      zipCode: "10001",
+      paymentMethod: "paypal",
+      paypalClientId: "paypal-client-id",
+      customFieldValues: { "field-1": "Nick" },
+      status: { type: "starting" },
+      products: state().products.map((product) => ({
+        ...product,
+        price: 1_000,
+        requirePayment: true,
+        supportsPaypal: "native" as const,
+      })),
+    });
+    paypalMock.createBillingAgreement.mockImplementation(async (token: string) => ({
+      id: token === "billing-token-2" ? "agreement-id-2" : "agreement-id-1",
+      payer: {
+        payer_info: {
+          email: "paypal-buyer@example.com",
+          payer_id: "payer-id",
+          billing_address:
+            token === "billing-token-2"
+              ? { country_code: "DE", postal_code: "10115" }
+              : { country_code: "US", postal_code: "10001" },
+          first_name: "PayPal",
+          last_name: "Buyer",
+        },
+      },
+    }));
+    paypalMock.getPaymentMethodResult.mockResolvedValue(leftoverPayment);
+    const harness: CheckoutHarness = {
+      dispatch: () => undefined,
+      actions: [],
+    };
+    render(<StatefulPaymentForm initial={checkoutState} harness={harness} />);
+
+    await waitFor(() => expect(paypalMock.buttonsConfig).not.toBeNull());
+    await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token-1" });
+    await waitFor(() => expect(harness.actions.some((action) => action.type === "set-payment-method")).toBe(true));
+
+    harness.dispatch({ type: "cancel" });
+    harness.actions.length = 0;
+
+    await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token-2" });
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "PayPal updated your tax location. Review the updated total below, then click PayPal again to continue.",
+        ),
+      ).toBeTruthy(),
+    );
+    expect(paypalMock.getPaymentMethodResult).toHaveBeenCalledOnce();
+
+    // A later start-payment must not replay the first approval's tokenized method.
+    harness.dispatch({ type: "start-payment" });
+    await waitFor(() => expect(screen.getByLabelText("Email address")).toHaveProperty("disabled", true));
+    expect(harness.actions.filter((action) => action.type === "set-payment-method")).toEqual([]);
   });
 
   // Mirrors Checkout/index.tsx: tip and gift inputs render as siblings of PaymentForm, all of them
