@@ -65,17 +65,42 @@ while idx < len(text):
     obj, end = dec.raw_decode(text, idx)
     jobs.extend(obj.get("jobs", []))
     idx = end
-def ok(prefix):
-    hits = [
-        j for j in jobs
-        if j.get("name", "").startswith(prefix)
-        and "noop" not in j.get("name", "").lower()
-    ]
-    return (
-        any(j.get("conclusion") == "success" for j in hits)
-        and not any(j.get("conclusion") == "failure" for j in hits)
-    )
-sys.exit(0 if ok("Test Fast") and ok("Test Slow") else 1)
+import os, re
+
+def expected_shards_from_workflow():
+    path = os.environ.get("TESTS_WORKFLOW_PATH", ".github/workflows/tests.yml")
+    text = open(path).read()
+    expected = {}
+    for job_key, prefix in (("test_fast", "Test Fast"), ("test_slow", "Test Slow")):
+        job = re.search(rf"(?ms)^  {job_key}:\n(?P<block>.*?)(?=^  [A-Za-z0-9_-]+:|\Z)", text)
+        if not job:
+            raise RuntimeError(f"missing {job_key} in {path}")
+        matrix = re.search(r"(?ms)^\s+ci_node_index:\s*(\[[^\]]*\])", job.group("block"))
+        if not matrix:
+            raise RuntimeError(f"missing {job_key} ci_node_index matrix in {path}")
+        shards = sorted({int(value) for value in re.findall(r"\d+", matrix.group(1))})
+        if shards != list(range(len(shards))):
+            raise RuntimeError(f"{job_key} matrix is not zero-based contiguous: {shards}")
+        expected[prefix] = set(shards)
+    return expected
+
+def ok(prefix, expected_shards):
+    seen = {}
+    pattern = re.compile(rf"^{re.escape(prefix)} (\d+)(?:\b|$)")
+    for job in jobs:
+        name = job.get("name", "")
+        if "noop" in name.lower():
+            continue
+        match = pattern.match(name)
+        if not match:
+            continue
+        shard = int(match.group(1))
+        if shard in expected_shards:
+            seen[shard] = job.get("conclusion")
+    return all(seen.get(shard) == "success" for shard in expected_shards)
+
+EXPECTED_SHARDS = expected_shards_from_workflow()
+sys.exit(0 if all(ok(prefix, shards) for prefix, shards in EXPECTED_SHARDS.items()) else 1)
 '
 }
 
