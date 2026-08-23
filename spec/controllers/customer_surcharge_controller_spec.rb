@@ -248,6 +248,8 @@ describe CustomerSurchargeController, :vcr do
       post "calculate_all", params: {
         products: [{ permalink: cad_product.unique_permalink, price: 10_00, quantity: 1 }],
         buyer_currency: Currency::CAD,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
       }, as: :json
 
       codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
@@ -262,6 +264,8 @@ describe CustomerSurchargeController, :vcr do
       post "calculate_all", params: {
         products: [{ permalink: cad_product.unique_permalink, price: 11_00, tip_cents: 1_00, quantity: 1 }],
         buyer_currency: Currency::CAD,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
       }, as: :json
 
       codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
