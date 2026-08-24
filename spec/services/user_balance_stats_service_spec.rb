@@ -57,6 +57,18 @@ describe UserBalanceStatsService do
       end
     end
 
+    context "when the seller is cacheable and the cached payload has no overview" do
+      before do
+        allow(instance).to receive(:should_use_cache?).and_return(true)
+        $redis.setex(instance.send(:cache_key), 48.hours.to_i, { generated_at: now }.to_json)
+      end
+
+      it "computes the four scalars instead of returning nil" do
+        expect(instance).not_to receive(:generate)
+        expect(instance.fetch_overview).to eq(overview)
+      end
+    end
+
     context "when the seller is cacheable and the cache is warm" do
       let(:cached_payload) do
         {
