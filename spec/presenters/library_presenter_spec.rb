@@ -596,6 +596,17 @@ describe LibraryPresenter do
         expect(props[:bundle_downloads]).to eq([expected_download])
       end
 
+      it "does not create a combined ZIP when a member product has stampable pdfs" do
+        create(:readable_document, pdf_stamp_enabled: true, link: purchase1.product_purchases.first.link)
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:bundle_downloads]).to eq(
+          [{ id: purchase1.link.external_id, label: "Bundle", download_url: nil }]
+        )
+        expect(purchase1.link.product_files_archives.alive).to be_empty
+      end
+
       it "matches nothing when no selected bundle id resolves to a product" do
         expect(results(bundle_ids: ["garbage"])).to be_empty
       end

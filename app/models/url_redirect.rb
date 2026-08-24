@@ -155,9 +155,11 @@ class UrlRedirect < ApplicationRecord
   def bundle_archive_product_files
     return ProductFile.none unless purchase&.is_bundle_purchase?
 
-    file_ids = purchase.product_purchases.visible_in_library.includes(:url_redirect).flat_map do |product_purchase|
-      url_redirect = product_purchase.url_redirect
-      next [] if url_redirect.blank? || !url_redirect.with_product_files.is_downloadable?
+    member_redirects = purchase.product_purchases.visible_in_library.includes(:url_redirect).filter_map(&:url_redirect)
+    return ProductFile.none if member_redirects.any? { _1.with_product_files.has_stampable_pdfs? }
+
+    file_ids = member_redirects.flat_map do |url_redirect|
+      next [] unless url_redirect.with_product_files.is_downloadable?
 
       url_redirect.alive_product_files.filter_map { _1.id if _1.archivable? }
     end.uniq
