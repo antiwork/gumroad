@@ -59,6 +59,10 @@ class Purchase::SyncStatusWithChargeProcessorService
                          !charge.try(:refunded) && !charge.try(:refunded?) && !charge.try(:disputed)
       charge_succeeded &&= @charge_outcome == :succeeded if @require_final_charge_status
 
+      if purchase.merchant_account.blank? && purchase.charge&.merchant_account.present?
+        purchase.update!(merchant_account: purchase.charge.merchant_account)
+      end
+
       if charge_succeeded && @charge_outcome == :succeeded && charge.flow_of_funds.nil? &&
          !purchase.stripe_charge_processor? && purchase.is_part_of_combined_charge?
         # Non-Stripe processors never produce a flow of funds (PaypalCharge deliberately skips

@@ -6,7 +6,7 @@ describe Purchase do
   describe "#load_flow_of_funds" do
     # load_flow_of_funds is private; exercised directly to cover nil processor flows.
     # Stripe, on Gumroad's own merchant account (no user => funds held by Gumroad).
-    let(:purchase) { create(:purchase, merchant_account: create(:merchant_account, user: nil)) }
+    let(:purchase) { create(:purchase, merchant_account: create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")) }
     let(:processor_charge) { OpenStruct.new(flow_of_funds: nil) }
 
     context "when the processor charge has no flow of funds and the funds are Gumroad-held" do
@@ -38,11 +38,23 @@ describe Purchase do
       end
     end
 
+    context "when the processor charge has no flow of funds and merchant_account is nil" do
+      it "keeps the nil flow instead of treating unknown ownership as Gumroad-held USD" do
+        purchase.update_column(:merchant_account_id, nil)
+        purchase.reload
+
+        purchase.send(:load_flow_of_funds, processor_charge)
+
+        expect(processor_charge.flow_of_funds).to be_nil
+        expect(purchase.flow_of_funds).to be_nil
+      end
+    end
+
     context "when the processor charge has no flow of funds but the funds are seller-held" do
       # A destination charge into the seller's own Stripe account: nil means Stripe has not
       # produced the settlement data yet, and dollars here would become the holding amount of an
       # account denominated in its own currency — a balance no payout picks up.
-      let(:merchant_account) { create(:merchant_account, currency: Currency::EUR) }
+      let(:merchant_account) { create(:merchant_account, currency: Currency::EUR, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}") }
 
       before { purchase.update!(merchant_account:) }
 
@@ -100,6 +112,29 @@ describe Purchase do
         expect(purchase.flow_of_funds).to eq(provided)
         expect(purchase.flow_of_funds.issued_amount.currency).to eq(Currency::CAD)
       end
+    end
+  end
+
+  describe "#processor_settlement_deferrable?" do
+    let(:purchase) { create(:purchase, charge_processor_id: StripeChargeProcessor.charge_processor_id, merchant_account: create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")) }
+    it "is true when the purchase merchant account is missing and the charge is seller-held" do
+      merchant_account = create(:merchant_account, user: purchase.seller, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+      charge = create(:charge, seller: purchase.seller, merchant_account:)
+      purchase.update_column(:merchant_account_id, nil)
+      charge.purchases << purchase
+      purchase.reload
+
+      expect(purchase.merchant_account_id).to be_nil
+      expect(purchase.charge.merchant_account).to eq(merchant_account)
+      expect(purchase.processor_settlement_deferrable?).to be(true)
+    end
+
+    it "is true when Stripe ownership is unknown because merchant_account is nil" do
+      purchase.update_column(:merchant_account_id, nil)
+      purchase.reload
+
+      expect(purchase.charge).to be_nil
+      expect(purchase.processor_settlement_deferrable?).to be(true)
     end
   end
 end

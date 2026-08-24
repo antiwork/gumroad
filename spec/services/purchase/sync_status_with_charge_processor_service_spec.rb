@@ -220,6 +220,30 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(purchase.balance_transactions).to be_empty
   end
 
+  it "leaves a seller-held Stripe purchase in progress when settlement is missing and the purchase merchant account is nil" do
+    merchant_account = create(:merchant_account, user: @seller, currency: Currency::EUR,
+                                                 charge_processor_merchant_id: "acct_missing_ma")
+    charge = create(:charge, seller: @seller, merchant_account:, processor_transaction_id: "ch_missing_ma")
+    purchase = create(:purchase_in_progress, link: @product, seller: @seller,
+                                             charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                             merchant_account: nil, stripe_transaction_id: "ch_missing_ma",
+                                             flow_of_funds: nil)
+    charge.purchases << purchase
+    expect(purchase.reload.merchant_account_id).to be_nil
+    processor_charge = Struct.new(:id, :status, :refunded, :disputed, :flow_of_funds) do
+      def refunded? = refunded
+    end.new("ch_missing_ma", "succeeded", false, false, nil)
+    allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(processor_charge)
+    allow(ChargeProcessor).to receive(:charge_processor_success_statuses).and_return(["succeeded"])
+    expect(Purchase::MarkSuccessfulService).not_to receive(:new)
+
+    expect(described_class.new(purchase, require_final_charge_status: true).perform).to be(false)
+
+    expect(purchase.reload).to be_in_progress
+    expect(purchase.flow_of_funds).to be_nil
+    expect(purchase.merchant_account).to eq(merchant_account)
+  end
+
   it "uses subscription success handling for seller-held Stripe recurring purchases once settlement data exists" do
     product = create(:product, :is_subscription, user: @seller)
     subscription = create(:subscription, link: product)

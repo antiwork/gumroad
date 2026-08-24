@@ -1711,7 +1711,16 @@ class Purchase < ApplicationRecord
   end
 
   def processor_settlement_deferrable?
-    stripe_charge_processor? && (buyer_presentment? || charge&.charge_presentment.present? || !funds_held_by_gumroad?)
+    return false unless stripe_charge_processor?
+
+    # funds_held_by_gumroad? treats merchant_account == nil as Gumroad-held, but
+    # sync already persists that shape for a charged seller-held row. Read the
+    # charge too, and treat unknown ownership as deferrable.
+    buyer_presentment? ||
+      charge&.charge_presentment.present? ||
+      !funds_held_by_gumroad? ||
+      charge&.merchant_account&.user_id.present? ||
+      merchant_account.nil?
   end
 
   def buyer_presentment_currency
@@ -4616,8 +4625,9 @@ class Purchase < ApplicationRecord
       # arrived yet (StripeCharge#build_flow_of_funds), and dollars there become the holding
       # amount of an account denominated in its own currency — a balance no payout picks up
       # (gumroad-private#1471). Presentment stays nil for the same reason.
-      if funds_held_by_gumroad? && !buyer_presentment?
+      if funds_held_by_gumroad? && merchant_account.present? && !buyer_presentment?
         # Sized to the whole charge, because the combined-charge split below divides by it.
+        # Do not mint USD when merchant_account is nil: that is also the unprepared seller-held shape.
         flow_amount_cents = is_part_of_combined_charge? ? charge.amount_cents : total_transaction_cents
         processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, flow_amount_cents)
       end
