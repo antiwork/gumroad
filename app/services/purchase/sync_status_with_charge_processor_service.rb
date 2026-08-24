@@ -87,7 +87,7 @@ class Purchase::SyncStatusWithChargeProcessorService
         purchase.merchant_account = purchase.send(:prepare_merchant_account, purchase.charge_processor_id) unless purchase.merchant_account.present?
         if purchase.balance_transactions.exists?
           purchase.mark_successful!
-        elsif purchase.buyer_presentment? && purchase.is_recurring_subscription_charge
+        elsif purchase.is_recurring_subscription_charge
           purchase.subscription.handle_purchase_success(purchase)
         else
           Purchase::MarkSuccessfulService.new(purchase).perform

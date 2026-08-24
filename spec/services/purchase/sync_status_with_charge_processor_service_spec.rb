@@ -220,6 +220,34 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(purchase.balance_transactions).to be_empty
   end
 
+  it "uses subscription success handling for seller-held Stripe recurring purchases once settlement data exists" do
+    product = create(:product, :is_subscription, user: @seller)
+    subscription = create(:subscription, link: product)
+    create(:membership_purchase, link: product, seller: @seller, subscription:)
+    merchant_account = create(:merchant_account, user: @seller, currency: Currency::EUR,
+                                                 charge_processor_merchant_id: "acct_recurring_settled")
+    charge = create(:charge, seller: @seller, merchant_account:, processor_transaction_id: "ch_recurring_settled")
+    purchase = create(:recurring_membership_purchase, link: product, seller: @seller, subscription:,
+                                                      purchase_state: "in_progress",
+                                                      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                                      merchant_account:, stripe_transaction_id: "ch_recurring_settled",
+                                                      flow_of_funds: nil)
+    charge.purchases << purchase
+    processor_charge = Struct.new(:id, :status, :refunded, :disputed, :flow_of_funds) do
+      def refunded? = refunded
+    end.new("ch_recurring_settled", "succeeded", false, false,
+            FlowOfFunds.build_simple_flow_of_funds(Currency::EUR, purchase.total_transaction_cents))
+    allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(processor_charge)
+    allow(ChargeProcessor).to receive(:charge_processor_success_statuses).and_return(["succeeded"])
+    allow(purchase).to receive(:subscription).and_return(subscription)
+    expect(subscription).to receive(:handle_purchase_success).with(purchase).and_call_original
+    expect(Purchase::MarkSuccessfulService).not_to receive(:new)
+
+    expect(described_class.new(purchase, require_final_charge_status: true).perform).to be(true)
+
+    expect(purchase.reload).to be_successful
+  end
+
   it "does not mark a client-confirmed purchase failed when its finalizer is unavailable" do
     order = create(:order)
     charge = create(:charge, order:, seller: @seller, client_confirmed: true,
