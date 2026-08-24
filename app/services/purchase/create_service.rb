@@ -231,7 +231,9 @@ class Purchase::CreateService < Purchase::BaseService
         token: params[:buyer_currency_quote],
         seller_id: purchase.seller.id,
         permalink: purchase.link.unique_permalink,
-        currency: purchase.link.price_currency_type
+        currency: purchase.link.price_currency_type,
+        uid: params[:buyer_currency_quote_line_uid],
+        line_index: params[:buyer_currency_quote_line_index]
       )
     end
 

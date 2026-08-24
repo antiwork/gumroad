@@ -56,7 +56,7 @@ class Order::CreateService
     cart_items = line_items.map { _1.slice(:permalink, :price_cents) }
     spent_once_per_cart_allocations = Set.new
 
-    line_items.each do |line_item_params|
+    line_items.each_with_index do |line_item_params, line_item_index|
       submitted_discount_code = line_item_params[:discount_code]
       product = Link.find_by(unique_permalink: line_item_params[:permalink])
       line_item_uid = line_item_params[:uid]
@@ -120,7 +120,9 @@ class Order::CreateService
             )
         ).merge(
           submitted_pre_discount_price_cents: submitted_pre_discount_price_cents(line_item_params, allocated_discount),
-          once_per_cart_discount_allocation:
+          once_per_cart_discount_allocation:,
+          buyer_currency_quote_line_uid: line_item_uid,
+          buyer_currency_quote_line_index: line_item_index
         )
 
         # Card params are excluded from build_purchase_params (charging is handled by

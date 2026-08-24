@@ -57,7 +57,7 @@ class Checkout::BuyerCurrencyQuote
   # components mirror the layout Charge::PresentmentAllocator allocates at charge time
   # (price, tip, seller tax, Gumroad tax, shipping), so the quote-time allocation and the
   # persisted purchase rows are computed from identical inputs.
-  LineItem = Struct.new(:permalink, :product, :price_cents, :tip_cents,
+  LineItem = Struct.new(:permalink, :uid, :line_index, :product, :price_cents, :tip_cents,
                         :seller_tax_cents, :gumroad_tax_cents, :shipping_cents,
                         :charge_price_cents, :charge_tip_cents,
                         :charge_seller_tax_cents, :charge_gumroad_tax_cents,
@@ -89,7 +89,7 @@ class Checkout::BuyerCurrencyQuote
     def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:,
                             charge_tax_result: nil, charge_tip_cents: nil, charge_shipping_usd_cents: nil,
                             later_charge_kind: nil, later_charge_price_cents: nil, charge_now: true,
-                            listed_currency_rate: nil)
+                            listed_currency_rate: nil, uid: nil, line_index: nil)
       price_cents = tax_result.price_cents.to_i
       # The submitted price and tip are buyer-controlled request params. A crafted
       # negative price would make clamp's bounds invalid (min > max) and raise, and a
@@ -116,6 +116,8 @@ class Checkout::BuyerCurrencyQuote
 
       new(
         permalink:,
+        uid:,
+        line_index:,
         product:,
         price_cents: price_cents - tip_cents,
         tip_cents:,
@@ -353,7 +355,7 @@ class Checkout::BuyerCurrencyQuote
   # constructing a non-USD listed purchase from a quote token: the display price remains in the
   # product's listed currency, but the charge must use the canonical component split the quote
   # signed, or a rounded listed tip can make charge-time verification fail.
-  def self.canonical_components_hint(token:, seller_id:, permalink:, currency:)
+  def self.canonical_components_hint(token:, seller_id:, permalink:, currency:, uid: nil, line_index: nil)
     return if token.blank?
 
     payload = verifier.verify(token)
@@ -363,7 +365,20 @@ class Checkout::BuyerCurrencyQuote
     return if Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
     return unless charge_payload.dig("listed_currency_codes", permalink.to_s).to_s.casecmp?(currency.to_s)
 
-    components = charge_payload.dig("canonical_line_components", permalink.to_s)
+    components_payload = charge_payload["canonical_line_components"]
+    components = if components_payload.is_a?(Hash)
+      components_payload[permalink.to_s]
+    elsif components_payload.is_a?(Array)
+      if uid.present?
+        components_payload.find { |line| line.is_a?(Hash) && line["uid"].to_s == uid.to_s } ||
+          (!line_index.nil? && components_payload.find { |line| line.is_a?(Hash) && line["line_index"].to_i == line_index.to_i })
+      elsif !line_index.nil?
+        components_payload.find { |line| line.is_a?(Hash) && line["line_index"].to_i == line_index.to_i }
+      else
+        matching_components = components_payload.select { |line| line.is_a?(Hash) && line["permalink"].to_s == permalink.to_s }
+        matching_components.sole if matching_components.one?
+      end
+    end
     return if components.blank?
 
     {
@@ -424,7 +439,7 @@ class Checkout::BuyerCurrencyQuote
     # A negative component means the submitted request was malformed (prices and tips
     # are sanitized above, but defense in depth: never lock a quote whose lines could
     # not represent a real cart).
-    return false if line_items.any? { |line| line.to_h.except(:permalink, :product, :later_charge_kind, :listed_currency_rate).values.compact.any?(&:negative?) }
+    return false if line_items.any? { |line| line.to_h.except(:permalink, :uid, :product, :later_charge_kind, :listed_currency_rate).values.compact.any?(&:negative?) }
     # A line item can carry a nil product when the caller built it from a product lookup
     # that found nothing (seen from an ad-hoc QA script — Sentry GUMROAD-Z5). The surcharge
     # endpoint already withholds the quote for unknown products, but the service must not
@@ -774,17 +789,17 @@ class Checkout::BuyerCurrencyQuote
           next if line_item.charge_canonical_total_cents.zero?
 
           components = line_item.charge_canonical_component_cents
-          [
-            line_item.permalink.to_s,
-            {
-              price_cents: components[0].to_i,
-              tip_cents: components[1].to_i,
-              seller_tax_cents: components[2].to_i,
-              gumroad_tax_cents: components[3].to_i,
-              shipping_cents: components[4].to_i,
-            }
-          ]
-        end.to_h,
+          {
+            uid: line_item.uid.presence,
+            line_index: line_item.line_index,
+            permalink: line_item.permalink.to_s,
+            price_cents: components[0].to_i,
+            tip_cents: components[1].to_i,
+            seller_tax_cents: components[2].to_i,
+            gumroad_tax_cents: components[3].to_i,
+            shipping_cents: components[4].to_i,
+          }.compact
+        end,
         # Built from the EXACT converted total plus the rounding difference, so the tax the
         # checkout displays is the true converted tax and the cosmetic difference shows up on
         # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).

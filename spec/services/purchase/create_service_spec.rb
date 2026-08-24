@@ -16,7 +16,7 @@ describe Purchase::CreateService, :vcr do
       "listed_currency_codes" => { product.unique_permalink => product.price_currency_type.to_s.downcase },
     }
     if canonical_components.present?
-      charge["canonical_line_components"] = { product.unique_permalink => canonical_components.stringify_keys }
+      charge["canonical_line_components"] = canonical_components.is_a?(Array) ? canonical_components : { product.unique_permalink => canonical_components.stringify_keys }
     end
     payload = { "charges" => [charge] }
     Rails.application.message_verifier(Checkout::BuyerCurrencyQuote::TOKEN_PURPOSE).generate(payload)
@@ -147,6 +147,52 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.tip.value_cents).to eq(1_00)
     expect(purchase.tip.value_usd_cents).to eq(1_26)
     expect(purchase.total_transaction_cents).to eq(13_76)
+  end
+
+  it "selects the matching signed components for repeated product rows" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: [
+        {
+          "line_index" => 0,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_26,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+        {
+          "line_index" => 1,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 15_00,
+          "tip_cents" => 1_27,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+      ]
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        buyer_currency_quote_line_index: 1,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip.value_usd_cents).to eq(1_27)
+    expect(purchase.total_transaction_cents).to eq(16_27)
   end
 
   it "creates a purchase and sets the proper state" do

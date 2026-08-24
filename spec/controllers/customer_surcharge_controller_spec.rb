@@ -181,7 +181,7 @@ describe CustomerSurchargeController, :vcr do
       allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR).and_return("0.8")
 
       post "calculate_all", params: {
-        products: [{ permalink: eur_product.unique_permalink, price: 13_75, tip_cents: 1_25, quantity: 1 }],
+        products: [{ uid: "line-a", permalink: eur_product.unique_permalink, price: 13_75, tip_cents: 1_25, quantity: 1 }],
         buyer_currency: Currency::CAD,
       }, as: :json
 
@@ -192,7 +192,8 @@ describe CustomerSurchargeController, :vcr do
         token: quote.fetch("token"),
         seller_id: @user.id,
         permalink: eur_product.unique_permalink,
-        currency: Currency::EUR
+        currency: Currency::EUR,
+        uid: "line-a"
       )).to include(price_cents: 12_50, tip_cents: 1_25)
     end
 
