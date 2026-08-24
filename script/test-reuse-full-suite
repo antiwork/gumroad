@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# Offline checks for bin/reuse-full-suite.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT="$ROOT/bin/reuse-full-suite"
+FAKE="$(mktemp -d)"
+trap 'rm -rf "$FAKE"' EXIT
+
+cat > "$FAKE/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+jq_expr=""
+path=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--jq" ]; then
+    jq_expr="$a"
+  fi
+  case "$a" in
+    repos/*) path="$a" ;;
+  esac
+  prev="$a"
+done
+apply() {
+  if [ -n "$jq_expr" ]; then
+    jq -r "$jq_expr"
+  else
+    cat
+  fi
+}
+if [[ "$path" == */git/commits/mainsha ]]; then
+  echo '{"tree":{"sha":"TREE_MAIN"}}' | apply
+elif [[ "$path" == */git/commits/prhead ]]; then
+  echo '{"tree":{"sha":"TREE_MAIN"}}' | apply
+elif [[ "$path" == */git/commits/otherhead ]]; then
+  echo '{"tree":{"sha":"TREE_OTHER"}}' | apply
+elif [[ "$path" == */commits/mainsha/pulls ]]; then
+  cat "${GH_FIXTURE_DIR}/pulls.json" | apply
+elif [[ "$path" == */pulls/1 ]]; then
+  echo '{"head":{"sha":"prhead"}}' | apply
+elif [[ "$path" == */pulls/2 ]]; then
+  echo '{"head":{"sha":"otherhead"}}' | apply
+elif [[ "$path" == *actions/runs* && "$path" == *head_sha=prhead* ]]; then
+  cat "${GH_FIXTURE_DIR}/runs-green.json" | apply
+elif [[ "$path" == *actions/runs* && "$path" == *head_sha=* ]]; then
+  echo '{"workflow_runs":[]}' | apply
+elif [[ "$path" == */actions/runs/88/jobs* ]]; then
+  cat "${GH_FIXTURE_DIR}/jobs-noop.json" | apply
+elif [[ "$path" == */actions/runs/99/jobs* ]]; then
+  cat "${GH_FIXTURE_DIR}/jobs-full.json" | apply
+else
+  echo "unexpected gh api path=$path" >&2
+  exit 1
+fi
+EOF
+chmod +x "$FAKE/gh"
+
+mkdir -p "$FAKE/fix"
+write_workflow() {
+  python3 - "$FAKE/tests.yml" "$1" "$2" <<'PY'
+import sys
+path, fast_count, slow_count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+def numbers(count):
+    return ", ".join(str(i) for i in range(count))
+open(path, "w").write(f"""name: Tests
+jobs:
+  test_fast:
+    name: Test Fast ${{{{ matrix.ci_node_index }}}}
+    strategy:
+      matrix:
+        ci_node_total: [{fast_count}]
+        ci_node_index: [{numbers(fast_count)}]
+  test_slow:
+    name: Test Slow ${{{{ matrix.ci_node_index }}}}
+    strategy:
+      matrix:
+        ci_node_total: [{slow_count}]
+        ci_node_index: [{numbers(slow_count)}]
+""")
+PY
+}
+write_jobs() {
+  python3 - "$3" "$1" "$2" <<'PY'
+import json, sys
+path, fast_count, slow_count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+jobs = [
+    {"name": f"Test Fast {i}", "conclusion": "success"}
+    for i in range(fast_count)
+] + [
+    {"name": f"Test Slow {i}", "conclusion": "success"}
+    for i in range(slow_count)
+]
+open(path, "w").write(json.dumps({"jobs": jobs}) + "\n")
+PY
+}
+write_workflow 18 50
+printf '[{"number":1}]\n' > "$FAKE/fix/pulls.json"
+printf '{"workflow_runs":[{"name":"Tests","conclusion":"success","id":99}]}\n' > "$FAKE/fix/runs-green.json"
+write_jobs 18 50 "$FAKE/fix/jobs-full.json"
+printf '{"jobs":[{"name":"Test Fast 0 (internal PR noop)","conclusion":"success"},{"name":"Test Relevant 0","conclusion":"success"}]}\n' > "$FAKE/fix/jobs-noop.json"
+
+run() {
+  TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha
+}
+
+out=$(run)
+test "$out" = "reuse=true" || { echo "FAIL expected reuse=true got [$out]"; exit 1; }
+echo "ok same-tree full suite"
+
+write_jobs 18 49 "$FAKE/fix/jobs-full.json"
+out=$(run)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false with an incomplete matrix got [$out]"; exit 1; }
+echo "ok incomplete matrix is not reusable"
+
+write_workflow 18 51
+write_jobs 18 50 "$FAKE/fix/jobs-full.json"
+out=$(run)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false when workflow matrix grew got [$out]"; exit 1; }
+echo "ok workflow matrix drift fail-closes"
+
+write_jobs 18 51 "$FAKE/fix/jobs-full.json"
+out=$(run)
+test "$out" = "reuse=true" || { echo "FAIL expected reuse=true with expanded workflow matrix got [$out]"; exit 1; }
+echo "ok workflow matrix counts derive from workflow"
+
+write_workflow 18 50
+write_jobs 18 50 "$FAKE/fix/jobs-full.json"
+
+printf '[{"number":2}]\n' > "$FAKE/fix/pulls.json"
+out=$(run)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false on tree mismatch got [$out]"; exit 1; }
+echo "ok different tree"
+
+printf '[]\n' > "$FAKE/fix/pulls.json"
+out=$(run)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false with no PR got [$out]"; exit 1; }
+echo "ok no PR"
+
+printf '[{"number":1}]\n' > "$FAKE/fix/pulls.json"
+printf '{"workflow_runs":[{"name":"Tests","conclusion":"success","id":88}]}\n' > "$FAKE/fix/runs-green.json"
+out=$(run)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false when only Relevant/noop ran got [$out]"; exit 1; }
+echo "ok relevant-only is not reusable"
+
+# Newest Tests run is the pull_request_target noop; older run has Fast+Slow.
+printf '{"workflow_runs":[{"name":"Tests","conclusion":"success","id":88},{"name":"Tests","conclusion":"success","id":99}]}\n' > "$FAKE/fix/runs-green.json"
+out=$(run)
+test "$out" = "reuse=true" || { echo "FAIL expected reuse=true when a later run has Fast+Slow got [$out]"; exit 1; }
+echo "ok noop does not shadow a green full suite"
+
+printf '{"workflow_runs":[{"name":"Tests","conclusion":"success","id":99}]}\n' > "$FAKE/fix/runs-green.json"
+out=$(GITHUB_ACTIONS=1 GITHUB_EVENT_NAME=pull_request_target GITHUB_REF=refs/heads/main TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false off main event got [$out]"; exit 1; }
+echo "ok refuse pull_request_target"
+
+out=$(GITHUB_ACTIONS=1 GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha)
+test "$out" = "reuse=true" || { echo "FAIL expected reuse=true on GHA main push got [$out]"; exit 1; }
+echo "ok allow GHA main push"
+
+# pulls/<n> 404 must emit reuse=false, not die with empty stdout.
+cat > "$FAKE/gh-fail-pull" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+jq_expr=""
+path=""
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--jq" ]; then jq_expr="$a"; fi
+  case "$a" in repos/*) path="$a" ;; esac
+  prev="$a"
+done
+apply() { if [ -n "$jq_expr" ]; then jq -r "$jq_expr"; else cat; fi; }
+if [[ "$path" == */git/commits/mainsha ]]; then echo '{"tree":{"sha":"TREE_MAIN"}}' | apply
+elif [[ "$path" == */commits/mainsha/pulls ]]; then echo '[{"number":1}]' | apply
+elif [[ "$path" == */pulls/1 ]]; then echo "boom" >&2; exit 1
+else echo "unexpected $path" >&2; exit 1
+fi
+EOF
+chmod +x "$FAKE/gh-fail-pull"
+out=$(TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH="$FAKE/gh-fail-pull" "$SCRIPT" mainsha || true)
+test "$out" = "reuse=false" || { echo "FAIL expected reuse=false on pulls 404 got [$out]"; exit 1; }
+echo "ok pulls 404 fail-closes"
+
+echo ALL_OK

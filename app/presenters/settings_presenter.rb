@@ -255,7 +255,10 @@ class SettingsPresenter
       payouts_paused_by_user: seller.payouts_paused_by_user?,
       payout_threshold_cents: seller.payout_threshold_cents,
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
-      payout_country_name: Compliance::Countries.for_select.to_h[seller.alive_user_compliance_info&.legal_entity_country_code],
+      # Name lookup must not go through `for_select` — that list omits Stripe-restricted
+      # countries, but a seller already recorded there still needs their country named
+      # in payout-threshold / PayPal-rail copy (not the "your country" fallback).
+      payout_country_name: Compliance::Countries.mapping[seller.alive_user_compliance_info&.legal_entity_country_code],
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
       # Daily payouts are executed as Stripe instant payouts, so they carry the same

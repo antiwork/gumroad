@@ -81,6 +81,28 @@ class Api::V2::BaseController < ApplicationController
       "custom_html is too long (maximum is #{Page::MAX_CUSTOM_HTML_LENGTH} characters)."
     end
 
+    # Validated candidate for the dry-run preview endpoints. When a root page is
+    # already live, the preview validates THAT page with the new HTML swapped in
+    # memory: moderation's over-budget exception keys on `persisted?` and
+    # `custom_html_was`, so an unsaved stand-in would preview-reject a 1:1 image
+    # swap the real write allows. Attributes are restored afterward so nothing
+    # is saved.
+    def validate_custom_html_preview_candidate(pageable, sanitized_html)
+      live = nil
+      live = pageable.page
+      return Page.new(pageable:, custom_html: sanitized_html, moderation_preview: true).tap(&:validate) if live.nil?
+
+      live.moderation_preview = true
+      live.custom_html = sanitized_html
+      live.validate
+      live
+    ensure
+      if live
+        live.restore_attributes
+        live.moderation_preview = nil
+      end
+    end
+
     def log_method_use
       return unless current_resource_owner.present?
       return unless doorkeeper_token.present?

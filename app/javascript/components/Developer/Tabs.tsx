@@ -1,20 +1,22 @@
-import { CodeAlt, NoteBook } from "@boxicons/react";
+import { BarChartBig, CodeAlt, NoteBook } from "@boxicons/react";
 import * as React from "react";
 
 import { Tab, TabIcon, Tabs as TabsComponent } from "$app/components/ui/Tabs";
 
-export type Tab = "overlay" | "embed";
+export type Tab = "overlay" | "embed" | "analytics";
 
 export const Tabs = ({
   tab,
   setTab,
   overlayTabpanelUID,
   embedTabpanelUID,
+  analyticsTabpanelUID,
 }: {
   tab: Tab;
   setTab: React.Dispatch<React.SetStateAction<Tab>>;
   overlayTabpanelUID?: string;
   embedTabpanelUID?: string;
+  analyticsTabpanelUID?: string;
 }) => (
   <TabsComponent variant="buttons">
     <Tab onClick={() => setTab("overlay")} isSelected={tab === "overlay"} aria-controls={overlayTabpanelUID}>
@@ -35,6 +37,15 @@ export const Tabs = ({
       <div>
         <h4 className="font-bold">Embed</h4>
         <small className="block text-sm">Embed on your website, blog posts & more.</small>
+      </div>
+    </Tab>
+    <Tab onClick={() => setTab("analytics")} isSelected={tab === "analytics"} aria-controls={analyticsTabpanelUID}>
+      <TabIcon>
+        <BarChartBig pack="filled" className="size-5" />
+      </TabIcon>
+      <div>
+        <h4 className="font-bold">Analytics</h4>
+        <small className="block text-sm">Count views from a page you host yourself.</small>
       </div>
     </Tab>
   </TabsComponent>

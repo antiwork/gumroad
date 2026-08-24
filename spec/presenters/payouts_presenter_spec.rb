@@ -39,6 +39,23 @@ describe PayoutsPresenter do
     end
   end
 
+  describe "balance stats payload" do
+    # The page reads two keys off the service and builds its past periods itself, so the
+    # per-payout aggregates in the rest of the payload must not be built here.
+    it "does not build the rest of the balance stats payload" do
+      user = create(:user, user_risk_state: "compliant")
+      3.times { |i| create(:payment_completed, user:, created_at: (i + 1).weeks.ago) }
+      service = UserBalanceStatsService.new(user:)
+      allow(UserBalanceStatsService).to receive(:new).with(user:).and_return(service)
+      expect(service).not_to receive(:generate)
+
+      instance = described_class.new(seller: user)
+
+      expect(instance.next_payout_period_data).to be_present
+      expect(instance.processing_payout_periods_data).to eq([])
+    end
+  end
+
   describe "#processing_payout_periods_data" do
     it "returns empty array when no processing payouts exist" do
       user = create(:user, user_risk_state: "compliant")

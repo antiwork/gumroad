@@ -233,9 +233,11 @@ Rails.application.routes.draw do
         if named_routes
           post :track_user_action, as: :track_user_action
           post :increment_views, as: :increment_views
+          get :increment_views
         else
           post :track_user_action
           post :increment_views
+          get :increment_views
         end
       end
     end
@@ -311,6 +313,7 @@ Rails.application.routes.draw do
     get "/gumroad", to: "embedded_javascripts#overlay"
     get "/gumroad-overlay", to: "embedded_javascripts#overlay"
     get "/gumroad-embed", to: "embedded_javascripts#embed"
+    get "/gumroad-analytics", to: "embedded_javascripts#analytics"
     get "/gumroad-multioverlay", to: "embedded_javascripts#overlay"
   end
 
@@ -927,6 +930,7 @@ Rails.application.routes.draw do
         post :publish
         post :unpublish
         post :increment_views
+        get :increment_views
         post :track_user_action
         put :sections, action: :update_sections
       end

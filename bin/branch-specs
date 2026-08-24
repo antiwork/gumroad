@@ -6,8 +6,10 @@
 # for files whose behavior many end-to-end specs depend on.
 #
 # Branch CI runs exactly this list (see .github/workflows/tests.yml
-# test_relevant); main still runs everything before a deploy, and a PR can
-# opt into the full suite with the run-all-specs label.
+# test_relevant). Main still requires a green full suite before deploy, but
+# skips re-running Fast/Slow when the merge commit is the same git tree as a
+# PR that already passed them (bin/reuse-full-suite). A PR can opt into the
+# full suite with the run-all-specs label.
 #
 # Exits 3 (ESCALATE) when the diff cannot be mapped safely — dependency,
 # config, migration, factory, or unmapped-helper changes, or a selection so

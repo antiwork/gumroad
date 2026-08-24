@@ -15,15 +15,8 @@ class Checkout::StripePaymentPresenter
   # natively (instead of the deprecated Payment Request Button rendering them next to it) and the
   # Payment Request Button is not mounted for that cart. Rollout flag for antiwork/gumroad#5768.
   PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME
-  # Ramp flag for wallets on the buyer-currency (FX-quoted) presentment lane, gumroad-private#1436.
-  # Separate from PAYMENT_ELEMENT_WALLETS_FEATURE_NAME (at 100% since July 2026) because this lane
-  # has a distinct risk: the wallet sheet quotes a locked local-currency total from an FX quote, so
-  # it needs its own kill switch that does not take wallets off every other checkout with it.
-  # Keyed per seller and ANDed with the general wallet flag — a seller must be in BOTH.
-  #
-  # Both names are borrowed from Checkout::BuyerCurrencyEligibility, which owns them, so the
-  # wallet rows this presenter renders and the wallet charges that service accepts can never
-  # end up reading different flags.
+  # FX-quoted wallet kill switch; ANDed with PAYMENT_ELEMENT_WALLETS. Names owned by
+  # Checkout::BuyerCurrencyEligibility so render and charge cannot drift.
   BUYER_CURRENCY_WALLETS_FEATURE_NAME = Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
@@ -71,50 +64,12 @@ class Checkout::StripePaymentPresenter
       return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
     end
 
-    # FX-quoted buyer-currency candidates use server-confirm because the deferred-intent path does
-    # not consume their locked quote token. Its currency-less PaymentMethod lets the charge path
-    # price the intent from the verified quote after the Element displays that same amount.
-    #
-    # Wallets are allowed here when the rollout flag below is on, because on this lane the
-    # element's wallet sheet quotes the SAME locked buyer-currency total the cart displays: the
-    # browser mounts the element from the FX quote in the surcharge response, and the charge
-    # verifies that quote's signed token. A wallet payment therefore charges what its sheet
-    # showed. Three properties make that safe, all covered by specs — the sheet reads the quote
-    # (getStripePaymentElementAmount), the purchase carries the quote token, and a wallet whose
-    # adopted billing address moves the tax location is held and re-confirmed rather than
-    # submitted (resolveHeldWalletPayment). Ramped per seller by
-    # BUYER_CURRENCY_WALLETS_FEATURE_NAME so it can be pulled instantly.
-    #
-    # This branch has to come before the client-confirm one below, and the reason is a
-    # correctness constraint rather than a preference. When a cart is a presentment candidate
-    # and the buyer's currency supports quoting, the surcharge endpoint quotes it, and the
-    # browser then both displays the quoted local total and submits the quote token with the
-    # payment. The client-confirm lane cannot honor a token:
-    # Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote fails the
-    # purchase closed rather than charge canonical USD behind a local-currency total, so
-    # sending a quoted cart there makes every payment attempt on it fail. The rule: if the
-    # surcharge endpoint would quote the cart, checkout must mount a lane that can honor the
-    # quote (this element, or CardElement via the fallback above).
-    #
-    # A candidate can also go unquoted, and that cart takes this branch too. A buyer whose
-    # GeoIP currency is USD sees a candidate display for a non-USD listing, but the quote
-    # service returns nothing for USD buyers, so the cart renders plain canonical USD and
-    # submits no token. That is safe; it does mean this element replaces the local-method
-    # tabs for those viewers.
-    #
-    # The two shapes really can overlap, and this is where that is decided. A product listed in
-    # a forced currency, bought by someone whose own currency is different — a EUR product and a
-    # Canadian buyer — is both a quote candidate and a method-forced cart. The quote lane takes
-    # it: the buyer sees CA$, which is the point of quoting, and the local methods it gives up
-    # (iDEAL, Bancontact) require a bank in the country that issues them, so a Canadian buyer
-    # could never have paid with them anyway.
-    #
-    # The carts the method-forced lane exists for are untouched, because they are not
-    # candidates. That lane serves a buyer paying a product listed in their OWN currency (a
-    # Dutch buyer on a EUR product, a Brazilian buyer on a BRL one — #6346), and
-    # buyer_currency_display_props returns display_mode "default" when the two currencies
-    # match, so those carts are never quoted, produce no candidate here, and fall through to
-    # the client-confirm branch below with their local method tabs intact.
+    # Server-confirm: deferred-intent does not consume the quote token.
+    # Before client-confirm — Prepare#block_unexpected_buyer_currency_quote fails closed
+    # on a token rather than charge USD behind a local total.
+    # Unquoted USD-GeoIP candidates take this branch too (no local-method tabs).
+    # Quote candidate + method-forced (EUR listing, CAD buyer) wins here; own-currency
+    # method-forced carts are not candidates and fall through.
     if buyer_currency_presentment_element_shape?(checkout_items)
       return payment_element_props(
         STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
@@ -209,28 +164,9 @@ class Checkout::StripePaymentPresenter
         payment_method_resolver.resolve.client_confirm_eligible?
     end
 
-    # A cart that reads as zero here only because the buyer has not named their price yet (see the
-    # zero-total comment in fallback_reason_for). Such a cart keeps the Payment Element, but it must
-    # take the canonical server-confirm lane rather than the client-confirm one, because everything
-    # the client-confirm lane fixes at page load is derived from a total that does not exist yet:
-    #
-    #   1. A listed-currency surface mounts the Element with a server-rendered
-    #      presentment_amount_cents — the cart's listed subtotal in the forced currency. On a
-    #      pay-what-you-want cart that number is 0, and the browser prefers it over its own total
-    #      for the whole session (getStripePaymentElementAmount returns it whenever it is non-null),
-    #      so the Element would still be mounted at zero after the buyer typed $25.
-    #   2. The Element's payment_method_types must equal the deferred intent's, or Stripe rejects
-    #      the payment_method_types-scoped ConfirmationToken and the buyer cannot pay with ANY
-    #      method, card included. Klarna's gate is cart-total-dependent
-    #      (KLARNA_MIN_USD_CHARGE_CENTS), so a cart that mounts at zero resolves without Klarna
-    #      while Order::PreparePaymentIntentService — which re-resolves from the real purchase
-    #      amounts — adds it back once the buyer has named an eligible amount.
-    #
-    # The canonical server-confirm Payment Element has neither property: its amount is derived in
-    # the browser from the loaded total (and the browser declines to mount below Stripe's minimum
-    # until a real total exists), and it carries a fixed ["card"] method list with no deferred
-    # intent to match. So a pending-price cart still gets the Payment Element and its wallets; it
-    # gives up only the local payment methods, which it could not have mounted correctly anyway.
+    # PWYW at load reads as zero. Stay on server-confirm Payment Element: client-confirm
+    # would freeze presentment_amount_cents at 0 (browser prefers a non-null server amount)
+    # and a Klarna-less method set that later mismatches the deferred intent.
     def price_still_pending?(items)
       !items.sum { _1[:price_cents].to_i }.positive? && items.any? { _1[:has_customizable_price] }
     end
@@ -249,14 +185,9 @@ class Checkout::StripePaymentPresenter
         # whole cart is priced in the currency they force). Mixed-currency and USD carts pass nil —
         # they mount the canonical USD element, where forced-currency methods must never appear.
         cart_product_currency: uniform_method_forced_currency(items),
-        # The Klarna amount-window gate's input (see the resolver). Pre-tax, pre-discount cart
-        # total including quantities — price_cents is the per-unit price and quantity is a
-        # separate field, so a 100 × $50 cart must read $5,000 here, not $50: undercounting
-        # would render Klarna on carts whose real total is outside Stripe's window, and the
-        # buyer's confirm would then fail with no recourse. Prepare re-checks against the final
-        # charged total, so a total that drifts out of Klarna's window after tax/tip/discounts
-        # fails closed there instead of at Stripe. Only meaningful for USD-priced carts;
-        # forced-currency carts never offer Klarna (see the resolver's launched_method_set).
+        # Pre-tax, pre-discount, quantity-inclusive. price_cents is per-unit — 100 × $50
+        # must be 5000, or Klarna mounts on carts Stripe will reject. Prepare re-checks
+        # the charged total. USD carts only; forced-currency never offers Klarna.
         cart_total_usd_cents: items.all? { _1[:product_currency] == Currency::USD } ? items.sum { _1[:price_cents].to_i * (_1[:quantity] || 1).to_i } : nil,
         # Only the narrow registration shape may use the recurring client-confirm lane.
         recurring_upi_registration: recurring_upi_registration_shape?(items),
@@ -288,45 +219,21 @@ class Checkout::StripePaymentPresenter
       sellers.present? && sellers.all? { _1.present? && Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, _1) }
     end
 
-    # Same seller-complete keying as payment_element_wallets?, and ANDed with it: a seller must be
-    # in the general wallet rollout AND this lane's ramp before their buyer-currency checkouts
-    # offer a wallet. That means ramping the general flag down still removes wallets everywhere,
-    # while this flag scopes an emergency ramp-down to presentment carts only.
-    #
-    # The per-seller answer comes from Checkout::BuyerCurrencyEligibility.wallets_enabled?, the
-    # same predicate the charge path applies to an incoming wallet payment, so the surface and
-    # the charge decision cannot drift apart.
+    # Same seller-complete keying as payment_element_wallets?; charge path uses
+    # BuyerCurrencyEligibility.wallets_enabled? so surface and charge cannot drift.
     def buyer_currency_wallets?
       sellers.present? && sellers.all? { Checkout::BuyerCurrencyEligibility.wallets_enabled?(_1) }
     end
 
-    # Whether the checkout renders the flat payment-methods list (the Payment Element's
-    # accordion IS the payment-method selector — no outer "Card" radio row — with PayPal
-    # appended as one more matching row). Introduced with the element-wallets rollout
-    # (antiwork/gumroad#5768) and now decoupled from it so every Payment Element cart gets one
-    # layout: carts whose wallets are suppressed (the buyer-currency presentment lane,
-    # disable_wallets) render the same flat list with the wallet rows simply absent, instead of
-    # falling back to the legacy nested layout.
-    #
-    # The one deliberate exception: a cart that COULD take wallet payments while the
-    # payment_element_wallets flag is off (an emergency ramp-down of that flag) keeps the
-    # legacy layout, because that layout is where the deprecated Payment Request Button
-    # renders — ramping the flag to 0 must restore the previous wallet surface, not remove
-    # Apple Pay/Google Pay from checkout entirely. At the flag's steady state (100% since
-    # July 2026) this method is true for every Payment Element cart. Server-owned so the
-    # client never composes flags itself.
+    # Flat Payment Element list (no outer Card radio). Exception: wallets possible but
+    # payment_element_wallets off keeps the legacy layout so the Payment Request Button
+    # still renders.
     def flat_payment_methods?(disable_wallets)
       payment_element_wallets? || disable_wallets
     end
 
-    # U13 PPP method matrix input. True when any item offers a PPP discount for this buyer's GeoIP
-    # country AND that item's own seller enforces PPP payment verification — the case where prepare
-    # will run the funding-country check and a non-verifiable method would fail closed. Item-scoped
-    # (not cart-scoped): on a multi-seller Lane A cart, one seller disabling verification must not
-    # re-enable Link for another seller's still-verified PPP purchase. Keyed on discount
-    # AVAILABILITY (ppp_details for this ip), the same server-owned basis
-    # Order::PreparePaymentIntentService recomputes from the purchase's ip_country, so the Payment
-    # Element and the deferred intent gate identically (the step-1 method-set invariant).
+    # Item-scoped PPP verification: one seller disabling it must not re-enable Link for
+    # another seller's still-verified PPP item. Same GeoIP availability basis as prepare.
     def ppp_verification_applies?
       items.any? do |item|
         item[:ppp_discounted] && !item[:seller]&.purchasing_power_parity_payment_verification_disabled?
@@ -417,17 +324,8 @@ class Checkout::StripePaymentPresenter
 
       # Initial eligibility uses pre-tax item prices; the browser waits for the final loaded total.
       total_price_cents = items.sum { _1[:price_cents].to_i }
-      # A zero total normally means nothing will be charged (a free product), so the legacy card
-      # surface is the right place for it. But a pay-what-you-want product listed from zero also
-      # reads as zero HERE, because this runs when the page loads — before the buyer has typed an
-      # amount into the price field. Treating that as "free" picked the checkout surface for a
-      # cart the buyer then paid real money on: they entered $25 and were charged on the legacy
-      # CardElement, losing the Payment Element's local payment methods and wallets for no
-      # reason (gumroad-private#1430).
-      #
-      # So a zero total is only "not charged" when no item could still acquire a price. For a
-      # pay-what-you-want item the amount is unknown at load rather than zero, and the browser
-      # re-runs eligibility once the buyer commits a total, which is what decides the real charge.
+      # Zero is "not charged" only when no item can still acquire a price. PWYW at load
+      # is unknown, not free — treating it as free put paid carts on CardElement.
       if !total_price_cents.positive? && items.none? { _1[:has_customizable_price] }
         return "not_charged"
       end
@@ -439,15 +337,10 @@ class Checkout::StripePaymentPresenter
         return "stripe_payment_element_amount_below_minimum"
       end
       if items.any? { buyer_currency_presentment_candidate?(_1) }
-        # A candidate cart must mount a lane that can honor an FX quote (the buyer-currency
-        # element, or CardElement via this fallback) — the client-confirm lane fails a quoted
-        # payment closed. The only candidate carts still kicked back to CardElement are the
-        # ones the element shape cannot represent: carts mixing candidate and non-candidate
-        # items (a partial quote would mix local-currency and dollar lines, so the quote
-        # service refuses them) and carts past the quote's seller cap. The method-forced arm
-        # keeps uniform forced-currency carts on their local-method element when a
-        # non-candidate line breaks the presentment shape. Installments cannot use that arm
-        # because the resolver treats their later off-session payments as recurring.
+        # Candidates must mount a lane that can honor an FX quote; client-confirm fails closed.
+        # Mixed candidate/non-candidate carts and seller-cap overflows stay on CardElement.
+        # Uniform forced-currency non-candidates keep the local-method element; installments
+        # cannot (resolver treats later off-session payments as recurring).
         supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported
@@ -456,17 +349,8 @@ class Checkout::StripePaymentPresenter
       nil
     end
 
-    # Whether every item is a presentment candidate (candidate? covers the seller's flags and
-    # an active buyer-local display), within the number of charges the quote service prices
-    # (Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES — past it the endpoint withholds the
-    # quote, and the element would just fall back to dollars a moment later).
-    #
-    # There are deliberately no product-shape conditions here. The buyer-local display and the
-    # quote service own that policy (CurrencyHelper#buyer_currency_unquotable_product? and
-    # BuyerCurrencyQuote#quotable_line_item?, kept in lockstep), and a cart the quote service
-    # declines is safe on this element: no quote arrives, no token is minted, and the browser
-    # mounts canonical USD. Charge-time-only gates (merchant account model, GeoIP re-check,
-    # quote verification) stay in the eligibility service for the same reason.
+    # Every item a presentment candidate, within MAX_QUOTED_CHARGES. Product-shape policy
+    # lives on the quote service; a declined quote is safe here (browser mounts USD).
     def buyer_currency_presentment_element_shape?(items)
       return false if items.empty?
 
@@ -530,6 +414,14 @@ class Checkout::StripePaymentPresenter
       return false unless sellers.uniq.one?
       return false unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
       return false unless sellers.all? { Checkout::BuyerCurrencyEligibility.listed_currency_direct_charge_enabled?(_1) }
+      # Same account gates the surcharge menu applies in
+      # Checkout::BuyerCurrencyEligibility.direct_listed_line_items_eligible?: a seller whose
+      # charging account cannot create the intent must not get a listed-currency Element either,
+      # or the Element mounts in CAD while prepare refuses the charge.
+      seller = sellers.first
+      merchant_account = Checkout::BuyerCurrencyEligibility.charging_merchant_account(seller)
+      return false unless merchant_account&.stripe_charge_processor?
+      return false unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account, seller:)
 
       buyer_currency = buyer_currency_for_ip(ip).to_s.downcase
       return false if buyer_currency.blank? || buyer_currency == Currency::USD

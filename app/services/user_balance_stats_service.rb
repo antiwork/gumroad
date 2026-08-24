@@ -10,13 +10,27 @@ class UserBalanceStatsService
     @user = user
   end
 
-  def fetch
+  # The Payouts page reads only these two keys: it builds the past periods itself, off its own
+  # paginated query. A payout period costs ~30 purchase aggregates (PayoutsHelper#payout_sales_data),
+  # so the two readers here each skip the other's work.
+  def fetch_payout_periods
     if should_use_cache?
       UpdateUserBalanceStatsCacheWorker.perform_async(user.id)
-      read_cache || generate
-    else
-      generate
+      cached = read_cache
+      return cached.slice(:next_payout_period_data, :processing_payout_periods_data) if cached
     end
+    payout_periods_stats
+  end
+
+  # The dashboard renders only these four scalars.
+  # A cached blob missing :overview falls through instead of returning nil.
+  def fetch_overview
+    if should_use_cache?
+      UpdateUserBalanceStatsCacheWorker.perform_async(user.id)
+      cached_overview = read_cache&.dig(:overview)
+      return cached_overview if cached_overview
+    end
+    overview_stats
   end
 
   def write_cache
@@ -36,37 +50,29 @@ class UserBalanceStatsService
   end
 
   private
+    # The cached blob is the union of what the two readers slice out of it.
     def generate
-      result = {
+      {
         generated_at: Time.current,
+        overview: overview_stats,
+        **payout_periods_stats,
+      }
+    end
+
+    def payout_periods_stats
+      {
         next_payout_period_data:,
         processing_payout_periods_data: user.payments.processing.order("created_at DESC").map { payout_period_data(user, _1) },
-        overview: {
-          last_payout_period_data: payout_period_data(user, user.payments.completed.last),
-          balance: user.unpaid_balance_cents,
-          last_seven_days_sales_total: user.sales_cents_total(after: 7.days.ago),
-          last_28_days_sales_total: user.sales_cents_total(after: 28.days.ago),
-          sales_cents_total: user.sales_cents_total,
-        },
       }
+    end
 
-      payments = user.payments.completed
-        .displayable
-        .order("created_at DESC")
-
-      if payments.size > PayoutsPresenter::PAST_PAYMENTS_PER_PAGE
-        payments = payments.limit(PayoutsPresenter::PAST_PAYMENTS_PER_PAGE)
-        result[:is_paginating] = true
-      else
-        result[:is_paginating] = false
-      end
-      payments = payments.load
-      result[:payout_period_data] = payments.to_h do |payment|
-        [payment.id, payout_period_data(user, payment)]
-      end
-      result[:payments] = payments
-
-      result
+    def overview_stats
+      {
+        balance: user.unpaid_balance_cents,
+        last_seven_days_sales_total: user.sales_cents_total(after: 7.days.ago),
+        last_28_days_sales_total: user.sales_cents_total(after: 28.days.ago),
+        sales_cents_total: user.sales_cents_total,
+      }
     end
 
     def read_cache

@@ -761,6 +761,14 @@ describe SettingsPresenter do
       expect(countries).to have_key("US")
     end
 
+    it "names a Stripe-restricted country even though it is omitted from the dropdown" do
+      create(:user_compliance_info, user: seller, country: "Syria")
+
+      props = presenter.payments_props
+      expect(props[:countries]).not_to have_key("SY")
+      expect(props[:payout_country_name]).to eq("Syrian Arab Republic")
+    end
+
     it "shows the AU backtax prompt when the creator owes more than $100 and the creator has received an email" do
       seller.update!(au_backtax_owed_cents: 100_01)
       create(:australia_backtax_email_info, user: seller)

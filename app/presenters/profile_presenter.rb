@@ -24,6 +24,7 @@ class ProfilePresenter
       # key and FollowersController verifies the resulting token against the
       # same one, since Google ties a token to the key that produced it.
       follow_recaptcha_site_key: FollowRecaptcha.required?(seller) ? FollowRecaptcha.site_key : nil,
+      hide_follow_form: seller.hide_follow_form?,
       # Key present only while the flag is on, so flipping it off removes the
       # surface entirely instead of shipping a null the frontend must know about.
       **(seller.reputation_summary_enabled? ? { reputation: seller.seller_reputation_summary } : {}),
@@ -68,6 +69,7 @@ class ProfilePresenter
           highlight_color: HexColorValidator.normalize(seller.seller_profile.highlight_color),
           profile_picture_blob_id: seller.avatar.signed_id,
           product_page_storefront_enabled: seller.product_page_storefront_enabled?,
+          hide_follow_form: seller.hide_follow_form?,
         },
         editable_profile: shared_profile_props(seller_custom_domain_url: nil, request:),
         # Version stamp for optimistic concurrency: the editor sends it back on save so the server

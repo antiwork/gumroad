@@ -28,6 +28,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shown
   const cartItemsCount = useCartItemsCount();
   const appDomain = useAppDomain();
   const isDesktop = useIsAboveBreakpoint("lg");
+  const hideSubscribeForm = hideFollowForm || Boolean(creatorProfile.hide_follow_form);
 
   const headerButtons =
     creatorProfile.can_edit || creatorProfile.twitter_handle || cartItemsCount ? (
@@ -68,7 +69,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shown
               </div>
             ) : null}
           </div>
-          {!hideFollowForm ? (
+          {!hideSubscribeForm ? (
             <div className="flex basis-full items-center gap-3 border-b border-border p-4 lg:basis-auto lg:border-0 lg:p-0">
               <FollowForm creatorProfile={creatorProfile} />
             </div>

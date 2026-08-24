@@ -19,13 +19,13 @@ class PayoutsPresenter
   end
 
   def next_payout_period_data
-    seller_stats[:next_payout_period_data]&.merge(
+    payout_periods[:next_payout_period_data]&.merge(
       has_stripe_connect: seller.stripe_connect_account.present?
     )
   end
 
   def processing_payout_periods_data
-    seller_stats[:processing_payout_periods_data].map do |item|
+    payout_periods[:processing_payout_periods_data].map do |item|
       item.merge(has_stripe_connect: seller.stripe_connect_account.present?)
     end
   end
@@ -58,8 +58,8 @@ class PayoutsPresenter
   end
 
   private
-    def seller_stats
-      @seller_stats ||= UserBalanceStatsService.new(user: seller).fetch
+    def payout_periods
+      @payout_periods ||= UserBalanceStatsService.new(user: seller).fetch_payout_periods
     end
 
     def pagination

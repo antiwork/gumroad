@@ -65,7 +65,7 @@ class CreatorHomePresenter
         "last_30" => analytics[:by_date][:totals][product.unique_permalink]&.sum || 0,
       }
     end.compact
-    balances = UserBalanceStatsService.new(user: seller).fetch[:overview]
+    balances = UserBalanceStatsService.new(user: seller).fetch_overview
 
     stripe_verification_message = nil
     if seller.stripe_account.present?

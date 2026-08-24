@@ -1231,6 +1231,67 @@ describe Checkout::BuyerCurrencyEligibility do
     end
   end
 
+  describe ".direct_listed_line_items_eligible?" do
+    def cad_line_item(product, **overrides)
+      Checkout::BuyerCurrencyQuote::LineItem.new(
+        permalink: product.unique_permalink,
+        product:,
+        tip_cents: 0,
+        shipping_cents: 0,
+        listed_currency_rate: "0.8",
+        **overrides
+      )
+    end
+
+    def eligible_for?(product, **overrides)
+      described_class.direct_listed_line_items_eligible?(
+        line_items: [cad_line_item(product, **overrides)],
+        buyer_currency: Currency::CAD
+      )
+    end
+
+    let(:cad_product) { create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 10_00) }
+
+    before do
+      Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    end
+
+    it "advertises the listed currency for a cart the listed lane can charge" do
+      merchant_account
+
+      expect(eligible_for?(cad_product)).to be(true)
+    end
+
+    it "refuses a seller whose charging account cannot create the intent" do
+      # The seller's only account is a Gumroad-managed Stripe Custom account, outside the
+      # destination-charge ramp. #decision refuses that at :unsupported_charge_model before it
+      # reaches the listed lane, so the menu must not offer the currency either.
+      create(:merchant_account, user: seller, currency: Currency::USD)
+
+      expect(eligible_for?(cad_product)).to be(false)
+    end
+
+    # `later_charge_kind` is the caller's summary of the charge, not a fact about the product, so
+    # it cannot be what keeps these shapes out. #decision refuses both from the product itself at
+    # :unsupported_product_type, and a currency advertised here that prepare then refuses is a
+    # total that changes under the buyer. The supported account is set up in each so the account
+    # gate above is not what answers.
+    it "refuses a free-trial membership reported with no later charge" do
+      merchant_account
+      Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+      membership = create(:membership_product, :with_free_trial_enabled, user: seller, price_currency_type: Currency::CAD)
+
+      expect(eligible_for?(membership)).to be(false)
+    end
+
+    it "refuses a membership reported with no later charge while the subscription ramp is off" do
+      merchant_account
+      membership = create(:membership_product, user: seller, price_currency_type: Currency::CAD)
+
+      expect(eligible_for?(membership)).to be(false)
+    end
+  end
+
   describe ".buyer_presentment_display?" do
     it "treats a local currency other than USD as presentment" do
       expect(described_class.buyer_presentment_display?(display_mode: "buyer_local", buyer_currency_shown: "eur")).to be(true)

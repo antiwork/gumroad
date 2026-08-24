@@ -4,12 +4,15 @@ class CustomersController < Sellers::BaseController
   include CurrencyHelper
 
   rescue_from Faraday::TimeoutError, with: :handle_search_timeout
+  rescue_from Elasticsearch::Transport::Transport::Errors::BadRequest, with: :handle_search_error
 
 
   before_action :authorize
   before_action :set_on_page_type
 
   CUSTOMERS_PER_PAGE = 20
+  # Keep pagination within Elasticsearch's index.max_result_window.
+  MAX_RESULT_WINDOW = 10_000
 
   layout "inertia", only: [:index, :show]
 
@@ -20,7 +23,7 @@ class CustomersController < Sellers::BaseController
       pundit_user:,
       product:,
       customers: load_sales(sales),
-      pagination: { page: 1, pages: (sales.results.total / CUSTOMERS_PER_PAGE.to_f).ceil, next: nil },
+      pagination: { page: 1, pages: total_pages(sales.results.total), next: nil },
       count: sales.results.total
     )
     create_user_event("customers_view")
@@ -78,7 +81,7 @@ class CustomersController < Sellers::BaseController
     customers_presenter = CustomersPresenter.new(
       pundit_user:,
       customers: load_sales(sales),
-      pagination: { page: params[:page].to_i + 1, pages: (sales.results.total / CUSTOMERS_PER_PAGE.to_f).ceil, next: nil },
+      pagination: { page: page_offset / CUSTOMERS_PER_PAGE + 1, pages: total_pages(sales.results.total), next: nil },
       count: sales.results.total
     )
 
@@ -115,7 +118,28 @@ class CustomersController < Sellers::BaseController
     end
   end
 
+  def handle_search_error(exception)
+    ErrorNotifier.notify(exception)
+
+    if action_name == "paged"
+      render json: { success: false, error: "search failed" }, status: :bad_request
+    else
+      redirect_back fallback_location: root_path, warning: "Request failed. Please try again.", status: :see_other
+    end
+  end
+
   private
+    # `from` is 0-indexed; page 500 (1-indexed) is the last legal ES window (9980). Clamp
+    # requests past it to that window so a deep page renders the last page rather than
+    # an ES "Result window is too large" rejection.
+    def page_offset
+      params[:page].to_i.clamp(0, MAX_RESULT_WINDOW / CUSTOMERS_PER_PAGE - 1) * CUSTOMERS_PER_PAGE
+    end
+
+    def total_pages(total)
+      [(total / CUSTOMERS_PER_PAGE.to_f).ceil, MAX_RESULT_WINDOW / CUSTOMERS_PER_PAGE].min
+    end
+
     def fetch_sales(query: nil, sort: nil, products: nil, variants: nil, excluded_products: nil, excluded_variants: nil, minimum_amount_cents: nil, maximum_amount_cents: nil, created_after: nil, created_before: nil, country: nil, active_customers_only: false, minimum_license_uses: nil)
       search_options = {
         seller: current_seller,
@@ -128,7 +152,7 @@ class CustomersController < Sellers::BaseController
         exclude_giftees: true,
         exclude_bundle_product_purchases: true,
         exclude_commission_completion_purchases: true,
-        from: params[:page].to_i * CUSTOMERS_PER_PAGE,
+        from: page_offset,
         size: CUSTOMERS_PER_PAGE,
         sort: [{ created_at: { order: :desc } }, { id: { order: :desc } }],
         track_total_hits: true,
@@ -166,13 +190,37 @@ class CustomersController < Sellers::BaseController
       sales.records
         .includes(
           :call,
-          :purchase_offer_code_discount,
+          :license,
+          :merchant_account,
+          :offer_code,
+          :preorder,
+          :price,
+          :purchaser,
+          # Lets Purchase#amount_refunded_cents take its in-memory Refund#effective?
+          # branch. Unpreloaded it runs a per-row SUM for cents_refundable.
+          :refunds,
+          :seller,
+          :shipment,
           :tip,
-          :upsell_purchase,
-          :variant_attributes,
           :url_redirect,
-          :link,
+          :variant_attributes,
+          affiliate: :affiliate_user,
+          commission_as_deposit: [:completion_purchase, { files_attachments: :blob }],
+          link: :alive_variants,
           product_review: [:response, { alive_videos: [:video_file] }],
+          purchase_custom_fields: { files_attachments: :blob },
+          purchase_offer_code_discount: :offer_code,
+          # original_product_review goes through Subscription#true_original_purchase (a different
+          # Purchase), so the top-level product_review preload never applies to memberships.
+          # :original_purchase is a separate cache; current_subscription_price_cents reads it.
+          subscription: [
+            :original_purchase,
+            {
+              last_payment_option: [:price, :installment_plan, :installment_plan_snapshot],
+              true_original_purchase: { product_review: [:response, { alive_videos: [:video_file] }] }
+            }
+          ],
+          upsell_purchase: :upsell,
           utm_link: [target_resource: [:seller, :user]]
         )
         .in_order_of(:id, sales.records.ids)

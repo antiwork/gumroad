@@ -427,6 +427,7 @@ class User < ApplicationRecord
             57 => :content_moderation_disabled, # Admin-only: exempts every product this seller creates from automated content moderation, including ones that don't exist yet. Link#content_moderation_disabled only covers products that already exist when support grants it (gumroad-private#1742).
             58 => :product_page_storefront_enabled, # Product pages render inside the creator's storefront (profile header above, catalog below). Defaulted on for new accounts only, so lift can be measured against existing creators before enabling for all (gumroad-private#2196). Sellers can turn it off in profile settings.
             59 => :has_dismissed_gumhead_promo,
+            60 => :hide_follow_form, # Seller setting: hides the subscribe box in the public profile header. Custom HTML pages omit it by not including the form.
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -1393,18 +1394,11 @@ class User < ApplicationRecord
     has_completed_payouts?
   end
 
-  # The store Agent can rewrite a seller's live storefront, so it stays behind the same
-  # earned-your-way-in bar as AI product generation: real money in, and a payout that
-  # proves the account is a going concern rather than a fresh signup experimenting.
-  #
-  # Never memoize: this backs an authorization check on a long-lived SSE stream, so a
-  # suspension mid-conversation has to revoke access on the next check rather than at the
-  # next object load.
-  #
-  # The ordering is what keeps it cheap. sales_cents_total is an Elasticsearch aggregation
-  # while has_completed_payouts? is an indexed exists?, so testing the payout first means a
-  # seller who has never been paid out short-circuits without touching ES — exactly the
-  # pre-launch account this gate exists to stop.
+  # Store Agent can rewrite a live storefront, so same bar as AI generation.
+  # Do not memoize: this authorizes a long-lived SSE stream; a mid-stream
+  # suspension must revoke on the next check.
+  # Check has_completed_payouts? before sales_cents_total (ES aggregation)
+  # so unpaid accounts never hit Elasticsearch.
   def eligible_for_store_agent?
     return true if Rails.env.development?
     return false if !confirmed? || suspended? || !has_completed_payouts?
@@ -1412,27 +1406,14 @@ class User < ApplicationRecord
     sales_cents_total >= MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT
   end
 
-  # Devise routes every confirmation *resend* through this method — the public
-  # "resend confirmation" form, the Settings resend button, and the library
-  # gate all land here. A prior transient delivery failure may have left the
-  # target address on SendGrid's bounce/block suppression list, which silently
-  # drops every later send including this one, so we clear those suppressions
-  # before re-sending (see ResendConfirmationEmailJob for the full rationale).
+  # All confirmation *resends* land here. Clear SendGrid bounce/block
+  # suppressions first or a prior transient failure drops every later send
+  # (ResendConfirmationEmailJob). Signup uses send_confirmation_instructions.
   #
-  # Initial-signup sends go through send_confirmation_instructions instead, so
-  # this override adds no suppression lookups to the signup path. We keep
-  # Devise's pending_any_confirmation guard so an already-confirmed address
-  # still gets the usual "already confirmed" error rather than a pointless send.
-  #
-  # We stamp confirmation_sent_at here, at enqueue time, because the callers that
-  # throttle resends (e.g. the library gate) read it synchronously — if it only
-  # updated when the low-priority job actually sends, every request in between
-  # would see a stale timestamp and enqueue another duplicate resend.
-  #
-  # The one-minute floor bounds double-clicks and the public "resend confirmation"
-  # form (which has no rack_attack throttle): each enqueue costs SendGrid
-  # suppression-API calls in the job, so an unbounded per-user enqueue rate would
-  # hand an attacker who knows an unconfirmed address a free API-hammering lever.
+  # Stamp confirmation_sent_at at enqueue time — throttles read it
+  # synchronously; a job-time stamp would enqueue duplicates. The 1-minute
+  # floor bounds double-clicks and the unthrottled public form (each enqueue
+  # hits SendGrid's suppression API).
   RESEND_CONFIRMATION_ENQUEUE_FLOOR = 1.minute
 
   def resend_confirmation_instructions
@@ -1453,31 +1434,17 @@ class User < ApplicationRecord
     end
 
   private
-    # The cached avatar variant URL, resolving and caching it when there is no
-    # usable entry.
-    #
-    # The version suffix on the cache key lets us abandon previously cached
-    # URLs without a backfill: every user's avatar URL is simply recomputed on
-    # its next read, and the old entries are left behind for memcached to
-    # evict. "_v2" moved us from 128x128 to 400x400 variants. "_v3" abandons
-    # the entries written before we checked that the variant file still
-    # exists, some of which pointed at files that had disappeared from storage
-    # and so returned 403 forever.
+    # Cache-key version suffix abandons old URLs without a backfill.
+    # "_v3" dropped entries written before we checked the variant file still
+    # exists — those 403'd forever.
     def cached_avatar_variant_url
       cache_key = "attachment_#{avatar.id}_variant_url_v3"
       cached = Rails.cache.read(cache_key)
 
-      # A cached URL is only worth serving while the file behind it is still
-      # there, so the variant's storage key is cached next to the URL and
-      # checked on every hit. Without that check a variant that disappeared
-      # just after its URL was written would 403 for the rest of the day.
-      #
-      # The check is usually answered by the short-lived presence entry rather
-      # than by storage, which is what keeps a page full of avatars cheap. That
-      # entry is also the remaining gap: a variant that disappears while it says
-      # "present" keeps being served until it expires, so its lifetime
-      # (AVATAR_VARIANT_PRESENCE_CACHE_TTL, a few minutes) is deliberately the
-      # worst case for a broken avatar.
+      # Cache the storage key next to the URL and re-check it: a vanished
+      # variant would otherwise 403 for the rest of the day. Presence is
+      # usually a short-lived cache hit; AVATAR_VARIANT_PRESENCE_CACHE_TTL is
+      # the worst-case window for a broken avatar.
       if cached.is_a?(Hash) && cached[:url].present? && cached[:key].present? &&
          avatar_variant_file_present?(cached[:key])
         return cached[:url]
@@ -1488,32 +1455,17 @@ class User < ApplicationRecord
       # we write it.
       variant = avatar_variant(verify_storage: true)
       url = variant&.url.presence
-      # Only ever cache a real URL. A blank value here means we could not work
-      # out where the variant lives on this pass, and caching that would leave
-      # the seller with no profile picture until the entry expired, with no way
-      # for them to fix it. The expiry bounds how long any single cached URL
-      # can outlive the file it points at.
+      # Never cache a blank URL — that would hide the avatar until expiry.
       if url && variant.key.present?
         Rails.cache.write(cache_key, { url:, key: variant.key }, expires_in: AVATAR_VARIANT_URL_CACHE_TTL)
       end
       url
     end
 
-    # Returns the resized avatar, having confirmed that the resized file is
-    # really still in storage.
-    #
-    # Active Storage decides a variant is "already processed" purely from the
-    # presence of an active_storage_variant_records row — it never asks storage
-    # whether the resized file is still there. So when a variant's file
-    # disappears but its row survives, Active Storage keeps handing out a URL
-    # for the missing file: nothing raises, the rescue fallbacks in the avatar
-    # methods above never run, and every request for that URL fails with a 403
-    # forever. The seller sees no profile picture anywhere and has no way to
-    # tell it is our problem rather than their upload having failed, so most of
-    # them never report it.
-    #
-    # When the file is gone we throw the stale row away and resize again from
-    # the original upload, which is normally still intact.
+    # Active Storage treats a variant as processed if the variant_records row
+    # exists — it never checks storage. A missing file + surviving row therefore
+    # yields a 403 URL with nothing raised. Destroy the stale row and resize
+    # from the original.
     def stored_avatar_variant(verify_storage: false, **transformations)
       variant = avatar.variant(**transformations).processed
       return variant if avatar_variant_file_present?(variant.key, verify_storage:)

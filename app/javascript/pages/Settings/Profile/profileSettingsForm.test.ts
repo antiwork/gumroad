@@ -15,6 +15,7 @@ const settings = (overrides: Partial<ProfileSettingsForm> = {}): ProfileSettings
   background_color: "#ffffff",
   highlight_color: "#ff90e8",
   product_page_storefront_enabled: false,
+  hide_follow_form: false,
   ...overrides,
 });
 
@@ -44,6 +45,13 @@ describe("profile settings synchronization", () => {
       ...incoming,
       background_color: "#123456",
     });
+  });
+
+  it("includes hide_follow_form among dirty settings", () => {
+    const baseline = settings();
+    const current = settings({ hide_follow_form: true });
+
+    expect(changedProfileSettings(current, baseline)).toEqual({ hide_follow_form: true });
   });
 
   it("submits only fields that remain changed after a rebase", () => {
