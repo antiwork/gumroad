@@ -1096,6 +1096,8 @@ jobs:
             -e KNAPSACK_PRO_CI_NODE_TOTAL \
             -e KNAPSACK_PRO_CI_NODE_INDEX \
             -e KNAPSACK_PRO_LOG_LEVEL \
+            -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES \
+            -e KNAPSACK_PRO_SLOW_TEST_FILE_PATTERN \
             -e KNAPSACK_PRO_TEST_FILE_LIST \
             -e KNAPSACK_PRO_COMMIT_HASH \
             -e KNAPSACK_PRO_BRANCH \
@@ -1113,6 +1115,13 @@ jobs:
           KNAPSACK_PRO_CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
           KNAPSACK_PRO_CI_NODE_INDEX: ${{ matrix.ci_node_index }}
           KNAPSACK_PRO_LOG_LEVEL: info
+          # Relevant is 4 nodes / 25 minutes. taxes_spec.rb (~168 JS checkouts)
+          # queued as one file blows that budget. Force an example-level split
+          # for this file only: the shared FAST token does not reliably mark the
+          # parent file slow, and a request-wide pattern would enumerate ~850
+          # examples on a checkout fanout.
+          KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES: true
+          KNAPSACK_PRO_SLOW_TEST_FILE_PATTERN: "spec/requests/purchases/product/taxes_spec.rb"
           KNAPSACK_PRO_TEST_FILE_LIST: ${{ needs.relevant_specs.outputs.files_csv }}
           KNAPSACK_PRO_COMMIT_HASH: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
