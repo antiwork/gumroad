@@ -4574,6 +4574,7 @@ class Purchase < ApplicationRecord
       self.total_transaction_cents += shipping_cents
 
       apply_buyer_currency_quote_canonical_components!
+      return if errors.present?
 
       calculate_fees
 
@@ -4601,6 +4602,9 @@ class Purchase < ApplicationRecord
     def apply_buyer_currency_quote_canonical_components!
       components = buyer_currency_quote_canonical_components
       return if components.blank?
+      # PayPal/Braintree discard the quote before verify!. A leftover token must
+      # not overwrite the USD split, and a stale token must not fail the charge.
+      return unless buyer_currency_quote_components_may_apply?
 
       component_price_cents = components.fetch(:price_cents).to_i
       component_tip_cents = components.fetch(:tip_cents).to_i
@@ -4629,11 +4633,16 @@ class Purchase < ApplicationRecord
       ]
       # Rounding slack is for FX pennies, not tip presence. A 1–5¢ signed tip
       # against a missing Tip row (or the reverse) must refuse, not overwrite.
-      return unless component_tip_cents.positive? == submitted_tip_cents.positive?
-      return unless signed_components.zip(submitted_components).all? do |signed_cents, submitted_cents|
-        (signed_cents - submitted_cents).abs <= BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
+      # Stripe verify! only sees line totals, so a same-total remapped split
+      # would otherwise charge the unsigned attribution — fail closed.
+      unless component_tip_cents.positive? == submitted_tip_cents.positive? &&
+          signed_components.zip(submitted_components).all? do |signed_cents, submitted_cents|
+            (signed_cents - submitted_cents).abs <= BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
+          end &&
+          (submitted_components.sum - signed_total_cents).abs <= BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
+        reject_stale_buyer_currency_quote_components!
+        return
       end
-      return if (submitted_components.sum - signed_total_cents).abs > BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
 
       tip.value_usd_cents = component_tip_cents if tip.present?
       self.tax_cents = component_seller_tax_cents
@@ -4643,6 +4652,15 @@ class Purchase < ApplicationRecord
       self.price_cents += component_seller_tax_cents if was_tax_excluded_from_price
       self.price_cents += component_shipping_cents
       self.total_transaction_cents = signed_total_cents
+    end
+
+    def buyer_currency_quote_components_may_apply?
+      charge_processor_id.blank? || stripe_charge_processor?
+    end
+
+    def reject_stale_buyer_currency_quote_components!
+      errors.add :base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      self.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
     end
 
     def load_flow_of_funds(processor_charge)
