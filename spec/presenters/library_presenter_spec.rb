@@ -686,6 +686,21 @@ describe LibraryPresenter do
         expect(archives.map(&:product_files_archive_state)).to eq(["ready", "queueing"])
       end
 
+      it "queues a fresh ZIP when a member product rename changes a bundle archive path" do
+        library_props(bundle_ids: [purchase1.link.external_id])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archive.mark_in_progress!
+        archive.mark_ready!
+        purchase1.product_purchases.first.link.update!(name: "Renamed member product")
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil }
+        expect(props[:bundle_downloads]).to eq([expected_download])
+        archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
+        expect(archives.map(&:product_files_archive_state)).to eq(["ready", "queueing"])
+      end
+
       it "matches nothing when no selected bundle id resolves to a product" do
         expect(results(bundle_ids: ["garbage"])).to be_empty
       end

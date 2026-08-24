@@ -110,7 +110,12 @@ class ProductFilesArchive < ApplicationRecord
     def files_digest(files)
       rich_content_files = rich_content_provider&.map_rich_content_files_and_folders
       file_list = if rich_content_files.blank?
-        files.map { |file| [file.folder&.external_id, file.folder&.name, file.external_id, file.name_displayable].compact.join("/") }.sort
+        files.map do |file|
+          parts = []
+          parts.concat([file.link&.external_id, file.link&.name]) if bundle_purchase_archive?
+          parts.concat([file.folder&.external_id, file.folder&.name, file.external_id, file.name_displayable])
+          parts.compact.join("/")
+        end.sort
       else
         rich_content_files = rich_content_files.select { |key, value| value[:folder_id] == folder_id } if folder_archive?
         rich_content_files.values.map do |info|
