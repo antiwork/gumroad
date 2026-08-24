@@ -219,12 +219,28 @@ export { readBuyerCurrencyPreference, writeBuyerCurrencyPreference };
 export type State = {
   products: Product[];
   buyerCurrency: string | null;
-  // The quote that was on screen when the buyer changed currency, held only until the replacement
-  // lands. A currency change is the one quote invalidation whose control lives inside the summary
-  // it blanks, so the summary renders from this snapshot to keep its rows — and the picker the
-  // buyer is still holding focus in — in place across the round trip. `previousCurrency` is what
-  // the selection goes back to if the chosen currency turns out to be unquotable.
-  buyerCurrencyRemint: { surcharges: SurchargesResponse; previousCurrency: string | null } | null;
+  // The quote that was on screen when the buyer changed currency (or switched payment surface),
+  // held only until the replacement lands. Both leave the cart alone, and a currency change is the
+  // one whose control lives inside the summary it blanks, so the summary renders from this
+  // snapshot to keep its rows — and the picker the buyer is still holding focus in — in place
+  // across the round trip. `previousCurrency` is what the selection goes back to if the chosen
+  // currency turns out to be unquotable.
+  buyerCurrencyRemint: {
+    surcharges: SurchargesResponse;
+    previousCurrency: string | null;
+    // Set when the refetch was a payment-surface switch (saved card ⇄ Payment Element) rather
+    // than the buyer picking a currency. Those switches change which currencies the server
+    // advertises but leave the selection alone, so there is nothing to put back and no refusal
+    // to report — the snapshot is held only so the summary keeps its amounts across the trip.
+    surfaceSwitch?: boolean;
+    // The surface the buyer was on when a surface-switch snapshot was taken. Which currency the
+    // summary is in is a function of that surface — a saved card charges canonical USD, a new
+    // card can charge the listed currency — so rendering the held amounts under the NEW surface
+    // flips them between listed and USD the instant the toggle moves, which is the mid-flight
+    // total change the snapshot exists to prevent. Display only; pay and disable gates keep
+    // reading live `usingSavedCard`.
+    previousUsingSavedCard?: boolean;
+  } | null;
   // A currency the buyer chose that the server then came back without. The summary names it, so a
   // total that reverts to another currency says why instead of changing under the buyer.
   unavailableBuyerCurrency: string | null;
@@ -589,11 +605,25 @@ export function getConfiguredDirectListedCurrency(state: Pick<State, "checkoutPa
   return currency;
 }
 
-export function getSelectableDirectListedCurrency(state: State): string | null {
+// `usingSavedCard` defaults to the live surface. The summary passes the surface a surface-switch
+// remint was taken on instead, so its held amounts stay in the currency they were quoted in until
+// the replacement lands — see getDisplayedUsingSavedCard.
+export function getSelectableDirectListedCurrency(
+  state: State,
+  { usingSavedCard = state.usingSavedCard }: { usingSavedCard?: boolean } = {},
+): string | null {
   const currency = getConfiguredDirectListedCurrency(state);
-  if (!currency || !directListedCardActive(state) || !canUseStripePaymentElementClientConfirm(state)) return null;
+  if (!currency || !directListedCardActive(state, usingSavedCard) || !canUseStripePaymentElementClientConfirm(state))
+    return null;
 
   return currency;
+}
+
+// The payment surface the summary renders as of: the pre-toggle one while a surface-switch remint
+// is still on screen, the live one otherwise.
+export function getDisplayedUsingSavedCard(state: Pick<State, "usingSavedCard" | "buyerCurrencyRemint">): boolean {
+  const remint = state.buyerCurrencyRemint;
+  return remint?.surfaceSwitch ? (remint.previousUsingSavedCard ?? state.usingSavedCard) : state.usingSavedCard;
 }
 
 function getDesiredStripePaymentElementMountCurrency(state: State): string | null {
@@ -611,8 +641,8 @@ function getDesiredStripePaymentElementMountCurrency(state: State): string | nul
     : "usd";
 }
 
-function directListedCardActive(state: State) {
-  return state.paymentMethod === "card" && !state.usingSavedCard && computeTip(state) === 0 && !hasShipping(state);
+function directListedCardActive(state: State, usingSavedCard = state.usingSavedCard) {
+  return state.paymentMethod === "card" && !usingSavedCard && computeTip(state) === 0 && !hasShipping(state);
 }
 
 export function isProcessing(state: State) {
@@ -1011,6 +1041,31 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         if ("buyerCurrency" in action) {
           if (state.surcharges.type === "loaded")
             state.buyerCurrencyRemint = { surcharges: state.surcharges.result, previousCurrency: state.buyerCurrency };
+          else if (state.buyerCurrencyRemint?.surfaceSwitch)
+            // An explicit pick landing on top of a surface switch's in-flight remint: there is no
+            // loaded quote to snapshot, but the held amounts still describe what the buyer saw.
+            // Keep them and re-point the remint at this pick, so a refusal restores the selection
+            // this pick replaced instead of skipping refusal/restore entirely.
+            state.buyerCurrencyRemint = {
+              ...state.buyerCurrencyRemint,
+              previousCurrency: state.buyerCurrency,
+              surfaceSwitch: false,
+            };
+        } else if ("usingSavedCard" in action) {
+          // Switching surface re-asks the server which currencies it can charge, but it does not
+          // touch the cart, so the loaded amounts are still the amounts. Hold them for the same
+          // reason a currency change does: folding the Total row (and the picker under it) away
+          // for the length of the round trip reads as a hang. Pay stays disabled until the
+          // replacement lands — isSubmitDisabled reads `surcharges`, not this snapshot.
+          if (state.surcharges.type === "loaded")
+            state.buyerCurrencyRemint = {
+              surcharges: state.surcharges.result,
+              previousCurrency: state.buyerCurrency,
+              surfaceSwitch: true,
+              // Pre-toggle: `action` is only merged into state further down.
+              previousUsingSavedCard: state.usingSavedCard,
+            };
+          state.unavailableBuyerCurrency = null;
         } else {
           state.buyerCurrencyRemint = null;
           // The refusal was about the cart being replaced here, so it no longer describes
@@ -1303,6 +1358,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         // buyer on to some third currency with no explanation is what must not happen.
         if (
           remint &&
+          !remint.surfaceSwitch &&
           state.buyerCurrency != null &&
           offersBuyerCurrency(action.result, state.buyerCurrency) === false
         ) {
@@ -1343,7 +1399,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       //
       // `unavailableBuyerCurrency` is deliberately NOT set: a request that never completed is not
       // the server saying it cannot charge that currency, and the notice must not claim it did.
-      if (state.buyerCurrencyRemint) {
+      if (state.buyerCurrencyRemint && !state.buyerCurrencyRemint.surfaceSwitch) {
         state.buyerCurrency = state.buyerCurrencyRemint.previousCurrency;
         writeBuyerCurrencyPreference(state.buyerCurrency);
       }

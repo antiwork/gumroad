@@ -793,6 +793,29 @@ describe("Checkout direct-listed currency picker", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
   });
 
+  it("keeps the listed total while a switch to the saved card is being re-quoted", () => {
+    // The held quote was minted for a new card, which charges the listed currency. Reading the
+    // display off the surface being switched TO flips the same held amounts to USD for the length
+    // of the round trip, so the total changes twice under the buyer. Paying stays blocked on the
+    // live `surcharges`, which is pending here.
+    const { getAllByLabelText } = renderCheckout(
+      directListedState({
+        buyerCurrency: "cad",
+        usingSavedCard: true,
+        surcharges: { type: "pending" },
+        buyerCurrencyRemint: {
+          surcharges: directListedSurcharges,
+          previousCurrency: "cad",
+          surfaceSwitch: true,
+          previousUsingSavedCard: false,
+        },
+      }),
+      directListedCart,
+    );
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$15"]);
+  });
+
   it("does not expose quote-backed currencies after a tip moves the cart to canonical USD", () => {
     const { getAllByLabelText, queryByLabelText } = renderCheckout(
       directListedState({

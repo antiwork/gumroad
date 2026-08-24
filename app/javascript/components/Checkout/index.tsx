@@ -81,6 +81,7 @@ import {
   computeTip,
   computeTipForListedLines,
   computeTipForPrice,
+  getDisplayedUsingSavedCard,
   getErrors,
   getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
@@ -357,7 +358,13 @@ export const Checkout = ({
 
   const displayTipSelector = isTippingEnabled(state);
   const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
-  const selectableDirectListedCurrency = getSelectableDirectListedCurrency(state);
+  // The surface the summary renders as of, for the same reason `summarySurcharges` above renders
+  // the held quote: a surface switch's snapshot was quoted on the previous surface, and reading
+  // the listed-vs-USD display off the new one flips the held total the moment the toggle moves.
+  const displayedUsingSavedCard = getDisplayedUsingSavedCard(state);
+  const selectableDirectListedCurrency = getSelectableDirectListedCurrency(state, {
+    usingSavedCard: displayedUsingSavedCard,
+  });
   const buyerCurrencyDisplay = configuredDirectListedCurrency
     ? null
     : getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
@@ -400,7 +407,7 @@ export const Checkout = ({
     buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state) || !directListedCurrencySelected
       ? null
       : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cart.items, {
-          usingSavedCard: state.usingSavedCard,
+          usingSavedCard: displayedUsingSavedCard,
           paymentMethod: state.paymentMethod,
           hasTip: computeTip(state) > 0,
           hasShipping: cart.items.some((item) => item.product.require_shipping),

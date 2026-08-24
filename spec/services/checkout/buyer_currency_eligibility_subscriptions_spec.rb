@@ -33,30 +33,28 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
   end
 
   describe "product-shape gates" do
-    subject(:unquotable) { described_class.send(:new, order: nil, seller:, merchant_account: nil, chargeable: nil, purchases: [], params: {}, setup_future_charges: false, off_session: false) }
-
     it "keeps memberships unquotable while the ramp is off" do
-      expect(unquotable.send(:unquotable_product?, membership)).to be(true)
+      expect(described_class.unquotable_product?(membership)).to be(true)
     end
 
     it "makes a plain membership quotable once the ramp is on" do
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
 
-      expect(unquotable.send(:unquotable_product?, membership)).to be(false)
+      expect(described_class.unquotable_product?(membership)).to be(false)
     end
 
     it "keeps a free-trial membership excluded even in the ramp, because it charges $0 now" do
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
       allow(membership).to receive(:free_trial_enabled?).and_return(true)
 
-      expect(unquotable.send(:unquotable_product?, membership)).to be(true)
+      expect(described_class.unquotable_product?(membership)).to be(true)
     end
 
     it "makes a preorder quotable once the later-charge ramp is on" do
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
       allow(membership).to receive(:is_in_preorder_state?).and_return(true)
 
-      expect(unquotable.send(:unquotable_product?, membership)).to be(false)
+      expect(described_class.unquotable_product?(membership)).to be(false)
     end
   end
 
@@ -73,8 +71,7 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
     def gate_answers
       quotable_at_quote_time = Checkout::BuyerCurrencyQuote.send(:new, line_items: [], canonical_total_cents: 1000, ip: "1.2.3.4")
                                                           .send(:quotable_product?, membership, buyer_currency: "eur")
-      quotable_at_charge_time = !described_class.send(:new, order: nil, seller:, merchant_account: nil, chargeable: nil, purchases: [], params: {}, setup_future_charges: false, off_session: false)
-                                                .send(:unquotable_product?, membership)
+      quotable_at_charge_time = !described_class.unquotable_product?(membership)
       quotable_on_product_page = !display_gate.buyer_currency_unquotable_product?(membership)
 
       [quotable_on_product_page, quotable_at_quote_time, quotable_at_charge_time]

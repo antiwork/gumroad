@@ -307,6 +307,10 @@ describe("createReducer surcharge refetches", () => {
 
     act(() => result.current[1]({ type: "set-value", usingSavedCard: false }));
     expect(result.current[0].surcharges.type).toBe("pending");
+    // The refetch still happens, but the amounts the summary was showing are held for it: the
+    // switch changes which currencies the server advertises, not what the cart costs.
+    expect(result.current[0].buyerCurrencyRemint?.surcharges).toEqual(surchargesResponse());
+    expect(result.current[0].buyerCurrencyRemint?.surfaceSwitch).toBe(true);
     await act(() => vi.advanceTimersByTimeAsync(300));
 
     expect(requests[1]?.payload).toMatchObject({

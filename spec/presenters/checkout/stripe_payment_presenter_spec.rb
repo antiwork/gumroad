@@ -1685,6 +1685,7 @@ describe Checkout::StripePaymentPresenter do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
       stub_geoip_country("24.48.0.1", "Canada")
+      platform_merchant_account
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "24.48.0.1")).to eq(
         payment_element_client_confirm_props(
@@ -1708,6 +1709,7 @@ describe Checkout::StripePaymentPresenter do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
       stub_geoip_country("24.48.0.1", "Canada")
+      platform_merchant_account
 
       add_products = [checkout_product_for(product), checkout_product_for(second_product)]
       expect(stripe_payment_props(add_products:, ip: "24.48.0.1")).to eq(
@@ -1774,6 +1776,27 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props)
     ensure
       deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "keeps that CAD listing on the USD element when the seller's charging account cannot create the intent" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::CAD, price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("24.48.0.1", "Canada")
+      # The seller's only account is a Gumroad-managed Stripe Custom account, outside the
+      # destination-charge ramp, which prepare refuses at :unsupported_charge_model. Mounting the
+      # Element in CAD anyway would show a CAD sheet for a charge that cannot be created.
+      create(:merchant_account, user: seller, currency: Currency::USD)
+
+      elements_options = stripe_payment_props(add_products: [checkout_product_for(product)], ip: "24.48.0.1")[:elements_options]
+      expect(elements_options[:currency]).to eq(described_class::CLIENT_CONFIRM_CURRENCY)
+      expect(elements_options).not_to have_key(:direct_listed_card)
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
     end
 
     it "mounts the EUR element with only the launched local method in live mode when its launch flag is on" do

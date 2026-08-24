@@ -194,6 +194,27 @@ describe CustomerSurchargeController, :vcr do
       expect(codes).to contain_exactly(Currency::USD, Currency::CAD)
     end
 
+    it "snaps a stale requested currency to the listed one when only that lane can charge" do
+      # A leftover EUR preference (cookie, or a currency the buyer picked before this cart) on a
+      # cart whose only non-USD client-confirm option is the listed currency. Without the snap the
+      # endpoint mints an EUR FX token this surface can never confirm, while the menu it returns
+      # alongside offers only US dollars and Canadian dollars.
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+
+      post "calculate_all", params: {
+        products: [{ permalink: cad_product.unique_permalink, price: 10_00, quantity: 1 }],
+        buyer_currency: Currency::EUR,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_direct_listed_currency: Currency::CAD,
+      }, as: :json
+
+      expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { _1.fetch("code") }
+      expect(codes).to contain_exactly(Currency::USD, Currency::CAD)
+    end
+
     it "does not advertise the listed currency when the current payment element is mounted in USD" do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
       cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
@@ -292,6 +313,28 @@ describe CustomerSurchargeController, :vcr do
       }, as: :json
 
       codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).not_to include(Currency::CAD)
+    end
+
+    it "does not advertise the listed currency when the seller's account cannot create the intent" do
+      # A Gumroad-managed Stripe Custom account outside the destination-charge ramp. Prepare
+      # refuses this cart at :unsupported_charge_model, so offering the listed currency here would
+      # show a total in Canadian dollars for a charge that lands in US dollars.
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      create(:merchant_account, user: @user, currency: Currency::USD)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+
+      post "calculate_all", params: {
+        products: [{ permalink: cad_product.unique_permalink, price: 10_00, quantity: 1 }],
+        buyer_currency: Currency::CAD,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+      }, as: :json
+
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).to include(Currency::USD)
       expect(codes).not_to include(Currency::CAD)
     end
 
