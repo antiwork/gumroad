@@ -7,18 +7,6 @@ describe UserBalanceStatsService do
   let(:instance) { described_class.new(user:) }
   let(:example_values) { { foo: "bar", nested: { key1: { key2: "value2" } }, records: [{ id: 1, name: "first" }, { id: 2, name: "second" }] } }
 
-  describe "#generate" do
-    # We're not actually testing the values generated here.
-    # The values and intended final behavior is tested in spec/requests/balance_pages_spec.rb
-    it "returns a hash" do
-      now = Time.zone.local(2020, 1, 1)
-      travel_to(now)
-      generated = instance.send(:generate)
-      expect(generated).to be_a(Hash)
-      expect(generated.fetch(:generated_at)).to eq(now)
-    end
-  end
-
   describe "#fetch_overview" do
     let(:now) { Time.zone.local(2024, 6, 15, 12, 0, 0) }
     let(:overview) do
@@ -99,53 +87,71 @@ describe UserBalanceStatsService do
     end
   end
 
-  describe "#fetch" do
-    let(:fetched) { instance.fetch }
+  describe "#fetch_payout_periods" do
+    let(:payout_periods) do
+      {
+        next_payout_period_data: { status: "not_payable" },
+        processing_payout_periods_data: [],
+      }
+    end
 
-    context "when value should be retrieved from the cache" do
-      before do
-        expect(instance).to receive(:should_use_cache?).and_return(true)
+    before do
+      allow(instance).to receive(:payout_periods_stats).and_return(payout_periods)
+    end
+
+    context "when the seller is not cacheable" do
+      before { allow(instance).to receive(:should_use_cache?).and_return(false) }
+
+      it "returns the two payout period keys without building the rest of the payload" do
+        expect(instance).not_to receive(:generate)
+        expect(instance.fetch_payout_periods).to eq(payout_periods)
       end
+    end
 
-      after do
+    context "when the seller is cacheable and the cache is cold" do
+      before { allow(instance).to receive(:should_use_cache?).and_return(true) }
+
+      it "builds the payout periods and enqueues a cache refresh" do
+        expect(instance).not_to receive(:generate)
+        expect(instance.fetch_payout_periods).to eq(payout_periods)
         expect(UpdateUserBalanceStatsCacheWorker).to have_enqueued_sidekiq_job(user.id)
       end
-
-      context "when cached value exists" do
-        it "returns cached value" do
-          $redis.setex(instance.send(:cache_key), 48.hours.to_i, example_values.to_json)
-          expect(instance).not_to receive(:generate)
-          expect(fetched).to eq(example_values)
-        end
-      end
-
-      context "when cached value does not exist" do
-        it "returns generated value" do
-          expect(instance).to receive(:generate).and_return(example_values)
-          expect(fetched).to eq(example_values)
-        end
-      end
     end
 
-    context "when value should not be retrieved from the cache" do
+    context "when the seller is cacheable and the cache is warm" do
+      let(:cached_payload) do
+        payout_periods.merge(
+          generated_at: Time.current,
+          overview: { balance: 12_34 },
+        )
+      end
+
       before do
-        expect(instance).to receive(:should_use_cache?).and_return(false)
+        allow(instance).to receive(:should_use_cache?).and_return(true)
+        $redis.setex(instance.send(:cache_key), 48.hours.to_i, cached_payload.to_json)
       end
 
-      it "returns generated value" do
-        expect(instance).to receive(:generate).and_return(example_values)
-        expect(fetched).to eq(example_values)
+      it "returns only the two payout period keys out of the cached payload" do
+        expect(instance).not_to receive(:generate)
+        expect(instance).not_to receive(:payout_periods_stats)
+        result = instance.fetch_payout_periods
+
+        expect(result.keys).to match_array(%i[next_payout_period_data processing_payout_periods_data])
+        expect(result).not_to have_key(:overview)
+        expect(UpdateUserBalanceStatsCacheWorker).to have_enqueued_sidekiq_job(user.id)
       end
     end
+  end
 
-    it "returns a hash" do
+  describe "#generate" do
+    it "builds only the keys the two readers slice out of the cached payload" do
       user = create(:user)
       now = Time.zone.local(2020, 1, 1)
       travel_to(now)
       generated = described_class.new(user:).send(:generate)
       expect(generated).to be_a(Hash)
       expect(generated.keys).to match_array(
-        [:generated_at, :next_payout_period_data, :processing_payout_periods_data, :overview, :payout_period_data, :payments, :is_paginating]
+        [:generated_at, :overview, :next_payout_period_data, :processing_payout_periods_data]
       )
       expect(generated.fetch(:generated_at)).to eq(now)
     end
