@@ -87,7 +87,19 @@ class ProductFilesArchive < ApplicationRecord
   end
 
   def rich_content_provider
+    return if bundle_purchase_archive?
+
     link || variant
+  end
+
+  def bundle_purchase_archive?
+    return false unless link&.is_bundle?
+
+    if product_files.loaded?
+      product_files.any? { _1.link_id != link_id }
+    else
+      product_files.where.not(link_id:).exists?
+    end
   end
 
   private

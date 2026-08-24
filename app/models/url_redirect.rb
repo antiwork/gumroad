@@ -95,6 +95,16 @@ class UrlRedirect < ApplicationRecord
     product_files_archives.latest_ready_entity_archive
   end
 
+  def bundle_archive
+    return unless purchase&.is_bundle_purchase?
+
+    bundle_files = bundle_archive_product_files
+    return if bundle_files.empty?
+
+    ensure_bundle_archive_for(bundle_files)
+    matching_bundle_archives(bundle_files).select(&:ready?).last
+  end
+
   def folder_archive(folder_id)
     return if with_product_files.has_stampable_pdfs?
 
@@ -140,6 +150,36 @@ class UrlRedirect < ApplicationRecord
         filename: product_file.s3_filename
       }
     end.compact.to_json
+  end
+
+  def bundle_archive_product_files
+    return ProductFile.none unless purchase&.is_bundle_purchase?
+
+    file_ids = purchase.product_purchases.visible_in_library.includes(:url_redirect).flat_map do |product_purchase|
+      url_redirect = product_purchase.url_redirect
+      next [] if url_redirect.blank? || !url_redirect.with_product_files.is_downloadable?
+
+      url_redirect.alive_product_files.select(&:archivable?).map(&:id)
+    end.uniq
+
+    ProductFile.where(id: file_ids).in_order
+  end
+
+  def matching_bundle_archives(bundle_files)
+    bundle_file_ids = bundle_files.map(&:id).sort
+    product_files_archives.entity_archives.alive.includes(:product_files).select do |archive|
+      archive.product_files.map(&:id).sort == bundle_file_ids
+    end
+  end
+
+  def ensure_bundle_archive_for(bundle_files)
+    return if matching_bundle_archives(bundle_files).any?
+
+    product_files_archive = product_files_archives.new
+    product_files_archive.product_files = bundle_files
+    product_files_archive.save!
+    product_files_archive.set_url_if_not_present
+    product_files_archive.save!
   end
 
   def seller

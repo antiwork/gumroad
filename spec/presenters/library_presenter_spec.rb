@@ -50,6 +50,7 @@ describe LibraryPresenter do
       expect(props[:pagination]).to eq(page: 1, pages: 1, from: 1, to: 1, count: 1)
       expect(props[:creators]).to eq([{ id: creator.external_id, name: creator.name, count: 1 }])
       expect(props[:bundles]).to eq([])
+      expect(props[:bundle_downloads]).to eq([])
       expect(props[:archived_count]).to eq(0)
       expect(props[:unarchived_count]).to eq(1)
       expect(props[:search]).to eq(
@@ -546,6 +547,12 @@ describe LibraryPresenter do
       let(:purchase2) { create(:purchase, purchaser: buyer, link: create(:product, :bundle)) }
 
       before do
+        [purchase1, purchase2].each do |bundle_purchase|
+          bundle_purchase.link.bundle_products.each_with_index do |bundle_product, index|
+            create(:product_file, link: bundle_product.product, display_name: "#{bundle_purchase.external_id}-file-#{index}")
+          end
+        end
+
         purchase1.create_artifacts_and_send_receipt!
         purchase2.create_artifacts_and_send_receipt!
       end
@@ -571,6 +578,24 @@ describe LibraryPresenter do
         matches = results(bundle_ids: [purchase1.link.external_id])
 
         expect(matches.map { _1[:purchase][:id] }).to match_array(purchase1.product_purchases.map(&:external_id))
+      end
+
+      it "prepares and returns a combined ZIP for the selected bundle purchase" do
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:bundle_downloads]).to eq([
+          { id: purchase1.link.external_id, label: "Bundle", download_url: nil }
+        ])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        expect(archive.product_files.map(&:link_id).sort).to eq(purchase1.product_purchases.map(&:link_id).sort)
+
+        archive.mark_in_progress!
+        archive.mark_ready!
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:bundle_downloads]).to eq([
+          { id: purchase1.link.external_id, label: "Bundle", download_url: url_redirect_download_archive_path(purchase1.url_redirect.token) }
+        ])
       end
 
       it "matches nothing when no selected bundle id resolves to a product" do
