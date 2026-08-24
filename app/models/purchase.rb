@@ -1700,10 +1700,18 @@ class Purchase < ApplicationRecord
     purchase_presentment.present?
   end
 
-  # True while a presentment purchase has been charged but Stripe settlement data has not
+  # True while a processor-backed purchase has been charged but settlement data has not
   # arrived yet; a finalization job completes the purchase once it does.
+  def pending_processor_settlement?
+    in_progress? && stripe_transaction_id.present? && processor_settlement_deferrable? && flow_of_funds.blank?
+  end
+
   def pending_buyer_presentment_settlement?
-    in_progress? && stripe_transaction_id.present? && (buyer_presentment? || charge&.charge_presentment.present?) && flow_of_funds.blank?
+    pending_processor_settlement?
+  end
+
+  def processor_settlement_deferrable?
+    stripe_charge_processor? && (buyer_presentment? || charge&.charge_presentment.present? || !funds_held_by_gumroad?)
   end
 
   def buyer_presentment_currency
@@ -2398,7 +2406,9 @@ class Purchase < ApplicationRecord
     return if errors.present?
 
     if charge_intent.succeeded?
-      charge_data_saved = save_charge_data(charge_intent.charge, chargeable:, allow_missing_flow_of_funds: buyer_presentment?)
+      charge_data_saved = save_charge_data(charge_intent.charge,
+                                           chargeable:,
+                                           allow_missing_flow_of_funds: processor_settlement_deferrable?)
       unless charge_data_saved
         FinalizeBuyerPresentmentPurchaseJob.perform_in(FinalizeBuyerPresentmentPurchaseJob::INITIAL_DELAY, id)
       end
@@ -2417,10 +2427,10 @@ class Purchase < ApplicationRecord
     self.charge_intent = ChargeProcessor.confirm_payment_intent!(merchant_account, processor_payment_intent_id)
 
     if charge_intent.succeeded?
-      # Presentment charges may not have Stripe settlement data yet right after an SCA
-      # confirmation; defer like the create path does instead of crashing on a blank
+      # Presentment and seller-held Stripe charges may not have settlement data yet right after an
+      # SCA confirmation; defer like the create path does instead of crashing on a blank
       # flow of funds. FinalizeBuyerPresentmentChargeJob completes the purchase later.
-      save_charge_data(charge_intent.charge, allow_missing_flow_of_funds: charge&.charge_presentment.present?)
+      save_charge_data(charge_intent.charge, allow_missing_flow_of_funds: processor_settlement_deferrable?)
     else
       errors.add :base, "Sorry, something went wrong."
     end

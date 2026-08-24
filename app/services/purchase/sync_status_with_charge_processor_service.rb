@@ -68,7 +68,7 @@ class Purchase::SyncStatusWithChargeProcessorService
         charge.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.charge.amount_cents)
       end
 
-      if charge_succeeded && charge.flow_of_funds.nil? && (purchase.is_part_of_combined_charge? || purchase.buyer_presentment?)
+      if charge_succeeded && charge.flow_of_funds.nil? && purchase.processor_settlement_deferrable?
         # The charge succeeded but the processor has not produced the balance transaction the flow
         # of funds is read from, so retry later rather than failing a purchase whose money moved.
         # Only the uncredited-destination-payment cause is bounded (by

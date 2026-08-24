@@ -443,7 +443,7 @@ class Order::ChargeService
   def charge_intent_waiting_for_flow_of_funds?(charge)
     charge_intent&.succeeded? &&
       charge_intent.is_a?(StripeChargeIntent) &&
-      charge&.charge_presentment.present? &&
+      (charge&.charge_presentment.present? || charge&.merchant_account&.user_id.present?) &&
       charge_intent.charge.flow_of_funds.blank?
   end
 
