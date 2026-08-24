@@ -206,6 +206,10 @@ class Checkout::BuyerCurrencyQuote
                            keyword_init: true)
 
   TOKEN_PURPOSE = :buyer_currency_quote
+  # Payload had signed per-line components but this request did not bind one
+  # row. Callers on the Stripe verify path must fail closed rather than treat
+  # this like a pre-component legacy token.
+  CANONICAL_COMPONENTS_UNBOUND = :unbound
 
   # Each seller costs one serial Stripe FX quote (2s connect + 5s read, no retry) on the
   # surcharge request the buyer is waiting on, re-paid on every cart/tip/address/VAT edit.
@@ -374,6 +378,8 @@ class Checkout::BuyerCurrencyQuote
     end
 
     components_payload = charge_payload["canonical_line_components"]
+    return if components_payload.blank?
+
     components = if components_payload.is_a?(Hash)
       components_payload[permalink.to_s]
     elsif components_payload.is_a?(Array)
@@ -394,7 +400,7 @@ class Checkout::BuyerCurrencyQuote
         scoped.sole if scoped.one?
       end
     end
-    return if components.blank?
+    return CANONICAL_COMPONENTS_UNBOUND if components.blank?
 
     {
       price_cents: components.fetch("price_cents").to_i,

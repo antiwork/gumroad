@@ -224,12 +224,15 @@ class Purchase::CreateService < Purchase::BaseService
 
     def buyer_currency_quote_canonical_components_hint(purchase)
       return if params[:buyer_currency_quote].blank?
+      # Charge::CreateService discards the token for PayPal before verify!.
+      # Do not make that token authoritative over the USD split.
+      return unless buyer_currency_quote_components_verified_path?
 
       # Do not require a submit-time tip or a non-USD listing. Quote-time largest-remainder
       # can hand a cent to a different line — including a USD line in a mixed cart — so any
       # quoted line may arrive with tip_cents=0 and still need its signed split.
 
-      Checkout::BuyerCurrencyQuote.canonical_components_hint(
+      hint = Checkout::BuyerCurrencyQuote.canonical_components_hint(
         token: params[:buyer_currency_quote],
         seller_id: purchase.seller.id,
         permalink: purchase.link.unique_permalink,
@@ -237,6 +240,23 @@ class Purchase::CreateService < Purchase::BaseService
         uid: params[:buyer_currency_quote_line_uid],
         line_index: params[:buyer_currency_quote_line_index]
       )
+      if hint == Checkout::BuyerCurrencyQuote::CANONICAL_COMPONENTS_UNBOUND
+        purchase.errors.add(:base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+        purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
+        raise Purchase::PurchaseInvalid, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      end
+
+      hint
+    end
+
+    def buyer_currency_quote_components_verified_path?
+      return false if params[:paypal_order_id].present? || params[:billing_agreement_id].present?
+
+      chargeable = purchase_params&.[](:chargeable)
+      processor_id = chargeable.respond_to?(:charge_processor_id) ? chargeable.charge_processor_id : nil
+      return true if processor_id.blank?
+
+      processor_id == StripeChargeProcessor.charge_processor_id
     end
 
     def is_gift?

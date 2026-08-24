@@ -805,7 +805,7 @@ describe Checkout::BuyerCurrencyQuote do
         seller_id: seller.id,
         permalink: eur_product.unique_permalink,
         currency: Currency::EUR
-      )).to be_nil
+      )).to eq(described_class::CANONICAL_COMPONENTS_UNBOUND)
       expect(described_class.canonical_components_hint(
         token:,
         seller_id: seller.id,
@@ -813,7 +813,7 @@ describe Checkout::BuyerCurrencyQuote do
         currency: Currency::EUR,
         uid: "line-b",
         line_index: 0
-      )).to be_nil
+      )).to eq(described_class::CANONICAL_COMPONENTS_UNBOUND)
       expect(described_class.canonical_components_hint(
         token:,
         seller_id: seller.id,
@@ -821,7 +821,7 @@ describe Checkout::BuyerCurrencyQuote do
         currency: Currency::EUR,
         uid: "missing",
         line_index: 1
-      )).to be_nil
+      )).to eq(described_class::CANONICAL_COMPONENTS_UNBOUND)
       expect(described_class.canonical_components_hint(
         token:,
         seller_id: seller.id,
@@ -878,7 +878,7 @@ describe Checkout::BuyerCurrencyQuote do
         currency: Currency::EUR,
         uid: "line-cad",
         line_index: 1
-      )).to be_nil
+      )).to eq(described_class::CANONICAL_COMPONENTS_UNBOUND)
     end
 
     it "treats a non-USD line's submitted price as already-canonical USD, matching the purchase total" do

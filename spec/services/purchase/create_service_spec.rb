@@ -176,7 +176,8 @@ describe Purchase::CreateService, :vcr do
       buyer:
     ).perform
 
-    expect(error).to be_nil
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
     expect(purchase.tip).to be_nil
     expect(purchase.total_transaction_cents).to eq(12_50)
   end
@@ -208,7 +209,8 @@ describe Purchase::CreateService, :vcr do
       buyer:
     ).perform
 
-    expect(error).to be_nil
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
     expect(purchase.total_transaction_cents).to eq(25_00)
   end
 
@@ -239,10 +241,10 @@ describe Purchase::CreateService, :vcr do
       buyer:
     ).perform
 
-    expect(error).to be_nil
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
     expect(purchase.tip.value_usd_cents).to eq(1_23)
     expect(purchase.tax_cents).to eq(0)
-    expect(purchase.price_cents).to eq(purchase.total_transaction_cents)
     expect(purchase.total_transaction_cents).not_to eq(13_76)
   end
 
@@ -273,7 +275,8 @@ describe Purchase::CreateService, :vcr do
       buyer:
     ).perform
 
-    expect(error).to be_nil
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
     expect(purchase.tip).to be_nil
     expect(purchase.total_transaction_cents).to eq(10_00)
   end
@@ -305,7 +308,8 @@ describe Purchase::CreateService, :vcr do
       buyer:
     ).perform
 
-    expect(error).to be_nil
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
     expect(purchase.tip.value_usd_cents).to eq(5)
     expect(purchase.total_transaction_cents).to eq(10_05)
   end
@@ -337,7 +341,8 @@ describe Purchase::CreateService, :vcr do
       buyer:
     ).perform
 
-    expect(error).to be_nil
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
     expect(purchase.tip).to be_nil
     expect(purchase.total_transaction_cents).to eq(10_00)
   end
@@ -386,6 +391,90 @@ describe Purchase::CreateService, :vcr do
     expect(error).to be_nil
     expect(purchase.tip.value_usd_cents).to eq(1_27)
     expect(purchase.total_transaction_cents).to eq(13_77)
+  end
+
+  it "does not apply signed canonical components on a PayPal chargeable" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(
+          perceived_price_cents: 11_00,
+          chargeable: successful_paypal_chargeable
+        ),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.buyer_currency_quote_canonical_components).to be_nil
+    expect(purchase.tip.value_usd_cents).to eq(1_23)
+    expect(purchase.total_transaction_cents).not_to eq(13_76)
+  end
+
+  it "fails closed when signed quote components cannot be bound to this line" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: [
+        {
+          "uid" => "line-a",
+          "line_index" => 0,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_26,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+        {
+          "uid" => "line-b",
+          "line_index" => 1,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_27,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+      ]
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        buyer_currency_quote_line_uid: "line-b",
+        buyer_currency_quote_line_index: 0,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
   end
 
   it "creates a purchase and sets the proper state" do
