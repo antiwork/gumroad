@@ -140,6 +140,45 @@ describe Purchase do
       end
     end
 
+    context "when the purchase still has a Gumroad account but the charge is seller-held" do
+      it "keeps the nil flow instead of minting USD from the leftover purchase account" do
+        seller_account = create(:merchant_account, user: purchase.seller, currency: Currency::EUR,
+                                                   charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+        charge = create(:charge, seller: purchase.seller, merchant_account: seller_account,
+                                 amount_cents: purchase.total_transaction_cents)
+        charge.purchases << purchase
+        purchase.reload
+
+        expect(purchase.merchant_account.user_id).to be_nil
+        expect(purchase.charge.merchant_account.user_id).to eq(purchase.seller_id)
+
+        purchase.send(:load_flow_of_funds, processor_charge)
+
+        expect(processor_charge.flow_of_funds).to be_nil
+        expect(purchase.flow_of_funds).to be_nil
+      end
+    end
+
+    context "when the purchase account is nil but the charge is a known Gumroad-held account" do
+      it "synthesises the USD fallback the Gumroad-held charge requires" do
+        gumroad_account = purchase.merchant_account
+        charge = create(:charge, seller: purchase.seller, merchant_account: gumroad_account,
+                                 amount_cents: purchase.total_transaction_cents)
+        charge.purchases << purchase
+        purchase.update_column(:merchant_account_id, nil)
+        purchase.reload
+
+        expect(purchase.merchant_account).to be_nil
+        expect(purchase.charge.merchant_account.user_id).to be_nil
+
+        purchase.send(:load_flow_of_funds, processor_charge)
+
+        expect(purchase.flow_of_funds).to be_present
+        expect(purchase.flow_of_funds.issued_amount.currency).to eq(Currency::USD)
+        expect(purchase.flow_of_funds.issued_amount.cents).to eq(purchase.total_transaction_cents)
+      end
+    end
+
     context "when the processor charge has no flow of funds but the purchase IS buyer-presentment" do
       it "keeps the nil flow of funds instead of relabelling the buyer-currency charge as dollars" do
         create(:purchase_presentment, purchase:, charge_presentment: nil)
@@ -193,6 +232,30 @@ describe Purchase do
       expect(purchase.merchant_account).to be_present
       expect(purchase.charge.merchant_account).to be_nil
       expect(purchase.processor_settlement_deferrable?).to be(true)
+    end
+
+    it "is true when the purchase still has a Gumroad account but the charge is seller-held" do
+      seller_account = create(:merchant_account, user: purchase.seller,
+                                                 charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+      charge = create(:charge, seller: purchase.seller, merchant_account: seller_account)
+      charge.purchases << purchase
+      purchase.reload
+
+      expect(purchase.merchant_account.user_id).to be_nil
+      expect(purchase.charge.merchant_account.user_id).to eq(purchase.seller_id)
+      expect(purchase.processor_settlement_deferrable?).to be(true)
+    end
+
+    it "is false when the purchase account is nil but the charge is a known Gumroad-held account" do
+      gumroad_account = purchase.merchant_account
+      charge = create(:charge, seller: purchase.seller, merchant_account: gumroad_account)
+      charge.purchases << purchase
+      purchase.update_column(:merchant_account_id, nil)
+      purchase.reload
+
+      expect(purchase.merchant_account).to be_nil
+      expect(purchase.charge.merchant_account.user_id).to be_nil
+      expect(purchase.processor_settlement_deferrable?).to be(false)
     end
   end
 end

@@ -1713,15 +1713,13 @@ class Purchase < ApplicationRecord
   def processor_settlement_deferrable?
     return false unless stripe_charge_processor?
 
-    # funds_held_by_gumroad? treats merchant_account == nil as Gumroad-held, but
-    # sync already persists that shape for a charged seller-held row. Read the
-    # charge too, and treat unknown ownership as deferrable.
+    # Charge merchant_account is the money's home when the Charge exists; a nil
+    # purchase account (or a leftover Gumroad account on a seller-held charge)
+    # must not disagree with checkout/finalizer gates.
     buyer_presentment? ||
       charge&.charge_presentment.present? ||
       !funds_held_by_gumroad? ||
-      charge&.merchant_account&.user_id.present? ||
-      merchant_account.nil? ||
-      (charge.present? && charge.merchant_account.nil?)
+      settlement_merchant_account.nil?
   end
 
   def buyer_presentment_currency
@@ -4626,8 +4624,7 @@ class Purchase < ApplicationRecord
       # arrived yet (StripeCharge#build_flow_of_funds), and dollars there become the holding
       # amount of an account denominated in its own currency — a balance no payout picks up
       # (gumroad-private#1471). Presentment stays nil for the same reason.
-      unknown_stripe_ownership = stripe_charge_processor? &&
-        (merchant_account.nil? || (charge.present? && charge.merchant_account.nil?))
+      unknown_stripe_ownership = stripe_charge_processor? && settlement_merchant_account.nil?
       if funds_held_by_gumroad? && !buyer_presentment? && !charge&.charge_presentment.present? && !unknown_stripe_ownership
         # Sized to the whole charge, because the combined-charge split below divides by it.
         # Stripe with a missing merchant_account is unknown ownership, not Gumroad-held USD.
@@ -4646,8 +4643,17 @@ class Purchase < ApplicationRecord
     # other processor is Gumroad-held. Not charged_using_gumroad_merchant_account?, which is also
     # true of a seller's own custom account, nor MerchantAccount#holder_of_funds, which answers
     # the same question by dispatching through the charge-processor registry.
+    # Prefer the Charge's account when a Charge exists: that is where the money actually sat.
     def funds_held_by_gumroad?
-      !(stripe_charge_processor? && merchant_account&.user_id.present?)
+      !(stripe_charge_processor? && settlement_merchant_account&.user_id.present?)
+    end
+
+    # Charge.merchant_account wins when the Charge row exists, even if that account is nil.
+    # Falling back to Purchase.merchant_account only when there is no Charge keeps a leftover
+    # Gumroad account from minting USD on a seller-held charge, and a nil purchase account
+    # from suppressing the USD fallback on a known Gumroad-held charge.
+    def settlement_merchant_account
+      charge.present? ? charge.merchant_account : merchant_account
     end
 
     def additional_fields_for_creator_app_api
