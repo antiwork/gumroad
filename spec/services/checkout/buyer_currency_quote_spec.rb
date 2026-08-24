@@ -881,6 +881,42 @@ describe Checkout::BuyerCurrencyQuote do
       )).to eq(described_class::CANONICAL_COMPONENTS_UNBOUND)
     end
 
+    it "does not treat an omitted permalink as unbound" do
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      free_product = create(:product, user: seller, price_cents: 0, price_currency_type: Currency::USD)
+      payload = {
+        "charges" => [
+          {
+            "seller_id" => seller.id,
+            "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
+            "listed_currency_codes" => { eur_product.unique_permalink => Currency::EUR },
+            "canonical_line_components" => [
+              {
+                "uid" => "paid-item",
+                "line_index" => 0,
+                "permalink" => eur_product.unique_permalink,
+                "price_cents" => 12_50,
+                "tip_cents" => 0,
+                "seller_tax_cents" => 0,
+                "gumroad_tax_cents" => 0,
+                "shipping_cents" => 0,
+              },
+            ],
+          }
+        ]
+      }
+      token = Rails.application.message_verifier(described_class::TOKEN_PURPOSE).generate(payload)
+
+      expect(described_class.canonical_components_hint(
+        token:,
+        seller_id: seller.id,
+        permalink: free_product.unique_permalink,
+        currency: Currency::USD,
+        uid: "free-item",
+        line_index: 1
+      )).to be_nil
+    end
+
     it "treats a non-USD line's submitted price as already-canonical USD, matching the purchase total" do
       # LOAD-BEARING UNITS INVARIANT. The browser converts before it posts — getProducts in
       # pages/Checkout/Show.tsx sends `price: convertToUSD(item, price)` — so the surcharge

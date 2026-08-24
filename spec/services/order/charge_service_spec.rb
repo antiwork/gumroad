@@ -7,11 +7,13 @@ describe Order::ChargeService, :vcr do
     # Builds a quote the way the surcharge endpoint would for an untaxed digital cart:
     # one price-only line per product. Keeps the specs in sync with the line-item quote API
     # (Checkout::BuyerCurrencyQuote.create takes line_items, not products).
-    def buyer_currency_quote_for(*products, ip: "24.48.0.1")
+    def buyer_currency_quote_for(*products, ip: "24.48.0.1", uids: nil)
       Checkout::BuyerCurrencyQuote.create(
-        line_items: products.map do |product|
+        line_items: products.map.with_index do |product, line_index|
           Checkout::BuyerCurrencyQuote::LineItem.new(
             permalink: product.unique_permalink,
+            uid: Array(uids)[line_index] || "unique-id-#{line_index}",
+            line_index:,
             product:,
             price_cents: product.price_cents,
             tip_cents: 0,
@@ -471,7 +473,7 @@ describe Order::ChargeService, :vcr do
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
       expect(StripeFxQuote).to receive(:create).once.and_return(stripe_fx_quote)
 
-      quote = buyer_currency_quote_for(product_1, free_product_1)
+      quote = buyer_currency_quote_for(product_1, free_product_1, uids: %w[paid-item free-item])
       params = {
         line_items: [
           {
@@ -842,6 +844,8 @@ describe Order::ChargeService, :vcr do
         line_items: [
           Checkout::BuyerCurrencyQuote::LineItem.new(
             permalink: commission_product.unique_permalink,
+            uid: "unique-id-0",
+            line_index: 0,
             product: commission_product,
             price_cents: commission_product.price_cents,
             tip_cents: 0,
@@ -940,6 +944,8 @@ describe Order::ChargeService, :vcr do
         line_items: [
           Checkout::BuyerCurrencyQuote::LineItem.new(
             permalink: installment_product.unique_permalink,
+            uid: "unique-id-0",
+            line_index: 0,
             product: installment_product.reload,
             price_cents: 10_00,
             tip_cents: 0,
@@ -1923,6 +1929,8 @@ describe Order::ChargeService, :vcr do
 
         quote_line_item = Checkout::BuyerCurrencyQuote::LineItem.new(
           permalink: membership_product_2.unique_permalink,
+          uid: "unique-id-0",
+          line_index: 0,
           product: membership_product_2,
           price_cents: 10_00,
           tip_cents: 0,
