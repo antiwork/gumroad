@@ -1720,7 +1720,8 @@ class Purchase < ApplicationRecord
       charge&.charge_presentment.present? ||
       !funds_held_by_gumroad? ||
       charge&.merchant_account&.user_id.present? ||
-      merchant_account.nil?
+      merchant_account.nil? ||
+      (charge.present? && charge.merchant_account.nil?)
   end
 
   def buyer_presentment_currency
@@ -4625,9 +4626,10 @@ class Purchase < ApplicationRecord
       # arrived yet (StripeCharge#build_flow_of_funds), and dollars there become the holding
       # amount of an account denominated in its own currency — a balance no payout picks up
       # (gumroad-private#1471). Presentment stays nil for the same reason.
-      if funds_held_by_gumroad? && merchant_account.present? && !buyer_presentment? && !charge&.charge_presentment.present?
+      unknown_stripe_ownership = stripe_charge_processor? && merchant_account.nil?
+      if funds_held_by_gumroad? && !buyer_presentment? && !charge&.charge_presentment.present? && !unknown_stripe_ownership
         # Sized to the whole charge, because the combined-charge split below divides by it.
-        # Do not mint USD when merchant_account is nil: that is also the unprepared seller-held shape.
+        # Stripe with a missing merchant_account is unknown ownership, not Gumroad-held USD.
         flow_amount_cents = is_part_of_combined_charge? ? charge.amount_cents : total_transaction_cents
         processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, flow_amount_cents)
       end

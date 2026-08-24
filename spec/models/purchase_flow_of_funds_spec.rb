@@ -90,6 +90,17 @@ describe Purchase do
         expect(purchase.flow_of_funds.issued_amount.currency).to eq(Currency::USD)
         expect(purchase.flow_of_funds.issued_amount.cents).to eq(purchase.total_transaction_cents)
       end
+
+      it "still synthesises USD when the non-Stripe merchant account is missing" do
+        purchase.charge_processor_id = PaypalChargeProcessor.charge_processor_id
+        purchase.update_column(:merchant_account_id, nil)
+        purchase.reload
+
+        purchase.send(:load_flow_of_funds, processor_charge)
+
+        expect(purchase.flow_of_funds.issued_amount.currency).to eq(Currency::USD)
+        expect(purchase.flow_of_funds.issued_amount.cents).to eq(purchase.total_transaction_cents)
+      end
     end
 
     context "when the processor charge has no flow of funds but the charge has a presentment snapshot" do
@@ -152,6 +163,16 @@ describe Purchase do
       purchase.reload
 
       expect(purchase.charge).to be_nil
+      expect(purchase.processor_settlement_deferrable?).to be(true)
+    end
+
+    it "is true when the associated charge merchant account is missing" do
+      charge = create(:charge, seller: purchase.seller, merchant_account: nil)
+      charge.purchases << purchase
+      purchase.reload
+
+      expect(purchase.merchant_account).to be_present
+      expect(purchase.charge.merchant_account).to be_nil
       expect(purchase.processor_settlement_deferrable?).to be(true)
     end
   end
