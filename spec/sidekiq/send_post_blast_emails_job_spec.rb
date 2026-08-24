@@ -67,6 +67,27 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 0
     end
 
+    it "records how many recipients it still owes, and clears the count when it finishes" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(blast.reload.completed_at).to be_present
+      expect($redis.exists?(pending_key)).to be(false)
+    end
+
+    it "leaves the owed count positive when the send dies before the provider call" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
+
+      expect { described_class.new.perform(blast.id) }.to raise_error(StandardError, "API failure")
+
+      expect($redis.get(RedisKey.blast_pending_recipients(blast.id)).to_i).to eq(1)
+      expect(described_class.fully_delivered?(blast.reload)).to be(false)
+    end
+
     it "records when blast started processing" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
       described_class.new.perform(blast.id)
@@ -715,6 +736,50 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
       # Verify that no SentPostEmail records exist
       expect(SentPostEmail.where(post: post).count).to eq(0)
+    end
+  end
+
+  describe ".fully_delivered?" do
+    let(:blast) { create(:blast, post: basic_post_with_audience, completed_at: nil) }
+    let(:pending_key) { RedisKey.blast_pending_recipients(blast.id) }
+
+    it "is false when the sender never published an owed count" do
+      expect(described_class.fully_delivered?(blast)).to be(false)
+    end
+
+    it "is false while recipients are still owed" do
+      $redis.set(pending_key, 5)
+
+      expect(described_class.fully_delivered?(blast)).to be(false)
+    end
+
+    it "is true once every recipient has been handed over" do
+      $redis.set(pending_key, 0)
+
+      expect(described_class.fully_delivered?(blast)).to be(true)
+    end
+
+    it "is true when the count went negative through a re-delivered slice" do
+      $redis.set(pending_key, -2)
+
+      expect(described_class.fully_delivered?(blast)).to be(true)
+    end
+
+    it "is false once completed_at is already set" do
+      $redis.set(pending_key, 0)
+      blast.update!(completed_at: Time.current)
+
+      expect(described_class.fully_delivered?(blast)).to be(false)
+    end
+
+    it "is false for a non-opener resend that still owes recipients" do
+      blast.update!(recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+      $redis.set(pending_key, 1)
+
+      expect(described_class.fully_delivered?(blast)).to be(false)
+
+      $redis.set(pending_key, 0)
+      expect(described_class.fully_delivered?(blast)).to be(true)
     end
   end
 

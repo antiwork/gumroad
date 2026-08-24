@@ -9,6 +9,19 @@ class SendPostBlastEmailsJob
   # blast silently, which is what made the documented recovery a no-op (gumroad-private#1816).
   sidekiq_options retry: 10, queue: :default
 
+  # True when the sender has already handed every recipient it picked to an ESP.
+  #
+  # The sender publishes how many recipients it still owes (see `start_pending_recipients`),
+  # and only decrements after the provider call returns — so a kill anywhere before the
+  # handoff leaves a positive count. A missing key means "unknown", not "delivered": the
+  # caller falls back to resuming, exactly as it did before this existed.
+  def self.fully_delivered?(blast)
+    return false if blast.completed_at.present?
+
+    pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
+    pending.present? && pending.to_i <= 0
+  end
+
   def perform(blast_id)
     @blast = PostEmailBlast.find(blast_id)
     @post = @blast.post
@@ -35,6 +48,7 @@ class SendPostBlastEmailsJob
 
     return mark_blast_as_completed if @members.empty?
 
+    start_pending_recipients
     cache = {}
     @members.each_slice(recipients_slice_size) do |members_slice|
       members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
@@ -76,12 +90,16 @@ class SendPostBlastEmailsJob
     # already accepted its recipients must not be handed them again because a later
     # provider failed, so the cleanup below only rolls back the slice that raised.
     def send_provider_slice(provider:, members:, cache:)
+      # Count the slice as handed over, not the post-dedupe remainder: anything
+      # `store_recipients_as_sent` drops was already emailed by someone else.
+      owed = members.size
       members = store_recipients_as_sent(members)
       recipients = prepare_recipients(members)
 
       begin
         deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
         mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
+        decrement_pending_recipients(owed)
       rescue Exception => e
         # Delete the sent_post_emails records if there's an error with the provider send.
         # We cannot use `transaction` here because it exceeds the lock timeout.
@@ -358,15 +376,29 @@ class SendPostBlastEmailsJob
       end
     end
 
+    # Publishes how many recipients this attempt still owes the ESPs, so a monitor can tell a
+    # blast that died mid-send from one that died after the last handoff but before the stamp
+    # below (gumroad-private#2250). Written per attempt, after filtering: a retry owes only
+    # what is left. The TTL matches the audience snapshot — past it the answer is "unknown"
+    # and the monitor falls back to resuming.
+    def start_pending_recipients
+      $redis.set(RedisKey.blast_pending_recipients(@blast.id), @members.size, ex: AUDIENCE_SNAPSHOT_TTL.to_i)
+    end
+
+    def decrement_pending_recipients(count)
+      $redis.decrby(RedisKey.blast_pending_recipients(@blast.id), count)
+    end
+
     def mark_blast_as_completed
       @blast.update!(completed_at: Time.current)
-      # The blast is done, so the retry-resume snapshot and the non-opener checkpoint
-      # have served their purpose. Also remove the temporary write-in-progress keys in
-      # case a previous attempt died mid-write (they carry a TTL, but no reason to keep
-      # them around).
+      # The blast is done, so the retry-resume snapshot, the non-opener checkpoint and the
+      # pending-recipient count have served their purpose. Also remove the temporary
+      # write-in-progress keys in case a previous attempt died mid-write (they carry a TTL,
+      # but no reason to keep them around).
       snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
       checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
-      $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp")
+      $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
+                 RedisKey.blast_pending_recipients(@blast.id))
     end
 
     # Stores email addresses in SentPostEmail, just before sending the emails.
