@@ -178,9 +178,10 @@ class UrlRedirect < ApplicationRecord
   def ensure_bundle_archive_for(bundle_files)
     owner = rich_content_provider.presence || with_product_files
     owner.with_lock do
-      # Failed ZIPs stay alive; they must not block a replacement or Download all
-      # disappears after one generation error.
-      return if matching_bundle_archives(bundle_files).any? { |archive| !archive.failed? }
+      matching_archives = matching_bundle_archives(bundle_files)
+      # One automatic retry covers transient worker failures; two failed matching ZIPs
+      # mean Library should stop requeueing the same archive on every load.
+      return if matching_archives.any? { |archive| !archive.failed? } || matching_archives.count(&:failed?) >= 2
 
       product_files_archive = product_files_archives.new
       product_files_archive.product_files = bundle_files

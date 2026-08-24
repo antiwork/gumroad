@@ -618,6 +618,21 @@ describe LibraryPresenter do
         expect(archives.map(&:product_files_archive_state)).to contain_exactly("failed", "queueing")
       end
 
+      it "stops automatically retrying after a replacement ZIP also failed" do
+        library_props(bundle_ids: [purchase1.link.external_id])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archive.mark_failed!
+        library_props(bundle_ids: [purchase1.link.external_id])
+        replacement_archive = purchase1.link.product_files_archives.alive.entity_archives.where.not(id: archive.id).sole
+        replacement_archive.mark_failed!
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:bundle_downloads]).to eq([])
+        archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
+        expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed"])
+      end
+
       it "matches nothing when no selected bundle id resolves to a product" do
         expect(results(bundle_ids: ["garbage"])).to be_empty
       end
