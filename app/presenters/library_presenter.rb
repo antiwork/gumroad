@@ -214,9 +214,16 @@ class LibraryPresenter
       bundle_purchases.filter_map do |purchase|
         redirect = purchase.url_redirect
         next if redirect.blank?
-        next if redirect.bundle_archive_product_files.empty?
+
+        files = redirect.bundle_archive_product_files
+        next if files.empty?
 
         archive = redirect.bundle_archive
+        if archive.blank?
+          matching = redirect.matching_bundle_archives(files)
+          next if matching.any? && matching.none? { |existing| existing.queueing? || existing.in_progress? }
+        end
+
         {
           id: purchase.link.external_id,
           label: purchase.link.name,
