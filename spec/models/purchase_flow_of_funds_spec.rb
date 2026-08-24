@@ -92,8 +92,10 @@ describe Purchase do
       end
 
       it "still synthesises USD when the non-Stripe merchant account is missing" do
-        purchase.charge_processor_id = PaypalChargeProcessor.charge_processor_id
-        purchase.update_column(:merchant_account_id, nil)
+        purchase.update_columns(
+          charge_processor_id: PaypalChargeProcessor.charge_processor_id,
+          merchant_account_id: nil
+        )
         purchase.reload
 
         purchase.send(:load_flow_of_funds, processor_charge)
