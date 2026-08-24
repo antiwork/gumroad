@@ -4606,6 +4606,16 @@ class Purchase < ApplicationRecord
       component_seller_tax_cents = components.fetch(:seller_tax_cents).to_i
       component_gumroad_tax_cents = components.fetch(:gumroad_tax_cents).to_i
       component_shipping_cents = components.fetch(:shipping_cents).to_i
+      signed_total_cents = component_price_cents + component_tip_cents +
+        component_seller_tax_cents + component_gumroad_tax_cents + component_shipping_cents
+
+      # Replace only the independently calculated tip with the signed tip, then demand the
+      # rest of the line already matches. A few cents is listed-currency rounding; a larger
+      # gap means quantity/price/discount/shipping diverged from the quote, and applying
+      # would charge the old quoted amount for the new cart.
+      submitted_tip_cents = tip&.value_usd_cents.to_i
+      adjusted_total_cents = total_transaction_cents.to_i - submitted_tip_cents + component_tip_cents
+      return if (adjusted_total_cents - signed_total_cents).abs > 5
 
       tip.value_usd_cents = component_tip_cents if tip.present?
       self.tax_cents = component_seller_tax_cents
@@ -4614,8 +4624,7 @@ class Purchase < ApplicationRecord
       self.price_cents = component_price_cents + component_tip_cents
       self.price_cents += component_seller_tax_cents if was_tax_excluded_from_price
       self.price_cents += component_shipping_cents
-      self.total_transaction_cents = component_price_cents + component_tip_cents +
-        component_seller_tax_cents + component_gumroad_tax_cents + component_shipping_cents
+      self.total_transaction_cents = signed_total_cents
     end
 
     def load_flow_of_funds(processor_charge)
