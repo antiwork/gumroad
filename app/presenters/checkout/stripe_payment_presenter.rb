@@ -414,6 +414,14 @@ class Checkout::StripePaymentPresenter
       return false unless sellers.uniq.one?
       return false unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
       return false unless sellers.all? { Checkout::BuyerCurrencyEligibility.listed_currency_direct_charge_enabled?(_1) }
+      # Same account gates the surcharge menu applies in
+      # Checkout::BuyerCurrencyEligibility.direct_listed_line_items_eligible?: a seller whose
+      # charging account cannot create the intent must not get a listed-currency Element either,
+      # or the Element mounts in CAD while prepare refuses the charge.
+      seller = sellers.first
+      merchant_account = Checkout::BuyerCurrencyEligibility.charging_merchant_account(seller)
+      return false unless merchant_account&.stripe_charge_processor?
+      return false unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account, seller:)
 
       buyer_currency = buyer_currency_for_ip(ip).to_s.downcase
       return false if buyer_currency.blank? || buyer_currency == Currency::USD
