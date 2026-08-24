@@ -31,6 +31,7 @@ class UrlRedirect < ApplicationRecord
   TIME_TO_WATCH_RENTED_PRODUCT_AFTER_FIRST_PLAY = 72.hours
   FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION = "ef64f2fef0d6c776a337050020423fc0"
   GUID_GETTER_FROM_S3_URL_REGEX = %r{attachments/(.*)/original}
+  BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN = 24.hours
 
   # Public: If one exists, returns the product that this UrlRedirect is associated to, directly or indirectly. Otherwise nil is returned.
   def referenced_link
@@ -171,7 +172,7 @@ class UrlRedirect < ApplicationRecord
   def matching_bundle_archives(bundle_files)
     bundle_file_ids = bundle_files.map(&:id).sort
     product_files_archives.entity_archives.alive.includes(:product_files).select do |archive|
-      archive.product_files.map(&:id).sort == bundle_file_ids
+      archive.product_files.map(&:id).sort == bundle_file_ids && (archive.digest.blank? || !archive.needs_updating?(bundle_files))
     end
   end
 
@@ -179,9 +180,11 @@ class UrlRedirect < ApplicationRecord
     owner = rich_content_provider.presence || with_product_files
     owner.with_lock do
       matching_archives = matching_bundle_archives(bundle_files)
-      # One automatic retry covers transient worker failures; two failed matching ZIPs
-      # mean Library should stop requeueing the same archive on every load.
-      return if matching_archives.any? { |archive| !archive.failed? } || matching_archives.count(&:failed?) >= 2
+      return if matching_archives.any? { |archive| !archive.failed? }
+
+      failed_archives = matching_archives.select(&:failed?)
+      latest_failure_at = failed_archives.map(&:updated_at).compact.max
+      return if failed_archives.size >= 2 && latest_failure_at > BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN.ago
 
       product_files_archive = product_files_archives.new
       product_files_archive.product_files = bundle_files
