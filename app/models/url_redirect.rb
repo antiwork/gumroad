@@ -179,7 +179,10 @@ class UrlRedirect < ApplicationRecord
 
   def matching_bundle_archives(bundle_files)
     bundle_file_ids = bundle_files.map(&:id).sort
-    product_files_archives.entity_archives.alive.includes(:product_files).select do |archive|
+    digest_probe = product_files_archives.new
+    digest_probe.product_files = bundle_files
+    expected_digest = digest_probe.digest_for_files(bundle_files)
+    product_files_archives.entity_archives.alive.where(digest: [nil, expected_digest]).includes(:product_files).select do |archive|
       archive.product_files.map(&:id).sort == bundle_file_ids && (archive.digest.blank? || !archive.needs_updating?(bundle_files))
     end
   end
@@ -198,6 +201,7 @@ class UrlRedirect < ApplicationRecord
 
       product_files_archive = product_files_archives.new
       product_files_archive.product_files = bundle_files
+      product_files_archive.digest = product_files_archive.digest_for_files(bundle_files)
       product_files_archive.save!
       product_files_archive.set_url_if_not_present
       product_files_archive.save!
