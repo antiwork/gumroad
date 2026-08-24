@@ -4626,7 +4626,8 @@ class Purchase < ApplicationRecord
       # arrived yet (StripeCharge#build_flow_of_funds), and dollars there become the holding
       # amount of an account denominated in its own currency — a balance no payout picks up
       # (gumroad-private#1471). Presentment stays nil for the same reason.
-      unknown_stripe_ownership = stripe_charge_processor? && merchant_account.nil?
+      unknown_stripe_ownership = stripe_charge_processor? &&
+        (merchant_account.nil? || (charge.present? && charge.merchant_account.nil?))
       if funds_held_by_gumroad? && !buyer_presentment? && !charge&.charge_presentment.present? && !unknown_stripe_ownership
         # Sized to the whole charge, because the combined-charge split below divides by it.
         # Stripe with a missing merchant_account is unknown ownership, not Gumroad-held USD.

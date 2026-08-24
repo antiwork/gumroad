@@ -123,6 +123,23 @@ describe Purchase do
       end
     end
 
+    context "when the associated charge merchant account is missing" do
+      it "keeps the nil flow even if the purchase still has a Gumroad merchant account" do
+        charge = create(:charge, seller: purchase.seller, merchant_account: nil,
+                                 amount_cents: purchase.total_transaction_cents)
+        charge.purchases << purchase
+        purchase.reload
+
+        expect(purchase.merchant_account).to be_present
+        expect(purchase.charge.merchant_account).to be_nil
+
+        purchase.send(:load_flow_of_funds, processor_charge)
+
+        expect(processor_charge.flow_of_funds).to be_nil
+        expect(purchase.flow_of_funds).to be_nil
+      end
+    end
+
     context "when the processor charge has no flow of funds but the purchase IS buyer-presentment" do
       it "keeps the nil flow of funds instead of relabelling the buyer-currency charge as dollars" do
         create(:purchase_presentment, purchase:, charge_presentment: nil)
