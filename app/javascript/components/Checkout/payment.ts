@@ -57,19 +57,10 @@ export type PaymentElementConfig = {
   payment_method_creation: "manual";
   stripe_link_enabled: boolean;
 };
-// Client-confirm checkout mints a ConfirmationToken from the Payment Element, so it omits
-// payment_method_creation and stays in one-time payment mode. The method list is
-// server-resolved (Checkout::PaymentMethodResolver) and must match the deferred intent's;
-// the browser never widens it — card and Link everywhere (stripe_link_enabled reflects the
-// resolved set; Link auto-enables with the Payment Element, dropped only by the PPP gate), plus
-// the US-locked methods (cashapp, us_bank_account) for US buyers. Recurring UPI registration is
-// the narrow card + UPI exception.
-// Currency is "usd" everywhere except direct-listed and method-forced (iDEAL/Bancontact/UPI)
-// surfaces. Those mount in the listed currency with the listed subtotal so the Element, checkout
-// summary, and deferred intent stay aligned; when presentment_amount_cents is null the amount
-// derives from the USD total below.
-// listed_currency_display is non-null on that same surface and tells the checkout summary to
-// render the cart in the listed currency, matching what the element and the charge use.
+// Client-confirm mints a ConfirmationToken, so it omits payment_method_creation.
+// payment_method_types is server-resolved and must match the deferred intent — the
+// browser never widens it. Currency is usd except on direct-listed / method-forced
+// surfaces, which mount in the listed currency so the Element, summary, and intent stay aligned.
 export type ListedCurrencyDisplayConfig = {
   currency: string;
   // The backend's authoritative minor-unit scale for the currency, so formatting never relies on
@@ -92,20 +83,11 @@ export type PaymentElementClientConfirmConfig = {
   stripe_link_enabled: boolean;
   stripe_connect_account_id: string | null;
 };
-// Every integration variant also carries `request_apple_pay_merchant_tokens` — a per-seller
-// rollout flag: when true, subscription carts declare recurring intent on the Apple Pay sheet so
-// Apple issues a device-independent merchant token (MPAN) instead of a device token. It applies
-// to the wallet button regardless of which card integration is active.
-// `payment_element_wallets` is another per-seller rollout flag: when true, the Payment Element
-// renders Apple Pay/Google Pay natively and the separate Payment Request Button is not mounted
-// for that cart (antiwork/gumroad#5768). It is always false on the card_element fallback lane,
-// which has no Payment Element to render wallets in.
-// `flat_payment_methods` selects the flat payment-methods list (the element's accordion is the
-// payment-method selector; PayPal appends as one more row — see PaymentMethodsSection in
-// PaymentForm.tsx). Server-owned and independent of `payment_element_wallets` since the layout
-// was decoupled from the wallet rollout: wallet-suppressed carts (disable_wallets) get the same
-// flat list without wallet rows. Always false on the card_element lane, which has no element to
-// act as the selector.
+// request_apple_pay_merchant_tokens: subscription carts ask Apple for an MPAN (survives a
+// device wipe) instead of a device token. payment_element_wallets: PE renders wallets
+// natively and the Payment Request Button is not mounted; always false on card_element.
+// flat_payment_methods is independent of that flag (wallet-suppressed carts stay flat);
+// always false on card_element, which has no accordion to act as the selector.
 export type CheckoutPaymentConfig =
   | {
       integration: "card_element";
@@ -711,18 +693,10 @@ export function computeTipForPrice(state: State, price: number, permalink: strin
   return Math.round((state.tip.percentage / 100) * price);
 }
 
-// Computes each cart line's tip so the per-line integers sum exactly to the tip the buyer
-// selected (the same figure TipSelector / Subtotal / confirm show via `computeTip`, or its
-// listed-currency counterpart). `computeTipForPrice` rounds each line independently, which
-// overshoots for both tip types: two equal items with a 1-cent fixed tip each round to 1 cent
-// (2 charged vs 1 chosen), and prices like [999, 1999, 2999] at 20% round to 200+400+600 = 1200
-// while `computeTip` is 1199. Both tip types therefore use largest-remainder allocation (floor
-// every line's exact proportional share, then hand leftover cents to the lines with the largest
-// fractional parts). Every consumer that builds per-line money for the server (the surcharge
-// quote request and the order's line items) must use this same function, because the
-// buyer-currency quote token is verified at charge time by comparing the quote's line totals
-// against the purchases': two call sites rounding differently would make every affected charge
-// fail verification.
+// Per-line tips that sum exactly to the cart tip. computeTipForPrice rounds each line
+// independently and overshoots (1¢ fixed on two items → 2¢; [999,1999,2999] @ 20% → 1200
+// vs computeTip 1199). Largest-remainder. Surcharge quotes and order lines must share this
+// function: the quote token is verified against purchase line totals.
 export function computeTipsForLines(
   state: State,
   lines: { price: number; permalink: string | undefined }[],
@@ -753,22 +727,10 @@ export function computeTipsForLines(
   return allocateFixedTipCents(tipCents, lines, totalPriceCents);
 }
 
-// The tip to DISPLAY on the method-forced listed-currency lane, in the listed currency's minor
-// units: the exact figure the order will submit, obtained by running the submission's own
-// allocation over the same per-line bases.
-//
-// The tip lives in checkout state as canonical USD cents on every lane (`computeTip` takes its
-// percentage of `getTotalPriceFromProducts`, and those prices are built with `convertToUSD`), so
-// something has to turn it into listed units for display. Doing that arithmetic separately is what
-// went wrong twice on this lane: a percentage tip re-derived from the canonical figure rounds twice
-// and lands a minor unit low, and a fixed tip converted at the exchange rate disagrees with
-// `allocateFixedTipCents`, which floors each line's exact share and then hands out the leftover
-// minor units. Both were display/charge mismatches of exactly the kind this lane exists to remove.
-//
-// Rather than keep a parallel conversion in step with the allocator, ask the allocator. Callers pass
-// the same per-line prices they will submit — each line's `getDiscountedPrice(...)`, in the
-// product's own minor units — so display and charge agree by construction, for both tip types and
-// for any future change to how tips are split.
+// Listed-lane display tip, in the listed currency's minor units. Do not convert the
+// canonical computeTip figure: a percentage double-rounds one unit low, and a fixed tip
+// converted at the FX rate disagrees with allocateFixedTipCents. Callers pass the same
+// getDiscountedPrice(...) bases the order will submit so display and charge match.
 export function computeTipForListedLines(state: State, lines: { price: number; permalink: string | undefined }[]) {
   return computeTipsForLines(state, lines, { basis: "listed" }).reduce<number>((sum, tip) => sum + (tip ?? 0), 0);
 }
@@ -856,32 +818,20 @@ export function getCustomFieldKey(
 
 export const hasShipping = (state: State) => state.products.some((item) => item.requireShipping);
 
-// Whether the Stripe Payment Element is collecting the buyer's FULL billing details itself for
-// the current selection (the "element-full" collection mode — UPI on digital carts, see
-// paymentElementBillingDetailsCollection in card_payment_method_data.ts). Mirrors that rule
-// instead of importing it: card_payment_method_data.ts already imports from this module, and a
-// value import back would create a module cycle. When this is true, checkout's own form hides
-// its Country/ZIP fields (the element's pane asks for the full street address with Stripe's
-// localized labels and validation) and the ZIP requirement for US buyers is waived — the buyer
-// types their postal code into the element instead. The Full name field stays visible: the
-// pane's name field is pinned to "never" and tokenization passes the form's name (see
-// paymentElementBillingDetailsOverride). Guarded on the card/element lane being checkout's
-// active payment method: a buyer who selected UPI inside the element and then switched to
-// PayPal pays with PayPal's own flow, and the form's fields must come back.
+// UPI on digital carts: the Payment Element collects full billing details. Duplicated from
+// paymentElementBillingDetailsCollection to avoid a cycle with card_payment_method_data.ts.
+// Hide Country/ZIP (the element collects them) but keep Full name — the pane's name field
+// is "never". False again if the buyer leaves the card/element lane (e.g. PayPal).
 export const paymentElementCollectsFullBillingDetails = (state: State) =>
   state.paymentMethod === "card" &&
   state.paymentElementType === "upi" &&
   !hasShipping(state) &&
   (canUseStripePaymentElement(state) || canUseStripePaymentElementClientConfirm(state));
 
-// Whether the currently selected Payment Element method needs `billing_details.name` from
-// checkout's own Full name field. The list of such methods lives in
-// $app/data/payment_element_methods (a cycle-free module, since card_payment_method_data.ts and
-// this module import each other). Bancontact is the case this exists for: Stripe rejects its
-// authorization without a name, but unlike UPI it stays in "form" collection mode, so
-// paymentElementCollectsFullBillingDetails is false for it and the name would otherwise never be
-// required on a digital cart (gumroad-private#1306). Guarded on the card/element lane for the
-// same reason as above: switching to PayPal must not keep the requirement.
+// Bancontact needs billing_details.name but stays in "form" collection mode, so the
+// full-details helper above is false and a digital cart would otherwise skip the name
+// field (gumroad-private#1306). Method list lives in $app/data/payment_element_methods
+// to stay cycle-free. Drop the requirement if the buyer leaves the card/element lane.
 export const paymentElementRequiresBillingNameForSelection = (state: State) =>
   state.paymentMethod === "card" &&
   paymentElementRequiresBillingName(state.paymentElementType) &&
