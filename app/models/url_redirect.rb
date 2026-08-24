@@ -90,6 +90,7 @@ class UrlRedirect < ApplicationRecord
   end
 
   def entity_archive
+    return bundle_archive if purchase&.is_bundle_purchase?
     return if with_product_files.has_stampable_pdfs?
 
     product_files_archives.latest_ready_entity_archive
