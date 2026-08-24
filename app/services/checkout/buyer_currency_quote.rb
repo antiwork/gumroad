@@ -220,7 +220,7 @@ class Checkout::BuyerCurrencyQuote
 
   # Whether this cart clears the gates in #create that no currency can get it past: a total that
   # isn't positive, lines that don't reconcile, more sellers than MAX_QUOTED_CHARGES, a seller who
-  # isn't enabled, a free trial, a mixed recurring cart, a tip on a non-USD listing. Asked by the
+  # isn't enabled, a free trial, or a mixed recurring cart. Asked by the
   # surcharge endpoint before it publishes a currency menu — a cart that fails one of these can be
   # quoted in nothing, so listing its settleable currencies would offer the buyer a row of choices
   # that each vanish the moment they are picked.
@@ -369,14 +369,16 @@ class Checkout::BuyerCurrencyQuote
     components = if components_payload.is_a?(Hash)
       components_payload[permalink.to_s]
     elsif components_payload.is_a?(Array)
+      # UID and line_index are client-supplied. Scope to the signed permalink first so a
+      # swapped identifier cannot apply another product's price/tip/tax/shipping split.
+      scoped = components_payload.select { |line| line.is_a?(Hash) && line["permalink"].to_s == permalink.to_s }
       if uid.present?
-        components_payload.find { |line| line.is_a?(Hash) && line["uid"].to_s == uid.to_s } ||
-          (!line_index.nil? && components_payload.find { |line| line.is_a?(Hash) && line["line_index"].to_i == line_index.to_i })
+        scoped.find { |line| line["uid"].to_s == uid.to_s } ||
+          (!line_index.nil? && scoped.find { |line| line["line_index"].to_i == line_index.to_i })
       elsif !line_index.nil?
-        components_payload.find { |line| line.is_a?(Hash) && line["line_index"].to_i == line_index.to_i }
+        scoped.find { |line| line["line_index"].to_i == line_index.to_i }
       else
-        matching_components = components_payload.select { |line| line.is_a?(Hash) && line["permalink"].to_s == permalink.to_s }
-        matching_components.sole if matching_components.one?
+        scoped.sole if scoped.one?
       end
     end
     return if components.blank?
