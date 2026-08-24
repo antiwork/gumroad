@@ -4610,15 +4610,27 @@ class Purchase < ApplicationRecord
       signed_total_cents = component_price_cents + component_tip_cents +
         component_seller_tax_cents + component_gumroad_tax_cents + component_shipping_cents
 
-      # Replace only the independently calculated tip with the signed tip, then demand the
-      # rest of the line already matches. A few cents is listed-currency rounding; a larger
-      # gap means quantity/price/discount/shipping diverged from the quote, and applying
-      # would charge the old quoted amount for the new cart.
       submitted_tip_cents = tip&.value_usd_cents.to_i
-      return if (component_tip_cents - submitted_tip_cents).abs > BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
-
-      adjusted_total_cents = total_transaction_cents.to_i - submitted_tip_cents + component_tip_cents
-      return if (adjusted_total_cents - signed_total_cents).abs > BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
+      submitted_price_cents = price_cents.to_i - submitted_tip_cents - shipping_cents.to_i
+      submitted_price_cents -= tax_cents.to_i if was_tax_excluded_from_price
+      submitted_components = [
+        submitted_price_cents,
+        submitted_tip_cents,
+        tax_cents.to_i,
+        gumroad_tax_cents.to_i,
+        shipping_cents.to_i,
+      ]
+      signed_components = [
+        component_price_cents,
+        component_tip_cents,
+        component_seller_tax_cents,
+        component_gumroad_tax_cents,
+        component_shipping_cents,
+      ]
+      return unless signed_components.zip(submitted_components).all? do |signed_cents, submitted_cents|
+        (signed_cents - submitted_cents).abs <= BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
+      end
+      return if (submitted_components.sum - signed_total_cents).abs > BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
 
       tip.value_usd_cents = component_tip_cents if tip.present?
       self.tax_cents = component_seller_tax_cents

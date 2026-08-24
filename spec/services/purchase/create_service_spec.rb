@@ -212,6 +212,40 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.total_transaction_cents).to eq(25_00)
   end
 
+  it "does not apply signed components when only the aggregate non-tip total still matches" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 11_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 1_00,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip.value_usd_cents).to eq(1_23)
+    expect(purchase.tax_cents).to eq(0)
+    expect(purchase.price_cents).to eq(purchase.total_transaction_cents)
+    expect(purchase.total_transaction_cents).not_to eq(13_76)
+  end
+
   it "refuses signed components on a USD line when submit-time tip is removed" do
     user.update!(tipping_enabled: true)
     usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
