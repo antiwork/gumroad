@@ -147,7 +147,10 @@ const CurrencyPicker = ({
     ? availableOptions.filter((option) => option.code === "usd" || option.code === configuredDirectListedCurrency)
     : availableOptions;
   const detected = surcharges?.detected_buyer_currency ?? null;
-  const preferred = state.buyerCurrency ?? detected ?? "usd";
+  // Unset buyerCurrency is the listed-currency default on this lane (mount treats
+  // `null !== "usd"` as listed). Prefer that over GeoIP / options[0] or the picker
+  // shows USD while the summary and Payment Element stay CAD.
+  const preferred = state.buyerCurrency ?? selectableDirectListedCurrency ?? detected ?? "usd";
   const value = options.some((option) => option.code === preferred)
     ? preferred
     : detected && options.some((option) => option.code === detected)

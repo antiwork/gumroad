@@ -775,6 +775,23 @@ describe("Checkout direct-listed currency picker", () => {
     expect(dispatch).toHaveBeenCalledWith({ type: "set-value", buyerCurrency: "usd" });
   });
 
+  it("stays on the listed currency when buyerCurrency is unset and GeoIP is not listed", () => {
+    // The mount treats null buyerCurrency as listed (null !== "usd"). The picker used to prefer
+    // detected / options[0], so a USD or GBP GeoIP painted USD next to a CAD total and CAD Element.
+    const { getAllByLabelText, getByLabelText } = renderCheckout(
+      directListedState({
+        surcharges: {
+          type: "loaded",
+          result: { ...directListedSurcharges, detected_buyer_currency: "gbp" },
+        },
+      }),
+      directListedCart,
+    );
+
+    expect(getByLabelText("Currency")).toHaveProperty("value", "cad");
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$15"]);
+  });
+
   it("keeps the direct-listed control available while Save card is checked", () => {
     const { getByLabelText } = renderCheckout(directListedState({ willSaveCard: true }), directListedCart);
 
