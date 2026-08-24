@@ -5,12 +5,12 @@ require "spec_helper"
 describe Purchase do
   describe "#load_flow_of_funds" do
     # load_flow_of_funds is private; exercised directly to cover nil processor flows.
-    let(:purchase) { create(:purchase) } # defaults to Stripe charge processor
+    # Stripe, on Gumroad's own merchant account (no user => funds held by Gumroad).
+    let(:purchase) { create(:purchase, merchant_account: create(:merchant_account, user: nil)) }
+    let(:processor_charge) { OpenStruct.new(flow_of_funds: nil) }
 
-    context "when the processor charge has no flow of funds and the purchase is not buyer-presentment" do
+    context "when the processor charge has no flow of funds and the funds are Gumroad-held" do
       it "synthesises a simple USD flow of funds from the canonical total" do
-        processor_charge = OpenStruct.new(flow_of_funds: nil)
-
         purchase.send(:load_flow_of_funds, processor_charge)
 
         expect(purchase.flow_of_funds).to be_present
@@ -30,7 +30,6 @@ describe Purchase do
         charge.purchases << [purchase, sibling]
         purchase.update!(is_part_of_combined_charge: true)
         sibling.update!(is_part_of_combined_charge: true)
-        processor_charge = OpenStruct.new(flow_of_funds: nil)
 
         purchase.send(:load_flow_of_funds, processor_charge)
 
@@ -39,10 +38,51 @@ describe Purchase do
       end
     end
 
+    context "when the processor charge has no flow of funds but the funds are seller-held" do
+      # A destination charge into the seller's own Stripe account: nil means Stripe has not
+      # produced the settlement data yet, and dollars here would become the holding amount of an
+      # account denominated in its own currency — a balance no payout picks up.
+      let(:merchant_account) { create(:merchant_account, currency: Currency::EUR) }
+
+      before { purchase.update!(merchant_account:) }
+
+      it "keeps the nil flow of funds instead of booking the seller's money as dollars" do
+        expect(merchant_account.holder_of_funds).to eq(HolderOfFunds::STRIPE)
+
+        purchase.send(:load_flow_of_funds, processor_charge)
+
+        expect(processor_charge.flow_of_funds).to be_nil
+        expect(purchase.flow_of_funds).to be_nil
+      end
+
+      it "keeps the nil flow of funds for a combined charge too" do
+        charge = create(:charge, seller: purchase.seller, merchant_account:,
+                                 amount_cents: purchase.total_transaction_cents)
+        charge.purchases << purchase
+        purchase.update!(is_part_of_combined_charge: true)
+
+        purchase.send(:load_flow_of_funds, processor_charge)
+
+        expect(processor_charge.flow_of_funds).to be_nil
+        expect(purchase.flow_of_funds).to be_nil
+      end
+    end
+
+    context "when the processor charge has no flow of funds and the processor is not Stripe" do
+      it "synthesises the USD flow the non-Stripe processors have always relied on" do
+        purchase.charge_processor_id = PaypalChargeProcessor.charge_processor_id
+        purchase.merchant_account = create(:merchant_account_paypal)
+
+        purchase.send(:load_flow_of_funds, processor_charge)
+
+        expect(purchase.flow_of_funds.issued_amount.currency).to eq(Currency::USD)
+        expect(purchase.flow_of_funds.issued_amount.cents).to eq(purchase.total_transaction_cents)
+      end
+    end
+
     context "when the processor charge has no flow of funds but the purchase IS buyer-presentment" do
       it "keeps the nil flow of funds instead of relabelling the buyer-currency charge as dollars" do
         create(:purchase_presentment, purchase:, charge_presentment: nil)
-        processor_charge = OpenStruct.new(flow_of_funds: nil)
 
         purchase.send(:load_flow_of_funds, processor_charge)
 
@@ -53,7 +93,7 @@ describe Purchase do
     context "when the processor charge already has a flow of funds" do
       it "uses the provided flow of funds and does not overwrite it" do
         provided = FlowOfFunds.build_simple_flow_of_funds(Currency::CAD, 7_00)
-        processor_charge = OpenStruct.new(flow_of_funds: provided)
+        processor_charge.flow_of_funds = provided
 
         purchase.send(:load_flow_of_funds, processor_charge)
 

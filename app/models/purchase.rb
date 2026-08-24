@@ -4141,6 +4141,11 @@ class Purchase < ApplicationRecord
   end
 
   def build_flow_of_funds_from_combined_charge(combined_flow_of_funds)
+    # Nothing to split until the processor has produced settlement data. Returning nil keeps a
+    # missing flow readable as "not settled yet" (Purchase::SyncStatusWithChargeProcessorService
+    # and #pending_buyer_presentment_settlement? both read it that way) instead of raising mid-split.
+    return if combined_flow_of_funds.nil?
+
     charge_purchases = charge.purchases.to_a.sort_by(&:id)
     purchase_index = charge_purchases.index { |purchase| purchase.id == id }
     raise ArgumentError, "Purchase #{id} is not part of charge #{charge&.id}" if purchase_index.nil?
@@ -4596,23 +4601,30 @@ class Purchase < ApplicationRecord
     end
 
     def load_flow_of_funds(processor_charge)
-      # Synthesising a US dollar flow of funds from the canonical total would be wrong for a
-      # buyer-currency (presentment) charge, where the money actually moved in the buyer's
-      # currency. Only Stripe charges can be presentment charges today, so the fallback was
-      # historically gated to non-Stripe processors; but a Stripe charge whose balance
-      # transaction isn't attached to its charge wrapper (see StripeCharge#build_flow_of_funds)
-      # can also arrive here with a nil flow of funds, and when it is not a presentment charge
-      # the money moved in USD, so the same simple fallback is safe. A presentment charge keeps
-      # the existing nil path rather than being relabelled as dollars. If another processor
-      # ever gains buyer-currency support, this line has to build the flow of funds from that
-      # processor's own amounts instead of assuming dollars.
-      flow_amount_cents = is_part_of_combined_charge? ? charge.amount_cents : self.total_transaction_cents
-      processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, flow_amount_cents) unless buyer_presentment?
+      # Nil means two different things: on Gumroad-held money the canonical USD total is all
+      # there is to record, but on seller-held money Stripe settlement data simply has not
+      # arrived yet (StripeCharge#build_flow_of_funds), and dollars there become the holding
+      # amount of an account denominated in its own currency — a balance no payout picks up
+      # (gumroad-private#1471). Presentment stays nil for the same reason.
+      if funds_held_by_gumroad? && !buyer_presentment?
+        # Sized to the whole charge, because the combined-charge split below divides by it.
+        flow_amount_cents = is_part_of_combined_charge? ? charge.amount_cents : total_transaction_cents
+        processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, flow_amount_cents)
+      end
+
       self.flow_of_funds = if is_part_of_combined_charge?
         build_flow_of_funds_from_combined_charge(processor_charge.flow_of_funds)
       else
         processor_charge.flow_of_funds
       end
+    end
+
+    # Only Stripe routes charges into seller-owned accounts (destination and direct), so every
+    # other processor is Gumroad-held. Not charged_using_gumroad_merchant_account?, which is also
+    # true of a seller's own custom account, nor MerchantAccount#holder_of_funds, which answers
+    # the same question by dispatching through the charge-processor registry.
+    def funds_held_by_gumroad?
+      !(stripe_charge_processor? && merchant_account&.user_id.present?)
     end
 
     def additional_fields_for_creator_app_api
