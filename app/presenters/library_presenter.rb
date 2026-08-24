@@ -211,12 +211,16 @@ class LibraryPresenter
         .order(id: :desc)
         .to_a
         .uniq(&:link_id)
-      bundle_purchases.map do |purchase|
-        archive = purchase.url_redirect&.bundle_archive
+      bundle_purchases.filter_map do |purchase|
+        redirect = purchase.url_redirect
+        next if redirect.blank?
+        next if redirect.bundle_archive_product_files.empty?
+
+        archive = redirect.bundle_archive
         {
           id: purchase.link.external_id,
           label: purchase.link.name,
-          download_url: archive.present? ? url_redirect_download_archive_path(purchase.url_redirect.token) : nil,
+          download_url: archive.present? ? url_redirect_download_archive_path(redirect.token) : nil,
         }
       end
     end

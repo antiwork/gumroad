@@ -601,9 +601,7 @@ describe LibraryPresenter do
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expect(props[:bundle_downloads]).to eq(
-          [{ id: purchase1.link.external_id, label: "Bundle", download_url: nil }]
-        )
+        expect(props[:bundle_downloads]).to eq([])
         expect(purchase1.link.product_files_archives.alive).to be_empty
       end
 
