@@ -85,6 +85,15 @@ class CustomerSurchargeController < ApplicationController
     detected_buyer_currency = buyer_currency_for_ip(request.remote_ip)
     requested_buyer_currency = Checkout::BuyerCurrencyQuote.normalize_requested_currency(params[:buyer_currency])
     quote_currency = requested_buyer_currency || detected_buyer_currency
+    direct_listed_selector_currency = direct_listed_selector_currency_for_cart(
+      all_lines_quotable ? quote_line_items : []
+    )
+    # Client-confirm can switch only between canonical USD and this listed currency. Normalize a
+    # stale preference before quote creation so this surface never returns an unusable FX token.
+    if direct_listed_selector_currency.present? &&
+       ![Currency::USD, direct_listed_selector_currency].include?(quote_currency)
+      quote_currency = direct_listed_selector_currency
+    end
     quote_props = buyer_currency_quote_props(
       line_items: all_lines_quotable ? quote_line_items : nil,
       # Sum the per-line integers: rounding the running totals once can disagree
@@ -103,10 +112,14 @@ class CustomerSurchargeController < ApplicationController
       canonical_total_cents: quote_line_items.sum(&:canonical_total_cents)
     )
     available = available_buyer_currencies(quotable_cart ? quote_line_items : [])
+    if direct_listed_selector_currency.present?
+      available = available.select { [Currency::USD, direct_listed_selector_currency].include?(_1[:code]) }
+    end
     # What is left can still fail for a reason specific to one currency (a settlement mismatch
     # on the seller's account, or a cart uniformly listed in it). Don't advertise the one we just
     # attempted to quote; the checkout tells the buyer their choice was refused.
-    if quote_currency.present? && quote_currency != Currency::USD && quote_props.nil?
+    if quote_currency.present? && quote_currency != Currency::USD && quote_props.nil? &&
+       !direct_listed_currency_offered_for_cart?(quote_line_items, quote_currency)
       available = available.reject { |entry| entry[:code] == quote_currency }
     end
 
@@ -291,6 +304,8 @@ class CustomerSurchargeController < ApplicationController
       # offered; the gates below only decide which extra currencies join it.
       return true if code == Currency::USD
 
+      return true if direct_listed_currency_offered_for_cart?(line_items, code)
+
       # A charge entirely listed in this currency uses the direct-listed lane (or stays
       # unquoted). A mixed charge instead quotes its canonical USD total, so its already-listed
       # lines must not remove a currency that the remaining lines can settle. Grouped per
@@ -313,5 +328,25 @@ class CustomerSurchargeController < ApplicationController
         product:,
         product_currency: product.price_currency_type
       )
+    end
+
+    def direct_listed_currency_offered_for_cart?(line_items, code)
+      return false unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+      reported_currencies = [
+        params[:payment_element_mount_currency],
+        params[:payment_element_direct_listed_currency],
+      ].filter_map { _1.to_s.downcase.presence }
+      return false unless reported_currencies.include?(code.to_s.downcase)
+
+      Checkout::BuyerCurrencyEligibility.direct_listed_line_items_eligible?(line_items:, buyer_currency: code)
+    end
+
+    def direct_listed_selector_currency_for_cart(line_items)
+      currency = params[:payment_element_direct_listed_currency].to_s.downcase.presence
+      return if currency.blank?
+
+      # This capability keeps the listed option available after the Element switches to USD.
+      # Prepare still validates the separately reported actual mount before creating an intent.
+      currency if direct_listed_currency_offered_for_cart?(line_items, currency)
     end
 end

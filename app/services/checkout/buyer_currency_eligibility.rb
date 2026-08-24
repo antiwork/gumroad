@@ -80,6 +80,55 @@ class Checkout::BuyerCurrencyEligibility
     seller.present? && Feature.active?(LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
   end
 
+  # The cart-shaped half of #decision's listed lane, for the selector and the surcharge menu,
+  # which have line items rather than purchases. Every gate #decision reaches before that lane
+  # returns eligible is re-applied here when a line item can answer it, so this never advertises
+  # a currency prepare refuses for a reason already visible in the cart. What is left over is
+  # purchase-only (a snapshotted displayed_price_currency_type that moved under the checkout, a
+  # wallet or off-session submit) and still falls back there.
+  def self.direct_listed_line_items_eligible?(line_items:, buyer_currency:)
+    return false if line_items.blank?
+
+    currency = buyer_currency.to_s.downcase
+    return false if currency.blank? || currency == Currency::USD
+    return false unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
+    return false if line_items.any? { _1.product.blank? }
+    return false unless line_items.all? { _1.product.price_currency_type.to_s.downcase == currency }
+
+    seller_ids = line_items.map { _1.product.user_id }.uniq
+    return false unless seller_ids.one?
+
+    seller = line_items.first.product.user
+    return false unless seller_enabled?(seller)
+    return false unless listed_currency_direct_charge_enabled?(seller)
+    # #decision refuses at :unsupported_processor / :unsupported_charge_model before it reaches
+    # the listed-currency gates, so a seller whose charging account cannot create the intent has
+    # no listed lane to advertise.
+    merchant_account = charging_merchant_account(seller)
+    return false unless merchant_account&.stripe_charge_processor?
+    return false unless supported_merchant_account?(merchant_account, seller:)
+    # The product shapes #decision refuses at :unsupported_product_type. `later_charge_kind`
+    # below happens to exclude most of them, but it is computed by the caller — free trials and
+    # out-of-ramp later-charge products are facts about the product, and are checked as such.
+    return false if line_items.any? { unquotable_product?(_1.product) }
+    return false if line_items.any? { _1.later_charge_kind.present? }
+    return false if line_items.any? { _1.tip_cents.to_i.positive? || _1.shipping_cents.to_i.positive? }
+
+    rates = line_items.map { _1.listed_currency_rate.presence }
+    rates.all? && rates.map(&:to_s).uniq.one? && rates.first.to_d.positive?
+  end
+
+  # Product-only compatibility for callers that do not have a purchase shape (the charge-time
+  # mirror is #unquotable_purchase?). A product that merely offers installments remains quotable;
+  # the selected installment intent is checked on the purchase there.
+  def self.unquotable_product?(product)
+    return true if product.free_trial_enabled?
+    return !subscriptions_enabled?(product.user) if product.is_in_preorder_state? || product.native_type == Link::NATIVE_TYPE_COMMISSION
+    return false unless product.is_recurring_billing?
+
+    !subscriptions_enabled?(product.user)
+  end
+
   # Whether a method-forced surface for `currency` is available to card or Link in this
   # eligibility check: always in Stripe test mode, and in live mode when at least one
   # registry method forcing that currency has its launch flag active. The presenter and
@@ -174,6 +223,17 @@ class Checkout::BuyerCurrencyEligibility
     return nil if merchant_account.user.blank?
 
     merchant_account.charge_processor_merchant_id.presence
+  end
+
+  # The account this seller's PaymentIntent would be created on, resolved the way
+  # Checkout::BuyerCurrencyQuote#charge_quote_for resolves it: their own Stripe account when they
+  # have one, otherwise Gumroad's platform account. For callers that hold a cart rather than the
+  # merchant account #decision is handed.
+  def self.charging_merchant_account(seller)
+    return if seller.blank?
+
+    seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
   end
 
   def self.supported_merchant_account?(merchant_account, seller: nil)
@@ -585,17 +645,6 @@ class Checkout::BuyerCurrencyEligibility
          purchase.is_commission_deposit_purchase? || purchase.is_installment_payment?
         return !self.class.subscriptions_enabled?(product.user)
       end
-      return false unless product.is_recurring_billing?
-
-      !self.class.subscriptions_enabled?(product.user)
-    end
-
-    # Product-only compatibility for callers that do not have a purchase shape. A product that
-    # merely offers installments remains quotable; the selected installment intent is checked on
-    # the purchase by #unquotable_purchase?.
-    def unquotable_product?(product)
-      return true if product.free_trial_enabled?
-      return !self.class.subscriptions_enabled?(product.user) if product.is_in_preorder_state? || product.native_type == Link::NATIVE_TYPE_COMMISSION
       return false unless product.is_recurring_billing?
 
       !self.class.subscriptions_enabled?(product.user)

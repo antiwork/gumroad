@@ -62,7 +62,9 @@ import {
   computeTipsForLines,
   type CheckoutPaymentConfig,
   createReducer,
+  getConfiguredDirectListedCurrency,
   getCustomFieldKey,
+  getSelectableDirectListedCurrency,
   getTotalPriceFromProducts,
   type Gift,
   isTipSuspiciouslyLarge,
@@ -248,15 +250,16 @@ const CheckoutIndexPage = () => {
     checkoutPayment: checkout_payment,
   });
   const [state, dispatch] = reducer;
-  const buyerCurrencyDisplay = getCheckoutBuyerCurrencyDisplay(
-    state.surcharges.type === "loaded" ? state.surcharges.result : null,
-    {
-      cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
-      willSaveCard: state.willSaveCard,
-      paymentMethod: state.paymentMethod,
-      paymentElementType: state.paymentElementType,
-    },
-  );
+  const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
+  const selectableDirectListedCurrency = getSelectableDirectListedCurrency(state);
+  const buyerCurrencyDisplay = configuredDirectListedCurrency
+    ? null
+    : getCheckoutBuyerCurrencyDisplay(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
+        cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
+        willSaveCard: state.willSaveCard,
+        paymentMethod: state.paymentMethod,
+        paymentElementType: state.paymentElementType,
+      });
   // The direct-listed currency lane, for the large-tip confirmation below and for the tip
   // basis the order submits. Suppressed whenever the FX-quoted buyer-currency lane is displaying,
   // exactly as the checkout summary's precedence does (`buyerCurrencyDisplay ?? listedCurrency`):
@@ -269,8 +272,11 @@ const CheckoutIndexPage = () => {
   // the summary in index.tsx): if a discount or surcharge reload drops the loaded canonical total
   // below Stripe's Payment Element minimum, PaymentForm falls back to the CardElement and the
   // charge is canonical USD, so the tip basis and the modal must fall back too.
+  const directListedCurrencySelected =
+    configuredDirectListedCurrency === null ||
+    (selectableDirectListedCurrency !== null && state.buyerCurrency?.toLowerCase() !== "usd");
   const listedCurrency =
-    buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state)
+    buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state) || !directListedCurrencySelected
       ? null
       : getCheckoutListedCurrencyDisplay(state.checkoutPayment, cartForm.data.cart.items, {
           usingSavedCard: state.usingSavedCard,
@@ -551,15 +557,14 @@ const CheckoutIndexPage = () => {
         },
         recaptchaResponse: state.status.recaptchaResponse ?? null,
         recaptchaChallengeFallback: state.status.challengeFallback ?? false,
-        buyerCurrencyQuote: getCheckoutBuyerCurrencyQuoteToken(
-          state.surcharges.type === "loaded" ? state.surcharges.result : null,
-          {
-            cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
-            willSaveCard: state.willSaveCard,
-            paymentMethod: state.paymentMethod,
-            paymentElementType: state.paymentElementType,
-          },
-        ),
+        buyerCurrencyQuote: configuredDirectListedCurrency
+          ? null
+          : getCheckoutBuyerCurrencyQuoteToken(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
+              cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
+              willSaveCard: state.willSaveCard,
+              paymentMethod: state.paymentMethod,
+              paymentElementType: state.paymentElementType,
+            }),
         lineItems: (() => {
           // Precompute each line's discounted price bases once so the tip can be allocated
           // across the whole cart in a single pass. The per-line tips must sum exactly to
