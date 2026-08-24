@@ -605,15 +605,17 @@ describe LibraryPresenter do
         expect(purchase1.link.product_files_archives.alive).to be_empty
       end
 
-      it "does not offer a combined ZIP when the matching archive has failed" do
+      it "queues a replacement ZIP when the matching archive has failed" do
         library_props(bundle_ids: [purchase1.link.external_id])
         archive = purchase1.link.product_files_archives.alive.entity_archives.sole
         archive.mark_failed!
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expect(props[:bundle_downloads]).to eq([])
-        expect(purchase1.link.product_files_archives.alive.entity_archives.sole).to be_failed
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil }
+        expect(props[:bundle_downloads]).to eq([expected_download])
+        archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
+        expect(archives.map(&:product_files_archive_state)).to contain_exactly("failed", "queueing")
       end
 
       it "matches nothing when no selected bundle id resolves to a product" do

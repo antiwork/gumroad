@@ -176,13 +176,18 @@ class UrlRedirect < ApplicationRecord
   end
 
   def ensure_bundle_archive_for(bundle_files)
-    return if matching_bundle_archives(bundle_files).any?
+    owner = rich_content_provider.presence || with_product_files
+    owner.with_lock do
+      # Failed ZIPs stay alive; they must not block a replacement or Download all
+      # disappears after one generation error.
+      return if matching_bundle_archives(bundle_files).any? { |archive| !archive.failed? }
 
-    product_files_archive = product_files_archives.new
-    product_files_archive.product_files = bundle_files
-    product_files_archive.save!
-    product_files_archive.set_url_if_not_present
-    product_files_archive.save!
+      product_files_archive = product_files_archives.new
+      product_files_archive.product_files = bundle_files
+      product_files_archive.save!
+      product_files_archive.set_url_if_not_present
+      product_files_archive.save!
+    end
   end
 
   def seller
