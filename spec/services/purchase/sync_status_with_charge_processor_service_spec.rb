@@ -320,16 +320,25 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
   end
 
   it "returns false and leaves the purchase in_progress when a combined charge has nil flow_of_funds (transient unsettled state)" do
-    purchase = build(:purchase, link: @product, purchase_state: "in_progress")
-    purchase.save!(validate: false)
-    allow(purchase).to receive(:is_part_of_combined_charge?).and_return(true)
-
+    merchant_account = create(:merchant_account, user: @seller, currency: Currency::EUR,
+                                                 charge_processor_merchant_id: "acct_combined_nil_fof")
+    charge = create(:charge, seller: @seller, merchant_account:, processor_transaction_id: "ch_test_nil_fof")
+    purchase = create(:purchase_in_progress, link: @product, seller: @seller,
+                                             charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                             merchant_account:, stripe_transaction_id: "ch_test_nil_fof",
+                                             flow_of_funds: nil)
+    charge.purchases << purchase
+    sibling = create(:purchase_in_progress, link: @product, seller: @seller,
+                                            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                            merchant_account:)
+    charge.purchases << sibling
     charge_with_nil_fof = BaseProcessorCharge.new
     charge_with_nil_fof.id = "ch_test_nil_fof"
     charge_with_nil_fof.status = "succeeded"
     charge_with_nil_fof.charge_processor_id = StripeChargeProcessor.charge_processor_id
     charge_with_nil_fof.flow_of_funds = nil
     allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(charge_with_nil_fof)
+    allow(ChargeProcessor).to receive(:charge_processor_success_statuses).and_return(["succeeded"])
 
     expect(Purchase::SyncStatusWithChargeProcessorService.new(purchase, mark_as_failed: true).perform).to be(false)
     # Crucially: even with mark_as_failed: true, the purchase stays in_progress so the next
