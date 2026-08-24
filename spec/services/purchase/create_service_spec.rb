@@ -181,6 +181,69 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.total_transaction_cents).to eq(13_76)
   end
 
+  it "does not apply signed components when submit economics diverge from the quote" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 20_00, quantity: 2),
+        tip_cents: 0,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.total_transaction_cents).to eq(25_00)
+  end
+
+  it "applies signed components to a USD line when submit-time tip remaps to zero" do
+    user.update!(tipping_enabled: true)
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 10_00,
+        tip_cents: 1_00,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        tip_cents: 0,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip).to be_nil
+    expect(purchase.total_transaction_cents).to eq(11_00)
+  end
+
   it "selects the matching signed components for repeated product rows" do
     user.update!(tipping_enabled: true)
     eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
@@ -201,7 +264,7 @@ describe Purchase::CreateService, :vcr do
         {
           "line_index" => 1,
           "permalink" => eur_product.unique_permalink,
-          "price_cents" => 15_00,
+          "price_cents" => 12_50,
           "tip_cents" => 1_27,
           "seller_tax_cents" => 0,
           "gumroad_tax_cents" => 0,
@@ -224,7 +287,7 @@ describe Purchase::CreateService, :vcr do
 
     expect(error).to be_nil
     expect(purchase.tip.value_usd_cents).to eq(1_27)
-    expect(purchase.total_transaction_cents).to eq(16_27)
+    expect(purchase.total_transaction_cents).to eq(13_77)
   end
 
   it "creates a purchase and sets the proper state" do

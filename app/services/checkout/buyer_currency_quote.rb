@@ -363,7 +363,15 @@ class Checkout::BuyerCurrencyQuote
     charge_payload = charge_payloads.find { |cp| cp["seller_id"] == seller_id }
     return if charge_payload.blank?
     return if Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
-    return unless charge_payload.dig("listed_currency_codes", permalink.to_s).to_s.casecmp?(currency.to_s)
+
+    listed_code = charge_payload.dig("listed_currency_codes", permalink.to_s).to_s
+    if listed_code.present?
+      return unless listed_code.casecmp?(currency.to_s)
+    else
+      # USD lines are omitted from listed_currency_codes (no listed rate). They still
+      # carry signed components so a remapped tip can be restored on that line.
+      return unless currency.to_s.casecmp?(Currency::USD)
+    end
 
     components_payload = charge_payload["canonical_line_components"]
     components = if components_payload.is_a?(Hash)
