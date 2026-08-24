@@ -8,17 +8,17 @@ describe Purchase::CreateService, :vcr do
   let(:buyer) { create(:user, email:) }
   let(:zip_code) { "12345" }
 
-  def signed_buyer_currency_quote(seller:, product:, rate:)
-    payload = {
-      "charges" => [
-        {
-          "seller_id" => seller.id,
-          "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
-          "listed_currency_rates" => { product.unique_permalink => rate },
-          "listed_currency_codes" => { product.unique_permalink => product.price_currency_type.to_s.downcase },
-        }
-      ]
+  def signed_buyer_currency_quote(seller:, product:, rate:, canonical_components: nil)
+    charge = {
+      "seller_id" => seller.id,
+      "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
+      "listed_currency_rates" => { product.unique_permalink => rate },
+      "listed_currency_codes" => { product.unique_permalink => product.price_currency_type.to_s.downcase },
     }
+    if canonical_components.present?
+      charge["canonical_line_components"] = { product.unique_permalink => canonical_components.stringify_keys }
+    end
+    payload = { "charges" => [charge] }
     Rails.application.message_verifier(Checkout::BuyerCurrencyQuote::TOKEN_PURPOSE).generate(payload)
   end
 
@@ -114,6 +114,39 @@ describe Purchase::CreateService, :vcr do
       zip_code: "94117"
     )
     params
+  end
+
+  it "uses signed canonical tip components for a tipped non-USD quote" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip.value_cents).to eq(1_00)
+    expect(purchase.tip.value_usd_cents).to eq(1_26)
+    expect(purchase.total_transaction_cents).to eq(13_76)
   end
 
   it "creates a purchase and sets the proper state" do

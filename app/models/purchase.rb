@@ -663,7 +663,7 @@ class Purchase < ApplicationRecord
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
                 :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited,
                 :submitted_pre_discount_price_cents, :once_per_cart_discount_allocation, :offer_code_cart_quantity,
-                :confirmed_duplicate_purchase
+                :buyer_currency_quote_canonical_components, :confirmed_duplicate_purchase
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -4572,6 +4572,8 @@ class Purchase < ApplicationRecord
       self.price_cents += shipping_cents
       self.total_transaction_cents += shipping_cents
 
+      apply_buyer_currency_quote_canonical_components!
+
       calculate_fees
 
       purchase_sales_tax_info.save
@@ -4593,6 +4595,27 @@ class Purchase < ApplicationRecord
       end
 
       chargeable
+    end
+
+    def apply_buyer_currency_quote_canonical_components!
+      components = buyer_currency_quote_canonical_components
+      return if components.blank?
+
+      component_price_cents = components.fetch(:price_cents).to_i
+      component_tip_cents = components.fetch(:tip_cents).to_i
+      component_seller_tax_cents = components.fetch(:seller_tax_cents).to_i
+      component_gumroad_tax_cents = components.fetch(:gumroad_tax_cents).to_i
+      component_shipping_cents = components.fetch(:shipping_cents).to_i
+
+      tip.value_usd_cents = component_tip_cents if tip.present?
+      self.tax_cents = component_seller_tax_cents
+      self.gumroad_tax_cents = component_gumroad_tax_cents
+      self.shipping_cents = component_shipping_cents
+      self.price_cents = component_price_cents + component_tip_cents
+      self.price_cents += component_seller_tax_cents if was_tax_excluded_from_price
+      self.price_cents += component_shipping_cents
+      self.total_transaction_cents = component_price_cents + component_tip_cents +
+        component_seller_tax_cents + component_gumroad_tax_cents + component_shipping_cents
     end
 
     def load_flow_of_funds(processor_charge)
