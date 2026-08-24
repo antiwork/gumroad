@@ -149,7 +149,7 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.total_transaction_cents).to eq(13_76)
   end
 
-  it "applies signed canonical components when submit-time tip remaps to zero" do
+  it "refuses signed canonical components when submit-time tip remaps to zero" do
     user.update!(tipping_enabled: true)
     eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
     quote = signed_buyer_currency_quote(
@@ -178,7 +178,7 @@ describe Purchase::CreateService, :vcr do
 
     expect(error).to be_nil
     expect(purchase.tip).to be_nil
-    expect(purchase.total_transaction_cents).to eq(13_76)
+    expect(purchase.total_transaction_cents).to eq(12_50)
   end
 
   it "does not apply signed components when submit economics diverge from the quote" do
@@ -212,7 +212,7 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.total_transaction_cents).to eq(25_00)
   end
 
-  it "applies signed components to a USD line when submit-time tip remaps to zero" do
+  it "refuses signed components on a USD line when submit-time tip is removed" do
     user.update!(tipping_enabled: true)
     usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
     quote = signed_buyer_currency_quote(
@@ -241,7 +241,7 @@ describe Purchase::CreateService, :vcr do
 
     expect(error).to be_nil
     expect(purchase.tip).to be_nil
-    expect(purchase.total_transaction_cents).to eq(11_00)
+    expect(purchase.total_transaction_cents).to eq(10_00)
   end
 
   it "selects the matching signed components for repeated product rows" do

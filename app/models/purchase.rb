@@ -49,6 +49,7 @@ class Purchase < ApplicationRecord
   PIX_IOF_FEE_PER_THOUSAND = 35
 
   MAX_PRICE_RANGE = (-2_147_483_647..2_147_483_647)
+  BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS = 5
 
   CHARGED_SUCCESS_STATES = %w[preorder_authorization_successful successful]
   NON_GIFT_SUCCESS_STATES = CHARGED_SUCCESS_STATES.dup.push("not_charged")
@@ -4642,8 +4643,10 @@ class Purchase < ApplicationRecord
       # gap means quantity/price/discount/shipping diverged from the quote, and applying
       # would charge the old quoted amount for the new cart.
       submitted_tip_cents = tip&.value_usd_cents.to_i
+      return if (component_tip_cents - submitted_tip_cents).abs > BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
+
       adjusted_total_cents = total_transaction_cents.to_i - submitted_tip_cents + component_tip_cents
-      return if (adjusted_total_cents - signed_total_cents).abs > 5
+      return if (adjusted_total_cents - signed_total_cents).abs > BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
 
       tip.value_usd_cents = component_tip_cents if tip.present?
       self.tax_cents = component_seller_tax_cents
