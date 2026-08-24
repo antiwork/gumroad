@@ -10,6 +10,19 @@ describe HealthcheckController do
       expect(response.status).to eq(200)
       expect(response.body).to eq("healthcheck")
     end
+
+    # The blue/green deploy gates on this action, so anything it touches becomes something
+    # that can hold traffic off a healthy cluster. Adding a before_action to
+    # ApplicationController that reads Redis or the cache should fail here, not in a deploy.
+    it "answers without reading Redis or the cache" do
+      expect(SubdomainRedirectorService).not_to receive(:new)
+      expect($redis).not_to receive(:get)
+      expect(Rails.cache).not_to receive(:fetch)
+
+      get :index
+
+      expect(response.status).to eq(200)
+    end
   end
 
   SIDEKIQ_QUEUE_NAMES = [:critical, :default].freeze
