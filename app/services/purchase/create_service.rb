@@ -225,7 +225,10 @@ class Purchase::CreateService < Purchase::BaseService
     def buyer_currency_quote_canonical_components_hint(purchase)
       return if params[:buyer_currency_quote].blank?
       return unless purchase.link.price_currency_type.to_s.downcase != Currency::USD
-      return unless params[:tip_cents].to_i.positive?
+
+      # Do not require a submit-time tip. Quote-time largest-remainder can hand a
+      # cent to a different line, so a quoted tipped line may arrive with tip_cents=0
+      # and still need its signed split for verify! to match the token.
 
       Checkout::BuyerCurrencyQuote.canonical_components_hint(
         token: params[:buyer_currency_quote],
