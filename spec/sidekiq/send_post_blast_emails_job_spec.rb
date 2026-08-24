@@ -67,87 +67,25 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 0
     end
 
-    it "does not start sending while the completion-stamp path owns the blast" do
+    it "records how many recipients it still owes, and clears the count when it finishes" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
-      $redis.set(RedisKey.blast_completion_stamp_claim(blast.id), Time.current.iso8601)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
 
       described_class.new.perform(blast.id)
 
-      expect_sent_count 0
-      expect(blast.reload.started_at).to be_nil
-      expect(blast.reload.completed_at).to be_nil
-      expect($redis.exists?(RedisKey.blast_send_attempt_claim(blast.id))).to be(false)
-    ensure
-      if blast
-        $redis.del(RedisKey.blast_completion_stamp_claim(blast.id))
-        $redis.del(RedisKey.blast_send_attempt_claim(blast.id))
-      end
+      expect_sent_count 1
+      expect(blast.reload.completed_at).to be_present
+      expect($redis.exists?(pending_key)).to be(false)
     end
 
-    it "reschedules instead of acknowledging when another sender holds the claim" do
+    it "leaves the owed count positive when the send dies before the provider call" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
-      $redis.set(RedisKey.blast_send_attempt_claim(blast.id), SecureRandom.uuid, ex: 4.hours.to_i)
-      expect(described_class).to receive(:perform_in).with(4.hours.to_i + 5, blast.id)
+      expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
 
-      described_class.new.perform(blast.id)
+      expect { described_class.new.perform(blast.id) }.to raise_error(StandardError, "API failure")
 
-      expect_sent_count 0
-      expect(blast.reload.started_at).to be_nil
-      expect(blast.reload.completed_at).to be_nil
-    ensure
-      $redis.del(RedisKey.blast_send_attempt_claim(blast.id)) if blast
-    end
-
-    it "stops without completing if the send-attempt lease is lost" do
-      blast = create(:blast, :just_requested, post: basic_post_with_audience)
-      allow(described_class).to receive(:renew_send_attempt).and_return(false)
-
-      described_class.new.perform(blast.id)
-
-      expect_sent_count 0
-      expect(blast.reload.completed_at).to be_nil
-    end
-
-    it "renews only the send-attempt claim owned by this invocation" do
-      blast = create(:blast, :just_requested, post: basic_post_with_audience)
-      token = described_class.claim_send_attempt(blast.id)
-      $redis.expire(RedisKey.blast_send_attempt_claim(blast.id), 30)
-
-      expect(described_class.renew_send_attempt(blast.id, token)).to be(true)
-      expect($redis.ttl(RedisKey.blast_send_attempt_claim(blast.id))).to be > 30
-      expect(described_class.renew_send_attempt(blast.id, "other-token")).to be(false)
-    ensure
-      $redis.del(RedisKey.blast_send_attempt_claim(blast.id)) if blast
-    end
-
-    it "holds the completion-stamp claim longer than the audience revalidation cap" do
-      blast = create(:blast, :just_requested, post: basic_post_with_audience)
-      $redis.set(RedisKey.audience_member_load_max_execution_time_seconds, 2.hours.to_i)
-
-      expect($redis).to receive(:set)
-        .with(RedisKey.blast_completion_stamp_claim(blast.id), kind_of(String), nx: true, ex: 2.hours.to_i + 10.minutes.to_i)
-        .and_call_original
-
-      expect(described_class.claim_completion_stamp(blast.id)).to be_present
-    ensure
-      if blast
-        $redis.del(RedisKey.blast_completion_stamp_claim(blast.id))
-        $redis.del(RedisKey.audience_member_load_max_execution_time_seconds)
-      end
-    end
-
-    it "releases only the completion claim owned by this invocation" do
-      blast = create(:blast, :just_requested, post: basic_post_with_audience)
-      claim_key = RedisKey.blast_completion_stamp_claim(blast.id)
-      stale_token = described_class.claim_completion_stamp(blast.id)
-      $redis.del(claim_key)
-      successor_token = described_class.claim_completion_stamp(blast.id)
-
-      described_class.release_completion_stamp(blast.id, stale_token)
-
-      expect($redis.get(claim_key)).to eq(successor_token)
-    ensure
-      $redis.del(RedisKey.blast_completion_stamp_claim(blast.id)) if blast
+      expect($redis.get(RedisKey.blast_pending_recipients(blast.id)).to_i).to eq(1)
+      expect(described_class.fully_delivered?(blast.reload)).to be(false)
     end
 
     it "records when blast started processing" do
@@ -574,40 +512,6 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(blast.reload.completed_at).to be_present
     end
 
-    it "does not mark an empty sender complete if the completion-stamp path claims the blast during audience load" do
-      post = basic_post_with_audience
-      blast = create(:blast, :just_requested, post:)
-      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
-      recipient = AudienceMember.where(seller_id: post.seller_id).sole
-      SentPostEmail.create!(post:, email: recipient.email)
-      allow(described_class).to receive(:completion_stamp_claimed?).with(blast.id).and_return(false, true)
-
-      described_class.new.perform(blast.id)
-
-      expect_sent_count 0
-      expect(blast.reload.completed_at).to be_nil
-      expect($redis.exists?(snapshot_key)).to eq(true)
-    ensure
-      $redis.del(snapshot_key) if snapshot_key
-    end
-
-    it "stops before a provider slice if the completion-stamp path claims the blast after grouping" do
-      post = basic_post_with_audience
-      blast = create(:blast, :just_requested, post:)
-      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
-      allow(described_class).to receive(:completion_stamp_claimed?).with(blast.id).and_return(false, false, true)
-      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
-      expect(PostSendgridApi).not_to receive(:process)
-
-      described_class.new.perform(blast.id)
-
-      expect_sent_count 0
-      expect(blast.reload.completed_at).to be_nil
-      expect($redis.exists?(snapshot_key)).to eq(true)
-    ensure
-      $redis.del(snapshot_key) if snapshot_key
-    end
-
     it "resumes from the snapshot on retry using only an id-restricted filter" do
       post = basic_post_with_audience
       blast = create(:blast, :just_requested, post:)
@@ -836,99 +740,46 @@ describe SendPostBlastEmailsJob, :freeze_time do
   end
 
   describe ".fully_delivered?" do
-    let(:post) { basic_post_with_audience }
-    let(:blast) { create(:blast, post:, completed_at: nil, delivery_count: 0) }
-    let(:snapshot_key) { RedisKey.blast_audience_snapshot(blast.id) }
-    let(:recipient) { AudienceMember.where(seller_id: post.seller_id).sole }
+    let(:blast) { create(:blast, post: basic_post_with_audience, completed_at: nil) }
+    let(:pending_key) { RedisKey.blast_pending_recipients(blast.id) }
 
-    it "is false with no audience snapshot" do
-      blast.update!(delivery_count: 3)
+    it "is false when the sender never published an owed count" do
+      expect(described_class.fully_delivered?(blast)).to be(false)
+    end
+
+    it "is false while recipients are still owed" do
+      $redis.set(pending_key, 5)
 
       expect(described_class.fully_delivered?(blast)).to be(false)
     end
 
-    it "is false when the snapshotted recipient has no sent_post_email row" do
-      $redis.rpush(snapshot_key, recipient.id)
-      blast.update!(delivery_count: 3)
-
-      expect(described_class.fully_delivered?(blast)).to be(false)
-    end
-
-    it "does not count stale sent rows toward a rebuilt audience snapshot" do
-      $redis.rpush(snapshot_key, recipient.id)
-      SentPostEmail.create!(post:, email: "previous-snapshot@example.com")
-      blast.update!(delivery_count: 3)
-
-      expect(described_class.fully_delivered?(blast)).to be(false)
-    end
-
-    it "is true when sent_post_emails covers the snapshotted audience and delivery_count matches" do
-      $redis.rpush(snapshot_key, recipient.id)
-      SentPostEmail.create!(post:, email: recipient.email)
-      blast.update!(delivery_count: 1)
+    it "is true once every recipient has been handed over" do
+      $redis.set(pending_key, 0)
 
       expect(described_class.fully_delivered?(blast)).to be(true)
     end
 
-    it "is false when sent rows exist but delivery_count has not acknowledged the handoff" do
-      $redis.rpush(snapshot_key, recipient.id)
-      SentPostEmail.create!(post:, email: recipient.email)
+    it "is true when the count went negative through a re-delivered slice" do
+      $redis.set(pending_key, -2)
 
-      expect(described_class.fully_delivered?(blast)).to be(false)
+      expect(described_class.fully_delivered?(blast)).to be(true)
     end
 
     it "is false once completed_at is already set" do
-      $redis.rpush(snapshot_key, recipient.id)
-      SentPostEmail.create!(post:, email: recipient.email)
+      $redis.set(pending_key, 0)
       blast.update!(completed_at: Time.current)
 
       expect(described_class.fully_delivered?(blast)).to be(false)
     end
 
-    it "uses the per-blast sent set for a non-opener resend" do
+    it "is false for a non-opener resend that still owes recipients" do
       blast.update!(recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
-      checkpoint = RedisKey.blast_non_opener_emails(blast.id)
-      sent = RedisKey.blast_sent_emails(blast.id)
-      $redis.sadd(checkpoint, "a@example.com", "b@example.com")
-      $redis.sadd(sent, "a@example.com")
+      $redis.set(pending_key, 1)
 
       expect(described_class.fully_delivered?(blast)).to be(false)
 
-      $redis.sadd(sent, "b@example.com")
+      $redis.set(pending_key, 0)
       expect(described_class.fully_delivered?(blast)).to be(true)
-    end
-
-    it "does not count stale sent-set emails toward a rebuilt non-opener checkpoint" do
-      blast.update!(recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
-      checkpoint = RedisKey.blast_non_opener_emails(blast.id)
-      sent = RedisKey.blast_sent_emails(blast.id)
-      $redis.sadd(checkpoint, "current-unsent@example.com", "current-sent@example.com")
-      $redis.sadd(sent, "current-sent@example.com", "previous-checkpoint@example.com")
-
-      expect(described_class.fully_delivered?(blast)).to be(false)
-    end
-  end
-
-  describe ".complete_if_fully_delivered!" do
-    let(:post) { basic_post_with_audience }
-    let(:blast) { create(:blast, post:, completed_at: nil, delivery_count: 3) }
-    let(:recipient) { AudienceMember.where(seller_id: post.seller_id).sole }
-
-    it "stamps completed_at and drops the snapshot when sent rows cover the snapshot" do
-      snapshot = RedisKey.blast_audience_snapshot(blast.id)
-      $redis.rpush(snapshot, recipient.id)
-      SentPostEmail.create!(post:, email: recipient.email)
-
-      expect(described_class.complete_if_fully_delivered!(blast)).to be(true)
-      expect(blast.reload.completed_at).to eq(Time.current)
-      expect($redis.exists?(snapshot)).to be(false)
-    end
-
-    it "leaves an incomplete blast untouched" do
-      $redis.rpush(RedisKey.blast_audience_snapshot(blast.id), recipient.id)
-
-      expect(described_class.complete_if_fully_delivered!(blast)).to be(false)
-      expect(blast.reload.completed_at).to be_nil
     end
   end
 

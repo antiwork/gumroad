@@ -9,185 +9,59 @@ class SendPostBlastEmailsJob
   # blast silently, which is what made the documented recovery a no-op (gumroad-private#1816).
   sidekiq_options retry: 10, queue: :default
 
-  # True when this blast has already handed every snapshotted recipient to an ESP.
-  # Missing snapshot/checkpoint => unknown, not delivered — the caller resumes.
+  # True when the sender has already handed every recipient it picked to an ESP.
+  #
+  # The sender publishes how many recipients it still owes (see `start_pending_recipients`),
+  # and only decrements after the provider call returns — so a kill anywhere before the
+  # handoff leaves a positive count. A missing key means "unknown", not "delivered": the
+  # caller falls back to resuming, exactly as it did before this existed.
   def self.fully_delivered?(blast)
     return false if blast.completed_at.present?
 
-    if blast.to_non_openers?
-      checkpoint_key = RedisKey.blast_non_opener_emails(blast.id)
-      sent_key = RedisKey.blast_sent_emails(blast.id)
-      return false unless $redis.exists?(checkpoint_key)
-      return false if $redis.scard(sent_key) < $redis.scard(checkpoint_key)
-
-      $redis.sdiff(checkpoint_key, sent_key).empty?
-    else
-      snapshotted_ids = $redis.lrange(RedisKey.blast_audience_snapshot(blast.id), 0, -1).map(&:to_i)
-      snapshotted_ids.present? && sent_post_emails_cover_snapshotted_audience?(blast, snapshotted_ids)
-    end
-  end
-
-  def self.sent_post_emails_cover_snapshotted_audience?(blast, snapshotted_ids)
-    post = blast.post
-    emails = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
-      snapshotted_ids.each_slice(REVALIDATION_SLICE_SIZE).flat_map do |ids_slice|
-        AudienceMember.filter(seller_id: post.seller_id, params: post.audience_members_filter_params, with_ids: true, ids: ids_slice).pluck(:email)
-      end
-    end.compact.uniq
-    return true if emails.empty?
-    # SentPostEmail is written just before the ESP call. delivery_count is the
-    # post-handoff ack from PostSendgridApi / PostResendApi, so a kill after the
-    # insert and before the provider cannot look fully delivered.
-    return false if blast.delivery_count < emails.size
-
-    SentPostEmail.missing_emails(post:, emails:).empty?
-  end
-
-  def self.audience_load_timeout_seconds
-    ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
-  end
-
-  def self.mark_completed!(blast)
-    blast.update!(completed_at: Time.current) if blast.completed_at.nil?
-    snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
-    checkpoint_key = RedisKey.blast_non_opener_emails(blast.id)
-    $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp")
-    blast
-  end
-
-  COMPLETION_STAMP_CLAIM_TTL_PADDING = 10.minutes
-  COMPLETION_STAMP_RELEASE_SCRIPT = <<~LUA.squish
-    if redis.call("get", KEYS[1]) == ARGV[1] then
-      return redis.call("del", KEYS[1])
-    else
-      return 0
-    end
-  LUA
-
-  def self.claim_completion_stamp(blast_id)
-    token = SecureRandom.uuid
-    $redis.set(RedisKey.blast_completion_stamp_claim(blast_id), token, nx: true, ex: completion_stamp_claim_ttl) ? token : nil
-  end
-
-  def self.completion_stamp_claim_ttl
-    audience_load_timeout_seconds + COMPLETION_STAMP_CLAIM_TTL_PADDING.to_i
-  end
-
-  def self.release_completion_stamp(blast_id, token)
-    return if token.blank?
-
-    $redis.eval(COMPLETION_STAMP_RELEASE_SCRIPT, keys: [RedisKey.blast_completion_stamp_claim(blast_id)], argv: [token])
-  end
-
-  SEND_ATTEMPT_CLAIM_TTL = 4.hours
-  SEND_ATTEMPT_RENEW_SCRIPT = <<~LUA.squish
-    if redis.call("get", KEYS[1]) == ARGV[1] then
-      return redis.call("expire", KEYS[1], ARGV[2])
-    else
-      return 0
-    end
-  LUA
-
-  def self.claim_send_attempt(blast_id)
-    token = SecureRandom.uuid
-    $redis.set(RedisKey.blast_send_attempt_claim(blast_id), token, nx: true, ex: SEND_ATTEMPT_CLAIM_TTL.to_i) ? token : nil
-  end
-
-  def self.release_send_attempt(blast_id, token)
-    return if token.blank?
-
-    $redis.eval(COMPLETION_STAMP_RELEASE_SCRIPT, keys: [RedisKey.blast_send_attempt_claim(blast_id)], argv: [token])
-  end
-
-  def self.renew_send_attempt(blast_id, token)
-    return false if token.blank?
-
-    $redis.eval(SEND_ATTEMPT_RENEW_SCRIPT, keys: [RedisKey.blast_send_attempt_claim(blast_id)], argv: [token, SEND_ATTEMPT_CLAIM_TTL.to_i]).to_i == 1
-  end
-
-  def self.reschedule_after_send_attempt_claim(blast_id)
-    ttl = $redis.ttl(RedisKey.blast_send_attempt_claim(blast_id)).to_i
-    delay = ttl.positive? ? ttl + 5 : 30
-    perform_in(delay, blast_id)
-  end
-
-  def self.send_attempt_claimed?(blast_id)
-    $redis.exists?(RedisKey.blast_send_attempt_claim(blast_id))
-  end
-
-  def self.completion_stamp_claimed?(blast_id)
-    $redis.exists?(RedisKey.blast_completion_stamp_claim(blast_id))
-  end
-
-  def self.complete_if_fully_delivered!(blast)
-    blast.reload
-    return false unless fully_delivered?(blast)
-
-    mark_completed!(blast)
-    true
+    pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
+    pending.present? && pending.to_i <= 0
   end
 
   def perform(blast_id)
     @blast = PostEmailBlast.find(blast_id)
     @post = @blast.post
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
-    send_attempt_token = self.class.claim_send_attempt(@blast.id)
-    unless send_attempt_token
-      # A live or crashed owner still holds the NX claim. Returning here would ACK
-      # a recovered job and drop the only retry. Wait for the claim to expire.
-      self.class.reschedule_after_send_attempt_claim(@blast.id)
-      return
+    return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
+
+    @blast.update!(started_at: Time.current) if @blast.started_at.nil?
+
+    @filters = @post.audience_members_filter_params
+    # The filter query can be expensive to run, it's better to run it on the replica DB.
+    Makara::Context.release_all
+    @members = load_audience_members
+
+    if @blast.to_non_openers?
+      keep_emails = load_non_opener_emails
+      @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
+      remove_members_already_sent_in_this_blast
+    else
+      # We will check each batch of emails to see if they were already messaged,
+      # but we can already remove all of the ones we know have already been emailed, ahead of time (faster).
+      # This check is only useful if the post has been published twice, or if this job is being retried.
+      remove_already_emailed_members
     end
 
-    begin
-      return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
-      return if self.class.completion_stamp_claimed?(@blast.id)
+    return mark_blast_as_completed if @members.empty?
 
-      @blast.update!(started_at: Time.current) if @blast.started_at.nil?
-
-      @filters = @post.audience_members_filter_params
-      # The filter query can be expensive to run, it's better to run it on the replica DB.
-      Makara::Context.release_all
-      @members = load_audience_members
-      return unless still_own_send_attempt?(send_attempt_token)
-
-      if @blast.to_non_openers?
-        keep_emails = load_non_opener_emails
-        return unless still_own_send_attempt?(send_attempt_token)
-        @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
-        remove_members_already_sent_in_this_blast
-      else
-        # We will check each batch of emails to see if they were already messaged,
-        # but we can already remove all of the ones we know have already been emailed, ahead of time (faster).
-        # This check is only useful if the post has been published twice, or if this job is being retried.
-        remove_already_emailed_members
-      end
-
-      return if self.class.completion_stamp_claimed?(@blast.id)
-      return mark_blast_as_completed if @members.empty?
-
-      cache = {}
-      @members.each_slice(recipients_slice_size) do |members_slice|
-        members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
-          provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
-            return if self.class.completion_stamp_claimed?(@blast.id)
-            return unless still_own_send_attempt?(send_attempt_token)
-            send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
-          end
+    start_pending_recipients
+    cache = {}
+    @members.each_slice(recipients_slice_size) do |members_slice|
+      members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
+        provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
+          send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
         end
       end
-
-      mark_blast_as_completed
-    ensure
-      self.class.release_send_attempt(@blast.id, send_attempt_token)
     end
+
+    mark_blast_as_completed
   end
 
   private
-    def still_own_send_attempt?(token)
-      self.class.renew_send_attempt(@blast.id, token)
-    end
-
     # How long the audience snapshot survives in Redis. Long enough to cover the full
     # Sidekiq retry schedule of this job (10 retries spans roughly a day), short enough
     # that an abandoned blast doesn't hold hundreds of thousands of entries forever.
@@ -216,12 +90,16 @@ class SendPostBlastEmailsJob
     # already accepted its recipients must not be handed them again because a later
     # provider failed, so the cleanup below only rolls back the slice that raised.
     def send_provider_slice(provider:, members:, cache:)
+      # Count the slice as handed over, not the post-dedupe remainder: anything
+      # `store_recipients_as_sent` drops was already emailed by someone else.
+      owed = members.size
       members = store_recipients_as_sent(members)
       recipients = prepare_recipients(members)
 
       begin
         deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
         mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
+        decrement_pending_recipients(owed)
       rescue Exception => e
         # Delete the sent_post_emails records if there's an error with the provider send.
         # We cannot use `transaction` here because it exceeds the lock timeout.
@@ -498,8 +376,29 @@ class SendPostBlastEmailsJob
       end
     end
 
+    # Publishes how many recipients this attempt still owes the ESPs, so a monitor can tell a
+    # blast that died mid-send from one that died after the last handoff but before the stamp
+    # below (gumroad-private#2250). Written per attempt, after filtering: a retry owes only
+    # what is left. The TTL matches the audience snapshot — past it the answer is "unknown"
+    # and the monitor falls back to resuming.
+    def start_pending_recipients
+      $redis.set(RedisKey.blast_pending_recipients(@blast.id), @members.size, ex: AUDIENCE_SNAPSHOT_TTL.to_i)
+    end
+
+    def decrement_pending_recipients(count)
+      $redis.decrby(RedisKey.blast_pending_recipients(@blast.id), count)
+    end
+
     def mark_blast_as_completed
-      self.class.mark_completed!(@blast)
+      @blast.update!(completed_at: Time.current)
+      # The blast is done, so the retry-resume snapshot, the non-opener checkpoint and the
+      # pending-recipient count have served their purpose. Also remove the temporary
+      # write-in-progress keys in case a previous attempt died mid-write (they carry a TTL,
+      # but no reason to keep them around).
+      snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
+      checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
+      $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
+                 RedisKey.blast_pending_recipients(@blast.id))
     end
 
     # Stores email addresses in SentPostEmail, just before sending the emails.
@@ -532,6 +431,6 @@ class SendPostBlastEmailsJob
 
     # Tunable via Redis so a stuck blast can be unblocked without a deploy.
     def audience_load_timeout_seconds
-      self.class.audience_load_timeout_seconds
+      ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
     end
 end
