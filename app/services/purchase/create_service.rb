@@ -147,6 +147,7 @@ class Purchase::CreateService < Purchase::BaseService
 
         purchase.build_tip(value_cents: params[:tip_cents], value_usd_cents: get_usd_cents(product.price_currency_type, params[:tip_cents]))
       end
+      purchase.buyer_currency_quote_canonical_components = buyer_currency_quote_canonical_components_hint(purchase)
 
       validate_bundle_products
 
@@ -214,6 +215,19 @@ class Purchase::CreateService < Purchase::BaseService
       return unless purchase.link.price_currency_type.to_s.downcase != Currency::USD
 
       Checkout::BuyerCurrencyQuote.listed_currency_rate_hint(
+        token: params[:buyer_currency_quote],
+        seller_id: purchase.seller.id,
+        permalink: purchase.link.unique_permalink,
+        currency: purchase.link.price_currency_type
+      )
+    end
+
+    def buyer_currency_quote_canonical_components_hint(purchase)
+      return if params[:buyer_currency_quote].blank?
+      return unless purchase.link.price_currency_type.to_s.downcase != Currency::USD
+      return unless params[:tip_cents].to_i.positive?
+
+      Checkout::BuyerCurrencyQuote.canonical_components_hint(
         token: params[:buyer_currency_quote],
         seller_id: purchase.seller.id,
         permalink: purchase.link.unique_permalink,

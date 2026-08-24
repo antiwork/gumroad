@@ -195,6 +195,7 @@ class Checkout::BuyerCurrencyQuote
                            :stripe_fx_quote_expires_at,
                            :canonical_line_items,
                            :charge_canonical_line_items,
+                           :canonical_line_components,
                            :line_allocations,
                            :future_installments_presentment_total_cents,
                            :later_charge_presentments,
@@ -348,6 +349,34 @@ class Checkout::BuyerCurrencyQuote
     nil
   end
 
+  # Signature- and expiry-checked, then scoped to one line in one seller charge. Used while
+  # constructing a non-USD listed purchase from a quote token: the display price remains in the
+  # product's listed currency, but the charge must use the canonical component split the quote
+  # signed, or a rounded listed tip can make charge-time verification fail.
+  def self.canonical_components_hint(token:, seller_id:, permalink:, currency:)
+    return if token.blank?
+
+    payload = verifier.verify(token)
+    charge_payloads = payload["charges"].presence || [payload]
+    charge_payload = charge_payloads.find { |cp| cp["seller_id"] == seller_id }
+    return if charge_payload.blank?
+    return if Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
+    return unless charge_payload.dig("listed_currency_codes", permalink.to_s).to_s.casecmp?(currency.to_s)
+
+    components = charge_payload.dig("canonical_line_components", permalink.to_s)
+    return if components.blank?
+
+    {
+      price_cents: components.fetch("price_cents").to_i,
+      tip_cents: components.fetch("tip_cents").to_i,
+      seller_tax_cents: components.fetch("seller_tax_cents").to_i,
+      gumroad_tax_cents: components.fetch("gumroad_tax_cents").to_i,
+      shipping_cents: components.fetch("shipping_cents").to_i,
+    }
+  rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, TypeError, ArgumentError
+    nil
+  end
+
   # Signature-checked but non-authoritative, like listed_currency_rate_hint: the currency the
   # buyer confirmed when this token was minted. The picker means it can differ from GeoIP's
   # answer, and charge-time eligibility must gate on the confirmed one or verify! rejects the
@@ -432,20 +461,6 @@ class Checkout::BuyerCurrencyQuote
     # complete that checkout at all, and reloading reproduced it.
     recurring, one_time = products.partition(&:is_recurring_billing?)
     return false if recurring.any? && one_time.any?
-    # Tip on a non-USD listing is not safe to quote: the surcharge request and the order
-    # builder split it over different price bases and convert at different points, so the
-    # two can disagree by a cent and `verify!` fails the buyer's payment on "total mismatch".
-    # Shipping now converts the same way on both paths (sum(convert) on each), so it's safe
-    # to quote; tip isn't.
-    #
-    # The gate is cart-level, not per-line, because the largest-remainder tip split can hand a
-    # cent to a different line between quote and submit, so a per-line check could mint a
-    # token whose per-line totals then fail verification.
-    if products.any? { |product| product.price_currency_type.to_s.downcase != Currency::USD } &&
-       line_items.any? { |line| line.tip_cents.to_i.positive? }
-      return false
-    end
-
     true
   end
 
@@ -755,6 +770,21 @@ class Checkout::BuyerCurrencyQuote
 
           [line_item.permalink.to_s, line_item.charge_canonical_total_cents.to_i]
         end,
+        canonical_line_components: charge_line_items.filter_map do |line_item|
+          next if line_item.charge_canonical_total_cents.zero?
+
+          components = line_item.charge_canonical_component_cents
+          [
+            line_item.permalink.to_s,
+            {
+              price_cents: components[0].to_i,
+              tip_cents: components[1].to_i,
+              seller_tax_cents: components[2].to_i,
+              gumroad_tax_cents: components[3].to_i,
+              shipping_cents: components[4].to_i,
+            }
+          ]
+        end.to_h,
         # Built from the EXACT converted total plus the rounding difference, so the tax the
         # checkout displays is the true converted tax and the cosmetic difference shows up on
         # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).
@@ -904,6 +934,7 @@ class Checkout::BuyerCurrencyQuote
           presentment_total_cents: charge_quote.presentment_total_cents,
           charge_canonical_total_cents: charge_quote.charge_canonical_total_cents,
           charge_canonical_line_items: charge_quote.charge_canonical_line_items,
+          canonical_line_components: charge_quote.canonical_line_components,
           charge_presentment_total_cents: charge_quote.charge_presentment_total_cents,
           later_charge_presentments: charge_quote.later_charge_presentments,
           # How far the rounding moved the amount, signed into the token so the charge
