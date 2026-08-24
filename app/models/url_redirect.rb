@@ -159,7 +159,7 @@ class UrlRedirect < ApplicationRecord
       url_redirect = product_purchase.url_redirect
       next [] if url_redirect.blank? || !url_redirect.with_product_files.is_downloadable?
 
-      url_redirect.alive_product_files.select(&:archivable?).map(&:id)
+      url_redirect.alive_product_files.filter_map { _1.id if _1.archivable? }
     end.uniq
 
     ProductFile.where(id: file_ids).in_order

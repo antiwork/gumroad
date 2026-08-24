@@ -583,9 +583,8 @@ describe LibraryPresenter do
       it "prepares and returns a combined ZIP for the selected bundle purchase" do
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expect(props[:bundle_downloads]).to eq([
-          { id: purchase1.link.external_id, label: "Bundle", download_url: nil }
-        ])
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil }
+        expect(props[:bundle_downloads]).to eq([expected_download])
         archive = purchase1.link.product_files_archives.alive.entity_archives.sole
         expect(archive.product_files.map(&:link_id).sort).to eq(purchase1.product_purchases.map(&:link_id).sort)
 
@@ -593,9 +592,8 @@ describe LibraryPresenter do
         archive.mark_ready!
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expect(props[:bundle_downloads]).to eq([
-          { id: purchase1.link.external_id, label: "Bundle", download_url: url_redirect_download_archive_path(purchase1.url_redirect.token) }
-        ])
+        expected_download[:download_url] = url_redirect_download_archive_path(purchase1.url_redirect.token)
+        expect(props[:bundle_downloads]).to eq([expected_download])
       end
 
       it "matches nothing when no selected bundle id resolves to a product" do
