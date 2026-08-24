@@ -806,6 +806,30 @@ describe Checkout::BuyerCurrencyQuote do
         permalink: eur_product.unique_permalink,
         currency: Currency::EUR
       )).to be_nil
+      expect(described_class.canonical_components_hint(
+        token:,
+        seller_id: seller.id,
+        permalink: eur_product.unique_permalink,
+        currency: Currency::EUR,
+        uid: "line-b",
+        line_index: 0
+      )).to be_nil
+      expect(described_class.canonical_components_hint(
+        token:,
+        seller_id: seller.id,
+        permalink: eur_product.unique_permalink,
+        currency: Currency::EUR,
+        uid: "missing",
+        line_index: 1
+      )).to be_nil
+      expect(described_class.canonical_components_hint(
+        token:,
+        seller_id: seller.id,
+        permalink: eur_product.unique_permalink,
+        currency: Currency::EUR,
+        uid: "line-b",
+        line_index: 1
+      )).to include(price_cents: 15_00, tip_cents: 1_25)
     end
 
     it "does not apply another permalink's signed components via a swapped uid or index" do

@@ -380,11 +380,16 @@ class Checkout::BuyerCurrencyQuote
       # UID and line_index are client-supplied. Scope to the signed permalink first so a
       # swapped identifier cannot apply another product's price/tip/tax/shipping split.
       scoped = components_payload.select { |line| line.is_a?(Hash) && line["permalink"].to_s == permalink.to_s }
-      if uid.present?
-        scoped.find { |line| line["uid"].to_s == uid.to_s } ||
-          (!line_index.nil? && scoped.find { |line| line["line_index"].to_i == line_index.to_i })
+      by_uid = uid.present? ? scoped.find { |line| line["uid"].to_s == uid.to_s } : nil
+      by_index = line_index.nil? ? nil : scoped.find { |line| line["line_index"].to_i == line_index.to_i }
+      if uid.present? && !line_index.nil?
+        # Both identifiers are client-supplied. Accept only when they name the
+        # same signed row — never fall back from a miss or a sibling swap.
+        by_uid if by_uid && by_index && by_uid.equal?(by_index)
+      elsif uid.present?
+        by_uid
       elsif !line_index.nil?
-        scoped.find { |line| line["line_index"].to_i == line_index.to_i }
+        by_index
       else
         scoped.sole if scoped.one?
       end
