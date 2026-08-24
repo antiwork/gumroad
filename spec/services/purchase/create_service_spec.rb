@@ -246,6 +246,70 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.total_transaction_cents).not_to eq(13_76)
   end
 
+  it "does not apply signed components when a slack-sized signed tip has no submitted tip" do
+    user.update!(tipping_enabled: true)
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 10_00,
+        tip_cents: 5,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        tip_cents: 0,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip).to be_nil
+    expect(purchase.total_transaction_cents).to eq(10_00)
+  end
+
+  it "does not apply signed components when a slack-sized submitted tip has no signed tip" do
+    user.update!(tipping_enabled: true)
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 10_00,
+        tip_cents: 0,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_05),
+        tip_cents: 5,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip.value_usd_cents).to eq(5)
+    expect(purchase.total_transaction_cents).to eq(10_05)
+  end
+
   it "refuses signed components on a USD line when submit-time tip is removed" do
     user.update!(tipping_enabled: true)
     usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
