@@ -443,8 +443,16 @@ class Order::ChargeService
   def charge_intent_waiting_for_flow_of_funds?(charge)
     charge_intent&.succeeded? &&
       charge_intent.is_a?(StripeChargeIntent) &&
-      (charge&.charge_presentment.present? || charge&.merchant_account&.user_id.present?) &&
+      charge_settlement_deferrable?(charge) &&
       charge_intent.charge.flow_of_funds.blank?
+  end
+
+  def charge_settlement_deferrable?(charge)
+    return false if charge.blank?
+
+    charge.charge_presentment.present? ||
+      charge.merchant_account&.user_id.present? ||
+      charge.merchant_account.nil?
   end
 
   def mark_charged_purchase_successful(purchase)

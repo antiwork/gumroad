@@ -16,7 +16,7 @@ class FinalizeBuyerPresentmentChargeJob
 
   def perform(charge_id, attempt = 0)
     charge = Charge.find(charge_id)
-    return unless charge.charge_presentment.present? || charge.merchant_account&.user_id.present?
+    return unless charge.charge_presentment.present? || charge.merchant_account&.user_id.present? || charge.merchant_account.nil?
 
     pending_purchases = charge.purchases.select { _1.in_progress? && _1.stripe_transaction_id.present? }
     if pending_purchases.none?

@@ -4625,7 +4625,7 @@ class Purchase < ApplicationRecord
       # arrived yet (StripeCharge#build_flow_of_funds), and dollars there become the holding
       # amount of an account denominated in its own currency — a balance no payout picks up
       # (gumroad-private#1471). Presentment stays nil for the same reason.
-      if funds_held_by_gumroad? && merchant_account.present? && !buyer_presentment?
+      if funds_held_by_gumroad? && merchant_account.present? && !buyer_presentment? && !charge&.charge_presentment.present?
         # Sized to the whole charge, because the combined-charge split below divides by it.
         # Do not mint USD when merchant_account is nil: that is also the unprepared seller-held shape.
         flow_amount_cents = is_part_of_combined_charge? ? charge.amount_cents : total_transaction_cents

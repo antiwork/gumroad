@@ -74,6 +74,18 @@ describe FinalizeBuyerPresentmentChargeJob do
     expect(described_class.jobs.size).to eq(1)
   end
 
+  it "polls charges whose merchant account is missing" do
+    charge.charge_presentment.destroy!
+    charge.update!(merchant_account: nil)
+    purchase.update_column(:merchant_account_id, nil)
+    sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: false)
+    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase).and_return(sync_service)
+
+    described_class.new.perform(charge.id)
+
+    expect(described_class.jobs.size).to eq(1)
+  end
+
   it "re-enqueues the receipt when purchases finalized but the receipt was never sent" do
     # Simulates a Sidekiq retry after the original SendChargeReceiptJob enqueue failed
     # (e.g. transient Redis error): the purchase is already successful, so pending_purchases
