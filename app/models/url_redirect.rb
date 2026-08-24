@@ -32,6 +32,7 @@ class UrlRedirect < ApplicationRecord
   FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION = "ef64f2fef0d6c776a337050020423fc0"
   GUID_GETTER_FROM_S3_URL_REGEX = %r{attachments/(.*)/original}
   BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN = 24.hours
+  BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS = 3
 
   # Public: If one exists, returns the product that this UrlRedirect is associated to, directly or indirectly. Otherwise nil is returned.
   def referenced_link
@@ -183,6 +184,8 @@ class UrlRedirect < ApplicationRecord
       return if matching_archives.any? { |archive| !archive.failed? }
 
       failed_archives = matching_archives.select(&:failed?)
+      return if failed_archives.size >= BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS
+
       latest_failure_at = failed_archives.map(&:updated_at).compact.max
       return if failed_archives.size >= 2 && latest_failure_at > BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN.ago
 

@@ -650,6 +650,26 @@ describe LibraryPresenter do
         expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed", "queueing"])
       end
 
+      it "stops retrying after the stale-failure recovery attempt also fails" do
+        library_props(bundle_ids: [purchase1.link.external_id])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archive.mark_failed!
+        library_props(bundle_ids: [purchase1.link.external_id])
+        replacement_archive = purchase1.link.product_files_archives.alive.entity_archives.where.not(id: archive.id).sole
+        replacement_archive.mark_failed!
+        [archive, replacement_archive].each { _1.update_columns(updated_at: 25.hours.ago) }
+        library_props(bundle_ids: [purchase1.link.external_id])
+        stale_failure_recovery_archive = purchase1.link.product_files_archives.alive.entity_archives.where(product_files_archive_state: "queueing").sole
+        stale_failure_recovery_archive.mark_failed!
+        [archive, replacement_archive, stale_failure_recovery_archive].each { _1.update_columns(updated_at: 25.hours.ago) }
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:bundle_downloads]).to eq([])
+        archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
+        expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed", "failed"])
+      end
+
       it "queues a fresh ZIP when the matching bundle files keep the same ids but change paths" do
         library_props(bundle_ids: [purchase1.link.external_id])
         archive = purchase1.link.product_files_archives.alive.entity_archives.sole
