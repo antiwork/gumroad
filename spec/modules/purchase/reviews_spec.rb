@@ -429,6 +429,14 @@ describe Purchase::Reviews do
       expect(giftee_purchase.rater_name).to eq("Sabrina")
     end
 
+    it "keeps the sender name available for gift receipt subjects" do
+      giftee = create(:user, name: "Sabrina")
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Mahmood Pervaiz")
+
+      expect(giftee_purchase.rater_name).to eq("Sabrina")
+      expect(giftee_purchase.gifter_full_name).to eq("Mahmood Pervaiz")
+    end
+
     it "keeps the shipping name on a physical gift" do
       giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Sabrina Rehman")
       allow(giftee_purchase.link).to receive(:require_shipping?).and_return(true)
