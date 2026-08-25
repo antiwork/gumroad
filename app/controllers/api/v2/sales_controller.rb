@@ -211,8 +211,19 @@ class Api::V2::SalesController < Api::V2::BaseController
       sales = sales.where(link_id: product_id) if product_id.present?
       sales = sales.where(id: purchase_id) if purchase_id.present?
       sales = sales.where("full_name LIKE ?", "%#{Purchase.sanitize_sql_like(name)}%") if name.present?
-      sales = sales.where(id: License.where(serial: license_key.upcase).select(:purchase_id)) if license_key.present?
+      sales = sales.where(id: sale_ids_for_license_key(license_key)) if license_key.present?
       sales.order(created_at: :desc, id: :desc)
+    end
+
+    # Licenses for gifted products live on the giftee purchase, which
+    # for_sales_api then drops. Prefer the gift's payer leg so a license_key
+    # lookup returns the same sale the unfiltered Sales API already lists.
+    def sale_ids_for_license_key(license_key)
+      holder_ids = License.where(serial: license_key.upcase).select(:purchase_id)
+      Purchase.unscoped
+        .where(id: holder_ids)
+        .joins("LEFT JOIN gifts ON gifts.giftee_purchase_id = purchases.id")
+        .select("COALESCE(gifts.gifter_purchase_id, purchases.id)")
     end
 
     def export_filters
