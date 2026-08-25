@@ -212,7 +212,7 @@
 - id: 149
   slug: "149-adding-a-product"
   title: "Adding a product"
-  description: "In this article: Choose a product type Set a price Describe your product Provide additional product info Integrations Add content to your product Pages Embed em"
+  description: "In this article: Watch a walkthrough Choose a product type Set a price Describe your product Provide additional product info Integrations Add content to your pr"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 153
   slug: "153-setting-up-a-custom-domain"

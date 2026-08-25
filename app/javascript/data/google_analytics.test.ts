@@ -2,7 +2,12 @@
 import loadGoogleAnalyticsScript from "$vendor/google_analytics_4";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { sanitizedPageLocation, sanitizedPageReferrer, startTrackingForSeller } from "./google_analytics";
+import {
+  sanitizedPageLocation,
+  sanitizedPageReferrer,
+  startTrackingForSeller,
+  trackHelpVideoEvent,
+} from "./google_analytics";
 
 vi.mock("$vendor/google_analytics_4", () => ({ default: vi.fn() }));
 
@@ -119,6 +124,58 @@ describe("startTrackingForSeller", () => {
     const gtag = stubGtag();
 
     startTrackingForSeller({ ...sellerConfig, googleAnalyticsId: null });
+
+    expect(gtag).not.toHaveBeenCalled();
+  });
+});
+
+describe("trackHelpVideoEvent", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends recommended video events to the Gumroad GA property", () => {
+    enableGa();
+    const gtag = stubGtag();
+
+    trackHelpVideoEvent("video_start", {
+      videoId: "beginner-walkthrough",
+      title: "Beginner walkthrough: set up a course",
+      url: "/images/help_center/beginner-walkthrough.mp4",
+    });
+    trackHelpVideoEvent("video_progress", {
+      videoId: "beginner-walkthrough",
+      title: "Beginner walkthrough: set up a course",
+      url: "/images/help_center/beginner-walkthrough.mp4",
+      percent: 50,
+    });
+
+    expect(gtag).toHaveBeenCalledWith(
+      "event",
+      "video_start",
+      expect.objectContaining({
+        send_to: "gumroad",
+        video_id: "beginner-walkthrough",
+        video_provider: "gumroad",
+      }),
+    );
+    expect(gtag).toHaveBeenCalledWith(
+      "event",
+      "video_progress",
+      expect.objectContaining({ video_percent: 50, send_to: "gumroad" }),
+    );
+  });
+
+  it("does not send when tracking is off", () => {
+    document.head.innerHTML = '<meta property="gr:google_analytics:enabled" content="false">';
+    const gtag = stubGtag();
+
+    trackHelpVideoEvent("video_complete", {
+      videoId: "beginner-walkthrough",
+      title: "Walkthrough",
+      url: "/video.mp4",
+      percent: 100,
+    });
 
     expect(gtag).not.toHaveBeenCalled();
   });
