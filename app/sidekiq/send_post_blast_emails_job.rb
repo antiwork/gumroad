@@ -49,6 +49,7 @@ class SendPostBlastEmailsJob
     return mark_blast_as_completed if @members.empty?
     unless SellerLargeBlastQuota.allow?(
       seller_id: @post.seller_id,
+      kind: "post_blast",
       blast_id: @blast.id,
       recipient_count: @members.size
     )

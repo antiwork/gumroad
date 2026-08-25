@@ -287,6 +287,7 @@ class SendWorkflowPostEmailsJob
     def claim_daily_large_blast_slot
       SellerLargeBlastQuota.allow?(
         seller_id: @post.seller_id,
+        kind: "workflow",
         blast_id: @post.id,
         recipient_count: @members.size
       )

@@ -27,6 +27,12 @@ describe SellerLargeBlastQuota, :freeze_time do
     expect(described_class.allow?(seller_id:, blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(true)
   end
 
+  it "does not treat a workflow post and a one-off blast as the same claim when their ids match" do
+    expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(true)
+    expect(described_class.allow?(seller_id:, kind: "workflow", blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(false)
+    expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(true)
+  end
+
   it "opens a new slot the next day" do
     expect(described_class.allow?(seller_id:, blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(true)
 

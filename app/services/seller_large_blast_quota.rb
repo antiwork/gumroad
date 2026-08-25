@@ -5,22 +5,28 @@
 class SellerLargeBlastQuota
   DEFAULT_THRESHOLD = 10_000
 
-  def self.allow?(seller_id:, blast_id:, recipient_count:)
+  def self.allow?(seller_id:, blast_id:, recipient_count:, kind: "blast")
     return true if recipient_count.to_i < threshold
 
-    claim(seller_id:, blast_id:)
+    claim(seller_id:, claim_id: claim_id_for(kind:, blast_id:))
   end
 
-  def self.claim(seller_id:, blast_id:)
-    return true if seller_id.blank? || blast_id.blank?
+  def self.claim(seller_id:, claim_id:)
+    return true if seller_id.blank? || claim_id.blank?
 
     key = RedisKey.seller_large_blast_quota(seller_id, Date.current)
-    return true if $redis.set(key, blast_id.to_s, nx: true, ex: ttl_seconds)
+    return true if $redis.set(key, claim_id, nx: true, ex: ttl_seconds)
 
-    $redis.get(key) == blast_id.to_s
+    $redis.get(key) == claim_id
   rescue Redis::BaseError, RedisClient::Error => e
     ErrorNotifier.notify(e, seller_id:)
     true
+  end
+
+  def self.claim_id_for(kind:, blast_id:)
+    return if blast_id.blank?
+
+    "#{kind}:#{blast_id}"
   end
 
   def self.threshold
