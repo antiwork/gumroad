@@ -52,16 +52,22 @@ class Purchase::SyncStatusWithChargeProcessorService
 
       restore_failed_purchase_to_in_progress!
 
+      # The processor lookup scopes by purchase.merchant_account, so a missing or stale
+      # Gumroad account must be repaired from the charge before the lookup: a seller's
+      # direct charge is invisible to a platform-scoped retrieve, and the raise would skip
+      # a repair placed after it. A nil charge account stays nil (fail closed).
+      charge_merchant_account = purchase.charge&.merchant_account
+      if charge_merchant_account.present? && charge_merchant_account != purchase.merchant_account &&
+         purchase.merchant_account&.user_id.blank?
+        purchase.update!(merchant_account: charge_merchant_account)
+      end
+
       charge = ChargeProcessor.get_or_search_charge(purchase)
       success_statuses = ChargeProcessor.charge_processor_success_statuses(purchase.charge_processor_id)
       @charge_outcome = classify(charge, success_statuses)
       charge_succeeded = charge && success_statuses.include?(charge.status) &&
                          !charge.try(:refunded) && !charge.try(:refunded?) && !charge.try(:disputed)
       charge_succeeded &&= @charge_outcome == :succeeded if @require_final_charge_status
-
-      if purchase.merchant_account.blank? && purchase.charge&.merchant_account.present?
-        purchase.update!(merchant_account: purchase.charge.merchant_account)
-      end
 
       if charge_succeeded && @charge_outcome == :succeeded && charge.flow_of_funds.nil? &&
          !purchase.stripe_charge_processor? && purchase.is_part_of_combined_charge?
