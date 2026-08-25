@@ -58,6 +58,7 @@ import {
   isProcessing,
   isSubmitDisabled,
   PaymentMethodType,
+  paypalBillingAddressChangesTaxLocation,
   paymentElementCollectsFullBillingDetails,
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
@@ -1327,10 +1328,15 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
         onApprove: async (data) => {
           assert(data.billingToken != null, "Billing token missing");
           const result = await createBillingAgreement(data.billingToken);
-          dispatch({
-            type: "set-value",
+          const billingAddress = {
             country: result.payer.payer_info.billing_address.country_code,
             zipCode: result.payer.payer_info.billing_address.postal_code,
+            state: result.payer.payer_info.billing_address.state,
+          };
+          const taxLocationChanged = paypalBillingAddressChangesTaxLocation(billingAddress, stateRef.current);
+          dispatch({
+            type: "set-paypal-billing-address",
+            ...billingAddress,
             fullName: `${result.payer.payer_info.first_name ?? ""} ${result.payer.payer_info.last_name ?? ""}`,
             ...(stateRef.current.email ? {} : { email: result.payer.payer_info.email }),
           });
@@ -1345,6 +1351,10 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
               fullName: address.recipient_name,
               address: address.line1 + (address.line2 ?? ""),
             });
+          }
+          if (taxLocationChanged) {
+            setPaymentMethod(null);
+            return;
           }
           const selectedPaymentMethod: SelectedPaymentMethod = {
             type: "paypal-native",
