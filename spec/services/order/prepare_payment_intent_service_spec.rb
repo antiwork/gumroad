@@ -1953,29 +1953,24 @@ describe Order::PreparePaymentIntentService, :vcr do
         end
       end
 
-      it "keeps today's canonical USD behavior byte-for-byte when the flag is off" do
+      # iDEAL can only confirm against a euro intent. When the seller is not enabled for
+      # buyer-currency charging there is no presentment machinery, and a USD fallback cannot
+      # confirm the token — fail closed instead of creating an unconfirmable intent.
+      it "fails an iDEAL token closed rather than building an unconfirmable USD intent when the flag is off" do
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
         expect(StripeFxQuote).not_to receive(:create)
 
         order, params = build_order
         create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_flag_off")
 
-        charge = order.charges.last
-        expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
-        expect(create_args[:amount_cents]).to eq(order.purchases.sum(&:total_transaction_cents))
-        expect(create_args[:idempotency_key]).to eq("deferred_intent_#{charge.external_id}_ctoken_flag_off")
-        expect(create_args[:payment_method_types]).not_to include("ideal")
-        expect(responses["unique-id-0"][:success]).to eq(true)
-        expect(charge.charge_presentment).to be_nil
-        expect(order.purchases.first.reload.purchase_presentment).to be_nil
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+        expect(order.charges.last&.charge_presentment).to be_nil
       end
 
-      # The one flags-off shape this change DOES move: a euro-mounted element whose seller had
-      # buyer-currency charging turned off in between. There is no presentment machinery available
-      # to build a euro intent for a seller who is not enabled, and the canonical dollar intent is
-      # not a fallback — the euro token can never confirm against it, which is the dead end this
-      # whole change exists to remove. So fail the order cleanly instead. Requests that report
-      # nothing, or report dollars, are unchanged (the example above).
+      # Same fail-closed for a card token minted on a euro-mounted element after the flag
+      # rolled back: no presentment machinery, and the euro token cannot confirm USD.
       it "fails a EUR-mounted token closed rather than building an unconfirmable USD intent when the flag is off" do
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
 
