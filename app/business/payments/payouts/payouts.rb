@@ -445,7 +445,15 @@ class Payouts
   end
 
   def self.create_instant_payouts_for_balances_up_to_date(date)
-    users = User.holding_balance.where("json_data->'$.payout_frequency' = 'daily'")
+    # Daily is a few hundred sellers. User.holding_balance groups the whole unpaid
+    # balances table (~hours) to find them — start from the daily ids instead.
+    daily_user_ids = User.where("json_data->'$.payout_frequency' = ?", User::PayoutSchedule::DAILY).ids
+    holding_ids = if daily_user_ids.empty?
+      []
+    else
+      Balance.unpaid.where(user_id: daily_user_ids).group(:user_id).having("SUM(amount_cents) > 0").pluck(:user_id)
+    end
+    users = User.where(id: holding_ids)
     self.create_instant_payouts_for_balances_up_to_date_for_users(date, users, perform_async: true, add_comment: true)
   end
 
