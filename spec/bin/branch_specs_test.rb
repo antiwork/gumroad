@@ -132,6 +132,35 @@ check(
   expect_escalate: true,
 )
 
+# Hung-checkout files are standalone ruby + a workflow that only invokes
+# them, so they must not trip the mapping-gap escalate the way an unmapped
+# helper would. Sibling model+spec so the run is not an empty selection.
+check(
+  "hung-checkout classifier, its test, and workflow do not escalate",
+  base_files: {
+    ".github/workflows/rerun-hung-checkout.yml" => "old",
+    "bin/classify-hung-checkout" => "old",
+    "spec/bin/classify_hung_checkout_test.rb" => "old",
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+  },
+  head_files: {
+    ".github/workflows/rerun-hung-checkout.yml" => "new",
+    "bin/classify-hung-checkout" => "new",
+    "spec/bin/classify_hung_checkout_test.rb" => "new",
+    "app/models/widget.rb" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+# tests.yml is the suite itself and must still force the full suite.
+check(
+  "tests.yml still escalates",
+  base_files: { ".github/workflows/tests.yml" => "old" },
+  head_files: { ".github/workflows/tests.yml" => "new" },
+  expect_escalate: true,
+)
+
 # Co-located vitest module is not a mapping gap
 check(
   "TS module with co-located .test.ts does not escalate",
