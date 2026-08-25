@@ -51,6 +51,13 @@ describe HelpCenterPresenter do
       expect(html).to include("help_center/beginner-walkthrough.mp4")
       expect(html).to include("Watch a walkthrough")
     end
+
+    it "points Why choose Gumroad at the beginner walkthrough" do
+      why = HelpCenter::Article.find_by!(slug: "64-is-gumroad-for-me")
+      html = presenter.article_props(why)[:article][:content]
+
+      expect(html).to include("149-adding-a-product#watch-a-walkthrough")
+    end
   end
 
   describe "#category_props" do
