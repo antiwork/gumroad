@@ -245,6 +245,23 @@ describe UrlRedirect do
       expect(bundle_purchase.url_redirect.bundle_archive).to eq(nil)
       expect(bundle.product_files_archives.alive).to be_empty
     end
+
+    it "does not include files from another purchase of the same bundle" do
+      add_member_files
+      bundle_purchase.create_artifacts_and_send_receipt!
+      original_product_ids = bundle_purchase.product_purchases.map(&:link_id)
+
+      removed_bundle_product = bundle.bundle_products.first
+      removed_bundle_product.mark_deleted!
+      new_bundle_product = create(:bundle_product, bundle:)
+      create(:product_file, link: new_bundle_product.product, display_name: "new-file")
+      repeat_purchase = create(:purchase, purchaser: buyer, link: bundle)
+      repeat_purchase.create_artifacts_and_send_receipt!
+
+      files_for_original_token = bundle_purchase.url_redirect.bundle_archive_product_files
+      expect(files_for_original_token.map(&:link_id)).to match_array(original_product_ids)
+      expect(files_for_original_token.map(&:link_id)).not_to include(new_bundle_product.product_id)
+    end
   end
 
   describe "streaming" do

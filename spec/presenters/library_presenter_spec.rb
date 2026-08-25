@@ -596,7 +596,7 @@ describe LibraryPresenter do
         expect(props[:bundle_downloads]).to eq([expected_download])
       end
 
-      it "includes files from repeat purchases of the same bundle link" do
+      it "keeps a bundle archive scoped to the selected purchase" do
         removed_bundle_product = purchase1.link.bundle_products.first
         removed_bundle_product.mark_deleted!
         new_bundle_product = create(:bundle_product, bundle: purchase1.link)
@@ -606,9 +606,10 @@ describe LibraryPresenter do
 
         library_props(bundle_ids: [purchase1.link.external_id])
 
-        archive = repeat_purchase.link.product_files_archives.alive.entity_archives.sole
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
         archived_link_ids = archive.product_files.map(&:link_id)
-        expect(archived_link_ids).to include(removed_bundle_product.product_id, new_bundle_product.product_id)
+        expect(archived_link_ids).to include(new_bundle_product.product_id)
+        expect(archived_link_ids).not_to include(removed_bundle_product.product_id)
       end
 
       it "does not create a combined ZIP when a member product has stampable pdfs" do
