@@ -29,6 +29,7 @@ export function mountHelpVideos(root: HTMLElement): () => void {
 
     const firedProgress = new Set<number>();
     let started = false;
+    let completed = false;
 
     void createJWPlayer(playerId, {
       width: "100%",
@@ -65,6 +66,8 @@ export function mountHelpVideos(root: HTMLElement): () => void {
       });
 
       player.on("complete", () => {
+        if (completed) return;
+        completed = true;
         trackHelpVideoEvent("video_complete", { videoId, title, url: src, percent: 100 });
       });
     });

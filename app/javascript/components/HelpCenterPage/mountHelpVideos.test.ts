@@ -97,6 +97,8 @@ describe("mountHelpVideos", () => {
     player.handlers.time?.({ position: 51, duration: 100 });
     player.handlers.time?.({ position: 80, duration: 100 });
     player.handlers.complete?.();
+    player.handlers.play?.();
+    player.handlers.complete?.();
 
     expect(mocks.trackHelpVideoEvent.mock.calls).toEqual([
       ["video_start", { videoId: "beginner-walkthrough", title: "Walkthrough", url: "/video.mp4" }],
