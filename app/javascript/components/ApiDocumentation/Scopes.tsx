@@ -43,7 +43,8 @@ const SCOPES = [
   },
   {
     name: "edit_sales",
-    description: "write access to refund the user's products' sales, revoke or restore buyer access, and resend purchase receipts to customers.",
+    description:
+      "write access to refund the user's products' sales, revoke or restore buyer access, and resend purchase receipts to customers.",
   },
 ];
 
