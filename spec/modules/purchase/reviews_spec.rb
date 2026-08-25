@@ -438,18 +438,24 @@ describe Purchase::Reviews do
     end
 
     it "keeps the shipping name on a physical gift" do
-      giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Sabrina Rehman")
-      allow(giftee_purchase.link).to receive(:require_shipping?).and_return(true)
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Sabrina Rehman", street_address: "1 Main St")
 
       expect(giftee_purchase.rater_name).to eq("Sabrina Rehman")
     end
 
     it "keeps the shipping name on a physical gift even when the giftee has a different account name" do
       giftee = create(:user, name: "Account Name")
-      giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Sabrina Rehman")
-      allow(giftee_purchase.link).to receive(:require_shipping?).and_return(true)
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Sabrina Rehman", street_address: "1 Main St")
 
       expect(giftee_purchase.rater_name).to eq("Sabrina Rehman")
+      expect(giftee_purchase.rater_uses_account_identity?).to eq(false)
+    end
+
+    it "does not treat a digital gift as physical when the product later requires shipping" do
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Mahmood Pervaiz")
+      giftee_purchase.link.update!(require_shipping: true)
+
+      expect(giftee_purchase.rater_name).to eq("Anonymous")
     end
   end
 end

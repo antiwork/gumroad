@@ -49,16 +49,24 @@ module Purchase::Reviews
 
   def rater_identity_name
     # Physical gifts already collected a shipping name; a later-linked account may not be the recipient.
-    return rater_checkout_name.presence if is_gift_receiver_purchase? && link.require_shipping?
+    return rater_checkout_name.presence if gift_receiver_with_shipping_address?
 
     purchaser&.name.presence || rater_checkout_name.presence
   end
 
-  # Gift checkout only collects the recipient email (and a shipping name when
-  # required). On digital gifts the copied full_name is the sender's.
+  def rater_uses_account_identity?
+    purchaser.present? && !gift_receiver_with_shipping_address?
+  end
+
+  # Digital giftee full_name is the sender's. Classify from the purchase
+  # row, not the live product flag — sellers can flip require_shipping.
   def rater_checkout_name
-    return if is_gift_receiver_purchase? && !link.require_shipping?
+    return if is_gift_receiver_purchase? && !gift_receiver_with_shipping_address?
     full_name
+  end
+
+  def gift_receiver_with_shipping_address?
+    is_gift_receiver_purchase? && street_address.present?
   end
 
   private

@@ -99,6 +99,21 @@ describe ProductReviewPresenter do
       end
     end
 
+    context "product review is on a physical gift with a later-linked account" do
+      let(:purchaser) { create(:user, :with_avatar, name: "Account Name") }
+      let(:giftee_purchase) { create(:purchase, :gift_receiver, purchaser:, full_name: "Sabrina Rehman", street_address: "1 Main St") }
+      let(:product_review) { create(:product_review, purchase: giftee_purchase) }
+
+      it "uses the shipping name and the default avatar" do
+        expect(described_class.new(product_review).product_review_props[:rater]).to eq(
+          {
+            avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
+            name: "Sabrina Rehman",
+          }
+        )
+      end
+    end
+
     context "product review has videos" do
       let(:video) { create(:product_review_video, product_review:) }
 
