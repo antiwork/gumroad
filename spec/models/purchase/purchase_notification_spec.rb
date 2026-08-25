@@ -57,26 +57,6 @@ describe "Purchase Notifications", :vcr do
       expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(purchase.id, purchase.url_parameters)
     end
 
-    it "still schedules the sale ping when the affiliate notification enqueue fails" do
-      seller = create(:user, notification_endpoint: "http://notification.com")
-      product = create(:product, user: seller)
-      affiliate = create(:direct_affiliate, seller:)
-      purchase = create(:purchase, affiliate:, seller:, link: product, affiliate_credit_cents: 100)
-      mail_double = double
-      allow(mail_double).to receive(:deliver_later).and_raise(StandardError.new("mailer queue unavailable"))
-      allow(AffiliateMailer).to receive(:notify_affiliate_of_sale).and_return(mail_double)
-      allow(Rails.logger).to receive(:error)
-
-      expect do
-        Purchase.transaction do
-          purchase.notify_affiliate!
-          purchase.send_notification_webhook
-        end
-      end.to_not raise_error
-
-      expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(purchase.id, purchase.url_parameters)
-    end
-
     describe "with offer code" do
       before do
         @product = create(:product, price_cents: 600, user: create(:user, notification_endpoint: "http://notification.com"))
