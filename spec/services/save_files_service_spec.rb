@@ -173,7 +173,7 @@ describe SaveFilesService do
       expect(file.reload.display_name).to eq("renamed file")
     end
 
-    it "is a no-op for serializer-only keys a v2 GET->PUT round-trip echoes (file_size etc.)" do
+    it "drops ProductFile.as_json-only keys from a Hash payload so update! does not raise (file_size etc.)" do
       file = create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png", size: 1234)
       @product.product_files << file
 
@@ -219,7 +219,7 @@ describe SaveFilesService do
       expect(file.display_name).to eq("renamed file")
     end
 
-    it "still applies writable flag-backed attributes (stream_only) alongside serializer echoes" do
+    it "still applies writable flag-backed attributes (stream_only) when serializer-only keys are also present" do
       video = create(:streamable_video, link: @product, size: 4321)
       @product.product_files << video
 

@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class SaveFilesService
-  # ProductFile.as_json exposes these derived keys to v2 clients, but
-  # ProductFile cannot write them back. Keep writable flag-backed as_json
-  # attributes out of this list.
+  # ProductFile.as_json (editor/internal serialization — not the smaller v2
+  # GET shape) includes these derived keys, but ProductFile cannot write them
+  # back. Keep writable flag-backed as_json attributes out of this list.
   UNWRITABLE_SERIALIZED_FILE_KEYS = %i[
     file_size extension is_pdf is_streamable is_transcoding_in_progress attached_product_name status
   ].freeze
