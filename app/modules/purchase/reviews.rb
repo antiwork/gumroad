@@ -43,6 +43,21 @@ module Purchase::Reviews
     allows_reviews(permit_recurring_charges: true)
   end
 
+  def rater_name
+    rater_identity_name.presence || "Anonymous"
+  end
+
+  def rater_identity_name
+    purchaser&.name.presence || rater_checkout_name.presence
+  end
+
+  # Gift checkout only collects the recipient email (and a shipping name when
+  # required). On digital gifts the copied full_name is the sender's.
+  def rater_checkout_name
+    return if is_gift_receiver_purchase? && !link.require_shipping?
+    full_name
+  end
+
   private
     def allows_reviews(permit_recurring_charges:)
       allowed = purchase_state.in?(COUNTS_REVIEWS_STATES)

@@ -400,4 +400,40 @@ describe Purchase::Reviews do
       end
     end
   end
+
+  describe "#rater_name" do
+    it "uses the purchaser name" do
+      purchaser = create(:user, name: "Reviewer")
+      purchase = create(:purchase, purchaser:, full_name: "Checkout Name")
+
+      expect(purchase.rater_name).to eq("Reviewer")
+    end
+
+    it "falls back to the purchase full_name for a guest" do
+      purchase = create(:purchase, purchaser: nil, full_name: "Checkout Name")
+
+      expect(purchase.rater_name).to eq("Checkout Name")
+    end
+
+    it "does not attribute a digital gift review to the sender's copied full_name" do
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Mahmood Pervaiz")
+
+      expect(giftee_purchase.rater_name).to eq("Anonymous")
+      expect(giftee_purchase.rater_identity_name).to be_nil
+    end
+
+    it "uses the giftee account name even when the purchase still has the sender's full_name" do
+      giftee = create(:user, name: "Sabrina")
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Mahmood Pervaiz")
+
+      expect(giftee_purchase.rater_name).to eq("Sabrina")
+    end
+
+    it "keeps the shipping name on a physical gift" do
+      product = create(:product, require_shipping: true)
+      giftee_purchase = create(:purchase, :gift_receiver, link: product, purchaser: nil, full_name: "Sabrina Rehman")
+
+      expect(giftee_purchase.rater_name).to eq("Sabrina Rehman")
+    end
+  end
 end

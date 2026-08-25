@@ -501,6 +501,9 @@ class Purchase::CreateService < Purchase::BaseService
         is_gift_sender_purchase: false,
         is_gift_receiver_purchase: true
       )
+      unless product.require_shipping?
+        giftee_purchase_params[:full_name] = giftee_purchaser&.name
+      end
       giftee_purchase = build_purchase(giftee_purchase_params)
       giftee_purchase.purchaser = giftee_purchaser
       giftee_purchase.gift_received = gift

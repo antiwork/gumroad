@@ -115,6 +115,15 @@ describe Api::V2::ProductReviewsController do
       expect(response.parsed_body["product_reviews"].first["rater_name"]).to eq("Purchaser")
     end
 
+    it "does not attribute a digital gift review to the sender's copied full_name" do
+      giftee_purchase = create(:purchase, :gift_receiver, link: @product, seller: @user, purchaser: nil, full_name: "Mahmood Pervaiz")
+      create(:product_review, purchase: giftee_purchase, link: @product, rating: 5, message: "Loved it")
+
+      get @action, params: @params
+
+      expect(response.parsed_body["product_reviews"].first["rater_name"]).to eq("Anonymous")
+    end
+
     it "does not expose another creator's product" do
       other_product = create(:product, user: create(:user))
 

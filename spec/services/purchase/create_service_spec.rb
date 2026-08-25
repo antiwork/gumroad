@@ -2339,6 +2339,26 @@ describe Purchase::CreateService, :vcr do
       expect(gifter_purchase.variant_attributes).to eq []
     end
 
+    it "does not copy the sender's full_name onto a digital giftee purchase" do
+      gift_params[:purchase][:full_name] = "Mahmood Pervaiz"
+
+      purchase, _ = Purchase::CreateService.new(product:, params: gift_params).perform
+
+      expect(purchase.full_name).to eq("Mahmood Pervaiz")
+      expect(purchase.gift_given.giftee_purchase.full_name).to be_nil
+    end
+
+    it "sets a digital giftee purchase full_name from the giftee account" do
+      giftee = create(:user, email: gift_params[:gift][:giftee_email], name: "Sabrina")
+      gift_params[:purchase][:full_name] = "Mahmood Pervaiz"
+
+      purchase, _ = Purchase::CreateService.new(product:, params: gift_params).perform
+
+      giftee_purchase = purchase.gift_given.giftee_purchase
+      expect(giftee_purchase.purchaser).to eq(giftee)
+      expect(giftee_purchase.full_name).to eq("Sabrina")
+    end
+
     it "sets the purchaser of giftee purchase to the user account with giftee email" do
       user = create(:user, email: gift_params[:gift][:giftee_email])
 

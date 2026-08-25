@@ -90,6 +90,15 @@ describe ProductReviewPresenter do
       end
     end
 
+    context "product review is on a digital gift receiver purchase" do
+      let(:giftee_purchase) { create(:purchase, :gift_receiver, purchaser: nil, full_name: "Mahmood Pervaiz") }
+      let(:product_review) { create(:product_review, purchase: giftee_purchase) }
+
+      it "does not show the gift sender's copied name" do
+        expect(described_class.new(product_review).product_review_props[:rater][:name]).to eq("Anonymous")
+      end
+    end
+
     context "product review has videos" do
       let(:video) { create(:product_review_video, product_review:) }
 

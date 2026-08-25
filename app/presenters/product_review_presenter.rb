@@ -16,15 +16,10 @@ class ProductReviewPresenter
       id: product_review.external_id,
       rating: product_review.rating,
       message: product_review.message,
-      rater: purchaser.present? ?
-        {
-          avatar_url: purchaser.avatar_url,
-          name: purchaser.name.presence || purchase.full_name.presence || "Anonymous",
-        } :
-        {
-          avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
-          name: purchase.full_name.presence || "Anonymous",
-        },
+      rater: {
+        avatar_url: purchaser.present? ? purchaser.avatar_url : ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
+        name: purchase.rater_name,
+      },
       purchase_id: purchase.external_id,
       # `is_new` only says whether the review is recent. The timestamp itself is what a creator
       # building their own product page needs to sort reviews or print "reviewed on ...", so it is
