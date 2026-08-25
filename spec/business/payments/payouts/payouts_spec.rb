@@ -678,13 +678,14 @@ describe Payouts do
       expect(described_class).to receive(:create_instant_payouts_for_balances_up_to_date_for_users).with(payout_date, [u4], perform_async: true, add_comment: true)
 
       queries = []
-      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      callback = lambda { |*, payload|
         sql = payload[:sql]
         next unless sql.start_with?("SELECT")
         queries << sql
+      }
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        described_class.create_instant_payouts_for_balances_up_to_date(payout_date)
       end
-      described_class.create_instant_payouts_for_balances_up_to_date(payout_date)
-      ActiveSupport::Notifications.unsubscribe(subscriber)
 
       grouped = queries.grep(/SUM\(amount_cents\)/)
       expect(grouped.join).to match(/`user_id` IN \(/)
