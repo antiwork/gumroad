@@ -3139,6 +3139,58 @@ describe Subscription::UpdaterService, :vcr do
       end
     end
 
+    context "when the charge defers on missing Stripe settlement data" do
+      let(:logged_in_user) { create(:user) }
+      let(:subscription) { instance_double(Subscription) }
+      let(:service) do
+        described_class.new(
+          subscription:,
+          gumroad_guid: "abc123",
+          params: {},
+          logged_in_user:,
+          remote_ip: "127.0.0.1",
+        )
+      end
+      let(:pending_purchase) do
+        instance_double(Purchase,
+                        successful?: false,
+                        test_successful?: false,
+                        in_progress?: true,
+                        pending_buyer_presentment_settlement?: true,
+                        charge_intent: nil,
+                        errors: double(full_messages: []),
+                        error_code: nil)
+      end
+
+      before do
+        allow(service).to receive(:amount_owed).and_return(12_34)
+        allow(service).to receive(:prorated_discount_price_cents).and_return(0)
+        allow(service).to receive(:upgrade?).and_return(true)
+        allow(service).to receive(:use_existing_card?).and_return(true)
+        allow(service).to receive(:send_subscription_updated_api_notification)
+        allow(service).to receive(:same_variants?).and_return(true)
+        allow(service).to receive(:success_message).and_return("Your membership has been updated.")
+        allow(subscription).to receive(:credit_card_to_charge).and_return(nil)
+        allow(subscription).to receive(:charge!).and_return(pending_purchase)
+      end
+
+      it "reports success without a content link when the charged purchase awaits settlement" do
+        service.is_resubscribing = false
+
+        result = service.send(:charge_user!)
+
+        expect(result[:success]).to eq(true)
+        expect(result).not_to have_key(:next)
+      end
+
+      it "does not unsubscribe a resubscription whose charge awaits settlement" do
+        service.is_resubscribing = true
+        expect(subscription).not_to receive(:unsubscribe_and_fail!)
+
+        expect(service.send(:charge_user!)[:success]).to eq(true)
+      end
+    end
+
     context "when restarting with offer code changes" do
       let(:free_trial) { false }
 

@@ -1700,10 +1700,26 @@ class Purchase < ApplicationRecord
     purchase_presentment.present?
   end
 
-  # True while a presentment purchase has been charged but Stripe settlement data has not
+  # True while a processor-backed purchase has been charged but settlement data has not
   # arrived yet; a finalization job completes the purchase once it does.
+  def pending_processor_settlement?
+    in_progress? && stripe_transaction_id.present? && processor_settlement_deferrable? && flow_of_funds.blank?
+  end
+
   def pending_buyer_presentment_settlement?
-    in_progress? && stripe_transaction_id.present? && (buyer_presentment? || charge&.charge_presentment.present?) && flow_of_funds.blank?
+    pending_processor_settlement?
+  end
+
+  def processor_settlement_deferrable?
+    return false unless stripe_charge_processor?
+
+    # Charge merchant_account is the money's home when the Charge exists; a nil
+    # purchase account (or a leftover Gumroad account on a seller-held charge)
+    # must not disagree with checkout/finalizer gates.
+    buyer_presentment? ||
+      charge&.charge_presentment.present? ||
+      !funds_held_by_gumroad? ||
+      settlement_merchant_account.nil?
   end
 
   def buyer_presentment_currency
@@ -2400,7 +2416,9 @@ class Purchase < ApplicationRecord
     return if errors.present?
 
     if charge_intent.succeeded?
-      charge_data_saved = save_charge_data(charge_intent.charge, chargeable:, allow_missing_flow_of_funds: buyer_presentment?)
+      charge_data_saved = save_charge_data(charge_intent.charge,
+                                           chargeable:,
+                                           allow_missing_flow_of_funds: processor_settlement_deferrable?)
       unless charge_data_saved
         FinalizeBuyerPresentmentPurchaseJob.perform_in(FinalizeBuyerPresentmentPurchaseJob::INITIAL_DELAY, id)
       end
@@ -2419,10 +2437,10 @@ class Purchase < ApplicationRecord
     self.charge_intent = ChargeProcessor.confirm_payment_intent!(merchant_account, processor_payment_intent_id)
 
     if charge_intent.succeeded?
-      # Presentment charges may not have Stripe settlement data yet right after an SCA
-      # confirmation; defer like the create path does instead of crashing on a blank
+      # Presentment and seller-held Stripe charges may not have settlement data yet right after an
+      # SCA confirmation; defer like the create path does instead of crashing on a blank
       # flow of funds. FinalizeBuyerPresentmentChargeJob completes the purchase later.
-      save_charge_data(charge_intent.charge, allow_missing_flow_of_funds: charge&.charge_presentment.present?)
+      save_charge_data(charge_intent.charge, allow_missing_flow_of_funds: processor_settlement_deferrable?)
     else
       errors.add :base, "Sorry, something went wrong."
     end
@@ -4611,8 +4629,10 @@ class Purchase < ApplicationRecord
       # arrived yet (StripeCharge#build_flow_of_funds), and dollars there become the holding
       # amount of an account denominated in its own currency — a balance no payout picks up
       # (gumroad-private#1471). Presentment stays nil for the same reason.
-      if funds_held_by_gumroad? && !buyer_presentment?
+      unknown_stripe_ownership = stripe_charge_processor? && settlement_merchant_account.nil?
+      if funds_held_by_gumroad? && !buyer_presentment? && !charge&.charge_presentment.present? && !unknown_stripe_ownership
         # Sized to the whole charge, because the combined-charge split below divides by it.
+        # Stripe with a missing merchant_account is unknown ownership, not Gumroad-held USD.
         flow_amount_cents = is_part_of_combined_charge? ? charge.amount_cents : total_transaction_cents
         processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, flow_amount_cents)
       end
@@ -4628,8 +4648,17 @@ class Purchase < ApplicationRecord
     # other processor is Gumroad-held. Not charged_using_gumroad_merchant_account?, which is also
     # true of a seller's own custom account, nor MerchantAccount#holder_of_funds, which answers
     # the same question by dispatching through the charge-processor registry.
+    # Prefer the Charge's account when a Charge exists: that is where the money actually sat.
     def funds_held_by_gumroad?
-      !(stripe_charge_processor? && merchant_account&.user_id.present?)
+      !(stripe_charge_processor? && settlement_merchant_account&.user_id.present?)
+    end
+
+    # Charge.merchant_account wins when the Charge row exists, even if that account is nil.
+    # Falling back to Purchase.merchant_account only when there is no Charge keeps a leftover
+    # Gumroad account from minting USD on a seller-held charge, and a nil purchase account
+    # from suppressing the USD fallback on a known Gumroad-held charge.
+    def settlement_merchant_account
+      charge.present? ? charge.merchant_account : merchant_account
     end
 
     def additional_fields_for_creator_app_api

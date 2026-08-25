@@ -1065,6 +1065,43 @@ describe Order::ChargeService, :vcr do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
     end
 
+    it "keeps seller-held Stripe purchases in progress when settlement data is not available yet" do
+      seller_stripe_account = create(:merchant_account, user: seller_1,
+                                                        charge_processor_merchant_id: "acct_seller_held_missing_settlement")
+      seller_1.update!(check_merchant_account_is_linked: true)
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
+      params = line_items_params.merge!(common_order_params_without_payment)
+      order, = Order::CreateService.new(params:).perform
+      expect(order.purchases.in_progress.count).to eq(2)
+
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, *_args|
+        stripe_charge_intent_without_flow_of_funds(merchant_account: merchant_account_arg)
+      end
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      charge = order.reload.charges.sole
+      purchases = order.purchases.order(:id).to_a
+      expect(charge.merchant_account).to eq(seller_stripe_account)
+      expect(purchases).to all(be_in_progress)
+      expect(purchases.map(&:stripe_transaction_id).uniq).to eq(["ch_missing_settlement"])
+      expect(purchases.map(&:flow_of_funds)).to all(be_nil)
+      expect(purchases.map(&:purchase_success_balance_id)).to all(be_nil)
+      expect(purchases.map(&:purchase_presentment)).to all(be_nil)
+      expect(charge).to have_attributes(processor_transaction_id: "ch_missing_settlement",
+                                        stripe_payment_intent_id: "pi_missing_settlement")
+      expect(charge_responses.fetch("unique-id-0")).to include(success: true,
+                                                               content_url: nil,
+                                                               should_show_receipt: false,
+                                                               show_view_content_button_on_product_page: false)
+      expect(charge_responses.fetch("unique-id-1")).to include(success: true,
+                                                               content_url: nil,
+                                                               should_show_receipt: false,
+                                                               show_view_content_button_on_product_page: false)
+      expect(FinalizeBuyerPresentmentChargeJob.jobs.size).to eq(1)
+      expect(FinalizeBuyerPresentmentChargeJob.jobs.first["args"]).to eq([charge.id])
+    end
+
     it "charges 2.9% + 30c of processor fee when seller has a Stripe merchant account and existing credit card is used for payment" do
       seller_stripe_account = create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 
@@ -2009,6 +2046,32 @@ describe Order::ChargeService, :vcr do
         requires_mandate?: false,
         visual: "**** **** **** 4242",
         zip_code: "H2X 1Y4"
+      )
+    end
+
+    def stripe_charge_intent_without_flow_of_funds(merchant_account:)
+      processor_charge = BaseProcessorCharge.new
+      processor_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      processor_charge.id = "ch_missing_settlement"
+      processor_charge.refunded = false
+      processor_charge.fee = 59
+      processor_charge.fee_currency = Currency::USD
+      processor_charge.card_fingerprint = "card_fp"
+      processor_charge.card_expiry_month = 12
+      processor_charge.card_expiry_year = 2030
+      processor_charge.zip_check_result = "pass"
+
+      stripe_charge_processor = instance_double(StripeChargeProcessor)
+      allow(StripeChargeProcessor).to receive(:new).and_return(stripe_charge_processor)
+      allow(stripe_charge_processor).to receive(:get_charge).with(processor_charge.id, merchant_account:).and_return(processor_charge)
+
+      StripeChargeIntent.new(
+        payment_intent: Stripe::PaymentIntent.construct_from(
+          id: "pi_missing_settlement",
+          status: StripeIntentStatus::SUCCESS,
+          latest_charge: processor_charge.id
+        ),
+        merchant_account:
       )
     end
 

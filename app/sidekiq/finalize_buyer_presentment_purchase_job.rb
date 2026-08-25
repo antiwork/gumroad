@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Finalizes a standalone buyer-presentment purchase once Stripe exposes settlement data.
+# Finalizes a standalone purchase once Stripe exposes settlement data.
 class FinalizeBuyerPresentmentPurchaseJob
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :default, lock: :until_executed

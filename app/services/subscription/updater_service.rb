@@ -543,6 +543,7 @@ class Subscription::UpdaterService
       )
 
       subscription.unsubscribe_and_fail!(preserve_access_for_mandate_failure: false) if is_resubscribing && !(upgrade_purchase.successful? ||
+          upgrade_purchase.pending_buyer_presentment_settlement? ||
           (upgrade_purchase.in_progress? && upgrade_purchase.charge_intent&.requires_action?))
       error_message = upgrade_purchase.errors.full_messages.first || upgrade_purchase.error_code
 
@@ -552,6 +553,17 @@ class Subscription::UpdaterService
         {
           success: true,
           next: logged_in_user && Rails.application.routes.url_helpers.library_purchase_url(upgrade_purchase.external_id, host: "#{PROTOCOL}://#{DOMAIN}"),
+          success_message:,
+        }
+      elsif error_message.nil? && upgrade_purchase.pending_buyer_presentment_settlement?
+        # The card was charged but Stripe settlement data is pending;
+        # FinalizeBuyerPresentmentPurchaseJob finalizes the purchase. The plan change is
+        # already applied, so report success — but without a content link the buyer
+        # cannot use yet.
+        send_subscription_updated_api_notification
+        subscription.original_purchase.schedule_workflows_for_variants(excluded_variants: original_purchase.variant_attributes) unless same_variants?
+        {
+          success: true,
           success_message:,
         }
       elsif upgrade_purchase.in_progress? && upgrade_purchase.charge_intent&.requires_action?
