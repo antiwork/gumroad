@@ -140,18 +140,27 @@ class Purchase::CreateService < Purchase::BaseService
         raise Purchase::PurchaseInvalid, purchase.upsell_purchase.errors.first.message unless purchase.upsell_purchase.valid?
       end
 
+      quoted_listed_rate = buyer_currency_quote_rate_hint(purchase)
+
       if params[:tip_cents].present? && params[:tip_cents] > 0
         raise Purchase::PurchaseInvalid, "Tip is not allowed for this product" unless purchase.seller.tipping_enabled? && product.not_is_tiered_membership?
 
         raise Purchase::PurchaseInvalid, "Tip is too large for this purchase" if (purchase_params[:perceived_price_cents].ceil - params[:tip_cents].floor) < purchase.minimum_paid_price_cents
 
-        purchase.build_tip(value_cents: params[:tip_cents], value_usd_cents: get_usd_cents(product.price_currency_type, params[:tip_cents]))
+        # Listed-currency tip_cents must convert at the quote's locked rate, the same
+        # rate prepare_for_charge! uses. A live-rate read here makes the submitted USD
+        # tip miss the signed split by more than rounding slack and fail-closes as
+        # buyer_currency_quote_invalid.
+        purchase.build_tip(
+          value_cents: params[:tip_cents],
+          value_usd_cents: get_usd_cents(product.price_currency_type, params[:tip_cents], rate: quoted_listed_rate)
+        )
       end
       purchase.buyer_currency_quote_canonical_components = buyer_currency_quote_canonical_components_hint(purchase)
 
       validate_bundle_products
 
-      purchase.prepare_for_charge!(locked_rate: buyer_currency_quote_rate_hint(purchase))
+      purchase.prepare_for_charge!(locked_rate: quoted_listed_rate)
 
       purchase.build_purchase_wallet_type(wallet_type: params[:wallet_type]) if params[:wallet_type].present?
 

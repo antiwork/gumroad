@@ -149,6 +149,44 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.total_transaction_cents).to eq(13_76)
   end
 
+  it "converts a listed non-USD tip at the quote's locked rate when the live rate has drifted" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    allow_any_instance_of(described_class).to receive(:get_usd_cents).and_wrap_original do |method, currency_type, quantity, **kwargs|
+      kwargs = kwargs.merge(rate: 0.5) if kwargs[:rate].blank?
+      method.call(currency_type, quantity, **kwargs)
+    end
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip.value_cents).to eq(1_00)
+    expect(purchase.tip.value_usd_cents).to eq(1_26)
+    expect(purchase.total_transaction_cents).to eq(13_76)
+  end
+
   it "refuses signed canonical components when submit-time tip remaps to zero" do
     user.update!(tipping_enabled: true)
     eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
