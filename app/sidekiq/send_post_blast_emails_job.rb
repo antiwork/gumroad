@@ -47,6 +47,14 @@ class SendPostBlastEmailsJob
     end
 
     return mark_blast_as_completed if @members.empty?
+    unless SellerLargeBlastQuota.allow?(
+      seller_id: @post.seller_id,
+      blast_id: @blast.id,
+      recipient_count: @members.size
+    )
+      requeue_for_daily_blast_limit
+      return
+    end
 
     start_pending_recipients
     cache = {}
@@ -432,5 +440,12 @@ class SendPostBlastEmailsJob
     # Tunable via Redis so a stuck blast can be unblocked without a deploy.
     def audience_load_timeout_seconds
       ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
+    end
+
+    def requeue_for_daily_blast_limit
+      job_id = self.class.perform_at(Time.zone.tomorrow.beginning_of_day, @blast.id)
+      return if job_id.present?
+
+      raise "Sidekiq did not requeue the blast for the daily limit"
     end
 end

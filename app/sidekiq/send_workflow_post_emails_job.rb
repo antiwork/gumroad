@@ -113,6 +113,13 @@ class SendWorkflowPostEmailsJob
       Makara::Context.release_all
       primary_pinned = false
     end
+    unless claim_daily_large_blast_slot
+      requeue_for_daily_blast_limit(
+        post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
+        schedule_intent_token, schedule_intent_fanout_token
+      )
+      return
+    end
 
     case enqueue_all_member_jobs
     when :complete
@@ -275,6 +282,21 @@ class SendWorkflowPostEmailsJob
       return if job_id.present?
 
       raise FanoutNotEnqueuedError, "Sidekiq did not requeue the workflow fanout"
+    end
+
+    def claim_daily_large_blast_slot
+      SellerLargeBlastQuota.allow?(
+        seller_id: @post.seller_id,
+        blast_id: @post.id,
+        recipient_count: @members.size
+      )
+    end
+
+    def requeue_for_daily_blast_limit(*args)
+      job_id = self.class.perform_at(Time.zone.tomorrow.beginning_of_day, *args)
+      return if job_id.present?
+
+      raise FanoutNotEnqueuedError, "Sidekiq did not requeue the workflow fanout for the daily limit"
     end
 
     def confirmed_follower_member_ids_after_cutoff

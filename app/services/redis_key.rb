@@ -122,5 +122,7 @@ class RedisKey
     def workflow_immediate_fanout_threshold = "workflow_immediate_fanout_threshold"
     def workflow_immediate_enqueue_per_second = "workflow_immediate_enqueue_per_second"
     def workflow_immediate_fanout_max_spread_seconds = "workflow_immediate_fanout_max_spread_seconds"
+    def seller_large_blast_threshold = "seller_large_blast_threshold"
+    def seller_large_blast_quota(seller_id, day) = "seller_large_blast_quota:#{seller_id}:#{day}"
   end
 end

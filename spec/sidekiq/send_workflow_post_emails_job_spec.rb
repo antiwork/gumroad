@@ -823,6 +823,53 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
     end
   end
 
+  describe "one large blast per seller per day" do
+    before do
+      @product = create(:product, user: @seller, price_cents: 0)
+      @post.update!(
+        installment_type: Installment::PRODUCT_TYPE,
+        link: @product,
+        bought_products: [@product.unique_permalink]
+      )
+      @post_rule.update!(delayed_delivery_time: 0)
+      stub_const("SellerLargeBlastQuota::DEFAULT_THRESHOLD", 3)
+      4.times do |i|
+        purchase = create(:free_purchase, link: @product, email: "daily-buyer-#{i}@example.com", created_at: 1.hour.ago)
+        purchase.rebuild_audience_member_details
+      end
+    end
+
+    after { $redis.del(RedisKey.seller_large_blast_quota(@seller.id, Date.current)) }
+
+    it "fans out the first large post and holds the next one until tomorrow" do
+      second_post = create(:installment, :published, seller: @seller, link: @product, workflow: @workflow,
+                                                     installment_type: Installment::PRODUCT_TYPE,
+                                                     bought_products: [@product.unique_permalink])
+      create(:post_rule, installment: second_post, delayed_delivery_time: 0)
+
+      described_class.new.perform(@post.id)
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(4)
+
+      SendWorkflowInstallmentWorker.jobs.clear
+      described_class.jobs.clear
+      described_class.new.perform(second_post.id)
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+      expect(described_class).to have_enqueued_sidekiq_job(
+        second_post.id, nil, false, nil, nil, nil
+      ).at(Time.zone.tomorrow.beginning_of_day)
+    end
+
+    it "does not consume the day for a small audience" do
+      stub_const("SellerLargeBlastQuota::DEFAULT_THRESHOLD", 100)
+
+      described_class.new.perform(@post.id)
+
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(4)
+      expect($redis.get(RedisKey.seller_large_blast_quota(@seller.id, Date.current))).to be_nil
+    end
+  end
+
   describe "seller fanout lock" do
     before do
       @product = create(:product, user: @seller, price_cents: 0)
