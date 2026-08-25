@@ -3,6 +3,7 @@ import * as React from "react";
 import typia from "typia";
 
 import { CategorySidebar } from "$app/components/HelpCenterPage/CategorySidebar";
+import { mountHelpVideos } from "$app/components/HelpCenterPage/mountHelpVideos";
 import { ArticleCategory, SidebarCategory } from "$app/components/HelpCenterPage/types";
 
 import { HelpCenterLayout } from "../Layout";
@@ -194,6 +195,12 @@ export default function HelpCenterArticle() {
     container.addEventListener("click", onLinkClick);
     return () => container.removeEventListener("click", onLinkClick);
   }, []);
+
+  React.useEffect(() => {
+    const container = contentRef.current;
+    if (!container) return;
+    return mountHelpVideos(container);
+  }, [article.slug, article.content]);
 
   // The article body is injected as raw HTML, so the headings a fragment points at don't exist
   // until this component has rendered. Both the browser (on a fresh page load) and Inertia (on a
