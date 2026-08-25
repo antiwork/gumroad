@@ -2263,6 +2263,65 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(order.charges).to be_empty
         expect(order.purchases.first.reload).to be_failed
       end
+
+      # The USD remount path exists so UPI can appear on a USD listing. Presentment
+      # must stay required: a USD fallback cannot confirm a token minted in INR.
+      context "on a USD-priced cart remounted in INR for a seller who hid local-currency display" do
+        let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: true) }
+        let(:product) { create(:product, user: seller, price_cents: 19_99) }
+        let(:quote) do
+          StripeFxQuote::Quote.new(id: "fxq_upi_usd", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("83.0"))
+        end
+
+        before { allow(StripeFxQuote).to receive(:create).and_return(quote) }
+
+        it "prepares the INR intent when the buyer selected UPI" do
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "India") }
+
+          create_args, responses = perform_with_upi_preview(order, params)
+
+          expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+          expect(create_args[:currency]).to eq(Currency::INR)
+          expect(create_args[:payment_method_types]).to include("upi")
+        end
+
+        it "fails closed when INR presentment cannot be recreated after a UPI selection" do
+          allow_any_instance_of(Charge::MethodForcedPresentment).to receive(:perform).and_return(nil)
+
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "India") }
+
+          create_args, responses = perform_with_upi_preview(order, params)
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.purchases.first.reload).to be_failed
+        end
+
+        it "prepares the INR intent when the buyer selected card on the remounted element" do
+          order, params = build_order
+          params = params.merge(payment_element_mount_currency: Currency::INR)
+          order.purchases.each { _1.update!(ip_country: "India") }
+
+          preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
+          allow(Stripe::ConfirmationToken).to receive(:retrieve)
+            .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+          charge_intent = instance_double(StripeChargeIntent, id: "pi_card_inr", client_secret: "pi_card_inr_secret")
+          create_args = nil
+          allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+            create_args = kwargs
+            charge_intent
+          end
+
+          responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_inr").perform
+
+          expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+          expect(create_args[:currency]).to eq(Currency::INR)
+          expect(create_args[:payment_method_types]).to include("card")
+        end
+      end
     end
 
 

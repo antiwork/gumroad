@@ -765,31 +765,24 @@ class Order::PreparePaymentIntentService
       return true if direct_listed_decision.eligible? && direct_listed_decision.direct_listed_amount? &&
                      direct_listed_decision.currency == currency
 
-      return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       return false unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+      return true if Checkout::BuyerCurrencyEligibility.seller_enabled?(seller) &&
+                     uniform_method_forced_purchase_currency == currency
 
-      uniform_method_forced_purchase_currency == currency
+      # USD carts remount in INR so UPI can appear. Card/Link tokens from that remount
+      # still need an INR intent. disable_buyer_local_currency is only a display pref.
+      Checkout::BuyerCurrencyEligibility.local_method_quote_enabled?(seller, currency)
     end
 
-    # Once the buyer confirmed on a non-USD Payment Element — through a direct-listed card
-    # surface, a forced-currency method, or another method that Element offered — the
-    # canonical USD intent is never a usable fallback: Stripe rejects confirming such a
-    # ConfirmationToken against a USD intent, synchronously and without a payment_failed
-    # webhook, so the purchase would sit in_progress until the abandonment worker instead of
-    # failing cleanly here. A seller with buyer-currency disabled remains on the canonical USD
-    # path; a forced-currency token received after its local-method flag rolls back fails cleanly
-    # instead of creating an intent the token can never confirm.
-    #
-    # For card/Link the browser's report is the authority (see #intent_forced_currency): a
-    # non-USD mount currency REQUIRES a non-USD intent, so a presentment we could not build for it
-    # must fail the order rather than fall back to dollars. A reported USD mount currency requires
-    # nothing — the canonical USD intent is exactly what that token confirms against, which is the
-    # dominant shape in gumroad-private#1382.
+    # A ConfirmationToken from a non-USD Payment Element can never confirm a USD intent.
+    # UPI/iDEAL/Pix/Bancontact always require the forced-currency presentment — including
+    # after a local-method flag rollback and when the seller hid local-currency display.
+    # Card/Link follow the browser's reported mount currency (see #intent_forced_currency).
     def client_confirm_presentment_required?
       return false if @previewed_payment_method_type.blank?
 
       if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).present?
-        Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+        true
       else
         reported_currency = reported_element_mount_currency
         return element_mount_forced_currency.present? if reported_currency.nil?
