@@ -236,6 +236,47 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "returns the gift sender sale when license_key belongs to a gifted purchase" do
+        @product.update!(is_licensed: true)
+        sender = create(:purchase, :gift_sender, purchaser: @purchaser, link: @product)
+        giftee = create(:purchase, :gift_receiver, link: @product, seller: @seller, price_cents: 0)
+        create(:gift, link: @product, gifter_purchase: sender, giftee_purchase: giftee,
+                      gifter_email: sender.email, giftee_email: giftee.email)
+        giftee.create_license!
+
+        get :index, params: @params.merge(license_key: giftee.license.serial)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["sales"].map { _1["id"] }).to eq([sender.external_id])
+        expect(response.parsed_body["sales"].first["license_key"]).to eq(giftee.license.serial)
+        expect(response.parsed_body["sales"].map { _1["id"] }).not_to include(giftee.external_id)
+      end
+
+      it "returns the gift sender sale for a gifted license_key on the deprecated page path" do
+        @product.update!(is_licensed: true)
+        sender = create(:purchase, :gift_sender, purchaser: @purchaser, link: @product)
+        giftee = create(:purchase, :gift_receiver, link: @product, seller: @seller, price_cents: 0)
+        create(:gift, link: @product, gifter_purchase: sender, giftee_purchase: giftee,
+                      gifter_email: sender.email, giftee_email: giftee.email)
+        giftee.create_license!
+
+        get :index, params: @params.merge(license_key: giftee.license.serial, page: 1)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["sales"].map { _1["id"] }).to eq([sender.external_id])
+        expect(response.parsed_body["sales"].first["license_key"]).to eq(giftee.license.serial)
+      end
+
+      it "does not list gift-receiver purchases when license_key is absent" do
+        create(:purchase, :gift_receiver, link: @product, seller: @seller, price_cents: 0)
+
+        get :index, params: @params
+
+        expect(response.parsed_body["sales"].map { _1["id"] }).to match_array(
+          [@purchase, @free_trial_purchase].map(&:external_id)
+        )
+      end
+
       it "returns a 400 error when the page_key query times out" do
         allow(WithMaxExecutionTime).to receive(:timeout_queries).and_raise(WithMaxExecutionTime::QueryTimeoutError)
 
