@@ -1,16 +1,9 @@
 # frozen_string_literal: true
 
 class SaveFilesService
-  # ProductFile.as_json exposes these derived keys, but they are not ProductFile
-  # columns and are not valid write targets on the save path. A v2 client that
-  # GETs a product and PUTs the files back echoes them verbatim (file_size is
-  # the top-level file's `file_size: size` alias; the rest are computed or
-  # serialization metadata), and update! would raise UnknownAttributeError on
-  # the first one — 500ing the whole product update. Drop them here so the
-  # round-trip echo is a no-op. Deliberately NOT included: writable flag-backed
-  # attributes ProductFile.as_json also exposes (stream_only, pdf_stamp_enabled,
-  # hide_kindle_and_read_buttons) and genuine columns (display_name,
-  # description, pagelength, duration, width, height, url, isbn).
+  # ProductFile.as_json exposes these derived keys to v2 clients, but
+  # ProductFile cannot write them back. Keep writable flag-backed as_json
+  # attributes out of this list.
   UNWRITABLE_SERIALIZED_FILE_KEYS = %i[
     file_size extension is_pdf is_streamable is_transcoding_in_progress attached_product_name status
   ].freeze
@@ -133,10 +126,6 @@ class SaveFilesService
           file_params[:display_name] ||= file_params[:file_name]
           file_params.delete(:file_name)
         end
-
-        # Serializer-only keys echoed by a v2 GET->PUT round-trip (see
-        # UNWRITABLE_SERIALIZED_FILE_KEYS). update! has no such columns/writers,
-        # so leaving them would raise and 500 the whole product update.
         file_params.except!(*UNWRITABLE_SERIALIZED_FILE_KEYS)
       end
     end
