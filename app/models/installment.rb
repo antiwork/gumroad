@@ -435,13 +435,7 @@ class Installment < ApplicationRecord
     return if sale.chargedback_not_reversed_or_refunded?
     return if sale.subscription.present? && !sale.subscription.alive?
 
-    other_purchase_ids = Purchase.where(email: sale.email, seller_id: sale.seller_id)
-                                 .all_success_states
-                                 .no_or_active_subscription
-                                 .not_fully_refunded
-                                 .not_chargedback_or_chargedback_reversed
-                                 .pluck(:id)
-    return if other_purchase_ids.present? && CreatorContactingCustomersEmailInfo.where(purchase: other_purchase_ids, installment: id).present?
+    return if already_emailed_workflow_purchase?(sale)
 
     return if workflow.present? && !workflow.applies_to_purchase?(sale)
     expected_delivery_time_for_sale = expected_delivery_time(sale)
@@ -472,13 +466,7 @@ class Installment < ApplicationRecord
     return unless sale.can_contact?
     return if sale.chargedback_not_reversed_or_refunded?
 
-    other_purchase_ids = Purchase.where(email: sale.email, seller_id: sale.seller_id)
-                                 .all_success_states
-                                 .inactive_subscription
-                                 .not_fully_refunded
-                                 .not_chargedback_or_chargedback_reversed
-                                 .pluck(:id)
-    return if other_purchase_ids.present? && CreatorContactingCustomersEmailInfo.where(purchase: other_purchase_ids, installment: id).present?
+    return if already_emailed_workflow_purchase?(sale, subscription_scope: :inactive_subscription)
 
     return if workflow.present? && !workflow.applies_to_purchase?(sale)
 
@@ -1162,6 +1150,17 @@ class Installment < ApplicationRecord
 
       errors.add(:base, "You have to confirm your email address before you can do that.")
       raise InstallmentInvalid, "You have to confirm your email address before you can do that."
+    end
+
+    # Start from this installment's email_infos. The old email+seller pluck scanned
+    # every purchase for the buyer on each of ~100k workers.
+    def already_emailed_workflow_purchase?(sale, subscription_scope: :no_or_active_subscription)
+      purchase_scope = Purchase.where(email: sale.email, seller_id: sale.seller_id)
+                               .all_success_states
+                               .public_send(subscription_scope)
+                               .not_fully_refunded
+                               .not_chargedback_or_chargedback_reversed
+      CreatorContactingCustomersEmailInfo.where(installment_id: id).joins(:purchase).merge(purchase_scope).exists?
     end
 
     def send_email(recipient)

@@ -822,4 +822,89 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       end
     end
   end
+
+  describe "seller fanout lock" do
+    before do
+      @product = create(:product, user: @seller, price_cents: 0)
+      @post.update!(
+        installment_type: Installment::PRODUCT_TYPE,
+        link: @product,
+        bought_products: [@product.unique_permalink]
+      )
+      purchase = create(:free_purchase, link: @product, created_at: 2.days.ago)
+      purchase.rebuild_audience_member_details
+    end
+
+    it "requeues when another fanout for the seller is running" do
+      $redis.set(RedisKey.workflow_seller_fanout_lock(@seller.id), "held", nx: true, ex: 60)
+
+      described_class.new.perform(@post.id)
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+      expect(described_class).to have_enqueued_sidekiq_job(
+        @post.id, nil, false, nil, nil, nil
+      ).in(30.seconds)
+    end
+
+    it "releases the seller lock after a successful fanout" do
+      described_class.new.perform(@post.id)
+
+      expect($redis.get(RedisKey.workflow_seller_fanout_lock(@seller.id))).to be_nil
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
+    end
+
+    it "lets a second post fan out after the first releases the seller lock" do
+      second_post = create(:installment, :published, seller: @seller, link: @product, workflow: @workflow,
+                                                     installment_type: Installment::PRODUCT_TYPE,
+                                                     bought_products: [@product.unique_permalink])
+      create(:post_rule, installment: second_post, delayed_delivery_time: 1.day)
+
+      described_class.new.perform(@post.id)
+      SendWorkflowInstallmentWorker.jobs.clear
+      described_class.new.perform(second_post.id)
+
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(1)
+    end
+  end
+
+  describe "immediate fanout pacing" do
+    before do
+      @product = create(:product, user: @seller, price_cents: 0)
+      @post.update!(
+        installment_type: Installment::PRODUCT_TYPE,
+        link: @product,
+        bought_products: [@product.unique_permalink]
+      )
+      @post_rule.update!(delayed_delivery_time: 0)
+      stub_const("#{described_class}::IMMEDIATE_FANOUT_THRESHOLD", 3)
+      stub_const("#{described_class}::DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND", 2)
+      4.times do |i|
+        purchase = create(:free_purchase, link: @product, email: "paced-buyer-#{i}@example.com", created_at: 1.hour.ago)
+        purchase.rebuild_audience_member_details
+      end
+    end
+
+    it "spreads due-now jobs across the paced window" do
+      described_class.new.perform(@post.id)
+
+      jobs = SendWorkflowInstallmentWorker.jobs
+      expect(jobs.size).to eq(4)
+      ats = jobs.filter_map { _1["at"] }.sort
+      expect(ats.size).to eq(3)
+      expect(ats.last - Time.current.to_f).to be_within(0.05).of(1.5)
+    end
+
+    it "keeps future deliveries on their original schedule" do
+      @post_rule.update!(delayed_delivery_time: 3.days)
+      SendWorkflowInstallmentWorker.jobs.clear
+
+      described_class.new.perform(@post.id)
+
+      expected_at = 1.hour.ago + 3.days
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(4)
+      SendWorkflowInstallmentWorker.jobs.each do |job|
+        expect(job["at"]).to be_within(1).of(expected_at.to_f)
+      end
+    end
+  end
 end

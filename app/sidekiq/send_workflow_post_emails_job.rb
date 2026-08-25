@@ -9,18 +9,17 @@ class SendWorkflowPostEmailsJob
 
   FOLLOWER_LOOKUP_BATCH_SIZE = 1_000
   AFFILIATE_LOOKUP_BATCH_SIZE = 1_000
+  IMMEDIATE_FANOUT_THRESHOLD = 2_000
+  DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND = 80
+  MAX_IMMEDIATE_SPREAD = 15.minutes
 
   def perform(post_id, earliest_valid_time = nil, reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
     @schedule_intent_token = schedule_intent_token
     @schedule_intent_fanout_token = schedule_intent_fanout_token
+    @seller_fanout_lock = nil
     primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? ||
                      schedule_intent_fanout_token.present? || earliest_valid_time.present? || reschedule_on_stale
     ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
-    return unless WorkflowInstallmentScheduleIntent.begin_fanout(
-      intent_token: schedule_intent_token,
-      fanout_token: schedule_intent_fanout_token
-    )
-    @next_fanout_heartbeat_at = fanout_heartbeat_time + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f
     @post = Installment.find_by(id: post_id)
     if @post.nil?
       WorkflowInstallmentScheduleIntent.mark_processed(
@@ -29,6 +28,18 @@ class SendWorkflowPostEmailsJob
       )
       return
     end
+    unless claim_seller_fanout_lock
+      requeue_for_seller_fanout_limit(
+        post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
+        schedule_intent_token, schedule_intent_fanout_token
+      )
+      return
+    end
+    return unless WorkflowInstallmentScheduleIntent.begin_fanout(
+      intent_token: schedule_intent_token,
+      fanout_token: schedule_intent_fanout_token
+    )
+    @next_fanout_heartbeat_at = fanout_heartbeat_time + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f
     @workflow = @post.workflow
     @reschedule_on_stale = reschedule_on_stale
     unless @workflow&.alive? && @post.alive? && @post.published?
@@ -115,6 +126,7 @@ class SendWorkflowPostEmailsJob
       raise FanoutNotEnqueuedError, "Unexpected fanout result"
     end
   ensure
+    @seller_fanout_lock&.release
     Makara::Context.release_all if primary_pinned
   end
 
@@ -126,6 +138,7 @@ class SendWorkflowPostEmailsJob
     end
 
     def enqueue_all_member_jobs
+      @immediate_fanout_index = 0
       @members.each do |member|
         return :ownership_lost unless renew_fanout_lease
 
@@ -149,15 +162,14 @@ class SendWorkflowPostEmailsJob
     end
 
     def renew_fanout_lease(force: false)
-      return true if @schedule_intent_token.blank? && @schedule_intent_fanout_token.blank?
-
       now = fanout_heartbeat_time
-      return true unless force || now >= @next_fanout_heartbeat_at
+      return true unless force || @next_fanout_heartbeat_at.nil? || now >= @next_fanout_heartbeat_at
 
       renewed = WorkflowInstallmentScheduleIntent.renew_fanout(
         intent_token: @schedule_intent_token,
         fanout_token: @schedule_intent_fanout_token
       )
+      renewed &&= @seller_fanout_lock.nil? || @seller_fanout_lock.renew
       Makara::Context.release_all unless @keep_primary_for_cutoff_scan
       @next_fanout_heartbeat_at = now + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f if renewed
       renewed
@@ -208,10 +220,56 @@ class SendWorkflowPostEmailsJob
       reschedule_recipient = @reschedule_on_stale && [purchase_id, follower_id, affiliate_user_id].one?(&:present?)
       args.push(nil, created_at.iso8601) if reschedule_recipient || preserve_reference_time
       worker = reschedule_recipient ? SendWorkflowInstallmentRescheduleJob : SendWorkflowInstallmentWorker
-      job_id = worker.perform_at(created_at + @rule_delay, *args)
+      job_id = worker.perform_at(paced_deliver_at(created_at + @rule_delay), *args)
       return job_id if job_id.present?
 
       raise FanoutNotEnqueuedError, "Sidekiq did not enqueue the workflow installment"
+    end
+
+    def paced_deliver_at(natural_at)
+      return natural_at unless pace_immediate_fanout?
+
+      now = Time.current
+      return natural_at if natural_at > now
+
+      offset = @immediate_fanout_index.to_f / immediate_enqueue_per_second
+      @immediate_fanout_index += 1
+      now + [offset, max_immediate_spread_seconds].min
+    end
+
+    def pace_immediate_fanout?
+      @members.size >= immediate_fanout_threshold
+    end
+
+    def immediate_fanout_threshold
+      ($redis.get(RedisKey.workflow_immediate_fanout_threshold) || IMMEDIATE_FANOUT_THRESHOLD).to_i
+    rescue Redis::BaseError, RedisClient::Error
+      IMMEDIATE_FANOUT_THRESHOLD
+    end
+
+    def immediate_enqueue_per_second
+      per_second = ($redis.get(RedisKey.workflow_immediate_enqueue_per_second) || DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND).to_f
+      per_second.positive? ? per_second : DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND
+    rescue Redis::BaseError, RedisClient::Error
+      DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND
+    end
+
+    def max_immediate_spread_seconds
+      ($redis.get(RedisKey.workflow_immediate_fanout_max_spread_seconds) || MAX_IMMEDIATE_SPREAD).to_i
+    rescue Redis::BaseError, RedisClient::Error
+      MAX_IMMEDIATE_SPREAD.to_i
+    end
+
+    def claim_seller_fanout_lock
+      @seller_fanout_lock = WorkflowSellerFanoutLock.acquire(@post.seller_id)
+      @seller_fanout_lock.present?
+    end
+
+    def requeue_for_seller_fanout_limit(*args)
+      job_id = self.class.perform_in(WorkflowSellerFanoutLock.retry_in, *args)
+      return if job_id.present?
+
+      raise FanoutNotEnqueuedError, "Sidekiq did not requeue the workflow fanout"
     end
 
     def confirmed_follower_member_ids_after_cutoff

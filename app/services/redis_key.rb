@@ -116,5 +116,11 @@ class RedisKey
     # only for the length of one render; `product_reviews.seller_notified_at` is what records that
     # the seller was told. See ContactingCreatorMailer#review_submitted.
     def product_review_seller_notified(review_id) = "product_review_seller_notified:#{review_id}"
+    def workflow_seller_fanout_lock(seller_id) = "workflow_seller_fanout_lock:#{seller_id}"
+    def workflow_seller_fanout_lock_ttl_seconds = "workflow_seller_fanout_lock_ttl_seconds"
+    def workflow_seller_fanout_retry_seconds = "workflow_seller_fanout_retry_seconds"
+    def workflow_immediate_fanout_threshold = "workflow_immediate_fanout_threshold"
+    def workflow_immediate_enqueue_per_second = "workflow_immediate_enqueue_per_second"
+    def workflow_immediate_fanout_max_spread_seconds = "workflow_immediate_fanout_max_spread_seconds"
   end
 end
