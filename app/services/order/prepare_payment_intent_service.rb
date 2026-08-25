@@ -124,15 +124,16 @@ class Order::PreparePaymentIntentService
       true
     end
 
-    # The browser sends a buyer-currency quote token only when the checkout displayed
-    # local-currency totals, meaning the buyer confirmed that local amount. The client-confirm
-    # lane always charges canonical USD and has no machinery to honor a quote, so accepting a
-    # token here would silently charge a different amount than the buyer saw — the invariant
-    # the buyer-currency feature must never break (mirrors Charge::CreateService's fail-closed
-    # behavior on the server-confirm lane). Failing with the quote-invalid error code makes the
+    # The browser sends a buyer-currency quote token when checkout displayed local-currency
+    # totals. A USD-mounted client-confirm Element cannot honor that token, so accepting one
+    # would charge a different amount than the buyer saw. An Element remounted in a forced
+    # currency (USD listing + UPI in INR) *can* honor it — prepare must reuse that quote
+    # rather than minting a second rate. Failing with the quote-invalid error code makes the
     # checkout cancel, re-fetch surcharges, and re-run the display gates.
     def block_unexpected_buyer_currency_quote
       return false if params[:buyer_currency_quote].blank?
+      reported = reported_element_mount_currency
+      return false if reported.present? && reported != Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
 
       Rails.logger.error("Client-confirm prepare received a buyer_currency_quote for order #{order.id}; failing closed rather than charging canonical USD")
       purchases_to_charge.each { |purchase| purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID }

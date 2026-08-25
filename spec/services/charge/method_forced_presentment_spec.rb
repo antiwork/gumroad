@@ -80,6 +80,66 @@ describe Charge::MethodForcedPresentment do
     it "returns a quote-derived idempotency key" do
       expect(result.idempotency_key).to eq("buyer-currency-intent-#{charge.external_id}-fxq_forced")
     end
+
+    context "when checkout already displayed a locked quote" do
+      def displayed_quote_token(stripe_fx_quote_id:, fx_rate:, presentment_total_cents:)
+        charge_payload = {
+          "seller_id" => seller.id,
+          "merchant_account_id" => merchant_account.id,
+          "stripe_account_id" => merchant_account.charge_processor_merchant_id,
+          "canonical_total_cents" => 10_00,
+          "canonical_line_items" => [[product.unique_permalink, 10_00]],
+          "presentment_total_cents" => presentment_total_cents,
+          "charge_canonical_total_cents" => 10_00,
+          "charge_canonical_line_items" => [[product.unique_permalink, 10_00]],
+          "charge_presentment_total_cents" => presentment_total_cents,
+          "stripe_fx_quote_id" => stripe_fx_quote_id,
+          "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
+          "fx_rate" => fx_rate.to_s("F"),
+        }
+        Rails.application.message_verifier(Checkout::BuyerCurrencyQuote::TOKEN_PURPOSE).generate(
+          charge_payload.merge("currency" => Currency::EUR, "charges" => [charge_payload])
+        )
+      end
+
+      it "reuses the displayed quote instead of minting a second rate" do
+        token = displayed_quote_token(stripe_fx_quote_id: "fxq_displayed", fx_rate: BigDecimal("1.25"), presentment_total_cents: 8_00)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        reused = described_class.new(charge:,
+                                     order:,
+                                     seller:,
+                                     merchant_account:,
+                                     purchases: [purchase],
+                                     amount_cents: 10_00,
+                                     gumroad_amount_cents: 3_00,
+                                     payment_method_type:,
+                                     params: { buyer_currency_quote: token }).perform
+
+        expect(reused).to have_attributes(presentment_total_cents: 8_00,
+                                          presentment_currency: Currency::EUR,
+                                          stripe_fx_quote_id: "fxq_displayed")
+        expect(charge.reload.charge_presentment.stripe_fx_quote_id).to eq("fxq_displayed")
+      end
+
+      it "fails closed when the displayed quote does not match this charge" do
+        token = displayed_quote_token(stripe_fx_quote_id: "fxq_stale", fx_rate: BigDecimal("1.25"), presentment_total_cents: 8_00)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        mismatched = described_class.new(charge:,
+                                         order:,
+                                         seller:,
+                                         merchant_account:,
+                                         purchases: [purchase],
+                                         amount_cents: 11_00,
+                                         gumroad_amount_cents: 3_00,
+                                         payment_method_type:,
+                                         params: { buyer_currency_quote: token }).perform
+
+        expect(mismatched).to be_nil
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+    end
   end
 
   describe "product priced in the forced currency (direct listed-amount case)" do

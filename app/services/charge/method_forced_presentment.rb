@@ -17,9 +17,10 @@
 #      USD on the purchase) are converted back using the purchase's own stored
 #      rate_converted_to_usd, the same rate that produced those USD figures, so no new
 #      FX exposure is introduced.
-#   2. USD-priced product: a Stripe FX quote is minted (same machinery as the card
-#      path's Checkout::BuyerCurrencyQuote) and the canonical USD total converts through
-#      it; quote fields are persisted exactly as on the card path.
+#   2. USD-priced product: convert the canonical USD total through an FX quote.
+#      When checkout already displayed a locked quote (the USD listing remounted in
+#      INR so UPI could appear), reuse that quote — minting a second rate would show
+#      one INR amount and charge another. Mint only when no displayed token was sent.
 #
 # Returns nil whenever the checkout is ineligible or anything fails, which leaves the
 # caller on today's canonical USD behavior. Cleanup of persisted rows when the prepared
@@ -153,10 +154,7 @@ class Charge::MethodForcedPresentment
       )
     end
 
-    # Case 2: USD-priced product — mint a Stripe FX quote (the same underlying machinery
-    # Checkout::BuyerCurrencyQuote uses on the card path; that service's entry point is
-    # GeoIP-driven so it cannot be reused directly here, where the payment method fixes
-    # the currency) and convert the canonical USD totals through it.
+    # Case 2: USD-priced product. Prefer the quote checkout already showed the buyer.
     def quoted_result(decision)
       currency = decision.currency
       # Must be the account the intent is created on — Stripe honours a quote only in the
@@ -164,30 +162,18 @@ class Charge::MethodForcedPresentment
       quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account)
       return nil if quote_merchant_account.blank?
 
-      # Ramp gate for quoting a destination charge, a pairing production has never minted.
-      # Unlike the card lane, nil here refuses the checkout rather than falling back to USD:
-      # the caller (Order::PreparePaymentIntentService#client_confirm_presentment_required?)
-      # fails it, because the buyer's token was minted on a forced-currency element. Costs no
-      # live traffic — the quoted branch needs a USD-priced cart, and a currency-forcing method
-      # is only offered on a cart already priced in its own currency, which never quotes. The
-      # routing above stays ungated; only the decision to quote at all is gated here.
+      # Ramp gate for quoting a destination charge. Nil refuses the checkout rather than
+      # falling back to USD: the ConfirmationToken was minted on a forced-currency element.
       if Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account).present? &&
          !Checkout::BuyerCurrencyEligibility.destination_charge_quotes_enabled?(seller)
         Rails.logger.info("Method-forced presentment fallback for charge #{charge.external_id}: destination charge quoting disabled")
         return nil
       end
 
-      quote = StripeFxQuote.create(
-        to_currency: Currency::USD,
-        from_currency: currency,
-        stripe_account_id: quote_merchant_account.charge_processor_merchant_id,
-        # Declared up front because Stripe matches the quote's destination against the
-        # intent's transfer_data[destination] exactly; see StripeFxQuote#create.
-        destination_account_id: Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account)
-      )
+      quote_id, fx_rate, expires_at, presentment_total_cents = locked_or_minted_quote(currency, quote_merchant_account)
+      return nil if quote_id.blank?
 
-      presentment_total_cents = presentment_cents_for(amount_cents, quote.fx_rate, currency)
-      presentment_gumroad_amount_cents = presentment_cents_for(gumroad_amount_cents, quote.fx_rate, currency)
+      presentment_gumroad_amount_cents = presentment_cents_for(gumroad_amount_cents, fx_rate, currency)
 
       allocations = Charge::PresentmentAllocator.new(
         purchases:,
@@ -201,18 +187,57 @@ class Charge::MethodForcedPresentment
         presentment_total_cents:,
         presentment_gumroad_amount_cents:,
         allocations:,
-        stripe_fx_quote_id: quote.id,
-        stripe_fx_quote_expires_at: quote.expires_at,
-        fx_rate: quote.fx_rate
+        stripe_fx_quote_id: quote_id,
+        stripe_fx_quote_expires_at: expires_at,
+        fx_rate:
       )
 
       Result.new(
         presentment_total_cents:,
         presentment_currency: currency,
         presentment_gumroad_amount_cents:,
-        stripe_fx_quote_id: quote.id,
-        idempotency_key: self.class.idempotency_key_for(charge:, presentment_currency: currency, stripe_fx_quote_id: quote.id)
+        stripe_fx_quote_id: quote_id,
+        idempotency_key: self.class.idempotency_key_for(charge:, presentment_currency: currency, stripe_fx_quote_id: quote_id)
       )
+    end
+
+    # A displayed token is the amount the Payment Element mounted. An invalid token must
+    # not fall through to minting a second rate. No token (iDEAL on a USD listing that
+    # never remounted) still mints, matching the previous prepare-time path.
+    def locked_or_minted_quote(currency, quote_merchant_account)
+      token = params[:buyer_currency_quote].presence
+      if token.present?
+        locked = Checkout::BuyerCurrencyQuote.verify!(
+          token:,
+          seller:,
+          merchant_account:,
+          currency:,
+          canonical_total_cents: amount_cents,
+          canonical_line_items: purchases.filter_map do |purchase|
+            next if purchase.total_transaction_cents.zero?
+
+            { permalink: purchase.link.unique_permalink, total_cents: purchase.total_transaction_cents }
+          end,
+          later_charge_canonical_line_items: Purchase::FixLaterChargePresentmentService.canonical_line_items_for(purchases)
+        )
+        return [locked.stripe_fx_quote_id, locked.fx_rate, locked.stripe_fx_quote_expires_at, locked.charge_presentment_total_cents]
+      end
+
+      quote = StripeFxQuote.create(
+        to_currency: Currency::USD,
+        from_currency: currency,
+        stripe_account_id: quote_merchant_account.charge_processor_merchant_id,
+        destination_account_id: Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account)
+      )
+      [
+        quote.id,
+        quote.fx_rate,
+        quote.expires_at,
+        presentment_cents_for(amount_cents, quote.fx_rate, currency),
+      ]
+    rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
+      Rails.logger.info("Method-forced presentment rejected displayed quote for charge #{charge.external_id}: #{e.message}")
+      nil
     end
 
     # Same conversion as Checkout::BuyerCurrencyQuote / Charge::PresentmentOrchestrator:
