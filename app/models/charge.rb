@@ -52,6 +52,13 @@ class Charge < ApplicationRecord
     end
   end
 
+  # Missing Stripe settlement data defers finalization unless the money verifiably sits in a
+  # known Gumroad-held account. Purchase#processor_settlement_deferrable? is the
+  # purchase-level counterpart; checkout and the finalization job must agree with it.
+  def settlement_deferrable?
+    charge_presentment.present? || merchant_account&.user_id.present? || merchant_account.nil?
+  end
+
   def reference_id_for_charge_processors
     COMBINED_CHARGE_PREFIX + external_id
   end

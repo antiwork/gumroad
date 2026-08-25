@@ -78,10 +78,13 @@ class Purchase::SyncStatusWithChargeProcessorService
         charge.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.charge.amount_cents)
       end
 
-      if charge_succeeded && charge.flow_of_funds.nil? && purchase.processor_settlement_deferrable?
+      if charge_succeeded && charge.flow_of_funds.nil? &&
+         (purchase.processor_settlement_deferrable? || purchase.is_part_of_combined_charge?)
         # The charge succeeded but the processor has not produced the balance transaction the flow
         # of funds is read from, so retry later rather than failing a purchase whose money moved.
-        # Only the uncredited-destination-payment cause is bounded (by
+        # Combined charges defer regardless of ownership: the per-purchase split needs real
+        # settlement data and this path has no Stripe USD fallback, so proceeding would book
+        # balances from a nil flow. Only the uncredited-destination-payment cause is bounded (by
         # StripeCharge::DESTINATION_PAYMENT_SETTLEMENT_GRACE); every other cause waits
         # indefinitely, and the retry jobs stop scanning at
         # Purchase::UnstickStuckInProgressService::MAX_AGE.
@@ -104,7 +107,9 @@ class Purchase::SyncStatusWithChargeProcessorService
         else
           Purchase::MarkSuccessfulService.new(purchase).perform
         end
-        complete_later_charge_owner if purchase.buyer_presentment?
+        # Any row that can defer on settlement data may be a preorder charge or commission
+        # completion whose owner still needs to be marked done once the purchase succeeds.
+        complete_later_charge_owner if purchase.processor_settlement_deferrable?
         true
       elsif charge.nil? && purchase.free_purchase?
         Purchase::MarkSuccessfulService.new(purchase).perform

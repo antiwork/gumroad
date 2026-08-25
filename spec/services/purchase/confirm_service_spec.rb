@@ -91,6 +91,26 @@ describe Purchase::ConfirmService, :vcr do
     end
   end
 
+  context "when a standalone purchase without a charge is awaiting Stripe settlement data" do
+    # Subscription upgrade/resubscription confirms arrive here without a Charge row, so the
+    # deferral must use the purchase-level finalization job instead of crashing on charge.id.
+    it "schedules the purchase-level finalization job" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      purchase = create(:purchase_in_progress, seller:, link: create(:product, user: seller), merchant_account:)
+      allow(purchase).to receive(:confirm_charge_intent!)
+      allow(purchase).to receive(:pending_buyer_presentment_settlement?).and_return(true)
+
+      error_message = Purchase::ConfirmService.new(purchase:, params: {}).perform
+
+      expect(error_message).to be_nil
+      expect(purchase.reload).to be_in_progress
+      expect(FinalizeBuyerPresentmentChargeJob.jobs.size).to eq(0)
+      expect(FinalizeBuyerPresentmentPurchaseJob.jobs.size).to eq(1)
+      expect(FinalizeBuyerPresentmentPurchaseJob.jobs.first["args"]).to eq([purchase.id])
+    end
+  end
+
   context "when SCA fails" do
     context "for a classic product" do
       let(:purchase) { create(:purchase_in_progress, chargeable:) }
