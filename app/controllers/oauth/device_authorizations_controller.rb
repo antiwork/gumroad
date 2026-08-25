@@ -179,7 +179,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
       when "mark_sales_as_shipped" then "Mark your sales as shipped."
       when "mobile_api" then "Mobile API"
       when "refund_sales" then "Refund your sales."
-      when "edit_sales" then "Refund your sales and resend purchase receipts to customers."
+      when "edit_sales" then "Refund your sales, revoke or restore buyer access, and resend purchase receipts to customers."
       when "revenue_share" then "Revenue Share"
       when "unfurl" then "Fetch public information of any product to preview it in Notion."
       when "view_profile" then "See your profile data."
