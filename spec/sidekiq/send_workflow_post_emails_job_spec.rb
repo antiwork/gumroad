@@ -894,6 +894,21 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(ats.last - Time.current.to_f).to be_within(0.05).of(1.5)
     end
 
+    it "keeps oversized due-now fanouts inside the window without a terminal burst" do
+      $redis.set(RedisKey.workflow_immediate_fanout_max_spread_seconds, 1)
+
+      described_class.new.perform(@post.id)
+
+      jobs = SendWorkflowInstallmentWorker.jobs
+      expect(jobs.size).to eq(4)
+      ats = jobs.filter_map { _1["at"] }.sort
+      expect(ats.size).to eq(3)
+      expect(ats.last - Time.current.to_f).to be_between(0.6, 1.0)
+      expect(ats.last - ats[-2]).to be > 0.1
+    ensure
+      $redis.del(RedisKey.workflow_immediate_fanout_max_spread_seconds)
+    end
+
     it "keeps future deliveries on their original schedule" do
       @post_rule.update!(delayed_delivery_time: 3.days)
       SendWorkflowInstallmentWorker.jobs.clear

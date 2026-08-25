@@ -232,9 +232,9 @@ class SendWorkflowPostEmailsJob
       now = Time.current
       return natural_at if natural_at > now
 
-      offset = @immediate_fanout_index.to_f / immediate_enqueue_per_second
+      offset = @immediate_fanout_index.to_f / effective_immediate_enqueue_per_second
       @immediate_fanout_index += 1
-      now + [offset, max_immediate_spread_seconds].min
+      now + offset
     end
 
     def pace_immediate_fanout?
@@ -247,6 +247,10 @@ class SendWorkflowPostEmailsJob
       IMMEDIATE_FANOUT_THRESHOLD
     end
 
+    def effective_immediate_enqueue_per_second
+      [immediate_enqueue_per_second, @members.size.to_f / max_immediate_spread_seconds].max
+    end
+
     def immediate_enqueue_per_second
       per_second = ($redis.get(RedisKey.workflow_immediate_enqueue_per_second) || DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND).to_f
       per_second.positive? ? per_second : DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND
@@ -255,7 +259,8 @@ class SendWorkflowPostEmailsJob
     end
 
     def max_immediate_spread_seconds
-      ($redis.get(RedisKey.workflow_immediate_fanout_max_spread_seconds) || MAX_IMMEDIATE_SPREAD).to_i
+      spread_seconds = ($redis.get(RedisKey.workflow_immediate_fanout_max_spread_seconds) || MAX_IMMEDIATE_SPREAD).to_i
+      spread_seconds.positive? ? spread_seconds : MAX_IMMEDIATE_SPREAD.to_i
     rescue Redis::BaseError, RedisClient::Error
       MAX_IMMEDIATE_SPREAD.to_i
     end
