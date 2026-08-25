@@ -216,11 +216,12 @@ class Purchase::CreateService < Purchase::BaseService
   end
 
   private
-    # Every processor may use this signature- and expiry-checked hint while building the purchase.
-    # Stripe later performs the full amount verification; PayPal discards the token after the hint,
-    # which makes expiry the only bound on its pricing use (gumroad-private#1958).
+    # Only the Stripe-verified path may lock listed conversion to the leftover quote rate.
+    # PayPal/Braintree discard the signed components, so a rate hint here would reprice
+    # those charges at Stripe's stale FX instead of the legacy live conversion.
     def buyer_currency_quote_rate_hint(purchase)
       return if params[:buyer_currency_quote].blank?
+      return unless buyer_currency_quote_components_verified_path?
       return unless purchase.link.price_currency_type.to_s.downcase != Currency::USD
 
       Checkout::BuyerCurrencyQuote.listed_currency_rate_hint(
