@@ -27,6 +27,19 @@ import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Fieldset } from "$app/components/ui/Fieldset";
 
+const paymentMethodTypesForMountCurrency = (
+  elementsOptions: PaymentElementConfig | PaymentElementClientConfirmConfig,
+  currency: string,
+) => {
+  const types = [...elementsOptions.payment_method_types];
+  if (currency.toLowerCase() !== "inr") return types;
+
+  for (const method of elementsOptions.inr_local_methods ?? []) {
+    if (!types.includes(method)) types.push(method);
+  }
+  return types;
+};
+
 export type PaymentElementController = { stripe: Stripe; elements: StripeElements };
 
 // Server-confirm and client-confirm integrations share the Payment Element; only
@@ -412,7 +425,7 @@ const StripePaymentElementProvider = ({
       currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
       ...(setupFutureUsage ? { setupFutureUsage } : {}),
-      paymentMethodTypes: elementsOptions.payment_method_types,
+      paymentMethodTypes: paymentMethodTypesForMountCurrency(elementsOptions, currency),
       // Stripe rejects createConfirmationToken({ elements }) when payment_method_creation is manual.
       ...("payment_method_creation" in elementsOptions
         ? { paymentMethodCreation: elementsOptions.payment_method_creation }

@@ -330,7 +330,7 @@ class Checkout::PaymentMethodResolver
     # forced-currency method listed on a USD element/intent makes Stripe reject the whole element
     # session — no payment form renders at all, which broke flag-on sellers' plain USD checkouts.
     def forced_currency_methods(eligible)
-      return [] unless sellers.one? && Checkout::BuyerCurrencyEligibility.seller_enabled?(sellers.first)
+      return [] unless sellers.one? && Checkout::BuyerCurrencyEligibility.local_method_surface_enabled?(sellers.first)
 
       methods_for_cart_currency = (eligible & Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.keys).select do |method|
         Checkout::BuyerCurrencyEligibility.forced_currency_for(method) == cart_product_currency

@@ -147,10 +147,27 @@ class Checkout::BuyerCurrencyEligibility
   attr_reader :order, :seller, :merchant_account, :chargeable, :purchases, :params, :setup_future_charges, :off_session, :client_confirm
 
   def self.seller_enabled?(seller)
+    local_method_surface_enabled?(seller) &&
+      !seller.disable_buyer_local_currency?
+  end
+
+  # UPI/iDEAL/Pix/Bancontact ride the buyer-currency charge infrastructure, but
+  # disable_buyer_local_currency is only a product-page display preference. A seller who
+  # turns that off must not lose local payment methods for Indian/Dutch/Brazilian buyers.
+  def self.local_method_surface_enabled?(seller)
     seller.present? &&
       Feature.active?(FEATURE_NAME, seller) &&
-      Feature.active?(:buyer_local_currency, seller) &&
-      !seller.disable_buyer_local_currency?
+      Feature.active?(:buyer_local_currency, seller)
+  end
+
+  # Opted-out sellers may still mint an FX quote when the buyer's currency is one a
+  # launched local method can charge in (INR+UPI today). Other currencies stay on
+  # canonical USD so turning off local display does not silently start charging CAD/GBP.
+  def self.local_method_quote_enabled?(seller, currency)
+    local_method_surface_enabled?(seller) &&
+      FORCED_CURRENCY_PAYMENT_METHODS.any? do |method, forced|
+        forced == currency.to_s.downcase && (stripe_test_mode? || local_method_launched?(method, seller))
+      end
   end
 
   # Own ramp on top of seller_enabled?: a membership amount outlives checkout.
@@ -413,7 +430,7 @@ class Checkout::BuyerCurrencyEligibility
     # nothing to decide — the caller should not offer it through this path.
     return fallback(:unsupported_payment_method) if forced_currency.blank?
 
-    return fallback(:feature_disabled) unless self.class.seller_enabled?(seller)
+    return fallback(:feature_disabled) unless self.class.local_method_surface_enabled?(seller)
     # Live mode is no longer a blanket refusal: each registry method carries its own
     # per-method launch flag (LOCAL_METHOD_LAUNCH_FEATURES) so the #5362 Phase 4 cohort
     # can ramp one method at a time — iDEAL first. Test mode keeps the whole registry

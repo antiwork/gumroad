@@ -78,7 +78,7 @@ describe Checkout::StripePaymentPresenter do
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, recurring_upi_registration: false, direct_listed_card: false, disable_wallets: false, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, recurring_upi_registration: false, direct_listed_card: false, disable_wallets: false, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets, inr_local_methods: [])
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
@@ -98,6 +98,7 @@ describe Checkout::StripePaymentPresenter do
         listed_currency_display: listed_currency_display ||
           (currency == "usd" ? nil : { currency:, subunit_to_unit: 100 }),
         payment_method_types:,
+        inr_local_methods:,
         # The presenter signs the list it mounted, so the fixture pins the post-strip list: a
         # region or amount strip that failed to reach the issuer would show up here.
         payment_method_list_token: "issued:#{payment_method_types.join(",")}",
@@ -108,7 +109,7 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets, inr_local_methods: [])
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
@@ -122,6 +123,7 @@ describe Checkout::StripePaymentPresenter do
         currency: "usd",
         buyer_currency_presentment:,
         payment_method_types: ["card"],
+        inr_local_methods:,
         payment_method_creation: "manual",
         stripe_link_enabled:,
       },
@@ -1862,8 +1864,30 @@ describe Checkout::StripePaymentPresenter do
           presentment_amount_cents: 7300,
           payment_method_types: %w[card link upi],
           disable_wallets: true,
+          inr_local_methods: %w[upi],
         )
       )
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "advertises UPI as an INR remount upgrade on a USD-priced cart for an Indian buyer, even when local-currency display is off" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1999)
+      seller.update!(disable_buyer_local_currency: true)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.21", "India")
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.21")
+
+      expect(props[:elements_options][:currency]).to eq("usd")
+      expect(props[:elements_options][:payment_method_types]).not_to include("upi")
+      expect(props[:elements_options][:inr_local_methods]).to eq(%w[upi])
+      expect(props[:disable_wallets]).to be(true)
     ensure
       if seller
         Feature.deactivate_user(:checkout_local_method_upi, seller)
@@ -2010,6 +2034,7 @@ describe Checkout::StripePaymentPresenter do
           presentment_amount_cents: 14600,
           payment_method_types: %w[card link upi],
           disable_wallets: true,
+          inr_local_methods: %w[upi],
         )
       )
     ensure

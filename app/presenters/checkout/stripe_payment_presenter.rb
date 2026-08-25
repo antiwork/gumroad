@@ -142,6 +142,7 @@ class Checkout::StripePaymentPresenter
           # the browser mounts canonical USD exactly as if this flag were false.
           buyer_currency_presentment:,
           payment_method_types: ["card"],
+          inr_local_methods:,
           payment_method_creation: "manual",
           # Link auto-enables with the Payment Element: it's inline (PaymentMethod-mode here, no
           # return-page/webhook dependency), and Stripe's dashboard payment-method settings remain
@@ -263,19 +264,22 @@ class Checkout::StripePaymentPresenter
       else
         CLIENT_CONFIRM_CURRENCY
       end
+      # Never list a forced-currency method on an element that is not mounted in that
+      # currency — Stripe rejects the whole session, card included. UPI for a USD-priced
+      # cart is added only after the browser remounts in INR (inr_local_methods).
+      payment_method_types = Array(payment_method_types).reject do |payment_method_type|
+        forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type)
+        forced_currency.present? && forced_currency != element_currency
+      end
       # Listed-currency Elements stay wallet-free until their sheet can be guaranteed to carry
       # the same final tax/tip/shipping total as the deferred intent.
-      disable_wallets = listed_currency || items.any? { buyer_currency_presentment_candidate?(_1) }
+      disable_wallets = listed_currency || items.any? { buyer_currency_presentment_candidate?(_1) } || inr_local_methods.any?
       if listed_currency
         # The ConfirmationToken inherits this currency and method set. Keep only methods the
         # matching non-USD intent can accept; prepare applies the same restrictions.
         payment_method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
         payment_method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE,
                                  Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
-        payment_method_types = payment_method_types.reject do |payment_method_type|
-          forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type)
-          forced_currency.present? && forced_currency != element_currency
-        end
       end
       elements_options = {
         stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
@@ -286,6 +290,7 @@ class Checkout::StripePaymentPresenter
           subunit_to_unit: subunit_to_unit(element_currency),
         } : nil,
         payment_method_types:,
+        inr_local_methods:,
         payment_method_list_token: Checkout::PaymentMethodListToken.issue(payment_method_types:, sellers:),
         stripe_link_enabled: payment_method_types.include?(Checkout::PaymentMethodResolver::LINK_PAYMENT_METHOD_TYPE),
         stripe_connect_account_id: resolution.stripe_connect_account_id,
@@ -372,7 +377,7 @@ class Checkout::StripePaymentPresenter
     def method_forced_shape?(items)
       forced_currency = uniform_method_forced_currency(items)
       return false if forced_currency.blank?
-      return false unless items.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1[:seller]) }
+      return false unless items.all? { Checkout::BuyerCurrencyEligibility.local_method_surface_enabled?(_1[:seller]) }
 
       # The resolver returns nil payment_method_types when it rejects the cart (recurring,
       # commission, multi-seller, etc.), so check its eligibility verdict before inspecting
@@ -383,6 +388,22 @@ class Checkout::StripePaymentPresenter
       resolution.payment_method_types.any? do |payment_method_type|
         Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == forced_currency
       end
+    end
+
+    # UPI on a USD-priced cart cannot ride the USD Payment Element (Stripe rejects the
+    # session). After the surcharge quote remounts the element in INR, the browser adds
+    # these methods. Recurring/commission/setup carts stay off — they cannot take one-shot UPI.
+    def inr_local_methods
+      return [] unless sellers.one?
+      return [] unless buyer_country == Checkout::PaymentMethodResolver::IN_ALPHA2
+      return [] if items.any? { _1[:recurrence].present? || _1[:pay_in_installments] || _1[:native_type] == Link::NATIVE_TYPE_COMMISSION }
+      return [] if setup_for_future_charges_without_charging?(items)
+      seller = sellers.first
+      return [] unless Checkout::BuyerCurrencyEligibility.local_method_surface_enabled?(seller)
+      return [] unless Checkout::BuyerCurrencyEligibility.stripe_test_mode? ||
+                       Checkout::BuyerCurrencyEligibility.local_method_launched?("upi", seller)
+
+      %w[upi]
     end
 
     def recurring_upi_registration_shape?(items)

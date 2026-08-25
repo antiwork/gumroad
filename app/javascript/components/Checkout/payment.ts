@@ -55,6 +55,7 @@ export type PaymentElementConfig = {
   // element mounts canonical USD, exactly as if this flag were false.
   buyer_currency_presentment: boolean;
   payment_method_types: ["card"];
+  inr_local_methods?: string[];
   payment_method_creation: "manual";
   stripe_link_enabled: boolean;
 };
@@ -77,6 +78,9 @@ export type PaymentElementClientConfirmConfig = {
   // moves this Element back to canonical USD because charge-time eligibility excludes both.
   direct_listed_card?: boolean;
   payment_method_types: string[];
+  // Methods the browser may add only after remounting in INR. Listing UPI on a USD
+  // element makes Stripe reject the whole session, card included.
+  inr_local_methods?: string[];
   // Signed server copy of payment_method_types above, echoed back at /orders/prepare so the
   // deferred intent is built from the list this page actually mounted rather than a second
   // server-side resolution (gumroad-private#1528). Opaque to the browser.
@@ -593,8 +597,6 @@ export function getStripePaymentElementAmount(state: State) {
 // the card, which PR 1 forces onto the canonical USD charge path), this returns null and the
 // element mounts canonical USD — matching the canonical charge the fallback performs.
 export function getStripePaymentElementPresentment(state: State): { currency: string; amountCents: number } | null {
-  if (state.checkoutPayment.integration !== "payment_element") return null;
-  if (!state.checkoutPayment.elements_options.buyer_currency_presentment) return null;
   if (state.surcharges.type !== "loaded") return null;
 
   const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
@@ -605,7 +607,18 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   });
   if (!display) return null;
 
-  return { currency: display.currencyCode, amountCents: display.chargePresentmentTotalCents };
+  if (state.checkoutPayment.integration === "payment_element") {
+    if (!state.checkoutPayment.elements_options.buyer_currency_presentment) return null;
+    return { currency: display.currencyCode, amountCents: display.chargePresentmentTotalCents };
+  }
+
+  if (state.checkoutPayment.integration === "payment_element_client_confirm") {
+    const upgradeMethods = state.checkoutPayment.elements_options.inr_local_methods ?? [];
+    if (!upgradeMethods.includes("upi") || display.currencyCode.toLowerCase() !== "inr") return null;
+    return { currency: display.currencyCode, amountCents: display.chargePresentmentTotalCents };
+  }
+
+  return null;
 }
 
 // The currency the Payment Element should mount in. Direct-listed client-confirm checkouts use
@@ -659,6 +672,9 @@ export function getDisplayedUsingSavedCard(state: Pick<State, "usingSavedCard" |
 
 function getDesiredStripePaymentElementMountCurrency(state: State): string | null {
   if (state.checkoutPayment.integration !== "payment_element_client_confirm") return null;
+
+  const upgrade = getStripePaymentElementPresentment(state);
+  if (upgrade) return upgrade.currency;
 
   const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
   if (!configuredDirectListedCurrency) {
