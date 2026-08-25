@@ -126,7 +126,12 @@ class SaveFilesService
           file_params[:display_name] ||= file_params[:file_name]
           file_params.delete(:file_name)
         end
-        file_params.except!(*UNWRITABLE_SERIALIZED_FILE_KEYS)
+        # Hash#except! is missing on ActionController::Parameters (editor PUT),
+        # and v2 JSON uses string keys. delete works for Hash, HWIA, and Parameters.
+        UNWRITABLE_SERIALIZED_FILE_KEYS.each do |key|
+          file_params.delete(key)
+          file_params.delete(key.to_s)
+        end
       end
     end
 end

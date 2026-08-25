@@ -196,6 +196,29 @@ describe SaveFilesService do
       expect(file.display_name).to eq("renamed file")
     end
 
+    it "drops serializer-only keys from ActionController::Parameters (editor PUT string keys)" do
+      file = create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png", size: 1234)
+      @product.product_files << file
+
+      service.perform(@product, ActionController::Parameters.new(
+                                  files: [{
+                                    "external_id" => file.external_id,
+                                    "url" => file.url,
+                                    "file_name" => "renamed file",
+                                    "file_size" => 999_999,
+                                    "extension" => "png",
+                                    "is_pdf" => false,
+                                    "is_streamable" => false,
+                                    "attached_product_name" => @product.name,
+                                    "status" => { "type" => "saved" },
+                                  }]
+                                ).permit!)
+
+      file.reload
+      expect(file.size).to eq(1234)
+      expect(file.display_name).to eq("renamed file")
+    end
+
     it "still applies writable flag-backed attributes (stream_only) alongside serializer echoes" do
       video = create(:streamable_video, link: @product, size: 4321)
       @product.product_files << video
