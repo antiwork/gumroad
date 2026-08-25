@@ -62,7 +62,9 @@ class UpdateProductFilesArchiveWorker
       product_files.each do |product_file|
         next if product_file.stream_only?
 
-        if rich_content_files_and_folders_mapping.nil?
+        if product_files_archive.bundle_purchase_archive?
+          file_path_parts = [product_file.link.name, product_file.folder&.name, product_file.name_displayable]
+        elsif rich_content_files_and_folders_mapping.nil?
           file_path_parts = [product_file.folder&.name, product_file.name_displayable]
         else
           file_info = rich_content_files_and_folders_mapping[product_file.id]

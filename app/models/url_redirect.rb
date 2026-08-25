@@ -31,6 +31,8 @@ class UrlRedirect < ApplicationRecord
   TIME_TO_WATCH_RENTED_PRODUCT_AFTER_FIRST_PLAY = 72.hours
   FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION = "ef64f2fef0d6c776a337050020423fc0"
   GUID_GETTER_FROM_S3_URL_REGEX = %r{attachments/(.*)/original}
+  BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN = 24.hours
+  BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS = 3
 
   # Public: If one exists, returns the product that this UrlRedirect is associated to, directly or indirectly. Otherwise nil is returned.
   def referenced_link
@@ -90,9 +92,20 @@ class UrlRedirect < ApplicationRecord
   end
 
   def entity_archive
+    return bundle_archive if purchase&.is_bundle_purchase?
     return if with_product_files.has_stampable_pdfs?
 
     product_files_archives.latest_ready_entity_archive
+  end
+
+  def bundle_archive
+    return unless purchase&.is_bundle_purchase?
+
+    bundle_files = bundle_archive_product_files
+    return if bundle_files.empty?
+
+    ensure_bundle_archive_for(bundle_files)
+    matching_bundle_archives(bundle_files).select(&:ready?).last
   end
 
   def folder_archive(folder_id)
@@ -140,6 +153,59 @@ class UrlRedirect < ApplicationRecord
         filename: product_file.s3_filename
       }
     end.compact.to_json
+  end
+
+  def bundle_archive_product_files
+    return ProductFile.none unless purchase&.is_bundle_purchase?
+
+    bundle_purchases = if purchase.purchaser_id.present?
+      Purchase.visible_in_library.is_bundle_purchase.where(purchaser_id: purchase.purchaser_id, link_id: purchase.link_id)
+    else
+      Purchase.where(id: purchase.id)
+    end
+    member_redirects = bundle_purchases.flat_map do |bundle_purchase|
+      bundle_purchase.product_purchases.visible_in_library.includes(:url_redirect).filter_map(&:url_redirect)
+    end
+    return ProductFile.none if member_redirects.any? { _1.with_product_files.has_stampable_pdfs? }
+
+    file_ids = member_redirects.flat_map do |url_redirect|
+      next [] unless url_redirect.with_product_files.is_downloadable?
+
+      url_redirect.alive_product_files.filter_map { _1.id if _1.archivable? }
+    end.uniq
+
+    ProductFile.where(id: file_ids).in_order
+  end
+
+  def matching_bundle_archives(bundle_files)
+    bundle_file_ids = bundle_files.map(&:id).sort
+    digest_probe = product_files_archives.new
+    digest_probe.product_files = bundle_files
+    expected_digest = digest_probe.digest_for_files(bundle_files)
+    product_files_archives.entity_archives.alive.where(digest: [nil, expected_digest]).includes(:product_files).select do |archive|
+      archive.product_files.map(&:id).sort == bundle_file_ids && (archive.digest.blank? || !archive.needs_updating?(bundle_files))
+    end
+  end
+
+  def ensure_bundle_archive_for(bundle_files)
+    owner = rich_content_provider.presence || with_product_files
+    owner.with_lock do
+      matching_archives = matching_bundle_archives(bundle_files)
+      return if matching_archives.any? { |archive| !archive.failed? }
+
+      failed_archives = matching_archives.select(&:failed?)
+      return if failed_archives.size >= BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS
+
+      latest_failure_at = failed_archives.map(&:updated_at).compact.max
+      return if failed_archives.size >= 2 && latest_failure_at > BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN.ago
+
+      product_files_archive = product_files_archives.new
+      product_files_archive.product_files = bundle_files
+      product_files_archive.digest = product_files_archive.digest_for_files(bundle_files)
+      product_files_archive.save!
+      product_files_archive.set_url_if_not_present
+      product_files_archive.save!
+    end
   end
 
   def seller

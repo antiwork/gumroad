@@ -83,31 +83,48 @@ class ProductFilesArchive < ApplicationRecord
     return true if rich_content_provider.nil? && (new_files.size != existing_files.size || new_files.in_order != existing_files.in_order)
 
     # Update if folder / file renamed or files re-arranged into different folders
-    digest != files_digest(new_files)
+    digest != digest_for_files(new_files)
+  end
+
+  def digest_for_files(files)
+    rich_content_files = rich_content_provider&.map_rich_content_files_and_folders
+    file_list = if rich_content_files.blank?
+      files.map do |file|
+        parts = []
+        parts.concat([file.link&.external_id, file.link&.name]) if bundle_purchase_archive?
+        parts.concat([file.folder&.external_id, file.folder&.name, file.external_id, file.name_displayable])
+        parts.compact.join("/")
+      end.sort
+    else
+      rich_content_files = rich_content_files.select { |key, value| value[:folder_id] == folder_id } if folder_archive?
+      rich_content_files.values.map do |info|
+        page_info = folder_archive? ? [] : [info[:page_id], info[:page_title]]
+        page_info.concat([info[:folder_id], info[:folder_name], info[:file_id], info[:file_name]]).flatten.compact.join("/")
+      end.sort
+    end
+
+    Digest::SHA1.hexdigest(file_list.join("\n"))
   end
 
   def rich_content_provider
+    return if bundle_purchase_archive?
+
     link || variant
+  end
+
+  def bundle_purchase_archive?
+    return false unless link&.is_bundle?
+
+    if product_files.loaded?
+      product_files.any? { _1.link_id != link_id }
+    else
+      product_files.where.not(link_id:).exists?
+    end
   end
 
   private
     def set_digest
-      self.digest = files_digest(product_files.archivable)
-    end
-
-    def files_digest(files)
-      rich_content_files = rich_content_provider&.map_rich_content_files_and_folders
-      file_list = if rich_content_files.blank?
-        files.map { |file| [file.folder&.external_id, file.folder&.name, file.external_id, file.name_displayable].compact.join("/") }.sort
-      else
-        rich_content_files = rich_content_files.select { |key, value| value[:folder_id] == folder_id } if folder_archive?
-        rich_content_files.values.map do |info|
-          page_info = folder_archive? ? [] : [info[:page_id], info[:page_title]]
-          page_info.concat([info[:folder_id], info[:folder_name], info[:file_id], info[:file_name]]).flatten.compact.join("/")
-        end.sort
-      end
-
-      Digest::SHA1.hexdigest(file_list.join("\n"))
+      self.digest = digest_for_files(product_files.archivable)
     end
 
     def belongs_to_product_or_installment_or_variant

@@ -222,6 +222,31 @@ describe UrlRedirect do
     end
   end
 
+  describe "#bundle_archive" do
+    let(:buyer) { create(:user) }
+    let(:bundle) { create(:product, :bundle) }
+    let(:bundle_purchase) { create(:purchase, purchaser: buyer, link: bundle) }
+
+    def add_member_files(stampable: false)
+      bundle.bundle_products.each_with_index do |bundle_product, index|
+        attrs = { link: bundle_product.product, display_name: "file-#{index}" }
+        if stampable && index.zero?
+          create(:readable_document, pdf_stamp_enabled: true, **attrs)
+        else
+          create(:product_file, **attrs)
+        end
+      end
+    end
+
+    it "returns nil and does not create an archive when a member product has stampable pdfs" do
+      add_member_files(stampable: true)
+      bundle_purchase.create_artifacts_and_send_receipt!
+
+      expect(bundle_purchase.url_redirect.bundle_archive).to eq(nil)
+      expect(bundle.product_files_archives.alive).to be_empty
+    end
+  end
+
   describe "streaming" do
     before do
       @product = create(:product)

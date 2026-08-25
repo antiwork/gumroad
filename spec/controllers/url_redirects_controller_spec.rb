@@ -1164,6 +1164,44 @@ describe UrlRedirectsController, inertia: true do
       expect(ConsumptionEvent.where(event_type: ConsumptionEvent::EVENT_TYPE_FOLDER_DOWNLOAD).count).to eq(0)
     end
 
+    it "serves the bundle archive that matches this purchase when a newer bundle archive exists" do
+      buyer = create(:user)
+      bundle = create(:product, :bundle)
+      bundle.bundle_products.each_with_index do |bundle_product, index|
+        create(:product_file, link: bundle_product.product, display_name: "owned-#{index}")
+      end
+      bundle_purchase = create(:purchase, purchaser: buyer, link: bundle)
+      bundle_purchase.create_artifacts_and_send_receipt!
+      url_redirect = bundle_purchase.url_redirect
+      owned_files = url_redirect.bundle_archive_product_files.to_a
+
+      matching_archive = url_redirect.product_files_archives.new(product_files_archive_state: "ready")
+      matching_archive.product_files = owned_files
+      matching_archive.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments_zipped/matching-bundle.zip"
+      matching_archive.save!
+
+      extra_file = create(:product_file, link: create(:product), display_name: "later-file")
+      newer_archive = url_redirect.product_files_archives.new(product_files_archive_state: "ready")
+      newer_archive.product_files = owned_files + [extra_file]
+      newer_archive.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments_zipped/newer-bundle.zip"
+      newer_archive.save!
+
+      allow(controller).to(
+        receive(:signed_download_url_for_s3_key_and_filename)
+          .with(matching_archive.s3_key, matching_archive.s3_filename)
+          .and_return("https://example.com/matching-bundle-zip")
+      )
+      allow(controller).to(
+        receive(:signed_download_url_for_s3_key_and_filename)
+          .with(newer_archive.s3_key, newer_archive.s3_filename)
+          .and_return("https://example.com/newer-bundle-zip")
+      )
+
+      get :download_archive, format: :html, params: { id: url_redirect.token }
+
+      expect(response).to redirect_to("https://example.com/matching-bundle-zip")
+    end
+
     it "redirects to the download URL for the requested folder archive when the format is HTML" do
       folder_id = SecureRandom.uuid
       folder_archive = @url_redirect.product_files_archives.new(folder_id:, product_files_archive_state: "ready")
