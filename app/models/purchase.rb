@@ -2116,6 +2116,8 @@ class Purchase < ApplicationRecord
     after_commit do
       next if destroyed?
       AffiliateMailer.notify_affiliate_of_sale(id).deliver_later
+    rescue => e
+      Rails.logger.error("Failed to enqueue affiliate sale notification for purchase_id=#{id} affiliate_id=#{affiliate_id}: #{e.class}: #{e.message}")
     end
   end
 
