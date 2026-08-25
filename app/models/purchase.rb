@@ -2132,6 +2132,8 @@ class Purchase < ApplicationRecord
     after_commit do
       next if destroyed?
       AffiliateMailer.notify_affiliate_of_sale(id).deliver_later
+    rescue => e
+      Rails.logger.error("Failed to enqueue affiliate sale notification for purchase_id=#{id} affiliate_id=#{affiliate_id}: #{e.class}: #{e.message}")
     end
   end
 
@@ -4034,7 +4036,10 @@ class Purchase < ApplicationRecord
     # Ref: Stripe::SetupIntentsController#create
     return if is_multi_buy?
 
-    recurrence = subscription_duration if is_original_subscription_purchase? || is_upgrade_purchase?
+    # Reauth / card-update purchases enter this method via setup_future_charges, not
+    # the original/upgrade flags. Passing nil recurrence here registers a sporadic
+    # mandate, which RBI issuers then refuse for the same monthly membership.
+    recurrence = subscription_duration if is_original_subscription_purchase? || is_upgrade_purchase? || setup_future_charges
     interval, interval_count = StripeChargeProcessor.indian_card_mandate_interval(recurrence)
 
     mandate_options = {

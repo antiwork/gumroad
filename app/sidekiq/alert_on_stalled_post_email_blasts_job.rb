@@ -15,6 +15,10 @@
 # snapshots missed would double-deliver. Older blasts may be time-boxed sale announcements worse
 # delivered late than not at all, and a blast that stalls AGAIN after a resume has something
 # wrong this job cannot see — all of these stay a human call and are reported as HELD.
+#
+# The exception is a blast whose sender handed every recipient over and then died before
+# stamping `completed_at` (gumroad-private#2250). Resuming that one cannot double-send, so it
+# skips the guards above — see `resolve_action`.
 class AlertOnStalledPostEmailBlastsJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
@@ -39,7 +43,7 @@ class AlertOnStalledPostEmailBlastsJob
   AUTO_RESUME_WINDOW = 24.hours
 
   # Rows the run acted on (or would have) are the audit trail; message_for never truncates them.
-  AUDITED_ACTIONS = [:resumed, :would_resume, :skipped_reappeared].freeze
+  AUDITED_ACTIONS = [:resumed, :resumed_to_complete, :would_resume, :would_complete, :skipped_reappeared].freeze
 
   def perform
     scan = scan_for_stalled_blasts
@@ -90,6 +94,21 @@ class AlertOnStalledPostEmailBlastsJob
     def resolve_action(entry, live:)
       blast = entry[:blast]
       return nil unless entry[:disposition].in?([:dead, :unaccounted])
+
+      # The sender handed every recipient it picked to an ESP and then died before stamping
+      # `completed_at` (gumroad-private#2250). A resume cannot double-send here: the resumed
+      # job filters all of them out — `sent_post_emails` for a regular blast, the per-blast
+      # sent set for a non-opener resend — finds nothing left, and stamps the blast itself.
+      # That is why this skips the guards below, all of which exist to bound double-sending:
+      # the 24h window, the once-per-blast marker, and the non-opener hold. It still respects
+      # the flag, which is the kill switch for this job enqueueing anything at all.
+      if SendPostBlastEmailsJob.fully_delivered?(blast)
+        return :would_complete unless live
+        return :skipped_reappeared if sender_visible_now?(blast.id)
+
+        return resume(entry, marker: RedisKey.stalled_blast_completion_resumed(blast.id)) ? :resumed_to_complete : :held_already_resumed
+      end
+
       # A DEAD entry proves its attempt chain ended; UNACCOUNTED can hide a live sender, and a
       # concurrent duplicate double-delivers a non-opener resend.
       return :held_non_opener if entry[:disposition] == :unaccounted && blast.to_non_openers?
@@ -103,16 +122,20 @@ class AlertOnStalledPostEmailBlastsJob
       resume(entry) ? :resumed : :held_already_resumed
     end
 
+    # Three full Sidekiq scans per call, so memoize: `resolve_action` runs once per candidate and
+    # the scan is bounded at MAX_CANDIDATES_SCANNED. One read per run is still "at action time" —
+    # the point is that it is later than the dispositions taken in `scan_for_stalled_blasts`.
     def sender_visible_now?(blast_id)
-      busy_blast_ids.include?(blast_id) || queued_blast_ids.include?(blast_id) || retrying_blast_ids.include?(blast_id)
+      @live_blast_ids ||= (busy_blast_ids + queued_blast_ids + retrying_blast_ids).to_set
+      @live_blast_ids.include?(blast_id)
     end
 
-    def resume(entry)
+    def resume(entry, marker: RedisKey.stalled_blast_auto_resumed(entry[:blast].id))
       blast = entry[:blast]
       # Atomic NX claim, written before the resume: overlapping runs cannot both claim the same
       # blast, and a crash between claim and resume holds the blast for a human instead of risking
       # a second automated resume of a blast in an unknown state.
-      claimed = $redis.set(RedisKey.stalled_blast_auto_resumed(blast.id), Time.current.iso8601, nx: true, ex: LOOKBACK.to_i)
+      claimed = $redis.set(marker, Time.current.iso8601, nx: true, ex: LOOKBACK.to_i)
       return false unless claimed
 
       if entry[:disposition] == :dead
@@ -178,7 +201,10 @@ class AlertOnStalledPostEmailBlastsJob
           "post no longer sendable (super_fetch resurrects hard-killed jobs on its own). HELD " \
           "rows need a human: confirm with the seller (time-boxed blasts may be worse late than " \
           "never), then `job.retry` a DEAD entry or `SendPostBlastEmailsJob.perform_async(blast_id)` " \
-          "for an UNACCOUNTED one. See gumroad-private#1750 for a worked run.",
+          "for an UNACCOUNTED one. A blast whose sender finished delivering but died before the " \
+          "completion stamp is resumed regardless of those limits — the resumed job has nothing " \
+          "left to send and just stamps it (gumroad-private#2250). See gumroad-private#1750 for " \
+          "a worked run.",
       ].compact.join("\n")
     end
 
@@ -189,7 +215,9 @@ class AlertOnStalledPostEmailBlastsJob
       action =
         case entry[:action]
         when :resumed then " → RESUMED"
+        when :resumed_to_complete then " → RESUMED (already fully delivered; the send job stamps it)"
         when :would_resume then " → WOULD RESUME (dry run)"
+        when :would_complete then " → WOULD RESUME TO COMPLETE (dry run: already fully delivered)"
         when :held_past_window then " → HELD (past #{AUTO_RESUME_WINDOW.inspect} resume window)"
         when :held_already_resumed then " → HELD (already auto-resumed once)"
         when :held_non_opener then " → HELD (non-opener resend: a duplicate sender double-delivers)"
