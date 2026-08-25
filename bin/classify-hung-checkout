@@ -9,7 +9,8 @@
 # Reads the attempt's jobs payload on stdin, or from a file argument:
 #
 #   { "jobs": [ ... GET /repos/{repo}/actions/runs/{id}/attempts/{n}/jobs ... ],
-#     "annotations": { "<job_id>": ["<check-run annotation message>", ...] } }
+#     "annotations": { "<job_id>": ["<check-run annotation message>", ...] },
+#     "conclusion": "<the triggering run's own conclusion>" }
 #
 # `--candidates` prints the job ids whose first bad step already looks like the
 # hang, so the caller only fetches annotations for that short list before asking
@@ -95,7 +96,15 @@ def job_label(job)
   job["name"] || "job #{job['id']}"
 end
 
-def verdict(jobs, annotations)
+def verdict(jobs, annotations, conclusion = nil)
+  # Fail-fast behind a hang still leaves the run `failure`; `cancelled` means a
+  # human or a cancel-in-progress threw the run away, and job-level `cancelled`
+  # cannot tell those two apart. An absent field falls through to the job-level
+  # gates below.
+  if !conclusion.nil? && conclusion != "" && conclusion != "failure"
+    return [EXIT_SKIP, "skip: the attempt concluded #{conclusion}"]
+  end
+
   # A run that was cancelled before anything was scheduled has nothing to
   # attribute the failure to, so there is nothing to re-run.
   return [EXIT_SKIP, "skip: the attempt has no jobs"] if jobs.empty?
@@ -137,6 +146,10 @@ if candidates_only
   exit 0
 end
 
-code, message = verdict(jobs, payload.is_a?(Hash) ? payload["annotations"].to_h : {})
+code, message = verdict(
+  jobs,
+  payload.is_a?(Hash) ? payload["annotations"].to_h : {},
+  payload.is_a?(Hash) ? payload["conclusion"] : nil
+)
 puts message
 exit code

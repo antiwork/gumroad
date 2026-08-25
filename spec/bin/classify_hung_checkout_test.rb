@@ -71,7 +71,7 @@ SPEC_FAILURE = [["Check out repository", "success", 10], ["Run tests", "failure"
 hang = job("Slow 3", "failure", HUNG_CHECKOUT)
 check(
   "a 300s checkout timeout with tests never started",
-  { "jobs" => [hang], "annotations" => hang_annotations(hang) },
+  { "jobs" => [hang], "annotations" => hang_annotations(hang), "conclusion" => "failure" },
   expect: :rerun
 )
 
@@ -79,7 +79,7 @@ check(
 trusted = job("Relevant 2", "failure", HUNG_TRUSTED)
 check(
   "a trusted-workflow-files checkout timeout",
-  { "jobs" => [trusted], "annotations" => hang_annotations(trusted, "Check out trusted workflow files") },
+  { "jobs" => [trusted], "annotations" => hang_annotations(trusted, "Check out trusted workflow files"), "conclusion" => "failure" },
   expect: :rerun
 )
 
@@ -88,7 +88,7 @@ check(
 build = job("Build images", "failure", [["Set up job", "success", 3], ["Check out repository", "failure", 300]])
 check(
   "a job with no Run tests step at all",
-  { "jobs" => [build], "annotations" => hang_annotations(build) },
+  { "jobs" => [build], "annotations" => hang_annotations(build), "conclusion" => "failure" },
   expect: :rerun
 )
 
@@ -114,13 +114,26 @@ check(
 )
 
 # test_fast is fail-fast, so one hang cancels siblings mid-`Run tests`. That
-# cancellation is collateral, not evidence.
+# cancellation is collateral, not evidence -- and the run still concluded
+# `failure`, which is what separates this from the case below.
 fast_hang = job("Fast 16", "failure", HUNG_CHECKOUT)
 fast_cancelled = job("Fast 17", "cancelled", [["Check out repository", "success", 10], ["Run tests", "cancelled", 400]])
 check(
   "a hang plus a sibling cancelled mid-Run tests",
-  { "jobs" => [fast_hang, fast_cancelled], "annotations" => hang_annotations(fast_hang) },
+  { "jobs" => [fast_hang, fast_cancelled], "annotations" => hang_annotations(fast_hang), "conclusion" => "failure" },
   expect: :rerun
+)
+
+# The same jobs, but the run was cancelled outright -- someone hit cancel, or a
+# new push cancelled it in progress. Job-level `cancelled` is indistinguishable
+# from fail-fast collateral, so the run conclusion is the only thing that tells
+# them apart, and re-running a run that was thrown away is wasted CI.
+cancelled_hang = job("Fast 16", "failure", HUNG_CHECKOUT)
+cancelled_sibling = job("Fast 17", "cancelled", [["Check out repository", "success", 10], ["Run tests", "cancelled", 400]])
+check(
+  "a hang on a run that was cancelled outright",
+  { "jobs" => [cancelled_hang, cancelled_sibling], "annotations" => hang_annotations(cancelled_hang), "conclusion" => "cancelled" },
+  expect: :skip
 )
 
 # Same shape, except the sibling's specs actually failed. One real red blocks the
@@ -168,10 +181,12 @@ WORKFLOW = File.expand_path("../../.github/workflows/rerun-hung-checkout.yml", _
 
 $count += 1
 gate = YAML.load_file(WORKFLOW).fetch("jobs").fetch("rerun").fetch("if")
-if gate.include?("run_attempt < 2") && gate.include?("conclusion == 'failure'") && gate.include?("conclusion == 'cancelled'")
-  puts "  ok    the workflow gate caps attempts and only runs on red"
+# `cancelled` has to stay out of the gate: fail-fast behind a hang still leaves
+# the run `failure`, so anything `cancelled` was thrown away on purpose.
+if gate.include?("run_attempt < 2") && gate.include?("conclusion == 'failure'") && !gate.include?("conclusion == 'cancelled'")
+  puts "  ok    the workflow gate caps attempts and only runs on a failed run"
 else
-  puts "  FAIL  the workflow gate caps attempts and only runs on red"
+  puts "  FAIL  the workflow gate caps attempts and only runs on a failed run"
   $failures << "workflow gate: #{gate.inspect}"
 end
 

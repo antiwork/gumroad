@@ -25,9 +25,13 @@ jobs:
     # run_attempt < 2 is the cap: attempt 1 may be re-run, attempt 2 is where
     # this stops. A hang that survives one re-run is not a flake worth chasing
     # unattended.
+    #
+    # `failure` only: fail-fast cancelling siblings behind a hang still leaves
+    # the run itself `failure`, while a manual cancel or a concurrency
+    # cancel-in-progress leaves it `cancelled` -- and that run was thrown away
+    # on purpose, so re-running its failed jobs is wasted CI.
     if: >-
-      (github.event.workflow_run.conclusion == 'failure' ||
-       github.event.workflow_run.conclusion == 'cancelled') &&
+      github.event.workflow_run.conclusion == 'failure' &&
       github.event.workflow_run.run_attempt < 2
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +50,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
           set -euo pipefail
           # --paginate --jq emits one job object per line (gh forbids --slurp
@@ -66,7 +71,11 @@ jobs:
             mv annotations.tmp annotations.json
           done
 
-          jq -s '{jobs: .[0].jobs, annotations: .[1]}' jobs.json annotations.json > attempt.json
+          # The run conclusion rides along so the classifier applies the same
+          # `failure`-only rule as the job `if` above.
+          jq -s --arg conclusion "$CONCLUSION" \
+            '{jobs: .[0].jobs, annotations: .[1], conclusion: $conclusion}' \
+            jobs.json annotations.json > attempt.json
           set +e
           ruby bin/classify-hung-checkout attempt.json
           status=$?
