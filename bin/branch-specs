@@ -341,6 +341,14 @@ changed.each do |path|
   elsif path == "bin/branch-specs" || path == "spec/bin/branch_specs_test.rb"
     # Standalone ruby test (ruby spec/bin/branch_specs_test.rb), not rspec.
     next
+  elsif path == "bin/classify-hung-checkout" || path == "spec/bin/classify_hung_checkout_test.rb"
+    # Same: standalone ruby (ruby spec/bin/classify_hung_checkout_test.rb), not rspec.
+    next
+  elsif path == ".github/workflows/rerun-hung-checkout.yml"
+    # Only invokes the classifier; the job `if` is asserted in that standalone
+    # test. Other workflows still go through unattributed; tests.yml still
+    # escalates via ESCALATE_PATTERNS.
+    next
   elsif path.match?(%r{\A(lib|app)/.*\.rb\z}) &&
         (by_content = specs_mentioning(File.basename(path, ".rb"))).any?
     # Name-based mapping missed (spec lives under another name, e.g.

@@ -1,0 +1,93 @@
+name: Rerun hung checkout
+
+# Re-runs the failed jobs of a `Tests` attempt when the only thing that went
+# wrong was actions/checkout sitting at its 5-minute timeout. That failure is
+# unrelated to the commit, and it lands on shards at random, so the red it
+# leaves is noise a human has to clear by hand.
+#
+# Scoped hard on purpose: the classifier refuses unless every red job on the
+# triggering attempt is either a hung checkout or a sibling fail-fast cancelled
+# behind one, so a spec failure is never re-run into a pass.
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
+
+permissions:
+  actions: write # rerun-failed-jobs; the default token cannot re-run without it
+  checks: read # the timeout text lives in the job's check-run annotations
+  contents: read
+
+jobs:
+  rerun:
+    runs-on: ubuntu-latest
+    # run_attempt < 2 is the cap: attempt 1 may be re-run, attempt 2 is where
+    # this stops. A hang that survives one re-run is not a flake worth chasing
+    # unattended.
+    #
+    # `failure` only: fail-fast cancelling siblings behind a hang still leaves
+    # the run itself `failure`, while a manual cancel or a concurrency
+    # cancel-in-progress leaves it `cancelled` -- and that run was thrown away
+    # on purpose, so re-running its failed jobs is wasted CI.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.run_attempt < 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            bin/classify-hung-checkout
+          sparse-checkout-cone-mode: false
+
+      # The attempt's own jobs, not the run's latest conclusion: a shard that
+      # hung on attempt 1 reads as SUCCESS once attempt 2 passes, and this
+      # workflow is triggered by that first attempt completing.
+      - name: Classify the triggering attempt
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          set -euo pipefail
+          # --paginate --jq emits one job object per line (gh forbids --slurp
+          # together with --jq). jq -s rebuilds the jobs array the classifier
+          # reads. Use the triggering attempt, not the run's latest jobs.
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${ATTEMPT}/jobs?per_page=100" \
+            --jq '.jobs[]' | jq -s '{jobs: .}' > jobs.json
+
+          # Annotations only for the jobs that already look like the hang, so a
+          # 40-shard run does not cost 40 extra API calls.
+          echo '{}' > annotations.json
+          for id in $(ruby bin/classify-hung-checkout --candidates jobs.json); do
+            messages=$(gh api "repos/${GITHUB_REPOSITORY}/check-runs/${id}/annotations" \
+                         --jq '[.[].message]') || messages='[]'
+            jq --arg id "$id" --argjson messages "$messages" \
+              '.[$id] = $messages' annotations.json > annotations.tmp
+            mv annotations.tmp annotations.json
+          done
+
+          # The run conclusion rides along so the classifier applies the same
+          # `failure`-only rule as the job `if` above.
+          jq -s --arg conclusion "$CONCLUSION" \
+            '{jobs: .[0].jobs, annotations: .[1], conclusion: $conclusion}' \
+            jobs.json annotations.json > attempt.json
+          set +e
+          ruby bin/classify-hung-checkout attempt.json
+          status=$?
+          set -e
+          case "$status" in
+            0) echo "rerun=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "rerun=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Re-run the failed jobs
+        if: steps.classify.outputs.rerun == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: gh run rerun "$RUN_ID" --failed -R "$GITHUB_REPOSITORY"
