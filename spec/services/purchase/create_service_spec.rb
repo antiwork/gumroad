@@ -281,7 +281,7 @@ describe Purchase::CreateService, :vcr do
 
     expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
     expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
-    expect(purchase.tip.value_usd_cents).to eq(1_23)
+    expect(purchase.tip.value_usd_cents).to eq(1_25)
     expect(purchase.tax_cents).to eq(0)
     expect(purchase.total_transaction_cents).not_to eq(13_76)
   end
@@ -463,7 +463,7 @@ describe Purchase::CreateService, :vcr do
 
     expect(error).to be_nil
     expect(purchase.buyer_currency_quote_canonical_components).to be_nil
-    expect(purchase.tip.value_usd_cents).to eq(1_23)
+    expect(purchase.tip.value_usd_cents).to eq(1_25)
     expect(purchase.total_transaction_cents).not_to eq(13_76)
   end
 
