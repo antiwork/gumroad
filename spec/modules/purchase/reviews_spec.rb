@@ -443,5 +443,13 @@ describe Purchase::Reviews do
 
       expect(giftee_purchase.rater_name).to eq("Sabrina Rehman")
     end
+
+    it "keeps the shipping name on a physical gift even when the giftee has a different account name" do
+      giftee = create(:user, name: "Account Name")
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Sabrina Rehman")
+      allow(giftee_purchase.link).to receive(:require_shipping?).and_return(true)
+
+      expect(giftee_purchase.rater_name).to eq("Sabrina Rehman")
+    end
   end
 end

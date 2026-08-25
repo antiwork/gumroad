@@ -48,6 +48,9 @@ module Purchase::Reviews
   end
 
   def rater_identity_name
+    # Physical gifts already collected a shipping name; a later-linked account may not be the recipient.
+    return rater_checkout_name.presence if is_gift_receiver_purchase? && link.require_shipping?
+
     purchaser&.name.presence || rater_checkout_name.presence
   end
 
