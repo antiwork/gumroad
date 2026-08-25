@@ -430,8 +430,8 @@ describe Purchase::Reviews do
     end
 
     it "keeps the shipping name on a physical gift" do
-      product = create(:product, require_shipping: true)
-      giftee_purchase = create(:purchase, :gift_receiver, link: product, purchaser: nil, full_name: "Sabrina Rehman")
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Sabrina Rehman")
+      allow(giftee_purchase.link).to receive(:require_shipping?).and_return(true)
 
       expect(giftee_purchase.rater_name).to eq("Sabrina Rehman")
     end
