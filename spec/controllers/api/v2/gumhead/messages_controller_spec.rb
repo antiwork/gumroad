@@ -83,6 +83,7 @@ describe Api::V2::Gumhead::MessagesController do
 
     it "refuses to proxy when the server-side key is not configured" do
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_ANTHROPIC_API_KEY").and_return(nil)
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
 
       post_messages
 
@@ -349,7 +350,8 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(200)
       expect(JSON.parse(response.body)["content"].first["text"]).to eq("Hello!")
       expect(WebMock).to have_requested(:post, messages_url).with { |req|
-        req.headers["X-Api-Key"] == "sk-ant-gateway-test" && req.headers["Authorization"].nil?
+        req.headers["X-Api-Key"] == "sk-ant-gateway-test" &&
+          req.headers["Authorization"] == "Bearer sk-ant-gateway-test"
       }
 
       event = GumheadUsageEvent.sole
@@ -471,7 +473,7 @@ describe Api::V2::Gumhead::MessagesController do
       post_messages
 
       expect(response.status).to eq(502)
-      expect(GumheadUsageEvent.sole.input_tokens).to eq(request_payload.to_json.bytesize)
+      expect(GumheadUsageEvent.sole.input_tokens).to eq(request_payload.merge(model: "x-ai/grok-4.6").to_json.bytesize)
     end
 
     it "charges nothing when the connection itself times out" do
@@ -695,6 +697,113 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(response.status).to eq(429)
       expect(WebMock).not_to have_requested(:post, count_tokens_url)
+    end
+  end
+
+  describe "upstream hop" do
+    let(:openrouter_messages_url) { "https://openrouter.ai/api/v1/messages" }
+    let(:rewritten_payload_bytesize) { request_payload.merge(model: "x-ai/grok-4.6").to_json.bytesize }
+
+    it "rewrites an allowed Claude alias to the mapped OpenRouter id before forwarding" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+        JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
+      }
+    end
+
+    it "maps a versioned Claude name by prefix" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages(request_payload.merge(model: "claude-sonnet-5-20250514"))
+
+      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+        JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
+      }
+    end
+
+    it "records the outgoing model on a synthetic timeout charge" do
+      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 200, body: { input_tokens: 37 }.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(GumheadUsageEvent.sole.model).to eq("x-ai/grok-4.6")
+    end
+
+    it "leaves the model untouched when the map has no matching entry" do
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_MODEL_MAP", described_class::DEFAULT_MODEL_MAP)
+        .and_return({})
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+        JSON.parse(req.body)["model"] == "claude-sonnet-5"
+      }
+    end
+
+    it "still rejects a model outside the Claude allowlist" do
+      post_messages(request_payload.merge(model: "x-ai/grok-4.6"))
+
+      expect(response.status).to eq(400)
+      expect(WebMock).not_to have_requested(:post, messages_url)
+    end
+
+    it "prefers GUMHEAD_UPSTREAM_API_KEY over the Anthropic key" do
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-or-test")
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+        req.headers["X-Api-Key"] == "sk-or-test" && req.headers["Authorization"] == "Bearer sk-or-test"
+      }
+    end
+
+    it "forwards to GUMHEAD_UPSTREAM_API_BASE when it is set" do
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_UPSTREAM_API_BASE", described_class::DEFAULT_UPSTREAM_API_BASE)
+        .and_return("https://openrouter.ai/api/v1")
+      stub_request(:post, openrouter_messages_url)
+        .to_return(status: 200, body: anthropic_response.merge(model: "x-ai/grok-4.6").to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(WebMock).to have_requested(:post, openrouter_messages_url)
+      expect(WebMock).not_to have_requested(:post, messages_url)
+      expect(GumheadUsageEvent.sole.model).to eq("x-ai/grok-4.6")
+    end
+
+    it "returns a synthetic token count when upstream count_tokens is missing" do
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 404, body: { type: "error", error: { type: "not_found_error", message: "Not Found" } }.to_json)
+
+      post :count_tokens, body: request_payload.to_json, as: :json
+
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)["input_tokens"]).to eq(rewritten_payload_bytesize)
+      expect(GumheadUsageEvent.count).to eq(0)
+    end
+
+    it "charges the byte fallback when count_tokens returns 404 during a timeout" do
+      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, count_tokens_url).to_return(status: 404, body: "Not Found")
+
+      post_messages
+
+      expect(response.status).to eq(502)
+      expect(GumheadUsageEvent.sole.input_tokens).to eq(rewritten_payload_bytesize)
     end
   end
 end
