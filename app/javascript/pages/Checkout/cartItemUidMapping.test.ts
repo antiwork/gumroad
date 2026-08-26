@@ -26,10 +26,10 @@ describe("checkout cart-item uid mapping", () => {
 
     const getProducts = sliceFunction(source, "function getProducts(state: CartState): Product[] {");
     expect(getProducts).not.toBeNull();
-    expect(getProducts).toMatch(/uid: getCartItemUid\(item\),/);
+    expect(getProducts).toMatch(/uid: getCartItemUid\(item\),/u);
     // The order-line mapper is a later sibling; leaking into it would make this
     // pin stay green after the getProducts uid mapping is deleted.
-    expect(getProducts).not.toMatch(/linePricing\.map/);
+    expect(getProducts).not.toMatch(/linePricing\.map/u);
 
     const orderLine = source.match(
       /return linePricing\.map\(\(\{ item, discounted, discountedPriceToChargeNow \}, index\) => \{[\s\S]*?uid: getCartItemUid\(item\),/u,
