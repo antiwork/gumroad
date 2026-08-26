@@ -236,16 +236,21 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     # Role ids have no Anthropic SKU. They pass only when this request
-    # will rewrite that exact id. A partial GUMHEAD_MODEL_MAP must not
-    # admit an unmapped role. Claude family prefixes stay valid on both hosts.
+    # will rewrite that exact id. Claude family prefixes stay valid on
+    # both hosts. Other ops prefixes keep the old always-on allowlist.
     def allowed_incoming_model?(model)
-      allowed_model_prefixes.any? do |prefix|
-        next false unless model.start_with?(prefix)
-        next true if prefix.start_with?("claude-")
-
+      return true if allowed_model_prefixes.any? { |prefix| prefix.start_with?("claude-") && model.start_with?(prefix) }
+      if incoming_role_id?(model)
+        return false unless rewrite_upstream_model?
         outgoing = mapped_upstream_model(model)
-        outgoing.present? && outgoing != model
+        return outgoing.present? && outgoing != model
       end
+
+      allowed_model_prefixes.any? { |prefix| model.start_with?(prefix) }
+    end
+
+    def incoming_role_id?(model)
+      %w[gumhead-chat gumhead-status gumhead-cover].include?(model)
     end
 
     # Incoming names stay on the Claude allowlist so the shipped app
@@ -370,6 +375,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       if upstream.status.success?
         parsed = safe_parse_json(body)
         if parsed.is_a?(Hash) && parsed["error"].is_a?(Hash)
+          meter_buffered_usage(body) if meter
           message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
           return render json: anthropic_error("api_error", message), status: :bad_gateway
         end
