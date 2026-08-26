@@ -199,7 +199,7 @@ class Exports::Payouts::Base
         data << row
       end
 
-      (payout_start_date..payout_end_date).each do |date|
+      paypal_affiliate_fee_dates(user, payout_start_date, payout_end_date).each do |date|
         affiliate_fees_entry = summarize_paypal_affiliate_fee(user, date)
         if affiliate_fees_entry.last != 0
           paypal_rows << affiliate_fees_entry
@@ -245,7 +245,7 @@ class Exports::Payouts::Base
         data << row
       end
 
-      (payout_start_date..payout_end_date).each do |date|
+      stripe_connect_affiliate_fee_dates(user, payout_start_date, payout_end_date).each do |date|
         affiliate_fees_entry = summarize_stripe_connect_affiliate_fee(user, date)
         if affiliate_fees_entry.last != 0
           stripe_connect_rows << affiliate_fees_entry
@@ -422,6 +422,35 @@ class Exports::Payouts::Base
         "",
         (amount / 100.0),
       ]
+    end
+
+    # A day with no sale, refund or chargeback sums to zero on all three terms, so the
+    # `!= 0` guard below already drops it. Ask for the days that can matter instead of
+    # walking the calendar: with no earlier completed payout the window floors at
+    # OLDEST_DISPLAYABLE_PAYOUT_PERIOD_END_DATE, which is thousands of days of empty aggregates.
+    def paypal_affiliate_fee_dates(user, start_date, end_date)
+      candidate_dates(
+        [user.paypal_sales_in_duration(start_date:, end_date:), "purchases.succeeded_at"],
+        [user.paypal_refunds_in_duration(start_date:, end_date:), "refunds.created_at"],
+        [user.paypal_sales_chargebacked_in_duration(start_date:, end_date:), "purchases.chargeback_date"],
+      )
+    end
+
+    def stripe_connect_affiliate_fee_dates(user, start_date, end_date)
+      candidate_dates(
+        [user.stripe_connect_sales_in_duration(start_date:, end_date:), "purchases.succeeded_at"],
+        [user.stripe_connect_refunds_in_duration(start_date:, end_date:), "refunds.created_at"],
+        [user.stripe_connect_sales_chargebacked_in_duration(start_date:, end_date:), "purchases.chargeback_date"],
+      )
+    end
+
+    # Timestamps are stored and compared in UTC (Time.zone and ActiveRecord.default_timezone
+    # are both UTC), so DATE() lands on the same calendar day the scopes bound with
+    # beginning_of_day / end_of_day.
+    def candidate_dates(*scopes_with_columns)
+      scopes_with_columns.flat_map do |scope, column|
+        scope.distinct.pluck(Arel.sql("DATE(#{column})"))
+      end.compact.map { _1.is_a?(Date) ? _1 : Date.parse(_1.to_s) }.uniq.sort
     end
 
     def summarize_paypal_affiliate_fee(user, date)
