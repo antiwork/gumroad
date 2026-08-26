@@ -329,10 +329,10 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(buyer_country: nil, cart_product_currency: "inr").payment_method_types).not_to include("upi")
         end
 
-        it "still surfaces UPI when the seller has turned off buyer-local-currency display" do
+        it "keeps UPI off when the seller has turned off buyer-local-currency display" do
           seller.update!(disable_buyer_local_currency: true)
 
-          expect(resolve(buyer_country: "IN", cart_product_currency: "inr").payment_method_types).to include("upi")
+          expect(resolve(buyer_country: "IN", cart_product_currency: "inr").payment_method_types).not_to include("upi")
         end
 
         it "keeps them off a USD-priced cart — Stripe rejects an element/intent listing EUR-only methods in USD" do
@@ -530,10 +530,10 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal")
         end
 
-        it "still offers forced-currency methods when the seller opted out of buyer-local-currency display" do
+        it "keeps forced-currency methods off when the seller opted out of buyer-local-currency display" do
           seller.update!(disable_buyer_local_currency: true)
 
-          expect(resolve(cart_product_currency: "eur").payment_method_types).to include("ideal", "bancontact")
+          expect(resolve(cart_product_currency: "eur").payment_method_types).not_to include("ideal", "bancontact")
         end
       end
 
