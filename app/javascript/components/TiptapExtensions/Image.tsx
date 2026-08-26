@@ -267,8 +267,10 @@ export const Image = TiptapNode.create({
                 const snapshotted =
                   fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files);
                 if (snapshotted) input.value = "";
-                await uploads;
-                if (!snapshotted && fileListMatchesPickedFiles(input.files, picked)) input.value = "";
+                if (!snapshotted) {
+                  await uploads;
+                  if (fileListMatchesPickedFiles(input.files, picked)) input.value = "";
+                }
               })
               .catch((error: unknown) => {
                 showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
