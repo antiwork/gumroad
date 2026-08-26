@@ -8,7 +8,7 @@ describe("checkout cart-item uid mapping", () => {
     const source = (await import("$app/pages/Checkout/Show.tsx?raw")).default;
 
     const getProducts = source.match(
-      /function getProducts\(state: CartState\): Product\[] \{[\s\S]*?return \{[\s\S]*?uid: getCartItemUid\(item\),/u,
+      /function getProducts\(state: CartState\): Product\[\] \{[\s\S]*?return \{[\s\S]*?uid: getCartItemUid\(item\),/u,
     );
     expect(getProducts).not.toBeNull();
 
