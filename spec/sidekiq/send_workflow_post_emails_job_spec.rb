@@ -925,8 +925,10 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       @post_rule.update!(delayed_delivery_time: 0)
       stub_const("#{described_class}::IMMEDIATE_FANOUT_THRESHOLD", 3)
       stub_const("#{described_class}::DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND", 2)
+      @paced_purchases = []
       4.times do |i|
         purchase = create(:free_purchase, link: @product, email: "paced-buyer-#{i}@example.com", created_at: 1.hour.ago)
+        @paced_purchases << purchase
         purchase.rebuild_audience_member_details
       end
     end
@@ -952,6 +954,22 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(ats.size).to eq(3)
       expect(ats.last - Time.current.to_f).to be_between(0.6, 1.0)
       expect(ats.last - ats[-2]).to be > 0.1
+    ensure
+      $redis.del(RedisKey.workflow_immediate_fanout_max_spread_seconds)
+    end
+
+    it "sizes the pacing rate from due-now recipients, not future recipients" do
+      $redis.set(RedisKey.workflow_immediate_fanout_max_spread_seconds, 1)
+      @paced_purchases.last.update!(created_at: 1.day.from_now)
+      @paced_purchases.last.rebuild_audience_member_details
+
+      described_class.new.perform(@post.id)
+
+      ats = SendWorkflowInstallmentWorker.jobs.filter_map { _1["at"] }.sort
+      due_now_ats = ats.select { _1 < 1.hour.from_now.to_f }
+      expect(due_now_ats.size).to eq(2)
+      expect(due_now_ats.last - Time.current.to_f).to be_between(0.6, 0.8)
+      expect(ats.last).to be_within(1).of(1.day.from_now.to_f)
     ensure
       $redis.del(RedisKey.workflow_immediate_fanout_max_spread_seconds)
     end

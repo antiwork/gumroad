@@ -146,26 +146,35 @@ class SendWorkflowPostEmailsJob
 
     def enqueue_all_member_jobs
       @immediate_fanout_index = 0
+      return :ownership_lost unless prepare_immediate_fanout_pacing
+
       @members.each do |member|
         return :ownership_lost unless renew_fanout_lease
 
-        if @post.seller_or_product_or_variant_type?
-          enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
-        elsif @post.follower_type?
-          enqueue_email_job(member:, type: :follower, id: member.follower_id)
-        elsif @post.affiliate_type?
-          enqueue_email_job(member:, type: :affiliate, id: member.affiliate_id)
-        elsif @post.audience_type?
-          if member.follower_id
-            enqueue_email_job(member:, type: :follower, id: member.follower_id)
-          elsif member.affiliate_id
-            enqueue_email_job(member:, type: :affiliate, id: member.affiliate_id)
-          else
-            enqueue_email_job(member:, type: :purchase, id: member.purchase_id)
-          end
-        end
+        enqueue_email_jobs_for(member)
       end
       :complete
+    end
+
+    def enqueue_email_jobs_for(member)
+      delivery_targets_for(member, log_unresolvable: true).each do |target|
+        enqueue_installment_worker(**target)
+      end
+    end
+
+    def prepare_immediate_fanout_pacing
+      @immediate_fanout_started_at = Time.current
+      @immediate_fanout_recipient_count = 0
+      return true if @members.size < immediate_fanout_threshold
+
+      @members.each do |member|
+        return false unless renew_fanout_lease
+
+        @immediate_fanout_recipient_count += delivery_targets_for(member, log_unresolvable: false).count do |target|
+          target[:created_at] + @rule_delay <= @immediate_fanout_started_at
+        end
+      end
+      true
     end
 
     def renew_fanout_lease(force: false)
@@ -193,33 +202,62 @@ class SendWorkflowPostEmailsJob
       @filters[:created_after] = [configured_cutoff, @recipient_filter_cutoff_time].compact.max
     end
 
-    def enqueue_email_job(member:, type:, id:)
-      if type == :purchase
-        # `with_ids` supplies the matching purchase. Another embedded purchase can bypass the workflow filters.
-        return log_unresolvable_recipient(member:, type:) if id.nil?
-
-        purchase = member.details["purchases"].find { _1["id"] == id }
-        return log_unresolvable_recipient(member:, type:) if purchase.nil?
-        created_at = Time.zone.parse(purchase["created_at"])
-        enqueue_installment_worker(created_at:, purchase_id: id)
-      elsif type == :follower
-        id ||= member.details.dig("follower", "id")
-        return log_unresolvable_recipient(member:, type:) if id.nil?
-        confirmed_at = @follower_confirmation_times_by_id[id]
-        return log_unresolvable_recipient(member:, type:) if confirmed_at.nil?
-        enqueue_installment_worker(created_at: confirmed_at, follower_id: id, preserve_reference_time: true)
-      elsif type == :affiliate
-        affiliate_triggers = resolve_affiliate_triggers(member:, id:)
-        return log_unresolvable_recipient(member:, type:) if affiliate_triggers.empty?
-
-        affiliate_triggers.each do |affiliate|
-          enqueue_installment_worker(
-            created_at: affiliate[:created_at],
-            affiliate_user_id: affiliate[:affiliate_user_id],
-            preserve_reference_time: true
-          )
+    def delivery_targets_for(member, log_unresolvable:)
+      if @post.seller_or_product_or_variant_type?
+        delivery_targets_for_purchase(member:, id: member.purchase_id, log_unresolvable:)
+      elsif @post.follower_type?
+        delivery_targets_for_follower(member:, id: member.follower_id, log_unresolvable:)
+      elsif @post.affiliate_type?
+        delivery_targets_for_affiliate(member:, id: member.affiliate_id, log_unresolvable:)
+      elsif @post.audience_type?
+        if member.follower_id
+          delivery_targets_for_follower(member:, id: member.follower_id, log_unresolvable:)
+        elsif member.affiliate_id
+          delivery_targets_for_affiliate(member:, id: member.affiliate_id, log_unresolvable:)
+        else
+          delivery_targets_for_purchase(member:, id: member.purchase_id, log_unresolvable:)
         end
+      else
+        []
       end
+    end
+
+    def delivery_targets_for_purchase(member:, id:, log_unresolvable:)
+      # `with_ids` supplies the matching purchase. Another embedded purchase can bypass the workflow filters.
+      return unresolved_recipient(member:, type: :purchase, log_unresolvable:) if id.nil?
+
+      purchase = member.details["purchases"].find { _1["id"] == id }
+      return unresolved_recipient(member:, type: :purchase, log_unresolvable:) if purchase.nil?
+
+      [{ created_at: Time.zone.parse(purchase["created_at"]), purchase_id: id }]
+    end
+
+    def delivery_targets_for_follower(member:, id:, log_unresolvable:)
+      id ||= member.details.dig("follower", "id")
+      return unresolved_recipient(member:, type: :follower, log_unresolvable:) if id.nil?
+
+      confirmed_at = @follower_confirmation_times_by_id[id]
+      return unresolved_recipient(member:, type: :follower, log_unresolvable:) if confirmed_at.nil?
+
+      [{ created_at: confirmed_at, follower_id: id, preserve_reference_time: true }]
+    end
+
+    def delivery_targets_for_affiliate(member:, id:, log_unresolvable:)
+      affiliate_triggers = resolve_affiliate_triggers(member:, id:)
+      return unresolved_recipient(member:, type: :affiliate, log_unresolvable:) if affiliate_triggers.empty?
+
+      affiliate_triggers.map do |affiliate|
+        {
+          created_at: affiliate[:created_at],
+          affiliate_user_id: affiliate[:affiliate_user_id],
+          preserve_reference_time: true
+        }
+      end
+    end
+
+    def unresolved_recipient(member:, type:, log_unresolvable:)
+      log_unresolvable_recipient(member:, type:) if log_unresolvable
+      []
     end
 
     def enqueue_installment_worker(created_at:, purchase_id: nil, follower_id: nil, affiliate_user_id: nil, preserve_reference_time: false)
@@ -236,7 +274,7 @@ class SendWorkflowPostEmailsJob
     def paced_deliver_at(natural_at)
       return natural_at unless pace_immediate_fanout?
 
-      now = Time.current
+      now = @immediate_fanout_started_at || Time.current
       return natural_at if natural_at > now
 
       offset = @immediate_fanout_index.to_f / effective_immediate_enqueue_per_second
@@ -245,7 +283,7 @@ class SendWorkflowPostEmailsJob
     end
 
     def pace_immediate_fanout?
-      @members.size >= immediate_fanout_threshold
+      @immediate_fanout_recipient_count.to_i >= immediate_fanout_threshold
     end
 
     def immediate_fanout_threshold
@@ -255,7 +293,7 @@ class SendWorkflowPostEmailsJob
     end
 
     def effective_immediate_enqueue_per_second
-      [immediate_enqueue_per_second, @members.size.to_f / max_immediate_spread_seconds].max
+      [immediate_enqueue_per_second, @immediate_fanout_recipient_count.to_f / max_immediate_spread_seconds].max
     end
 
     def immediate_enqueue_per_second
