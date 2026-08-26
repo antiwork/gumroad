@@ -56,6 +56,7 @@ export const useConfigureEvaporate = (props: Props) => {
     mimeType,
     onComplete,
     onProgress,
+    onError,
   }: {
     cancellationKey: string;
     name: string;
@@ -63,6 +64,7 @@ export const useConfigureEvaporate = (props: Props) => {
     mimeType: string;
     onComplete: () => void;
     onProgress: (progress: UploadProgress) => void;
+    onError?: () => void;
   }) => {
     let previousProgress = 0;
 
@@ -73,6 +75,9 @@ export const useConfigureEvaporate = (props: Props) => {
       mimeType,
       xAmzHeadersAtInitiate: { "x-amz-acl": "private" },
       complete: onComplete,
+      error: () => {
+        onError?.();
+      },
       progress(percent) {
         // Calculate the bitrate of the file upload by subtracting the completed percentage from the last iteration from the current iteration percentage
         // and multiplying that by the bytesize.  I have found this to be accurate enough by comparing my upload

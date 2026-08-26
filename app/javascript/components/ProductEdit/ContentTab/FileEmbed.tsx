@@ -327,6 +327,9 @@ const FileEmbedNodeView = ({
               updateFile({});
               settleSubtitleUpload(subtitleEntry.url);
             },
+            onError: () => {
+              settleSubtitleUpload(subtitleEntry.url);
+            },
             onProgress: (progress) => {
               subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploading", progress } };
               updateFile({});

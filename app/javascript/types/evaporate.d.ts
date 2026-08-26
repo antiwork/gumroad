@@ -6,6 +6,7 @@ declare module "$vendor/evaporate.cjs" {
     mimeType: string;
     xAmzHeadersAtInitiate: Record<string, string>;
     complete: () => void;
+    error?: (message?: string) => void;
     progress: (this: { file: File; sizeBytes: number }, percent: number) => void;
     initiated: (uploadId: string) => void;
   };

@@ -5,6 +5,8 @@ import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { PICKED_FILE_SNAPSHOT_LIMIT_BYTES } from "$app/utils/snapshotPickedFile";
+
 import { FileEmbed, FileEmbedConfig } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { FileEntry } from "$app/components/ProductEdit/state";
 
@@ -24,9 +26,19 @@ vi.mock("$app/components/ProductEdit/state", async (importOriginal) => {
   return { ...mod, useProductEditContext: () => context };
 });
 const cancelUpload = vi.hoisted(() => vi.fn());
+const scheduledUploads = vi.hoisted((): { onComplete: () => void; onError?: () => void }[] => []);
 vi.mock("$app/components/EvaporateUploader", async (importOriginal) => {
   const mod = await importOriginal<typeof import("$app/components/EvaporateUploader")>();
-  return { ...mod, useEvaporateUploader: () => ({ scheduleUpload: () => 0, cancelUpload }) };
+  return {
+    ...mod,
+    useEvaporateUploader: () => ({
+      scheduleUpload: (options: { onComplete: () => void; onError?: () => void }) => {
+        scheduledUploads.push(options);
+        return 0;
+      },
+      cancelUpload,
+    }),
+  };
 });
 vi.mock("$app/components/S3UploadConfig", async (importOriginal) => {
   const mod = await importOriginal<typeof import("$app/components/S3UploadConfig")>();
@@ -53,6 +65,7 @@ vi.mock("$app/components/ProductEdit/ContentTab/useNodeVisibility", async (impor
 afterEach(() => {
   cleanup();
   cancelUpload.mockReset();
+  scheduledUploads.length = 0;
 });
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs the fields the node view reads
@@ -167,4 +180,38 @@ it("keeps every subtitle from a multi-file pick instead of last-write-wins", asy
   // Both entries must land. Spreading the render-closed file.subtitle_files would
   // write [english] then overwrite with [spanish].
   expect(names).toEqual(["english", "spanish"]);
+});
+
+it("re-enables the subtitle picker when an over-budget upload errors", async () => {
+  const file: FileEntry = { ...streamableFile, subtitle_files: [] };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+  context.updateProduct = () => {};
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+
+  const input = document.querySelector<HTMLInputElement>("input.subtitles-file");
+  if (!input) throw new Error("Subtitle file input did not mount");
+  const picked = new File(["x"], "huge.srt", { type: "text/plain" });
+  Object.defineProperty(picked, "size", { value: PICKED_FILE_SNAPSHOT_LIMIT_BYTES + 1 });
+  attachPickedFiles(input, [picked]);
+
+  await act(async () => {
+    fireEvent.change(input);
+    await Promise.resolve();
+  });
+
+  expect(input.disabled).toBe(true);
+  expect(scheduledUploads).toHaveLength(1);
+
+  await act(async () => {
+    scheduledUploads[0]?.onError?.();
+    await Promise.resolve();
+  });
+
+  expect(input.disabled).toBe(false);
 });

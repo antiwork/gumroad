@@ -81,11 +81,12 @@ export const uploadImages = ({
   });
 
   return Promise.all(
-    filesWithUrls.map(({ file, src }) =>
-      imageSettings.onUpload(file, src)?.then(
-        (newSrc) => setImageSrcInView(view, src, newSrc),
-        () => deleteImageInView(view, src),
-      ) ?? Promise.resolve(),
+    filesWithUrls.map(
+      ({ file, src }) =>
+        imageSettings.onUpload(file, src)?.then(
+          (newSrc) => setImageSrcInView(view, src, newSrc),
+          () => deleteImageInView(view, src),
+        ) ?? Promise.resolve(),
     ),
   );
 };

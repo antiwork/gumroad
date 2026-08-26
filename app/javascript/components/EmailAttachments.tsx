@@ -360,6 +360,9 @@ export const useUploadSubtitles = () => {
               filesDispatch({ type: "finish-subtitle-upload", fileId, subtitleUrl: subtitleEntry.url });
               settle(fileId, subtitleEntry.url);
             },
+            onError: () => {
+              settle(fileId, subtitleEntry.url);
+            },
             onProgress: (progress) =>
               filesDispatch({ type: "set-subtitle-upload-progress", fileId, subtitleUrl: subtitleEntry.url, progress }),
           });

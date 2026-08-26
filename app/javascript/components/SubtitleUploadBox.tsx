@@ -10,7 +10,7 @@ import {
 import { buttonVariants } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
-type UploadBoxProps = { onUploadFiles: (domFiles: File[]) => void | Promise<unknown> };
+type UploadBoxProps = { onUploadFiles: (domFiles: File[]) => unknown };
 
 const acceptedSubtitleExtensions = FileUtils.getAllowedSubtitleExtensions()
   .map((ext) => `.${ext}`)
