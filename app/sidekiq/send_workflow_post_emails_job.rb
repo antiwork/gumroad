@@ -179,7 +179,8 @@ class SendWorkflowPostEmailsJob
       @members.each do |member|
         return :ownership_lost unless renew_fanout_lease
 
-        @fanout_emitted_recipient_jobs ||= enqueue_email_jobs_for(member)
+        enqueued = enqueue_email_jobs_for(member)
+        @fanout_emitted_recipient_jobs ||= enqueued
       end
       :complete
     end
