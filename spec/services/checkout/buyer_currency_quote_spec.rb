@@ -799,7 +799,7 @@ describe Checkout::BuyerCurrencyQuote do
         permalink: eur_product.unique_permalink,
         currency: Currency::EUR,
         line_index: 0
-      )).to include(price_cents: 12_50, tip_cents: 1_25)
+      )).to eq(described_class::CANONICAL_COMPONENTS_UNBOUND)
       expect(described_class.canonical_components_hint(
         token:,
         seller_id: seller.id,
@@ -830,6 +830,40 @@ describe Checkout::BuyerCurrencyQuote do
         uid: "line-b",
         line_index: 1
       )).to include(price_cents: 15_00, tip_cents: 1_25)
+    end
+
+    it "accepts an index-only bind when the permalink has a single signed row" do
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      payload = {
+        "charges" => [
+          {
+            "seller_id" => seller.id,
+            "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
+            "listed_currency_codes" => { eur_product.unique_permalink => Currency::EUR },
+            "canonical_line_components" => [
+              {
+                "uid" => "only-row",
+                "line_index" => 3,
+                "permalink" => eur_product.unique_permalink,
+                "price_cents" => 12_50,
+                "tip_cents" => 1_25,
+                "seller_tax_cents" => 0,
+                "gumroad_tax_cents" => 0,
+                "shipping_cents" => 0,
+              },
+            ],
+          }
+        ]
+      }
+      token = Rails.application.message_verifier(described_class::TOKEN_PURPOSE).generate(payload)
+
+      expect(described_class.canonical_components_hint(
+        token:,
+        seller_id: seller.id,
+        permalink: eur_product.unique_permalink,
+        currency: Currency::EUR,
+        line_index: 3
+      )).to include(price_cents: 12_50, tip_cents: 1_25)
     end
 
     it "does not apply another permalink's signed components via a swapped uid or index" do

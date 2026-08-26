@@ -418,7 +418,7 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.total_transaction_cents).to eq(10_00)
   end
 
-  it "selects the matching signed components for repeated product rows" do
+  it "fails closed when repeated permalink rows cannot be bound by uid" do
     user.update!(tipping_enabled: true)
     eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
     quote = signed_buyer_currency_quote(
@@ -427,6 +427,7 @@ describe Purchase::CreateService, :vcr do
       rate: "0.8",
       canonical_components: [
         {
+          "uid" => "line-a",
           "line_index" => 0,
           "permalink" => eur_product.unique_permalink,
           "price_cents" => 12_50,
@@ -436,6 +437,7 @@ describe Purchase::CreateService, :vcr do
           "shipping_cents" => 0,
         },
         {
+          "uid" => "line-b",
           "line_index" => 1,
           "permalink" => eur_product.unique_permalink,
           "price_cents" => 12_50,
@@ -453,6 +455,54 @@ describe Purchase::CreateService, :vcr do
         purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
         tip_cents: 1_00,
         buyer_currency_quote: quote,
+        buyer_currency_quote_line_index: 1,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+  end
+
+  it "selects the matching signed components for repeated product rows by uid" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: [
+        {
+          "uid" => "line-a",
+          "line_index" => 0,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_26,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+        {
+          "uid" => "line-b",
+          "line_index" => 1,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_27,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+      ]
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        buyer_currency_quote_line_uid: "line-b",
         buyer_currency_quote_line_index: 1,
         is_part_of_combined_charge: true,
       },

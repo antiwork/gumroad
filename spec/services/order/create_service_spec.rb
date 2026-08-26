@@ -90,16 +90,30 @@ describe Order::CreateService, :vcr do
     it "threads buyer-currency quote line binding through combined-order purchase creation" do
       seller_1.update!(tipping_enabled: true)
       product_1.update!(price_currency_type: Currency::EUR, price_cents: 15_00)
-      line_uid = "tz "
+      variant_category = create(:variant_category, link: product_1)
+      first_variant = create(:variant, variant_category:, name: "First")
+      second_variant = create(:variant, variant_category:, name: "Second")
+      first_uid = "tz a"
+      second_uid = "tz b"
       params[:line_items] = [
         {
-          uid: line_uid,
+          uid: first_uid,
           permalink: product_1.unique_permalink,
           price_cents: 17_25,
           perceived_price_cents: 17_25,
           tip_cents: 2_25,
           quantity: 1,
-        }
+          variants: [first_variant.external_id],
+        },
+        {
+          uid: second_uid,
+          permalink: product_1.unique_permalink,
+          price_cents: 17_25,
+          perceived_price_cents: 17_25,
+          tip_cents: 2_25,
+          quantity: 1,
+          variants: [second_variant.external_id],
+        },
       ]
       params[:buyer_currency_quote] = signed_buyer_currency_quote(
         seller: seller_1,
@@ -107,7 +121,7 @@ describe Order::CreateService, :vcr do
         rate: "0.8571",
         canonical_components: [
           {
-            "uid" => line_uid,
+            "uid" => first_uid,
             "line_index" => 0,
             "permalink" => product_1.unique_permalink,
             "price_cents" => 17_50,
@@ -115,7 +129,17 @@ describe Order::CreateService, :vcr do
             "seller_tax_cents" => 0,
             "gumroad_tax_cents" => 0,
             "shipping_cents" => 0,
-          }
+          },
+          {
+            "uid" => second_uid,
+            "line_index" => 1,
+            "permalink" => product_1.unique_permalink,
+            "price_cents" => 17_50,
+            "tip_cents" => 2_67,
+            "seller_tax_cents" => 0,
+            "gumroad_tax_cents" => 0,
+            "shipping_cents" => 0,
+          },
         ]
       )
       params[:payment_details_source] = "payment_element"
@@ -124,9 +148,8 @@ describe Order::CreateService, :vcr do
       order, purchase_responses = Order::CreateService.new(params:).perform
 
       expect(purchase_responses).to be_empty
-      purchase = order.purchases.sole
-      expect(purchase.tip.value_usd_cents).to eq(2_63)
-      expect(purchase.total_transaction_cents).to eq(20_13)
+      expect(order.purchases.map { _1.tip.value_usd_cents }).to contain_exactly(2_63, 2_67)
+      expect(order.purchases.map(&:total_transaction_cents)).to contain_exactly(20_13, 20_17)
     end
 
     it "rejects carts above the product limit before allocating discounts" do
