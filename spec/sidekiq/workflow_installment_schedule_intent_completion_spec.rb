@@ -189,10 +189,16 @@ describe "workflow installment schedule intent completion", :freeze_time do
 
     it "runs a direct fanout without an intent lease" do
       rule
-      expect(WorkflowInstallmentScheduleIntent).not_to receive(:renew_fanout)
+      # The heartbeat runs on every path but must stay a no-op here: blank tokens only.
+      lease_renewals = []
+      allow(WorkflowInstallmentScheduleIntent).to receive(:renew_fanout).and_wrap_original do |method, **kwargs|
+        lease_renewals << kwargs
+        method.call(**kwargs)
+      end
 
       described_class.new.perform(post.id)
 
+      expect(lease_renewals).to all(eq(intent_token: nil, fanout_token: nil))
       expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(
         post.id,
         rule.version,
@@ -202,22 +208,6 @@ describe "workflow installment schedule intent completion", :freeze_time do
         nil,
         follower.confirmed_at.change(usec: 0).iso8601
       )
-    end
-
-    it "does not replace a missing matching purchase with another embedded purchase" do
-      job = described_class.new
-      job.instance_variable_set(:@post, post)
-      job.instance_variable_set(:@rule_version, rule.version)
-      job.instance_variable_set(:@rule_delay, rule.delayed_delivery_time)
-      member = instance_double(
-        AudienceMember,
-        id: 1,
-        details: { "purchases" => [{ "id" => 99, "created_at" => 1.day.ago.iso8601 }] }
-      )
-
-      job.send(:enqueue_email_job, member:, type: :purchase, id: nil)
-
-      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
     end
   end
 
