@@ -771,30 +771,51 @@ describe Api::V2::Gumhead::MessagesController do
       }
     end
 
-    it "rejects a role id while the upstream is still Anthropic" do
-      post_messages(request_payload.merge(model: "gumhead-chat"))
+    it "rewrites a Claude family name that carries an OpenRouter variant suffix" do
+      use_openrouter_base
+      stub_request(:post, openrouter_messages_url)
+        .to_return(status: 200, body: anthropic_response.merge(model: "x-ai/grok-4.6").to_json, headers: { "Content-Type" => "application/json" })
 
-      expect(response.status).to eq(400)
-      expect(WebMock).not_to have_requested(:post, messages_url)
+      post_messages(request_payload.merge(model: "claude-opus-4-7:online"))
+
+      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
+        JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
+      }
     end
 
-    # Forwarded body plus a response that omits model: the ledger then
-    # records @body["model"] after rewrite. A stub that already names
-    # grok would pass with the rewrite reverted.
-    %w[gumhead-chat gumhead-status gumhead-cover].each do |role_id|
-      it "allows #{role_id}, rewrites it on the upstream POST, and records the billed model" do
-        use_openrouter_base
-        stub_request(:post, openrouter_messages_url)
-          .to_return(status: 200, body: anthropic_response.except(:model).to_json, headers: { "Content-Type" => "application/json" })
+    it "does not rewrite when the configured base is still the Anthropic host" do
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_UPSTREAM_API_BASE", described_class::DEFAULT_UPSTREAM_API_BASE)
+        .and_return("https://api.anthropic.com/v1/")
+      stub_request(:post, %r{\Ahttps://api\.anthropic\.com/v1/+messages\z})
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
 
-        post_messages(request_payload.merge(model: role_id))
+      post_messages
 
-        expect(response.status).to eq(200)
-        expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
-          JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
-        }
-        expect(GumheadUsageEvent.sole.model).to eq("x-ai/grok-4.6")
-      end
+      expect(WebMock).to have_requested(:post, %r{\Ahttps://api\.anthropic\.com/v1/+messages\z}).with { |req|
+        JSON.parse(req.body)["model"] == "claude-sonnet-5" &&
+          req.headers["X-Api-Key"] == "sk-ant-gateway-test" &&
+          req.headers["Authorization"].nil?
+      }
+    end
+
+    it "turns an OpenRouter HTTP 200 error envelope into a gateway error" do
+      use_openrouter_base
+      stub_request(:post, openrouter_messages_url)
+        .to_return(
+          status: 200,
+          body: { error: { message: "Provider returned error" } }.to_json,
+          headers: { "Content-Type" => "application/json" },
+        )
+
+      post_messages
+
+      expect(response.status).to eq(502)
+      expect(JSON.parse(response.body)).to eq(
+        "type" => "error",
+        "error" => { "type" => "api_error", "message" => "Provider returned error" },
+      )
+      expect(GumheadUsageEvent.count).to eq(0)
     end
 
     it "records the outgoing model on a synthetic timeout charge" do
