@@ -8,12 +8,12 @@ describe("checkout cart-item uid mapping", () => {
     const source = (await import("$app/pages/Checkout/Show.tsx?raw")).default;
 
     const getProducts = source.match(
-      /function getProducts\(state: CartState\): Product\[] \{[\s\S]*?return \{[\s\S]*?uid: getCartItemUid\(item\),/,
+      /function getProducts\(state: CartState\): Product\[] \{[\s\S]*?return \{[\s\S]*?uid: getCartItemUid\(item\),/u,
     );
     expect(getProducts).not.toBeNull();
 
     const orderLine = source.match(
-      /return linePricing\.map\(\(\{ item, discounted, discountedPriceToChargeNow \}, index\) => \{[\s\S]*?uid: getCartItemUid\(item\),/,
+      /return linePricing\.map\(\(\{ item, discounted, discountedPriceToChargeNow \}, index\) => \{[\s\S]*?uid: getCartItemUid\(item\),/u,
     );
     expect(orderLine).not.toBeNull();
   });
@@ -21,7 +21,7 @@ describe("checkout cart-item uid mapping", () => {
   it("derives uid from permalink and option, including a blank option", async () => {
     const source = (await import("$app/pages/Checkout/Show.tsx?raw")).default;
     expect(source).toMatch(
-      /function getCartItemUid\(item: CartItem\) \{\s*return `\$\{item\.product\.permalink\} \$\{item\.option_id \?\? ""\}`;/,
+      /function getCartItemUid\(item: CartItem\) \{\s*return `\$\{item\.product\.permalink\} \$\{item\.option_id \?\? ""\}`;/u,
     );
   });
 });
