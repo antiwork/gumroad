@@ -16,14 +16,14 @@ class GumheadUsageEvent < ApplicationRecord
 
   # Cache tokens are billed too, so the input cap counts a cost-weighted
   # total — otherwise a cache-heavy agent loop would spend almost entirely
-  # outside the cap. Defaults follow Grok 4.6 ($2 input / $0.50 cache
-  # read, no write premium). Anthropic's 1.25 / 2 / 0.1 stay available
-  # via GlobalConfig if the upstream moves back.
+  # outside the cap. Defaults stay Anthropic (1.25 / 2 / 0.1). Set the
+  # GUMHEAD_CACHE_* knobs when the upstream moves to Grok ($2 / $0.50
+  # cache read, no write premium) so the ledger does not lie.
   # `cache_creation_input_tokens` is the total across both TTLs, so the
   # 1-hour share is stored separately and re-weighted here.
-  CACHE_CREATION_COST_MULTIPLIER = 1.0
-  CACHE_CREATION_1H_COST_MULTIPLIER = 1.0
-  CACHE_READ_COST_MULTIPLIER = 0.25
+  CACHE_CREATION_COST_MULTIPLIER = 1.25
+  CACHE_CREATION_1H_COST_MULTIPLIER = 2
+  CACHE_READ_COST_MULTIPLIER = 0.1
 
   def self.input_equivalent_tokens_today(user)
     creation = cache_cost_multiplier("GUMHEAD_CACHE_CREATION_COST_MULTIPLIER", CACHE_CREATION_COST_MULTIPLIER)

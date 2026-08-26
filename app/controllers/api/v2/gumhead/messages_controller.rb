@@ -318,10 +318,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # and `plugins` run extra paid work outside this ledger.
     def validate_pricing_modifiers
       speed_ok = @body["speed"].nil? || @body["speed"] == "standard"
-      extra = %w[inference_geo fallbacks plugins models provider route]
+      extra = %w[inference_geo fallbacks plugins models provider route service_tier]
       return if speed_ok && extra.none? { |key| @body.key?(key) }
 
-      render json: anthropic_error("invalid_request_error", "speed, inference_geo, fallbacks, plugins, models, provider, and route options are not available through the Gumhead gateway."), status: :bad_request
+      render json: anthropic_error("invalid_request_error", "speed, inference_geo, fallbacks, plugins, models, provider, route, and service_tier options are not available through the Gumhead gateway."), status: :bad_request
     end
 
     # A missing max_tokens passes through: Anthropic's own error for it is
@@ -611,11 +611,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def upstream_headers
       key = upstream_api_key
       headers = {
-        "x-api-key" => key,
-        "authorization" => "Bearer #{key}",
         "anthropic-version" => request.headers["anthropic-version"].presence || DEFAULT_ANTHROPIC_VERSION,
         "content-type" => "application/json",
       }
+      # Anthropic rejects a bearer token when x-api-key is also set.
+      # OpenRouter authenticates only with Authorization: Bearer.
+      if upstream_api_base == DEFAULT_UPSTREAM_API_BASE
+        headers["x-api-key"] = key
+      else
+        headers["authorization"] = "Bearer #{key}"
+      end
       beta = filtered_beta_features
       headers["anthropic-beta"] = beta if beta.present?
       headers

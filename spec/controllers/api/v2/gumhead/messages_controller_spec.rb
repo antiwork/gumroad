@@ -313,6 +313,9 @@ describe Api::V2::Gumhead::MessagesController do
 
       post_messages(request_payload.merge(models: ["x-ai/grok-4.6"]))
       expect(response.status).to eq(400)
+
+      post_messages(request_payload.merge(service_tier: "priority"))
+      expect(response.status).to eq(400)
     end
 
     # The runtime's real header, verbatim: every one of these must survive,
@@ -356,8 +359,7 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(200)
       expect(JSON.parse(response.body)["content"].first["text"]).to eq("Hello!")
       expect(WebMock).to have_requested(:post, messages_url).with { |req|
-        req.headers["X-Api-Key"] == "sk-ant-gateway-test" &&
-          req.headers["Authorization"] == "Bearer sk-ant-gateway-test"
+        req.headers["X-Api-Key"] == "sk-ant-gateway-test" && req.headers["Authorization"].nil?
       }
 
       event = GumheadUsageEvent.sole
@@ -794,7 +796,20 @@ describe Api::V2::Gumhead::MessagesController do
       post_messages
 
       expect(WebMock).to have_requested(:post, messages_url).with { |req|
-        req.headers["X-Api-Key"] == "sk-or-test" && req.headers["Authorization"] == "Bearer sk-or-test"
+        req.headers["X-Api-Key"] == "sk-or-test" && req.headers["Authorization"].nil?
+      }
+    end
+
+    it "sends a bearer token to OpenRouter and omits x-api-key" do
+      use_openrouter_base
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-or-test")
+      stub_request(:post, openrouter_messages_url)
+        .to_return(status: 200, body: anthropic_response.merge(model: "x-ai/grok-4.6").to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
+        req.headers["Authorization"] == "Bearer sk-or-test" && req.headers["X-Api-Key"].nil?
       }
     end
 
