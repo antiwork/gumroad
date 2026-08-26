@@ -140,6 +140,45 @@ describe Charge::MethodForcedPresentment do
         expect(charge.reload.charge_presentment).to be_nil
       end
     end
+
+    context "when UPI is selected without a displayed quote token" do
+      let(:payment_method_type) { "upi" }
+
+      before { Feature.activate_user(:checkout_local_method_upi, seller) }
+      after { Feature.deactivate_user(:checkout_local_method_upi, seller) }
+
+      it "fails closed instead of minting a second rate" do
+        expect(StripeFxQuote).not_to receive(:create)
+
+        expect(result).to be_nil
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+    end
+
+    context "when the Payment Element remounted in INR without a quote token" do
+      subject(:result) do
+        described_class.new(charge:,
+                            order:,
+                            seller:,
+                            merchant_account:,
+                            purchases: [purchase],
+                            amount_cents: 10_00,
+                            gumroad_amount_cents: 3_00,
+                            payment_method_type: "card",
+                            forced_currency: Currency::INR,
+                            params: { payment_element_mount_currency: Currency::INR }).perform
+      end
+
+      before { Feature.activate_user(:checkout_local_method_upi, seller) }
+      after { Feature.deactivate_user(:checkout_local_method_upi, seller) }
+
+      it "fails closed instead of minting a second rate" do
+        expect(StripeFxQuote).not_to receive(:create)
+
+        expect(result).to be_nil
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+    end
   end
 
   describe "product priced in the forced currency (direct listed-amount case)" do

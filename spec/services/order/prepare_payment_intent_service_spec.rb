@@ -2270,15 +2270,16 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         before { allow(StripeFxQuote).to receive(:create).and_return(quote) }
 
-        it "prepares the INR intent when the buyer selected UPI" do
+        it "fails closed when UPI is selected without the displayed quote" do
           order, params = build_order
           order.purchases.each { _1.update!(ip_country: "India") }
+          expect(StripeFxQuote).not_to receive(:create)
 
           create_args, responses = perform_with_upi_preview(order, params)
 
-          expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
-          expect(create_args[:currency]).to eq(Currency::INR)
-          expect(create_args[:payment_method_types]).to include("upi")
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.purchases.first.reload).to be_failed
         end
 
         it "fails closed when INR presentment cannot be recreated after a UPI selection" do
@@ -2319,8 +2320,17 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         it "prepares the INR intent when the buyer selected card on the remounted element" do
           order, params = build_order
-          params = params.merge(payment_element_mount_currency: Currency::INR)
+          params = params.merge(payment_element_mount_currency: Currency::INR, buyer_currency_quote: "displayed-inr-quote")
           order.purchases.each { _1.update!(ip_country: "India") }
+          locked = instance_double(
+            Checkout::BuyerCurrencyQuote::Result,
+            stripe_fx_quote_id: "fxq_displayed_card",
+            fx_rate: BigDecimal("0.012048"),
+            stripe_fx_quote_expires_at: 30.minutes.from_now,
+            charge_presentment_total_cents: 1_659_17
+          )
+          allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked)
+          expect(StripeFxQuote).not_to receive(:create)
 
           preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
           allow(Stripe::ConfirmationToken).to receive(:retrieve)

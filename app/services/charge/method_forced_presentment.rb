@@ -20,7 +20,9 @@
 #   2. USD-priced product: convert the canonical USD total through an FX quote.
 #      When checkout already displayed a locked quote (the USD listing remounted in
 #      INR so UPI could appear), reuse that quote — minting a second rate would show
-#      one INR amount and charge another. Mint only when no displayed token was sent.
+#      one INR amount and charge another. Mint only for methods that never remounted
+#      (iDEAL on a USD listing). A remounted INR element or UPI selection without a
+#      token fails closed.
 #
 # Returns nil whenever the checkout is ineligible or anything fails, which leaves the
 # caller on today's canonical USD behavior. Cleanup of persisted rows when the prepared
@@ -202,8 +204,9 @@ class Charge::MethodForcedPresentment
     end
 
     # A displayed token is the amount the Payment Element mounted. An invalid token must
-    # not fall through to minting a second rate. No token (iDEAL on a USD listing that
-    # never remounted) still mints, matching the previous prepare-time path.
+    # not fall through to minting a second rate. UPI and an INR remount require that
+    # token — minting here would charge a different rate than the element showed.
+    # iDEAL on a USD listing never remounted, so no token still mints.
     def locked_or_minted_quote(currency, quote_merchant_account)
       token = params[:buyer_currency_quote].presence
       if token.present?
@@ -223,6 +226,11 @@ class Charge::MethodForcedPresentment
         return [locked.stripe_fx_quote_id, locked.fx_rate, locked.stripe_fx_quote_expires_at, locked.charge_presentment_total_cents]
       end
 
+      if displayed_quote_required?(currency)
+        Rails.logger.info("Method-forced presentment rejected missing displayed quote for charge #{charge.external_id}")
+        return nil
+      end
+
       quote = StripeFxQuote.create(
         to_currency: Currency::USD,
         from_currency: currency,
@@ -238,6 +246,13 @@ class Charge::MethodForcedPresentment
     rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
       Rails.logger.info("Method-forced presentment rejected displayed quote for charge #{charge.external_id}: #{e.message}")
       nil
+    end
+
+    def displayed_quote_required?(currency)
+      return true if payment_method_type.to_s.downcase == "upi"
+
+      mount = params[:payment_element_mount_currency].to_s.downcase
+      mount.present? && mount == currency.to_s.downcase
     end
 
     # Same conversion as Checkout::BuyerCurrencyQuote / Charge::PresentmentOrchestrator:
