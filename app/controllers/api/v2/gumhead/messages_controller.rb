@@ -57,16 +57,17 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # a deploy — any upstream must speak the Anthropic Messages protocol.
   DEFAULT_UPSTREAM_API_BASE = "https://api.anthropic.com/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
-  # The shipped app still sends claude-* names. Role ids stay out of
-  # this hop; they need an app change. Caps are token-denominated, so
-  # an unlisted pricier SKU cannot spend faster.
-  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-"
-  # Family prefixes rewrite every allowed Claude name, including
-  # OpenRouter :online variants, once the base leaves Anthropic.
+  # Claude families plus exact role ids newer builds send. Role ids
+  # pass only after the hop is on. Family prefixes rewrite every
+  # allowed Claude name, including OpenRouter :online variants.
+  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-,gumhead-chat,gumhead-status,gumhead-cover"
   DEFAULT_MODEL_MAP = {
     "claude-sonnet-" => "x-ai/grok-4.6",
     "claude-haiku-" => "x-ai/grok-4.6",
     "claude-opus-" => "x-ai/grok-4.6",
+    "gumhead-chat" => "x-ai/grok-4.6",
+    "gumhead-status" => "x-ai/grok-4.6",
+    "gumhead-cover" => "x-ai/grok-4.6",
   }.freeze
   # Matches nginx's client_max_body_size; a larger constant here would
   # document a limit requests can never reach.
@@ -229,9 +230,19 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     def validate_model
       model = @body["model"].to_s
-      return if allowed_model_prefixes.any? { |prefix| model.start_with?(prefix) }
+      return if allowed_incoming_model?(model)
 
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
+    end
+
+    # Role ids have no Anthropic SKU. They pass only when we will rewrite
+    # them. Claude family prefixes stay valid on both hosts.
+    def allowed_incoming_model?(model)
+      allowed_model_prefixes.any? do |prefix|
+        next false unless model.start_with?(prefix)
+
+        prefix.start_with?("claude-") || rewrite_upstream_model?
+      end
     end
 
     # Incoming names stay on the Claude allowlist so the shipped app
@@ -356,7 +367,6 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       if upstream.status.success?
         parsed = safe_parse_json(body)
         if parsed.is_a?(Hash) && parsed["error"].is_a?(Hash)
-          meter_buffered_usage(body) if meter
           message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
           return render json: anthropic_error("api_error", message), status: :bad_gateway
         end
