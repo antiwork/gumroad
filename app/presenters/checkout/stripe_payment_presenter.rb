@@ -142,7 +142,9 @@ class Checkout::StripePaymentPresenter
           # the browser mounts canonical USD exactly as if this flag were false.
           buyer_currency_presentment:,
           payment_method_types: ["card"],
-          inr_local_methods:,
+          # UPI confirm is the deferred client-confirm path. Advertising it here mounts
+          # a method this manual-creation card Element cannot charge.
+          inr_local_methods: [],
           payment_method_creation: "manual",
           # Link auto-enables with the Payment Element: it's inline (PaymentMethod-mode here, no
           # return-page/webhook dependency), and Stripe's dashboard payment-method settings remain

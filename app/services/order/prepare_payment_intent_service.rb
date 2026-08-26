@@ -770,8 +770,11 @@ class Order::PreparePaymentIntentService
         return true if Checkout::BuyerCurrencyEligibility.seller_enabled?(seller) &&
                        uniform_method_forced_purchase_currency == currency
 
-        # USD carts remount in INR so UPI can appear. Card/Link tokens from that remount
-        # still need an INR intent, but only for sellers who have not opted out of buyer currency.
+        # A quoted card remount in EUR/INR/BRL is bound by the signed quote, not by
+        # whether iDEAL/UPI/Pix is launched. Those launch flags only decide whether
+        # the local method itself may be offered. Require a launched local method only
+        # when there is no displayed quote to honor.
+        return true if quote_bound_presentment_currency?(currency)
         return Checkout::BuyerCurrencyEligibility.local_method_quote_enabled?(seller, currency)
       end
 

@@ -2157,6 +2157,33 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
+    it "does not advertise UPI on the server-confirm presentment Element" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.24", "India")
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::INR,
+          }
+        )
+      ]
+
+      props = stripe_payment_props(add_products:, ip: "203.0.113.24")
+
+      expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
+      expect(props.dig(:elements_options, :inr_local_methods)).to eq([])
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
     it "drops the US-locked methods (Cash App Pay, ACH) from the forced-currency element for a US buyer" do
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       activate_buyer_currency_flags(seller)

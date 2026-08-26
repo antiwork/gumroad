@@ -2419,6 +2419,18 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to include("card")
         expect(create_args[:payment_method_types]).not_to include("cashapp")
       end
+
+      it "treats a quoted EUR remount as honorable without the iDEAL launch flag" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: "eur",
+          buyer_currency_quote: "displayed-eur-quote",
+        )
+
+        service = described_class.new(order:, params:, confirmation_token: "ctoken_card_eur")
+
+        expect(service.send(:honorable_element_mount_currency?, "eur")).to eq(true)
+      end
     end
 
     context "on an opted-in USD cart remounted in INR" do
