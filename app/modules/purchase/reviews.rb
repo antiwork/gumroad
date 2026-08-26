@@ -43,6 +43,32 @@ module Purchase::Reviews
     allows_reviews(permit_recurring_charges: true)
   end
 
+  def rater_name
+    rater_identity_name.presence || "Anonymous"
+  end
+
+  def rater_identity_name
+    # Physical gifts already collected a shipping name; a later-linked account may not be the recipient.
+    return rater_checkout_name.presence if gift_receiver_with_shipping_address?
+
+    purchaser&.name.presence || rater_checkout_name.presence
+  end
+
+  def rater_uses_account_identity?
+    purchaser.present? && !gift_receiver_with_shipping_address?
+  end
+
+  # Digital giftee full_name is the sender's. Classify from the purchase
+  # row, not the live product flag — sellers can flip require_shipping.
+  def rater_checkout_name
+    return if is_gift_receiver_purchase? && !gift_receiver_with_shipping_address?
+    full_name
+  end
+
+  def gift_receiver_with_shipping_address?
+    is_gift_receiver_purchase? && street_address.present?
+  end
+
   private
     def allows_reviews(permit_recurring_charges:)
       allowed = purchase_state.in?(COUNTS_REVIEWS_STATES)

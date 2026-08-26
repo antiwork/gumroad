@@ -400,4 +400,62 @@ describe Purchase::Reviews do
       end
     end
   end
+
+  describe "#rater_name" do
+    it "uses the purchaser name" do
+      purchaser = create(:user, name: "Reviewer")
+      purchase = create(:purchase, purchaser:, full_name: "Checkout Name")
+
+      expect(purchase.rater_name).to eq("Reviewer")
+    end
+
+    it "falls back to the purchase full_name for a guest" do
+      purchase = create(:purchase, purchaser: nil, full_name: "Checkout Name")
+
+      expect(purchase.rater_name).to eq("Checkout Name")
+    end
+
+    it "does not attribute a digital gift review to the sender's copied full_name" do
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Mahmood Pervaiz")
+
+      expect(giftee_purchase.rater_name).to eq("Anonymous")
+      expect(giftee_purchase.rater_identity_name).to be_nil
+    end
+
+    it "uses the giftee account name even when the purchase still has the sender's full_name" do
+      giftee = create(:user, name: "Sabrina")
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Mahmood Pervaiz")
+
+      expect(giftee_purchase.rater_name).to eq("Sabrina")
+    end
+
+    it "keeps the sender name available for gift receipt subjects" do
+      giftee = create(:user, name: "Sabrina")
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Mahmood Pervaiz")
+
+      expect(giftee_purchase.rater_name).to eq("Sabrina")
+      expect(giftee_purchase.gifter_full_name).to eq("Mahmood Pervaiz")
+    end
+
+    it "keeps the shipping name on a physical gift" do
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Sabrina Rehman", street_address: "1 Main St")
+
+      expect(giftee_purchase.rater_name).to eq("Sabrina Rehman")
+    end
+
+    it "keeps the shipping name on a physical gift even when the giftee has a different account name" do
+      giftee = create(:user, name: "Account Name")
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Sabrina Rehman", street_address: "1 Main St")
+
+      expect(giftee_purchase.rater_name).to eq("Sabrina Rehman")
+      expect(giftee_purchase.rater_uses_account_identity?).to eq(false)
+    end
+
+    it "does not treat a digital gift as physical when the product later requires shipping" do
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Mahmood Pervaiz")
+      giftee_purchase.link.update!(require_shipping: true)
+
+      expect(giftee_purchase.rater_name).to eq("Anonymous")
+    end
+  end
 end

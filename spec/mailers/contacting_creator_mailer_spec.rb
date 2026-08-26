@@ -2727,6 +2727,16 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to have_link("View all reviews", href: review.link.long_url)
     end
 
+    it "does not name the gift sender when the giftee purchase inherited their full_name" do
+      giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Mahmood Pervaiz")
+      review = create(:product_review, purchase: giftee_purchase)
+
+      mail = ContactingCreatorMailer.review_submitted(review.id)
+
+      expect(mail.subject).to eq("#{giftee_purchase.email} reviewed #{review.link.name}")
+      expect(mail.body.encoded).not_to have_text("Mahmood Pervaiz")
+    end
+
     context "no message" do
       before { review.update!(message: nil) }
       it "omits the quotation marks" do
