@@ -703,6 +703,16 @@ describe Api::V2::Gumhead::MessagesController do
       expect(GumheadUsageEvent.count).to eq(0)
     end
 
+    it "passes through a 404 from Anthropic count_tokens" do
+      stub_request(:post, count_tokens_url)
+        .to_return(status: 404, body: { type: "error", error: { type: "not_found_error", message: "Not Found" } }.to_json)
+
+      post :count_tokens, body: request_payload.to_json, as: :json
+
+      expect(response.status).to eq(404)
+      expect(JSON.parse(response.body)["error"]["type"]).to eq("not_found_error")
+    end
+
     it "shares the concurrent in-flight limit" do
       key = RedisKey.gumhead_gateway_in_flight(@user.id)
       described_class::MAX_IN_FLIGHT_REQUESTS.times { |i| $redis.zadd(key, Time.current.to_f, "lease-#{i}") }

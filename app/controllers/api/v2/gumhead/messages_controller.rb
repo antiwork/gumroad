@@ -135,7 +135,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # the in-flight limit.
   def count_tokens
     with_in_flight_slot do
-      forward_buffered("#{upstream_api_base}/messages/count_tokens", meter: false, missing_ok: true)
+      forward_buffered("#{upstream_api_base}/messages/count_tokens", meter: false, missing_ok: !anthropic_upstream?)
     end
   end
 
@@ -652,6 +652,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # One-deploy fallback: ops can store the OpenRouter key in the
       # existing GUMHEAD_ANTHROPIC_API_KEY name while flipping the base.
       GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence || GlobalConfig.get("GUMHEAD_ANTHROPIC_API_KEY")
+    end
+
+    def anthropic_upstream?
+      upstream_api_base == DEFAULT_UPSTREAM_API_BASE
     end
 
     def upstream_api_base
