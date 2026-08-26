@@ -799,6 +799,27 @@ describe Api::V2::Gumhead::MessagesController do
       end
     end
 
+    it "rejects a suffixed role id instead of treating it as a prefix" do
+      use_openrouter_base
+
+      post_messages(request_payload.merge(model: "gumhead-chat-extra"))
+
+      expect(response.status).to eq(400)
+      expect(WebMock).not_to have_requested(:post, openrouter_messages_url)
+    end
+
+    it "rejects a role id that is missing from the allowlist" do
+      use_openrouter_base
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_ALLOWED_MODEL_PREFIXES", described_class::DEFAULT_ALLOWED_MODEL_PREFIXES)
+        .and_return("claude-sonnet-,claude-haiku-,claude-opus-")
+
+      post_messages(request_payload.merge(model: "gumhead-chat"))
+
+      expect(response.status).to eq(400)
+      expect(WebMock).not_to have_requested(:post, openrouter_messages_url)
+    end
+
     it "rewrites a Claude family name that carries an OpenRouter variant suffix" do
       use_openrouter_base
       stub_request(:post, openrouter_messages_url)

@@ -58,9 +58,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   DEFAULT_UPSTREAM_API_BASE = "https://api.anthropic.com/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
   # Claude families plus exact role ids newer builds send. Role ids
-  # pass only after the hop is on. Family prefixes rewrite every
-  # allowed Claude name, including OpenRouter :online variants.
-  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-"
+  # are listed here so validate_model can admit them, but they are
+  # not prefixes: only an exact allowlist hit plus a rewrite passes.
+  # Family prefixes rewrite every allowed Claude name, including
+  # OpenRouter :online variants.
+  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-,gumhead-chat,gumhead-status,gumhead-cover"
   DEFAULT_MODEL_MAP = {
     "claude-sonnet-" => "x-ai/grok-4.6",
     "claude-haiku-" => "x-ai/grok-4.6",
@@ -235,18 +237,25 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
     end
 
-    # Role ids have no Anthropic SKU. They pass only when this request
-    # will rewrite that exact id. Claude family prefixes stay valid on
-    # both hosts. Other ops prefixes keep the old always-on allowlist.
+    # Role ids have no Anthropic SKU. They pass only as an exact
+    # allowlist hit, and only when this request will rewrite that id.
+    # Claude family prefixes stay valid on both hosts. Other ops
+    # prefixes keep the old always-on allowlist. Role id strings are
+    # never used as prefixes, so gumhead-chat-extra stays out.
     def allowed_incoming_model?(model)
-      return true if allowed_model_prefixes.any? { |prefix| prefix.start_with?("claude-") && model.start_with?(prefix) }
+      prefixes = allowed_model_prefixes
+      return true if prefixes.any? { |prefix| prefix.start_with?("claude-") && model.start_with?(prefix) }
       if incoming_role_id?(model)
+        return false unless prefixes.include?(model)
         return false unless rewrite_upstream_model?
         outgoing = mapped_upstream_model(model)
         return outgoing.present? && outgoing != model
       end
 
-      allowed_model_prefixes.any? { |prefix| model.start_with?(prefix) }
+      prefixes.any? do |prefix|
+        next false if incoming_role_id?(prefix)
+        model.start_with?(prefix)
+      end
     end
 
     def incoming_role_id?(model)
