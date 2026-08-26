@@ -4,32 +4,28 @@ require "spec_helper"
 
 describe InternalNotificationMailer do
   describe "#notify" do
-    # Use the "risk" room, which maps to INTERNAL_NOTIFICATION_EMAIL — a recipient
-    # that is intentionally distinct from INTERNAL_NOTIFICATION_ALWAYS_CC. This keeps
-    # the `to` and `cc` assertions below meaningful even if PAYMENTS_NOTIFICATION_EMAIL
-    # and the always-CC address ever resolve to the same value in a shared config.
+    # Payments is finance@, always-CC is gumclaw@ — distinct, so To vs Cc is meaningful.
+    # Risk/ops rooms now also default to gumclaw (never hi@), so they cannot be used
+    # to assert a distinct CC.
     subject(:mail) do
       described_class.notify(
-        room_name: "risk",
+        room_name: "payments",
         sender: "VAT Reporting",
         message_text: "VAT report generated successfully."
       )
     end
 
     it "sends to the configured email for the room" do
-      expect(mail.to).to eq([INTERNAL_NOTIFICATION_EMAIL])
+      expect(mail.to).to eq([PAYMENTS_NOTIFICATION_EMAIL])
     end
 
     it "CCs Gumclaw on every notification in addition to the room recipient" do
-      # The mailer dedups the CC when it equals the room's own recipient, so this
-      # assertion is only meaningful while the two addresses are distinct. Assert the
-      # prerequisite explicitly rather than relying on it implicitly.
       expect(INTERNAL_NOTIFICATION_ALWAYS_CC).not_to eq(mail.to.first)
       expect(mail.cc).to eq([INTERNAL_NOTIFICATION_ALWAYS_CC])
     end
 
     it "sets the subject with room name and sender" do
-      expect(mail.subject).to eq("[test] [risk] VAT Reporting")
+      expect(mail.subject).to eq("[test] [payments] VAT Reporting")
     end
 
     it "includes the sender and message in the body" do
@@ -62,11 +58,12 @@ describe InternalNotificationMailer do
         )
       end
 
-      # The room exists to keep autonomously-worked reports out of human inboxes
-      # (gumroad-private#2106); pointing it at a human recipient regresses that silently.
+      # Agent-only inbox. Risk/ops also go to gumclaw now (never hi@), so the
+      # regression to watch is leaking to finance@ or hi@.
       it "delivers to the agent inbox only" do
         expect(mail.to).to eq([INTERNAL_NOTIFICATION_ALWAYS_CC])
-        expect(mail.to).not_to include(INTERNAL_NOTIFICATION_EMAIL)
+        expect(mail.to).not_to include(PAYMENTS_NOTIFICATION_EMAIL)
+        expect(mail.to).not_to include("hi@gumroad.com")
         expect(mail.cc).to be_nil
       end
     end
