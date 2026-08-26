@@ -307,6 +307,12 @@ describe Api::V2::Gumhead::MessagesController do
 
       post_messages(request_payload.merge(fallbacks: [{ model: "claude-opus-5" }]))
       expect(response.status).to eq(400)
+
+      post_messages(request_payload.merge(plugins: [{ id: "web" }]))
+      expect(response.status).to eq(400)
+
+      post_messages(request_payload.merge(models: ["x-ai/grok-4.6"]))
+      expect(response.status).to eq(400)
     end
 
     # The runtime's real header, verbatim: every one of these must survive,
@@ -473,7 +479,7 @@ describe Api::V2::Gumhead::MessagesController do
       post_messages
 
       expect(response.status).to eq(502)
-      expect(GumheadUsageEvent.sole.input_tokens).to eq(request_payload.merge(model: "x-ai/grok-4.6").to_json.bytesize)
+      expect(GumheadUsageEvent.sole.input_tokens).to eq(request_payload.to_json.bytesize)
     end
 
     it "charges nothing when the connection itself times out" do
@@ -702,34 +708,55 @@ describe Api::V2::Gumhead::MessagesController do
 
   describe "upstream hop" do
     let(:openrouter_messages_url) { "https://openrouter.ai/api/v1/messages" }
+    let(:openrouter_count_tokens_url) { "https://openrouter.ai/api/v1/messages/count_tokens" }
     let(:rewritten_payload_bytesize) { request_payload.merge(model: "x-ai/grok-4.6").to_json.bytesize }
 
-    it "rewrites an allowed Claude alias to the mapped OpenRouter id before forwarding" do
+    def use_openrouter_base
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_UPSTREAM_API_BASE", described_class::DEFAULT_UPSTREAM_API_BASE)
+        .and_return("https://openrouter.ai/api/v1")
+    end
+
+    it "does not rewrite Claude aliases while the upstream is still Anthropic" do
       stub_request(:post, messages_url)
         .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages
 
-      expect(response.status).to eq(200)
       expect(WebMock).to have_requested(:post, messages_url).with { |req|
+        JSON.parse(req.body)["model"] == "claude-sonnet-5"
+      }
+    end
+
+    it "rewrites an allowed Claude alias to the mapped OpenRouter id before forwarding" do
+      use_openrouter_base
+      stub_request(:post, openrouter_messages_url)
+        .to_return(status: 200, body: anthropic_response.merge(model: "x-ai/grok-4.6").to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
         JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
       }
     end
 
     it "maps a versioned Claude name by prefix" do
-      stub_request(:post, messages_url)
+      use_openrouter_base
+      stub_request(:post, openrouter_messages_url)
         .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages(request_payload.merge(model: "claude-sonnet-5-20250514"))
 
-      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
         JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
       }
     end
 
     it "records the outgoing model on a synthetic timeout charge" do
-      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
-      stub_request(:post, count_tokens_url)
+      use_openrouter_base
+      stub_request(:post, openrouter_messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, openrouter_count_tokens_url)
         .to_return(status: 200, body: { input_tokens: 37 }.to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages
@@ -738,15 +765,16 @@ describe Api::V2::Gumhead::MessagesController do
     end
 
     it "leaves the model untouched when the map has no matching entry" do
+      use_openrouter_base
       allow(GlobalConfig).to receive(:get)
         .with("GUMHEAD_MODEL_MAP", described_class::DEFAULT_MODEL_MAP)
         .and_return({})
-      stub_request(:post, messages_url)
+      stub_request(:post, openrouter_messages_url)
         .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages
 
-      expect(WebMock).to have_requested(:post, messages_url).with { |req|
+      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
         JSON.parse(req.body)["model"] == "claude-sonnet-5"
       }
     end
@@ -786,7 +814,8 @@ describe Api::V2::Gumhead::MessagesController do
     end
 
     it "returns a synthetic token count when upstream count_tokens is missing" do
-      stub_request(:post, count_tokens_url)
+      use_openrouter_base
+      stub_request(:post, openrouter_count_tokens_url)
         .to_return(status: 404, body: { type: "error", error: { type: "not_found_error", message: "Not Found" } }.to_json)
 
       post :count_tokens, body: request_payload.to_json, as: :json
@@ -797,8 +826,9 @@ describe Api::V2::Gumhead::MessagesController do
     end
 
     it "charges the byte fallback when count_tokens returns 404 during a timeout" do
-      stub_request(:post, messages_url).to_raise(HTTP::TimeoutError)
-      stub_request(:post, count_tokens_url).to_return(status: 404, body: "Not Found")
+      use_openrouter_base
+      stub_request(:post, openrouter_messages_url).to_raise(HTTP::TimeoutError)
+      stub_request(:post, openrouter_count_tokens_url).to_return(status: 404, body: "Not Found")
 
       post_messages
 

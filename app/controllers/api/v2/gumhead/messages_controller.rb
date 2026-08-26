@@ -235,16 +235,26 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
     end
 
-    # Incoming names stay on the allowlist so both the shipped claude-*
-    # builds and the role-id ones pass validate_model. The body that goes
-    # upstream uses the mapped id, and the ledger records that billed name.
+    # Incoming names stay on the Claude allowlist so the shipped app
+    # passes validate_model. The built-in Grok map applies only when the
+    # upstream is no longer Anthropic, so a deploy that has not flipped
+    # the base still sends Claude ids. An explicit GUMHEAD_MODEL_MAP
+    # always applies. The ledger records the billed outgoing name.
     def rewrite_upstream_model
+      return unless rewrite_upstream_model?
+
       incoming = @body["model"].to_s
       outgoing = mapped_upstream_model(incoming)
       return if outgoing.blank? || outgoing == incoming
 
       @body["model"] = outgoing
       @raw_body = @body.to_json
+    end
+
+    def rewrite_upstream_model?
+      return true if GlobalConfig.get("GUMHEAD_MODEL_MAP").present?
+
+      upstream_api_base != DEFAULT_UPSTREAM_API_BASE
     end
 
     def mapped_upstream_model(model)
@@ -304,14 +314,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     # `speed: "fast"` and `inference_geo` carry pricing multipliers the
-    # ledger does not weight, and `fallbacks` runs extra attempts whose
-    # nested options bypass every top-level validator here. All three would
-    # spend the shared key invisibly.
+    # ledger does not weight. `fallbacks`, `models`, `provider`, `route`,
+    # and `plugins` run extra paid work outside this ledger.
     def validate_pricing_modifiers
       speed_ok = @body["speed"].nil? || @body["speed"] == "standard"
-      return if speed_ok && @body["inference_geo"].nil? && !@body.key?("fallbacks")
+      extra = %w[inference_geo fallbacks plugins models provider route]
+      return if speed_ok && extra.none? { |key| @body.key?(key) }
 
-      render json: anthropic_error("invalid_request_error", "speed, inference_geo, and fallbacks options are not available through the Gumhead gateway."), status: :bad_request
+      render json: anthropic_error("invalid_request_error", "speed, inference_geo, fallbacks, plugins, models, provider, and route options are not available through the Gumhead gateway."), status: :bad_request
     end
 
     # A missing max_tokens passes through: Anthropic's own error for it is
