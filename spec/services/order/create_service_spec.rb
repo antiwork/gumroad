@@ -71,7 +71,64 @@ describe Order::CreateService, :vcr do
     }.merge(common_order_params_without_payment)
   end
 
+  def signed_buyer_currency_quote(seller:, product:, rate:, canonical_components:)
+    payload = {
+      "charges" => [
+        {
+          "seller_id" => seller.id,
+          "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
+          "listed_currency_rates" => { product.unique_permalink => rate },
+          "listed_currency_codes" => { product.unique_permalink => product.price_currency_type.to_s.downcase },
+          "canonical_line_components" => canonical_components,
+        }
+      ]
+    }
+    Rails.application.message_verifier(Checkout::BuyerCurrencyQuote::TOKEN_PURPOSE).generate(payload)
+  end
+
   describe "#perform" do
+    it "threads buyer-currency quote line binding through combined-order purchase creation" do
+      seller_1.update!(tipping_enabled: true)
+      product_1.update!(price_currency_type: Currency::EUR, price_cents: 15_00)
+      line_uid = "tz "
+      params[:line_items] = [
+        {
+          uid: line_uid,
+          permalink: product_1.unique_permalink,
+          price_cents: 17_25,
+          perceived_price_cents: 17_25,
+          tip_cents: 2_25,
+          quantity: 1,
+        }
+      ]
+      params[:buyer_currency_quote] = signed_buyer_currency_quote(
+        seller: seller_1,
+        product: product_1,
+        rate: "0.8571",
+        canonical_components: [
+          {
+            "uid" => line_uid,
+            "line_index" => 0,
+            "permalink" => product_1.unique_permalink,
+            "price_cents" => 17_50,
+            "tip_cents" => 2_63,
+            "seller_tax_cents" => 0,
+            "gumroad_tax_cents" => 0,
+            "shipping_cents" => 0,
+          }
+        ]
+      )
+      params[:payment_details_source] = "payment_element"
+      params[:confirmation_token] = "ctoken_123"
+
+      order, purchase_responses = Order::CreateService.new(params:).perform
+
+      expect(purchase_responses).to be_empty
+      purchase = order.purchases.sole
+      expect(purchase.tip.value_usd_cents).to eq(2_63)
+      expect(purchase.total_transaction_cents).to eq(20_13)
+    end
+
     it "rejects carts above the product limit before allocating discounts" do
       stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 4)
       expect(OfferCodeDiscountComputingService).not_to receive(:new)

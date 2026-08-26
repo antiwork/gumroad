@@ -53,6 +53,7 @@ const initialArgs = {
   products: [
     {
       permalink: "abc",
+      uid: "abc ",
       name: "Product",
       creator: { id: "creator", name: "Creator", profile_url: "", avatar_url: "" },
       quantity: 1,
@@ -243,6 +244,7 @@ describe("createReducer surcharge refetches", () => {
     await act(() => vi.advanceTimersByTimeAsync(300));
 
     expect(requests[0]?.payload).toMatchObject({
+      products: [expect.objectContaining({ permalink: "abc", uid: "abc " })],
       payment_details_source: "payment_element",
       payment_element_mount_currency: "cad",
       payment_element_direct_listed_currency: "cad",

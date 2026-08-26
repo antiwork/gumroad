@@ -124,6 +124,7 @@ export type CheckoutPaymentConfig =
 
 export type Product = {
   permalink: string;
+  uid?: string | undefined;
   name: string;
   creator: Creator;
   quantity: number;
@@ -913,6 +914,7 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
         const tipCents = item.hasFreeTrial && !isGift ? 0 : (lineTips[index] ?? 0);
         return {
           permalink: item.permalink,
+          uid: item.uid,
           quantity: item.quantity,
           price: item.hasFreeTrial && !isGift ? 0 : Math.round(item.price + tipCents),
           tip_cents: tipCents,

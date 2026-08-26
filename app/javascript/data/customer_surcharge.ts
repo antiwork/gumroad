@@ -6,6 +6,7 @@ import { request, ResponseError } from "$app/utils/request";
 export type GetSurchargesRequest = {
   products: {
     permalink: string;
+    uid?: string | undefined;
     quantity: number;
     price: number;
     // The share of the buyer's tip included in `price`, so the server can carve it back out
