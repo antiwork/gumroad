@@ -162,11 +162,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   };
   const fileExists = file && file.status.type !== "removed";
   React.useEffect(() => {
-    if (
-      file?.is_streamable &&
-      file.status.type === "unsaved" &&
-      file.status.uploadStatus.type === "uploading"
-    )
+    if (file?.is_streamable && file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading")
       generateThumbnail();
   }, [file?.status.type]);
 
