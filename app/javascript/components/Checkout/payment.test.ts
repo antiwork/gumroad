@@ -22,6 +22,7 @@ import {
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
   requiresReusablePaymentMethod,
+  shouldSuppressClientConfirmWallets,
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
   STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
   type CheckoutPaymentConfig,
@@ -990,6 +991,40 @@ describe("client-confirm buyer-currency quote", () => {
     expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 2_813 });
     expect(getStripePaymentElementAmount(s)).toBe(2_813);
     expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("suppresses wallets as soon as a client-confirm checkout selects or loads a buyer currency", () => {
+    expect(
+      shouldSuppressClientConfirmWallets(
+        state({
+          checkoutPayment: paymentElementClientConfirmConfig,
+          buyerCurrency: "cad",
+          surcharges: { type: "pending" },
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      shouldSuppressClientConfirmWallets(
+        state({
+          checkoutPayment: paymentElementClientConfirmConfig,
+          paymentMethod: "stripePaymentRequest",
+          paymentElementType: "apple_pay",
+          surcharges: quotedSurcharges,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not suppress wallets on server-confirm presentment or canonical client-confirm checkout", () => {
+    expect(
+      shouldSuppressClientConfirmWallets(
+        state({ checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig, surcharges: quotedSurcharges }),
+      ),
+    ).toBe(false);
+    expect(shouldSuppressClientConfirmWallets(state({ checkoutPayment: paymentElementClientConfirmConfig }))).toBe(
+      false,
+    );
   });
 
   it("holds the method-forced mount while the replacement quote is loading", () => {
