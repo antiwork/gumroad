@@ -435,6 +435,7 @@ const CheckoutIndexPage = () => {
       const renewalPrice = discountLimitedToFirstCycle ? item.price * item.quantity : price;
       return {
         permalink: item.product.permalink,
+        uid: getCartItemUid(item),
         name: item.product.name,
         creator: item.product.creator,
         requireShipping: item.product.require_shipping,
