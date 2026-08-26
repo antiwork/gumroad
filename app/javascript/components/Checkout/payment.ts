@@ -568,6 +568,10 @@ export function getStripePaymentElementAmount(state: State) {
     state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
   )
     return null;
+  // A client-confirm surface can become quote-backed after a total-affecting edit. Prefer the
+  // loaded quote before the server-rendered listed amount from the stale initial configuration.
+  const presentment = getStripePaymentElementPresentment(state);
+  if (presentment) return presentment.amountCents;
   // Direct-listed surfaces mount in the listed currency, so the USD total below would be the
   // wrong unit. The server supplies the listed amount instead.
   if (
@@ -577,25 +581,24 @@ export function getStripePaymentElementAmount(state: State) {
       (getSelectableDirectListedCurrency(state) !== null && state.buyerCurrency?.toLowerCase() !== "usd"))
   )
     return state.checkoutPayment.elements_options.presentment_amount_cents;
-  // Buyer-currency presentment lane: the element mounts in the quote currency, so the amount
-  // must be the quote's locked local-currency total, not the USD amount below.
-  const presentment = getStripePaymentElementPresentment(state);
-  if (presentment) return presentment.amountCents;
   // Partial-payment carts mount with the amount the server will charge now, not the agreement total.
   return getChargeTodayPrice(state);
 }
 
 // The mount currency + amount for the buyer-currency presentment lane, or null everywhere else.
-// Non-null only when the server chose the lane (buyer_currency_presentment on the server-confirm
-// Payment Element config) AND the surcharge response carries a usable FX quote for this checkout.
+// Non-null when the server chose the lane, or when a stale client-confirm configuration receives
+// a usable quote after a total-affecting edit.
 // Both the element mount and the charge derive from that one quote — the element shows the
 // buyer the exact local-currency amount whose signed token the server verifies at charge time.
 // When the quote is missing or suppressed (expired/errored quote, or the buyer chose to save
 // the card, which PR 1 forces onto the canonical USD charge path), this returns null and the
 // element mounts canonical USD — matching the canonical charge the fallback performs.
 export function getStripePaymentElementPresentment(state: State): { currency: string; amountCents: number } | null {
-  if (state.checkoutPayment.integration !== "payment_element") return null;
-  if (!state.checkoutPayment.elements_options.buyer_currency_presentment) return null;
+  const presentmentEnabled =
+    (state.checkoutPayment.integration === "payment_element" &&
+      state.checkoutPayment.elements_options.buyer_currency_presentment) ||
+    clientConfirmBuyerCurrencyPresentmentEnabled(state);
+  if (!presentmentEnabled) return null;
   if (state.surcharges.type !== "loaded") return null;
 
   const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
@@ -615,14 +618,26 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
 // preserves the current Element instead of remounting and wiping entered card details.
 export function getStripePaymentElementMountCurrency(state: State): string | null {
   if (state.checkoutPayment.integration === "payment_element_client_confirm") {
-    if (getConfiguredDirectListedCurrency(state) !== null && state.surcharges.type !== "loaded") return null;
-    return getDesiredStripePaymentElementMountCurrency(state);
+    if (
+      (getConfiguredDirectListedCurrency(state) !== null || clientConfirmBuyerCurrencyPresentmentEnabled(state)) &&
+      state.surcharges.type !== "loaded"
+    )
+      return null;
+    return getStripePaymentElementPresentment(state)?.currency ?? getDesiredStripePaymentElementMountCurrency(state);
   }
   if (state.checkoutPayment.integration !== "payment_element") return null;
   const elementsOptions = state.checkoutPayment.elements_options;
   if (!elementsOptions.buyer_currency_presentment) return elementsOptions.currency;
   if (state.surcharges.type !== "loaded") return null;
   return getStripePaymentElementPresentment(state)?.currency ?? elementsOptions.currency;
+}
+
+function clientConfirmBuyerCurrencyPresentmentEnabled(state: State) {
+  return (
+    state.checkoutPayment.integration === "payment_element_client_confirm" &&
+    !state.checkoutPayment.recurring_upi_registration &&
+    getConfiguredDirectListedCurrency(state) === null
+  );
 }
 
 export function getConfiguredDirectListedCurrency(state: Pick<State, "checkoutPayment">): string | null {

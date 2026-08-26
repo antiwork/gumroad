@@ -141,6 +141,19 @@ const directListedCardConfig: CheckoutPaymentConfig = {
   },
 };
 
+const methodForcedEurConfig: CheckoutPaymentConfig = {
+  ...paymentElementClientConfirmConfig,
+  disable_wallets: true,
+  flat_payment_methods: true,
+  elements_options: {
+    ...paymentElementClientConfirmConfig.elements_options,
+    currency: "eur",
+    presentment_amount_cents: 1_500,
+    listed_currency_display: { currency: "eur", subunit_to_unit: 100 },
+    payment_method_types: ["card", "ideal"],
+  },
+};
+
 const product = (overrides: Partial<Product> = {}): Product => ({
   permalink: "product-a",
   name: "Product A",
@@ -928,6 +941,67 @@ describe("direct-listed card element", () => {
 
     expect(getStripePaymentElementAmount(s)).toBe(1_200);
     expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+});
+
+describe("client-confirm buyer-currency quote", () => {
+  const quotedSurcharges = {
+    type: "loaded" as const,
+    result: {
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 0,
+      tax_cents: 0,
+      tax_included_cents: 0,
+      subtotal: 2_013,
+      buyer_currency_quote: {
+        token: "quote-token",
+        currency: "cad" as const,
+        canonical_total_cents: 2_013,
+        presentment_total_cents: 2_813,
+        charge_presentment_total_cents: 2_813,
+        rate: 1.3974,
+        subunit_to_unit: 100,
+        expires_at: "2026-08-26T16:00:00Z",
+        line_allocations: [
+          {
+            permalink: "product-a",
+            price_cents: 2_446,
+            tip_cents: 367,
+            tax_cents: 0,
+            shipping_cents: 0,
+            total_cents: 2_813,
+          },
+        ],
+      },
+    },
+  };
+
+  it("remounts a stale method-forced element onto the tipped third-currency quote", () => {
+    const s = state({
+      checkoutPayment: methodForcedEurConfig,
+      buyerCurrency: "cad",
+      products: [product({ hasTippingEnabled: true })],
+      tip: { type: "percentage", percentage: 15 },
+      surcharges: quotedSurcharges,
+    });
+
+    expect(getConfiguredDirectListedCurrency(s)).toBeNull();
+    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 2_813 });
+    expect(getStripePaymentElementAmount(s)).toBe(2_813);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("holds the method-forced mount while the replacement quote is loading", () => {
+    const s = state({
+      checkoutPayment: methodForcedEurConfig,
+      products: [product({ hasTippingEnabled: true })],
+      tip: { type: "percentage", percentage: 15 },
+      surcharges: { type: "pending" },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBeNull();
+    expect(getStripePaymentElementMountCurrency(s)).toBeNull();
   });
 });
 
