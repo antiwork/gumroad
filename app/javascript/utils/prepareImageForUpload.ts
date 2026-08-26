@@ -1,6 +1,19 @@
 import FileUtils from "$app/utils/file";
 
 const DECODE_EXTENSIONS = ["heic", "heif", "avif", "bmp", "tif", "tiff", "jpeg", "jpg", "png", "webp", "gif"];
+const DECODE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/avif",
+  "image/bmp",
+  "image/x-bmp",
+  "image/tiff",
+  "image/tif",
+]);
 const PASSTHROUGH_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const DEFAULT_MAX_DIMENSION = 4096;
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
@@ -11,7 +24,9 @@ export type PrepareImageOptions = {
 };
 
 export const isLikelyImageFile = (file: File): boolean => {
-  if (file.type.startsWith("image/")) return true;
+  // SVG/ICO/etc. are image/* but we cannot re-encode them; leave those to the
+  // existing extension allow-lists so they still fail as invalid file types.
+  if (DECODE_TYPES.has(file.type.toLowerCase())) return true;
   const ext = FileUtils.getFileExtension(file.name).toLowerCase();
   return DECODE_EXTENSIONS.includes(ext);
 };

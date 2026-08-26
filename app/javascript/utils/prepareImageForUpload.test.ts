@@ -9,6 +9,7 @@ describe("isLikelyImageFile", () => {
     expect(isLikelyImageFile(new File([""], "photo.HEIC"))).toBe(true);
     expect(isLikelyImageFile(new File([""], "shot.avif"))).toBe(true);
     expect(isLikelyImageFile(new File([""], "notes.pdf", { type: "application/pdf" }))).toBe(false);
+    expect(isLikelyImageFile(new File(["<svg></svg>"], "logo.svg", { type: "image/svg+xml" }))).toBe(false);
   });
 });
 
