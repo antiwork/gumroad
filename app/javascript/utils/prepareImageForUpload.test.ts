@@ -43,9 +43,11 @@ describe("prepareImageForUpload", () => {
       cb(new Blob([new Uint8Array(1200)], { type: "image/jpeg" }));
     });
     vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(toBlob);
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
-      drawImage: vi.fn(),
-    } as unknown as CanvasRenderingContext2D);
+    // happy-dom's canvas.getContext("2d") is null; this helper only calls drawImage.
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      { drawImage: vi.fn() } as unknown as CanvasRenderingContext2D,
+    );
 
     const result = await prepareImageForUpload(file, { maxBytes: 5 * 1024 * 1024, maxDimension: 4096 });
 
