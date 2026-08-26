@@ -71,15 +71,15 @@ class Checkout::PaymentMethodListToken
 
       def types_for_currency(payload, currency)
         mount = currency.to_s.downcase.presence
-        remount_key = if mount == "inr"
-          "inr_types"
+        candidates = []
+        if mount == "inr"
+          candidates << payload["inr_types"]
+          candidates << payload["quoted_types"]
         elsif mount.present? && mount != "usd"
-          "quoted_types"
+          candidates << payload["quoted_types"]
         end
-        remount = remount_key && payload[remount_key]
-        return remount if string_types?(remount)
-
-        payload["types"] if string_types?(payload["types"])
+        candidates << payload["types"]
+        candidates.find { string_types?(_1) }
       end
 
       def string_types?(types)
