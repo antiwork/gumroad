@@ -62,9 +62,9 @@ it("settles the subtitle upload promise when Evaporate errors", async () => {
   expect(settled).toBe(true);
   expect(alerts).toEqual([{ message: "Subtitle upload failed.", level: "error" }]);
   expect(cancelUpload).toHaveBeenCalled();
-  expect(dispatched).toContainEqual({
-    type: "remove-subtitle",
-    fileId: "file-1",
-    subtitleUrl: expect.any(String) as string,
-  });
+  const removed = dispatched.find((action) => action.type === "remove-subtitle");
+  expect(removed).toMatchObject({ type: "remove-subtitle", fileId: "file-1" });
+  if (removed?.type === "remove-subtitle") {
+    expect(typeof removed.subtitleUrl).toBe("string");
+  }
 });

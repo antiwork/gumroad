@@ -49,6 +49,7 @@ export const useConfigureEvaporate = (props: Props) => {
   );
 
   const cancellationKeysToUploadIdsRef = React.useRef<Record<string, string>>({});
+  const cancelledKeysRef = React.useRef(new Set<string>());
   const scheduleUpload = ({
     cancellationKey,
     name,
@@ -66,6 +67,7 @@ export const useConfigureEvaporate = (props: Props) => {
     onProgress: (progress: UploadProgress) => void;
     onError?: () => void;
   }) => {
+    cancelledKeysRef.current.delete(cancellationKey);
     let previousProgress = 0;
     let errorNotified = false;
 
@@ -77,7 +79,8 @@ export const useConfigureEvaporate = (props: Props) => {
       xAmzHeadersAtInitiate: { "x-amz-acl": "private" },
       complete: onComplete,
       error: () => {
-        if (errorNotified) return;
+        // stop() aborts in-flight sign/initiate/complete XHRs, which call error.
+        if (cancelledKeysRef.current.has(cancellationKey) || errorNotified) return;
         errorNotified = true;
         onError?.();
       },
@@ -108,6 +111,7 @@ export const useConfigureEvaporate = (props: Props) => {
   };
 
   const cancelUpload = (cancellationKey: string) => {
+    cancelledKeysRef.current.add(cancellationKey);
     const uploadId = cancellationKeysToUploadIdsRef.current[cancellationKey];
     // Evaporate's first queued file is id 0; a truthy check would skip cancel and
     // leave the original File in use after the toolbar input is reset.

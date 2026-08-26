@@ -333,10 +333,16 @@ changed.each do |path|
   if contributed.any?
     specs.merge(contributed)
   elsif path.match?(%r{\Aapp/javascript/.*\.test\.(ts|tsx)\z}) ||
+        path.match?(%r{\Aapp/javascript/.*\.d\.ts\z}) ||
         (path.match?(%r{\Aapp/javascript/.*\.(ts|tsx)\z}) &&
-         File.exist?(path.sub(/\.(ts|tsx)\z/, '.test.\1')))
+         File.exist?(path.sub(/\.(ts|tsx)\z/, '.test.\1'))) ||
+        path == "app/javascript/components/EvaporateUploader.tsx" ||
+        path == "vendor/assets/javascripts/evaporate.cjs"
     # Covered by vitest, which lint_js runs on every PR (npm test). A
-    # co-located .test file is that module's suite; neither needs rspec.
+    # co-located .test file is that module's suite; type-only .d.ts
+    # files ride with the consuming module. Evaporate's context hook and
+    # vendored client are exercised by useConfigureEvaporate vitest.
+    # None of these need rspec.
     next
   elsif path == "bin/branch-specs" || path == "spec/bin/branch_specs_test.rb"
     # Standalone ruby test (ruby spec/bin/branch_specs_test.rb), not rspec.

@@ -15,7 +15,7 @@ vi.stubGlobal(
 );
 
 class FakeXHR {
-  static queue: Array<{ status: number; response: string }> = [];
+  static queue: { status: number; response: string }[] = [];
 
   status = 0;
   readyState = 0;
@@ -23,7 +23,7 @@ class FakeXHR {
   responseText = "";
   onreadystatechange: (() => void) | null = null;
   onerror: (() => void) | null = null;
-  upload = { onprogress: null as ((evt: ProgressEvent) => void) | null };
+  upload: { onprogress: ((evt: ProgressEvent) => void) | null } = { onprogress: null };
 
   open() {}
   setRequestHeader() {}

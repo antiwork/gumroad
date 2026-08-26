@@ -86,3 +86,37 @@ it("forwards Evaporate's error callback to onError", () => {
 
   expect(onError).toHaveBeenCalled();
 });
+
+it("does not forward onError after cancel", () => {
+  let errorCb: (() => void) | undefined;
+  evaporate.add.mockImplementation((params: { error?: () => void; initiated: (id: number) => void }) => {
+    errorCb = params.error;
+    params.initiated(0);
+    return 0;
+  });
+  evaporate.cancel.mockImplementation(() => {
+    errorCb?.();
+  });
+  const onError = vi.fn();
+
+  const { result } = renderHook(() =>
+    useConfigureEvaporate({
+      aws_access_key_id: "key",
+      s3_url: "https://s3.amazonaws.com/bucket",
+      user_id: "user-1",
+    }),
+  );
+
+  result.current.evaporateUploader.scheduleUpload({
+    cancellationKey: "subtitles_for_file",
+    name: "key",
+    file: new File(["x"], "huge.srt", { type: "text/plain" }),
+    mimeType: "text/plain",
+    onComplete: () => {},
+    onProgress: () => {},
+    onError,
+  });
+  result.current.evaporateUploader.cancelUpload("subtitles_for_file");
+
+  expect(onError).not.toHaveBeenCalled();
+});
