@@ -1,6 +1,11 @@
 import * as React from "react";
 
 import FileUtils from "$app/utils/file";
+import {
+  canResetFileInputAfterSnapshot,
+  fileListMatchesPickedFiles,
+  snapshotPickedFiles,
+} from "$app/utils/snapshotPickedFile";
 
 import { buttonVariants } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -14,13 +19,20 @@ const acceptedSubtitleExtensions = FileUtils.getAllowedSubtitleExtensions()
 export const SubtitleUploadBox = ({ onUploadFiles }: UploadBoxProps) => {
   const filePickerOnChange = (fileInput: HTMLInputElement) => {
     if (!fileInput.files) return;
-    const files = [...fileInput.files];
-    if (files.some((file) => !FileUtils.isFileNameASubtitle(file.name))) {
+    const picked = [...fileInput.files];
+    if (picked.some((file) => !FileUtils.isFileNameASubtitle(file.name))) {
       showAlert("Invalid file type.", "error");
       return;
     }
-    fileInput.value = "";
-    onUploadFiles(files);
+    void snapshotPickedFiles(picked)
+      .then((files) => {
+        onUploadFiles(files);
+        if (fileListMatchesPickedFiles(fileInput.files, picked) && canResetFileInputAfterSnapshot(picked, files))
+          fileInput.value = "";
+      })
+      .catch((error: unknown) => {
+        showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+      });
   };
 
   return (

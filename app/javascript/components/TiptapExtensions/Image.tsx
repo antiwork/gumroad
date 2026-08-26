@@ -9,6 +9,11 @@ import typia from "typia";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
+import {
+  canResetFileInputAfterSnapshot,
+  fileListMatchesPickedFiles,
+  snapshotPickedFiles,
+} from "$app/utils/snapshotPickedFile";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import {
@@ -43,6 +48,7 @@ export const uploadImages = ({
   view,
   files,
   imageSettings,
+  insertAt = getInsertAtFromSelection(view.state.selection),
 }: {
   view: EditorView;
   files: File[];
@@ -64,7 +70,6 @@ export const uploadImages = ({
 
   if (!validFiles.length) return;
 
-  const insertAt = getInsertAtFromSelection(view.state.selection);
   const imageSchema = assertDefined(view.state.schema.nodes.image, "Image node type missing");
 
   // We reverse the files so their order in the editor is the same as the order they were selected
@@ -237,10 +242,20 @@ export const Image = TiptapNode.create({
           type="file"
           accept={imageSettings.allowedExtensions.map((ext) => `.${ext}`).join(",")}
           onChange={(e) => {
-            const files = [...(e.target.files || [])];
-            if (!files.length) return;
-            uploadImages({ view: editor.view, files, imageSettings });
-            e.target.value = "";
+            const input = e.target;
+            const picked = [...(input.files || [])];
+            if (!picked.length) return;
+            // OS file dialog holds focus during pick, so the caret cannot move before snapshot finishes.
+            const insertAt = getInsertAtFromSelection(editor.view.state.selection);
+            void snapshotPickedFiles(picked)
+              .then((files) => {
+                uploadImages({ view: editor.view, files, imageSettings, insertAt });
+                if (fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files))
+                  input.value = "";
+              })
+              .catch((error: unknown) => {
+                showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+              });
           }}
         />
       </>
