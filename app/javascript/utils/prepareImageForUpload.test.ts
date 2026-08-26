@@ -45,7 +45,7 @@ describe("prepareImageForUpload", () => {
     vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(toBlob);
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
       drawImage: vi.fn(),
-    });
+    } as unknown as CanvasRenderingContext2D);
 
     const result = await prepareImageForUpload(file, { maxBytes: 5 * 1024 * 1024, maxDimension: 4096 });
 
