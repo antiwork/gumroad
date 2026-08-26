@@ -183,8 +183,14 @@ describe Order::CreateService, :vcr do
       [
         { billing_agreement_id: "B-123" },
         { braintree_transient_customer_store_key: "store-key", braintree_device_data: "device-data" },
-      ].each do |payment_params|
-        order_params = params.deep_dup.merge(payment_params, buyer_currency_quote: quote)
+      ].each_with_index do |payment_params, payment_index|
+        order_params = params.deep_dup.merge(
+          payment_params,
+          buyer_currency_quote: quote,
+          email: "native-payment-#{payment_index}@gumroad.com",
+          browser_guid: SecureRandom.uuid
+        )
+        order_params[:purchase][:email] = order_params[:email]
         order_params[:line_items] = [
           {
             uid: line_uid,
