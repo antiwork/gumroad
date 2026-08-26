@@ -25,6 +25,8 @@ class GumheadUsageEvent < ApplicationRecord
   CACHE_CREATION_1H_COST_MULTIPLIER = 2
   CACHE_READ_COST_MULTIPLIER = 0.1
 
+  # Current weights apply to every row from today. A mid-day hop is a
+  # one-time ops event, not a per-row snapshot.
   def self.input_equivalent_tokens_today(user)
     creation = cache_cost_multiplier("GUMHEAD_CACHE_CREATION_COST_MULTIPLIER", CACHE_CREATION_COST_MULTIPLIER)
     creation_1h = cache_cost_multiplier("GUMHEAD_CACHE_CREATION_1H_COST_MULTIPLIER", CACHE_CREATION_1H_COST_MULTIPLIER)
