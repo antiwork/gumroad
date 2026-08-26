@@ -101,7 +101,9 @@ export const useConfigureEvaporate = (props: Props) => {
 
   const cancelUpload = (cancellationKey: string) => {
     const uploadId = cancellationKeysToUploadIdsRef.current[cancellationKey];
-    if (uploadId) evaporate.cancel(uploadId);
+    // Evaporate's first queued file is id 0; a truthy check would skip cancel and
+    // leave the original File in use after the toolbar input is reset.
+    if (uploadId != null) evaporate.cancel(uploadId);
   };
 
   return { evaporateUploader: { scheduleUpload, cancelUpload }, s3UploadConfig };

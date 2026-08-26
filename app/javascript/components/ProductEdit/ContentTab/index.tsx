@@ -335,7 +335,19 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   };
   const uploader = assertDefined(useEvaporateUploader());
   const s3UploadConfig = useS3UploadConfig();
+  // An over-budget pick keeps the original File handle (see snapshotPickedFiles), and
+  // Evaporate re-slices that handle for every part, so the toolbar input can only be
+  // reset once each upload from the pick has completed or been cancelled.
+  const pendingFileInputResetRef = React.useRef<{ picked: File[]; uploadIds: Set<string> } | null>(null);
+  const settleFileInputUpload = (fileId: string) => {
+    const pending = pendingFileInputResetRef.current;
+    if (!pending?.uploadIds.delete(fileId) || pending.uploadIds.size > 0) return;
+    pendingFileInputResetRef.current = null;
+    const input = fileInputRef.current;
+    if (input && fileListMatchesPickedFiles(input.files, pending.picked)) input.value = "";
+  };
   const uploadFiles = (files: File[]) => {
+    const scheduledIds: string[] = [];
     const fileEntries = files.map((file) => {
       const id = FileUtils.generateGuid();
       const { s3key, fileUrl } = s3UploadConfig.generateS3KeyForUpload(id, file.name);
@@ -373,6 +385,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
           updateProduct((product) => {
             product.files = [...product.files];
           });
+          settleFileInputUpload(id);
         },
         onProgress: (progress) => {
           fileStatus.uploadStatus = { type: "uploading", progress };
@@ -384,11 +397,14 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
       if (typeof status === "string") {
         // status contains error string if any, otherwise index of file in array
         showAlert(status, "error");
+      } else {
+        scheduledIds.push(id);
       }
       return fileEntry;
     });
     updateProduct({ files: [...product.files, ...fileEntries] });
     onSelectFiles(fileEntries.map((file) => file.id));
+    return scheduledIds;
   };
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const uploadFileInput = (input: HTMLInputElement) => {
@@ -396,9 +412,12 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     const picked = [...input.files];
     void snapshotPickedFiles(picked)
       .then((files) => {
-        uploadFiles(files);
-        if (fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files))
-          input.value = "";
+        const uploadIds = uploadFiles(files);
+        if (!fileListMatchesPickedFiles(input.files, picked)) return;
+        // With no scheduled upload left, nothing holds the original handles and an
+        // immediate reset is safe.
+        if (canResetFileInputAfterSnapshot(picked, files) || uploadIds.length === 0) input.value = "";
+        else pendingFileInputResetRef.current = { picked, uploadIds: new Set(uploadIds) };
       })
       .catch((error: unknown) => {
         showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
@@ -411,7 +430,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     prepareDownload: save,
     filesById,
   });
-  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ filesById });
+  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ filesById, onUploadCancelled: settleFileInputUpload });
   const uploadFilesRef = useRefToLatest(uploadFiles);
   const contentEditorExtensions = extensions(id, [
     FileEmbedGroup.configure({ getConfig: () => fileEmbedGroupConfig.current }),

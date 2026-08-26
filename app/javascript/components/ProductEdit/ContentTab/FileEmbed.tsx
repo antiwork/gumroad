@@ -63,7 +63,13 @@ export const getDraggedFileEmbed = (editor: Editor) => {
 
 const DEFAULT_FILE_ROW_HEIGHT = 82;
 
-const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
+const FileEmbedNodeView = ({
+  node,
+  editor,
+  getPos,
+  updateAttributes,
+  config,
+}: NodeViewProps & { config: FileEmbedConfig | undefined }) => {
   if (!node.attrs.id) return;
 
   const { ref, visible, lastHeight } = useNodeVisibility(DEFAULT_FILE_ROW_HEIGHT);
@@ -234,6 +240,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const onCancel = () => {
     deleteNode();
     uploader.cancelUpload(`file_${file.id}`);
+    config?.onUploadCancelled?.(file.id);
     if (file.status.type === "dropbox") void cancelDropboxFileUpload(file.id);
     updateProduct((product) => {
       product.files = product.files.filter((f) => f.id !== file.id);
@@ -752,7 +759,12 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   );
 };
 
-export type FileEmbedConfig = { filesById: Map<string, FileEntry> };
+export type FileEmbedConfig = {
+  filesById: Map<string, FileEntry>;
+  // Cancelling releases Evaporate's hold on the picked File; the content tab uses this
+  // to know when the toolbar file input can be reset.
+  onUploadCancelled?: (fileId: string) => void;
+};
 
 export const FileEmbed = TiptapNode.create<{ getConfig?: () => FileEmbedConfig }>({
   name: "fileEmbed",
@@ -767,7 +779,9 @@ export const FileEmbed = TiptapNode.create<{ getConfig?: () => FileEmbedConfig }
   renderHTML: ({ HTMLAttributes }) => ["file-embed", HTMLAttributes],
 
   addNodeView() {
-    return ReactNodeViewRenderer(FileEmbedNodeView);
+    return ReactNodeViewRenderer((props: NodeViewProps) =>
+      FileEmbedNodeView({ ...props, config: this.options.getConfig?.() }),
+    );
   },
 
   addProseMirrorPlugins() {

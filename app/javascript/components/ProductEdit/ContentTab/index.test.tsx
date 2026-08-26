@@ -1,10 +1,13 @@
 // @vitest-environment happy-dom
-import { cleanup, render, act } from "@testing-library/react";
+import { cleanup, render, act, fireEvent } from "@testing-library/react";
 import type { Editor } from "@tiptap/core";
 import * as React from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { PICKED_FILE_SNAPSHOT_LIMIT_BYTES } from "$app/utils/snapshotPickedFile";
+
 import { ContentTabContent, rawDocContainsNode } from "$app/components/ProductEdit/ContentTab";
+import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { Product } from "$app/components/ProductEdit/state";
 
 // Capture the real mounted TipTap editor so the test can fire an update inside
@@ -54,11 +57,18 @@ vi.mock("$app/components/ProductEdit/Layout", async (importOriginal) => {
   const mod = await importOriginal<typeof import("$app/components/ProductEdit/Layout")>();
   return { ...mod, useProductUrl: () => "#" };
 });
+const scheduledUploads = vi.hoisted((): { file: File; onComplete: () => void }[] => []);
 vi.mock("$app/components/EvaporateUploader", async (importOriginal) => {
   const mod = await importOriginal<typeof import("$app/components/EvaporateUploader")>();
   return {
     ...mod,
-    useEvaporateUploader: () => ({ scheduleUpload: () => 0, cancelUpload: () => {} }),
+    useEvaporateUploader: () => ({
+      scheduleUpload: ({ file, onComplete }: { file: File; onComplete: () => void }) => {
+        scheduledUploads.push({ file, onComplete });
+        return 0;
+      },
+      cancelUpload: () => {},
+    }),
   };
 });
 vi.mock("$app/components/S3UploadConfig", async (importOriginal) => {
@@ -103,6 +113,7 @@ afterEach(() => {
   cleanup();
   mountedEditor = null;
   alerts.length = 0;
+  scheduledUploads.length = 0;
   sortable.echoList = false;
 });
 
@@ -604,4 +615,101 @@ it("keeps the newly selected variant's pages when a raw id is shared across tier
     { id: "shared-id", title: "Alpha" },
     { id: "extra-a", title: "A extra" },
   ]);
+});
+
+const attachToolbarFile = (input: HTMLInputElement, picked: File) => {
+  const valueWrites: string[] = [];
+  Object.defineProperty(input, "files", {
+    configurable: true,
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- minimal FileList for the handler
+    value: {
+      length: 1,
+      item: (index: number) => (index === 0 ? picked : null),
+      [Symbol.iterator]: () => [picked][Symbol.iterator](),
+    } as unknown as FileList,
+  });
+  Object.defineProperty(input, "value", {
+    configurable: true,
+    get: () => "",
+    set: (value: string) => valueWrites.push(value),
+  });
+  return valueWrites;
+};
+
+const renderToolbarPicker = async () => {
+  const product = buildProduct([{ id: "variant-a", name: "A", rich_content: [makePage("page-1", "PAGE")] }]);
+  context.product = product;
+  context.updateProduct = (update: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- narrowing the update union for the fixture
+    if (typeof update === "function") (update as (p: Product) => void)(product);
+    else Object.assign(product, update);
+  };
+  render(<ContentTabContent selectedVariantId="variant-a" />);
+  await act(async () => {});
+  const input = document.querySelector<HTMLInputElement>('input[name="file"]');
+  if (!input) throw new Error("Toolbar file input did not mount");
+  return { product, input };
+};
+
+it("uploads a snapshot copy of a small picked file and resets the toolbar input", async () => {
+  const { input } = await renderToolbarPicker();
+  const picked = new File(["file-bytes"], "notes.txt", { type: "text/plain" });
+  const valueWrites = attachToolbarFile(input, picked);
+
+  await act(async () => {
+    fireEvent.change(input);
+  });
+
+  const uploaded = scheduledUploads[0]?.file;
+  if (!uploaded) throw new Error("No upload was scheduled");
+  // A copy must be uploaded, not the picked File: resetting the input revokes the
+  // original's backing in Chromium, stranding the upload at 0%.
+  expect(uploaded).not.toBe(picked);
+  expect(uploaded.name).toBe("notes.txt");
+  expect(await uploaded.text()).toBe("file-bytes");
+  expect(valueWrites).toEqual([""]);
+});
+
+it("does not reset an over-budget pick until Evaporate completes", async () => {
+  const { input } = await renderToolbarPicker();
+  const picked = new File(["x"], "huge.mp4", { type: "video/mp4" });
+  Object.defineProperty(picked, "size", { value: PICKED_FILE_SNAPSHOT_LIMIT_BYTES + 1 });
+  const valueWrites = attachToolbarFile(input, picked);
+
+  await act(async () => {
+    fireEvent.change(input);
+  });
+
+  const uploaded = scheduledUploads[0];
+  if (!uploaded) throw new Error("No upload was scheduled");
+  expect(uploaded.file).toBe(picked);
+  expect(valueWrites).toEqual([]);
+
+  await act(async () => {
+    uploaded.onComplete();
+  });
+  expect(valueWrites).toEqual([""]);
+});
+
+it("resets an over-budget pick when the seller cancels the upload", async () => {
+  const { product, input } = await renderToolbarPicker();
+  const picked = new File(["x"], "huge.mp4", { type: "video/mp4" });
+  Object.defineProperty(picked, "size", { value: PICKED_FILE_SNAPSHOT_LIMIT_BYTES + 1 });
+  const valueWrites = attachToolbarFile(input, picked);
+
+  await act(async () => {
+    fireEvent.change(input);
+  });
+  expect(valueWrites).toEqual([]);
+
+  const fileId = product.files.at(-1)?.id;
+  if (!fileId) throw new Error("Picked file was not added");
+  const fileEmbed = getMountedEditor().extensionManager.extensions.find((ext) => ext.name === FileEmbed.name);
+  const onUploadCancelled = fileEmbed?.options.getConfig?.()?.onUploadCancelled;
+  if (!onUploadCancelled) throw new Error("FileEmbed cancel hook was not wired");
+
+  await act(async () => {
+    onUploadCancelled(fileId);
+  });
+  expect(valueWrites).toEqual([""]);
 });
