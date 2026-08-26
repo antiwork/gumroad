@@ -36,5 +36,15 @@ describe GumheadUsageEvent do
       # 30 * 1.0 = 30; 10 * 1.0 = 10; 100 * 0.25 = 25
       expect(described_class.input_equivalent_tokens_today(@user)).to eq(65)
     end
+
+    it "rejects a negative cache multiplier so cached traffic cannot shrink the cap" do
+      described_class.create!(user: @user, model: "claude-sonnet-5", cache_read_input_tokens: 100)
+      allow(GlobalConfig).to receive(:get).and_call_original
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_CACHE_READ_COST_MULTIPLIER", described_class::CACHE_READ_COST_MULTIPLIER)
+        .and_return(-1)
+
+      expect { described_class.input_equivalent_tokens_today(@user) }.to raise_error(ArgumentError)
+    end
   end
 end

@@ -40,7 +40,7 @@ class GumheadUsageEvent < ApplicationRecord
 
   def self.cache_cost_multiplier(name, default)
     value = Float(GlobalConfig.get(name, default))
-    raise ArgumentError, "#{name} must be a finite number" unless value.finite?
+    raise ArgumentError, "#{name} must be a finite non-negative number" unless value.finite? && value >= 0
     value
   end
   private_class_method :cache_cost_multiplier
