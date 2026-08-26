@@ -204,10 +204,10 @@ describe Checkout::PresentmentRounding do
       expect(described_class.enabled_for?(seller)).to eq(false)
     end
 
-    it "is off when the seller opted out of buyer-local currency entirely" do
+    it "stays on when the seller hid local-currency display on product pages" do
       seller.update!(disable_buyer_local_currency: true)
 
-      expect(described_class.enabled_for?(seller)).to eq(false)
+      expect(described_class.enabled_for?(seller)).to eq(true)
     end
 
     it "is off on fee-waived sales, where Gumroad may have no share to absorb the difference" do

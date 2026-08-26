@@ -33,7 +33,7 @@ class Checkout::StripePaymentPresenter
   # threaded into the deferred PaymentIntent by Order::PreparePaymentIntentService, so the Payment Element
   # and the intent cannot drift (Stripe rejects a payment_method_types-scoped ConfirmationToken against a
   # mismatched intent). Direct-listed and method-forced surfaces mount in their listed currency;
-  # every other client-confirm checkout stays in USD.
+  # other client-confirm checkouts start in USD and remount after the quote.
   CLIENT_CONFIRM_CURRENCY = "usd"
 
   attr_reader :cart, :add_products, :clear_cart, :saved_credit_card, :ip
@@ -273,7 +273,7 @@ class Checkout::StripePaymentPresenter
       end
       # Listed-currency Elements stay wallet-free until their sheet can be guaranteed to carry
       # the same final tax/tip/shipping total as the deferred intent.
-      disable_wallets = listed_currency || items.any? { buyer_currency_presentment_candidate?(_1) } || inr_local_methods.any?
+      disable_wallets = listed_currency || items.any? { buyer_currency_presentment_candidate?(_1) } || inr_local_methods.any? || client_confirm_quote_remount?
       if listed_currency
         # The ConfirmationToken inherits this currency and method set. Keep only methods the
         # matching non-USD intent can accept; prepare applies the same restrictions.
@@ -404,6 +404,15 @@ class Checkout::StripePaymentPresenter
                        Checkout::BuyerCurrencyEligibility.local_method_launched?("upi", seller)
 
       %w[upi]
+    end
+
+    # Client-confirm remounts the element in the quoted buyer currency. Wallets stay off
+    # because their sheet cannot carry that locked total.
+    def client_confirm_quote_remount?
+      return false unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
+
+      currency = buyer_currency_for_ip(ip).to_s.downcase.presence
+      currency.present? && currency != Currency::USD
     end
 
     def recurring_upi_registration_shape?(items)

@@ -589,13 +589,12 @@ export function getStripePaymentElementAmount(state: State) {
 }
 
 // The mount currency + amount for the buyer-currency presentment lane, or null everywhere else.
-// Non-null only when the server chose the lane (buyer_currency_presentment on the server-confirm
-// Payment Element config) AND the surcharge response carries a usable FX quote for this checkout.
-// Both the element mount and the charge derive from that one quote — the element shows the
-// buyer the exact local-currency amount whose signed token the server verifies at charge time.
-// When the quote is missing or suppressed (expired/errored quote, or the buyer chose to save
-// the card, which PR 1 forces onto the canonical USD charge path), this returns null and the
-// element mounts canonical USD — matching the canonical charge the fallback performs.
+// Server-confirm requires buyer_currency_presentment. Client-confirm remounts whenever the
+// surcharge response carries a usable FX quote, so any checkout can leave USD and the buyer
+// can pick the listed currency to come back. Both the element mount and the charge derive
+// from that one quote. When the quote is missing or suppressed (expired/errored quote, or
+// the buyer chose to save the card, which PR 1 forces onto the canonical USD charge path),
+// this returns null and the element mounts canonical USD.
 export function getStripePaymentElementPresentment(state: State): { currency: string; amountCents: number } | null {
   if (state.surcharges.type !== "loaded") return null;
 
@@ -613,8 +612,6 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   }
 
   if (state.checkoutPayment.integration === "payment_element_client_confirm") {
-    const upgradeMethods = state.checkoutPayment.elements_options.inr_local_methods ?? [];
-    if (!upgradeMethods.includes("upi") || display.currencyCode.toLowerCase() !== "inr") return null;
     return { currency: display.currencyCode, amountCents: display.chargePresentmentTotalCents };
   }
 

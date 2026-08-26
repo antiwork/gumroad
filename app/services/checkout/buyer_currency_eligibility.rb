@@ -146,23 +146,21 @@ class Checkout::BuyerCurrencyEligibility
 
   attr_reader :order, :seller, :merchant_account, :chargeable, :purchases, :params, :setup_future_charges, :off_session, :client_confirm
 
+  # Checkout presentment is on whenever the charging flags are. The product-page
+  # "show local currency" switch does not hide checkout, quotes, or the currency picker —
+  # buyers who want the listed currency select it there.
   def self.seller_enabled?(seller)
-    local_method_surface_enabled?(seller) &&
-      !seller.disable_buyer_local_currency?
+    local_method_surface_enabled?(seller)
   end
 
-  # UPI/iDEAL/Pix/Bancontact ride the buyer-currency charge infrastructure, but
-  # disable_buyer_local_currency is only a product-page display preference. A seller who
-  # turns that off must not lose local payment methods for Indian/Dutch/Brazilian buyers.
   def self.local_method_surface_enabled?(seller)
     seller.present? &&
       Feature.active?(FEATURE_NAME, seller) &&
       Feature.active?(:buyer_local_currency, seller)
   end
 
-  # Opted-out sellers may still mint an FX quote when the buyer's currency is one a
-  # launched local method can charge in (INR+UPI today). Other currencies stay on
-  # canonical USD so turning off local display does not silently start charging CAD/GBP.
+  # True when `currency` is one a launched local method can charge (INR+UPI, EUR+iDEAL).
+  # Used by prepare to honor an INR remount on a USD-listed cart.
   def self.local_method_quote_enabled?(seller, currency)
     local_method_surface_enabled?(seller) &&
       FORCED_CURRENCY_PAYMENT_METHODS.any? do |method, forced|

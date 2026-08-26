@@ -411,10 +411,7 @@ class Checkout::BuyerCurrencyQuote
     # that happened to be tried.
     return false unless line_items_by_seller.each_value.all? { |seller_lines| seller_lines.sum(&:canonical_total_cents).positive? }
     return false unless sellers_by_id.length == line_items_by_seller.length
-    return false unless sellers.all? do |seller|
-      Checkout::BuyerCurrencyEligibility.seller_enabled?(seller) ||
-        Checkout::BuyerCurrencyEligibility.local_method_surface_enabled?(seller)
-    end
+    return false unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
     # A line whose SHAPE cannot be quoted — a free trial, or a later-charge product from a seller
     # outside the subscription ramp. The one part of `quotable_line_item?` that does depend on the
     # currency is applied in `create`.
@@ -468,10 +465,7 @@ class Checkout::BuyerCurrencyQuote
     buyer_currency = currency.presence || buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
-    return unless sellers.all? do |seller|
-      Checkout::BuyerCurrencyEligibility.seller_enabled?(seller) ||
-        Checkout::BuyerCurrencyEligibility.local_method_quote_enabled?(seller, buyer_currency)
-    end
+    return unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
     return unless self.class.buyer_currency_listing_quotable?(line_items:, buyer_currency:)
 
     charge_quotes = line_items_by_seller.map do |seller_id, seller_line_items|

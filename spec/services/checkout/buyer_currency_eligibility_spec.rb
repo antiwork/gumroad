@@ -154,6 +154,20 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:feature_disabled)
   end
 
+  describe ".seller_enabled?" do
+    it "is on from the charging flags even when product-page local-currency display is off" do
+      seller.update!(disable_buyer_local_currency: true)
+
+      expect(described_class.seller_enabled?(seller)).to eq(true)
+    end
+
+    it "is off when either charging flag is off" do
+      Feature.deactivate_user(described_class::FEATURE_NAME, seller)
+
+      expect(described_class.seller_enabled?(seller)).to eq(false)
+    end
+  end
+
   it "stays eligible in live mode now that the card presentment path has shipped its safety gates" do
     allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
 

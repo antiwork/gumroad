@@ -1043,10 +1043,19 @@ describe("buyer-currency presentment lane", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
   });
 
-  it("ignores the quote when the server did not choose the presentment lane", () => {
+  it("ignores the quote on a server-confirm element that did not choose the presentment lane", () => {
     const s = state({ surcharges: loadedSurchargesWithQuote });
     expect(getStripePaymentElementPresentment(s)).toBeNull();
     expect(getStripePaymentElementAmount(s)).toBe(1_300);
+  });
+
+  it("remounts a client-confirm element in the quoted currency so any checkout can leave USD", () => {
+    const s = state({
+      checkoutPayment: paymentElementClientConfirmConfig,
+      surcharges: loadedSurchargesWithQuote,
+    });
+    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 625 });
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
   });
 
   it("returns null until surcharges load", () => {
