@@ -398,10 +398,11 @@ class Checkout::BuyerCurrencyQuote
         by_uid if by_uid && by_index && by_uid.equal?(by_index)
       elsif uid.present?
         by_uid
-      elsif !line_index.nil?
-        by_index
-      else
-        scoped.sole if scoped.one?
+      elsif scoped.one?
+        # Index (or sole-row) fallback is safe only when this permalink has one
+        # signed row. Two same-permalink rows without a uid can otherwise bind a
+        # sibling variant/PWYW split through a client-controlled index.
+        line_index.nil? ? scoped.sole : by_index
       end
     end
     return if components_payload.is_a?(Hash) && components.blank?

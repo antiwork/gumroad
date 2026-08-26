@@ -244,6 +244,8 @@ describe("createReducer surcharge refetches", () => {
     await act(() => vi.advanceTimersByTimeAsync(300));
 
     expect(requests[0]?.payload).toMatchObject({
+      // Production uid is computed in Show.tsx getProducts (see cartItemUidMapping.test.ts).
+      // This example only proves loadSurcharges forwards a product that already has one.
       products: [expect.objectContaining({ permalink: "abc", uid: "abc " })],
       payment_details_source: "payment_element",
       payment_element_mount_currency: "cad",
