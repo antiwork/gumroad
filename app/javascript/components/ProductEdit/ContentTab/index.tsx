@@ -52,6 +52,7 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { getMimeType } from "$app/utils/mimetypes";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 import { generatePageIcon } from "$app/utils/rich_content_page";
+import { canResetFileInputAfterSnapshot, snapshotPickedFiles } from "$app/utils/snapshotPickedFile";
 
 import { Button } from "$app/components/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
@@ -388,8 +389,15 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const uploadFileInput = (input: HTMLInputElement) => {
     if (!input.files?.length) return;
-    uploadFiles([...input.files]);
-    input.value = "";
+    const picked = [...input.files];
+    void snapshotPickedFiles(picked)
+      .then((files) => {
+        uploadFiles(files);
+        if (canResetFileInputAfterSnapshot(picked)) input.value = "";
+      })
+      .catch((error: unknown) => {
+        showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+      });
   };
 
   const fileEmbedGroupConfig = useRefToLatest({
@@ -858,13 +866,22 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                           multiple
                           onChange={(e) => {
                             if (!e.target.files) return;
-                            const [images, nonImages] = partition([...e.target.files], (file) =>
-                              file.type.startsWith("image"),
-                            );
-                            uploadImages({ view: editor.view, files: images, imageSettings });
-                            uploadFiles(nonImages);
-                            e.target.value = "";
-                            setShowEmbedModal(false);
+                            const picked = [...e.target.files];
+                            const input = e.target;
+                            void snapshotPickedFiles(picked)
+                              .then((files) => {
+                                const [images, nonImages] = partition(files, (file: File) => file.type.startsWith("image"));
+                                uploadImages({ view: editor.view, files: images, imageSettings });
+                                uploadFiles(nonImages);
+                                if (canResetFileInputAfterSnapshot(picked)) input.value = "";
+                                setShowEmbedModal(false);
+                              })
+                              .catch((error: unknown) => {
+                                showAlert(
+                                  error instanceof Error ? error.message : "Could not read the selected file.",
+                                  "error",
+                                );
+                              });
                           }}
                         />
                         <ArrowUp pack="filled" className="size-5" />
