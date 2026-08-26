@@ -766,13 +766,25 @@ class Order::PreparePaymentIntentService
       return true if direct_listed_decision.eligible? && direct_listed_decision.direct_listed_amount? &&
                      direct_listed_decision.currency == currency
 
-      return false unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
-      return true if Checkout::BuyerCurrencyEligibility.seller_enabled?(seller) &&
-                     uniform_method_forced_purchase_currency == currency
+      if Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+        return true if Checkout::BuyerCurrencyEligibility.seller_enabled?(seller) &&
+                       uniform_method_forced_purchase_currency == currency
 
-      # USD carts remount in INR so UPI can appear. Card/Link tokens from that remount
-      # still need an INR intent. disable_buyer_local_currency is only a display pref.
-      Checkout::BuyerCurrencyEligibility.local_method_quote_enabled?(seller, currency)
+        # USD carts remount in INR so UPI can appear. Card/Link tokens from that remount
+        # still need an INR intent. disable_buyer_local_currency is only a display pref.
+        return Checkout::BuyerCurrencyEligibility.local_method_quote_enabled?(seller, currency)
+      end
+
+      # Client-confirm remounts any quoted buyer currency. The signed quote is the
+      # chargeable-currency contract; a report without one is still fail-closed.
+      quote_bound_presentment_currency?(currency)
+    end
+
+    def quote_bound_presentment_currency?(currency)
+      return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+      return false if params[:buyer_currency_quote].blank?
+
+      StripeChargeProcessor.charge_minor_units_compatible?(currency)
     end
 
     # A ConfirmationToken from a non-USD Payment Element can never confirm a USD intent.

@@ -2352,6 +2352,76 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    context "on a USD-priced cart remounted in a quoted buyer currency" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true) }
+      let(:product) { create(:product, user: seller, price_cents: 10_00) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+      before do
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+
+      def perform_with_cad_card_preview(order, params)
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "CA" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_card_cad", client_secret: "pi_card_cad_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_cad").perform
+        [create_args, responses]
+      end
+
+      def locked_cad_quote
+        instance_double(
+          Checkout::BuyerCurrencyQuote::Result,
+          stripe_fx_quote_id: "fxq_displayed_cad",
+          fx_rate: BigDecimal("0.74"),
+          stripe_fx_quote_expires_at: 30.minutes.from_now,
+          charge_presentment_total_cents: 13_51
+        )
+      end
+
+      it "reuses the displayed CAD quote instead of failing the remount closed" do
+        order, params = build_order
+        params = params.merge(payment_element_mount_currency: "cad", buyer_currency_quote: "displayed-cad-quote")
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_cad_quote)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        create_args, responses = perform_with_cad_card_preview(order, params)
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq("cad")
+        expect(create_args[:stripe_fx_quote_id]).to eq("fxq_displayed_cad")
+        expect(create_args[:amount_cents]).to eq(13_51)
+        expect(Checkout::BuyerCurrencyQuote).to have_received(:verify!).with(hash_including(token: "displayed-cad-quote", currency: "cad"))
+      end
+
+      it "fails closed when the CAD remount has no displayed quote" do
+        order, params = build_order
+        params = params.merge(payment_element_mount_currency: "cad")
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        create_args, responses = perform_with_cad_card_preview(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+      end
+    end
 
     context "with a paid-upfront UPI Autopay membership" do
       let(:seller) { create(:user, disable_buyer_local_currency: false) }
