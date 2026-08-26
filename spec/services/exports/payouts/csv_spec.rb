@@ -316,6 +316,43 @@ describe Exports::Payouts::Csv, :vcr do
     end
   end
 
+  describe "affiliate fee day loop" do
+    # With no earlier completed payment the window floor falls back to
+    # OLDEST_DISPLAYABLE_PAYOUT_PERIOD_END_DATE (2013-01-04), and the per-day affiliate fee
+    # summaries then run 3 aggregates per processor for every calendar day since.
+    it "does not run a per-calendar-day aggregate for days with no affiliate activity" do
+      travel_to(Time.current.midday)
+
+      seller = create :user
+      affiliate = create(:direct_affiliate, affiliate_user: create(:user), seller:)
+      stripe_connect_account = create(:merchant_account_stripe_connect, user: seller,
+                                                                        charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d")
+
+      travel_to(1.month.ago) do
+        product = create :product, user: seller, name: "Day Loop Product", price_cents: 15000
+        create_purchase price_cents: 1000, seller:, link: product
+        create_purchase price_cents: 1000, seller:, link: product,
+                        affiliate:, merchant_account: stripe_connect_account
+      end
+
+      payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, seller)
+      expect(payout.user.payments.completed.where("created_at < ?", payout.created_at)).to be_empty
+
+      sums = []
+      callback = lambda do |_name, _start, _finish, _id, payload|
+        next if payload[:name] == "SCHEMA" || payload[:cached]
+        sums << payload[:sql] if payload[:sql].to_s.include?("SUM(")
+      end
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        Exports::Payouts::Csv.new(payment: payout).perform
+      end
+
+      expect(sums.size).to be < 100,
+                           "Expected the export to stop aggregating per calendar day, got #{sums.size} SUM queries"
+    end
+  end
+
   def csv_safe(value)
     return value if value.nil?
     str = value.to_s
