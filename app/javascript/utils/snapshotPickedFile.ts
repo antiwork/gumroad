@@ -27,3 +27,9 @@ export const snapshotPickedFiles = async (files: readonly File[]): Promise<File[
 
 export const canResetFileInputAfterSnapshot = (original: readonly File[], snapshotted: readonly File[]): boolean =>
   original.length === snapshotted.length && original.every((file, i) => file !== snapshotted[i]);
+
+export const fileListMatchesPickedFiles = (
+  fileList: Pick<FileList, "length" | "item"> | null,
+  files: readonly File[],
+): boolean =>
+  fileList != null && fileList.length === files.length && files.every((file, index) => fileList.item(index) === file);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canResetFileInputAfterSnapshot,
+  fileListMatchesPickedFiles,
   PICKED_FILE_SNAPSHOT_LIMIT_BYTES,
   snapshotPickedFile,
   snapshotPickedFiles,
@@ -54,6 +55,17 @@ describe("snapshotPickedFiles", () => {
     expect(copies[0]).not.toBe(first);
     expect(copies[1]).toBe(second);
     expect(await copies[0]?.text()).toBe("kept");
+  });
+});
+
+describe("fileListMatchesPickedFiles", () => {
+  it("is false when a later selection replaced the input's FileList", () => {
+    const first = new File(["a"], "a.txt");
+    const second = new File(["b"], "b.txt");
+    const fileList = { length: 1, item: (index: number) => (index === 0 ? second : null) };
+
+    expect(fileListMatchesPickedFiles(fileList, [first])).toBe(false);
+    expect(fileListMatchesPickedFiles(fileList, [second])).toBe(true);
   });
 });
 

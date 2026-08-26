@@ -52,7 +52,11 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { getMimeType } from "$app/utils/mimetypes";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 import { generatePageIcon } from "$app/utils/rich_content_page";
-import { canResetFileInputAfterSnapshot, snapshotPickedFiles } from "$app/utils/snapshotPickedFile";
+import {
+  canResetFileInputAfterSnapshot,
+  fileListMatchesPickedFiles,
+  snapshotPickedFiles,
+} from "$app/utils/snapshotPickedFile";
 
 import { Button } from "$app/components/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
@@ -393,7 +397,8 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     void snapshotPickedFiles(picked)
       .then((files) => {
         uploadFiles(files);
-        if (canResetFileInputAfterSnapshot(picked, files)) input.value = "";
+        if (fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files))
+          input.value = "";
       })
       .catch((error: unknown) => {
         showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
@@ -870,10 +875,16 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                             const input = e.target;
                             void snapshotPickedFiles(picked)
                               .then((files) => {
-                                const [images, nonImages] = partition(files, (file: File) => file.type.startsWith("image"));
+                                const [images, nonImages] = partition(files, (file: File) =>
+                                  file.type.startsWith("image"),
+                                );
                                 uploadImages({ view: editor.view, files: images, imageSettings });
                                 uploadFiles(nonImages);
-                                if (canResetFileInputAfterSnapshot(picked, files)) input.value = "";
+                                if (
+                                  fileListMatchesPickedFiles(input.files, picked) &&
+                                  canResetFileInputAfterSnapshot(picked, files)
+                                )
+                                  input.value = "";
                                 setShowEmbedModal(false);
                               })
                               .catch((error: unknown) => {
