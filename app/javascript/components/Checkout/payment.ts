@@ -612,6 +612,22 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   return { currency: display.currencyCode, amountCents: display.chargePresentmentTotalCents };
 }
 
+export function shouldSuppressClientConfirmWallets(state: State) {
+  if (!clientConfirmBuyerCurrencyPresentmentEnabled(state) || state.willSaveCard) return false;
+  if (state.buyerCurrency !== null && state.buyerCurrency.toLowerCase() !== "usd") return true;
+  if (state.surcharges.type !== "loaded") return false;
+
+  // Ignore the current wallet selection here: it suppresses the display helper, but must not
+  // keep that same wallet surface alive after a valid quote arrives.
+  return (
+    getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
+      cartPermalinks: state.products.map((product) => product.permalink),
+      paymentMethod: "card",
+      paymentElementType: "card",
+    }) !== null
+  );
+}
+
 // The currency the Payment Element should mount in. Direct-listed client-confirm checkouts use
 // the server-selected listed currency only while their cart stays eligible. The server-confirm
 // FX lane derives its currency from the surcharge quote; returning null while that quote reloads
