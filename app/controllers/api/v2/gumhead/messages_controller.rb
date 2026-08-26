@@ -510,7 +510,13 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
       unless upstream.status.success?
         copy_retry_after(upstream)
-        return render body: upstream.body.to_s, content_type: "application/json", status: upstream.status.code
+        body = upstream.body.to_s
+        parsed = safe_parse_json(body)
+        if openrouter_error_envelope?(parsed)
+          message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
+          return render json: anthropic_error("api_error", message), status: upstream.status.code
+        end
+        return render body:, content_type: "application/json", status: upstream.status.code
       end
       if upstream.headers["Content-Type"].to_s.include?("application/json") &&
          !upstream.headers["Content-Type"].to_s.include?("event-stream")
