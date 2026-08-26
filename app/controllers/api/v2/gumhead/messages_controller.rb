@@ -57,17 +57,19 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # a deploy — any upstream must speak the Anthropic Messages protocol.
   DEFAULT_UPSTREAM_API_BASE = "https://api.anthropic.com/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
-  # The shipped app still sends claude-* names. Role ids stay out of
-  # this hop; they need an app change. Caps are token-denominated, so
-  # an unlisted pricier SKU cannot spend faster. Ops can extend the
-  # list without a deploy via GUMHEAD_ALLOWED_MODEL_PREFIXES.
-  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-"
-  # Rewrite after validate_model, before the POST. Built-in Grok
-  # targets apply only once the base leaves Anthropic.
+  # Claude families the shipped app still sends, plus exact role ids
+  # newer builds send. Role ids pass only after the hop is on.
+  # Caps are token-denominated, so an unlisted pricier SKU cannot spend faster.
+  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-,gumhead-chat,gumhead-status,gumhead-cover"
+  # Incoming names stay on the allowlist; the body that goes upstream uses
+  # the mapped billed id once the base leaves Anthropic.
   DEFAULT_MODEL_MAP = {
     "claude-sonnet-5" => "x-ai/grok-4.6",
     "claude-haiku-4-5" => "x-ai/grok-4.6",
     "claude-opus-5" => "x-ai/grok-4.6",
+    "gumhead-chat" => "x-ai/grok-4.6",
+    "gumhead-status" => "x-ai/grok-4.6",
+    "gumhead-cover" => "x-ai/grok-4.6",
   }.freeze
   # Matches nginx's client_max_body_size; a larger constant here would
   # document a limit requests can never reach.
@@ -230,9 +232,19 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     def validate_model
       model = @body["model"].to_s
-      return if allowed_model_prefixes.any? { |prefix| model.start_with?(prefix) }
+      return if allowed_incoming_model?(model)
 
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
+    end
+
+    # Role ids have no Anthropic SKU. They pass only when we will rewrite
+    # them. Claude family prefixes stay valid on both hosts.
+    def allowed_incoming_model?(model)
+      allowed_model_prefixes.any? do |prefix|
+        next false unless model.start_with?(prefix)
+
+        prefix.start_with?("claude-") || rewrite_upstream_model?
+      end
     end
 
     # Incoming names stay on the Claude allowlist so the shipped app
