@@ -10,6 +10,7 @@ vi.mock("$app/components/server-components/Alert", () => ({
   showAlert: (message: string, level: string) => alerts.push({ message, level }),
 }));
 
+const cancelUpload = vi.hoisted(() => vi.fn());
 const scheduledUploads = vi.hoisted((): { onComplete: () => void; onError?: () => void }[] => []);
 
 vi.mock("$app/components/EvaporateUploader", () => ({
@@ -18,7 +19,7 @@ vi.mock("$app/components/EvaporateUploader", () => ({
       scheduledUploads.push(options);
       return 0;
     },
-    cancelUpload: () => {},
+    cancelUpload,
   }),
 }));
 
@@ -33,6 +34,7 @@ vi.mock("$app/components/S3UploadConfig", () => ({
 
 afterEach(() => {
   scheduledUploads.length = 0;
+  cancelUpload.mockReset();
   alerts.length = 0;
 });
 
@@ -59,6 +61,7 @@ it("settles the subtitle upload promise when Evaporate errors", async () => {
   await pending;
   expect(settled).toBe(true);
   expect(alerts).toEqual([{ message: "Subtitle upload failed.", level: "error" }]);
+  expect(cancelUpload).toHaveBeenCalled();
   expect(dispatched).toContainEqual({
     type: "remove-subtitle",
     fileId: "file-1",

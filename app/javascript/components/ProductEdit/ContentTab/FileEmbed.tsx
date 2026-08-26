@@ -338,6 +338,7 @@ const FileEmbedNodeView = ({
             },
             onError: () => {
               showAlert("Subtitle upload failed.", "error");
+              uploader.cancelUpload(`subtitles_for_${file.id}__${subtitleEntry.url}`);
               dropFailedSubtitle(subtitleEntry.url);
               settleSubtitleUpload(subtitleEntry.url);
             },

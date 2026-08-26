@@ -218,7 +218,7 @@ var Evaporate = function(config){
 
 
     function setStatus(s){
-      if (s == COMPLETE || s == ERROR || s == CANCELED){
+      if (s == COMPLETE || s == ERROR || s == CANCELED || s == ABORTED){
         clearInterval(progressTotalInterval);
         clearInterval(progressPartsInterval);
       }
@@ -313,9 +313,9 @@ var Evaporate = function(config){
           var errMsg = '404 error resulted in abortion of both this part and the entire file.';
           l.w(errMsg + ' Server response: ' + xhr.response);
           me.error(errMsg);
-// TODO: kill off other uploading parts when file is aborted
           part.status = ABORTED;
           setStatus(ABORTED);
+          cancelAllRequests();
         } else {
           part.status = ERROR;
           part.loadedBytes = 0;

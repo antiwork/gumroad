@@ -362,6 +362,7 @@ export const useUploadSubtitles = () => {
             },
             onError: () => {
               showAlert("Subtitle upload failed.", "error");
+              uploader.cancelUpload(key);
               filesDispatch({ type: "remove-subtitle", fileId, subtitleUrl: subtitleEntry.url });
               settle(fileId, subtitleEntry.url);
             },

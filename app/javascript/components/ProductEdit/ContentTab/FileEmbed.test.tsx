@@ -227,4 +227,5 @@ it("re-enables the subtitle picker when an over-budget upload errors", async () 
   expect(input.disabled).toBe(false);
   expect(product.files[0]?.subtitle_files).toEqual([]);
   expect(alerts).toEqual([{ message: "Subtitle upload failed.", level: "error" }]);
+  expect(cancelUpload).toHaveBeenCalled();
 });
