@@ -868,6 +868,37 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(SendWorkflowInstallmentWorker.jobs.size).to eq(4)
       expect($redis.get(RedisKey.seller_large_blast_quota(@seller.id, Date.current))).to be_nil
     end
+
+    it "holds a started schedule intent until the deferred job, so recovery cannot steal it" do
+      described_class.new.perform(@post.id)
+      SendWorkflowInstallmentWorker.jobs.clear
+      described_class.jobs.clear
+
+      second_post = create(:installment, :published, seller: @seller, link: @product, workflow: @workflow,
+                                                     installment_type: Installment::PRODUCT_TYPE,
+                                                     bought_products: [@product.unique_permalink])
+      second_rule = create(:post_rule, installment: second_post, delayed_delivery_time: 0)
+      intent = WorkflowInstallmentScheduleIntent.create!(
+        token: SecureRandom.uuid,
+        installment_id: second_post.id,
+        rule_version: second_rule.version,
+        cutoff_reference_time: Time.current
+      )
+      fanout_token = intent.with_lock { intent.claim_fanout! }
+
+      described_class.new.perform(second_post.id, nil, false, nil, intent.token, fanout_token)
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+      expect(described_class).to have_enqueued_sidekiq_job(
+        second_post.id, nil, false, nil, intent.token, fanout_token
+      ).at(Time.zone.tomorrow.beginning_of_day)
+      expect(intent.reload.processed_at).to be_nil
+      expect(intent.fanout_token).to eq(fanout_token)
+      expect(intent.fanout_expires_at).to eq(
+        Time.zone.tomorrow.beginning_of_day + WorkflowInstallmentScheduleIntent::FANOUT_LEASE
+      )
+      expect(WorkflowInstallmentScheduleIntent.dispatchable).not_to include(intent)
+    end
   end
 
   describe "seller fanout lock" do

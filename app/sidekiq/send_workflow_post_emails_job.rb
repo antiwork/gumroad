@@ -364,10 +364,21 @@ class SendWorkflowPostEmailsJob
     end
 
     def requeue_for_daily_blast_limit(*args)
-      job_id = self.class.perform_at(Time.zone.tomorrow.beginning_of_day, *args)
+      run_at = Time.zone.tomorrow.beginning_of_day
+      return unless defer_schedule_intent_until(run_at)
+
+      job_id = self.class.perform_at(run_at, *args)
       return if job_id.present?
 
       raise FanoutNotEnqueuedError, "Sidekiq did not requeue the workflow fanout for the daily limit"
+    end
+
+    def defer_schedule_intent_until(run_at)
+      WorkflowInstallmentScheduleIntent.defer_fanout(
+        intent_token: @schedule_intent_token,
+        fanout_token: @schedule_intent_fanout_token,
+        until_time: run_at + WorkflowInstallmentScheduleIntent::FANOUT_LEASE
+      )
     end
 
     def confirmed_follower_member_ids_after_cutoff
