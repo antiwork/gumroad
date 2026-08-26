@@ -1,8 +1,10 @@
 // Chrome revokes <input type="file"> File backing when the input is reset
 // (ERR_BLOB_REFERENCED_FILE_UNAVAILABLE). Copy small files before reset;
 // over-limit files keep the original handle, so callers must not reset.
+// Keep the copy budget well below a typical large video so the tab does not
+// materialize hundreds of MiB before upload starts.
 
-export const PICKED_FILE_SNAPSHOT_LIMIT_BYTES = 512 * 1024 * 1024;
+export const PICKED_FILE_SNAPSHOT_LIMIT_BYTES = 32 * 1024 * 1024;
 
 export const snapshotPickedFile = async (file: File): Promise<File> => {
   if (file.size > PICKED_FILE_SNAPSHOT_LIMIT_BYTES) return file;

@@ -9,6 +9,10 @@ import {
 } from "$app/utils/snapshotPickedFile";
 
 describe("snapshotPickedFile", () => {
+  it("caps the in-memory copy well below a typical large video", () => {
+    expect(PICKED_FILE_SNAPSHOT_LIMIT_BYTES).toBe(32 * 1024 * 1024);
+  });
+
   it("copies a small file into an independent File with the same bytes and metadata", async () => {
     const original = new File(["pdf-bytes"], "guide.pdf", { type: "application/pdf", lastModified: 1_700_000_000_000 });
 
