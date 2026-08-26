@@ -713,3 +713,30 @@ it("resets an over-budget pick when the seller cancels the upload", async () => 
   });
   expect(valueWrites).toEqual([""]);
 });
+
+it("ignores a second toolbar pick while an over-budget upload still needs the input", async () => {
+  const { input } = await renderToolbarPicker();
+  const first = new File(["x"], "huge.mp4", { type: "video/mp4" });
+  Object.defineProperty(first, "size", { value: PICKED_FILE_SNAPSHOT_LIMIT_BYTES + 1 });
+  const valueWrites = attachToolbarFile(input, first);
+
+  await act(async () => {
+    fireEvent.change(input);
+  });
+  expect(scheduledUploads).toHaveLength(1);
+  expect(scheduledUploads[0]?.file).toBe(first);
+  expect(input.disabled).toBe(true);
+  expect(valueWrites).toEqual([]);
+
+  await act(async () => {
+    fireEvent.change(input);
+  });
+  expect(scheduledUploads).toHaveLength(1);
+  expect(scheduledUploads[0]?.file).toBe(first);
+
+  await act(async () => {
+    scheduledUploads[0]?.onComplete();
+  });
+  expect(valueWrites).toEqual([""]);
+  expect(input.disabled).toBe(false);
+});

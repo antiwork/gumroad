@@ -339,10 +339,12 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   // Evaporate re-slices that handle for every part, so the toolbar input can only be
   // reset once each upload from the pick has completed or been cancelled.
   const pendingFileInputResetRef = React.useRef<{ picked: File[]; uploadIds: Set<string> } | null>(null);
+  const [fileInputHeld, setFileInputHeld] = React.useState(false);
   const settleFileInputUpload = (fileId: string) => {
     const pending = pendingFileInputResetRef.current;
     if (!pending?.uploadIds.delete(fileId) || pending.uploadIds.size > 0) return;
     pendingFileInputResetRef.current = null;
+    setFileInputHeld(false);
     const input = fileInputRef.current;
     if (input && fileListMatchesPickedFiles(input.files, pending.picked)) input.value = "";
   };
@@ -407,8 +409,14 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     return scheduledIds;
   };
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const openToolbarFileInput = () => {
+    if (pendingFileInputResetRef.current) return;
+    fileInputRef.current?.click();
+  };
   const uploadFileInput = (input: HTMLInputElement) => {
-    if (!input.files?.length) return;
+    // A second pick replaces this input's FileList; Chromium can revoke the
+    // original handles an in-flight over-budget upload still needs.
+    if (pendingFileInputResetRef.current || !input.files?.length) return;
     const picked = [...input.files];
     void snapshotPickedFiles(picked)
       .then((files) => {
@@ -417,7 +425,10 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
         // With no scheduled upload left, nothing holds the original handles and an
         // immediate reset is safe.
         if (canResetFileInputAfterSnapshot(picked, files) || uploadIds.length === 0) input.value = "";
-        else pendingFileInputResetRef.current = { picked, uploadIds: new Set(uploadIds) };
+        else {
+          pendingFileInputResetRef.current = { picked, uploadIds: new Set(uploadIds) };
+          setFileInputHeld(true);
+        }
       })
       .catch((error: unknown) => {
         showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
@@ -768,6 +779,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
         name="file"
         className="sr-only"
         multiple
+        disabled={fileInputHeld}
         onChange={(e) => uploadFileInput(e.target)}
       />
       <div className="h-screen sm:h-full md:flex md:flex-col">
@@ -784,7 +796,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                   <FileUploadMenu
                     existingFiles={existingFiles}
                     onEmbedMedia={() => setShowEmbedModal(true)}
-                    onClickComputerFiles={() => fileInputRef.current?.click()}
+                    onClickComputerFiles={openToolbarFileInput}
                     onSelectExistingFiles={() => {
                       setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
                       void fetchLatestExistingFiles();
@@ -1200,7 +1212,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                         <FileUploadMenu
                           existingFiles={existingFiles}
                           onEmbedMedia={() => setShowEmbedModal(true)}
-                          onClickComputerFiles={() => fileInputRef.current?.click()}
+                          onClickComputerFiles={openToolbarFileInput}
                           onSelectExistingFiles={() => {
                             setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
                             void fetchLatestExistingFiles();
