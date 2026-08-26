@@ -9,6 +9,7 @@ import typia from "typia";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
+import { isLikelyImageFile, prepareImageForUpload } from "$app/utils/prepareImageForUpload";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import {
@@ -51,36 +52,42 @@ export const uploadImages = ({
 }) => {
   if (!imageSettings || !files.length) return;
 
-  const { maxFileSize } = imageSettings;
-  const validFiles = maxFileSize
-    ? files.filter((file) => {
-        if (file.size > maxFileSize) {
+  void (async () => {
+    const { maxFileSize } = imageSettings;
+    const prepared: File[] = [];
+    for (const file of files) {
+      try {
+        const next = isLikelyImageFile(file)
+          ? await prepareImageForUpload(file, maxFileSize ? { maxBytes: maxFileSize } : undefined)
+          : file;
+        if (maxFileSize && next.size > maxFileSize) {
           showAlert(`File is too large (max allowed size is ${FileUtils.getReadableFileSize(maxFileSize)})`, "error");
-          return false;
+          continue;
         }
-        return true;
-      })
-    : files;
+        prepared.push(next);
+      } catch {
+        showAlert("Could not process that image.", "error");
+      }
+    }
+    if (!prepared.length) return;
 
-  if (!validFiles.length) return;
+    const insertAt = getInsertAtFromSelection(view.state.selection);
+    const imageSchema = assertDefined(view.state.schema.nodes.image, "Image node type missing");
 
-  const insertAt = getInsertAtFromSelection(view.state.selection);
-  const imageSchema = assertDefined(view.state.schema.nodes.image, "Image node type missing");
+    const filesWithUrls = [...prepared].reverse().map((file) => {
+      const src = URL.createObjectURL(file);
+      const node = imageSchema.create({ src, uploading: true });
+      view.dispatch(view.state.tr.insert(insertAt, node));
+      return { file, src };
+    });
 
-  // We reverse the files so their order in the editor is the same as the order they were selected
-  const filesWithUrls = [...validFiles].reverse().map((file) => {
-    const src = URL.createObjectURL(file);
-    const node = imageSchema.create({ src, uploading: true });
-    view.dispatch(view.state.tr.insert(insertAt, node));
-    return { file, src };
-  });
-
-  for (const { file, src } of filesWithUrls) {
-    imageSettings.onUpload(file, src)?.then(
-      (newSrc) => setImageSrcInView(view, src, newSrc),
-      () => deleteImageInView(view, src),
-    );
-  }
+    for (const { file, src } of filesWithUrls) {
+      imageSettings.onUpload(file, src)?.then(
+        (newSrc) => setImageSrcInView(view, src, newSrc),
+        () => deleteImageInView(view, src),
+      );
+    }
+  })();
 };
 
 const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
@@ -235,7 +242,13 @@ export const Image = TiptapNode.create({
           ref={inputRef}
           multiple
           type="file"
-          accept={imageSettings.allowedExtensions.map((ext) => `.${ext}`).join(",")}
+          accept={[
+            ...imageSettings.allowedExtensions.map((ext) => `.${ext}`),
+            "image/*",
+            ".heic",
+            ".heif",
+            ".avif",
+          ].join(",")}
           onChange={(e) => {
             const files = [...(e.target.files || [])];
             if (!files.length) return;

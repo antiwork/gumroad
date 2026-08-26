@@ -50,6 +50,7 @@ import { formatDate } from "$app/utils/date";
 import FileUtils from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
 import { getMimeType } from "$app/utils/mimetypes";
+import { isLikelyImageFile } from "$app/utils/prepareImageForUpload";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 import { generatePageIcon } from "$app/utils/rich_content_page";
 import {
@@ -875,9 +876,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                             const input = e.target;
                             void snapshotPickedFiles(picked)
                               .then((files) => {
-                                const [images, nonImages] = partition(files, (file: File) =>
-                                  file.type.startsWith("image"),
-                                );
+                                const [images, nonImages] = partition(files, (file: File) => isLikelyImageFile(file));
                                 uploadImages({ view: editor.view, files: images, imageSettings });
                                 uploadFiles(nonImages);
                                 if (

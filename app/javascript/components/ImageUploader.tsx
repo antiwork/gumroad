@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
+import { isLikelyImageFile, prepareImageForUpload } from "$app/utils/prepareImageForUpload";
 
 import { Button, buttonVariants } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -39,8 +40,35 @@ export const ImageUploader = ({
     defaultImageUrl && `linear-gradient(${overlayColor}, ${overlayColor}), url(${defaultImageUrl}) center / cover`;
   const shape = circular ? "rounded-full" : "rounded-sm";
 
+  const handleFile = async (file: File) => {
+    const prepared = isLikelyImageFile(file) ? await prepareImageForUpload(file) : file;
+    if (!FileUtils.isFileNameExtensionAllowed(prepared.name, allowedExtensions)) {
+      showAlert("Invalid file type.", "error");
+      return;
+    }
+    setUploading(true);
+    try {
+      await onSelectFile(prepared);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const accept = [...allowedExtensions.map((ext) => `.${ext}`), "image/*", ".heic", ".heif", ".avif"].join(",");
+
   return (
-    <div className="grid grid-cols-[12.5rem_1fr] items-center gap-5">
+    <div
+      className="grid grid-cols-[12.5rem_1fr] items-center gap-5"
+      onDragOver={(event: React.DragEvent) => {
+        if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+      }}
+      onDrop={(event: React.DragEvent) => {
+        event.preventDefault();
+        const file = event.dataTransfer.files[0];
+        if (!file || disabled || uploading) return;
+        void handleFile(file).catch(() => showAlert("Could not process that image.", "error"));
+      }}
+    >
       {uploading ? (
         <Placeholder className={classNames("aspect-square items-center", shape)}>
           <LoadingSpinner className="size-8" />
@@ -52,15 +80,12 @@ export const ImageUploader = ({
               type="file"
               className="sr-only"
               id={id}
-              accept={allowedExtensions.map((ext) => `.${ext}`).join(",")}
+              accept={accept}
               onChange={(evt) => {
                 const file = evt.target.files?.[0];
+                evt.target.value = "";
                 if (!file) return;
-                if (!FileUtils.isFileNameExtensionAllowed(file.name, allowedExtensions))
-                  return showAlert("Invalid file type.", "error");
-
-                setUploading(true);
-                void onSelectFile(file).finally(() => setUploading(false));
+                void handleFile(file).catch(() => showAlert("Could not process that image.", "error"));
               }}
               disabled={disabled}
             />
