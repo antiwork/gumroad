@@ -67,6 +67,7 @@ export const useConfigureEvaporate = (props: Props) => {
     onError?: () => void;
   }) => {
     let previousProgress = 0;
+    let errorNotified = false;
 
     const status = evaporate.add({
       name,
@@ -76,6 +77,8 @@ export const useConfigureEvaporate = (props: Props) => {
       xAmzHeadersAtInitiate: { "x-amz-acl": "private" },
       complete: onComplete,
       error: () => {
+        if (errorNotified) return;
+        errorNotified = true;
         onError?.();
       },
       progress(percent) {
