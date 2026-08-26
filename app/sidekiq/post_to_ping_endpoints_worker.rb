@@ -16,7 +16,7 @@ class PostToPingEndpointsWorker
     else
       purchase = Purchase.find(purchase_id)
       user = purchase.seller
-      ping_params = purchase.payload_for_ping_notification(url_parameters:, resource_name:)
+      ping_params = purchase.payload_for_ping_notification(url_parameters: url_parameters.presence || purchase.url_parameters, resource_name:)
     end
 
     targets = user.ping_notification_targets(resource_name)
