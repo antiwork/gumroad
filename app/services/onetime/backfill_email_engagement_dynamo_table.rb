@@ -29,7 +29,6 @@ class Onetime::BackfillEmailEngagementDynamoTable
   PROGRESS_INTERVAL = 100_000 # docs between progress lines
   MAX_WRITE_ATTEMPTS = 8
   RECOMPUTE_PROCESSES = 8
-  DELTA_THREADS = 8
   DRIFT_WINDOW_MARGIN = 15.minutes
   # Everything classify_item reads; OPEN#/CLICKER# items shrink to keys only.
   SCAN_PROJECTION = "pk, sk, click_url, open_count, click_count, click_pair_count"
@@ -57,22 +56,15 @@ class Onetime::BackfillEmailEngagementDynamoTable
     # from events arriving mid-run with recompute_installments_active_since!.
     def recompute_counters!(processes: RECOMPUTE_PROCESSES)
       started_at = Time.current
-      tallies = Hash.new { |h, k| h[k] = new_tally }
-      current = Hash.new { |h, k| h[k] = new_tally }
-      if processes >= 2
-        estimated_items = store.client.describe_table(table_name: store.table_name).table.item_count.to_i
-        puts "Scanning ~#{estimated_items} items with #{processes} forked workers..."
-        scan_segments_forked(processes, estimated_items) do |segment_tallies, segment_current|
-          merge_tally_map!(tallies, segment_tallies)
-          merge_tally_map!(current, segment_current)
+      adjustments =
+        if processes >= 2
+          estimated_items = store.client.describe_table(table_name: store.table_name).table.item_count.to_i
+          puts "Scanning ~#{estimated_items} items with #{processes} forked workers..."
+          scan_segments_forked(processes, estimated_items)
+        else
+          stream_segment_deltas(segment: nil, total_segments: nil, per_segment_estimate: nil)
         end
-        puts "Scan done in #{((Time.current - started_at) / 60).round} minutes."
-      else
-        scan_all_items { |item| classify_item(item, tallies[item["pk"]], current[item["pk"]]) }
-      end
-
-      adjustments = apply_all_deltas(tallies, current)
-      puts "#{adjustments} counter adjustments applied across #{(tallies.keys | current.keys).size} installments. " \
+      puts "Done in #{((Time.current - started_at) / 60).round} minutes: #{adjustments} counter adjustments applied. " \
            "Catch mid-run drift with recompute_installments_active_since!(Time.iso8601(\"#{started_at.utc.iso8601}\"))."
       adjustments
     end
@@ -375,111 +367,86 @@ class Onetime::BackfillEmailEngagementDynamoTable
         end
       end
 
-      def scan_all_items(&block)
-        last_evaluated_key = nil
-        loop do
-          response = store.client.scan(
-            table_name: store.table_name,
-            projection_expression: SCAN_PROJECTION,
-            exclusive_start_key: last_evaluated_key
-          )
-          response.items.each(&block)
-          last_evaluated_key = response.last_evaluated_key
-          break if last_evaluated_key.blank?
-        end
-      end
-
       # Forked (not threaded: the work is Ruby-side deserialization, GIL-bound)
-      # segment scans, handing tallies back via Marshal files. Each item is
-      # classified exactly once globally, so the parent merges by addition.
+      # segment scans. Failed segments are retried one at a time before giving
+      # up — the first production run lost 5 of 8 workers to memory pressure
+      # when every worker's whole-segment tally peaked at once; workers now
+      # hold one installment at a time instead.
       def scan_segments_forked(processes, estimated_items)
         dir = Dir.mktmpdir("email_engagement_recompute")
         per_segment_estimate = [estimated_items / processes, 1].max
-        pids = processes.times.map do |segment|
-          Process.fork do
-            store.client = nil # fresh connections post-fork
-            tallies = Hash.new { |h, k| h[k] = new_tally }
-            current = Hash.new { |h, k| h[k] = new_tally }
-            scanned = 0
-            last_evaluated_key = nil
-            loop do
-              response = store.client.scan(
-                table_name: store.table_name,
-                segment:,
-                total_segments: processes,
-                projection_expression: SCAN_PROJECTION,
-                exclusive_start_key: last_evaluated_key
-              )
-              response.items.each { |item| classify_item(item, tallies[item["pk"]], current[item["pk"]]) }
-              scanned_before = scanned
-              scanned += response.items.size
-              if scanned / 1_000_000 > scanned_before / 1_000_000
-                percent = [scanned * 100.0 / per_segment_estimate, 100.0].min
-                puts format("segment %d: %d/~%d items (%.1f%%)", segment, scanned, per_segment_estimate, percent)
-              end
-              last_evaluated_key = response.last_evaluated_key
-              break if last_evaluated_key.blank?
-            end
-            File.binwrite(File.join(dir, "segment-#{segment}.dump"), Marshal.dump([plain_tally_map(tallies), plain_tally_map(current)]))
-            exit!(0)
-          end
+        GC.start # shrink copy-on-write breakage in the children
+        waits = processes.times.map do |segment|
+          [segment, fork_segment_worker(segment, processes, dir, per_segment_estimate)]
         end
-        failures = pids.map { |pid| Process.wait2(pid).last }.reject(&:success?)
-        raise "#{failures.size} recompute scan workers failed" if failures.any?
+        failed = waits.map { |segment, pid| [segment, Process.wait2(pid).last] }.reject { |_, status| status.success? }
+        failed.each do |segment, status|
+          puts "segment #{segment} failed (#{status}); retrying serially..."
+          retry_status = Process.wait2(fork_segment_worker(segment, processes, dir, per_segment_estimate)).last
+          raise "segment #{segment} failed twice: #{status}, then #{retry_status}" unless retry_status.success?
+        end
 
-        processes.times do |segment|
-          yield(*Marshal.load(File.binread(File.join(dir, "segment-#{segment}.dump"))))
-        end
+        processes.times.sum { |segment| File.read(File.join(dir, "segment-#{segment}.adjustments")).to_i }
       ensure
         FileUtils.remove_entry(dir) if dir
       end
 
-      # Marshal can't dump hashes with default procs.
-      def plain_tally_map(map)
-        map.transform_values do |tally|
-          { opens: tally[:opens], clickers: tally[:clickers], pairs: tally[:pairs], urls: Hash[tally[:urls]] }
+      def fork_segment_worker(segment, total_segments, dir, per_segment_estimate)
+        Process.fork do
+          store.client = nil # fresh connections post-fork
+          adjustments = stream_segment_deltas(segment:, total_segments:, per_segment_estimate:)
+          File.write(File.join(dir, "segment-#{segment}.adjustments"), adjustments.to_s)
+          exit!(0)
+        rescue => e
+          warn "segment #{segment} crashed: #{e.class}: #{e.message}"
+          exit!(1)
         end
       end
 
-      def merge_tally_map!(target, source)
-        source.each do |pk, tally|
-          merged = target[pk]
-          merged[:opens] += tally[:opens]
-          merged[:clickers] += tally[:clickers]
-          merged[:pairs] += tally[:pairs]
-          tally[:urls].each { |url, count| merged[:urls][url] += count }
-        end
-      end
-
-      # Threaded: delta application is IO-bound UpdateItems, unlike the scan.
-      def apply_all_deltas(tallies, current)
-        pks = tallies.keys | current.keys
-        total = pks.size
-        return 0 if total.zero?
-
+      # A scan returns each pk's items contiguously (LastEvaluatedKey is
+      # (pk, sk), and a pk hashes into exactly one segment), so the tally for
+      # one installment completes before the next begins: flush deltas at every
+      # pk boundary and memory stays O(1) no matter the table size. Reapplying
+      # a partially-processed segment is safe — corrected installments produce
+      # zero deltas on the retry.
+      def stream_segment_deltas(segment:, total_segments:, per_segment_estimate:)
         adjustments = 0
-        done = 0
-        errors = []
-        mutex = Mutex.new
-        slice_size = [(total.to_f / DELTA_THREADS).ceil, 1].max
-        threads = pks.each_slice(slice_size).map do |chunk|
-          Thread.new do
-            chunk.each do |pk|
-              applied = apply_deltas(pk, tallies.fetch(pk) { new_tally }, current.fetch(pk) { new_tally })
-              mutex.synchronize do
-                adjustments += applied
-                done += 1
-                puts format("deltas: %d/%d installments (%.1f%%)", done, total, done * 100.0 / total) if (done % 250_000).zero?
-              end
-            end
-          rescue => e
-            mutex.synchronize { errors << e }
-          end
+        scanned = 0
+        run_pk = nil
+        tally = new_tally
+        seen = new_tally
+        flush = lambda do
+          adjustments += apply_deltas(run_pk, tally, seen) if run_pk
+          tally = new_tally
+          seen = new_tally
         end
-        # Join every thread before raising so a retry can't overlap live writers.
-        threads.each(&:join)
-        raise errors.first if errors.any?
 
+        last_evaluated_key = nil
+        loop do
+          params = {
+            table_name: store.table_name,
+            projection_expression: SCAN_PROJECTION,
+            exclusive_start_key: last_evaluated_key,
+          }
+          params.update(segment:, total_segments:) if segment
+          response = store.client.scan(**params)
+          response.items.each do |item|
+            if item["pk"] != run_pk
+              flush.call
+              run_pk = item["pk"]
+            end
+            classify_item(item, tally, seen)
+          end
+          scanned_before = scanned
+          scanned += response.items.size
+          if per_segment_estimate && scanned / 1_000_000 > scanned_before / 1_000_000
+            percent = [scanned * 100.0 / per_segment_estimate, 100.0].min
+            puts format("segment %d: %d/~%d items (%.1f%%), %d adjustments", segment, scanned, per_segment_estimate, percent, adjustments)
+          end
+          last_evaluated_key = response.last_evaluated_key
+          break if last_evaluated_key.blank?
+        end
+        flush.call
         adjustments
       end
 

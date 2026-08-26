@@ -173,13 +173,28 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
       expect(requests.map { _1[:operation_name] }).to eq([:scan])
     end
 
-    it "joins every delta thread before surfacing a failure" do
+    it "surfaces delta write failures" do
       scan_items = [{ "pk" => "123", "sk" => "OPEN#aaa" }]
       client.stub_responses(:scan, { items: scan_items, last_evaluated_key: nil })
       client.stub_responses(:update_item, "InternalServerError")
 
       expect { described_class.recompute_counters!(processes: 1) }
         .to raise_error(Aws::DynamoDB::Errors::InternalServerError)
+    end
+
+    it "flushes each installment's deltas at the pk boundary within one scan" do
+      scan_items = [
+        { "pk" => "123", "sk" => "OPEN#aaa" },
+        { "pk" => "124", "sk" => "OPEN#bbb" },
+        { "pk" => "124", "sk" => "OPEN#ccc" },
+      ]
+      client.stub_responses(:scan, { items: scan_items, last_evaluated_key: nil })
+
+      expect(described_class.recompute_counters!(processes: 1)).to eq(2)
+
+      open_fixes = requests.select { _1[:operation_name] == :update_item }.map { _1[:params] }
+      expect(open_fixes.map { |u| [u[:key]["pk"].values.first, u[:expression_attribute_values][":delta"][:n]] })
+        .to eq([["123", "1"], ["124", "2"]])
     end
   end
 
