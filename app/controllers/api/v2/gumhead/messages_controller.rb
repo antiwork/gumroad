@@ -60,7 +60,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # Claude families plus exact role ids newer builds send. Role ids
   # pass only after the hop is on. Family prefixes rewrite every
   # allowed Claude name, including OpenRouter :online variants.
-  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-,gumhead-chat,gumhead-status,gumhead-cover"
+  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-"
   DEFAULT_MODEL_MAP = {
     "claude-sonnet-" => "x-ai/grok-4.6",
     "claude-haiku-" => "x-ai/grok-4.6",
