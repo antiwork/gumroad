@@ -114,35 +114,3 @@ it("forwards a signer failure to onError only once", async () => {
     expect(onError).toHaveBeenCalledTimes(1);
   });
 });
-
-it("forwards a signer failure to onError only once", async () => {
-  FakeXHR.queue = [
-    { status: 200, response: "Wed, 26 Aug 2026 00:00:00 GMT" },
-    { status: 500, response: "nope" },
-  ];
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- test double implements the XHR methods Evaporate uses
-  globalThis.XMLHttpRequest = FakeXHR as unknown as typeof XMLHttpRequest;
-
-  const onError = vi.fn();
-  const { result } = renderHook(() =>
-    useConfigureEvaporate({
-      aws_access_key_id: "key",
-      s3_url: "https://s3.amazonaws.com/bucket",
-      user_id: "user-1",
-    }),
-  );
-
-  result.current.evaporateUploader.scheduleUpload({
-    cancellationKey: "subtitles_for_file",
-    name: "key",
-    file: new File(["x"], "huge.srt", { type: "text/plain" }),
-    mimeType: "text/plain",
-    onComplete: () => {},
-    onProgress: () => {},
-    onError,
-  });
-
-  await vi.waitFor(() => {
-    expect(onError).toHaveBeenCalledTimes(1);
-  });
-});
