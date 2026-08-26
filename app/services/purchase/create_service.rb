@@ -260,7 +260,12 @@ class Purchase::CreateService < Purchase::BaseService
     end
 
     def buyer_currency_quote_components_verified_path?
-      return false if params[:paypal_order_id].present? || params[:billing_agreement_id].present?
+      return false if params.values_at(
+        :paypal_order_id,
+        :billing_agreement_id,
+        :braintree_transient_customer_store_key,
+        :braintree_device_data
+      ).any?(&:present?)
 
       chargeable = purchase_params&.[](:chargeable)
       processor_id = chargeable.respond_to?(:charge_processor_id) ? chargeable.charge_processor_id : nil

@@ -152,6 +152,59 @@ describe Order::CreateService, :vcr do
       expect(order.purchases.map(&:total_transaction_cents)).to contain_exactly(20_13, 20_17)
     end
 
+    it "ignores a leftover quote for native PayPal and Braintree order payments" do
+      seller_1.update!(tipping_enabled: true)
+      product_1.update!(price_currency_type: Currency::EUR, price_cents: 15_00)
+      line_uid = "non-stripe-line"
+      quote = signed_buyer_currency_quote(
+        seller: seller_1,
+        product: product_1,
+        rate: "0.8571",
+        canonical_components: [
+          {
+            "uid" => line_uid,
+            "line_index" => 0,
+            "permalink" => product_1.unique_permalink,
+            "price_cents" => 17_50,
+            "tip_cents" => 2_63,
+            "seller_tax_cents" => 0,
+            "gumroad_tax_cents" => 0,
+            "shipping_cents" => 0,
+          },
+        ]
+      )
+      allow_any_instance_of(Purchase::CreateService).to receive(:get_usd_cents).and_wrap_original do |method, currency_type, quantity, **kwargs|
+        method.call(currency_type, quantity, **kwargs.merge(rate: 0.5))
+      end
+      allow_any_instance_of(Purchase).to receive(:get_usd_cents).and_wrap_original do |method, currency_type, quantity, **kwargs|
+        method.call(currency_type, quantity, **kwargs.merge(rate: 0.5))
+      end
+
+      [
+        { billing_agreement_id: "B-123" },
+        { braintree_transient_customer_store_key: "store-key", braintree_device_data: "device-data" },
+      ].each do |payment_params|
+        order_params = params.deep_dup.merge(payment_params, buyer_currency_quote: quote)
+        order_params[:line_items] = [
+          {
+            uid: line_uid,
+            permalink: product_1.unique_permalink,
+            price_cents: 17_25,
+            perceived_price_cents: 17_25,
+            tip_cents: 2_25,
+            quantity: 1,
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params: order_params).perform
+        purchase = order.purchases.sole
+
+        expect(purchase_responses).to be_empty
+        expect(purchase.buyer_currency_quote_canonical_components).to be_nil
+        expect(purchase.reload.tip.value_usd_cents).to eq(4_50)
+      end
+    end
+
     it "rejects carts above the product limit before allocating discounts" do
       stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 4)
       expect(OfferCodeDiscountComputingService).not_to receive(:new)

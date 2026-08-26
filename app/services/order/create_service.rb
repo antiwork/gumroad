@@ -128,8 +128,8 @@ class Order::CreateService
         # Card params are excluded from build_purchase_params (charging is handled by
         # Charge::CreateService), but RestartAtCheckoutService needs them for UpdaterService
         card_params = common_params.slice(
-          :card_data_handling_mode, :stripe_payment_method_id, :paypal_order_id,
-          :stripe_customer_id, :stripe_setup_intent_id
+          :card_data_handling_mode, :stripe_payment_method_id, :paypal_order_id, :billing_agreement_id,
+          :braintree_transient_customer_store_key, :braintree_device_data, :stripe_customer_id, :stripe_setup_intent_id
         ).to_h.symbolize_keys.compact
 
         purchase, error, sca_response = Purchase::CreateService.new(
