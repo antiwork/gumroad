@@ -385,6 +385,37 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.total_transaction_cents).to eq(10_05)
   end
 
+  it "does not apply signed components when a slack-sized seller tax has no submitted tax" do
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 9_95,
+        tip_cents: 0,
+        seller_tax_cents: 5,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.tax_cents).to eq(0)
+    expect(purchase.total_transaction_cents).to eq(10_00)
+  end
+
   it "refuses signed components on a USD line when submit-time tip is removed" do
     user.update!(tipping_enabled: true)
     usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
