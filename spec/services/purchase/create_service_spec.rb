@@ -145,7 +145,7 @@ describe Purchase::CreateService, :vcr do
 
     expect(error).to be_nil
     expect(purchase.tip.value_cents).to eq(1_00)
-    expect(purchase.tip.value_usd_cents).to eq(1_26)
+    expect(purchase.reload.tip.value_usd_cents).to eq(1_26)
     expect(purchase.total_transaction_cents).to eq(13_76)
   end
 
