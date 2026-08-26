@@ -336,10 +336,8 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
-    # The browser attaches a buyer-currency quote token exactly when the checkout displayed
-    # local-currency totals. Client-confirm charges canonical USD with no quote machinery, so a
-    # token arriving here means the buyer confirmed an amount this lane cannot charge — it must
-    # fail closed (like Charge::CreateService does) instead of silently charging USD.
+    # Reject malformed tokens before the ConfirmationToken lookup. Valid quote-backed
+    # client-confirm checkouts are covered with the presentment paths below.
     context "when the params carry a buyer-currency quote token" do
       before { create(:merchant_account, user: seller) }
 
@@ -2108,6 +2106,108 @@ describe Order::PreparePaymentIntentService, :vcr do
         purchase = order.purchases.first.reload
         expect(purchase).to be_failed
         expect(responses["unique-id-0"][:success]).to eq(false)
+      end
+    end
+
+    context "with a quote-backed client-confirm card" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+      let(:quote) do
+        Checkout::BuyerCurrencyQuote.create(
+          line_items: [
+            Checkout::BuyerCurrencyQuote::LineItem.new(
+              uid: line_item[:uid],
+              line_index: 0,
+              permalink: product.unique_permalink,
+              product:,
+              price_cents: product.price_cents,
+              tip_cents: 0,
+              seller_tax_cents: 0,
+              gumroad_tax_cents: 0,
+              shipping_cents: 0
+            )
+          ],
+          canonical_total_cents: product.price_cents,
+          ip: "24.48.0.1",
+          currency: Currency::CAD
+        )
+      end
+
+      before do
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active", "ideal_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+        allow(StripeFxQuote).to receive(:create).and_return(
+          StripeFxQuote::Quote.new(id: "fxq_client_quote", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+        )
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+
+      def build_quote_backed_order(mount_currency:)
+        expect(quote).to be_present
+        params = {
+          line_items: [line_item],
+          buyer_currency_quote: quote.token,
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: mount_currency,
+          payment_method_list_token: Checkout::PaymentMethodListToken.issue(
+            payment_method_types: %w[card link ideal], sellers: [seller]
+          ),
+        }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        [order, params]
+      end
+
+      it "prepares the intent in the signed quote currency when the Element mounted there" do
+        order, params = build_quote_backed_order(mount_currency: Currency::CAD)
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "CA" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_client_quote", client_secret: "pi_client_quote_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_client_quote").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args).to include(currency: Currency::CAD,
+                                       amount_cents: quote.charge_presentment_total_cents,
+                                       stripe_fx_quote_id: "fxq_client_quote")
+        expect(create_args[:payment_method_types]).to eq(%w[card link])
+        charge = order.charges.last
+        expect(charge.charge_presentment).to have_attributes(
+          presentment_currency: Currency::CAD,
+          presentment_total_cents: quote.charge_presentment_total_cents,
+          stripe_fx_quote_id: "fxq_client_quote"
+        )
+        expect(order.purchases.first.reload.purchase_presentment).to have_attributes(
+          presentment_currency: Currency::CAD,
+          presentment_total_cents: quote.charge_presentment_total_cents
+        )
+      end
+
+      it "rejects a signed quote when the Element reports a different mount currency" do
+        order, params = build_quote_backed_order(mount_currency: Currency::EUR)
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "CA" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_wrong_mount").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
       end
     end
 
