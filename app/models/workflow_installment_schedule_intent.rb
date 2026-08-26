@@ -142,4 +142,17 @@ class WorkflowInstallmentScheduleIntent < ApplicationRecord
       updated_at: now
     ).positive?
   end
+
+  # Keep owning a started fanout across a next-day requeue so recovery cannot
+  # reclaim it during the 2-hour lease gap.
+  def self.defer_fanout(intent_token:, fanout_token:, until_time:)
+    return true if intent_token.blank? && fanout_token.blank?
+    return false if intent_token.blank? || fanout_token.blank?
+
+    now = Time.current
+    pending.where(token: intent_token, fanout_token:).update_all(
+      fanout_expires_at: until_time,
+      updated_at: now
+    ).positive?
+  end
 end
