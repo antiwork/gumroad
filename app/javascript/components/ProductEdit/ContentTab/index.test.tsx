@@ -617,15 +617,15 @@ it("keeps the newly selected variant's pages when a raw id is shared across tier
   ]);
 });
 
-const attachToolbarFile = (input: HTMLInputElement, picked: File) => {
+const attachToolbarFiles = (input: HTMLInputElement, picked: File[]) => {
   const valueWrites: string[] = [];
   Object.defineProperty(input, "files", {
     configurable: true,
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- minimal FileList for the handler
     value: {
-      length: 1,
-      item: (index: number) => (index === 0 ? picked : null),
-      [Symbol.iterator]: () => [picked][Symbol.iterator](),
+      length: picked.length,
+      item: (index: number) => picked[index] ?? null,
+      [Symbol.iterator]: () => picked[Symbol.iterator](),
     } as unknown as FileList,
   });
   Object.defineProperty(input, "value", {
@@ -635,6 +635,8 @@ const attachToolbarFile = (input: HTMLInputElement, picked: File) => {
   });
   return valueWrites;
 };
+
+const attachToolbarFile = (input: HTMLInputElement, picked: File) => attachToolbarFiles(input, [picked]);
 
 const renderToolbarPicker = async () => {
   const product = buildProduct([{ id: "variant-a", name: "A", rich_content: [makePage("page-1", "PAGE")] }]);
@@ -740,3 +742,51 @@ it("ignores a second toolbar pick while an over-budget upload still needs the in
   expect(valueWrites).toEqual([""]);
   expect(input.disabled).toBe(false);
 });
+it("ignores a second toolbar pick while a mixed pick is still snapshotting", async () => {
+  const waiters: { file: File; resolve: (buffer: ArrayBuffer) => void }[] = [];
+  const originalArrayBuffer = File.prototype.arrayBuffer;
+  File.prototype.arrayBuffer = function (this: File) {
+    return new Promise((resolve) => {
+      waiters.push({ file: this, resolve });
+    });
+  };
+
+  try {
+    const { input } = await renderToolbarPicker();
+    const small = new File(["abc"], "notes.txt", { type: "text/plain" });
+    const large = new File(["x"], "huge.mp4", { type: "video/mp4" });
+    Object.defineProperty(large, "size", { value: PICKED_FILE_SNAPSHOT_LIMIT_BYTES + 1 });
+    const valueWrites = attachToolbarFiles(input, [small, large]);
+
+    fireEvent.change(input);
+    expect(waiters).toHaveLength(1);
+    expect(input.disabled).toBe(true);
+    expect(scheduledUploads).toHaveLength(0);
+
+    await act(async () => {
+      fireEvent.change(input);
+    });
+    expect(waiters).toHaveLength(1);
+    expect(scheduledUploads).toHaveLength(0);
+
+    await act(async () => {
+      for (const waiter of waiters) {
+        waiter.resolve(await originalArrayBuffer.call(waiter.file));
+      }
+    });
+    expect(scheduledUploads).toHaveLength(2);
+    expect(scheduledUploads[0]?.file).not.toBe(small);
+    expect(scheduledUploads[1]?.file).toBe(large);
+    expect(valueWrites).toEqual([]);
+
+    await act(async () => {
+      scheduledUploads[0]?.onComplete();
+      scheduledUploads[1]?.onComplete();
+    });
+    expect(valueWrites).toEqual([""]);
+    expect(input.disabled).toBe(false);
+  } finally {
+    File.prototype.arrayBuffer = originalArrayBuffer;
+  }
+});
+
