@@ -13,7 +13,8 @@ import { Image } from "$app/components/TiptapExtensions/Image";
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: () => {} }));
 
 // happy-dom has no object URL support, and uploadImages mints one per inserted image.
-Object.assign(URL, { createObjectURL: () => "blob:picked", revokeObjectURL: () => {} });
+let blobSeq = 0;
+Object.assign(URL, { createObjectURL: () => `blob:picked-${++blobSeq}`, revokeObjectURL: () => {} });
 
 let editor: Editor | null = null;
 
@@ -63,7 +64,7 @@ const renderInsertImagePicker = () => {
     allowedExtensions: ["png", "jpg"],
     onUpload: (file) => {
       uploaded.push(file);
-      return Promise.resolve("https://example.com/uploaded.png");
+      return Promise.resolve(`https://example.com/${file.name}`);
     },
   };
   render(
@@ -148,5 +149,33 @@ describe("Insert image picker", () => {
       if (node.type.name === "image") images.push(node);
     });
     expect(images).toHaveLength(1);
+  });
+
+  it("inserts multiple images in selection order", async () => {
+    const { input } = renderInsertImagePicker();
+    const first = new File(["a"], "a.png", { type: "image/png" });
+    const second = new File(["b"], "b.png", { type: "image/png" });
+    const picked = [first, second];
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- minimal FileList for the handler
+      value: {
+        length: picked.length,
+        item: (index: number) => picked[index] ?? null,
+        [Symbol.iterator]: () => picked[Symbol.iterator](),
+      } as unknown as FileList,
+    });
+
+    await act(async () => {
+      fireEvent.change(input);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const names: string[] = [];
+    editor?.state.doc.descendants((node) => {
+      if (node.type.name === "image") names.push(String(node.attrs.src));
+    });
+    expect(names).toEqual(["https://example.com/a.png", "https://example.com/b.png"]);
   });
 });

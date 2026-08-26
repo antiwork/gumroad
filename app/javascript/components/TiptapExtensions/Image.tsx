@@ -262,6 +262,7 @@ export const Image = TiptapNode.create({
             input.disabled = true;
             void snapshotPickedFiles(picked)
               .then(async (files) => {
+                editor.off("transaction", mapInsertAt);
                 const uploads = uploadImages({ view: editor.view, files, imageSettings, insertAt });
                 const snapshotted =
                   fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files);

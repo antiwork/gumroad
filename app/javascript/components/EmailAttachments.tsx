@@ -152,6 +152,7 @@ export const FileRow = ({ file }: { file: FileState }) => {
                   }
                   onCancelSubtitleUpload={(subtitleUrl) => {
                     uploader?.cancelUpload(uploadingSubtitleFileCancellationKey(file.id, subtitleUrl));
+                    uploadSubtitles?.settle(file.id, subtitleUrl);
                     filesDispatch({ type: "remove-subtitle", fileId: file.id, subtitleUrl });
                   }}
                   onChangeSubtitleLanguage={(subtitleUrl, language) =>
@@ -161,13 +162,12 @@ export const FileRow = ({ file }: { file: FileState }) => {
                 <SubtitleUploadBox
                   onUploadFiles={(subtitleFiles) => {
                     if (uploadSubtitles) {
-                      uploadSubtitles(file.id, subtitleFiles);
-                    } else {
-                      showAlert(
-                        "Unfortunately, file uploads aren't supported in your browser. Please update to the latest version and try again.",
-                        "error",
-                      );
+                      return uploadSubtitles.upload(file.id, subtitleFiles);
                     }
+                    showAlert(
+                      "Unfortunately, file uploads aren't supported in your browser. Please update to the latest version and try again.",
+                      "error",
+                    );
                   }}
                 />
               </div>
@@ -312,6 +312,12 @@ export const useUploadSubtitles = () => {
   const s3UploadConfig = useS3UploadConfig();
   const filesDispatch = useFilesDispatch();
   const uploader = useEvaporateUploader();
+  const subtitleUploadSettled = React.useRef(new Map<string, () => void>());
+  const settle = (fileId: string, subtitleUrl: string) => {
+    const key = uploadingSubtitleFileCancellationKey(fileId, subtitleUrl);
+    subtitleUploadSettled.current.get(key)?.();
+    subtitleUploadSettled.current.delete(key);
+  };
   if (!uploader) return null;
 
   const inProgressSubtitleEntry = (file: File): { subtitleEntry: SubtitleFileState; s3key: string } => {
@@ -335,28 +341,40 @@ export const useUploadSubtitles = () => {
     };
   };
 
-  return (fileId: string, subtitleFiles: File[]) => {
-    subtitleFiles.forEach((file) => {
-      const originalName = file.name;
-      const mimeType = getMimeType(originalName);
-      const { subtitleEntry, s3key } = inProgressSubtitleEntry(file);
-      filesDispatch({ type: "start-subtitle-upload", fileId, subtitleFile: subtitleEntry });
-      const status = uploader.scheduleUpload({
-        cancellationKey: uploadingSubtitleFileCancellationKey(fileId, subtitleEntry.url),
-        name: s3key,
-        file,
-        mimeType,
-        onComplete: () => filesDispatch({ type: "finish-subtitle-upload", fileId, subtitleUrl: subtitleEntry.url }),
-        onProgress: (progress) =>
-          filesDispatch({ type: "set-subtitle-upload-progress", fileId, subtitleUrl: subtitleEntry.url, progress }),
-      });
+  const upload = (fileId: string, subtitleFiles: File[]) => {
+    const pending = subtitleFiles.map(
+      (file) =>
+        new Promise<void>((resolve) => {
+          const originalName = file.name;
+          const mimeType = getMimeType(originalName);
+          const { subtitleEntry, s3key } = inProgressSubtitleEntry(file);
+          const key = uploadingSubtitleFileCancellationKey(fileId, subtitleEntry.url);
+          filesDispatch({ type: "start-subtitle-upload", fileId, subtitleFile: subtitleEntry });
+          subtitleUploadSettled.current.set(key, resolve);
+          const status = uploader.scheduleUpload({
+            cancellationKey: key,
+            name: s3key,
+            file,
+            mimeType,
+            onComplete: () => {
+              filesDispatch({ type: "finish-subtitle-upload", fileId, subtitleUrl: subtitleEntry.url });
+              settle(fileId, subtitleEntry.url);
+            },
+            onProgress: (progress) =>
+              filesDispatch({ type: "set-subtitle-upload-progress", fileId, subtitleUrl: subtitleEntry.url, progress }),
+          });
 
-      if (typeof status === "string") {
-        // status contains error string if any, otherwise index of file in array
-        showAlert(status, "error");
-      }
-    });
+          if (typeof status === "string") {
+            // status contains error string if any, otherwise index of file in array
+            showAlert(status, "error");
+            settle(fileId, subtitleEntry.url);
+          }
+        }),
+    );
+    return Promise.all(pending);
   };
+
+  return { upload, settle };
 };
 
 export type FileAction =
