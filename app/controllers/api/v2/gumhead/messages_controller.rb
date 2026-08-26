@@ -57,20 +57,17 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # a deploy — any upstream must speak the Anthropic Messages protocol.
   DEFAULT_UPSTREAM_API_BASE = "https://api.anthropic.com/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
-  # Families the shipped app still sends, plus the role ids newer builds
-  # use. Prefix match, so an exact role id also admits a suffixed variant.
-  # Caps are token-denominated; an unlisted pricier SKU cannot spend faster.
-  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-,gumhead-chat,gumhead-status,gumhead-cover"
-  # Incoming names stay on the allowlist; the body that goes upstream uses
-  # the mapped billed id. Role keys let ops change the model behind a slot
-  # from GUMHEAD_MODEL_MAP without a client release.
+  # The shipped app still sends claude-* names. Role ids stay out of
+  # this hop; they need an app change. Caps are token-denominated, so
+  # an unlisted pricier SKU cannot spend faster. Ops can extend the
+  # list without a deploy via GUMHEAD_ALLOWED_MODEL_PREFIXES.
+  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-"
+  # Rewrite after validate_model, before the POST. Built-in Grok
+  # targets apply only once the base leaves Anthropic.
   DEFAULT_MODEL_MAP = {
     "claude-sonnet-5" => "x-ai/grok-4.6",
     "claude-haiku-4-5" => "x-ai/grok-4.6",
     "claude-opus-5" => "x-ai/grok-4.6",
-    "gumhead-chat" => "x-ai/grok-4.6",
-    "gumhead-status" => "x-ai/grok-4.6",
-    "gumhead-cover" => "x-ai/grok-4.6",
   }.freeze
   # Matches nginx's client_max_body_size; a larger constant here would
   # document a limit requests can never reach.
@@ -640,17 +637,9 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     def upstream_api_key
-      explicit = GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence
-      return explicit if explicit
-      # The Anthropic key is only a fallback on the Anthropic host. Sending
-      # it to OpenRouter (or any other configured base) would leak it.
-      return unless anthropic_upstream?
-
-      GlobalConfig.get("GUMHEAD_ANTHROPIC_API_KEY")
-    end
-
-    def anthropic_upstream?
-      upstream_api_base == DEFAULT_UPSTREAM_API_BASE
+      # One-deploy fallback: ops can store the OpenRouter key in the
+      # existing GUMHEAD_ANTHROPIC_API_KEY name while flipping the base.
+      GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence || GlobalConfig.get("GUMHEAD_ANTHROPIC_API_KEY")
     end
 
     def upstream_api_base
