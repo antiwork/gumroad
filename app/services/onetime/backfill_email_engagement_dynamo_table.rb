@@ -367,11 +367,10 @@ class Onetime::BackfillEmailEngagementDynamoTable
         end
       end
 
-      # Forked (not threaded: the work is Ruby-side deserialization, GIL-bound)
-      # segment scans. Failed segments are retried one at a time before giving
-      # up — the first production run lost 5 of 8 workers to memory pressure
-      # when every worker's whole-segment tally peaked at once; workers now
-      # hold one installment at a time instead.
+      # Forked, not threaded: the work is GIL-bound Ruby deserialization.
+      # Failed segments retry one at a time — and with consistent reads, so a
+      # crashed attempt's already-applied deltas are seen and not re-added
+      # (the default eventually consistent scan doesn't read our own writes).
       def scan_segments_forked(processes, estimated_items)
         dir = Dir.mktmpdir("email_engagement_recompute")
         per_segment_estimate = [estimated_items / processes, 1].max
@@ -382,20 +381,25 @@ class Onetime::BackfillEmailEngagementDynamoTable
         failed = waits.map { |segment, pid| [segment, Process.wait2(pid).last] }.reject { |_, status| status.success? }
         failed.each do |segment, status|
           puts "segment #{segment} failed (#{status}); retrying serially..."
-          retry_status = Process.wait2(fork_segment_worker(segment, processes, dir, per_segment_estimate)).last
+          retry_status = Process.wait2(
+            fork_segment_worker(segment, processes, dir, per_segment_estimate, attempt: 2, consistent_read: true)
+          ).last
           raise "segment #{segment} failed twice: #{status}, then #{retry_status}" unless retry_status.success?
         end
 
-        processes.times.sum { |segment| File.read(File.join(dir, "segment-#{segment}.adjustments")).to_i }
+        # Checkpointed running totals per attempt; a crashed attempt's applied
+        # deltas still count (retries add only what the crash left undone).
+        Dir.glob(File.join(dir, "segment-*.adjustments")).sum { |path| File.read(path).to_i }
       ensure
         FileUtils.remove_entry(dir) if dir
       end
 
-      def fork_segment_worker(segment, total_segments, dir, per_segment_estimate)
+      def fork_segment_worker(segment, total_segments, dir, per_segment_estimate, attempt: 1, consistent_read: false)
         Process.fork do
           store.client = nil # fresh connections post-fork
-          adjustments = stream_segment_deltas(segment:, total_segments:, per_segment_estimate:)
-          File.write(File.join(dir, "segment-#{segment}.adjustments"), adjustments.to_s)
+          path = File.join(dir, "segment-#{segment}.attempt#{attempt}.adjustments")
+          checkpoint = ->(adjustments) { File.write(path, adjustments.to_s) }
+          checkpoint.call(stream_segment_deltas(segment:, total_segments:, per_segment_estimate:, consistent_read:, checkpoint:))
           exit!(0)
         rescue => e
           warn "segment #{segment} crashed: #{e.class}: #{e.message}"
@@ -404,12 +408,11 @@ class Onetime::BackfillEmailEngagementDynamoTable
       end
 
       # A scan returns each pk's items contiguously (LastEvaluatedKey is
-      # (pk, sk), and a pk hashes into exactly one segment), so the tally for
-      # one installment completes before the next begins: flush deltas at every
-      # pk boundary and memory stays O(1) no matter the table size. Reapplying
-      # a partially-processed segment is safe — corrected installments produce
-      # zero deltas on the retry.
-      def stream_segment_deltas(segment:, total_segments:, per_segment_estimate:)
+      # (pk, sk), and a pk hashes into exactly one segment), so one
+      # installment's tally completes before the next begins: flush deltas at
+      # each pk boundary and memory stays flat at any table size. verify!
+      # backstops the whole run regardless.
+      def stream_segment_deltas(segment:, total_segments:, per_segment_estimate:, consistent_read: false, checkpoint: nil)
         adjustments = 0
         scanned = 0
         run_pk = nil
@@ -426,6 +429,7 @@ class Onetime::BackfillEmailEngagementDynamoTable
           params = {
             table_name: store.table_name,
             projection_expression: SCAN_PROJECTION,
+            consistent_read:,
             exclusive_start_key: last_evaluated_key,
           }
           params.update(segment:, total_segments:) if segment
@@ -442,6 +446,7 @@ class Onetime::BackfillEmailEngagementDynamoTable
           if per_segment_estimate && scanned / 1_000_000 > scanned_before / 1_000_000
             percent = [scanned * 100.0 / per_segment_estimate, 100.0].min
             puts format("segment %d: %d/~%d items (%.1f%%), %d adjustments", segment, scanned, per_segment_estimate, percent, adjustments)
+            checkpoint&.call(adjustments)
           end
           last_evaluated_key = response.last_evaluated_key
           break if last_evaluated_key.blank?
