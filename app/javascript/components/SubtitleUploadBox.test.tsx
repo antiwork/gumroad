@@ -128,4 +128,41 @@ describe("SubtitleUploadBox", () => {
     expect(onUploadFiles).toHaveBeenCalledTimes(1);
     expect(onUploadFiles.mock.calls[0]?.[0][0]?.name).toBe("first.srt");
   });
+
+  it("holds an over-budget input until the upload promise settles, then resets", async () => {
+    let releaseUpload!: () => void;
+    const uploadDone = new Promise<void>((resolve) => {
+      releaseUpload = resolve;
+    });
+    const onUploadFiles = vi.fn<(files: File[]) => Promise<void>>(() => uploadDone);
+    render(<SubtitleUploadBox onUploadFiles={onUploadFiles} />);
+    const input = document.querySelector<HTMLInputElement>("input.subtitles-file");
+    if (!input) throw new Error("Subtitle file input did not mount");
+    const picked = new File(["x"], "huge.srt", { type: "text/plain" });
+    Object.defineProperty(picked, "size", { value: PICKED_FILE_SNAPSHOT_LIMIT_BYTES + 1 });
+    const valueWrites = attachPickedFile(input, picked);
+
+    await act(async () => {
+      fireEvent.change(input);
+      await Promise.resolve();
+    });
+
+    expect(onUploadFiles.mock.calls[0]?.[0]).toEqual([picked]);
+    expect(valueWrites).toEqual([]);
+    expect(input.disabled).toBe(true);
+
+    act(() => {
+      fireEvent.change(input);
+    });
+    expect(onUploadFiles).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      releaseUpload();
+      await uploadDone;
+      await Promise.resolve();
+    });
+
+    expect(valueWrites).toEqual([""]);
+    expect(input.disabled).toBe(false);
+  });
 });

@@ -99,7 +99,7 @@ describe("Insert image picker", () => {
     expect(valueWrites).toEqual([""]);
   });
 
-  it("keeps the original handle and leaves the input alone for an over-budget image", async () => {
+  it("keeps the original handle until upload settles, then resets an over-budget image", async () => {
     const { input, uploaded } = renderInsertImagePicker();
     const picked = new File(["x"], "huge.png", { type: "image/png" });
     Object.defineProperty(picked, "size", { value: PICKED_FILE_SNAPSHOT_LIMIT_BYTES + 1 });
@@ -107,11 +107,46 @@ describe("Insert image picker", () => {
 
     await act(async () => {
       fireEvent.change(input);
-      // snapshotPickedFiles settles on a microtask after the change handler returns
+      // snapshot then onUpload (already resolved) each take a microtask
+      await Promise.resolve();
       await Promise.resolve();
     });
 
     expect(uploaded).toEqual([picked]);
-    expect(valueWrites).toEqual([]);
+    expect(valueWrites).toEqual([""]);
+  });
+
+  it("maps the insert position across edits while the snapshot is in flight", async () => {
+    const { input } = renderInsertImagePicker();
+    let release!: () => void;
+    const ready = new Promise<ArrayBuffer>((resolve) => {
+      release = () => resolve(new TextEncoder().encode("png").buffer);
+    });
+    const picked = new File(["png"], "pic.png", { type: "image/png" });
+    Object.defineProperty(picked, "arrayBuffer", { value: () => ready });
+    attachPickedFile(input, picked);
+
+    act(() => {
+      fireEvent.change(input);
+    });
+
+    // Delete the paragraph contents so a stale insertAt is out of range.
+    act(() => {
+      if (!editor) throw new Error("editor missing");
+      editor.chain().setTextSelection({ from: 1, to: 6 }).deleteSelection().run();
+    });
+
+    await act(async () => {
+      release();
+      await ready;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const images: unknown[] = [];
+    editor?.state.doc.descendants((node) => {
+      if (node.type.name === "image") images.push(node);
+    });
+    expect(images).toHaveLength(1);
   });
 });

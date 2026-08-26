@@ -10,7 +10,7 @@ import {
 import { buttonVariants } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
-type UploadBoxProps = { onUploadFiles: (domFiles: File[]) => void };
+type UploadBoxProps = { onUploadFiles: (domFiles: File[]) => void | Promise<unknown> };
 
 const acceptedSubtitleExtensions = FileUtils.getAllowedSubtitleExtensions()
   .map((ext) => `.${ext}`)
@@ -29,10 +29,17 @@ export const SubtitleUploadBox = ({ onUploadFiles }: UploadBoxProps) => {
     snapshotInFlight.current = true;
     fileInput.disabled = true;
     void snapshotPickedFiles(picked)
-      .then((files) => {
-        onUploadFiles(files);
-        if (fileListMatchesPickedFiles(fileInput.files, picked) && canResetFileInputAfterSnapshot(picked, files))
-          fileInput.value = "";
+      .then(async (files) => {
+        const uploaded = onUploadFiles(files);
+        const snapshotted =
+          fileListMatchesPickedFiles(fileInput.files, picked) && canResetFileInputAfterSnapshot(picked, files);
+        if (snapshotted) fileInput.value = "";
+        // Over-budget picks keep the original File. Wait for the caller to finish
+        // with that handle (upload complete/cancel) before re-enabling or resetting.
+        if (!snapshotted && uploaded && typeof uploaded === "object" && "then" in uploaded) {
+          await uploaded;
+          if (fileListMatchesPickedFiles(fileInput.files, picked)) fileInput.value = "";
+        }
       })
       .catch((error: unknown) => {
         showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
