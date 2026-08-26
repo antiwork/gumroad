@@ -84,6 +84,8 @@ describe("Insert image picker", () => {
 
     await act(async () => {
       fireEvent.change(input);
+      // snapshotPickedFiles settles on a microtask after the change handler returns
+      await Promise.resolve();
     });
 
     const [file] = uploaded;
@@ -105,6 +107,8 @@ describe("Insert image picker", () => {
 
     await act(async () => {
       fireEvent.change(input);
+      // snapshotPickedFiles settles on a microtask after the change handler returns
+      await Promise.resolve();
     });
 
     expect(uploaded).toEqual([picked]);
