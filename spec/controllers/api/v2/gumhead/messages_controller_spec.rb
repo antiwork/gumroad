@@ -11,6 +11,7 @@ describe Api::V2::Gumhead::MessagesController do
 
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(GlobalConfig).to receive(:get).with("GUMHEAD_ANTHROPIC_API_KEY").and_return("sk-ant-gateway-test")
+    allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("GUMHEAD_OAUTH_APPLICATION_UIDS", "").and_return(@app.uid)
 
     request.headers["Authorization"] = "Bearer #{@token.token}"
@@ -733,6 +734,7 @@ describe Api::V2::Gumhead::MessagesController do
       allow(GlobalConfig).to receive(:get)
         .with("GUMHEAD_UPSTREAM_API_BASE", described_class::DEFAULT_UPSTREAM_API_BASE)
         .and_return("https://openrouter.ai/api/v1")
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-or-test")
     end
 
     it "does not rewrite Claude aliases while the upstream is still Anthropic" do
@@ -916,9 +918,7 @@ describe Api::V2::Gumhead::MessagesController do
     end
 
     it "forwards to GUMHEAD_UPSTREAM_API_BASE when it is set" do
-      allow(GlobalConfig).to receive(:get)
-        .with("GUMHEAD_UPSTREAM_API_BASE", described_class::DEFAULT_UPSTREAM_API_BASE)
-        .and_return("https://openrouter.ai/api/v1")
+      use_openrouter_base
       stub_request(:post, openrouter_messages_url)
         .to_return(status: 200, body: anthropic_response.merge(model: "x-ai/grok-4.6").to_json, headers: { "Content-Type" => "application/json" })
 
