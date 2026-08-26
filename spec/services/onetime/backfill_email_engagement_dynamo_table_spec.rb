@@ -143,7 +143,7 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
       ]
       client.stub_responses(:scan, { items: scan_items, last_evaluated_key: nil })
 
-      adjustments = described_class.recompute_counters!
+      adjustments = described_class.recompute_counters!(processes: 1)
 
       # open_count is off by one (2 items vs 1); click_count matches; the pair
       # count and the URL# item are missing entirely.
@@ -169,8 +169,23 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
       ]
       client.stub_responses(:scan, { items: scan_items, last_evaluated_key: nil })
 
-      expect(described_class.recompute_counters!).to eq(0)
+      expect(described_class.recompute_counters!(processes: 1)).to eq(0)
       expect(requests.map { _1[:operation_name] }).to eq([:scan])
+    end
+  end
+
+  describe ".recompute_installments_active_since!" do
+    it "recomputes only installments with Mongo activity in the window" do
+      stale = CreatorEmailOpenEvent.new(installment_id: 1, mailer_method:, mailer_args: "[1, 1]", open_count: 1)
+      stale._id = BSON::ObjectId.from_time(2.days.ago)
+      stale.save!
+      CreatorEmailOpenEvent.create!(installment_id: 2, mailer_method:, mailer_args: "[2, 2]", open_count: 1)
+      CreatorEmailClickEvent.create!(installment_id: 3, mailer_method:, mailer_args:, click_url:, click_count: 1)
+
+      expect(described_class).to receive(:recompute_installment!).with(2)
+      expect(described_class).to receive(:recompute_installment!).with(3)
+
+      expect(described_class.recompute_installments_active_since!(1.hour.ago)).to eq(2)
     end
   end
 
