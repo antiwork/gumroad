@@ -4660,11 +4660,13 @@ class Purchase < ApplicationRecord
         component_gumroad_tax_cents,
         component_shipping_cents,
       ]
-      # Rounding slack is for FX pennies, not tip or seller-tax presence.
+      # Rounding slack is for FX pennies, not non-price component presence.
       # Stripe verify! only sees line totals, so a component appearing or
       # disappearing within slack, or a same-total remap, must fail closed.
       unless component_tip_cents.positive? == submitted_tip_cents.positive? &&
           component_seller_tax_cents.positive? == tax_cents.to_i.positive? &&
+          component_gumroad_tax_cents.positive? == gumroad_tax_cents.to_i.positive? &&
+          component_shipping_cents.positive? == shipping_cents.to_i.positive? &&
           signed_components.zip(submitted_components).all? do |signed_cents, submitted_cents|
             (signed_cents - submitted_cents).abs <= BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
           end &&
