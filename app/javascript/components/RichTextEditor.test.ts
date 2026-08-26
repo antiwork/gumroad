@@ -42,15 +42,18 @@ describe("Tiptap button styling", () => {
       editor = useRichTextEditor({ initialValue: initialValue as never });
       return null;
     };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
 
     render(React.createElement(Harness));
     await act(async () => {
       await Promise.resolve();
     });
 
-    if (!editor) throw new Error("editor did not mount");
-    expect(editor.getHTML()).toContain('class="tiptap__button button primary"');
-    expect(editor.getHTML()).toContain(`style="${emailPrimaryButtonStyle}"`);
+    expect(getEditor().getHTML()).toContain('class="tiptap__button button primary"');
+    expect(getEditor().getHTML()).toContain(`style="${emailPrimaryButtonStyle}"`);
   });
 });
 
