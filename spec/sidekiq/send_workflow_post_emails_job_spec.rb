@@ -893,6 +893,18 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       ).in(30.seconds)
     end
 
+    it "requeues when the seller lock cannot be renewed before any recipient is enqueued" do
+      described_class.jobs.clear
+      allow_any_instance_of(WorkflowSellerFanoutLock).to receive(:renew).and_return(false)
+
+      described_class.new.perform(@post.id)
+
+      expect(SendWorkflowInstallmentWorker.jobs).to be_empty
+      expect(described_class).to have_enqueued_sidekiq_job(
+        @post.id, nil, false, nil, nil, nil
+      ).in(30.seconds)
+    end
+
     it "releases the seller lock after a successful fanout" do
       described_class.new.perform(@post.id)
 

@@ -17,6 +17,9 @@ class SendWorkflowPostEmailsJob
     @schedule_intent_token = schedule_intent_token
     @schedule_intent_fanout_token = schedule_intent_fanout_token
     @seller_fanout_lock = nil
+    @fanout_emitted_recipient_jobs = false
+    @fanout_requeue_args = [post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
+                            schedule_intent_token, schedule_intent_fanout_token]
     primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? ||
                      schedule_intent_fanout_token.present? || earliest_valid_time.present? || reschedule_on_stale
     ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
@@ -82,7 +85,7 @@ class SendWorkflowPostEmailsJob
     # filter query can exceed the database's default 5-minute statement cap, so raise it for
     # this one query.
     audience_timeout = audience_load_timeout_seconds
-    return unless renew_fanout_lease(force: true)
+    return unless keep_unemitted_fanout
     @members = WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) do
       filter_params = @post.affiliate_type? && @recipient_cutoff_time ? @original_filters : @filters
       filter_ids = affiliate_member_ids_after_cutoff if @post.affiliate_type? && @recipient_cutoff_time
@@ -91,23 +94,35 @@ class SendWorkflowPostEmailsJob
       AudienceMember.filter(**filter_options).
         select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
     end
-    return unless renew_fanout_lease(force: true)
+    return unless keep_unemitted_fanout
     if confirmed_follower_recovery?
-      return unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_confirmed_followers_after_cutoff(@members) }
-      return unless renew_fanout_lease(force: true)
+      unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_confirmed_followers_after_cutoff(@members) }
+        requeue_unemitted_fanout
+        return
+      end
+      return unless keep_unemitted_fanout
     end
     if affiliate_recovery?
-      return unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_affiliates_after_cutoff(@members) }
-      return unless renew_fanout_lease(force: true)
+      unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_affiliates_after_cutoff(@members) }
+        requeue_unemitted_fanout
+        return
+      end
+      return unless keep_unemitted_fanout
     end
     @follower_confirmation_times_by_id = follower_confirmation_times_by_id(@members)
-    return if @follower_confirmation_times_by_id.nil?
-    return unless renew_fanout_lease(force: true)
+    if @follower_confirmation_times_by_id.nil?
+      requeue_unemitted_fanout
+      return
+    end
+    return unless keep_unemitted_fanout
     @affiliate_recipients_by_key = affiliate_recipients_by_key(@members)
-    return if @affiliate_recipients_by_key.nil?
-    return unless renew_fanout_lease(force: true)
+    if @affiliate_recipients_by_key.nil?
+      requeue_unemitted_fanout
+      return
+    end
+    return unless keep_unemitted_fanout
     normalize_affiliate_matches(@members)
-    return unless renew_fanout_lease(force: true)
+    return unless keep_unemitted_fanout
     if @keep_primary_for_cutoff_scan
       @keep_primary_for_cutoff_scan = false
       Makara::Context.release_all
@@ -128,14 +143,7 @@ class SendWorkflowPostEmailsJob
         fanout_token: schedule_intent_fanout_token
       )
     when :ownership_lost
-      # Requeue only if no recipient jobs went out. Restarting after a partial
-      # enqueue would dump the whole audience onto the queue again.
-      unless @fanout_emitted_recipient_jobs
-        requeue_for_seller_fanout_limit(
-          post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
-          schedule_intent_token, schedule_intent_fanout_token
-        )
-      end
+      requeue_unemitted_fanout
     else
       raise FanoutNotEnqueuedError, "Unexpected fanout result"
     end
@@ -145,6 +153,18 @@ class SendWorkflowPostEmailsJob
   end
 
   private
+    def keep_unemitted_fanout
+      return true if renew_fanout_lease(force: true)
+
+      requeue_unemitted_fanout
+      false
+    end
+
+    def requeue_unemitted_fanout
+      # Restarting after a partial enqueue would dump the whole audience on the queue again.
+      requeue_for_seller_fanout_limit(*@fanout_requeue_args) unless @fanout_emitted_recipient_jobs
+    end
+
     def cache_rule_version(rule)
       rule.cache_version!
     rescue Redis::BaseError, RedisClient::Error => e
