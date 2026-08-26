@@ -30,6 +30,7 @@ class Onetime::BackfillEmailEngagementDynamoTable
   MAX_WRITE_ATTEMPTS = 8
   RECOMPUTE_PROCESSES = 8
   DELTA_THREADS = 8
+  DRIFT_WINDOW_MARGIN = 15.minutes
   # Everything classify_item reads; OPEN#/CLICKER# items shrink to keys only.
   SCAN_PROJECTION = "pk, sk, click_url, open_count, click_count, click_pair_count"
   OPENS_CURSOR_KEY = "onetime_backfill_email_engagement_opens_last_id"
@@ -78,8 +79,11 @@ class Onetime::BackfillEmailEngagementDynamoTable
 
     # Cheap drift pass: only installments with Mongo events since `time` can
     # have drifted during a full recompute; re-derive just those partitions.
+    # The margin covers events whose Mongo doc landed just before the scan
+    # started but whose DynamoDB writes straddled it (same handler, but the
+    # scan can catch a torn view of item vs counter).
     def recompute_installments_active_since!(time)
-      min_id = BSON::ObjectId.from_time(time)
+      min_id = BSON::ObjectId.from_time(time - DRIFT_WINDOW_MARGIN)
       installment_ids = CreatorEmailOpenEvent.where(_id: { "$gte" => min_id }).distinct(:installment_id)
       installment_ids |= CreatorEmailClickEvent.where(_id: { "$gte" => min_id }).distinct(:installment_id)
       installment_ids = installment_ids.compact
@@ -455,9 +459,10 @@ class Onetime::BackfillEmailEngagementDynamoTable
 
         adjustments = 0
         done = 0
+        errors = []
         mutex = Mutex.new
         slice_size = [(total.to_f / DELTA_THREADS).ceil, 1].max
-        pks.each_slice(slice_size).map do |chunk|
+        threads = pks.each_slice(slice_size).map do |chunk|
           Thread.new do
             chunk.each do |pk|
               applied = apply_deltas(pk, tallies.fetch(pk) { new_tally }, current.fetch(pk) { new_tally })
@@ -467,8 +472,14 @@ class Onetime::BackfillEmailEngagementDynamoTable
                 puts format("deltas: %d/%d installments (%.1f%%)", done, total, done * 100.0 / total) if (done % 250_000).zero?
               end
             end
+          rescue => e
+            mutex.synchronize { errors << e }
           end
-        end.each(&:join)
+        end
+        # Join every thread before raising so a retry can't overlap live writers.
+        threads.each(&:join)
+        raise errors.first if errors.any?
+
         adjustments
       end
 
