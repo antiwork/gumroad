@@ -31,19 +31,8 @@ describe("snapshotPickedFile", () => {
   });
 });
 
-describe("canResetFileInputAfterSnapshot", () => {
-  it("is false when any picked file was too large to copy", () => {
-    const small = new File(["ok"], "a.pdf");
-    const large = new File(["x"], "b.mp4");
-    Object.defineProperty(large, "size", { value: PICKED_FILE_SNAPSHOT_LIMIT_BYTES + 1 });
-
-    expect(canResetFileInputAfterSnapshot([small])).toBe(true);
-    expect(canResetFileInputAfterSnapshot([small, large])).toBe(false);
-  });
-});
-
 describe("snapshotPickedFiles", () => {
-  it("snapshots every file in the pick", async () => {
+  it("snapshots every file in a small pick", async () => {
     const files = [new File(["a"], "a.txt"), new File(["b"], "b.txt")];
 
     const copies = await snapshotPickedFiles(files);
@@ -52,5 +41,32 @@ describe("snapshotPickedFiles", () => {
     expect(copies[0]).not.toBe(files[0]);
     expect(await copies[0]?.text()).toBe("a");
     expect(await copies[1]?.text()).toBe("b");
+  });
+
+  it("stops copying once the aggregate budget is spent instead of buffering every file at once", async () => {
+    const first = new File(["kept"], "first.bin");
+    Object.defineProperty(first, "size", { value: PICKED_FILE_SNAPSHOT_LIMIT_BYTES - 10 });
+    const second = new File(["later"], "second.bin");
+    Object.defineProperty(second, "size", { value: 100 });
+
+    const copies = await snapshotPickedFiles([first, second]);
+
+    expect(copies[0]).not.toBe(first);
+    expect(copies[1]).toBe(second);
+    expect(await copies[0]?.text()).toBe("kept");
+  });
+});
+
+describe("canResetFileInputAfterSnapshot", () => {
+  it("is true only when every picked file was replaced by a copy", async () => {
+    const small = new File(["ok"], "a.pdf");
+    const large = new File(["x"], "b.mp4");
+    Object.defineProperty(large, "size", { value: PICKED_FILE_SNAPSHOT_LIMIT_BYTES + 1 });
+
+    const smallCopies = await snapshotPickedFiles([small]);
+    const mixed = await snapshotPickedFiles([small, large]);
+
+    expect(canResetFileInputAfterSnapshot([small], smallCopies)).toBe(true);
+    expect(canResetFileInputAfterSnapshot([small, large], mixed)).toBe(false);
   });
 });

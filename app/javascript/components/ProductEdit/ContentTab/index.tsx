@@ -393,7 +393,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     void snapshotPickedFiles(picked)
       .then((files) => {
         uploadFiles(files);
-        if (canResetFileInputAfterSnapshot(picked)) input.value = "";
+        if (canResetFileInputAfterSnapshot(picked, files)) input.value = "";
       })
       .catch((error: unknown) => {
         showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
@@ -873,7 +873,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                                 const [images, nonImages] = partition(files, (file: File) => file.type.startsWith("image"));
                                 uploadImages({ view: editor.view, files: images, imageSettings });
                                 uploadFiles(nonImages);
-                                if (canResetFileInputAfterSnapshot(picked)) input.value = "";
+                                if (canResetFileInputAfterSnapshot(picked, files)) input.value = "";
                                 setShowEmbedModal(false);
                               })
                               .catch((error: unknown) => {

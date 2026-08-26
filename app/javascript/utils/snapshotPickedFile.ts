@@ -4,14 +4,26 @@
 
 export const PICKED_FILE_SNAPSHOT_LIMIT_BYTES = 512 * 1024 * 1024;
 
-export const canResetFileInputAfterSnapshot = (files: readonly File[]): boolean =>
-  files.every((file) => file.size <= PICKED_FILE_SNAPSHOT_LIMIT_BYTES);
-
 export const snapshotPickedFile = async (file: File): Promise<File> => {
   if (file.size > PICKED_FILE_SNAPSHOT_LIMIT_BYTES) return file;
   const buffer = await file.arrayBuffer();
   return new File([buffer], file.name, { type: file.type, lastModified: file.lastModified });
 };
 
-export const snapshotPickedFiles = (files: readonly File[]): Promise<File[]> =>
-  Promise.all(files.map(snapshotPickedFile));
+export const snapshotPickedFiles = async (files: readonly File[]): Promise<File[]> => {
+  const out: File[] = [];
+  let remaining = PICKED_FILE_SNAPSHOT_LIMIT_BYTES;
+  for (const file of files) {
+    if (file.size > remaining) {
+      out.push(file);
+      remaining = 0;
+      continue;
+    }
+    out.push(await snapshotPickedFile(file));
+    remaining -= file.size;
+  }
+  return out;
+};
+
+export const canResetFileInputAfterSnapshot = (original: readonly File[], snapshotted: readonly File[]): boolean =>
+  original.length === snapshotted.length && original.every((file, i) => file !== snapshotted[i]);
