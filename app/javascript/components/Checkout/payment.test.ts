@@ -18,6 +18,7 @@ import {
   getStripePaymentElementPresentment,
   isCardReadyToPay,
   isSubmitDisabled,
+  paymentMethodTypesForMountCurrency,
   reduceCheckoutState,
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
@@ -2835,5 +2836,27 @@ describe("counting submits refused by client-side validation", () => {
 
     expect(refused.status).toEqual({ type: "input", errors: new Set(["email"]) });
     expect(refused.validationFailedCount).toBe(1);
+  });
+});
+
+describe("paymentMethodTypesForMountCurrency", () => {
+  const listedEur = {
+    payment_method_types: ["card", "link", "ideal", "bancontact"],
+    inr_local_methods: ["upi"],
+  };
+
+  it("keeps iDEAL on an EUR mount and drops it on a CAD remount", () => {
+    expect(paymentMethodTypesForMountCurrency(listedEur, "eur")).toEqual(["card", "link", "ideal", "bancontact"]);
+    expect(paymentMethodTypesForMountCurrency(listedEur, "cad")).toEqual(["card", "link"]);
+  });
+
+  it("adds UPI only after an INR remount and drops Cash App", () => {
+    const usdMount = {
+      payment_method_types: ["card", "link", "cashapp"],
+      inr_local_methods: ["upi"],
+    };
+
+    expect(paymentMethodTypesForMountCurrency(usdMount, "usd")).toEqual(["card", "link", "cashapp"]);
+    expect(paymentMethodTypesForMountCurrency(usdMount, "inr")).toEqual(["card", "link", "upi"]);
   });
 });

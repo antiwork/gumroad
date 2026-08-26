@@ -19,6 +19,7 @@ import {
 } from "$app/components/Checkout/checkoutTheme";
 import {
   STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
+  paymentMethodTypesForMountCurrency,
   type PaymentElementConfig,
   type PaymentElementClientConfirmConfig,
 } from "$app/components/Checkout/payment";
@@ -26,27 +27,6 @@ import { type PaymentElementApplePayOption } from "$app/components/Checkout/paym
 import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Fieldset } from "$app/components/ui/Fieldset";
-
-// Must match Checkout::PaymentMethodResolver's USD-only set. A quoted remount in CAD/EUR
-// that still lists these makes Stripe reject the session, card included.
-const USD_ONLY_PAYMENT_METHOD_TYPES = ["us_bank_account", "cashapp", "klarna", "alipay"];
-
-const paymentMethodTypesForMountCurrency = (
-  elementsOptions: PaymentElementConfig | PaymentElementClientConfirmConfig,
-  currency: string,
-) => {
-  const mount = currency.toLowerCase();
-  let types = [...elementsOptions.payment_method_types];
-  if (mount !== "usd") {
-    types = types.filter((method) => !USD_ONLY_PAYMENT_METHOD_TYPES.includes(method));
-  }
-  if (mount !== "inr") return types;
-
-  for (const method of elementsOptions.inr_local_methods ?? []) {
-    if (!types.includes(method)) types.push(method);
-  }
-  return types;
-};
 
 export type PaymentElementController = { stripe: Stripe; elements: StripeElements };
 

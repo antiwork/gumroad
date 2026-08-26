@@ -88,6 +88,41 @@ export type PaymentElementClientConfirmConfig = {
   stripe_link_enabled: boolean;
   stripe_connect_account_id: string | null;
 };
+
+// Must match Checkout::PaymentMethodResolver USD-only methods and
+// BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS. A remount that
+// still lists a method Stripe cannot charge in the new currency rejects the
+// whole session, card included.
+const USD_ONLY_PAYMENT_METHOD_TYPES = ["us_bank_account", "cashapp", "klarna", "alipay"];
+const FORCED_CURRENCY_PAYMENT_METHODS: Record<string, string> = {
+  ideal: "eur",
+  bancontact: "eur",
+  upi: "inr",
+  pix: "brl",
+};
+
+export function paymentMethodTypesForMountCurrency(
+  elementsOptions: Pick<PaymentElementConfig | PaymentElementClientConfirmConfig, "payment_method_types"> & {
+    inr_local_methods?: string[];
+  },
+  currency: string,
+): string[] {
+  const mount = currency.toLowerCase();
+  let types = [...elementsOptions.payment_method_types];
+  if (mount !== "usd") {
+    types = types.filter((method) => !USD_ONLY_PAYMENT_METHOD_TYPES.includes(method));
+  }
+  types = types.filter((method) => {
+    const forced = FORCED_CURRENCY_PAYMENT_METHODS[method];
+    return !forced || forced === mount;
+  });
+  if (mount === "inr") {
+    for (const method of elementsOptions.inr_local_methods ?? []) {
+      if (!types.includes(method)) types.push(method);
+    }
+  }
+  return types;
+}
 // request_apple_pay_merchant_tokens: subscription carts ask Apple for an MPAN (survives a
 // device wipe) instead of a device token. payment_element_wallets: PE renders wallets
 // natively and the Payment Request Button is not mounted; always false on card_element.
