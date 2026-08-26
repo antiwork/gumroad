@@ -3,7 +3,7 @@ import { renderHook } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { FilesDispatchProvider, useUploadSubtitles } from "$app/components/EmailAttachments";
+import { FileAction, FilesDispatchProvider, useUploadSubtitles } from "$app/components/EmailAttachments";
 
 const scheduledUploads = vi.hoisted((): { onComplete: () => void; onError?: () => void }[] => []);
 
@@ -31,9 +31,10 @@ afterEach(() => {
 });
 
 it("settles the subtitle upload promise when Evaporate errors", async () => {
+  const dispatched: FileAction[] = [];
   const { result } = renderHook(() => useUploadSubtitles(), {
     wrapper: ({ children }: { children: React.ReactNode }) => (
-      <FilesDispatchProvider value={() => {}}>{children}</FilesDispatchProvider>
+      <FilesDispatchProvider value={(action) => dispatched.push(action)}>{children}</FilesDispatchProvider>
     ),
   });
   if (!result.current) throw new Error("uploader hook returned null");
@@ -46,8 +47,14 @@ it("settles the subtitle upload promise when Evaporate errors", async () => {
   await Promise.resolve();
   expect(settled).toBe(false);
   expect(scheduledUploads).toHaveLength(1);
+  expect(dispatched.some((action) => action.type === "start-subtitle-upload")).toBe(true);
 
   scheduledUploads[0]?.onError?.();
   await pending;
   expect(settled).toBe(true);
+  expect(dispatched).toContainEqual({
+    type: "remove-subtitle",
+    fileId: "file-1",
+    subtitleUrl: expect.any(String) as string,
+  });
 });

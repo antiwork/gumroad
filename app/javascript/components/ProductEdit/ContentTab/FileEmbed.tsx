@@ -279,6 +279,15 @@ const FileEmbedNodeView = ({
     subtitleUploadSettled.current.get(url)?.();
     subtitleUploadSettled.current.delete(url);
   };
+  const dropFailedSubtitle = (url: string) => {
+    updateProduct((product) => {
+      product.files = product.files.map((existing) =>
+        existing.id === file.id
+          ? { ...existing, subtitle_files: existing.subtitle_files.filter((subtitle) => subtitle.url !== url) }
+          : existing,
+      );
+    });
+  };
   const removeSubtitle = (url: string) => {
     if (subtitleUploadSettled.current.has(url)) {
       uploader.cancelUpload(`subtitles_for_${file.id}__${url}`);
@@ -328,6 +337,7 @@ const FileEmbedNodeView = ({
               settleSubtitleUpload(subtitleEntry.url);
             },
             onError: () => {
+              dropFailedSubtitle(subtitleEntry.url);
               settleSubtitleUpload(subtitleEntry.url);
             },
             onProgress: (progress) => {
@@ -339,6 +349,7 @@ const FileEmbedNodeView = ({
           if (typeof status === "string") {
             // status contains error string if any, otherwise index of file in array
             showAlert(status, "error");
+            dropFailedSubtitle(subtitleEntry.url);
             settleSubtitleUpload(subtitleEntry.url);
           }
         }),

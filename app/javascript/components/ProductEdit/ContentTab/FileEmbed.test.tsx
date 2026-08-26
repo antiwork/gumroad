@@ -184,8 +184,12 @@ it("keeps every subtitle from a multi-file pick instead of last-write-wins", asy
 
 it("re-enables the subtitle picker when an over-budget upload errors", async () => {
   const file: FileEntry = { ...streamableFile, subtitle_files: [] };
+  const product: { files: FileEntry[] } = { files: [file] };
   context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
-  context.updateProduct = () => {};
+  context.updateProduct = (update: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture mapper matches updateProduct
+    if (typeof update === "function") (update as (p: typeof product) => void)(product);
+  };
 
   render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
   await act(() => Promise.resolve());
@@ -207,6 +211,7 @@ it("re-enables the subtitle picker when an over-budget upload errors", async () 
 
   expect(input.disabled).toBe(true);
   expect(scheduledUploads).toHaveLength(1);
+  expect(product.files[0]?.subtitle_files).toHaveLength(1);
 
   await act(async () => {
     scheduledUploads[0]?.onError?.();
@@ -214,4 +219,5 @@ it("re-enables the subtitle picker when an over-budget upload errors", async () 
   });
 
   expect(input.disabled).toBe(false);
+  expect(product.files[0]?.subtitle_files).toEqual([]);
 });

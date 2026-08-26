@@ -361,6 +361,7 @@ export const useUploadSubtitles = () => {
               settle(fileId, subtitleEntry.url);
             },
             onError: () => {
+              filesDispatch({ type: "remove-subtitle", fileId, subtitleUrl: subtitleEntry.url });
               settle(fileId, subtitleEntry.url);
             },
             onProgress: (progress) =>
@@ -370,6 +371,7 @@ export const useUploadSubtitles = () => {
           if (typeof status === "string") {
             // status contains error string if any, otherwise index of file in array
             showAlert(status, "error");
+            filesDispatch({ type: "remove-subtitle", fileId, subtitleUrl: subtitleEntry.url });
             settle(fileId, subtitleEntry.url);
           }
         }),
