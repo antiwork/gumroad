@@ -179,16 +179,18 @@ class SendWorkflowPostEmailsJob
       @members.each do |member|
         return :ownership_lost unless renew_fanout_lease
 
-        enqueue_email_jobs_for(member)
-        @fanout_emitted_recipient_jobs = true
+        @fanout_emitted_recipient_jobs ||= enqueue_email_jobs_for(member)
       end
       :complete
     end
 
     def enqueue_email_jobs_for(member)
+      enqueued = false
       delivery_targets_for(member, log_unresolvable: true).each do |target|
         enqueue_installment_worker(**target)
+        enqueued = true
       end
+      enqueued
     end
 
     def prepare_immediate_fanout_pacing

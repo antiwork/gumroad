@@ -3,7 +3,9 @@
 # One large workflow publish at a time per seller. Publishing several six-figure
 # posts together used to enqueue every recipient immediately and stall checkout.
 class WorkflowSellerFanoutLock
-  DEFAULT_TTL = 20.minutes
+  # Longer than the audience-load statement cap (1 hour) plus margin. The job
+  # cannot renew while blocked in that query.
+  DEFAULT_TTL = 75.minutes
   DEFAULT_RETRY = 30.seconds
 
   RELEASE_IF_HELD = <<~LUA
