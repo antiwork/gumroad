@@ -4608,6 +4608,7 @@ class Purchase < ApplicationRecord
 
       purchase_sales_tax_info.save
       save
+      tip.save! if errors.empty? && tip&.has_changes_to_save?
 
       return unless should_prepare_for_charge
 
