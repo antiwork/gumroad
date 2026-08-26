@@ -394,8 +394,13 @@ class Checkout::BuyerCurrencyQuote
       by_index = line_index.nil? ? nil : scoped.find { |line| line["line_index"].to_i == line_index.to_i }
       if uid.present? && !line_index.nil?
         # Both identifiers are client-supplied. Accept only when they name the
-        # same signed row — never fall back from a miss or a sibling swap.
-        by_uid if by_uid && by_index && by_uid.equal?(by_index)
+        # same signed row. An old browser can mint a sole row without a UID but
+        # submit the order UID; preserve that rolling-deploy shape by index.
+        if by_uid && by_index && by_uid.equal?(by_index)
+          by_uid
+        elsif scoped.one? && by_index && by_index["uid"].blank?
+          by_index
+        end
       elsif uid.present?
         by_uid
       elsif scoped.one?
