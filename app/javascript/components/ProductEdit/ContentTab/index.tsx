@@ -340,11 +340,16 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   // reset once each upload from the pick has completed or been cancelled.
   const pendingFileInputResetRef = React.useRef<{ picked: File[]; uploadIds: Set<string> } | null>(null);
   const [fileInputHeld, setFileInputHeld] = React.useState(false);
+  const fileInputHeldRef = React.useRef(false);
+  const holdFileInput = (held: boolean) => {
+    fileInputHeldRef.current = held;
+    setFileInputHeld(held);
+  };
   const settleFileInputUpload = (fileId: string) => {
     const pending = pendingFileInputResetRef.current;
     if (!pending?.uploadIds.delete(fileId) || pending.uploadIds.size > 0) return;
     pendingFileInputResetRef.current = null;
-    setFileInputHeld(false);
+    holdFileInput(false);
     const input = fileInputRef.current;
     if (input && fileListMatchesPickedFiles(input.files, pending.picked)) input.value = "";
   };
@@ -410,27 +415,31 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   };
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const openToolbarFileInput = () => {
-    if (pendingFileInputResetRef.current) return;
+    if (fileInputHeldRef.current || pendingFileInputResetRef.current) return;
     fileInputRef.current?.click();
   };
   const uploadFileInput = (input: HTMLInputElement) => {
     // A second pick replaces this input's FileList; Chromium can revoke the
     // original handles an in-flight over-budget upload still needs.
-    if (pendingFileInputResetRef.current || !input.files?.length) return;
+    if (fileInputHeldRef.current || pendingFileInputResetRef.current || !input.files?.length) return;
     const picked = [...input.files];
+    holdFileInput(true);
     void snapshotPickedFiles(picked)
       .then((files) => {
         const uploadIds = uploadFiles(files);
-        if (!fileListMatchesPickedFiles(input.files, picked)) return;
+        if (!fileListMatchesPickedFiles(input.files, picked)) {
+          holdFileInput(false);
+          return;
+        }
         // With no scheduled upload left, nothing holds the original handles and an
         // immediate reset is safe.
-        if (canResetFileInputAfterSnapshot(picked, files) || uploadIds.length === 0) input.value = "";
-        else {
-          pendingFileInputResetRef.current = { picked, uploadIds: new Set(uploadIds) };
-          setFileInputHeld(true);
-        }
+        if (canResetFileInputAfterSnapshot(picked, files) || uploadIds.length === 0) {
+          input.value = "";
+          holdFileInput(false);
+        } else pendingFileInputResetRef.current = { picked, uploadIds: new Set(uploadIds) };
       })
       .catch((error: unknown) => {
+        holdFileInput(false);
         showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
       });
   };
