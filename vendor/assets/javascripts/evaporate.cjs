@@ -371,6 +371,7 @@ var Evaporate = function(config){
       setupRequest(upload);
 
       setTimeout(function(){
+        if (me.status != EVAPORATING) return;
         authorizedSend(upload);
         l.d('upload #',partNumber,upload);
       },backOff);
