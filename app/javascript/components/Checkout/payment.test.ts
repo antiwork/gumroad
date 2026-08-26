@@ -974,6 +974,17 @@ describe("buyer-currency presentment lane", () => {
     expect(getStripePaymentElementAmount(s)).toBe(625);
   });
 
+  it("lets client-confirm direct-listed checkout remount to a third-currency quote", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      buyerCurrency: "cad",
+      surcharges: loadedSurchargesWithQuote,
+    });
+    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 625 });
+    expect(getStripePaymentElementAmount(s)).toBe(625);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
   it("mounts canonical USD when the surcharge response has no quote", () => {
     const s = state({
       checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,

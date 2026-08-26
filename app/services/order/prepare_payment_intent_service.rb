@@ -124,17 +124,20 @@ class Order::PreparePaymentIntentService
       true
     end
 
-    # The browser sends a buyer-currency quote token only when the checkout displayed
-    # local-currency totals, meaning the buyer confirmed that local amount. The client-confirm
-    # lane always charges canonical USD and has no machinery to honor a quote, so accepting a
-    # token here would silently charge a different amount than the buyer saw — the invariant
-    # the buyer-currency feature must never break (mirrors Charge::CreateService's fail-closed
-    # behavior on the server-confirm lane). Failing with the quote-invalid error code makes the
-    # checkout cancel, re-fetch surcharges, and re-run the display gates.
+    # The browser attaches a buyer-currency quote token when checkout displayed local-currency
+    # totals. A client-confirm checkout may keep that token only when the Payment Element was also
+    # mounted in the same quoted currency; then #prepare creates a matching presentment intent and
+    # the quote remains the source of truth. Any missing/mismatched mount currency would silently
+    # charge a different amount than the buyer saw, so fail closed before retrieving the token.
     def block_unexpected_buyer_currency_quote
       return false if params[:buyer_currency_quote].blank?
 
-      Rails.logger.error("Client-confirm prepare received a buyer_currency_quote for order #{order.id}; failing closed rather than charging canonical USD")
+      quoted_currency = Checkout::BuyerCurrencyQuote.quoted_currency_hint(params[:buyer_currency_quote])
+      reported_currency = reported_element_mount_currency
+      return false if quoted_currency.present? && quoted_currency == reported_currency &&
+        reported_currency != Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+
+      Rails.logger.error("Client-confirm prepare received a buyer_currency_quote for order #{order.id} with mount currency #{reported_currency.inspect}; failing closed rather than charging canonical USD")
       purchases_to_charge.each { |purchase| purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID }
       fail_purchases_with(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
       true

@@ -537,6 +537,11 @@ export function getStripePaymentElementAmount(state: State) {
     state.checkoutPayment.elements_options.stripe_elements_mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT
   )
     return null;
+  // Buyer-currency presentment lane: the element mounts in the quote currency, so the amount
+  // must be the quote's locked local-currency total, not any server-rendered listed/canonical
+  // amount below.
+  const presentment = getStripePaymentElementPresentment(state);
+  if (presentment) return presentment.amountCents;
   // Direct-listed surfaces mount in the listed currency, so the USD total below would be the
   // wrong unit. The server supplies the listed amount instead.
   if (
@@ -546,10 +551,6 @@ export function getStripePaymentElementAmount(state: State) {
       (getSelectableDirectListedCurrency(state) !== null && state.buyerCurrency?.toLowerCase() !== "usd"))
   )
     return state.checkoutPayment.elements_options.presentment_amount_cents;
-  // Buyer-currency presentment lane: the element mounts in the quote currency, so the amount
-  // must be the quote's locked local-currency total, not the USD amount below.
-  const presentment = getStripePaymentElementPresentment(state);
-  if (presentment) return presentment.amountCents;
   // Partial-payment carts mount with the amount the server will charge now, not the agreement total.
   return getChargeTodayPrice(state);
 }
@@ -563,8 +564,11 @@ export function getStripePaymentElementAmount(state: State) {
 // the card, which PR 1 forces onto the canonical USD charge path), this returns null and the
 // element mounts canonical USD — matching the canonical charge the fallback performs.
 export function getStripePaymentElementPresentment(state: State): { currency: string; amountCents: number } | null {
-  if (state.checkoutPayment.integration !== "payment_element") return null;
-  if (!state.checkoutPayment.elements_options.buyer_currency_presentment) return null;
+  if (state.checkoutPayment.integration === "payment_element") {
+    if (!state.checkoutPayment.elements_options.buyer_currency_presentment) return null;
+  } else if (state.checkoutPayment.integration !== "payment_element_client_confirm") {
+    return null;
+  }
   if (state.surcharges.type !== "loaded") return null;
 
   const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
@@ -585,6 +589,8 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
 export function getStripePaymentElementMountCurrency(state: State): string | null {
   if (state.checkoutPayment.integration === "payment_element_client_confirm") {
     if (getConfiguredDirectListedCurrency(state) !== null && state.surcharges.type !== "loaded") return null;
+    const presentment = getStripePaymentElementPresentment(state);
+    if (presentment) return presentment.currency;
     return getDesiredStripePaymentElementMountCurrency(state);
   }
   if (state.checkoutPayment.integration !== "payment_element") return null;
@@ -898,7 +904,7 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       ? "payment_element"
       : undefined;
   const paymentElementMountCurrency =
-    paymentDetailsSource === "payment_element" ? getDesiredStripePaymentElementMountCurrency(state) : null;
+    paymentDetailsSource === "payment_element" ? getStripePaymentElementMountCurrency(state) : null;
   const paymentElementDirectListedCurrency =
     paymentDetailsSource === "payment_element" ? getSelectableDirectListedCurrency(state) : null;
   // Allocate the tip across cart lines in one pass so the per-line integers sum to the

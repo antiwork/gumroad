@@ -110,7 +110,7 @@ describe Order::CreateService, :vcr do
             "uid" => line_uid,
             "line_index" => 0,
             "permalink" => product_1.unique_permalink,
-            "price_cents" => 17_50,
+            "price_cents" => 17_51,
             "tip_cents" => 2_63,
             "seller_tax_cents" => 0,
             "gumroad_tax_cents" => 0,
@@ -119,6 +119,7 @@ describe Order::CreateService, :vcr do
         ]
       )
       params[:payment_details_source] = "payment_element"
+      params[:payment_element_mount_currency] = "eur"
       params[:confirmation_token] = "ctoken_123"
 
       order, purchase_responses = Order::CreateService.new(params:).perform
