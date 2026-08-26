@@ -248,6 +248,7 @@ var Evaporate = function(config){
 
       initiate.onErr = function(xhr){
         l.d('onInitiateError for FileUpload ' + me.id);
+        me.error('Error initiating upload.');
         setStatus(ERROR);
       };
 
