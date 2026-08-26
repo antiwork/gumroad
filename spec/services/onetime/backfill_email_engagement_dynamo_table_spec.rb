@@ -143,7 +143,7 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
       ]
       client.stub_responses(:scan, { items: scan_items, last_evaluated_key: nil })
 
-      adjustments = described_class.recompute_counters!
+      adjustments = described_class.recompute_counters!(processes: 1)
 
       # open_count is off by one (2 items vs 1); click_count matches; the pair
       # count and the URL# item are missing entirely.
@@ -169,8 +169,37 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
       ]
       client.stub_responses(:scan, { items: scan_items, last_evaluated_key: nil })
 
-      expect(described_class.recompute_counters!).to eq(0)
+      expect(described_class.recompute_counters!(processes: 1)).to eq(0)
       expect(requests.map { _1[:operation_name] }).to eq([:scan])
+    end
+
+    it "joins every delta thread before surfacing a failure" do
+      scan_items = [{ "pk" => "123", "sk" => "OPEN#aaa" }]
+      client.stub_responses(:scan, { items: scan_items, last_evaluated_key: nil })
+      client.stub_responses(:update_item, "InternalServerError")
+
+      expect { described_class.recompute_counters!(processes: 1) }
+        .to raise_error(Aws::DynamoDB::Errors::InternalServerError)
+    end
+  end
+
+  describe ".recompute_installments_active_since!" do
+    it "recomputes installments with Mongo activity in the window plus the safety margin" do
+      stale = CreatorEmailOpenEvent.new(installment_id: 1, mailer_method:, mailer_args: "[1, 1]", open_count: 1)
+      stale._id = BSON::ObjectId.from_time(2.days.ago)
+      stale.save!
+      CreatorEmailOpenEvent.create!(installment_id: 2, mailer_method:, mailer_args: "[2, 2]", open_count: 1)
+      CreatorEmailClickEvent.create!(installment_id: 3, mailer_method:, mailer_args:, click_url:, click_count: 1)
+      # Just before the window: covered by DRIFT_WINDOW_MARGIN.
+      margin = CreatorEmailOpenEvent.new(installment_id: 4, mailer_method:, mailer_args: "[4, 4]", open_count: 1)
+      margin._id = BSON::ObjectId.from_time(65.minutes.ago)
+      margin.save!
+
+      expect(described_class).to receive(:recompute_installment!).with(2)
+      expect(described_class).to receive(:recompute_installment!).with(3)
+      expect(described_class).to receive(:recompute_installment!).with(4)
+
+      expect(described_class.recompute_installments_active_since!(1.hour.ago)).to eq(3)
     end
   end
 
