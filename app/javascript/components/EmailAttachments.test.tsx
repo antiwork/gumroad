@@ -5,6 +5,11 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { FileAction, FilesDispatchProvider, useUploadSubtitles } from "$app/components/EmailAttachments";
 
+const alerts = vi.hoisted((): { message: string; level: string }[] => []);
+vi.mock("$app/components/server-components/Alert", () => ({
+  showAlert: (message: string, level: string) => alerts.push({ message, level }),
+}));
+
 const scheduledUploads = vi.hoisted((): { onComplete: () => void; onError?: () => void }[] => []);
 
 vi.mock("$app/components/EvaporateUploader", () => ({
@@ -28,6 +33,7 @@ vi.mock("$app/components/S3UploadConfig", () => ({
 
 afterEach(() => {
   scheduledUploads.length = 0;
+  alerts.length = 0;
 });
 
 it("settles the subtitle upload promise when Evaporate errors", async () => {
@@ -52,6 +58,7 @@ it("settles the subtitle upload promise when Evaporate errors", async () => {
   scheduledUploads[0]?.onError?.();
   await pending;
   expect(settled).toBe(true);
+  expect(alerts).toEqual([{ message: "Subtitle upload failed.", level: "error" }]);
   expect(dispatched).toContainEqual({
     type: "remove-subtitle",
     fileId: "file-1",

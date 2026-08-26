@@ -275,6 +275,7 @@ export const Image = TiptapNode.create({
               })
               .catch((error: unknown) => {
                 showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+                if (fileListMatchesPickedFiles(input.files, picked)) input.value = "";
               })
               .finally(() => {
                 editor.off("transaction", mapInsertAt);

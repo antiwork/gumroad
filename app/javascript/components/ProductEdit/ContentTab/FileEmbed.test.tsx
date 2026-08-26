@@ -10,6 +10,11 @@ import { PICKED_FILE_SNAPSHOT_LIMIT_BYTES } from "$app/utils/snapshotPickedFile"
 import { FileEmbed, FileEmbedConfig } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { FileEntry } from "$app/components/ProductEdit/state";
 
+const alerts = vi.hoisted((): { message: string; level: string }[] => []);
+vi.mock("$app/components/server-components/Alert", () => ({
+  showAlert: (message: string, level: string) => alerts.push({ message, level }),
+}));
+
 // vite.config.ts replaces the bare `SSR` identifier at build time.
 Object.assign(globalThis, { SSR: false });
 
@@ -66,6 +71,7 @@ afterEach(() => {
   cleanup();
   cancelUpload.mockReset();
   scheduledUploads.length = 0;
+  alerts.length = 0;
 });
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs the fields the node view reads
@@ -220,4 +226,5 @@ it("re-enables the subtitle picker when an over-budget upload errors", async () 
 
   expect(input.disabled).toBe(false);
   expect(product.files[0]?.subtitle_files).toEqual([]);
+  expect(alerts).toEqual([{ message: "Subtitle upload failed.", level: "error" }]);
 });

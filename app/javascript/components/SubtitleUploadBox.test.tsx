@@ -83,6 +83,23 @@ describe("SubtitleUploadBox", () => {
     expect(valueWrites).toEqual([]);
   });
 
+  it("resets the input when snapshotting the pick fails", async () => {
+    const { onUploadFiles, input } = renderPicker();
+    const picked = new File(["x"], "captions.srt", { type: "text/plain" });
+    Object.defineProperty(picked, "arrayBuffer", { value: () => Promise.reject(new Error("read failed")) });
+    const valueWrites = attachPickedFile(input, picked);
+
+    await act(async () => {
+      fireEvent.change(input);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(alerts).toEqual([{ message: "read failed", level: "error" }]);
+    expect(onUploadFiles).not.toHaveBeenCalled();
+    expect(valueWrites).toEqual([""]);
+  });
+
   it("rejects a file that is not a subtitle before snapshotting it", async () => {
     const { onUploadFiles, input } = renderPicker();
     const picked = new File(["notes"], "notes.txt", { type: "text/plain" });

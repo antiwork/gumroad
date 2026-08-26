@@ -43,6 +43,7 @@ export const SubtitleUploadBox = ({ onUploadFiles }: UploadBoxProps) => {
       })
       .catch((error: unknown) => {
         showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+        if (fileListMatchesPickedFiles(fileInput.files, picked)) fileInput.value = "";
       })
       .finally(() => {
         snapshotInFlight.current = false;

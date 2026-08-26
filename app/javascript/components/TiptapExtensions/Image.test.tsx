@@ -117,6 +117,22 @@ describe("Insert image picker", () => {
     expect(valueWrites).toEqual([""]);
   });
 
+  it("resets the input when snapshotting the pick fails", async () => {
+    const { input, uploaded } = renderInsertImagePicker();
+    const picked = new File(["png"], "pic.png", { type: "image/png" });
+    Object.defineProperty(picked, "arrayBuffer", { value: () => Promise.reject(new Error("read failed")) });
+    const valueWrites = attachPickedFile(input, picked);
+
+    await act(async () => {
+      fireEvent.change(input);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(uploaded).toEqual([]);
+    expect(valueWrites).toEqual([""]);
+  });
+
   it("maps the insert position across edits while the snapshot is in flight", async () => {
     const { input } = renderInsertImagePicker();
     let release!: () => void;
