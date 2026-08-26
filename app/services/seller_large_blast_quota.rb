@@ -19,8 +19,9 @@ class SellerLargeBlastQuota
 
     $redis.get(key) == claim_id
   rescue Redis::BaseError, RedisClient::Error => e
+    # Fail closed: admitting every large blast during an outage recreates the stampede.
     ErrorNotifier.notify(e, seller_id:)
-    true
+    false
   end
 
   def self.claim_id_for(kind:, blast_id:)

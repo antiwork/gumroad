@@ -128,7 +128,10 @@ class SendWorkflowPostEmailsJob
         fanout_token: schedule_intent_fanout_token
       )
     when :ownership_lost
-      nil
+      requeue_for_seller_fanout_limit(
+        post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
+        schedule_intent_token, schedule_intent_fanout_token
+      )
     else
       raise FanoutNotEnqueuedError, "Unexpected fanout result"
     end

@@ -30,8 +30,9 @@ class WorkflowSellerFanoutLock
 
     new(seller_id:, token:)
   rescue Redis::BaseError, RedisClient::Error => e
+    # Fail closed: a synthetic lock would let concurrent publishes stampede during an outage.
     ErrorNotifier.notify(e, seller_id:)
-    new(seller_id:, token: nil, fail_open: true)
+    nil
   end
 
   def self.retry_in
@@ -57,8 +58,9 @@ class WorkflowSellerFanoutLock
 
     $redis.eval(RENEW_IF_HELD, keys: [key], argv: [@token, self.class.ttl_seconds]).to_i == 1
   rescue Redis::BaseError, RedisClient::Error => e
+    # Fail closed: continuing without a verifiable TTL lets a second publisher overlap.
     ErrorNotifier.notify(e, seller_id: @seller_id)
-    true
+    false
   end
 
   def release

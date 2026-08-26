@@ -33,6 +33,13 @@ describe SellerLargeBlastQuota, :freeze_time do
     expect(described_class.allow?(seller_id:, kind: "post_blast", blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(true)
   end
 
+  it "does not admit a large send when Redis is down" do
+    allow($redis).to receive(:set).and_raise(Redis::CannotConnectError, "no connection")
+    expect(ErrorNotifier).to receive(:notify)
+
+    expect(described_class.allow?(seller_id:, blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(false)
+  end
+
   it "opens a new slot the next day" do
     expect(described_class.allow?(seller_id:, blast_id: first_blast, recipient_count: described_class::DEFAULT_THRESHOLD)).to eq(true)
 

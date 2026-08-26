@@ -18,6 +18,21 @@ describe WorkflowSellerFanoutLock do
     expect(described_class.acquire(seller_id)).to be_present
   end
 
+  it "does not grant a lock when Redis is down" do
+    allow($redis).to receive(:set).and_raise(Redis::CannotConnectError, "no connection")
+    expect(ErrorNotifier).to receive(:notify)
+
+    expect(described_class.acquire(seller_id)).to be_nil
+  end
+
+  it "treats a renewal error as lost ownership" do
+    lock = described_class.acquire(seller_id)
+    allow($redis).to receive(:eval).and_raise(Redis::CannotConnectError, "no connection")
+    expect(ErrorNotifier).to receive(:notify)
+
+    expect(lock.renew).to eq(false)
+  end
+
   it "does not release a successor's lock" do
     first = described_class.acquire(seller_id)
     $redis.del(RedisKey.workflow_seller_fanout_lock(seller_id))
