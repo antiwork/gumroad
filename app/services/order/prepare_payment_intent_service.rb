@@ -771,7 +771,7 @@ class Order::PreparePaymentIntentService
                        uniform_method_forced_purchase_currency == currency
 
         # USD carts remount in INR so UPI can appear. Card/Link tokens from that remount
-        # still need an INR intent. disable_buyer_local_currency is only a display pref.
+        # still need an INR intent, but only for sellers who have not opted out of buyer currency.
         return Checkout::BuyerCurrencyEligibility.local_method_quote_enabled?(seller, currency)
       end
 
@@ -788,9 +788,9 @@ class Order::PreparePaymentIntentService
     end
 
     # A ConfirmationToken from a non-USD Payment Element can never confirm a USD intent.
-    # UPI/iDEAL/Pix/Bancontact always require the forced-currency presentment — including
-    # after a local-method flag rollback and when the seller hid local-currency display.
-    # Card/Link follow the browser's reported mount currency (see #intent_forced_currency).
+    # UPI/iDEAL/Pix/Bancontact always require the forced-currency presentment, including
+    # after a local-method flag rollback. Card/Link follow the browser's reported mount currency
+    # (see #intent_forced_currency).
     def client_confirm_presentment_required?
       return false if @previewed_payment_method_type.blank?
 

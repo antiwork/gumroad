@@ -2259,8 +2259,8 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(order.purchases.first.reload).to be_failed
       end
 
-      # The USD remount path exists so UPI can appear on a USD listing. Presentment
-      # must stay required: a USD fallback cannot confirm a token minted in INR.
+      # Sellers who hide buyer-local currency are the exception to the USD-listing remount path.
+      # A stale or forged INR token from that cart must fail closed, not create a USD fallback.
       context "on a USD-priced cart remounted in INR for a seller who hid local-currency display" do
         let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: true) }
         let(:product) { create(:product, user: seller, price_cents: 19_99) }
@@ -2295,59 +2295,36 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(order.purchases.first.reload).to be_failed
         end
 
-        it "reuses the displayed INR quote instead of minting a second rate" do
+        it "fails closed even if a stale displayed INR quote is submitted" do
           order, params = build_order
           params = params.merge(payment_element_mount_currency: Currency::INR, buyer_currency_quote: "displayed-inr-quote")
           order.purchases.each { _1.update!(ip_country: "India") }
-          locked = instance_double(
-            Checkout::BuyerCurrencyQuote::Result,
-            stripe_fx_quote_id: "fxq_displayed_upi",
-            fx_rate: BigDecimal("0.012048"),
-            stripe_fx_quote_expires_at: 30.minutes.from_now,
-            charge_presentment_total_cents: 1_659_17
-          )
-          allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked)
+          expect(Checkout::BuyerCurrencyQuote).not_to receive(:verify!)
           expect(StripeFxQuote).not_to receive(:create)
 
           create_args, responses = perform_with_upi_preview(order, params)
 
-          expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
-          expect(create_args[:currency]).to eq(Currency::INR)
-          expect(create_args[:stripe_fx_quote_id]).to eq("fxq_displayed_upi")
-          expect(create_args[:amount_cents]).to eq(1_659_17)
-          expect(Checkout::BuyerCurrencyQuote).to have_received(:verify!).with(hash_including(token: "displayed-inr-quote", currency: Currency::INR))
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.purchases.first.reload).to be_failed
         end
 
-        it "prepares the INR intent when the buyer selected card on the remounted element" do
+        it "fails closed when a card token claims the opted-out INR remount" do
           order, params = build_order
           params = params.merge(payment_element_mount_currency: Currency::INR, buyer_currency_quote: "displayed-inr-quote")
           order.purchases.each { _1.update!(ip_country: "India") }
-          locked = instance_double(
-            Checkout::BuyerCurrencyQuote::Result,
-            stripe_fx_quote_id: "fxq_displayed_card",
-            fx_rate: BigDecimal("0.012048"),
-            stripe_fx_quote_expires_at: 30.minutes.from_now,
-            charge_presentment_total_cents: 1_659_17
-          )
-          allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked)
+          expect(Checkout::BuyerCurrencyQuote).not_to receive(:verify!)
           expect(StripeFxQuote).not_to receive(:create)
 
           preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
           allow(Stripe::ConfirmationToken).to receive(:retrieve)
             .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
 
-          charge_intent = instance_double(StripeChargeIntent, id: "pi_card_inr", client_secret: "pi_card_inr_secret")
-          create_args = nil
-          allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
-            create_args = kwargs
-            charge_intent
-          end
-
           responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_inr").perform
 
-          expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
-          expect(create_args[:currency]).to eq(Currency::INR)
-          expect(create_args[:payment_method_types]).to include("card")
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.charges.last&.stripe_payment_intent_id).to be_nil
+          expect(order.purchases.first.reload).to be_failed
         end
       end
     end

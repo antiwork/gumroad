@@ -111,12 +111,13 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result.token).to be_present
     end
 
-    it "still quotes when the seller hid local-currency display on product pages" do
+    it "withholds the quote when the seller hid local-currency display on product pages" do
       seller.update!(disable_buyer_local_currency: true)
+      expect(StripeFxQuote).not_to receive(:create)
 
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
-      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 12_50)
+      expect(result).to be_nil
     end
 
     it "reports the exact rate from the locked quote when the cart is one charge" do

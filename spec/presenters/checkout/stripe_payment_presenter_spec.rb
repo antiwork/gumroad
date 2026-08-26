@@ -1741,7 +1741,8 @@ describe Checkout::StripePaymentPresenter do
       first[:product][:exchange_rate] = 0.8
       second = checkout_product_for(second_product)
       second[:product][:exchange_rate] = 0.9
-      expect(stripe_payment_props(add_products: [first, second], ip: "24.48.0.1")).to eq(payment_element_client_confirm_props)
+      expect(stripe_payment_props(add_products: [first, second], ip: "24.48.0.1"))
+        .to eq(payment_element_client_confirm_props(disable_wallets: true))
     ensure
       if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
@@ -1775,7 +1776,7 @@ describe Checkout::StripePaymentPresenter do
       stub_geoip_country("24.48.0.1", "Canada")
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "24.48.0.1"))
-        .to eq(payment_element_client_confirm_props)
+        .to eq(payment_element_client_confirm_props(disable_wallets: true))
     ensure
       deactivate_buyer_currency_flags(seller) if seller
     end
@@ -1874,7 +1875,7 @@ describe Checkout::StripePaymentPresenter do
       end
     end
 
-    it "advertises UPI as an INR remount upgrade on a USD-priced cart for an Indian buyer, even when local-currency display is off" do
+    it "does not advertise the INR remount upgrade when the seller hid local-currency display" do
       seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1999)
       seller.update!(disable_buyer_local_currency: true)
       activate_buyer_currency_flags(seller)
@@ -1886,8 +1887,8 @@ describe Checkout::StripePaymentPresenter do
 
       expect(props[:elements_options][:currency]).to eq("usd")
       expect(props[:elements_options][:payment_method_types]).not_to include("upi")
-      expect(props[:elements_options][:inr_local_methods]).to eq(%w[upi])
-      expect(props[:disable_wallets]).to be(true)
+      expect(props[:elements_options][:inr_local_methods]).to eq([])
+      expect(props[:disable_wallets]).to be(false)
     ensure
       if seller
         Feature.deactivate_user(:checkout_local_method_upi, seller)

@@ -377,7 +377,7 @@ class Checkout::StripePaymentPresenter
     def method_forced_shape?(items)
       forced_currency = uniform_method_forced_currency(items)
       return false if forced_currency.blank?
-      return false unless items.all? { Checkout::BuyerCurrencyEligibility.local_method_surface_enabled?(_1[:seller]) }
+      return false unless items.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1[:seller]) }
 
       # The resolver returns nil payment_method_types when it rejects the cart (recurring,
       # commission, multi-seller, etc.), so check its eligibility verdict before inspecting
@@ -399,7 +399,7 @@ class Checkout::StripePaymentPresenter
       return [] if items.any? { _1[:recurrence].present? || _1[:pay_in_installments] || _1[:native_type] == Link::NATIVE_TYPE_COMMISSION }
       return [] if setup_for_future_charges_without_charging?(items)
       seller = sellers.first
-      return [] unless Checkout::BuyerCurrencyEligibility.local_method_surface_enabled?(seller)
+      return [] unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       return [] unless Checkout::BuyerCurrencyEligibility.stripe_test_mode? ||
                        Checkout::BuyerCurrencyEligibility.local_method_launched?("upi", seller)
 
