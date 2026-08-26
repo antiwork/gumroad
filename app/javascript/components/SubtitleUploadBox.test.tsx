@@ -98,4 +98,34 @@ describe("SubtitleUploadBox", () => {
     expect(onUploadFiles).not.toHaveBeenCalled();
     expect(valueWrites).toEqual([]);
   });
+
+  it("ignores a second pick while the first snapshot is still in flight", async () => {
+    const { onUploadFiles, input } = renderPicker();
+    let releaseFirst!: () => void;
+    const firstReady = new Promise<ArrayBuffer>((resolve) => {
+      releaseFirst = () => resolve(new TextEncoder().encode("first").buffer);
+    });
+    const first = new File(["first"], "first.srt", { type: "text/plain" });
+    Object.defineProperty(first, "arrayBuffer", { value: () => firstReady });
+    const second = new File(["second"], "second.srt", { type: "text/plain" });
+
+    attachPickedFile(input, first);
+    act(() => {
+      fireEvent.change(input);
+    });
+
+    attachPickedFile(input, second);
+    act(() => {
+      fireEvent.change(input);
+    });
+
+    await act(async () => {
+      releaseFirst();
+      await firstReady;
+      await Promise.resolve();
+    });
+
+    expect(onUploadFiles).toHaveBeenCalledTimes(1);
+    expect(onUploadFiles.mock.calls[0]?.[0][0]?.name).toBe("first.srt");
+  });
 });

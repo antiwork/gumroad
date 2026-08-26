@@ -17,13 +17,17 @@ const acceptedSubtitleExtensions = FileUtils.getAllowedSubtitleExtensions()
   .join(",");
 
 export const SubtitleUploadBox = ({ onUploadFiles }: UploadBoxProps) => {
+  const snapshotInFlight = React.useRef(false);
+
   const filePickerOnChange = (fileInput: HTMLInputElement) => {
-    if (!fileInput.files) return;
+    if (snapshotInFlight.current || !fileInput.files) return;
     const picked = [...fileInput.files];
     if (picked.some((file) => !FileUtils.isFileNameASubtitle(file.name))) {
       showAlert("Invalid file type.", "error");
       return;
     }
+    snapshotInFlight.current = true;
+    fileInput.disabled = true;
     void snapshotPickedFiles(picked)
       .then((files) => {
         onUploadFiles(files);
@@ -32,6 +36,10 @@ export const SubtitleUploadBox = ({ onUploadFiles }: UploadBoxProps) => {
       })
       .catch((error: unknown) => {
         showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+      })
+      .finally(() => {
+        snapshotInFlight.current = false;
+        fileInput.disabled = false;
       });
   };
 

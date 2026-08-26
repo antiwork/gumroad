@@ -295,7 +295,13 @@ const FileEmbedNodeView = ({
         status: { type: "unsaved", uploadStatus: { type: "uploading", progress: { percent: 0, bitrate: 0 } } },
       };
 
-      updateFile({ subtitle_files: [...file.subtitle_files, subtitleEntry] });
+      updateProduct((product) => {
+        product.files = product.files.map((existing) =>
+          existing.id === file.id
+            ? { ...existing, subtitle_files: [...existing.subtitle_files, subtitleEntry] }
+            : existing,
+        );
+      });
 
       const status = uploader.scheduleUpload({
         cancellationKey: `subtitles_for_${file.id}__${subtitleEntry.url}`,
