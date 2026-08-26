@@ -193,11 +193,11 @@ const CoverUploader = ({
                 accept={[...ALLOWED_EXTENSIONS.map((ext) => `.${ext}`), "image/*", ".heic", ".heif", ".avif"].join(",")}
                 disabled={isUploading}
                 onChange={asyncVoid(async (event) => {
-                  const input = event.target as HTMLInputElement;
-                  if (!input.files?.length) return;
+                  const files = event.currentTarget.files;
+                  if (!files?.length) return;
 
                   const validFiles: File[] = [];
-                  for (const file of Array.from(input.files)) {
+                  for (const file of Array.from(files)) {
                     if (isLikelyImageFile(file)) {
                       try {
                         validFiles.push(await prepareImageForUpload(file, { maxBytes: MAX_IMAGE_FILE_SIZE }));

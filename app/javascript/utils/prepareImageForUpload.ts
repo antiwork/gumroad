@@ -77,39 +77,43 @@ export const prepareImageForUpload = async (file: File, options: PrepareImageOpt
     PASSTHROUGH_TYPES.has(file.type) && file.size <= maxBytes && ext !== "heic" && ext !== "heif" && ext !== "avif";
 
   const source = await decodeImage(file);
-  const srcWidth = "naturalWidth" in source ? source.naturalWidth : source.width;
-  const srcHeight = "naturalHeight" in source ? source.naturalHeight : source.height;
-  if (!srcWidth || !srcHeight) throw new Error("Could not decode image.");
+  try {
+    const srcWidth = "naturalWidth" in source ? source.naturalWidth : source.width;
+    const srcHeight = "naturalHeight" in source ? source.naturalHeight : source.height;
+    if (!srcWidth || !srcHeight) throw new Error("Could not decode image.");
 
-  const largest = Math.max(srcWidth, srcHeight);
-  const needsResize = largest > maxDimension || file.size > maxBytes;
-  if (alreadyFine && !needsResize) return file;
+    const largest = Math.max(srcWidth, srcHeight);
+    const needsResize = largest > maxDimension || file.size > maxBytes;
+    if (alreadyFine && !needsResize) return file;
 
-  let width = srcWidth;
-  let height = srcHeight;
-  if (largest > maxDimension) {
-    const scale = maxDimension / largest;
-    width = Math.max(1, Math.round(srcWidth * scale));
-    height = Math.max(1, Math.round(srcHeight * scale));
-  }
-
-  let quality = 0.88;
-  let blob: Blob | null = null;
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const canvas = drawToCanvas(source, width, height);
-    blob = await canvasToBlob(canvas, "image/jpeg", quality);
-    if (blob.size <= maxBytes) break;
-    if (quality > 0.5) {
-      quality -= 0.12;
-    } else {
-      width = Math.max(1, Math.round(width * 0.75));
-      height = Math.max(1, Math.round(height * 0.75));
-      quality = 0.82;
+    let width = srcWidth;
+    let height = srcHeight;
+    if (largest > maxDimension) {
+      const scale = maxDimension / largest;
+      width = Math.max(1, Math.round(srcWidth * scale));
+      height = Math.max(1, Math.round(srcHeight * scale));
     }
-  }
-  if (!blob) throw new Error("Could not encode image.");
 
-  return new File([blob], outputName(file.name), { type: "image/jpeg", lastModified: Date.now() });
+    let quality = 0.88;
+    let blob: Blob | null = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const canvas = drawToCanvas(source, width, height);
+      blob = await canvasToBlob(canvas, "image/jpeg", quality);
+      if (blob.size <= maxBytes) break;
+      if (quality > 0.5) {
+        quality -= 0.12;
+      } else {
+        width = Math.max(1, Math.round(width * 0.75));
+        height = Math.max(1, Math.round(height * 0.75));
+        quality = 0.82;
+      }
+    }
+    if (!blob) throw new Error("Could not encode image.");
+
+    return new File([blob], outputName(file.name), { type: "image/jpeg", lastModified: Date.now() });
+  } finally {
+    if ("close" in source) source.close();
+  }
 };
 
 export const prepareImagesForUpload = async (

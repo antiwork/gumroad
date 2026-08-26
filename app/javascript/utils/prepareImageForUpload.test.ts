@@ -20,34 +20,31 @@ describe("prepareImageForUpload", () => {
 
   it("leaves a small JPEG alone", async () => {
     const file = new File(["jpeg-bytes"], "cover.jpg", { type: "image/jpeg" });
+    const close = vi.fn();
     vi.stubGlobal(
       "createImageBitmap",
-      vi.fn(async () => ({ width: 800, height: 600, close: vi.fn() })),
+      vi.fn(() => Promise.resolve({ width: 800, height: 600, close })),
     );
 
     const result = await prepareImageForUpload(file, { maxBytes: 5 * 1024 * 1024 });
 
     expect(result).toBe(file);
+    expect(close).toHaveBeenCalled();
   });
 
   it("converts HEIC to JPEG and resizes when the source is too large", async () => {
     const file = new File(["heic-bytes"], "photo.heic", { type: "" });
+    const close = vi.fn();
     vi.stubGlobal(
       "createImageBitmap",
-      vi.fn(async () => ({ width: 8000, height: 6000, close: vi.fn() })),
+      vi.fn(() => Promise.resolve({ width: 8000, height: 6000, close })),
     );
-    const toBlob = vi.fn((cb: (blob: Blob | null) => void) => {
+    const toBlob = vi.fn((cb: BlobCallback) => {
       cb(new Blob([new Uint8Array(1200)], { type: "image/jpeg" }));
     });
-    const origCreate = document.createElement.bind(document);
-    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
-      if (tag !== "canvas") return origCreate(tag);
-      return {
-        width: 0,
-        height: 0,
-        getContext: () => ({ drawImage: vi.fn() }),
-        toBlob,
-      } as unknown as HTMLCanvasElement;
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(toBlob);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
     });
 
     const result = await prepareImageForUpload(file, { maxBytes: 5 * 1024 * 1024, maxDimension: 4096 });
@@ -56,6 +53,7 @@ describe("prepareImageForUpload", () => {
     expect(result.name).toBe("photo.jpg");
     expect(result.type).toBe("image/jpeg");
     expect(toBlob).toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
   });
 });
 

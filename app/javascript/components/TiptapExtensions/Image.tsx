@@ -54,6 +54,7 @@ export const uploadImages = ({
 
   void (async () => {
     const { maxFileSize } = imageSettings;
+    const insertAt = getInsertAtFromSelection(view.state.selection);
     const prepared: File[] = [];
     for (const file of files) {
       try {
@@ -71,7 +72,6 @@ export const uploadImages = ({
     }
     if (!prepared.length) return;
 
-    const insertAt = getInsertAtFromSelection(view.state.selection);
     const imageSchema = assertDefined(view.state.schema.nodes.image, "Image node type missing");
 
     const filesWithUrls = [...prepared].reverse().map((file) => {
