@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
-INTERNAL_NOTIFICATION_EMAIL = GlobalConfig.get("INTERNAL_NOTIFICATION_EMAIL", "hi@gumroad.com")
-PAYMENTS_NOTIFICATION_EMAIL = GlobalConfig.get("PAYMENTS_NOTIFICATION_EMAIL", "hi@gumroad.com")
+# Risk / ops / announcements: Gumclaw inbox only. Never hi@ (Sahil, 2026-08-25).
+INTERNAL_NOTIFICATION_EMAIL = GlobalConfig.get("INTERNAL_NOTIFICATION_EMAIL", "gumclaw@gumroad.com")
+# Finance reports + payments/payouts alerts: finance@, plus ALWAYS_CC gumclaw.
+PAYMENTS_NOTIFICATION_EMAIL = GlobalConfig.get("PAYMENTS_NOTIFICATION_EMAIL", "finance@gumroad.com")
 
 # Address CC'd on EVERY internal notification (all CHAT_ROOMS), in addition to each
-# room's own recipient. Lets Gumclaw ingest the full internal-notification stream
-# (risk alerts, payments, payouts, etc.) alongside the existing human recipients.
+# room's own recipient. Risk/ops rooms now default to this same inbox (never hi@);
+# payments/payouts still go to finance@ with this CC.
 INTERNAL_NOTIFICATION_ALWAYS_CC = GlobalConfig.get("INTERNAL_NOTIFICATION_ALWAYS_CC", "gumclaw@gumroad.com")
 
 CHAT_ROOMS = {
