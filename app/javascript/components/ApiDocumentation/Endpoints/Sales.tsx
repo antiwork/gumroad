@@ -452,6 +452,56 @@ export const RefundSale = () => (
   </ApiEndpoint>
 );
 
+export const RevokeSaleAccess = () => (
+  <ApiEndpoint
+    method="put"
+    path="/sales/:id/revoke_access"
+    description="Revokes the buyer's access to a sale without refunding it. The sale stays in the seller's records and the buyer loses library/download access. Same rules as the dashboard Customers page: refused for refunded sales, physical products, and subscriptions. Available with the 'edit_sales' scope."
+  >
+    <SaleResponseFields />
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/sales/FO8TXN-dvxYabdavG97Y-Q==/revoke_access \\
+  -d "access_token=ACCESS_TOKEN" \\
+  -X PUT`}
+    </CodeSnippet>
+    <CodeSnippet caption="Example response:">
+      {`{
+  "success": true,
+  "sale": {
+    "id": "FO8TXN-dvxYabdavG97Y-Q==",
+    "email": "calvin@gumroad.com",
+    "access_revoked": true
+  }
+}`}
+    </CodeSnippet>
+  </ApiEndpoint>
+);
+
+export const UndoRevokeSaleAccess = () => (
+  <ApiEndpoint
+    method="put"
+    path="/sales/:id/undo_revoke_access"
+    description="Restores the buyer's access to a sale that was previously revoked. Available with the 'edit_sales' scope."
+  >
+    <SaleResponseFields />
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/sales/FO8TXN-dvxYabdavG97Y-Q==/undo_revoke_access \\
+  -d "access_token=ACCESS_TOKEN" \\
+  -X PUT`}
+    </CodeSnippet>
+    <CodeSnippet caption="Example response:">
+      {`{
+  "success": true,
+  "sale": {
+    "id": "FO8TXN-dvxYabdavG97Y-Q==",
+    "email": "calvin@gumroad.com",
+    "access_revoked": false
+  }
+}`}
+    </CodeSnippet>
+  </ApiEndpoint>
+);
+
 export const ResendReceipt = () => (
   <ApiEndpoint
     method="post"

@@ -67,6 +67,8 @@ import {
   MarkSaleAsShipped,
   RefundSale,
   ResendReceipt,
+  RevokeSaleAccess,
+  UndoRevokeSaleAccess,
   GetSale,
   GetSales,
 } from "$app/components/ApiDocumentation/Endpoints/Sales";
@@ -265,6 +267,8 @@ export default function Api() {
                 <GetSale />
                 <MarkSaleAsShipped />
                 <RefundSale />
+                <RevokeSaleAccess />
+                <UndoRevokeSaleAccess />
                 <ResendReceipt />
               </ApiResource>
 
