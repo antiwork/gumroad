@@ -827,6 +827,26 @@ describe Api::V2::Gumhead::MessagesController do
       }
     end
 
+    it "translates a non-2xx OpenRouter error envelope into the Anthropic shape" do
+      use_openrouter_base
+      stub_request(:post, openrouter_messages_url)
+        .to_return(
+          status: 429,
+          body: { error: { message: "Rate limited" } }.to_json,
+          headers: { "Content-Type" => "application/json", "Retry-After" => "7" },
+        )
+
+      post_messages
+
+      expect(response.status).to eq(429)
+      expect(response.headers["Retry-After"]).to eq("7")
+      expect(JSON.parse(response.body)).to eq(
+        "type" => "error",
+        "error" => { "type" => "api_error", "message" => "Rate limited" },
+      )
+      expect(GumheadUsageEvent.count).to eq(0)
+    end
+
     it "turns an OpenRouter HTTP 200 error envelope into a gateway error" do
       use_openrouter_base
       stub_request(:post, openrouter_messages_url)

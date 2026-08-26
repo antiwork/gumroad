@@ -372,15 +372,17 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       if missing_ok && upstream.status.code == 404
         return render json: { "input_tokens" => @raw_body.bytesize }, status: :ok
       end
-      if upstream.status.success?
-        parsed = safe_parse_json(body)
-        if parsed.is_a?(Hash) && parsed["error"].is_a?(Hash)
-          meter_buffered_usage(body) if meter
-          message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
-          return render json: anthropic_error("api_error", message), status: :bad_gateway
-        end
-        meter_buffered_usage(body) if meter
+      parsed = safe_parse_json(body)
+      # OpenRouter uses {error:{message}} without Anthropic's top-level type.
+      # Keep Anthropic envelopes as pass-through.
+      if openrouter_error_envelope?(parsed)
+        meter_buffered_usage(body) if meter && upstream.status.success?
+        message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
+        copy_retry_after(upstream)
+        status = upstream.status.success? ? :bad_gateway : upstream.status.code
+        return render json: anthropic_error("api_error", message), status:
       end
+      meter_buffered_usage(body) if meter && upstream.status.success?
       copy_retry_after(upstream)
       render body:, content_type: "application/json", status: upstream.status.code
     rescue HTTP::ConnectTimeoutError => e
@@ -676,6 +678,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # One-deploy fallback: ops can store the OpenRouter key in the
       # existing GUMHEAD_ANTHROPIC_API_KEY name while flipping the base.
       GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence || GlobalConfig.get("GUMHEAD_ANTHROPIC_API_KEY")
+    end
+
+    def openrouter_error_envelope?(parsed)
+      parsed.is_a?(Hash) && parsed["error"].is_a?(Hash) && parsed["type"] != "error"
     end
 
     def anthropic_upstream?
