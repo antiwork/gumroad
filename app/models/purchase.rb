@@ -4660,11 +4660,11 @@ class Purchase < ApplicationRecord
         component_gumroad_tax_cents,
         component_shipping_cents,
       ]
-      # Rounding slack is for FX pennies, not tip presence. A 1–5¢ signed tip
-      # against a missing Tip row (or the reverse) must refuse, not overwrite.
-      # Stripe verify! only sees line totals, so a same-total remapped split
-      # would otherwise charge the unsigned attribution — fail closed.
+      # Rounding slack is for FX pennies, not tip or seller-tax presence.
+      # Stripe verify! only sees line totals, so a component appearing or
+      # disappearing within slack, or a same-total remap, must fail closed.
       unless component_tip_cents.positive? == submitted_tip_cents.positive? &&
+          component_seller_tax_cents.positive? == tax_cents.to_i.positive? &&
           signed_components.zip(submitted_components).all? do |signed_cents, submitted_cents|
             (signed_cents - submitted_cents).abs <= BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
           end &&
