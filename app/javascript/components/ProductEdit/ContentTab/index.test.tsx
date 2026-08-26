@@ -789,4 +789,3 @@ it("ignores a second toolbar pick while a mixed pick is still snapshotting", asy
     File.prototype.arrayBuffer = originalArrayBuffer;
   }
 });
-
