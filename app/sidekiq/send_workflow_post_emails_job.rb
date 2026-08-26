@@ -128,10 +128,14 @@ class SendWorkflowPostEmailsJob
         fanout_token: schedule_intent_fanout_token
       )
     when :ownership_lost
-      requeue_for_seller_fanout_limit(
-        post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
-        schedule_intent_token, schedule_intent_fanout_token
-      )
+      # Requeue only if no recipient jobs went out. Restarting after a partial
+      # enqueue would dump the whole audience onto the queue again.
+      unless @fanout_emitted_recipient_jobs
+        requeue_for_seller_fanout_limit(
+          post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
+          schedule_intent_token, schedule_intent_fanout_token
+        )
+      end
     else
       raise FanoutNotEnqueuedError, "Unexpected fanout result"
     end
@@ -149,12 +153,14 @@ class SendWorkflowPostEmailsJob
 
     def enqueue_all_member_jobs
       @immediate_fanout_index = 0
+      @fanout_emitted_recipient_jobs = false
       return :ownership_lost unless prepare_immediate_fanout_pacing
 
       @members.each do |member|
         return :ownership_lost unless renew_fanout_lease
 
         enqueue_email_jobs_for(member)
+        @fanout_emitted_recipient_jobs = true
       end
       :complete
     end
