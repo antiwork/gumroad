@@ -235,13 +235,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
     end
 
-    # Role ids have no Anthropic SKU. They pass only when we will rewrite
-    # them. Claude family prefixes stay valid on both hosts.
+    # Role ids have no Anthropic SKU. They pass only when this request
+    # will rewrite that exact id. A partial GUMHEAD_MODEL_MAP must not
+    # admit an unmapped role. Claude family prefixes stay valid on both hosts.
     def allowed_incoming_model?(model)
       allowed_model_prefixes.any? do |prefix|
         next false unless model.start_with?(prefix)
+        next true if prefix.start_with?("claude-")
 
-        prefix.start_with?("claude-") || rewrite_upstream_model?
+        outgoing = mapped_upstream_model(model)
+        outgoing.present? && outgoing != model
       end
     end
 
