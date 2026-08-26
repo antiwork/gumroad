@@ -316,6 +316,12 @@ describe Api::V2::Gumhead::MessagesController do
 
       post_messages(request_payload.merge(service_tier: "priority"))
       expect(response.status).to eq(400)
+
+      post_messages(request_payload.merge(provider: { sort: "price" }))
+      expect(response.status).to eq(400)
+
+      post_messages(request_payload.merge(route: "fallback"))
+      expect(response.status).to eq(400)
     end
 
     # The runtime's real header, verbatim: every one of these must survive,
@@ -755,6 +761,25 @@ describe Api::V2::Gumhead::MessagesController do
       }
     end
 
+    # Forwarded body plus a response that omits model: the ledger then
+    # records @body["model"] after rewrite. A stub that already names
+    # grok would pass with the rewrite reverted.
+    %w[gumhead-chat gumhead-status gumhead-cover].each do |role_id|
+      it "allows #{role_id}, rewrites it on the upstream POST, and records the billed model" do
+        use_openrouter_base
+        stub_request(:post, openrouter_messages_url)
+          .to_return(status: 200, body: anthropic_response.except(:model).to_json, headers: { "Content-Type" => "application/json" })
+
+        post_messages(request_payload.merge(model: role_id))
+
+        expect(response.status).to eq(200)
+        expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
+          JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
+        }
+        expect(GumheadUsageEvent.sole.model).to eq("x-ai/grok-4.6")
+      end
+    end
+
     it "records the outgoing model on a synthetic timeout charge" do
       use_openrouter_base
       stub_request(:post, openrouter_messages_url).to_raise(HTTP::TimeoutError)
@@ -786,6 +811,16 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(response.status).to eq(400)
       expect(WebMock).not_to have_requested(:post, messages_url)
+    end
+
+    it "does not send the Anthropic key to a non-Anthropic upstream" do
+      use_openrouter_base
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+
+      post_messages
+
+      expect(response.status).to eq(503)
+      expect(WebMock).not_to have_requested(:post, openrouter_messages_url)
     end
 
     it "prefers GUMHEAD_UPSTREAM_API_KEY over the Anthropic key" do
