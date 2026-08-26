@@ -1,4 +1,4 @@
-import { Archive, DotsHorizontalRounded, Search, Trash } from "@boxicons/react";
+import { Archive, DotsHorizontalRounded, FileCode, Search, Trash } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
@@ -187,6 +187,7 @@ type Props = {
   pagination: { page: number; pages: number; from: number; to: number; count: number };
   creators: { id: string; name: string; count: number }[];
   bundles: { id: string; label: string }[];
+  bundle_downloads: { id: string; label: string; download_url: string | null }[];
   archived_count: number;
   unarchived_count: number;
   search: SearchParams;
@@ -200,6 +201,7 @@ export default function LibraryPage() {
     pagination,
     creators,
     bundles,
+    bundle_downloads: bundleDownloads,
     archived_count: archivedCount,
     unarchived_count: unarchivedCount,
     search,
@@ -379,6 +381,26 @@ export default function LibraryPage() {
             </button>
           </Alert>
         ) : null}
+        {bundleDownloads.map((bundleDownload) => (
+          <Alert key={bundleDownload.id} role="status" variant="info" className="mb-5 flex items-center gap-4">
+            <div className="grow">
+              Download everything included in <strong>{bundleDownload.label}</strong> as one ZIP file.
+            </div>
+            {bundleDownload.download_url ? (
+              <Button asChild color="accent">
+                <a href={bundleDownload.download_url}>
+                  <FileCode pack="filled" className="size-5" />
+                  Download all
+                </a>
+              </Button>
+            ) : (
+              <Button disabled>
+                <FileCode pack="filled" className="size-5" />
+                Preparing ZIP
+              </Button>
+            )}
+          </Alert>
+        ))}
         <div
           className={classNames(
             "grid grid-cols-1 items-start gap-x-16 gap-y-8",

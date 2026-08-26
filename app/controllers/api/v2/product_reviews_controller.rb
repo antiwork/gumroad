@@ -53,7 +53,6 @@ class Api::V2::ProductReviewsController < Api::V2::BaseController
   private
     def review_json(review)
       purchase = review.purchase
-      purchaser = purchase&.purchaser
 
       {
         id: review.external_id,
@@ -63,7 +62,7 @@ class Api::V2::ProductReviewsController < Api::V2::BaseController
         # this is the field that lets a creator sort reviews by date or print "reviewed on ...".
         created_at: review.created_at.iso8601,
         purchase_id: purchase&.external_id,
-        rater_name: purchaser&.name.presence || purchase&.full_name.presence || "Anonymous",
+        rater_name: purchase&.rater_name || "Anonymous",
         response: review.response.present? ? { message: review.response.message, created_at: review.response.created_at.iso8601 } : nil,
       }
     end

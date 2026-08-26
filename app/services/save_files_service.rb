@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 class SaveFilesService
+  # ProductFile.as_json (editor/internal serialization — not the smaller v2
+  # GET shape) includes these derived keys, but ProductFile cannot write them
+  # back. Keep writable flag-backed as_json attributes out of this list.
+  UNWRITABLE_SERIALIZED_FILE_KEYS = %i[
+    file_size extension is_pdf is_streamable is_transcoding_in_progress attached_product_name status
+  ].freeze
+
   delegate :product_files, to: :owner
   attr_reader :owner, :params, :rich_content_params, :contract
 
@@ -118,6 +125,12 @@ class SaveFilesService
         if file_params.key?(:file_name)
           file_params[:display_name] ||= file_params[:file_name]
           file_params.delete(:file_name)
+        end
+        # Hash#except! is missing on ActionController::Parameters (editor PUT),
+        # and v2 JSON uses string keys. delete works for Hash, HWIA, and Parameters.
+        UNWRITABLE_SERIALIZED_FILE_KEYS.each do |key|
+          file_params.delete(key)
+          file_params.delete(key.to_s)
         end
       end
     end

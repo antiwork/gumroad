@@ -136,9 +136,7 @@ describe AlertOnStalledPostEmailBlastsJob do
 
         expect(@dead_jobs.fetch(blast.id)).to have_received(:retry)
         expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(true)
-        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
-          expect(message).to match(/blast #{blast.id}.*DEAD → RESUMED/)
-        end
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
       end
 
       it "re-enqueues an UNACCOUNTED blast inside the resume window" do
@@ -148,9 +146,7 @@ describe AlertOnStalledPostEmailBlastsJob do
         described_class.new.perform
 
         expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id)
-        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
-          expect(message).to match(/blast #{blast.id}.*UNACCOUNTED → RESUMED/)
-        end
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
       end
 
       it "holds a blast past the resume window for a human" do
@@ -215,6 +211,7 @@ describe AlertOnStalledPostEmailBlastsJob do
         described_class.new.perform
 
         expect(@dead_jobs.fetch(blast.id)).to have_received(:retry)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
       end
 
       it "skips the resume without burning the once-per-blast marker when the sender reappears at action time" do
@@ -227,9 +224,7 @@ describe AlertOnStalledPostEmailBlastsJob do
 
         expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
         expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(false)
-        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
-          expect(message).to match(/blast #{blast.id}.*UNACCOUNTED → SKIPPED \(sender reappeared/)
-        end
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
       end
 
       it "does not touch RUNNING, QUEUED, or RETRYING blasts" do
@@ -241,13 +236,109 @@ describe AlertOnStalledPostEmailBlastsJob do
         described_class.new.perform
 
         expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
-        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
-          expect(message).not_to include("RESUMED")
-        end
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
+      end
+    end
+
+    context "when the blast already finished delivering" do
+      before { Feature.activate(:auto_resume_stalled_post_blasts) }
+      after { Feature.deactivate(:auto_resume_stalled_post_blasts) }
+
+      def fully_delivered_blast(**args)
+        blast = stalled_blast(**args)
+        $redis.set(RedisKey.blast_pending_recipients(blast.id), 0)
+        blast
+      end
+
+      it "resumes a DEAD blast so the send job stamps it" do
+        blast = fully_delivered_blast(requested_hours_ago: 6)
+        stub_sidekiq(dead: [blast.id])
+
+        described_class.new.perform
+
+        expect(@dead_jobs.fetch(blast.id)).to have_received(:retry)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
+      end
+
+      it "resumes past the window and after a previous auto-resume, since it cannot double-send" do
+        blast = fully_delivered_blast(requested_hours_ago: 30)
+        $redis.set(RedisKey.stalled_blast_auto_resumed(blast.id), Time.current.iso8601)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
+      end
+
+      it "resumes an UNACCOUNTED non-opener resend, which the double-delivery hold would otherwise block" do
+        blast = fully_delivered_blast(requested_hours_ago: 6)
+        blast.update!(recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id)
+      end
+
+      it "leaves the once-per-blast resume marker unspent" do
+        blast = fully_delivered_blast(requested_hours_ago: 6)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(false)
+        expect($redis.exists?(RedisKey.stalled_blast_completion_resumed(blast.id))).to be(true)
+      end
+
+      it "resumes only once, even across runs" do
+        blast = fully_delivered_blast(requested_hours_ago: 6)
+        stub_sidekiq
+
+        described_class.new.perform
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id).once
+      end
+
+      it "skips a blast whose sender reappeared at action time" do
+        blast = fully_delivered_blast(requested_hours_ago: 6)
+        stub_sidekiq(busy: [blast.id])
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect($redis.exists?(RedisKey.stalled_blast_completion_resumed(blast.id))).to be(false)
+      end
+
+      it "takes the ordinary resume route when recipients are still owed" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        $redis.set(RedisKey.blast_pending_recipients(blast.id), 12)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id)
+        expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(true)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
       end
     end
 
     context "when the flag is off" do
+      it "reports a fully delivered blast without enqueueing anything" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        $redis.set(RedisKey.blast_pending_recipients(blast.id), 0)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect($redis.exists?(RedisKey.stalled_blast_completion_resumed(blast.id))).to be(false)
+        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+          expect(message).to match(/blast #{blast.id}.*WOULD RESUME TO COMPLETE \(dry run/)
+        end
+      end
+
       it "never truncates action rows out of the report" do
         stub_const("#{described_class}::MAX_REPORTED", 1)
         resumable = stalled_blast(requested_hours_ago: 6)

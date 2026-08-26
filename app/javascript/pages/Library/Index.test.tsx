@@ -57,7 +57,18 @@ const defaultSearch = (): SearchParams => ({
   show_archived_only: false,
 });
 
-const defaultProps = () => ({
+const defaultProps = (): {
+  results: Result[];
+  pagination: { page: number; pages: number; from: number; to: number; count: number };
+  creators: { id: string; name: string; count: number }[];
+  bundles: { id: string; label: string }[];
+  bundle_downloads: { id: string; label: string; download_url: string | null }[];
+  archived_count: number;
+  unarchived_count: number;
+  search: SearchParams;
+  purchase_analytics: Record<string, unknown>;
+  receipt_purchases: { id: string; email: string; permalink: string; has_third_party_analytics: boolean }[];
+} => ({
   results: [result("p1", "Alpha"), result("p2", "Beta")],
   pagination: { page: 1, pages: 3, from: 1, to: 2, count: 6 },
   creators: [
@@ -65,6 +76,7 @@ const defaultProps = () => ({
     { id: "c2", name: "Ann", count: 3 },
   ],
   bundles: [{ id: "b1", label: "Bundle One" }],
+  bundle_downloads: [],
   archived_count: 2,
   unarchived_count: 6,
   search: defaultSearch(),
@@ -282,6 +294,28 @@ describe("LibraryPage", () => {
     // A filter change navigates without a page param, i.e. back to page 1.
     fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "purchase_date" } });
     expect(lastGetParams()).toEqual({ sort: "purchase_date" });
+  });
+
+  it("renders a bundle Download all link when the selected bundle archive is ready", () => {
+    const props = defaultProps();
+    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: "/d/bundle-token/download_archive" }];
+    renderPage(props);
+
+    expect(screen.getByText(/Download everything included in/u).textContent).toContain(
+      "Download everything included in",
+    );
+    const link = screen.getByRole("link", { name: /Download all/u });
+    expect(link.getAttribute("href")).toBe("/d/bundle-token/download_archive");
+  });
+
+  it("shows the bundle ZIP preparation state while the archive is being generated", () => {
+    const props = defaultProps();
+    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: null }];
+    renderPage(props);
+
+    const button = screen.getByRole("button", { name: /Preparing ZIP/u });
+    if (!(button instanceof HTMLButtonElement)) throw new Error("expected a button");
+    expect(button.disabled).toBe(true);
   });
 });
 

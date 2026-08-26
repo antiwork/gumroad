@@ -1,0 +1,155 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Decides whether a failed `Tests` attempt failed *only* because actions/checkout
+# hung -- the one failure mode where re-running unattended tells us something new.
+# A spec failure re-run tells us nothing and hides a real red, so anything that
+# reached a non-checkout failure blocks the whole verdict, not just its own job.
+#
+# Reads the attempt's jobs payload on stdin, or from a file argument:
+#
+#   { "jobs": [ ... GET /repos/{repo}/actions/runs/{id}/attempts/{n}/jobs ... ],
+#     "annotations": { "<job_id>": ["<check-run annotation message>", ...] },
+#     "conclusion": "<the triggering run's own conclusion>" }
+#
+# `--candidates` prints the job ids whose first bad step already looks like the
+# hang, so the caller only fetches annotations for that short list before asking
+# for the verdict. No network in here: the file the workflow runs is the file the
+# test runs.
+#
+# Exit codes are a contract -- 0 rerun, 1 skip, 2 could not run (bad input) --
+# because the caller turns 0 into a real re-run and must treat everything else as
+# "leave it alone".
+
+require "json"
+require "time"
+
+EXIT_SKIP = 1
+EXIT_OPERATIONAL = 2
+
+# Only these two steps carry `timeout-minutes: 5` on a checkout in tests.yml.
+# `Check out fork fixtures` is deliberately absent: it also has the timeout, but
+# it pulls untrusted fork refs and is not a step we re-run on a guess.
+HANG_STEPS = ["Check out repository", "Check out trusted workflow files"].freeze
+
+# The observed hangs sat at exactly 300.0s. The window allows for the runner's
+# clock resolution without admitting a checkout that failed fast for some other
+# reason and happened to be slow.
+HANG_SECONDS = (270.0..330.0)
+
+# `timed_out` is a failure, not a cancellation: a job that ran out of its own
+# budget is a red we must not paper over.
+FAILED = %w[failure timed_out].freeze
+BAD = (FAILED + %w[cancelled]).freeze
+JOB_FAILED = %w[failure timed_out startup_failure cancelled].freeze
+
+def timeout_message(step_name)
+  "The action '#{step_name}' has timed out after 5 minutes"
+end
+
+def steps_of(job)
+  Array(job["steps"]).sort_by { |step| step["number"] || 0 }
+end
+
+def first_bad_step(job)
+  steps_of(job).find { |step| BAD.include?(step["conclusion"]) }
+end
+
+def first_failed_step(job)
+  steps_of(job).find { |step| FAILED.include?(step["conclusion"]) }
+end
+
+def step_seconds(step)
+  started = step["started_at"]
+  completed = step["completed_at"]
+  return nil if started.nil? || completed.nil?
+  Time.iso8601(completed) - Time.iso8601(started)
+rescue ArgumentError
+  nil
+end
+
+# Jobs with no `Run tests` step at all (Build images, Compute relevant specs)
+# satisfy this too -- what matters is that no specs got the chance to run, so a
+# re-run cannot be laundering a spec failure.
+def run_tests_started?(job)
+  steps_of(job).any? do |step|
+    next false unless step["name"] == "Run tests"
+    step["status"] == "in_progress" || BAD.include?(step["conclusion"]) || step["conclusion"] == "success"
+  end
+end
+
+def candidate?(job)
+  step = first_bad_step(job)
+  return false unless step && HANG_STEPS.include?(step["name"])
+  seconds = step_seconds(step)
+  !seconds.nil? && HANG_SECONDS.cover?(seconds)
+end
+
+def hung?(job, annotations)
+  return false unless candidate?(job)
+  return false if run_tests_started?(job)
+  wanted = timeout_message(first_bad_step(job)["name"])
+  Array(annotations[job["id"].to_s]).any? { |message| message.to_s.include?(wanted) }
+end
+
+def job_label(job)
+  job["name"] || "job #{job['id']}"
+end
+
+def verdict(jobs, annotations, conclusion = nil)
+  # Fail-fast behind a hang still leaves the run `failure`; `cancelled` means a
+  # human or a cancel-in-progress threw the run away, and job-level `cancelled`
+  # cannot tell those two apart. An absent field falls through to the job-level
+  # gates below.
+  if !conclusion.nil? && conclusion != "" && conclusion != "failure"
+    return [EXIT_SKIP, "skip: the attempt concluded #{conclusion}"]
+  end
+
+  # A run that was cancelled before anything was scheduled has nothing to
+  # attribute the failure to, so there is nothing to re-run.
+  return [EXIT_SKIP, "skip: the attempt has no jobs"] if jobs.empty?
+
+  jobs.each do |job|
+    step = first_failed_step(job)
+    next if step.nil? || HANG_STEPS.include?(step["name"])
+    return [EXIT_SKIP, "skip: #{job_label(job)} failed at #{step['name'].inspect}"]
+  end
+
+  failing = jobs.select { |job| JOB_FAILED.include?(job["conclusion"]) }
+  hangs = failing.select { |job| hung?(job, annotations) }
+  return [EXIT_SKIP, "skip: no hung checkout on this attempt"] if hangs.empty?
+
+  # Everything else that went red has to be collateral: fail-fast cancelling a
+  # sibling mid-`Run tests` is not evidence of anything. A job that reached
+  # `failure` on its own is, whatever its steps say.
+  collateral = failing - hangs
+  offender = collateral.find { |job| job["conclusion"] != "cancelled" }
+  return [EXIT_SKIP, "skip: #{job_label(offender)} concluded #{offender['conclusion']}"] if offender
+
+  [0, "rerun: checkout hung on #{hangs.map { |job| job_label(job) }.join(', ')}"]
+end
+
+raw = ARGV.reject { |arg| arg.start_with?("--") }.first
+candidates_only = ARGV.include?("--candidates")
+
+begin
+  payload = JSON.parse(raw ? File.read(raw) : $stdin.read)
+rescue JSON::ParserError, Errno::ENOENT => e
+  warn "Hung-checkout classifier could not run: #{e.message}"
+  exit EXIT_OPERATIONAL
+end
+
+jobs = Array(payload.is_a?(Hash) ? payload["jobs"] : payload)
+
+if candidates_only
+  jobs.each { |job| puts job["id"] if candidate?(job) }
+  exit 0
+end
+
+code, message = verdict(
+  jobs,
+  payload.is_a?(Hash) ? payload["annotations"].to_h : {},
+  payload.is_a?(Hash) ? payload["conclusion"] : nil
+)
+puts message
+exit code

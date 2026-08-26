@@ -51,13 +51,39 @@ describe FinalizeBuyerPresentmentChargeJob do
     expect(described_class.jobs.size).to eq(0)
   end
 
-  it "no-ops for charges without a presentment snapshot" do
+  it "no-ops for Gumroad-held charges without a presentment snapshot" do
     charge.charge_presentment.destroy!
+    gumroad_held_merchant_account = create(:merchant_account, user: nil,
+                                                              charge_processor_merchant_id: "acct_gumroad_held_no_presentment")
+    charge.update!(merchant_account: gumroad_held_merchant_account)
+    purchase.update!(merchant_account: gumroad_held_merchant_account)
     expect(Purchase::SyncStatusWithChargeProcessorService).not_to receive(:new)
 
     described_class.new.perform(charge.id)
 
     expect(SendChargeReceiptJob.jobs.size).to eq(0)
+  end
+
+  it "polls seller-held charges without a presentment snapshot" do
+    charge.charge_presentment.destroy!
+    sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: false)
+    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase).and_return(sync_service)
+
+    described_class.new.perform(charge.id)
+
+    expect(described_class.jobs.size).to eq(1)
+  end
+
+  it "polls charges whose merchant account is missing" do
+    charge.charge_presentment.destroy!
+    charge.update!(merchant_account: nil)
+    purchase.update_column(:merchant_account_id, nil)
+    sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: false)
+    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase).and_return(sync_service)
+
+    described_class.new.perform(charge.id)
+
+    expect(described_class.jobs.size).to eq(1)
   end
 
   it "re-enqueues the receipt when purchases finalized but the receipt was never sent" do

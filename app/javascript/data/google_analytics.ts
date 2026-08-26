@@ -188,6 +188,21 @@ export function startTrackingForSeller(data: AnalyticsConfig) {
   });
 }
 
+export function trackHelpVideoEvent(
+  eventName: "video_start" | "video_progress" | "video_complete",
+  data: { videoId: string; title: string; url: string; percent?: number },
+) {
+  if (!shouldTrack() || typeof gtag === "undefined") return;
+
+  logGumroadEvent(eventName, {
+    video_title: data.title,
+    video_url: data.url,
+    video_provider: "gumroad",
+    video_id: data.videoId,
+    ...(data.percent == null ? {} : { video_percent: data.percent }),
+  });
+}
+
 export function startTrackingForGumroad() {
   if (!shouldTrack()) return;
   if (typeof gtag === "undefined") loadGoogleAnalyticsScript();

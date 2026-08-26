@@ -719,9 +719,9 @@ class ContactingCreatorMailer < ApplicationMailer
     @review_notification_claim = @review.claim_seller_notification
     return do_not_send if @review_notification_claim.nil?
 
-    full_name = @review.purchase.full_name
+    name = @review.purchase.rater_identity_name
     email = @review.purchase.email
-    @buyer = full_name.present? ? "#{full_name} (#{email})" : email
+    @buyer = name.present? ? "#{name} (#{email})" : email
     @subject = "#{@buyer} reviewed #{@product.name}"
   end
 

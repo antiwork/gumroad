@@ -11,6 +11,10 @@ class Upsell < ApplicationRecord
             :flag_query_mode => :bit_operator,
             check_for_column: false
 
+  # `cross_sell` is a non-null column with no DB default; default it here so the
+  # public API can omit the key on create instead of raising NotNullViolation.
+  attribute :cross_sell, :boolean, default: false
+
   belongs_to :seller, class_name: "User"
   # For a cross-sell, this is the product that will be added to the cart if the buyer accepts the offer.
   # For an upsell, this is the product on which the buyer is offered a version change.

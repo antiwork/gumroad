@@ -173,6 +173,68 @@ describe SaveFilesService do
       expect(file.reload.display_name).to eq("renamed file")
     end
 
+    it "drops ProductFile.as_json-only keys from a Hash payload so update! does not raise (file_size etc.)" do
+      file = create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png", size: 1234)
+      @product.product_files << file
+
+      service.perform(@product, {
+                        files: [{
+                          external_id: file.external_id,
+                          url: file.url,
+                          file_name: "renamed file",
+                          file_size: 999_999,
+                          extension: "png",
+                          is_pdf: false,
+                          is_streamable: false,
+                          attached_product_name: @product.name,
+                          status: { type: "saved" },
+                        }]
+                      })
+
+      file.reload
+      expect(file.size).to eq(1234)
+      expect(file.display_name).to eq("renamed file")
+    end
+
+    it "drops serializer-only keys from ActionController::Parameters (editor PUT string keys)" do
+      file = create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png", size: 1234)
+      @product.product_files << file
+
+      service.perform(@product, ActionController::Parameters.new(
+                                  files: [{
+                                    "external_id" => file.external_id,
+                                    "url" => file.url,
+                                    "file_name" => "renamed file",
+                                    "file_size" => 999_999,
+                                    "extension" => "png",
+                                    "is_pdf" => false,
+                                    "is_streamable" => false,
+                                    "attached_product_name" => @product.name,
+                                    "status" => { "type" => "saved" },
+                                  }]
+                                ).permit!)
+
+      file.reload
+      expect(file.size).to eq(1234)
+      expect(file.display_name).to eq("renamed file")
+    end
+
+    it "still applies writable flag-backed attributes (stream_only) when serializer-only keys are also present" do
+      video = create(:streamable_video, link: @product, size: 4321)
+      @product.product_files << video
+
+      service.perform(@product, {
+                        files: [{
+                          external_id: video.external_id,
+                          url: video.url,
+                          file_size: video.size,
+                          stream_only: true,
+                        }]
+                      })
+
+      expect(video.reload.stream_only?).to eq(true)
+    end
+
     it "supports `files` param as an array" do
       installment = create(:installment, workflow: create(:workflow))
       file1 = create(:product_file, installment:, link: nil, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")

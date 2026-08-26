@@ -29,6 +29,7 @@ class LibraryPresenter
       pagination:,
       creators: creators_for_tab(cards, show_archived_only:),
       bundles: bundle_filter_options(base, replaced_ids),
+      bundle_downloads: bundle_downloads(base, bundle_ids),
       archived_count: visible.is_archived.count,
       unarchived_count: visible.not_is_archived.count,
       search: {
@@ -196,6 +197,39 @@ class LibraryPresenter
       link_ids = base.where(id: replaced_ids).order(id: :desc).pluck(:link_id).uniq
       links = Link.where(id: link_ids).index_by(&:id)
       link_ids.map { |link_id| { id: links[link_id].external_id, label: links[link_id].name } }
+    end
+
+    def bundle_downloads(base, bundle_ids)
+      return [] if bundle_ids.empty?
+
+      bundle_link_ids = bundle_ids.filter_map { Link.from_external_id(_1) }
+      return [] if bundle_link_ids.empty?
+
+      bundle_purchases = base.is_bundle_purchase
+        .where(link_id: bundle_link_ids)
+        .includes(:url_redirect, :link)
+        .order(id: :desc)
+        .to_a
+        .uniq(&:link_id)
+      bundle_purchases.filter_map do |purchase|
+        redirect = purchase.url_redirect
+        next if redirect.blank?
+
+        files = redirect.bundle_archive_product_files
+        next if files.empty?
+
+        archive = redirect.bundle_archive
+        if archive.blank?
+          matching = redirect.matching_bundle_archives(files)
+          next if matching.any? && matching.none? { |existing| existing.queueing? || existing.in_progress? }
+        end
+
+        {
+          id: purchase.link.external_id,
+          label: purchase.link.name,
+          download_url: archive.present? ? url_redirect_download_archive_path(redirect.token) : nil,
+        }
+      end
     end
 
     def universal_analytics_user_ids(user_ids)

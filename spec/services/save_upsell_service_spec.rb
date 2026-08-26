@@ -19,7 +19,6 @@ describe SaveUpsellService do
           name: "Upgrade",
           text: "Upgrade now",
           description: "Better tier",
-          cross_sell: false,
           product_id: product.external_id,
           upsell_variants: [{ selected_variant_id: product.alive_variants.first.external_id, offered_variant_id: product.alive_variants.second.external_id }],
         )
@@ -27,12 +26,23 @@ describe SaveUpsellService do
 
       expect(upsell).to be_persisted
       expect(upsell.name).to eq("Upgrade")
-      expect(upsell.cross_sell).to be(false)
+      expect(upsell.text).to eq("Upgrade now")
+      expect(upsell.description).to eq("Better tier")
       expect(upsell.product).to eq(product)
       expect(upsell.variant).to be_nil
       expect(upsell.upsell_variants.length).to eq(1)
       expect(upsell.upsell_variants.first.selected_variant).to eq(product.alive_variants.first)
       expect(upsell.upsell_variants.first.offered_variant).to eq(product.alive_variants.second)
+    end
+
+    it "defaults cross_sell to false when the key is omitted on create" do
+      upsell = described_class.new(
+        seller:,
+        params: params(name: "Upsell", product_id: product.external_id)
+      ).perform
+
+      expect(upsell).to be_persisted
+      expect(upsell.cross_sell).to be(false)
     end
 
     it "creates a cross-sell with a discounted offer code and selected products" do

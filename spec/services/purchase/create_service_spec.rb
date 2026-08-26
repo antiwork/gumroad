@@ -2072,6 +2072,25 @@ describe Purchase::CreateService, :vcr do
 
           Purchase::CreateService.new(product:, params:).perform
         end
+
+        it "still enqueues the sale ping when the affiliate notification enqueue fails" do
+          direct_affiliate = create(:direct_affiliate, seller: product.user)
+          params[:purchase][:affiliate_id] = direct_affiliate.id
+
+          mail_double = double
+          allow(mail_double).to receive(:deliver_later).and_raise(StandardError.new("mailer queue unavailable"))
+          allow(AffiliateMailer).to receive(:notify_affiliate_of_sale).and_return(mail_double)
+          allow(Rails.logger).to receive(:error)
+
+          purchase, error = nil
+          expect do
+            purchase, error = Purchase::CreateService.new(product:, params:).perform
+          end.to_not raise_error
+
+          expect(error).to be_nil
+          expect(purchase.purchase_state).to eq "successful"
+          expect(PostToPingEndpointsWorker).to have_enqueued_sidekiq_job(purchase.id, nil)
+        end
       end
 
       context "membership product" do

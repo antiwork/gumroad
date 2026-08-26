@@ -236,6 +236,47 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "returns the gift sender sale when license_key belongs to a gifted purchase" do
+        @product.update!(is_licensed: true)
+        sender = create(:purchase, :gift_sender, purchaser: @purchaser, link: @product)
+        giftee = create(:purchase, :gift_receiver, link: @product, seller: @seller, price_cents: 0)
+        create(:gift, link: @product, gifter_purchase: sender, giftee_purchase: giftee,
+                      gifter_email: sender.email, giftee_email: giftee.email)
+        giftee.create_license!
+
+        get :index, params: @params.merge(license_key: giftee.license.serial)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["sales"].map { _1["id"] }).to eq([sender.external_id])
+        expect(response.parsed_body["sales"].first["license_key"]).to eq(giftee.license.serial)
+        expect(response.parsed_body["sales"].map { _1["id"] }).not_to include(giftee.external_id)
+      end
+
+      it "returns the gift sender sale for a gifted license_key on the deprecated page path" do
+        @product.update!(is_licensed: true)
+        sender = create(:purchase, :gift_sender, purchaser: @purchaser, link: @product)
+        giftee = create(:purchase, :gift_receiver, link: @product, seller: @seller, price_cents: 0)
+        create(:gift, link: @product, gifter_purchase: sender, giftee_purchase: giftee,
+                      gifter_email: sender.email, giftee_email: giftee.email)
+        giftee.create_license!
+
+        get :index, params: @params.merge(license_key: giftee.license.serial, page: 1)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["sales"].map { _1["id"] }).to eq([sender.external_id])
+        expect(response.parsed_body["sales"].first["license_key"]).to eq(giftee.license.serial)
+      end
+
+      it "does not list gift-receiver purchases when license_key is absent" do
+        create(:purchase, :gift_receiver, link: @product, seller: @seller, price_cents: 0)
+
+        get :index, params: @params
+
+        expect(response.parsed_body["sales"].map { _1["id"] }).to match_array(
+          [@purchase, @free_trial_purchase].map(&:external_id)
+        )
+      end
+
       it "returns a 400 error when the page_key query times out" do
         allow(WithMaxExecutionTime).to receive(:timeout_queries).and_raise(WithMaxExecutionTime::QueryTimeoutError)
 
@@ -1278,6 +1319,157 @@ describe Api::V2::SalesController do
       it "the response is 403 forbidden for incorrect scope" do
         post :resend_receipt, params: @params
         expect(response.code).to eq "403"
+      end
+    end
+  end
+
+  describe "PUT 'revoke_access'" do
+    before do
+      @sale = create(:purchase, seller: @seller, link: @product)
+      @params = { id: @sale.external_id }
+    end
+
+    describe "when logged in with edit_sales scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "edit_sales")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "revokes access and returns the updated sale" do
+        put :revoke_access, params: @params
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["sale"]["id"]).to eq(@sale.external_id)
+        expect(response.parsed_body["sale"]["access_revoked"]).to eq(true)
+        expect(@sale.reload.is_access_revoked).to eq(true)
+      end
+
+      it "does not refund the sale" do
+        put :revoke_access, params: @params
+
+        expect(@sale.reload.refunded?).to eq(false)
+      end
+
+      it "returns a not found error when sale does not exist" do
+        @params[:id] = "non-existent"
+        put :revoke_access, params: @params
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("The sale was not found.")
+      end
+
+      it "returns a not found error when sale belongs to another user" do
+        other_user = create(:user)
+        other_product = create(:product, user: other_user)
+        other_sale = create(:purchase, seller: other_user, link: other_product)
+        @params[:id] = other_sale.external_id
+        put :revoke_access, params: @params
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("The sale was not found.")
+        expect(other_sale.reload.is_access_revoked).to eq(false)
+      end
+
+      it "refuses an already-revoked sale" do
+        @sale.update!(is_access_revoked: true)
+        put :revoke_access, params: @params
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Access cannot be revoked for this sale.")
+      end
+
+      it "refuses a refunded sale" do
+        allow_any_instance_of(Purchase).to receive(:refunded?).and_return(true)
+        put :revoke_access, params: @params
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Access cannot be revoked for this sale.")
+        expect(@sale.reload.is_access_revoked).to eq(false)
+      end
+
+      it "refuses a physical sale" do
+        physical_product = create(:physical_product, user: @seller)
+        physical_sale = create(:physical_purchase, link: physical_product, seller: @seller)
+        @params[:id] = physical_sale.external_id
+        put :revoke_access, params: @params
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Access cannot be revoked for this sale.")
+        expect(physical_sale.reload.is_access_revoked).to eq(false)
+      end
+
+      it "refuses a subscription sale" do
+        membership_product = create(:membership_product, user: @seller)
+        subscription = create(:subscription, link: membership_product, seller: @seller)
+        subscription_sale = create(:purchase, link: membership_product, seller: @seller, subscription:, is_original_subscription_purchase: true)
+        @params[:id] = subscription_sale.external_id
+        put :revoke_access, params: @params
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Access cannot be revoked for this sale.")
+        expect(subscription_sale.reload.is_access_revoked).to eq(false)
+      end
+    end
+
+    describe "when logged in with incorrect scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "the response is 403 forbidden for incorrect scope" do
+        put :revoke_access, params: @params
+        expect(response.code).to eq "403"
+        expect(@sale.reload.is_access_revoked).to eq(false)
+      end
+    end
+  end
+
+  describe "PUT 'undo_revoke_access'" do
+    before do
+      @sale = create(:purchase, seller: @seller, link: @product, is_access_revoked: true)
+      @params = { id: @sale.external_id }
+    end
+
+    describe "when logged in with edit_sales scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "edit_sales")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "restores access and returns the updated sale" do
+        put :undo_revoke_access, params: @params
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["sale"]["access_revoked"]).to eq(false)
+        expect(@sale.reload.is_access_revoked).to eq(false)
+      end
+
+      it "refuses a sale whose access is not revoked" do
+        @sale.update!(is_access_revoked: false)
+        put :undo_revoke_access, params: @params
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Access is not revoked for this sale.")
+      end
+
+      it "returns a not found error when sale belongs to another user" do
+        other_user = create(:user)
+        other_product = create(:product, user: other_user)
+        other_sale = create(:purchase, seller: other_user, link: other_product, is_access_revoked: true)
+        @params[:id] = other_sale.external_id
+        put :undo_revoke_access, params: @params
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("The sale was not found.")
+        expect(other_sale.reload.is_access_revoked).to eq(true)
+      end
+    end
+
+    describe "when logged in with incorrect scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "the response is 403 forbidden for incorrect scope" do
+        put :undo_revoke_access, params: @params
+        expect(response.code).to eq "403"
+        expect(@sale.reload.is_access_revoked).to eq(true)
       end
     end
   end

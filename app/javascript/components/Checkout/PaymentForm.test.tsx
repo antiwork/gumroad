@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { StateContext, type CheckoutPaymentConfig, type State } from "$app/components/Checkout/payment";
+import {
+  reduceCheckoutState,
+  StateContext,
+  type CheckoutPaymentConfig,
+  type State,
+} from "$app/components/Checkout/payment";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { LoggedInUserProvider } from "$app/components/LoggedInUser";
 
@@ -14,9 +19,41 @@ const paymentElementInputRender = vi.hoisted<{ setupFutureUsage: "off_session" |
   setupFutureUsage: undefined,
 }));
 
+type PayPalButtonsConfig = {
+  onApprove: (data: { billingToken: string }) => Promise<void>;
+  onClick?: (data: Record<string, never>, actions: { resolve: () => void; reject: () => void }) => unknown;
+};
+
+const paypalMock = vi.hoisted<{
+  buttonsConfig: null | PayPalButtonsConfig;
+  createBillingAgreement: ReturnType<typeof vi.fn>;
+  getPaymentMethodResult: ReturnType<typeof vi.fn>;
+  getReusablePaymentMethodResult: ReturnType<typeof vi.fn>;
+  loadScript: ReturnType<typeof vi.fn>;
+  render: ReturnType<typeof vi.fn>;
+}>(() => ({
+  buttonsConfig: null,
+  createBillingAgreement: vi.fn(),
+  getPaymentMethodResult: vi.fn(),
+  getReusablePaymentMethodResult: vi.fn(),
+  loadScript: vi.fn(),
+  render: vi.fn(),
+}));
+
 // Keeps the render free of network and third-party scripts. The recurring UPI case captures the
 // Payment Element props, while the other scenarios are free purchases whose payment subtrees do not mount.
 vi.mock("@stripe/react-stripe-js", () => ({ useStripe: () => null }));
+vi.mock("@paypal/paypal-js", () => ({ loadScript: paypalMock.loadScript }));
+vi.mock("$app/data/paypal", () => ({
+  createBillingAgreement: paypalMock.createBillingAgreement,
+  createBillingAgreementToken: vi.fn(),
+}));
+vi.mock("$app/data/payment_method_result", () => ({
+  getPaymentMethodResult: paypalMock.getPaymentMethodResult,
+  getPaymentRequestPaymentMethodResult: vi.fn(),
+  getReusablePaymentMethodResult: paypalMock.getReusablePaymentMethodResult,
+  getReusablePaymentRequestPaymentMethodResult: vi.fn(),
+}));
 vi.mock("$app/data/braintree_client_token_data", () => ({ useBraintreeToken: () => ({ type: "not-available" }) }));
 vi.mock("$app/utils/stripe_loader", () => ({ getCheckoutStripeInstance: vi.fn(), getStripeInstance: vi.fn() }));
 vi.mock("$app/components/Checkout/CreditCardInput", () => ({
@@ -136,12 +173,64 @@ const renderPaymentForm = (checkoutState: State) => {
   return { ...utils, rerenderWith: (s: State) => utils.rerender(view(s)) };
 };
 
+// Applies reducer updates so a second native PayPal approval sees the new tax location.
+type CheckoutDispatch = React.Dispatch<Parameters<typeof reduceCheckoutState>[1]>;
+type CheckoutAction = Parameters<typeof reduceCheckoutState>[1];
+type CheckoutHarness = { dispatch: CheckoutDispatch; actions: CheckoutAction[] };
+
+const StatefulPaymentForm = ({ initial, harness }: { initial: State; harness: CheckoutHarness }) => {
+  const [checkoutState, rawDispatch] = React.useReducer(reduceCheckoutState, initial);
+  const actionsRef = React.useRef(harness.actions);
+  actionsRef.current = harness.actions;
+  const dispatch = React.useCallback((action: CheckoutAction) => {
+    actionsRef.current.push(action);
+    rawDispatch(action);
+  }, []);
+  harness.dispatch = dispatch;
+  const contextValue = React.useMemo(
+    (): NonNullable<React.ContextType<typeof StateContext>> => [checkoutState, dispatch],
+    [checkoutState, dispatch],
+  );
+  return (
+    <LoggedInUserProvider value={null}>
+      <StateContext.Provider value={contextValue}>
+        <PaymentForm />
+      </StateContext.Provider>
+    </LoggedInUserProvider>
+  );
+};
+
 describe("PaymentForm validation-failure feedback", () => {
   const scrollIntoView = vi.fn();
 
   beforeEach(() => {
     scrollIntoView.mockClear();
     paymentElementInputRender.setupFutureUsage = undefined;
+    paypalMock.buttonsConfig = null;
+    paypalMock.createBillingAgreement.mockReset();
+    paypalMock.getPaymentMethodResult.mockReset();
+    paypalMock.getReusablePaymentMethodResult.mockReset();
+    paypalMock.loadScript.mockReset();
+    paypalMock.render.mockReset();
+    paypalMock.loadScript.mockResolvedValue({
+      Buttons: (config: PayPalButtonsConfig) => {
+        paypalMock.buttonsConfig = config;
+        return { render: paypalMock.render };
+      },
+    });
+    paypalMock.createBillingAgreement.mockResolvedValue({
+      id: "agreement-id",
+      payer: {
+        payer_info: {
+          email: "paypal-buyer@example.com",
+          payer_id: "payer-id",
+          billing_address: { country_code: "DE", postal_code: "10115" },
+          first_name: "PayPal",
+          last_name: "Buyer",
+        },
+      },
+    });
+    paypalMock.getPaymentMethodResult.mockResolvedValue({ type: "paypal", reusable: false });
     Element.prototype.scrollIntoView = scrollIntoView;
   });
   afterEach(cleanup);
@@ -225,6 +314,150 @@ describe("PaymentForm validation-failure feedback", () => {
     });
 
     expect(paymentElementInputRender.setupFutureUsage).toBe("off_session");
+  });
+
+  it("does not reuse a native PayPal agreement after PayPal changes the tax location", async () => {
+    const surchargeResult = {
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 0,
+      tax_cents: 190,
+      tax_included_cents: 0,
+      subtotal: 1_000,
+      buyer_currency_quote: null,
+    };
+    const checkoutState = state({
+      country: "US",
+      zipCode: "10001",
+      paymentMethod: "paypal",
+      paypalClientId: "paypal-client-id",
+      customFieldValues: { "field-1": "Nick" },
+      status: { type: "starting" },
+      products: state().products.map((product) => ({
+        ...product,
+        price: 1_000,
+        requirePayment: true,
+        supportsPaypal: "native" as const,
+      })),
+    });
+    paypalMock.createBillingAgreement.mockImplementation(async (token: string) => ({
+      id: token === "billing-token-2" ? "agreement-id-2" : "agreement-id-1",
+      payer: {
+        payer_info: {
+          email: "paypal-buyer@example.com",
+          payer_id: "payer-id",
+          billing_address: { country_code: "DE", postal_code: "10115" },
+          first_name: "PayPal",
+          last_name: "Buyer",
+        },
+      },
+    }));
+    const harness: CheckoutHarness = {
+      dispatch: () => undefined,
+      actions: [],
+    };
+    render(<StatefulPaymentForm initial={checkoutState} harness={harness} />);
+
+    await waitFor(() => expect(paypalMock.buttonsConfig).not.toBeNull());
+    await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token-1" });
+
+    expect(paypalMock.getPaymentMethodResult).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "PayPal updated your tax location. Review the updated total below, then click PayPal again to continue.",
+        ),
+      ).toBeTruthy(),
+    );
+
+    // Pending tax quote lands, then the buyer clicks the same PayPal button again.
+    harness.dispatch({
+      type: "set-value",
+      surcharges: { type: "loaded", result: surchargeResult },
+    });
+    const click = paypalMock.buttonsConfig?.onClick;
+    if (click === undefined) throw new Error("expected PayPal onClick");
+    await click({}, { resolve() {}, reject() {} });
+    await waitFor(() => expect(screen.getByLabelText("Email address")).toHaveProperty("disabled", true));
+
+    await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token-2" });
+
+    await waitFor(() => expect(paypalMock.getPaymentMethodResult).toHaveBeenCalledOnce());
+    expect(paypalMock.getPaymentMethodResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "paypal-native",
+        info: expect.objectContaining({
+          billingToken: "billing-token-2",
+          agreementId: "agreement-id-2",
+        }),
+      }),
+    );
+    expect(paypalMock.getPaymentMethodResult).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        info: expect.objectContaining({ agreementId: "agreement-id-1" }),
+      }),
+    );
+  });
+
+  it("clears a leftover native PayPal payment method when the next approval changes tax location", async () => {
+    const leftoverPayment = { type: "paypal", reusable: false, leftover: true };
+    const checkoutState = state({
+      country: "US",
+      zipCode: "10001",
+      paymentMethod: "paypal",
+      paypalClientId: "paypal-client-id",
+      customFieldValues: { "field-1": "Nick" },
+      status: { type: "starting" },
+      products: state().products.map((product) => ({
+        ...product,
+        price: 1_000,
+        requirePayment: true,
+        supportsPaypal: "native" as const,
+      })),
+    });
+    paypalMock.createBillingAgreement.mockImplementation(async (token: string) => ({
+      id: token === "billing-token-2" ? "agreement-id-2" : "agreement-id-1",
+      payer: {
+        payer_info: {
+          email: "paypal-buyer@example.com",
+          payer_id: "payer-id",
+          billing_address:
+            token === "billing-token-2"
+              ? { country_code: "DE", postal_code: "10115" }
+              : { country_code: "US", postal_code: "10001" },
+          first_name: "PayPal",
+          last_name: "Buyer",
+        },
+      },
+    }));
+    paypalMock.getPaymentMethodResult.mockResolvedValue(leftoverPayment);
+    const harness: CheckoutHarness = {
+      dispatch: () => undefined,
+      actions: [],
+    };
+    render(<StatefulPaymentForm initial={checkoutState} harness={harness} />);
+
+    await waitFor(() => expect(paypalMock.buttonsConfig).not.toBeNull());
+    await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token-1" });
+    await waitFor(() => expect(harness.actions.some((action) => action.type === "set-payment-method")).toBe(true));
+
+    harness.dispatch({ type: "cancel" });
+    harness.actions.length = 0;
+
+    await paypalMock.buttonsConfig?.onApprove({ billingToken: "billing-token-2" });
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "PayPal updated your tax location. Review the updated total below, then click PayPal again to continue.",
+        ),
+      ).toBeTruthy(),
+    );
+    expect(paypalMock.getPaymentMethodResult).toHaveBeenCalledOnce();
+
+    // A later start-payment must not replay the first approval's tokenized method.
+    harness.dispatch({ type: "start-payment" });
+    await waitFor(() => expect(screen.getByLabelText("Email address")).toHaveProperty("disabled", true));
+    expect(harness.actions.filter((action) => action.type === "set-payment-method")).toEqual([]);
   });
 
   // Mirrors Checkout/index.tsx: tip and gift inputs render as siblings of PaymentForm, all of them
