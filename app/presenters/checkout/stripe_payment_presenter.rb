@@ -291,7 +291,7 @@ class Checkout::StripePaymentPresenter
         } : nil,
         payment_method_types:,
         inr_local_methods:,
-        payment_method_list_token: Checkout::PaymentMethodListToken.issue(payment_method_types:, sellers:),
+        payment_method_list_token: issued_payment_method_list_token(payment_method_types),
         stripe_link_enabled: payment_method_types.include?(Checkout::PaymentMethodResolver::LINK_PAYMENT_METHOD_TYPE),
         stripe_connect_account_id: resolution.stripe_connect_account_id,
       }
@@ -388,6 +388,26 @@ class Checkout::StripePaymentPresenter
       resolution.payment_method_types.any? do |payment_method_type|
         Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == forced_currency
       end
+    end
+
+    # Methods a quoted remount can list. Cash App / ACH / Klarna / Alipay are USD-only;
+    # leaving them on a CAD/INR Element rejects the whole session, card included.
+    def quoted_remount_payment_method_types(payment_method_types)
+      payment_method_types -
+        Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES -
+        [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE,
+         Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
+    end
+
+    def issued_payment_method_list_token(payment_method_types)
+      quoted_types = quoted_remount_payment_method_types(payment_method_types)
+      inr_types = (quoted_types + inr_local_methods).uniq
+      Checkout::PaymentMethodListToken.issue(
+        payment_method_types:,
+        sellers:,
+        quoted_payment_method_types: quoted_types == payment_method_types ? nil : quoted_types,
+        inr_payment_method_types: inr_local_methods.present? ? inr_types : nil,
+      )
     end
 
     # UPI on a USD-priced cart cannot ride the USD Payment Element (Stripe rejects the

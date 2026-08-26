@@ -27,12 +27,20 @@ import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Fieldset } from "$app/components/ui/Fieldset";
 
+// Must match Checkout::PaymentMethodResolver's USD-only set. A quoted remount in CAD/EUR
+// that still lists these makes Stripe reject the session, card included.
+const USD_ONLY_PAYMENT_METHOD_TYPES = ["us_bank_account", "cashapp", "klarna", "alipay"];
+
 const paymentMethodTypesForMountCurrency = (
   elementsOptions: PaymentElementConfig | PaymentElementClientConfirmConfig,
   currency: string,
 ) => {
-  const types = [...elementsOptions.payment_method_types];
-  if (currency.toLowerCase() !== "inr") return types;
+  const mount = currency.toLowerCase();
+  let types = [...elementsOptions.payment_method_types];
+  if (mount !== "usd") {
+    types = types.filter((method) => !USD_ONLY_PAYMENT_METHOD_TYPES.includes(method));
+  }
+  if (mount !== "inr") return types;
 
   for (const method of elementsOptions.inr_local_methods ?? []) {
     if (!types.includes(method)) types.push(method);

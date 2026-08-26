@@ -2398,6 +2398,93 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(responses["unique-id-0"][:success]).to eq(false)
         expect(order.purchases.first.reload).to be_failed
       end
+
+      it "echoes the signed quoted remount list instead of the USD-only Element list" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: "cad",
+          buyer_currency_quote: "displayed-cad-quote",
+          payment_method_list_token: Checkout::PaymentMethodListToken.issue(
+            payment_method_types: %w[card link cashapp],
+            sellers: [seller],
+            quoted_payment_method_types: %w[card link],
+          ),
+        )
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_cad_quote)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+
+        create_args, responses = perform_with_cad_card_preview(order, params)
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:payment_method_types]).to include("card")
+        expect(create_args[:payment_method_types]).not_to include("cashapp")
+      end
+    end
+
+    context "on an opted-in USD cart remounted in INR" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
+      let(:product) { create(:product, user: seller, price_cents: 10_00) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+      before do
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active", "upi_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.activate_user(:checkout_local_method_upi, seller)
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+      end
+
+      def locked_inr_quote
+        instance_double(
+          Checkout::BuyerCurrencyQuote::Result,
+          stripe_fx_quote_id: "fxq_displayed_inr",
+          fx_rate: BigDecimal("83.0"),
+          stripe_fx_quote_expires_at: 30.minutes.from_now,
+          charge_presentment_total_cents: 83_000,
+        )
+      end
+
+      it "puts UPI on the INR intent even when the buyer confirmed with card" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: Currency::INR,
+          buyer_currency_quote: "displayed-inr-quote",
+          payment_method_list_token: Checkout::PaymentMethodListToken.issue(
+            payment_method_types: %w[card link],
+            sellers: [seller],
+            inr_payment_method_types: %w[card link upi],
+          ),
+        )
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_inr_quote)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_card_inr", client_secret: "pi_card_inr_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_inr").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::INR)
+        expect(create_args[:payment_method_types]).to eq(%w[card link upi])
+      end
     end
 
     context "with a paid-upfront UPI Autopay membership" do

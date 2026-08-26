@@ -6,7 +6,7 @@ describe Checkout::StripePaymentPresenter do
   # is actually responsible for: that the list handed to the issuer is the one the Element mounted,
   # after every strip. The signing itself is Checkout::PaymentMethodListToken's own spec.
   before do
-    allow(Checkout::PaymentMethodListToken).to receive(:issue) do |payment_method_types:, sellers:|
+    allow(Checkout::PaymentMethodListToken).to receive(:issue) do |payment_method_types:, sellers:, **|
       "issued:#{payment_method_types.join(",")}" if payment_method_types.present?
     end
   end
@@ -1894,6 +1894,51 @@ describe Checkout::StripePaymentPresenter do
         Feature.deactivate_user(:checkout_local_method_upi, seller)
         deactivate_buyer_currency_flags(seller)
       end
+    end
+
+    it "signs the INR remount list with UPI so prepare can echo the remounted Element" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1999)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.22", "India")
+      issued = nil
+      allow(Checkout::PaymentMethodListToken).to receive(:issue) do |**kwargs|
+        issued = kwargs
+        "issued:#{kwargs[:payment_method_types].join(",")}" if kwargs[:payment_method_types].present?
+      end
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.22")
+
+      expect(props[:elements_options][:payment_method_types]).to eq(%w[card link])
+      expect(props[:elements_options][:inr_local_methods]).to eq(%w[upi])
+      expect(issued[:payment_method_types]).to eq(%w[card link])
+      expect(issued[:inr_payment_method_types]).to eq(%w[card link upi])
+      expect(issued[:quoted_payment_method_types]).to be_nil
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "signs a quoted remount list that drops USD-only methods" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1999)
+      activate_buyer_currency_flags(seller)
+      stub_geoip_country("203.0.113.23", "United States")
+      issued = nil
+      allow(Checkout::PaymentMethodListToken).to receive(:issue) do |**kwargs|
+        issued = kwargs
+        "issued:#{kwargs[:payment_method_types].join(",")}" if kwargs[:payment_method_types].present?
+      end
+
+      stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.23")
+
+      expect(issued[:payment_method_types]).to include("cashapp")
+      expect(issued[:quoted_payment_method_types]).to eq(issued[:payment_method_types] - %w[cashapp])
+      expect(issued[:inr_payment_method_types]).to be_nil
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
     end
 
     it "mounts card + UPI for the flagged single paid-upfront INR membership slice" do

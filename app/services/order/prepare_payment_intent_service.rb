@@ -908,7 +908,11 @@ class Order::PreparePaymentIntentService
       return @issued_payment_method_types if defined?(@issued_payment_method_types)
 
       submitted = params[:payment_method_list_token].presence
-      issued = Checkout::PaymentMethodListToken.verify(submitted, sellers: [seller])
+      issued = Checkout::PaymentMethodListToken.verify(
+        submitted,
+        sellers: [seller],
+        currency: reported_element_mount_currency,
+      )
       # Expiry (a long-open tab) is routine here; a tampered token or a presenter/service
       # disagreement about the seller set is not. Warn rather than error because the bucket mixes
       # both, and log at all because a silent fallback is what made #1528 invisible.

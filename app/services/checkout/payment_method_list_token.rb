@@ -30,28 +30,35 @@ class Checkout::PaymentMethodListToken
   PURPOSE = "checkout_payment_method_list"
 
   class << self
-    def issue(payment_method_types:, sellers:)
+    def issue(payment_method_types:, sellers:, quoted_payment_method_types: nil, inr_payment_method_types: nil)
       return nil if payment_method_types.blank?
 
-      verifier.generate(
-        { "types" => payment_method_types.map(&:to_s), "sellers" => seller_ids(sellers) },
-        purpose: PURPOSE,
-        expires_in: TTL,
-      )
+      payload = { "types" => payment_method_types.map(&:to_s), "sellers" => seller_ids(sellers) }
+      # Quoted remounts leave USD (CAD, EUR, INR). Those Elements cannot list USD-only
+      # methods, and an INR remount also adds UPI. Signing the remount lists here is what
+      # lets prepare echo the list the Element actually mounted after the upgrade.
+      payload["quoted_types"] = quoted_payment_method_types.map(&:to_s) if quoted_payment_method_types.present?
+      payload["inr_types"] = inr_payment_method_types.map(&:to_s) if inr_payment_method_types.present?
+
+      verifier.generate(payload, purpose: PURPOSE, expires_in: TTL)
     end
 
     # The method list this checkout page mounted its Element with, or nil when the token is absent,
     # tampered with, expired, or was issued for different sellers — every one of which falls back to
     # re-resolving, i.e. today's behaviour. Never raises: a malformed token must not fail a checkout
     # that would otherwise succeed.
-    def verify(token, sellers:)
+    #
+    # `currency` is the Element's mount currency at pay time. A USD-priced cart starts in USD
+    # (`types`) and may remount in the quoted currency (`quoted_types`) or INR (`inr_types`).
+    # Missing remount keys (a tab older than this field) keep using `types`.
+    def verify(token, sellers:, currency: nil)
       return nil if token.blank?
 
       payload = verifier.verified(token.to_s, purpose: PURPOSE)
       return nil unless payload.is_a?(Hash)
 
-      types = payload["types"]
-      return nil unless types.is_a?(Array) && types.all? { _1.is_a?(String) } && types.present?
+      types = types_for_currency(payload, currency)
+      return nil unless types
       return nil unless payload["sellers"] == seller_ids(sellers)
 
       types
@@ -61,5 +68,22 @@ class Checkout::PaymentMethodListToken
       def seller_ids(sellers) = Array(sellers).compact.map(&:id).sort
 
       def verifier = Rails.application.message_verifier(PURPOSE)
+
+      def types_for_currency(payload, currency)
+        mount = currency.to_s.downcase.presence
+        remount_key = if mount == "inr"
+          "inr_types"
+        elsif mount.present? && mount != "usd"
+          "quoted_types"
+        end
+        remount = remount_key && payload[remount_key]
+        return remount if string_types?(remount)
+
+        payload["types"] if string_types?(payload["types"])
+      end
+
+      def string_types?(types)
+        types.is_a?(Array) && types.all? { _1.is_a?(String) } && types.present?
+      end
   end
 end
