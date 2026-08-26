@@ -1418,6 +1418,15 @@ describe Api::V2::SalesController do
         expect(@sale.reload.is_access_revoked).to eq(false)
       end
     end
+
+    it "refuses a broad account-scope token without edit_sales" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+
+      put :revoke_access, params: @params.merge(format: :json, access_token: token.token)
+
+      expect(response).to have_http_status(:forbidden)
+      expect(@sale.reload.is_access_revoked).to eq(false)
+    end
   end
 
   describe "PUT 'undo_revoke_access'" do
@@ -1471,6 +1480,15 @@ describe Api::V2::SalesController do
         expect(response.code).to eq "403"
         expect(@sale.reload.is_access_revoked).to eq(true)
       end
+    end
+
+    it "refuses a broad account-scope token without edit_sales" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+
+      put :undo_revoke_access, params: @params.merge(format: :json, access_token: token.token)
+
+      expect(response).to have_http_status(:forbidden)
+      expect(@sale.reload.is_access_revoked).to eq(true)
     end
   end
 
