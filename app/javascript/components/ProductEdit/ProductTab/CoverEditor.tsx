@@ -193,7 +193,8 @@ const CoverUploader = ({
                 accept={[...ALLOWED_EXTENSIONS.map((ext) => `.${ext}`), "image/*", ".heic", ".heif", ".avif"].join(",")}
                 disabled={isUploading}
                 onChange={asyncVoid(async (event) => {
-                  const files = event.currentTarget.files;
+                  const input = event.currentTarget;
+                  const files = input.files;
                   if (!files?.length) return;
 
                   const validFiles: File[] = [];
@@ -212,7 +213,11 @@ const CoverUploader = ({
                     }
                     validFiles.push(file);
                   }
-                  if (validFiles.length === 0) return;
+                  input.value = "";
+                  if (validFiles.length === 0) {
+                    setIsSelecting(false);
+                    return;
+                  }
 
                   setIsUploading(true);
                   for (const file of validFiles) {
