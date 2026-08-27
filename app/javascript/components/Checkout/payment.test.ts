@@ -1570,6 +1570,21 @@ describe("reduceCheckoutState", () => {
     expect(next.surcharges).toEqual({ type: "pending" });
   });
 
+  it("does not reinterpret an exact buyer-currency tip after a currency switch", () => {
+    const next = reduceCheckoutState(
+      state({
+        buyerCurrency: "cad",
+        products: [product({ hasTippingEnabled: true })],
+        tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
+        surcharges: loadedSurcharges(),
+      }),
+      { type: "set-value", buyerCurrency: "gbp" },
+    );
+
+    expect(next.tip).toEqual({ type: "fixed", amount: 350, presentmentAmount: null, presentmentCurrency: null });
+    expect(next.surcharges).toEqual({ type: "pending" });
+  });
+
   // Every field the server tax/shipping quote depends on must invalidate the loaded surcharges
   // (flipping them to "pending" is what triggers the debounced refetch) — a missing trigger
   // means the buyer-currency quote token submitted with the purchase was minted for different

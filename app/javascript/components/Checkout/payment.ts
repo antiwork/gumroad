@@ -194,6 +194,9 @@ export type Tip =
       // Some amounts (CA$4.37 at a 1.25 quote) cannot round-trip through canonical USD cents,
       // so the input must keep the buyer's figure while the quote remints around it.
       presentmentAmount?: number | null;
+      // The presentment currency that amount was typed in. A later currency pick must not
+      // reinterpret CA$4.37 as £4.37 while the replacement quote is loading.
+      presentmentCurrency?: string | null;
     };
 
 // Whether a response's currency menu offers `code`. Undefined when the response carries no menu
@@ -943,7 +946,9 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
     state.products.map((item) => ({ price: item.price, permalink: item.permalink })),
   );
   const presentmentLineTips =
-    state.tip.type === "fixed" && state.tip.presentmentAmount != null
+    state.tip.type === "fixed" &&
+    state.tip.presentmentAmount != null &&
+    (state.buyerCurrency == null || state.buyerCurrency.toLowerCase() === state.tip.presentmentCurrency?.toLowerCase())
       ? allocateFixedTipCents(
           state.tip.presentmentAmount,
           state.products.map((item) => ({ price: item.price })),
@@ -1096,6 +1101,9 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
               previousCurrency: state.buyerCurrency,
               surfaceSwitch: false,
             };
+          if (state.tip.type === "fixed" && state.tip.presentmentAmount != null) {
+            state.tip = { ...state.tip, presentmentAmount: null, presentmentCurrency: null };
+          }
         } else if ("usingSavedCard" in action) {
           // Switching surface re-asks the server which currencies it can charge, but it does not
           // touch the cart, so the loaded amounts are still the amounts. Hold them for the same

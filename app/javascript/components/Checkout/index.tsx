@@ -751,7 +751,9 @@ const TipSelector = ({
   const fixedTipCents =
     state.tip.type !== "fixed" || state.tip.amount == null
       ? null
-      : buyerCurrencyDisplay && state.tip.presentmentAmount != null
+      : buyerCurrencyDisplay &&
+          state.tip.presentmentAmount != null &&
+          state.tip.presentmentCurrency?.toLowerCase() === buyerCurrencyDisplay.currencyCode.toLowerCase()
         ? state.tip.presentmentAmount
         : buyerCurrencyDisplay && presentmentTipCents != null
           ? presentmentTipCents
@@ -825,6 +827,7 @@ const TipSelector = ({
                   // consumer reads; this is only consulted on that one lane.
                   listedAmount: isListedCurrency ? newAmount : null,
                   presentmentAmount: buyerCurrencyDisplay ? newAmount : null,
+                  presentmentCurrency: buyerCurrencyDisplay?.currencyCode ?? null,
                 },
               });
             }}

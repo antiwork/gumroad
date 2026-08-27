@@ -988,7 +988,7 @@ describe("Checkout currency picker", () => {
   it("keeps a custom buyer-currency tip as typed while the quote remints around canonical rounding", () => {
     const state = buildState({
       products: [stateProduct({ hasTippingEnabled: true })],
-      tip: { type: "fixed", amount: 350, presentmentAmount: 437 },
+      tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
       surcharges: {
         type: "loaded",
         result: {
