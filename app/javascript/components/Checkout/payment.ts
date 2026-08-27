@@ -945,10 +945,13 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
     state,
     state.products.map((item) => ({ price: item.price, permalink: item.permalink })),
   );
+  const exactPresentmentTipCurrency =
+    state.tip.type === "fixed" && state.tip.presentmentAmount != null ? (state.tip.presentmentCurrency ?? null) : null;
+  const requestedBuyerCurrency = state.buyerCurrency ?? exactPresentmentTipCurrency;
   const presentmentLineTips =
     state.tip.type === "fixed" &&
     state.tip.presentmentAmount != null &&
-    (state.buyerCurrency == null || state.buyerCurrency.toLowerCase() === state.tip.presentmentCurrency?.toLowerCase())
+    requestedBuyerCurrency?.toLowerCase() === state.tip.presentmentCurrency?.toLowerCase()
       ? allocateFixedTipCents(
           state.tip.presentmentAmount,
           state.products.map((item) => ({ price: item.price })),
@@ -976,7 +979,7 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       state: state.state,
       vat_id: state.vatId,
       postal_code: state.zipCode,
-      ...(state.buyerCurrency ? { buyer_currency: state.buyerCurrency } : {}),
+      ...(requestedBuyerCurrency ? { buyer_currency: requestedBuyerCurrency } : {}),
       ...(paymentDetailsSource ? { payment_details_source: paymentDetailsSource } : {}),
       ...(paymentElementMountCurrency ? { payment_element_mount_currency: paymentElementMountCurrency } : {}),
       ...(paymentElementDirectListedCurrency

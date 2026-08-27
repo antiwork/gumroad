@@ -333,7 +333,6 @@ describe("createReducer surcharge refetches", () => {
       result.current[1]({
         type: "set-value",
         tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
-        buyerCurrency: "cad",
       }),
     );
     await act(() => vi.advanceTimersByTimeAsync(300));
