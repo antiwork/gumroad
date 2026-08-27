@@ -895,7 +895,9 @@ class Checkout::BuyerCurrencyQuote
     end
 
     def presentment_component_overrides_for(charge_line_items)
-      overrides = charge_line_items.map do |line_item|
+      overrides = charge_line_items.filter_map do |line_item|
+        next if line_item.charge_canonical_total_cents.zero?
+
         line_item.presentment_tip_cents ? [nil, line_item.presentment_tip_cents, nil, nil, nil] : nil
       end
       overrides.any? ? overrides : nil
