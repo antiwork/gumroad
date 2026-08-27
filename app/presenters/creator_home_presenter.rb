@@ -7,7 +7,7 @@ class CreatorHomePresenter
   BALANCE_ITEMS_LIMIT = 3
   GUMHEAD_FEATURE = :gumhead
   # A fixed tag, because releases/latest here is a deploy release.
-  GUMHEAD_DOWNLOAD_URL = "https://github.com/antiwork/gumroad/releases/download/gumhead-latest/Gumhead.zip"
+  GUMHEAD_DOWNLOAD_URL = "https://github.com/antiwork/gumroad/releases/download/gumhead-latest/Gumhead.dmg"
 
   attr_reader :pundit_user, :seller
 
