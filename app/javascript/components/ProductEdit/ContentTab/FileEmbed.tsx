@@ -87,6 +87,7 @@ const FileEmbedNodeView = ({
   const downloadUrl = file && getDownloadUrl(id, file);
 
   const playerRef = React.useRef<jwplayer.JWPlayer | null>(null);
+  const subtitleUploadSettled = React.useRef(new Map<string, () => void>());
   const uploadedSubtitleFiles =
     file?.subtitle_files.filter(
       (subtitle) => subtitle.status.type !== "unsaved" || subtitle.status.uploadStatus.type === "uploaded",
@@ -274,9 +275,28 @@ const FileEmbedNodeView = ({
     />
   );
 
-  const removeSubtitle = (url: string) =>
+  const settleSubtitleUpload = (url: string) => {
+    subtitleUploadSettled.current.get(url)?.();
+    subtitleUploadSettled.current.delete(url);
+  };
+  const dropFailedSubtitle = (url: string) => {
+    updateProduct((product) => {
+      product.files = product.files.map((existing) =>
+        existing.id === file.id
+          ? { ...existing, subtitle_files: existing.subtitle_files.filter((subtitle) => subtitle.url !== url) }
+          : existing,
+      );
+    });
+  };
+  const removeSubtitle = (url: string) => {
+    if (subtitleUploadSettled.current.has(url)) {
+      uploader.cancelUpload(`subtitles_for_${file.id}__${url}`);
+      settleSubtitleUpload(url);
+    }
     updateFile({ subtitle_files: file.subtitle_files.filter((subtitle) => subtitle.url !== url) });
+  };
   const uploadSubtitles = (files: File[]) => {
+    const pending: Promise<void>[] = [];
     for (const subtitleFile of files) {
       const mimeType = getMimeType(subtitleFile.name);
       const extension = FileUtils.getFileExtension(subtitleFile.name).toUpperCase();
@@ -295,28 +315,49 @@ const FileEmbedNodeView = ({
         status: { type: "unsaved", uploadStatus: { type: "uploading", progress: { percent: 0, bitrate: 0 } } },
       };
 
-      updateFile({ subtitle_files: [...file.subtitle_files, subtitleEntry] });
-
-      const status = uploader.scheduleUpload({
-        cancellationKey: `subtitles_for_${file.id}__${subtitleEntry.url}`,
-        name: s3key,
-        file: subtitleFile,
-        mimeType,
-        onComplete: () => {
-          subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploaded" } };
-          updateFile({});
-        },
-        onProgress: (progress) => {
-          subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploading", progress } };
-          updateFile({});
-        },
+      updateProduct((product) => {
+        product.files = product.files.map((existing) =>
+          existing.id === file.id
+            ? { ...existing, subtitle_files: [...existing.subtitle_files, subtitleEntry] }
+            : existing,
+        );
       });
 
-      if (typeof status === "string") {
-        // status contains error string if any, otherwise index of file in array
-        showAlert(status, "error");
-      }
+      pending.push(
+        new Promise<void>((resolve) => {
+          subtitleUploadSettled.current.set(subtitleEntry.url, resolve);
+          const status = uploader.scheduleUpload({
+            cancellationKey: `subtitles_for_${file.id}__${subtitleEntry.url}`,
+            name: s3key,
+            file: subtitleFile,
+            mimeType,
+            onComplete: () => {
+              subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploaded" } };
+              updateFile({});
+              settleSubtitleUpload(subtitleEntry.url);
+            },
+            onError: () => {
+              showAlert("Subtitle upload failed.", "error");
+              uploader.cancelUpload(`subtitles_for_${file.id}__${subtitleEntry.url}`);
+              dropFailedSubtitle(subtitleEntry.url);
+              settleSubtitleUpload(subtitleEntry.url);
+            },
+            onProgress: (progress) => {
+              subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploading", progress } };
+              updateFile({});
+            },
+          });
+
+          if (typeof status === "string") {
+            // status contains error string if any, otherwise index of file in array
+            showAlert(status, "error");
+            dropFailedSubtitle(subtitleEntry.url);
+            settleSubtitleUpload(subtitleEntry.url);
+          }
+        }),
+      );
     }
+    return Promise.all(pending);
   };
 
   const folderAction = {

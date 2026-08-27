@@ -49,6 +49,7 @@ export const useConfigureEvaporate = (props: Props) => {
   );
 
   const cancellationKeysToUploadIdsRef = React.useRef<Record<string, string>>({});
+  const cancelledKeysRef = React.useRef(new Set<string>());
   const scheduleUpload = ({
     cancellationKey,
     name,
@@ -56,6 +57,7 @@ export const useConfigureEvaporate = (props: Props) => {
     mimeType,
     onComplete,
     onProgress,
+    onError,
   }: {
     cancellationKey: string;
     name: string;
@@ -63,8 +65,11 @@ export const useConfigureEvaporate = (props: Props) => {
     mimeType: string;
     onComplete: () => void;
     onProgress: (progress: UploadProgress) => void;
+    onError?: () => void;
   }) => {
+    cancelledKeysRef.current.delete(cancellationKey);
     let previousProgress = 0;
+    let errorNotified = false;
 
     const status = evaporate.add({
       name,
@@ -73,6 +78,12 @@ export const useConfigureEvaporate = (props: Props) => {
       mimeType,
       xAmzHeadersAtInitiate: { "x-amz-acl": "private" },
       complete: onComplete,
+      error: () => {
+        // stop() aborts in-flight sign/initiate/complete XHRs, which call error.
+        if (cancelledKeysRef.current.has(cancellationKey) || errorNotified) return;
+        errorNotified = true;
+        onError?.();
+      },
       progress(percent) {
         // Calculate the bitrate of the file upload by subtracting the completed percentage from the last iteration from the current iteration percentage
         // and multiplying that by the bytesize.  I have found this to be accurate enough by comparing my upload
@@ -100,6 +111,7 @@ export const useConfigureEvaporate = (props: Props) => {
   };
 
   const cancelUpload = (cancellationKey: string) => {
+    cancelledKeysRef.current.add(cancellationKey);
     const uploadId = cancellationKeysToUploadIdsRef.current[cancellationKey];
     // Evaporate's first queued file is id 0; a truthy check would skip cancel and
     // leave the original File in use after the toolbar input is reset.
