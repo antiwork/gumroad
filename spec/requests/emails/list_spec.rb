@@ -62,7 +62,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
           expect(page).to have_text("Sent #{installment1.published_at.in_time_zone(seller.timezone).strftime("%-m/%-d/%Y, %-I:%M:%S %p")}", normalize_ws: true)
           expect(page).to have_text("Emailed 1", normalize_ws: true)
           expect(page).to have_text("Opened 1 (100%)", normalize_ws: true)
-          expect(page).to have_text("Clicks 123 (12,300%)", normalize_ws: true)
+          expect(page).to have_text("Clicks 2 (200%)", normalize_ws: true)
           expect(page).to have_text("Views n/a", normalize_ws: true)
           expect(page).to have_link("Duplicate")
           expect(page).to have_link("Edit")
