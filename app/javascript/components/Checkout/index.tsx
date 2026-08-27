@@ -148,7 +148,9 @@ const CurrencyPicker = ({
   const directListedUsdOptionAvailable =
     configuredDirectListedCurrency !== null && availableOptions.some((option) => option.code === "usd");
   const directListedUsdFallbackAvailable =
-    directListedUsdOptionAvailable && !directListedCurrencyOptionAvailable && state.buyerCurrency !== null;
+    directListedUsdOptionAvailable &&
+    !directListedCurrencyOptionAvailable &&
+    state.buyerCurrency?.toLowerCase() === "usd";
   const options = configuredDirectListedCurrency
     ? availableOptions.filter(
         (option) =>
