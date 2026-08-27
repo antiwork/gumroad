@@ -107,5 +107,4 @@ class HandleEmailEventInfo::ForInstallmentEmail
         mailer_args: email_event_info.mailer_args,
       }
     end
-
 end
