@@ -25,23 +25,19 @@ class EmailEngagementDynamoStore
     attr_writer :client
 
     def record_open(installment_id:, mailer_method:, mailer_args:)
-      with_dual_write_guard do
-        upsert_open_item(installment_id: installment_id.to_i, mailer_method:, mailer_args:)
-      end
+      upsert_open_item(installment_id: installment_id.to_i, mailer_method:, mailer_args:)
     end
 
     def record_click(installment_id:, mailer_method:, mailer_args:, click_url:)
-      with_dual_write_guard do
-        installment_id = installment_id.to_i
-        recipient = recipient_digest(mailer_method:, mailer_args:)
+      installment_id = installment_id.to_i
+      recipient = recipient_digest(mailer_method:, mailer_args:)
 
-        # Each of these is one TransactWrite so a retry after a mid-flight
-        # failure cannot skip derived counters. A duplicate same-url click
-        # cancels all three on ConditionalCheckFailed and counts nothing.
-        commit_click_and_counters(installment_id:, mailer_method:, mailer_args:, click_url:, recipient:)
-        commit_clicker_and_count(installment_id:, mailer_method:, mailer_args:, recipient:)
-        ensure_open_item(installment_id:, mailer_method:, mailer_args:)
-      end
+      # Each of these is one TransactWrite so a retry after a mid-flight
+      # failure cannot skip derived counters. A duplicate same-url click
+      # cancels all three on ConditionalCheckFailed and counts nothing.
+      commit_click_and_counters(installment_id:, mailer_method:, mailer_args:, click_url:, recipient:)
+      commit_clicker_and_count(installment_id:, mailer_method:, mailer_args:, recipient:)
+      ensure_open_item(installment_id:, mailer_method:, mailer_args:)
     end
 
     def client
@@ -164,10 +160,6 @@ class EmailEngagementDynamoStore
     end
 
     private
-      def with_dual_write_guard
-        yield
-      end
-
       def upsert_open_item(installment_id:, mailer_method:, mailer_args:)
         return if ensure_open_item(installment_id:, mailer_method:, mailer_args:)
 
@@ -281,11 +273,14 @@ class EmailEngagementDynamoStore
         false
       end
 
+      # A cancellation is the expected duplicate only when fully explained by
+      # condition checks; anything else (conflict, throttle) raises so Sidekiq
+      # retries the event. Stubbed clients raise with empty data, so fall back
+      # to the per-item reason list the service embeds in the message.
       def conditional_check_failed?(error)
-        # aws-sdk-ruby's TransactionCanceledException has no cancellation_reasons
-        # member — reading it raises. The service still names ConditionalCheckFailed
-        # in the message; any other cancellation must retry.
-        error.message.to_s.include?("ConditionalCheckFailed")
+        codes = error.data.try(:cancellation_reasons).to_a.map(&:code)
+        codes = error.message.to_s[/\[([^\]]+)\]\z/, 1].to_s.split(",").map(&:strip) if codes.empty?
+        codes.any? && codes.all? { |code| ["ConditionalCheckFailed", "None"].include?(code) }
       end
 
       def item_key(installment_id, sort_key)
