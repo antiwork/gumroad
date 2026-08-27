@@ -19,6 +19,8 @@ class EmailEngagementDynamoStore
   TABLE_BASE_NAME = "email_engagement"
   SUMMARY_SORT_KEY = "SUMMARY"
   DUAL_WRITE_FEATURE = :email_engagement_dynamodb_dual_write
+  READ_FEATURE = :email_engagement_dynamodb_reads
+  BATCH_GET_LIMIT = 100
 
   class << self
     attr_writer :client
@@ -73,6 +75,56 @@ class EmailEngagementDynamoStore
 
     # Staging and production tables are Terraform-owned (antiwork/infrastructure#998)
     # and deletion-protected; this bootstrap is for dev, test, and branch apps.
+    def reads_enabled?
+      Feature.active?(READ_FEATURE)
+    end
+
+    def summary(installment_id)
+      item = client.get_item(table_name:, key: item_key(installment_id, SUMMARY_SORT_KEY)).item
+      summary_from_item(item)
+    end
+
+    def summaries(installment_ids)
+      ids = installment_ids.map(&:to_i).uniq
+      return {} if ids.empty?
+
+      counts = {}
+      ids.each_slice(BATCH_GET_LIMIT) do |slice|
+        keys = slice.map { item_key(_1, SUMMARY_SORT_KEY) }
+        response = client.batch_get_item(request_items: { table_name => { keys: } })
+        (response.responses[table_name] || []).each do |item|
+          counts[item["pk"].to_i] = summary_from_item(item)
+        end
+      end
+      ids.index_with { |id| counts[id] || summary_from_item(nil) }
+    end
+
+    def url_click_counts(installment_id)
+      items = []
+      exclusive_start_key = nil
+      loop do
+        params = {
+          table_name:,
+          key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
+          expression_attribute_values: {
+            ":pk" => partition_key(installment_id),
+            ":prefix" => "URL#",
+          },
+        }
+        params[:exclusive_start_key] = exclusive_start_key if exclusive_start_key.present?
+        response = client.query(params)
+        items.concat(response.items)
+        exclusive_start_key = response.last_evaluated_key
+        break if exclusive_start_key.blank?
+      end
+
+      items.each_with_object({}) do |item, counts|
+        url = display_url(item["click_url"].to_s)
+        next if url.blank?
+        counts[url] = item["click_count"].to_i
+      end
+    end
+
     def create_table!
       client.create_table(
         table_name:,
@@ -221,6 +273,18 @@ class EmailEngagementDynamoStore
 
       def item_key(installment_id, sort_key)
         { "pk" => partition_key(installment_id), "sk" => sort_key }
+      end
+
+      def summary_from_item(item)
+        {
+          open_count: item&.[]("open_count").to_i,
+          click_count: item&.[]("click_count").to_i,
+          click_pair_count: item&.[]("click_pair_count").to_i,
+        }
+      end
+
+      def display_url(url)
+        url.gsub(/&#46;/, ".").sub(%r{\Ahttps?://}i, "").sub(/\Awww\./i, "")
       end
 
       def timestamp
