@@ -52,7 +52,7 @@ const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
   ifttt: "See your sales data.",
   mark_sales_as_shipped: "Mark your sales as shipped.",
   refund_sales: "Refund your sales.",
-  edit_sales: "Refund your sales and resend purchase receipts to customers.",
+  edit_sales: "Refund your sales, revoke or restore buyer access, and resend purchase receipts to customers.",
   unfurl: "Fetch public information of any product to preview it in Notion.",
   view_profile: "See your profile data.",
   edit_profile: "Edit your profile name and bio.",

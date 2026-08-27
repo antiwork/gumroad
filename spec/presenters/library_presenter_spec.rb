@@ -50,6 +50,7 @@ describe LibraryPresenter do
       expect(props[:pagination]).to eq(page: 1, pages: 1, from: 1, to: 1, count: 1)
       expect(props[:creators]).to eq([{ id: creator.external_id, name: creator.name, count: 1 }])
       expect(props[:bundles]).to eq([])
+      expect(props[:bundle_downloads]).to eq([])
       expect(props[:archived_count]).to eq(0)
       expect(props[:unarchived_count]).to eq(1)
       expect(props[:search]).to eq(
@@ -546,6 +547,12 @@ describe LibraryPresenter do
       let(:purchase2) { create(:purchase, purchaser: buyer, link: create(:product, :bundle)) }
 
       before do
+        [purchase1, purchase2].each do |bundle_purchase|
+          bundle_purchase.link.bundle_products.each_with_index do |bundle_product, index|
+            create(:product_file, link: bundle_product.product, display_name: "#{bundle_purchase.external_id}-file-#{index}")
+          end
+        end
+
         purchase1.create_artifacts_and_send_receipt!
         purchase2.create_artifacts_and_send_receipt!
       end
@@ -571,6 +578,143 @@ describe LibraryPresenter do
         matches = results(bundle_ids: [purchase1.link.external_id])
 
         expect(matches.map { _1[:purchase][:id] }).to match_array(purchase1.product_purchases.map(&:external_id))
+      end
+
+      it "prepares and returns a combined ZIP for the selected bundle purchase" do
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil }
+        expect(props[:bundle_downloads]).to eq([expected_download])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        expect(archive.product_files.map(&:link_id).sort).to eq(purchase1.product_purchases.map(&:link_id).sort)
+
+        archive.mark_in_progress!
+        archive.mark_ready!
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expected_download[:download_url] = url_redirect_download_archive_path(purchase1.url_redirect.token)
+        expect(props[:bundle_downloads]).to eq([expected_download])
+      end
+
+      it "keeps a bundle archive scoped to the selected purchase" do
+        removed_bundle_product = purchase1.link.bundle_products.first
+        removed_bundle_product.mark_deleted!
+        new_bundle_product = create(:bundle_product, bundle: purchase1.link)
+        create(:product_file, link: new_bundle_product.product, display_name: "repeat-purchase-file")
+        repeat_purchase = create(:purchase, purchaser: buyer, link: purchase1.link)
+        repeat_purchase.create_artifacts_and_send_receipt!
+
+        library_props(bundle_ids: [purchase1.link.external_id])
+
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archived_link_ids = archive.product_files.map(&:link_id)
+        expect(archived_link_ids).to include(new_bundle_product.product_id)
+        expect(archived_link_ids).not_to include(removed_bundle_product.product_id)
+      end
+
+      it "does not create a combined ZIP when a member product has stampable pdfs" do
+        create(:readable_document, pdf_stamp_enabled: true, link: purchase1.product_purchases.first.link)
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:bundle_downloads]).to eq([])
+        expect(purchase1.link.product_files_archives.alive).to be_empty
+      end
+
+      it "queues a replacement ZIP when the matching archive has failed" do
+        library_props(bundle_ids: [purchase1.link.external_id])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archive.mark_failed!
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil }
+        expect(props[:bundle_downloads]).to eq([expected_download])
+        archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
+        expect(archives.map(&:product_files_archive_state)).to contain_exactly("failed", "queueing")
+      end
+
+      it "stops automatically retrying after a replacement ZIP also failed" do
+        library_props(bundle_ids: [purchase1.link.external_id])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archive.mark_failed!
+        library_props(bundle_ids: [purchase1.link.external_id])
+        replacement_archive = purchase1.link.product_files_archives.alive.entity_archives.where.not(id: archive.id).sole
+        replacement_archive.mark_failed!
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:bundle_downloads]).to eq([])
+        archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
+        expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed"])
+      end
+
+      it "allows another retry when the previous bundle ZIP failures are stale" do
+        library_props(bundle_ids: [purchase1.link.external_id])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archive.mark_failed!
+        library_props(bundle_ids: [purchase1.link.external_id])
+        replacement_archive = purchase1.link.product_files_archives.alive.entity_archives.where.not(id: archive.id).sole
+        replacement_archive.mark_failed!
+        [archive, replacement_archive].each { _1.update_columns(updated_at: 25.hours.ago) }
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil }
+        expect(props[:bundle_downloads]).to eq([expected_download])
+        archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
+        expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed", "queueing"])
+      end
+
+      it "stops retrying after the stale-failure recovery attempt also fails" do
+        library_props(bundle_ids: [purchase1.link.external_id])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archive.mark_failed!
+        library_props(bundle_ids: [purchase1.link.external_id])
+        replacement_archive = purchase1.link.product_files_archives.alive.entity_archives.where.not(id: archive.id).sole
+        replacement_archive.mark_failed!
+        [archive, replacement_archive].each { _1.update_columns(updated_at: 25.hours.ago) }
+        library_props(bundle_ids: [purchase1.link.external_id])
+        stale_failure_recovery_archive = purchase1.link.product_files_archives.alive.entity_archives.where(product_files_archive_state: "queueing").sole
+        stale_failure_recovery_archive.mark_failed!
+        [archive, replacement_archive, stale_failure_recovery_archive].each { _1.update_columns(updated_at: 25.hours.ago) }
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:bundle_downloads]).to eq([])
+        archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
+        expect(archives.map(&:product_files_archive_state)).to eq(["failed", "failed", "failed"])
+      end
+
+      it "queues a fresh ZIP when the matching bundle files keep the same ids but change paths" do
+        library_props(bundle_ids: [purchase1.link.external_id])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archive.mark_in_progress!
+        archive.mark_ready!
+        product_file = purchase1.product_purchases.first.link.product_files.alive.sole
+        product_file.update!(display_name: "renamed-member-file")
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil }
+        expect(props[:bundle_downloads]).to eq([expected_download])
+        archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
+        expect(archives.map(&:product_files_archive_state)).to eq(["ready", "queueing"])
+      end
+
+      it "queues a fresh ZIP when a member product rename changes a bundle archive path" do
+        library_props(bundle_ids: [purchase1.link.external_id])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archive.mark_in_progress!
+        archive.mark_ready!
+        purchase1.product_purchases.first.link.update!(name: "Renamed member product")
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil }
+        expect(props[:bundle_downloads]).to eq([expected_download])
+        archives = purchase1.link.product_files_archives.alive.entity_archives.order(:id)
+        expect(archives.map(&:product_files_archive_state)).to eq(["ready", "queueing"])
       end
 
       it "matches nothing when no selected bundle id resolves to a product" do

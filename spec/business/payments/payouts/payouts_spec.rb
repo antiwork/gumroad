@@ -670,14 +670,27 @@ describe Payouts do
     let(:payout_date) { Date.yesterday }
 
     it "calls create_instant_payouts_for_balances_up_to_date_for_users with all users holding balance with a payout frequency of daily" do
+      weekly_holder = create(:user, unpaid_balance_cents: 100, payout_frequency: User::PayoutSchedule::WEEKLY)
       create(:user, unpaid_balance_cents: 0, payout_frequency: User::PayoutSchedule::WEEKLY)
-      create(:user, unpaid_balance_cents: 100, payout_frequency: User::PayoutSchedule::WEEKLY)
       create(:user, unpaid_balance_cents: 0, payout_frequency: User::PayoutSchedule::DAILY)
       u4 = create(:user, unpaid_balance_cents: 100, payout_frequency: User::PayoutSchedule::DAILY)
 
       expect(described_class).to receive(:create_instant_payouts_for_balances_up_to_date_for_users).with(payout_date, [u4], perform_async: true, add_comment: true)
 
-      described_class.create_instant_payouts_for_balances_up_to_date(payout_date)
+      queries = []
+      callback = lambda { |*, payload|
+        sql = payload[:sql]
+        next unless sql.start_with?("SELECT")
+        queries << sql
+      }
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        described_class.create_instant_payouts_for_balances_up_to_date(payout_date)
+      end
+
+      grouped = queries.grep(/SUM\(amount_cents\)/)
+      expect(grouped.join).to match(/`user_id` IN \(/)
+      expect(grouped.join).to include(u4.id.to_s)
+      expect(grouped.join).not_to include(weekly_holder.id.to_s)
     end
   end
 

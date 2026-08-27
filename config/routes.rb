@@ -163,6 +163,8 @@ Rails.application.routes.draw do
           put :mark_as_shipped
           put :refund
           post :resend_receipt
+          put :revoke_access
+          put :undo_revoke_access
         end
       end
       resources :payouts, only: [:index, :show] do
@@ -233,9 +235,11 @@ Rails.application.routes.draw do
         if named_routes
           post :track_user_action, as: :track_user_action
           post :increment_views, as: :increment_views
+          get :increment_views
         else
           post :track_user_action
           post :increment_views
+          get :increment_views
         end
       end
     end
@@ -311,6 +315,7 @@ Rails.application.routes.draw do
     get "/gumroad", to: "embedded_javascripts#overlay"
     get "/gumroad-overlay", to: "embedded_javascripts#overlay"
     get "/gumroad-embed", to: "embedded_javascripts#embed"
+    get "/gumroad-analytics", to: "embedded_javascripts#analytics"
     get "/gumroad-multioverlay", to: "embedded_javascripts#overlay"
   end
 
@@ -927,6 +932,7 @@ Rails.application.routes.draw do
         post :publish
         post :unpublish
         post :increment_views
+        get :increment_views
         post :track_user_action
         put :sections, action: :update_sections
       end
@@ -1025,6 +1031,7 @@ Rails.application.routes.draw do
     get "/dashboard/monthly_recurring_revenue" => "dashboard#monthly_recurring_revenue", as: :dashboard_monthly_recurring_revenue
     get "/dashboard/download_tax_form" => "dashboard#download_tax_form", as: :dashboard_download_tax_form
     post "/dashboard/dismiss_getting_started_checklist" => "dashboard#dismiss_getting_started_checklist", as: :dashboard_dismiss_getting_started_checklist
+    post "/dashboard/dismiss_gumhead_promo" => "dashboard#dismiss_gumhead_promo", as: :dashboard_dismiss_gumhead_promo
 
     get "/products", to: "links#index", as: :products
 

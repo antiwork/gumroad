@@ -6,8 +6,10 @@
 # for files whose behavior many end-to-end specs depend on.
 #
 # Branch CI runs exactly this list (see .github/workflows/tests.yml
-# test_relevant); main still runs everything before a deploy, and a PR can
-# opt into the full suite with the run-all-specs label.
+# test_relevant). Main still requires a green full suite before deploy, but
+# skips re-running Fast/Slow when the merge commit is the same git tree as a
+# PR that already passed them (bin/reuse-full-suite). A PR can opt into the
+# full suite with the run-all-specs label.
 #
 # Exits 3 (ESCALATE) when the diff cannot be mapped safely — dependency,
 # config, migration, factory, or unmapped-helper changes, or a selection so
@@ -119,6 +121,9 @@ IGNORED_PATTERNS = [
   %r{\.md\z},
   %r{\A\.agents/},
   %r{\A\.claude/},
+  # Recorded HTTP, not helpers. A cassette-only diff must not force Slow;
+  # the spec that plays the tape is already in the selection (or unchanged).
+  %r{\Aspec/support/fixtures/vcr_cassettes/},
 ].freeze
 
 # Above this many selected files the full suite's parallelism wins anyway.
@@ -178,7 +183,11 @@ changed.merge(git("diff", "--name-only", "#{merge_base}..HEAD")) if merge_base
 changed.merge(git("diff", "--name-only", "HEAD"))
 changed.merge(git("ls-files", "--others", "--exclude-standard"))
 
+cassette_in_diff = changed.any? { |path| path.start_with?("spec/support/fixtures/vcr_cassettes/") }
 changed.reject! { |path| IGNORED_PATTERNS.any? { |re| re.match?(path) } }
+# Cassettes ride along with a mapped spec without forcing Slow. A cassette-only
+# diff has nothing left to attribute, so escalate rather than run zero specs.
+escalate!("cassette-only diff: map to the owning spec or add run-all-specs") if changed.empty? && cassette_in_diff
 
 unmappable = changed.select do |path|
   ESCALATE_PATTERNS.any? { |re| re.match?(path) } && !CONFIG_SPEC_MAP.key?(path)
@@ -324,10 +333,27 @@ changed.each do |path|
   if contributed.any?
     specs.merge(contributed)
   elsif path.match?(%r{\Aapp/javascript/.*\.test\.(ts|tsx)\z}) ||
+        path.match?(%r{\Aapp/javascript/.*\.d\.ts\z}) ||
         (path.match?(%r{\Aapp/javascript/.*\.(ts|tsx)\z}) &&
-         File.exist?(path.sub(/\.(ts|tsx)\z/, '.test.\1')))
+         File.exist?(path.sub(/\.(ts|tsx)\z/, '.test.\1'))) ||
+        path == "app/javascript/components/EvaporateUploader.tsx" ||
+        path == "vendor/assets/javascripts/evaporate.cjs"
     # Covered by vitest, which lint_js runs on every PR (npm test). A
-    # co-located .test file is that module's suite; neither needs rspec.
+    # co-located .test file is that module's suite; type-only .d.ts
+    # files ride with the consuming module. Evaporate's context hook and
+    # vendored client are exercised by useConfigureEvaporate vitest.
+    # None of these need rspec.
+    next
+  elsif path == "bin/branch-specs" || path == "spec/bin/branch_specs_test.rb"
+    # Standalone ruby test (ruby spec/bin/branch_specs_test.rb), not rspec.
+    next
+  elsif path == "bin/classify-hung-checkout" || path == "spec/bin/classify_hung_checkout_test.rb"
+    # Same: standalone ruby (ruby spec/bin/classify_hung_checkout_test.rb), not rspec.
+    next
+  elsif path == ".github/workflows/rerun-hung-checkout.yml"
+    # Only invokes the classifier; the job `if` is asserted in that standalone
+    # test. Other workflows still go through unattributed; tests.yml still
+    # escalates via ESCALATE_PATTERNS.
     next
   elsif path.match?(%r{\A(lib|app)/.*\.rb\z}) &&
         (by_content = specs_mentioning(File.basename(path, ".rb"))).any?

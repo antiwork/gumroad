@@ -52,6 +52,16 @@ class Purchase::SyncStatusWithChargeProcessorService
 
       restore_failed_purchase_to_in_progress!
 
+      # The processor lookup scopes by purchase.merchant_account, so a missing or stale
+      # Gumroad account must be repaired from the charge before the lookup: a seller's
+      # direct charge is invisible to a platform-scoped retrieve, and the raise would skip
+      # a repair placed after it. A nil charge account stays nil (fail closed).
+      charge_merchant_account = purchase.charge&.merchant_account
+      if charge_merchant_account.present? && charge_merchant_account != purchase.merchant_account &&
+         purchase.merchant_account&.user_id.blank?
+        purchase.update!(merchant_account: charge_merchant_account)
+      end
+
       charge = ChargeProcessor.get_or_search_charge(purchase)
       success_statuses = ChargeProcessor.charge_processor_success_statuses(purchase.charge_processor_id)
       @charge_outcome = classify(charge, success_statuses)
@@ -68,10 +78,13 @@ class Purchase::SyncStatusWithChargeProcessorService
         charge.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.charge.amount_cents)
       end
 
-      if charge_succeeded && charge.flow_of_funds.nil? && (purchase.is_part_of_combined_charge? || purchase.buyer_presentment?)
+      if charge_succeeded && charge.flow_of_funds.nil? &&
+         (purchase.processor_settlement_deferrable? || purchase.is_part_of_combined_charge?)
         # The charge succeeded but the processor has not produced the balance transaction the flow
         # of funds is read from, so retry later rather than failing a purchase whose money moved.
-        # Only the uncredited-destination-payment cause is bounded (by
+        # Combined charges defer regardless of ownership: the per-purchase split needs real
+        # settlement data and this path has no Stripe USD fallback, so proceeding would book
+        # balances from a nil flow. Only the uncredited-destination-payment cause is bounded (by
         # StripeCharge::DESTINATION_PAYMENT_SETTLEMENT_GRACE); every other cause waits
         # indefinitely, and the retry jobs stop scanning at
         # Purchase::UnstickStuckInProgressService::MAX_AGE.
@@ -87,12 +100,16 @@ class Purchase::SyncStatusWithChargeProcessorService
         purchase.merchant_account = purchase.send(:prepare_merchant_account, purchase.charge_processor_id) unless purchase.merchant_account.present?
         if purchase.balance_transactions.exists?
           purchase.mark_successful!
-        elsif purchase.buyer_presentment? && purchase.is_recurring_subscription_charge
+        elsif purchase.is_recurring_subscription_charge && purchase.subscription.original_purchase.present?
+          # handle_purchase_success always touches original_purchase; a first purchase that
+          # already has a subscription row but no original still goes through MarkSuccessfulService.
           purchase.subscription.handle_purchase_success(purchase)
         else
           Purchase::MarkSuccessfulService.new(purchase).perform
         end
-        complete_later_charge_owner if purchase.buyer_presentment?
+        # Any row that can defer on settlement data may be a preorder charge or commission
+        # completion whose owner still needs to be marked done once the purchase succeeds.
+        complete_later_charge_owner if purchase.processor_settlement_deferrable?
         true
       elsif charge.nil? && purchase.free_purchase?
         Purchase::MarkSuccessfulService.new(purchase).perform

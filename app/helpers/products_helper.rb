@@ -71,7 +71,7 @@ module ProductsHelper
     end
   end
 
-  def create_product_page_view(user_id:, referrer:, was_product_recommended:, view_url:)
+  def create_product_page_view(user_id:, referrer:, was_product_recommended:, view_url:, id: SecureRandom.uuid)
     geo = GeoIp.lookup(request.remote_ip)
     referrer = referrer.encode(Encoding.find("ASCII"), invalid: :replace, undef: :replace, replace: "")[0..190] if referrer.present?
     referrer_domain = was_product_recommended ? REFERRER_DOMAIN_FOR_GUMROAD_RECOMMENDED_PRODUCTS : Referrer.extract_domain(referrer)
@@ -91,7 +91,7 @@ module ProductsHelper
     }
     job_params = {
       class_name: "ProductPageView",
-      id: SecureRandom.uuid,
+      id:,
       body: data
     }
     ElasticsearchIndexerWorker.perform_async("index", job_params.deep_stringify_keys)

@@ -132,6 +132,35 @@ check(
   expect_escalate: true,
 )
 
+# Hung-checkout files are standalone ruby + a workflow that only invokes
+# them, so they must not trip the mapping-gap escalate the way an unmapped
+# helper would. Sibling model+spec so the run is not an empty selection.
+check(
+  "hung-checkout classifier, its test, and workflow do not escalate",
+  base_files: {
+    ".github/workflows/rerun-hung-checkout.yml" => "old",
+    "bin/classify-hung-checkout" => "old",
+    "spec/bin/classify_hung_checkout_test.rb" => "old",
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+  },
+  head_files: {
+    ".github/workflows/rerun-hung-checkout.yml" => "new",
+    "bin/classify-hung-checkout" => "new",
+    "spec/bin/classify_hung_checkout_test.rb" => "new",
+    "app/models/widget.rb" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+# tests.yml is the suite itself and must still force the full suite.
+check(
+  "tests.yml still escalates",
+  base_files: { ".github/workflows/tests.yml" => "old" },
+  head_files: { ".github/workflows/tests.yml" => "new" },
+  expect_escalate: true,
+)
+
 # Co-located vitest module is not a mapping gap
 check(
   "TS module with co-located .test.ts does not escalate",
@@ -146,6 +175,25 @@ check(
   head_files: {
     "app/javascript/utils/colombiaIdNumbers.ts" => "new",
     "app/javascript/utils/colombiaIdNumbers.test.ts" => "new",
+    "app/models/widget.rb" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+# Evaporate context, types, and vendored client are vitest-only (lint_js).
+check(
+  "Evaporate context, types, and vendored client do not escalate",
+  base_files: {
+    "app/javascript/components/EvaporateUploader.tsx" => "old",
+    "app/javascript/types/evaporate.d.ts" => "old",
+    "vendor/assets/javascripts/evaporate.cjs" => "old",
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+  },
+  head_files: {
+    "app/javascript/components/EvaporateUploader.tsx" => "new",
+    "app/javascript/types/evaporate.d.ts" => "new",
+    "vendor/assets/javascripts/evaporate.cjs" => "new",
     "app/models/widget.rb" => "new",
   },
   expect_specs: %w[spec/models/widget_spec.rb],
@@ -452,6 +500,45 @@ check_invalid_path_bytes_rejected(
     "app/views/customer_mailer/_footer.html.erb" => "old",
   },
   head_files: { "app/views/customer_mailer/_footer.html.erb" => "new" },
+)
+
+# VCR tapes are recordings, not helpers. Pairing one with a mapped spec
+# must not force the full suite (the escalate that put refund-only PRs
+# onto 50 Slow checkout shards).
+check(
+  "VCR cassette with a mapped spec does not escalate",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+    "spec/support/fixtures/vcr_cassettes/Widget/example.yml" => "old",
+  },
+  head_files: {
+    "app/models/widget.rb" => "new",
+    "spec/models/widget_spec.rb" => "#{SPEC_STUB}# changed\n",
+    "spec/support/fixtures/vcr_cassettes/Widget/example.yml" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+# A tape-only change has no mapped spec left after ignore. Escalate so a
+# re-recorded or malformed cassette cannot merge with an empty Relevant run.
+check(
+  "VCR cassette-only diff escalates",
+  base_files: {
+    "spec/support/fixtures/vcr_cassettes/Widget/example.yml" => "old",
+  },
+  head_files: {
+    "spec/support/fixtures/vcr_cassettes/Widget/example.yml" => "new",
+  },
+  expect_escalate: true,
+)
+
+# Real helper changes under spec/support still need the full suite.
+check(
+  "unmapped spec/support helper still escalates",
+  base_files: { "spec/support/mystery_helpers.rb" => "old" },
+  head_files: { "spec/support/mystery_helpers.rb" => "new" },
+  expect_escalate: true,
 )
 
 if $failures.empty?

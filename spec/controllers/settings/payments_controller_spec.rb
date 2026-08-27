@@ -472,6 +472,57 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           end
         end
 
+        describe "user has a bank account and a Stripe Connect account" do
+          before do
+            all_params.merge!(
+              bank_account: {
+                type: AchAccount.name,
+                account_number: "000123456789",
+                account_number_confirmation: "000123456789",
+                routing_number: "110000000",
+                account_holder_full_name: "gumbot"
+              }
+            )
+            create(:merchant_account_stripe_connect, user:)
+          end
+
+          it "does not create a gumroad-managed Stripe account next to Connect" do
+            expect(StripeMerchantAccountManager).not_to receive(:create_account)
+
+            put :update, params: all_params
+
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
+          end
+        end
+
+        describe "user has only a stale hollow merchant account" do
+          before do
+            all_params.merge!(
+              bank_account: {
+                type: AchAccount.name,
+                account_number: "000123456789",
+                account_number_confirmation: "000123456789",
+                routing_number: "110000000",
+                account_holder_full_name: "gumbot"
+              }
+            )
+            create(:merchant_account, user:, charge_processor_merchant_id: nil, charge_processor_alive_at: nil, created_at: 1.year.ago)
+          end
+
+          it "creates a stripe merchant account instead of treating the leftover row as done" do
+            expect(StripeMerchantAccountManager).to receive(:create_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_call_original
+
+            put :update, params: all_params
+
+            expect(user.reload.stripe_account).to be_present
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :see_other
+            expect(flash[:notice]).to eq("Thanks! You're all set.")
+          end
+        end
+
         describe "user does not have a bank account, or a merchant account" do
           it "does not try to create a new stripe account because user does not have a bank account" do
             expect(StripeMerchantAccountManager).not_to receive(:create_account)

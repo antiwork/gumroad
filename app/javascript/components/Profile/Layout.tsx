@@ -7,7 +7,6 @@ import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { TopCreatorBadge } from "$app/components/Product/AuthorByline";
 import { FollowForm } from "$app/components/Profile/FollowForm";
@@ -28,8 +27,8 @@ type LayoutProps = {
 export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shownCurrency, children }: LayoutProps) => {
   const cartItemsCount = useCartItemsCount();
   const appDomain = useAppDomain();
-  const loggedInUser = useLoggedInUser();
   const isDesktop = useIsAboveBreakpoint("lg");
+  const hideSubscribeForm = hideFollowForm || Boolean(creatorProfile.hide_follow_form);
 
   const headerButtons =
     creatorProfile.can_edit || creatorProfile.twitter_handle || cartItemsCount ? (
@@ -54,19 +53,6 @@ export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shown
       <header className="z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap lg:flex-nowrap lg:items-center lg:gap-6">
           <div className="relative flex min-w-0 grow flex-wrap items-center gap-3 border-b border-border p-4 lg:flex-1 lg:flex-nowrap lg:border-0 lg:p-0">
-            {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
-            creatorProfile.external_id !== loggedInUser.id ? (
-              <NavigationButton
-                href={Routes.admin_impersonate_url({
-                  host: appDomain,
-                  user_identifier: creatorProfile.external_id,
-                })}
-                className="left-3"
-                color="filled"
-              >
-                Impersonate
-              </NavigationButton>
-            ) : null}
             {creatorProfile.avatar_url ? <Avatar src={creatorProfile.avatar_url} alt="Profile Picture" /> : null}
             <a href={Routes.root_path()} className="flex max-w-full min-w-0 items-center gap-2 no-underline">
               <span className="truncate">{creatorProfile.name}</span>
@@ -83,7 +69,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shown
               </div>
             ) : null}
           </div>
-          {!hideFollowForm ? (
+          {!hideSubscribeForm ? (
             <div className="flex basis-full items-center gap-3 border-b border-border p-4 lg:basis-auto lg:border-0 lg:p-0">
               <FollowForm creatorProfile={creatorProfile} />
             </div>

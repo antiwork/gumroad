@@ -219,6 +219,18 @@ describe Api::V2::UpsellsController do
         expect(response.parsed_body["message"]).to be_present
       end
 
+      it "creates an upsell without cross_sell instead of a server error" do
+        params = @params.except(:cross_sell)
+
+        expect do
+          post @action, params:, as: :json
+        end.to change { @user.upsells.count }.by(1)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@user.upsells.last.cross_sell).to eq(false)
+      end
+
       it "returns an error when a call is offered as an upsell" do
         call = create(:call_product, user: @user)
         expect do

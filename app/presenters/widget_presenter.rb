@@ -30,7 +30,7 @@ class WidgetPresenter
   def affiliated_products
     @affiliated_products ||= if user_signed_in?
       seller.directly_affiliated_products
-            .select("name, custom_permalink, unique_permalink, affiliates.id AS affiliate_id")
+            .select("links.id, name, custom_permalink, unique_permalink, affiliates.id AS affiliate_id")
             .order("affiliates.created_at DESC")
     else
       Link.none
@@ -54,6 +54,7 @@ class WidgetPresenter
       {
         name: product.name,
         script_base_url: non_affiliated_product_script_base_url,
+        analytics_script_token: product.analytics_script_token,
         url: product_url(product, host: product_link_base_url),
         gumroad_domain_url: product_url(product, host: product_link_base_url(allow_custom_domain: false))
       }
@@ -64,6 +65,7 @@ class WidgetPresenter
       {
         name: product.name,
         script_base_url: affiliated_product_script_base_url,
+        analytics_script_token: product.analytics_script_token,
         url: referral_url,
         gumroad_domain_url: referral_url
       }

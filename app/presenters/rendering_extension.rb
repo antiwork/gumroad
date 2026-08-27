@@ -19,7 +19,7 @@ module RenderingExtension
       user_agent_info: {
         is_mobile: view_context.controller.is_mobile?,
       },
-      logged_in_user: logged_in_user_props(pundit_user, is_impersonating: view_context.controller.impersonating?),
+      logged_in_user: logged_in_user_props(pundit_user),
       current_seller: current_seller_props(pundit_user),
       csp_nonce: SecureHeaders.content_security_policy_script_nonce(view_context.request),
       locale: view_context.controller.http_accept_language.user_preferred_languages[0] || "en-US",
@@ -30,7 +30,7 @@ module RenderingExtension
   end
 
   private
-    def logged_in_user_props(pundit_user, is_impersonating:)
+    def logged_in_user_props(pundit_user)
       user = pundit_user.user
       return nil unless user
 
@@ -57,8 +57,6 @@ module RenderingExtension
           user.payment_address.present?,
         policies: policies_props(pundit_user),
         promoted_nav_items: user.promoted_nav_item_keys,
-        is_gumroad_admin: user.is_team_member?,
-        is_impersonating:,
         lazy_load_offscreen_discover_images: Feature.active?(:lazy_load_offscreen_discover_images, user),
       }
     end

@@ -7,6 +7,16 @@ describe WidgetPresenter do
 
   let!(:demo_product) { create(:product, unique_permalink: "demo") }
 
+  def widget_product_props(product, url: product.long_url, gumroad_domain_url: url)
+    {
+      name: product.name,
+      url:,
+      gumroad_domain_url:,
+      script_base_url: UrlService.root_domain_with_protocol,
+      analytics_script_token: product.analytics_script_token
+    }
+  end
+
   describe "#widget_props" do
     context "when user is signed in" do
       let(:user) { create(:user) }
@@ -18,21 +28,8 @@ describe WidgetPresenter do
           expect(subject.widget_props).to eq(
             {
               display_product_select: true,
-              default_product:
-                {
-                  name: "The Works of Edgar Gumstein",
-                  url: demo_product.long_url,
-                  gumroad_domain_url: demo_product.long_url,
-                  script_base_url: UrlService.root_domain_with_protocol
-                },
-              products: [
-                {
-                  name: "The Works of Edgar Gumstein",
-                  url: demo_product.long_url,
-                  gumroad_domain_url: demo_product.long_url,
-                  script_base_url: UrlService.root_domain_with_protocol
-                }
-              ],
+              default_product: widget_product_props(demo_product),
+              products: [widget_product_props(demo_product)],
               affiliated_products: [],
             })
         end
@@ -45,20 +42,8 @@ describe WidgetPresenter do
           expect(subject.widget_props).to eq(
             {
               display_product_select: true,
-              default_product: {
-                name: product.name,
-                url: product.long_url,
-                gumroad_domain_url: product.long_url,
-                script_base_url: UrlService.root_domain_with_protocol
-              },
-              products: [
-                {
-                  name: product.name,
-                  url: product.long_url,
-                  gumroad_domain_url: product.long_url,
-                  script_base_url: UrlService.root_domain_with_protocol
-                }
-              ],
+              default_product: widget_product_props(product),
+              products: [widget_product_props(product)],
               affiliated_products: [],
             })
         end
@@ -69,34 +54,16 @@ describe WidgetPresenter do
         let!(:direct_affiliate) { create(:direct_affiliate, affiliate_user: user, products: [affiliate_product]) }
 
         it "returns demo product and affiliated products" do
+          referral_url = affiliate_product_url(affiliate_id: direct_affiliate.external_id_numeric,
+                                               unique_permalink: affiliate_product.unique_permalink,
+                                               host: UrlService.root_domain_with_protocol)
           expect(subject.widget_props).to eq(
             {
               display_product_select: true,
-              default_product: {
-                name: demo_product.name,
-                url: demo_product.long_url,
-                gumroad_domain_url: demo_product.long_url,
-                script_base_url: UrlService.root_domain_with_protocol
-              },
-              products: [
-                {
-                  name: demo_product.name,
-                  url: demo_product.long_url,
-                  gumroad_domain_url: demo_product.long_url,
-                  script_base_url: UrlService.root_domain_with_protocol
-                }
-              ],
+              default_product: widget_product_props(demo_product),
+              products: [widget_product_props(demo_product)],
               affiliated_products: [
-                {
-                  name: affiliate_product.name,
-                  url: affiliate_product_url(affiliate_id: direct_affiliate.external_id_numeric,
-                                             unique_permalink: affiliate_product.unique_permalink,
-                                             host: UrlService.root_domain_with_protocol),
-                  gumroad_domain_url: affiliate_product_url(affiliate_id: direct_affiliate.external_id_numeric,
-                                                            unique_permalink: affiliate_product.unique_permalink,
-                                                            host: UrlService.root_domain_with_protocol),
-                  script_base_url: UrlService.root_domain_with_protocol
-                }
+                widget_product_props(affiliate_product, url: referral_url)
               ],
             })
         end
@@ -113,25 +80,10 @@ describe WidgetPresenter do
             expect(subject.widget_props).to eq(
               {
                 display_product_select: false,
-                default_product: {
-                  name: "Old Product",
-                  url: old_product.long_url,
-                  gumroad_domain_url: old_product.long_url,
-                  script_base_url: UrlService.root_domain_with_protocol
-                },
+                default_product: widget_product_props(old_product),
                 products: [
-                  {
-                    name: "New Product",
-                    url: new_product.long_url,
-                    gumroad_domain_url: new_product.long_url,
-                    script_base_url: UrlService.root_domain_with_protocol
-                  },
-                  {
-                    name: "Old Product",
-                    url: old_product.long_url,
-                    gumroad_domain_url: old_product.long_url,
-                    script_base_url: UrlService.root_domain_with_protocol
-                  }
+                  widget_product_props(new_product),
+                  widget_product_props(old_product)
                 ],
                 affiliated_products: [],
               })
@@ -145,25 +97,10 @@ describe WidgetPresenter do
             expect(subject.widget_props).to eq(
               {
                 display_product_select: true,
-                default_product: {
-                  name: "New Product",
-                  url: new_product.long_url,
-                  gumroad_domain_url: new_product.long_url,
-                  script_base_url: UrlService.root_domain_with_protocol
-                },
+                default_product: widget_product_props(new_product),
                 products: [
-                  {
-                    name: "New Product",
-                    url: new_product.long_url,
-                    gumroad_domain_url: new_product.long_url,
-                    script_base_url: UrlService.root_domain_with_protocol
-                  },
-                  {
-                    name: "Old Product",
-                    url: old_product.long_url,
-                    gumroad_domain_url: old_product.long_url,
-                    script_base_url: UrlService.root_domain_with_protocol
-                  }
+                  widget_product_props(new_product),
+                  widget_product_props(old_product)
                 ],
                 affiliated_products: [],
               })
@@ -179,21 +116,8 @@ describe WidgetPresenter do
         expect(subject.widget_props).to eq(
           {
             display_product_select: false,
-            default_product:
-              {
-                name: "The Works of Edgar Gumstein",
-                url: demo_product.long_url,
-                gumroad_domain_url: demo_product.long_url,
-                script_base_url: UrlService.root_domain_with_protocol
-              },
-            products: [
-              {
-                name: "The Works of Edgar Gumstein",
-                url: demo_product.long_url,
-                gumroad_domain_url: demo_product.long_url,
-                script_base_url: UrlService.root_domain_with_protocol
-              }
-            ],
+            default_product: widget_product_props(demo_product),
+            products: [widget_product_props(demo_product)],
             affiliated_products: [],
           })
       end

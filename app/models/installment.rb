@@ -435,13 +435,7 @@ class Installment < ApplicationRecord
     return if sale.chargedback_not_reversed_or_refunded?
     return if sale.subscription.present? && !sale.subscription.alive?
 
-    other_purchase_ids = Purchase.where(email: sale.email, seller_id: sale.seller_id)
-                                 .all_success_states
-                                 .no_or_active_subscription
-                                 .not_fully_refunded
-                                 .not_chargedback_or_chargedback_reversed
-                                 .pluck(:id)
-    return if other_purchase_ids.present? && CreatorContactingCustomersEmailInfo.where(purchase: other_purchase_ids, installment: id).present?
+    return if already_emailed_workflow_purchase?(sale)
 
     return if workflow.present? && !workflow.applies_to_purchase?(sale)
     expected_delivery_time_for_sale = expected_delivery_time(sale)
@@ -472,13 +466,7 @@ class Installment < ApplicationRecord
     return unless sale.can_contact?
     return if sale.chargedback_not_reversed_or_refunded?
 
-    other_purchase_ids = Purchase.where(email: sale.email, seller_id: sale.seller_id)
-                                 .all_success_states
-                                 .inactive_subscription
-                                 .not_fully_refunded
-                                 .not_chargedback_or_chargedback_reversed
-                                 .pluck(:id)
-    return if other_purchase_ids.present? && CreatorContactingCustomersEmailInfo.where(purchase: other_purchase_ids, installment: id).present?
+    return if already_emailed_workflow_purchase?(sale, subscription_scope: :inactive_subscription)
 
     return if workflow.present? && !workflow.applies_to_purchase?(sale)
 
@@ -770,8 +758,17 @@ class Installment < ApplicationRecord
 
   def unique_open_count
     Rails.cache.fetch(key_for_cache(:unique_open_count)) do
-      CreatorEmailOpenEvent.where(installment_id: id).count
+      if EmailEngagementDynamoStore.reads_enabled?
+        dynamo_engagement_summary[:open_count]
+      else
+        CreatorEmailOpenEvent.where(installment_id: id).count
+      end
     end
+  end
+
+  # One SUMMARY read serves both counters when a render misses both caches.
+  private def dynamo_engagement_summary
+    @dynamo_engagement_summary ||= EmailEngagementDynamoStore.summary(id)
   end
 
   # How many email_infos rows to read at a time when working out who a post was emailed
@@ -861,19 +858,27 @@ class Installment < ApplicationRecord
 
   def unique_click_count
     Rails.cache.fetch(key_for_cache(:unique_click_count)) do
-      summary = CreatorEmailClickSummary.where(installment_id: id).last
-      summary.present? ? summary[:total_unique_clicks] : 0
+      if EmailEngagementDynamoStore.reads_enabled?
+        dynamo_engagement_summary[:click_pair_count]
+      else
+        summary = CreatorEmailClickSummary.where(installment_id: id).last
+        summary.present? ? summary[:total_unique_clicks] : 0
+      end
     end
   end
 
-  # Return a breakdown of clicks by url.
   def clicked_urls
-    summary = CreatorEmailClickSummary.where(installment_id: id).last
-    return {} if summary.blank?
+    if EmailEngagementDynamoStore.reads_enabled?
+      counts = EmailEngagementDynamoStore.url_click_counts(id)
+      return {} if counts.blank?
+      counts.sort_by { |_, v| -v }.to_h
+    else
+      summary = CreatorEmailClickSummary.where(installment_id: id).last
+      return {} if summary.blank?
 
-    # Change urls back into human-readable format (Necessary because Mongo keys cannot contain ".") Also remove leading protocol & www
-    summary.urls.keys.each { |k| summary.urls[k.gsub(/&#46;/, ".").sub(%r{^https?://}, "").sub(/^www./, "")] = summary.urls.delete(k) }
-    Hash[summary.urls.sort_by { |_, v| v }.reverse] # Sort by number of clicks.
+      summary.urls.keys.each { |k| summary.urls[k.gsub(/&#46;/, ".").sub(%r{^https?://}, "").sub(/^www./, "")] = summary.urls.delete(k) }
+      Hash[summary.urls.sort_by { |_, v| v }.reverse]
+    end
   end
 
   # Public: Returns the percentage of email opens for this installment, or nil if one cannot be calculated.
@@ -1162,6 +1167,17 @@ class Installment < ApplicationRecord
 
       errors.add(:base, "You have to confirm your email address before you can do that.")
       raise InstallmentInvalid, "You have to confirm your email address before you can do that."
+    end
+
+    # Start from this installment's email_infos. The old email+seller pluck scanned
+    # every purchase for the buyer on each of ~100k workers.
+    def already_emailed_workflow_purchase?(sale, subscription_scope: :no_or_active_subscription)
+      purchase_scope = Purchase.where(email: sale.email, seller_id: sale.seller_id)
+                               .all_success_states
+                               .public_send(subscription_scope)
+                               .not_fully_refunded
+                               .not_chargedback_or_chargedback_reversed
+      CreatorContactingCustomersEmailInfo.where(installment_id: id).joins(:purchase).merge(purchase_scope).exists?
     end
 
     def send_email(recipient)

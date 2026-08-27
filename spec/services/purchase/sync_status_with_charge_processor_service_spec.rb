@@ -197,6 +197,161 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(StripePayoutProcessor.is_balance_payable(seller_balance_transaction.balance)).to be(true)
   end
 
+  it "leaves a seller-held Stripe purchase in progress while settlement data is missing" do
+    merchant_account = create(:merchant_account, user: @seller, currency: Currency::EUR,
+                                                 charge_processor_merchant_id: "acct_missing_settlement")
+    charge = create(:charge, seller: @seller, merchant_account:, processor_transaction_id: "ch_missing_settlement")
+    purchase = create(:purchase_in_progress, link: @product, seller: @seller,
+                                             charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                             merchant_account:, stripe_transaction_id: "ch_missing_settlement",
+                                             flow_of_funds: nil)
+    charge.purchases << purchase
+    processor_charge = Struct.new(:id, :status, :refunded, :disputed, :flow_of_funds) do
+      def refunded? = refunded
+    end.new("ch_missing_settlement", "succeeded", false, false, nil)
+    allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(processor_charge)
+    allow(ChargeProcessor).to receive(:charge_processor_success_statuses).and_return(["succeeded"])
+    expect(Purchase::MarkSuccessfulService).not_to receive(:new)
+
+    expect(described_class.new(purchase, require_final_charge_status: true).perform).to be(false)
+
+    expect(purchase.reload).to be_in_progress
+    expect(purchase.flow_of_funds).to be_nil
+    expect(purchase.balance_transactions).to be_empty
+  end
+
+  it "repairs a nil purchase merchant account from the charge before the processor lookup and stays in progress" do
+    merchant_account = create(:merchant_account_stripe_connect, user: @seller, currency: Currency::EUR)
+    charge = create(:charge, seller: @seller, merchant_account:, processor_transaction_id: "ch_missing_ma")
+    purchase = create(:purchase_in_progress, link: @product, seller: @seller,
+                                             charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                             merchant_account: nil, stripe_transaction_id: "ch_missing_ma",
+                                             flow_of_funds: nil)
+    charge.purchases << purchase
+    expect(purchase.reload.merchant_account_id).to be_nil
+    processor_charge = Struct.new(:id, :status, :refunded, :disputed, :flow_of_funds) do
+      def refunded? = refunded
+    end.new("ch_missing_ma", "succeeded", false, false, nil)
+    # A platform-scoped retrieve raises for a seller's direct charge, so the lookup must
+    # receive the charge's seller account; get_or_search_charge itself stays unstubbed.
+    expect(ChargeProcessor).to receive(:get_charge)
+      .with(StripeChargeProcessor.charge_processor_id, "ch_missing_ma", merchant_account:)
+      .and_return(processor_charge)
+    allow(ChargeProcessor).to receive(:charge_processor_success_statuses).and_return(["succeeded"])
+    expect(Purchase::MarkSuccessfulService).not_to receive(:new)
+
+    expect(described_class.new(purchase, require_final_charge_status: true).perform).to be(false)
+
+    expect(purchase.reload).to be_in_progress
+    expect(purchase.flow_of_funds).to be_nil
+    expect(purchase.merchant_account).to eq(merchant_account)
+  end
+
+  it "repairs a stale Gumroad purchase merchant account from the charge before the processor lookup" do
+    seller_account = create(:merchant_account_stripe_connect, user: @seller, currency: Currency::EUR)
+    gumroad_account = create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad_stale")
+    charge = create(:charge, seller: @seller, merchant_account: seller_account, processor_transaction_id: "ch_stale_ma")
+    purchase = create(:purchase_in_progress, link: @product, seller: @seller,
+                                             charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                             merchant_account: gumroad_account, stripe_transaction_id: "ch_stale_ma",
+                                             flow_of_funds: nil)
+    charge.purchases << purchase
+    processor_charge = Struct.new(:id, :status, :refunded, :disputed, :flow_of_funds) do
+      def refunded? = refunded
+    end.new("ch_stale_ma", "succeeded", false, false, nil)
+    expect(ChargeProcessor).to receive(:get_charge)
+      .with(StripeChargeProcessor.charge_processor_id, "ch_stale_ma", merchant_account: seller_account)
+      .and_return(processor_charge)
+    allow(ChargeProcessor).to receive(:charge_processor_success_statuses).and_return(["succeeded"])
+    expect(Purchase::MarkSuccessfulService).not_to receive(:new)
+
+    expect(described_class.new(purchase, require_final_charge_status: true).perform).to be(false)
+
+    expect(purchase.reload).to be_in_progress
+    expect(purchase.merchant_account).to eq(seller_account)
+  end
+
+  it "uses subscription success handling for seller-held Stripe recurring purchases once settlement data exists" do
+    product = create(:product, :is_subscription, user: @seller)
+    subscription = create(:subscription, link: product)
+    create(:membership_purchase, link: product, seller: @seller, subscription:)
+    merchant_account = create(:merchant_account, user: @seller, currency: Currency::EUR,
+                                                 charge_processor_merchant_id: "acct_recurring_settled")
+    charge = create(:charge, seller: @seller, merchant_account:, processor_transaction_id: "ch_recurring_settled")
+    purchase = create(:recurring_membership_purchase, link: product, seller: @seller, subscription:,
+                                                      purchase_state: "in_progress",
+                                                      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                                      merchant_account:, stripe_transaction_id: "ch_recurring_settled",
+                                                      flow_of_funds: nil)
+    charge.purchases << purchase
+    processor_charge = Struct.new(:id, :status, :refunded, :disputed, :flow_of_funds) do
+      def refunded? = refunded
+    end.new("ch_recurring_settled", "succeeded", false, false,
+            FlowOfFunds.build_simple_flow_of_funds(Currency::EUR, purchase.total_transaction_cents))
+    allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(processor_charge)
+    allow(ChargeProcessor).to receive(:charge_processor_success_statuses).and_return(["succeeded"])
+    allow(purchase).to receive(:subscription).and_return(subscription)
+    expect(subscription).to receive(:handle_purchase_success).with(purchase).and_call_original
+    expect(Purchase::MarkSuccessfulService).not_to receive(:new)
+
+    expect(described_class.new(purchase, require_final_charge_status: true).perform).to be(true)
+
+    expect(purchase.reload).to be_successful
+  end
+
+  it "marks the preorder charge successful when a seller-held deferred preorder purchase settles" do
+    preorder_link = create(:preorder_link, link: @product)
+    preorder = create(:preorder, preorder_link:, seller: @seller, state: "authorization_successful")
+    authorization_purchase = create(:preorder_authorization_purchase, link: @product, seller: @seller,
+                                                                      preorder:, is_preorder_authorization: true)
+    merchant_account = create(:merchant_account, user: @seller, currency: Currency::EUR,
+                                                 charge_processor_merchant_id: "acct_preorder_settled")
+    purchase = create(:purchase_in_progress, link: @product, seller: @seller, preorder:,
+                                             charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                             merchant_account:, stripe_transaction_id: "ch_preorder_settled",
+                                             flow_of_funds: nil)
+    processor_charge = Struct.new(:id, :status, :refunded, :disputed, :flow_of_funds) do
+      def refunded? = refunded
+    end.new("ch_preorder_settled", "succeeded", false, false,
+            FlowOfFunds.build_simple_flow_of_funds(Currency::EUR, purchase.total_transaction_cents))
+    allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(processor_charge)
+    allow(ChargeProcessor).to receive(:charge_processor_success_statuses).and_return(["succeeded"])
+
+    expect(described_class.new(purchase, require_final_charge_status: true).perform).to be(true)
+
+    expect(purchase.reload).to be_successful
+    expect(preorder.reload.state).to eq("charge_successful")
+    expect(authorization_purchase.reload.purchase_state).to eq("preorder_concluded_successfully")
+  end
+
+  it "leaves a Gumroad-held combined charge purchase in progress while the charge flow of funds is missing" do
+    merchant_account = create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad_combined_nil_fof")
+    charge = create(:charge, seller: @seller, merchant_account:, processor_transaction_id: "ch_gumroad_nil_fof")
+    purchase = create(:purchase_in_progress, link: @product, seller: @seller,
+                                             charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                             merchant_account:, stripe_transaction_id: "ch_gumroad_nil_fof",
+                                             flow_of_funds: nil, is_part_of_combined_charge: true)
+    charge.purchases << purchase
+    sibling = create(:purchase_in_progress, link: @product, seller: @seller,
+                                            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                            merchant_account:)
+    charge.purchases << sibling
+    processor_charge = Struct.new(:id, :status, :refunded, :disputed, :flow_of_funds) do
+      def refunded? = refunded
+    end.new("ch_gumroad_nil_fof", "succeeded", false, false, nil)
+    allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(processor_charge)
+    allow(ChargeProcessor).to receive(:charge_processor_success_statuses).and_return(["succeeded"])
+    expect(Purchase::MarkSuccessfulService).not_to receive(:new)
+
+    # Even with mark_as_failed, a transient unsettled combined charge must stay recoverable:
+    # this path has no Stripe USD fallback, so proceeding would book balances from a nil flow.
+    expect(described_class.new(purchase, mark_as_failed: true).perform).to be(false)
+
+    expect(purchase.reload).to be_in_progress
+    expect(purchase.flow_of_funds).to be_nil
+    expect(purchase.balance_transactions).to be_empty
+  end
+
   it "does not mark a client-confirmed purchase failed when its finalizer is unavailable" do
     order = create(:order)
     charge = create(:charge, order:, seller: @seller, client_confirmed: true,
@@ -269,16 +424,25 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
   end
 
   it "returns false and leaves the purchase in_progress when a combined charge has nil flow_of_funds (transient unsettled state)" do
-    purchase = build(:purchase, link: @product, purchase_state: "in_progress")
-    purchase.save!(validate: false)
-    allow(purchase).to receive(:is_part_of_combined_charge?).and_return(true)
-
+    merchant_account = create(:merchant_account, user: @seller, currency: Currency::EUR,
+                                                 charge_processor_merchant_id: "acct_combined_nil_fof")
+    charge = create(:charge, seller: @seller, merchant_account:, processor_transaction_id: "ch_test_nil_fof")
+    purchase = create(:purchase_in_progress, link: @product, seller: @seller,
+                                             charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                             merchant_account:, stripe_transaction_id: "ch_test_nil_fof",
+                                             flow_of_funds: nil)
+    charge.purchases << purchase
+    sibling = create(:purchase_in_progress, link: @product, seller: @seller,
+                                            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                            merchant_account:)
+    charge.purchases << sibling
     charge_with_nil_fof = BaseProcessorCharge.new
     charge_with_nil_fof.id = "ch_test_nil_fof"
     charge_with_nil_fof.status = "succeeded"
     charge_with_nil_fof.charge_processor_id = StripeChargeProcessor.charge_processor_id
     charge_with_nil_fof.flow_of_funds = nil
     allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(charge_with_nil_fof)
+    allow(ChargeProcessor).to receive(:charge_processor_success_statuses).and_return(["succeeded"])
 
     expect(Purchase::SyncStatusWithChargeProcessorService.new(purchase, mark_as_failed: true).perform).to be(false)
     # Crucially: even with mark_as_failed: true, the purchase stays in_progress so the next

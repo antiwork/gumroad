@@ -5,11 +5,6 @@ module UtmLinkTracking
 
   private
     def track_utm_link_visit
-      # Used by the duplicate-link rescue below, which re-runs this method once via
-      # `retry`. `||=` (not plain assignment) so the flag survives the retry re-running
-      # the method body — a plain assignment would reset it and loop forever.
-      retried_after_duplicate_insert ||= false
-
       return unless request.get?
 
       required_params = {
@@ -35,31 +30,53 @@ module UtmLinkTracking
 
       utm_params = required_params.merge(optional_params).transform_values { _1.to_s.strip.downcase.gsub(/[^a-z0-9\-_]/u, "-").first(UtmLink::MAX_UTM_PARAM_LENGTH).presence }
 
+      # Match the model's alive-scope uniqueness check, including disabled links; otherwise
+      # this can miss a duplicate and turn a buyer-facing GET into a validation error.
+      # Deterministically pick the oldest alive duplicate because nullable unique-index
+      # columns can allow duplicate rows, and splitting visits would fragment stats.
+      utm_link = UtmLink.alive
+        .where(utm_params.merge(target_resource_type:, target_resource_id:))
+        .order(:id)
+        .first_or_initialize
+
+      # A disabled link means the seller intentionally paused tracking for these UTM
+      # parameters — respect that and don't record the visit.
+      return if utm_link.persisted? && !utm_link.enabled?
+
+      if utm_link.new_record?
+        begin
+          auto_create_utm_link(utm_link, seller)
+        rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
+          # The auto-create insert is outside the visit transaction, so a race winner
+          # should now be committed and visible to an uncached lookup. Converge onto it;
+          # if no winner exists, this was not the race path and the outer rescue reports it.
+          utm_link = UtmLink.uncached do
+            UtmLink.alive
+              .where(utm_params.merge(seller_id: seller.id, target_resource_type:, target_resource_id:))
+              .order(:id)
+              .first
+          end
+          raise if utm_link.blank?
+        end
+      end
+      return unless utm_link.persisted?
+      # The converged winner could have been disabled by the seller while we handled the
+      # race — respect that the same way the lookup above does, and don't record the visit.
+      return if !utm_link.enabled?
+
+      track_visit(utm_link)
+    rescue ActiveRecord::LockWaitTimeout, ActiveRecord::Deadlocked => e
+      # Timestamp updates can contend with another visit or the dedupe job. Do not retry:
+      # lock timeouts already consumed the wait budget, and analytics must not block the page.
+      ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
+    rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
+      # Non-race uniqueness/validation failures cannot converge or retry safely. Report and
+      # swallow so analytics never breaks the buyer-facing page.
+      ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
+    end
+
+    def track_visit(utm_link)
       ActiveRecord::Base.transaction do
-        # Look up existing links with the "alive" scope (not "active") so we see links the
-        # seller has disabled. The model's uniqueness validation also checks against "alive"
-        # links, so if we only searched "active" links here we could miss a disabled duplicate,
-        # try to create a new link, and have the save fail — which used to surface as a 422
-        # error on the buyer-facing page.
-        #
-        # Order by id so the lookup is deterministic when duplicate alive links exist.
-        # Duplicates happen when two simultaneous first visits both insert the same link:
-        # MySQL's unique index can't stop that when a nullable column (utm_term, utm_content,
-        # target_resource_id) is NULL, because NULLs never conflict in unique indexes. Without
-        # an explicit order, alternating visits could split between the duplicate rows;
-        # always picking the oldest row keeps all stats accumulating on one link.
-        utm_link = UtmLink.alive
-          .where(utm_params.merge(target_resource_type:, target_resource_id:))
-          .order(:id)
-          .first_or_initialize
-
-        # A disabled link means the seller intentionally paused tracking for these UTM
-        # parameters — respect that and don't record the visit.
-        return if utm_link.persisted? && !utm_link.enabled?
-
-        auto_create_utm_link(utm_link, seller) if utm_link.new_record?
-        return unless utm_link.persisted?
-
         utm_link.utm_link_visits.create!(
           user: current_user,
           referrer: request.referrer,
@@ -75,53 +92,6 @@ module UtmLinkTracking
 
         UpdateUtmLinkStatsJob.perform_async(utm_link.id)
       end
-    rescue ActiveRecord::LockWaitTimeout, ActiveRecord::Deadlocked => e
-      # Row contention on the utm_links row the timestamp update above writes — a concurrent
-      # visit to the same link, or Onetime::DedupDuplicateUtmLinks, may already hold it. This
-      # runs in a before_action on public GETs, so an uncaught timeout 500s the product page.
-      #
-      # Neither is retried, unlike the uniqueness races below. A LockWaitTimeout has already
-      # waited out InnoDB's timeout (50s by default), so a retry queues behind the same lock;
-      # a deadlock victim could retry cheaply, but losing one visit is cheaper than a second
-      # retry path on a page-blocking write.
-      ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
-    rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
-      # Two simultaneous first visits with the same UTM parameters can both find no existing
-      # link and both try to auto-create it. The request that loses the race fails in one of
-      # two ways, depending on when the winner commits relative to the loser's save:
-      #
-      #   - ActiveRecord::RecordNotUnique — the winner commits after the loser's uniqueness
-      #     validation query ran, so the loser passes validation and then hits the database's
-      #     unique index on insert.
-      #   - ActiveRecord::RecordInvalid — the winner commits before the loser's uniqueness
-      #     validation query runs, so the loser's UtmLink#utm_fields_are_unique_per_target_resource
-      #     validation sees the winner's row and fails with "A link with similar UTM parameters
-      #     already exists".
-      #
-      # There is a third outcome: MySQL unique indexes treat NULL values as non-conflicting,
-      # and this index includes nullable columns (utm_term, utm_content, target_resource_id),
-      # so two racers can BOTH insert successfully and leave duplicate alive rows. Visits keep
-      # working for such links — the lookup above deterministically picks the oldest duplicate,
-      # and the model only re-validates uniqueness when identifying fields change (not on
-      # click-timestamp updates). Merging the duplicate rows themselves is handled by the
-      # Onetime::DedupDuplicateUtmLinks task; see https://github.com/antiwork/gumroad/issues/5989.
-      #
-      # In both recoverable cases the winning request has committed the link by the time we get here, so
-      # retrying once lets this request find that link and still record the visit. For
-      # RecordInvalid we only retry when the failing record is the auto-created UtmLink itself
-      # (a new record) — validation failures on other records in this block aren't races and
-      # retrying wouldn't help. If any failure repeats after the retry, something else is
-      # wrong — report and swallow so the buyer-facing page still renders (analytics must
-      # never break the page).
-      race_recoverable = e.is_a?(ActiveRecord::RecordNotUnique) ||
-        (e.record.is_a?(UtmLink) && e.record.new_record?)
-
-      if race_recoverable && !retried_after_duplicate_insert
-        retried_after_duplicate_insert = true
-        retry
-      end
-
-      ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
     end
 
     def auto_create_utm_link(utm_link, seller)

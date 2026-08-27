@@ -353,6 +353,19 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
+    it "refuses a listing check whose line item carries no product" do
+      # The surcharge controller reaches buyer_currency_listing_quotable? without cart_quotable?
+      # having screened the lines, so the predicate has to answer instead of raising.
+      orphan_line = described_class::LineItem.new(
+        permalink: "gone", product: nil,
+        price_cents: 5_00, tip_cents: 0, seller_tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0
+      )
+
+      expect(
+        described_class.buyer_currency_listing_quotable?(line_items: line_items_for(product) + [orphan_line], buyer_currency: Currency::CAD)
+      ).to be(false)
+    end
+
     context "with a cart spanning several sellers" do
       let(:other_seller) { create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true) }
       let(:other_seller_product) { create(:product, user: other_seller, price_cents: 5_00, price_currency_type: Currency::USD) }
@@ -365,6 +378,34 @@ describe Checkout::BuyerCurrencyQuote do
       after do
         Feature.deactivate_user(:buyer_local_currency, other_seller)
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller)
+      end
+
+      it "returns nil when one seller's lines are all priced in the buyer's currency" do
+        # That seller's charge is refused by charge-time eligibility (all-listed, not the
+        # direct-listed lane on a multi-seller order), so minting a token here would fail the
+        # buyer's payment closed with BuyerCurrencyQuoteInvalid on every retry. The cart must
+        # fall back to canonical USD instead.
+        cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
+        line_items = line_items_for(cad_product, other_seller_product)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        expect(described_class.buyer_currency_listing_quotable?(line_items:, buyer_currency: Currency::CAD)).to be(false)
+
+        result = described_class.create(line_items:, canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        expect(result).to be_nil
+      end
+
+      it "quotes a multi-seller cart when every seller's charge mixes in another currency" do
+        cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
+        line_items = line_items_for(product, cad_product, other_seller_product)
+
+        expect(described_class.buyer_currency_listing_quotable?(line_items:, buyer_currency: Currency::CAD)).to be(true)
+
+        result = described_class.create(line_items:, canonical_total_cents: 25_00, ip: "24.48.0.1")
+
+        expect(result).to have_attributes(currency: Currency::CAD, canonical_total_cents: 25_00)
+        expect(result.charges.map { _1.seller.id }).to eq([seller.id, other_seller.id])
       end
 
       it "locks one quote per seller and reports their sum as the cart total" do
@@ -779,13 +820,16 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
-    it "returns nil when only one item of a mixed cart is priced in the buyer's currency" do
+    it "quotes a mixed cart when only one item is priced in the buyer's currency" do
       cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
-      expect(StripeFxQuote).not_to receive(:create)
+      line_items = line_items_for(product, cad_product)
 
-      result = described_class.create(line_items: line_items_for(product, cad_product), canonical_total_cents: 20_00, ip: "24.48.0.1")
+      expect(described_class.buyer_currency_listing_quotable?(line_items:, buyer_currency: Currency::CAD)).to be(true)
 
-      expect(result).to be_nil
+      result = described_class.create(line_items:, canonical_total_cents: 20_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, canonical_total_cents: 20_00)
+      expect(StripeFxQuote).to have_received(:create)
     end
 
     it "returns nil when any item in the cart offers an installment plan even if the rest are supported" do

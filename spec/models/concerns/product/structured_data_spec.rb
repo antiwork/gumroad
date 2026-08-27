@@ -76,6 +76,39 @@ describe Product::StructuredData do
             expect(offer["availability"]).to eq(Product::StructuredData::AVAILABILITY_IN_STOCK)
           end
         end
+
+        context "when the product has a NULL price_currency_type" do
+          before do
+            # update_column bypasses the setter, matching a legacy NULL row.
+            # A NULL currency also matches no Price row, so price_cents is nil.
+            product.update_column(:price_currency_type, nil)
+            product.reload
+          end
+
+          it "renders the offer without priceCurrency and without price" do
+            offer = product.structured_data["offers"]
+
+            expect(offer).not_to have_key("priceCurrency")
+            expect(offer).not_to have_key("price")
+            expect(offer["availability"]).to eq(Product::StructuredData::AVAILABILITY_IN_STOCK)
+          end
+
+          context "when the product is a subscription with stale price rows" do
+            let(:product) { create(:subscription_product, user:, name: "My Great Book", price_cents: 500) }
+
+            it "omits the stale amount together with priceCurrency" do
+              # The offer's amount comes from minimum_offer_price_cents, which
+              # reads prices.alive.is_buy without a currency filter for
+              # recurring products, so an amount survives the NULL currency.
+              expect(product.reload.send(:minimum_offer_price_cents)).to eq(500)
+
+              offer = product.structured_data["offers"]
+
+              expect(offer).not_to have_key("priceCurrency")
+              expect(offer).not_to have_key("price")
+            end
+          end
+        end
       end
 
       context "with reviews disabled" do
@@ -178,6 +211,17 @@ describe Product::StructuredData do
         context "when the product is priced in a zero-decimal currency" do
           before do
             product.update!(price_currency_type: "jpy", price_cents: 14_800)
+          end
+
+          it "divides the converted price by the USD scaling factor, not the product currency's" do
+            Redis::Namespace.new(:currencies, redis: $redis).set("JPY", "148.0")
+
+            offer = product.structured_data["offers"]
+
+            # ¥14,800 at 148 JPY/USD is 10,000 USD cents. Dividing by the product
+            # currency's factor (1 for JPY) instead of USD's would publish 10000.0.
+            expect(offer["priceCurrency"]).to eq("USD")
+            expect(offer["price"]).to eq(100.0)
           end
 
           it "falls back to the native major-unit price when no conversion rate is available" do

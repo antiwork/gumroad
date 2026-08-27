@@ -42,7 +42,9 @@ class RedisKey
     def blast_sent_emails(blast_id) = "blast:#{blast_id}:sent_emails"
     def blast_audience_snapshot(blast_id) = "blast:#{blast_id}:audience_snapshot"
     def blast_non_opener_emails(blast_id) = "blast:#{blast_id}:non_opener_emails"
+    def blast_pending_recipients(blast_id) = "blast:#{blast_id}:pending_recipients"
     def stalled_blast_auto_resumed(blast_id) = "blast:#{blast_id}:auto_resumed"
+    def stalled_blast_completion_resumed(blast_id) = "blast:#{blast_id}:completion_resumed"
     def workflow_installment_rule_version(installment_id) = "workflow_installment_rule:#{installment_id}:version"
     def workflow_installment_rule_pending_token(installment_id) = "workflow_installment_rule:#{installment_id}:pending_token"
     def audience_member_load_max_execution_time_seconds = "audience_member_load:max_execution_time_seconds"
@@ -114,5 +116,13 @@ class RedisKey
     # only for the length of one render; `product_reviews.seller_notified_at` is what records that
     # the seller was told. See ContactingCreatorMailer#review_submitted.
     def product_review_seller_notified(review_id) = "product_review_seller_notified:#{review_id}"
+    def workflow_seller_fanout_lock(seller_id) = "workflow_seller_fanout_lock:#{seller_id}"
+    def workflow_seller_fanout_lock_ttl_seconds = "workflow_seller_fanout_lock_ttl_seconds"
+    def workflow_seller_fanout_retry_seconds = "workflow_seller_fanout_retry_seconds"
+    def workflow_immediate_fanout_threshold = "workflow_immediate_fanout_threshold"
+    def workflow_immediate_enqueue_per_second = "workflow_immediate_enqueue_per_second"
+    def workflow_immediate_fanout_max_spread_seconds = "workflow_immediate_fanout_max_spread_seconds"
+    def seller_large_blast_threshold = "seller_large_blast_threshold"
+    def seller_large_blast_quota(seller_id, day) = "seller_large_blast_quota:#{seller_id}:#{day}"
   end
 end

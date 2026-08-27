@@ -167,6 +167,21 @@ describe Wishlist do
 
       expect(wishlist.structured_data).to eq({})
     end
+
+    it "omits the offer for a product whose currency is NULL but keeps a stale price" do
+      product = create(:product, price_cents: 500)
+      create(:wishlist_product, wishlist:, product:)
+      # update_column bypasses the setter, matching legacy NULL rows. A NULL
+      # link currency matches a NULL Price-row currency, so price_cents stays.
+      product.update_column(:price_currency_type, nil)
+      product.prices.alive.each { |price| price.update_column(:currency, nil) }
+      expect(product.reload.price_cents).to eq(500)
+
+      item = wishlist.structured_data["itemListElement"].first["item"]
+
+      expect(item).not_to have_key("offers")
+      expect(item["name"]).to eq(product.name)
+    end
   end
 
   describe "#update_recommendable" do

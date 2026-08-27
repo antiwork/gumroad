@@ -113,8 +113,6 @@ const buildUser = (promotedNavItems: string[]): LoggedInUser => ({
   canCreateBrandAccount: false,
   hasPayoutSetupToPort: false,
   promotedNavItems,
-  isGumroadAdmin: false,
-  isImpersonating: false,
   lazyLoadOffscreenDiscoverImages: false,
   policies: {
     affiliate_requests_onboarding_form: { update: true },

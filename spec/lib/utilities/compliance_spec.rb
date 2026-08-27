@@ -218,6 +218,11 @@ describe Compliance do
       it "returns a sorted array of country names and codes" do
         expect(Compliance::Countries.for_select).to eq(for_select_expected)
       end
+
+      it "omits OFAC-blocked countries and Stripe-restricted Syria" do
+        codes = Compliance::Countries.for_select.map(&:first)
+        expect(codes).not_to include("CU", "IR", "KP", "SY")
+      end
     end
 
     describe ".for_select_for_seller_compliance" do
@@ -703,7 +708,6 @@ describe Compliance do
       ["CK", "Cook Islands"],
       ["CR", "Costa Rica"],
       ["HR", "Croatia"],
-      ["CU", "Cuba (not supported)"],
       ["CW", "Curaçao"],
       ["CY", "Cyprus"],
       ["CZ", "Czechia"],
@@ -753,7 +757,6 @@ describe Compliance do
       ["IS", "Iceland"],
       ["IN", "India"],
       ["ID", "Indonesia"],
-      ["IR", "Iran (not supported)"],
       ["IQ", "Iraq"],
       ["IE", "Ireland"],
       ["IM", "Isle of Man"],
@@ -811,7 +814,6 @@ describe Compliance do
       ["NG", "Nigeria"],
       ["NU", "Niue"],
       ["NF", "Norfolk Island"],
-      ["KP", "North Korea (not supported)"],
       ["MK", "North Macedonia"],
       ["MP", "Northern Mariana Islands"],
       ["NO", "Norway"],
@@ -865,7 +867,6 @@ describe Compliance do
       ["SJ", "Svalbard and Jan Mayen"],
       ["SE", "Sweden"],
       ["CH", "Switzerland"],
-      ["SY", "Syrian Arab Republic"],
       ["TW", "Taiwan"],
       ["TJ", "Tajikistan"],
       ["TZ", "Tanzania"],

@@ -9,6 +9,19 @@ class SendPostBlastEmailsJob
   # blast silently, which is what made the documented recovery a no-op (gumroad-private#1816).
   sidekiq_options retry: 10, queue: :default
 
+  # True when the sender has already handed every recipient it picked to an ESP.
+  #
+  # The sender publishes how many recipients it still owes (see `start_pending_recipients`),
+  # and only decrements after the provider call returns — so a kill anywhere before the
+  # handoff leaves a positive count. A missing key means "unknown", not "delivered": the
+  # caller falls back to resuming, exactly as it did before this existed.
+  def self.fully_delivered?(blast)
+    return false if blast.completed_at.present?
+
+    pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
+    pending.present? && pending.to_i <= 0
+  end
+
   def perform(blast_id)
     @blast = PostEmailBlast.find(blast_id)
     @post = @blast.post
@@ -34,7 +47,17 @@ class SendPostBlastEmailsJob
     end
 
     return mark_blast_as_completed if @members.empty?
+    unless SellerLargeBlastQuota.allow?(
+      seller_id: @post.seller_id,
+      kind: "post_blast",
+      blast_id: @blast.id,
+      recipient_count: @members.size
+    )
+      requeue_for_daily_blast_limit
+      return
+    end
 
+    start_pending_recipients
     cache = {}
     @members.each_slice(recipients_slice_size) do |members_slice|
       members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
@@ -54,19 +77,12 @@ class SendPostBlastEmailsJob
     AUDIENCE_SNAPSHOT_TTL = 3.days
 
     # How many snapshotted member ids to revalidate per statement. Small on purpose:
-    # MySQL's range optimizer has a memory budget for representing an `IN (...)` list as
-    # primary-key ranges, and once the list is big enough to blow that budget it silently
-    # abandons the primary key and looks the rows up through the (seller_id, email) index
-    # instead — which for a seller with a six-figure audience means searching that
-    # seller's whole membership per statement rather than the ids the slice asked for.
-    # Measured on production against the real 350k-member audience: the plan holds
-    # `range`/`PRIMARY` up to 6,000 ids and has flipped to `ref`/seller_id_and_email by
-    # 6,500, with no error to tell you it happened. The cost shows up as tail latency —
-    # ~57 ms per statement at 1,000 ids versus ~600-1,200 ms at 10,000 — so a slow
-    # replica or a busy window is far likelier to push a 10,000-id statement into the
-    # execution cap. Total revalidation wall time is roughly the same either way (the
-    # work is proportional to the audience, not the slice count), so 1,000 buys tail
-    # safety at no throughput cost. It leaves ~6x headroom under the measured flip.
+    # MySQL's range optimizer silently drops the PK plan once an `IN (...)` list blows
+    # its memory budget, and looks the rows up through (seller_id, email) instead —
+    # a six-figure audience then scans that seller's whole membership per statement.
+    # Measured on the 350k-member audience: `range`/`PRIMARY` holds to 6,000 ids and
+    # has flipped to `ref`/seller_id_and_email by 6,500, with no error. 1,000 leaves
+    # ~6x headroom; wall time is the same (work tracks the audience, not the slice).
     REVALIDATION_SLICE_SIZE = 1_000
 
     # Redis list/set writes only — no SQL — so this can stay large.
@@ -76,12 +92,16 @@ class SendPostBlastEmailsJob
     # already accepted its recipients must not be handed them again because a later
     # provider failed, so the cleanup below only rolls back the slice that raised.
     def send_provider_slice(provider:, members:, cache:)
+      # Count the slice as handed over, not the post-dedupe remainder: anything
+      # `store_recipients_as_sent` drops was already emailed by someone else.
+      owed = members.size
       members = store_recipients_as_sent(members)
       recipients = prepare_recipients(members)
 
       begin
         deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
         mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
+        decrement_pending_recipients(owed)
       rescue Exception => e
         # Delete the sent_post_emails records if there's an error with the provider send.
         # We cannot use `transaction` here because it exceeds the lock timeout.
@@ -108,25 +128,11 @@ class SendPostBlastEmailsJob
       end
     end
 
-    # Loads the recipient list for the blast. For sellers with very large audiences
-    # (hundreds of thousands of members) the filter query is the slowest, most fragile
-    # part of the job: it can exceed the database's default 5-minute statement cap, and a
-    # deploy or worker restart mid-run loses all its progress. Two protections here:
-    #
-    # 1. The query runs under a raised statement-time cap (Redis-tunable), the same way
-    #    the sales report jobs handle long queries.
-    # 2. The resolved member ids are snapshotted in Redis keyed by blast id. When a retry
-    #    of the SAME blast runs after a mid-run kill (deploys will only get more
-    #    frequent), it re-runs the filter restricted to just those ids — cheap,
-    #    primary-key-bound — instead of the unrestricted filter over the whole audience,
-    #    so each retry resumes sending within seconds instead of repaying the
-    #    minutes-long load and re-racing the next deploy.
-    #
-    # Because the retry re-applies the ORIGINAL filter criteria to the snapshotted ids,
-    # anyone whose eligibility changed after the snapshot was taken (unsubscribed,
-    # erased, refunded the qualifying purchase, removed as an affiliate) is dropped from
-    # the retry rather than emailed from stale data. Members ADDED after the first
-    # attempt won't be picked up by a retry — acceptable for a send already mid-flight.
+    # Filter query can blow the 5-minute statement cap and a mid-run kill loses it.
+    # Raised (Redis-tunable) timeout, then snapshot member ids in Redis by blast id.
+    # A retry of the SAME blast re-runs the original filter restricted to those ids
+    # (PK-bound), so eligibility changes drop and members added after the first
+    # attempt are not picked up — fine for a send already mid-flight.
     def load_audience_members
       snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
       snapshotted_ids = $redis.lrange(snapshot_key, 0, -1)
@@ -143,29 +149,14 @@ class SendPostBlastEmailsJob
       end
     end
 
-    # A snapshot can be up to a day old by the time the last retry runs, and audience
-    # membership changes in that window: buyers refund, followers unsubscribe, affiliates
-    # get removed. Simply checking that the audience_members row still exists is not
-    # enough — a person with multiple relationships to the seller (e.g. a customer who
-    # also follows) KEEPS their row when they leave just one role, so a follower who
-    # unsubscribed (but also bought something) would still be emailed by a follower
-    # blast from the stale snapshot.
-    #
-    # So the retry re-runs the SAME audience filter the first attempt used, restricted
-    # to the snapshotted ids. Primary-key-bounding every subquery (the `ids:` option)
-    # makes this cheap even for huge audiences — unlike the unrestricted filter the
-    # snapshot exists to avoid — while re-checking every original criterion (role,
-    # bought products, price/date bounds). The filter also returns FRESH rows, so the
-    # send uses current emails and current purchase/follower/affiliate ids rather than
-    # anything stale from the first attempt.
+    # Existence of the audience_members row is not enough: a customer who also
+    # follows KEEPS the row after unsubscribing, so a follower blast would still
+    # email them from a stale snapshot. Re-run the original filter on the
+    # snapshotted ids (`ids:`) for fresh rows and every original criterion.
     def revalidate_snapshotted_members(snapshotted_ids)
-      # Even though each slice is primary-key-bounded, the audience filter still joins
-      # several large tables per slice, and for six-figure audiences a slice can exceed
-      # the database's default statement cap. Every RETRY of a large blast goes through
-      # this path (the first attempt wrote the snapshot), so an unraised cap here means
-      # retries fail deterministically and the job dead-sets even though the fresh-load
-      # path above is protected. Run the revalidation under the same raised,
-      # Redis-tunable cap the fresh load uses.
+      # Audience filter still joins large tables; a six-figure slice can exceed
+      # the default statement cap. Every RETRY takes this path, so use the same
+      # raised Redis-tunable cap as the fresh load or retries dead-set.
       members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
         snapshotted_ids.each_slice(REVALIDATION_SLICE_SIZE).flat_map do |ids_slice|
           AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: ids_slice)
@@ -196,22 +187,9 @@ class SendPostBlastEmailsJob
       $redis.rename(tmp_key, snapshot_key)
     end
 
-    # Resolves which of the post's original recipients never opened it — the audience a
-    # "resend to non-openers" blast targets.
-    #
-    # For a post emailed to hundreds of thousands of people this computation is the
-    # slowest part of the whole job (it reads every open-tracking row for the post and
-    # then looks up those buyers' emails), and it used to be repeated in full by every
-    # attempt. That made large resends effectively un-sendable: each attempt needed
-    # roughly an hour before the first email went out, and any deploy or worker recycle
-    # in that window killed it and sent the next attempt back to the start.
-    #
-    # So the resolved set is checkpointed in Redis keyed by blast id, the same way the
-    # audience snapshot is. A restarted attempt reads the checkpoint and proceeds
-    # straight to sending. The set is still a point-in-time answer: someone who opens
-    # the original email after the checkpoint is written may still receive the resend.
-    # That was already true within a single attempt, and it is a far better outcome than
-    # a blast that never sends at all.
+    # Non-opener emails for a "resend to non-openers" blast. Checkpointed in Redis
+    # by blast id — the open-tracking walk is too slow to redo after a kill.
+    # Point-in-time: someone who opens after the checkpoint may still get the resend.
     def load_non_opener_emails
       checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
       if $redis.exists?(checkpoint_key)
@@ -358,15 +336,29 @@ class SendPostBlastEmailsJob
       end
     end
 
+    # Publishes how many recipients this attempt still owes the ESPs, so a monitor can tell a
+    # blast that died mid-send from one that died after the last handoff but before the stamp
+    # below (gumroad-private#2250). Written per attempt, after filtering: a retry owes only
+    # what is left. The TTL matches the audience snapshot — past it the answer is "unknown"
+    # and the monitor falls back to resuming.
+    def start_pending_recipients
+      $redis.set(RedisKey.blast_pending_recipients(@blast.id), @members.size, ex: AUDIENCE_SNAPSHOT_TTL.to_i)
+    end
+
+    def decrement_pending_recipients(count)
+      $redis.decrby(RedisKey.blast_pending_recipients(@blast.id), count)
+    end
+
     def mark_blast_as_completed
       @blast.update!(completed_at: Time.current)
-      # The blast is done, so the retry-resume snapshot and the non-opener checkpoint
-      # have served their purpose. Also remove the temporary write-in-progress keys in
-      # case a previous attempt died mid-write (they carry a TTL, but no reason to keep
-      # them around).
+      # The blast is done, so the retry-resume snapshot, the non-opener checkpoint and the
+      # pending-recipient count have served their purpose. Also remove the temporary
+      # write-in-progress keys in case a previous attempt died mid-write (they carry a TTL,
+      # but no reason to keep them around).
       snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
       checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
-      $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp")
+      $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
+                 RedisKey.blast_pending_recipients(@blast.id))
     end
 
     # Stores email addresses in SentPostEmail, just before sending the emails.
@@ -400,5 +392,12 @@ class SendPostBlastEmailsJob
     # Tunable via Redis so a stuck blast can be unblocked without a deploy.
     def audience_load_timeout_seconds
       ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
+    end
+
+    def requeue_for_daily_blast_limit
+      job_id = self.class.perform_at(Time.zone.tomorrow.beginning_of_day, @blast.id)
+      return if job_id.present?
+
+      raise "Sidekiq did not requeue the blast for the daily limit"
     end
 end

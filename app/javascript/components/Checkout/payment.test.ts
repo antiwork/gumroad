@@ -10,7 +10,9 @@ import {
   computeTipForListedLines,
   computeTipsForLines,
   getChargeTodayPrice,
+  getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
+  getSelectableDirectListedCurrency,
   getStripePaymentElementAmount,
   getStripePaymentElementMountCurrency,
   getStripePaymentElementPresentment,
@@ -849,8 +851,37 @@ describe("direct-listed card element", () => {
   it("mounts with the listed currency and amount", () => {
     const s = state({ checkoutPayment: directListedCardConfig });
 
+    expect(getConfiguredDirectListedCurrency(s)).toBe("cad");
+    expect(getSelectableDirectListedCurrency(s)).toBe("cad");
     expect(getStripePaymentElementAmount(s)).toBe(1_500);
     expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("mounts with the canonical amount when the buyer selects USD", () => {
+    const s = state({ checkoutPayment: directListedCardConfig, buyerCurrency: "usd" });
+
+    expect(getSelectableDirectListedCurrency(s)).toBe("cad");
+    expect(getStripePaymentElementAmount(s)).toBe(1_000);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+
+  it("keeps the listed selection when save-card intent does not change the client-confirm charge", () => {
+    const s = state({ checkoutPayment: directListedCardConfig, buyerCurrency: "cad", willSaveCard: true });
+
+    expect(getSelectableDirectListedCurrency(s)).toBe("cad");
+    expect(getStripePaymentElementAmount(s)).toBe(1_500);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("holds both mount inputs while a direct-listed currency change is loading", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      buyerCurrency: "usd",
+      surcharges: { type: "pending" },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBeNull();
+    expect(getStripePaymentElementMountCurrency(s)).toBeNull();
   });
 
   it("remounts in canonical USD when a tip makes the direct-listed charge ineligible", () => {
@@ -872,6 +903,7 @@ describe("direct-listed card element", () => {
       },
     });
 
+    expect(getSelectableDirectListedCurrency(s)).toBeNull();
     expect(getStripePaymentElementAmount(s)).toBe(1_100);
     expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
   });
@@ -1670,6 +1702,152 @@ describe("reduceCheckoutState", () => {
     // abort the payment that the address belongs to. The dedicated action invalidates the quote
     // (the held wallet payment then waits for the reload; see resolveHeldWalletPayment) while
     // leaving the in-flight status untouched.
+    describe("set-paypal-billing-address", () => {
+      it("returns to input and queues a tax recheck when PayPal changes the taxable country", () => {
+        const next = reduceCheckoutState(
+          state({ status: { type: "starting" }, paymentMethod: "paypal", country: "US", zipCode: "10001" }),
+          {
+            type: "set-paypal-billing-address",
+            country: "DE",
+            zipCode: "10115",
+            fullName: "PayPal Buyer",
+            email: "paypal-buyer@example.com",
+          },
+        );
+
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+        expect(next.country).toBe("DE");
+        expect(next.zipCode).toBe("10115");
+        expect(next.fullName).toBe("PayPal Buyer");
+        expect(next.email).toBe("paypal-buyer@example.com");
+        expect(next.warning).toBe(
+          "PayPal updated your tax location. Review the updated total below, then click PayPal again to continue.",
+        );
+      });
+
+      it("returns to input and queues a tax recheck when PayPal changes the Canadian province", () => {
+        const next = reduceCheckoutState(
+          state({
+            status: { type: "starting" },
+            paymentMethod: "paypal",
+            country: "CA",
+            state: "ON",
+            zipCode: "M5V 2T6",
+          }),
+          {
+            type: "set-paypal-billing-address",
+            country: "CA",
+            zipCode: "H2X 1Y4",
+            state: "QC",
+            fullName: "PayPal Buyer",
+          },
+        );
+
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+        expect(next.country).toBe("CA");
+        expect(next.state).toBe("QC");
+        expect(next.zipCode).toBe("H2X 1Y4");
+      });
+
+      it("returns to input and queues a tax recheck when PayPal changes only the US ZIP", () => {
+        const next = reduceCheckoutState(
+          state({ status: { type: "starting" }, paymentMethod: "paypal", country: "US", zipCode: "10001" }),
+          {
+            type: "set-paypal-billing-address",
+            country: "US",
+            zipCode: "94103",
+            fullName: "PayPal Buyer",
+          },
+        );
+
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+        expect(next.country).toBe("US");
+        expect(next.zipCode).toBe("94103");
+      });
+
+      it("prefers PayPal's explicit Canadian province over a conflicting postal derivation", () => {
+        const next = reduceCheckoutState(
+          state({
+            status: { type: "starting" },
+            paymentMethod: "paypal",
+            country: "CA",
+            state: "ON",
+            zipCode: "M5V 2T6",
+          }),
+          {
+            type: "set-paypal-billing-address",
+            country: "CA",
+            zipCode: "H2X 1Y4",
+            state: "ON",
+            fullName: "PayPal Buyer",
+          },
+        );
+
+        expect(next.state).toBe("ON");
+        expect(next.surcharges.type).not.toBe("pending");
+        expect(next.status).toEqual({ type: "starting" });
+      });
+
+      it("derives a Canadian province from PayPal's postal code when the province is omitted", () => {
+        const next = reduceCheckoutState(
+          state({
+            status: { type: "starting" },
+            paymentMethod: "paypal",
+            country: "CA",
+            state: "ON",
+            zipCode: "M5V 2T6",
+          }),
+          {
+            type: "set-paypal-billing-address",
+            country: "CA",
+            zipCode: "H2X 1Y4",
+            fullName: "PayPal Buyer",
+          },
+        );
+
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.state).toBe("QC");
+      });
+
+      it("does not interrupt a same-location PayPal approval", () => {
+        const initial = state({ status: { type: "starting" }, paymentMethod: "paypal" });
+        const next = reduceCheckoutState(initial, {
+          type: "set-paypal-billing-address",
+          country: initial.country,
+          zipCode: initial.zipCode,
+          fullName: "PayPal Buyer",
+        });
+
+        expect(next.surcharges).toBe(initial.surcharges);
+        expect(next.status).toEqual({ type: "starting" });
+        expect(next.warning).toBeNull();
+      });
+
+      it("aborts an in-flight surcharges request before sending PayPal back to review", () => {
+        const abort = vi.fn();
+        const next = reduceCheckoutState(
+          state({
+            status: { type: "starting" },
+            paymentMethod: "paypal",
+            surcharges: { type: "loading", requestId: 1, abort },
+          }),
+          {
+            type: "set-paypal-billing-address",
+            country: "CA",
+            zipCode: "H2X 1Y4",
+            fullName: "PayPal Buyer",
+          },
+        );
+
+        expect(abort).toHaveBeenCalledOnce();
+        expect(next.surcharges).toEqual({ type: "pending" });
+        expect(next.status).toEqual({ type: "input", errors: new Set() });
+      });
+    });
+
     describe("set-wallet-billing-address", () => {
       it("invalidates surcharges on a tax-location change without cancelling the starting card payment", () => {
         for (const action of [
@@ -2108,6 +2286,80 @@ describe("reduceCheckoutState", () => {
       ]) {
         expect(reduceCheckoutState(notified, action).unavailableBuyerCurrency).toBeNull();
       }
+    });
+
+    it("keeps the loaded amounts on screen while a saved-card switch is re-quoted", () => {
+      // Switching payment surface re-asks which currencies the server can charge; the cart is
+      // untouched, so blanking the summary's total for the round trip only reads as a hang.
+      const before = state({ surcharges: loadedIn("cad", ["usd", "cad"]) });
+
+      const next = reduceCheckoutState(before, { type: "set-value", usingSavedCard: true });
+
+      expect(next.surcharges).toEqual({ type: "pending" });
+      expect(next.buyerCurrencyRemint?.surcharges).toEqual(quoted("cad", ["usd", "cad"]));
+      expect(next.buyerCurrencyRemint?.surfaceSwitch).toBe(true);
+      // The surface those amounts were quoted on: the summary renders them as of it, so it has to
+      // be the pre-toggle value and not the surface being switched to.
+      expect(next.buyerCurrencyRemint?.previousUsingSavedCard).toBe(false);
+    });
+
+    it("keeps the held quote from a currency change when a saved-card switch lands on top of it", () => {
+      const picked = reduceCheckoutState(state({ surcharges: loadedIn("cad", ["usd", "cad", "gbp"]) }), {
+        type: "set-value",
+        buyerCurrency: "gbp",
+      });
+
+      const switched = reduceCheckoutState(picked, { type: "set-value", usingSavedCard: true });
+
+      // Still the quote the buyer last saw, and still revertible: the currency they picked is
+      // the one the response has to answer for.
+      expect(switched.buyerCurrencyRemint?.surcharges).toEqual(quoted("cad", ["usd", "cad", "gbp"]));
+      expect(switched.buyerCurrencyRemint?.surfaceSwitch).toBeUndefined();
+    });
+
+    it("does not report a refusal for a currency a saved-card switch withdrew", () => {
+      // The buyer changed nothing about their currency, so there is no selection to put back and
+      // nothing to explain — a saved card simply cannot charge the listed currency.
+      const loading = state({
+        buyerCurrency: "cad",
+        buyerCurrencyRemint: {
+          surcharges: quoted("cad", ["usd", "cad"]),
+          previousCurrency: "cad",
+          surfaceSwitch: true,
+        },
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+      });
+
+      const next = reduceCheckoutState(loading, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: quoted("usd", ["usd"]),
+      });
+
+      expect(next.unavailableBuyerCurrency).toBeNull();
+      expect(next.buyerCurrency).toBe("cad");
+      expect(next.surcharges.type).toBe("loaded");
+      expect(next.buyerCurrencyRemint).toBeNull();
+    });
+
+    it("still answers for a currency picked while a saved-card switch was in flight", () => {
+      const before = state({ buyerCurrency: "cad", surcharges: loadedIn("cad", ["usd", "cad", "gbp"]) });
+      const switched = reduceCheckoutState(before, { type: "set-value", usingSavedCard: true });
+
+      const picked = reduceCheckoutState(switched, { type: "set-value", buyerCurrency: "gbp" });
+
+      // The pick is now the thing the response has to answer for, even though there was no
+      // loaded quote left to snapshot when it landed.
+      expect(picked.buyerCurrencyRemint?.surfaceSwitch).toBe(false);
+      expect(picked.buyerCurrencyRemint?.previousCurrency).toBe("cad");
+
+      const next = reduceCheckoutState(
+        { ...picked, surcharges: { type: "loading", requestId: 1, abort: () => {} } },
+        { type: "surcharges-fetch-succeeded", requestId: 1, result: quoted("usd", ["usd", "cad"]) },
+      );
+
+      expect(next.unavailableBuyerCurrency).toBe("gbp");
+      expect(next.buyerCurrency).toBe("cad");
     });
 
     it("keeps the refusal notice through the response that restores the previous currency", () => {

@@ -45,8 +45,15 @@ describe ProfilePresenter do
           is_verified: false,
           can_edit: true,
           follow_recaptcha_site_key: FollowRecaptcha.site_key,
+          hide_follow_form: false,
         }
       )
+    end
+
+    it "includes hide_follow_form when the seller has turned it on" do
+      seller.update!(hide_follow_form: true)
+
+      expect(described_class.new(pundit_user:, seller: seller.reload).creator_profile[:hide_follow_form]).to eq(true)
     end
 
     it "omits the follow CAPTCHA key for a compliant seller" do
@@ -275,6 +282,7 @@ describe ProfilePresenter do
             highlight_color: seller.seller_profile.highlight_color,
             profile_picture_blob_id: nil,
             product_page_storefront_enabled: seller.product_page_storefront_enabled?,
+            hide_follow_form: seller.hide_follow_form?,
           },
           editable_profile: {
             **ProfileSectionsPresenter.new(seller:, query: seller.seller_profile_sections.on_profile).props(request:, pundit_user:, seller_custom_domain_url: nil),

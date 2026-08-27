@@ -90,11 +90,11 @@ describe EmailEngagementDynamoStore do
       expect(requests).to be_empty
     end
 
-    it "records a first-ever click with the url total, the clicker marker, the summary click count, and a compensating open" do
+    it "records a first-ever click with the url total, the pair count, the clicker marker, the summary click count, and a compensating open" do
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
       expect(requests.map { _1[:operation_name] }).to eq(
-        [:put_item, :update_item, :put_item, :update_item, :put_item, :update_item]
+        [:put_item, :update_item, :update_item, :put_item, :update_item, :put_item, :update_item]
       )
 
       click_put = requests[0][:params]
@@ -109,36 +109,41 @@ describe EmailEngagementDynamoStore do
       expect(url_update[:update_expression]).to eq("ADD click_count :one SET click_url = :click_url")
       expect(plain(url_update[:expression_attribute_values][":click_url"])).to eq(click_url)
 
-      marker_put = requests[2][:params]
+      pair_update = requests[2][:params]
+      expect(plain_hash(pair_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
+      expect(pair_update[:expression_attribute_names]).to eq("#counter" => "click_pair_count")
+
+      marker_put = requests[3][:params]
       expect(plain(marker_put[:item]["pk"])).to eq("123")
       expect(plain(marker_put[:item]["sk"])).to eq("CLICKER##{recipient_digest}")
       expect(plain(marker_put[:item]["mailer_args"])).to eq(mailer_args)
       expect(marker_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      summary_click_update = requests[3][:params]
+      summary_click_update = requests[4][:params]
       expect(plain_hash(summary_click_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(summary_click_update[:expression_attribute_names]).to eq("#counter" => "click_count")
 
-      open_put = requests[4][:params]
+      open_put = requests[5][:params]
       expect(plain(open_put[:item]["pk"])).to eq("123")
       expect(plain(open_put[:item]["sk"])).to eq("OPEN##{recipient_digest}")
       expect(plain(open_put[:item]["open_count"])).to eq(1)
       expect(open_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      summary_open_update = requests[5][:params]
+      summary_open_update = requests[6][:params]
       expect(plain_hash(summary_open_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(summary_open_update[:expression_attribute_names]).to eq("#counter" => "open_count")
     end
 
-    it "does not increment the summary click count when the recipient has clicked another url before" do
+    it "counts the pair but not the summary click count when the recipient has clicked another url before" do
       # The click item put succeeds; the clicker marker already exists, as does the open item.
       client.stub_responses(:put_item, [{}, "ConditionalCheckFailedException", "ConditionalCheckFailedException"])
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests.map { _1[:operation_name] }).to eq([:put_item, :update_item, :put_item, :put_item])
+      expect(requests.map { _1[:operation_name] }).to eq([:put_item, :update_item, :update_item, :put_item, :put_item])
       expect(plain(requests[1][:params][:key]["sk"])).to eq("URL##{url_digest}")
-      expect(plain(requests[2][:params][:item]["sk"])).to eq("CLICKER##{recipient_digest}")
+      expect(requests[2][:params][:expression_attribute_names]).to eq("#counter" => "click_pair_count")
+      expect(plain(requests[3][:params][:item]["sk"])).to eq("CLICKER##{recipient_digest}")
     end
 
     it "counts nothing on a repeat click of the same url by the same recipient" do
@@ -230,6 +235,95 @@ describe EmailEngagementDynamoStore do
           { attribute_name: "pk", key_type: "HASH" },
           { attribute_name: "sk", key_type: "RANGE" },
         ]
+      )
+    end
+  end
+
+  describe ".summary" do
+    it "returns zeroed counters when the item is missing" do
+      client.stub_responses(:get_item, { item: nil })
+
+      expect(described_class.summary(123)).to eq(open_count: 0, click_count: 0, click_pair_count: 0)
+    end
+
+    it "reads open and click-pair counters from SUMMARY" do
+      client.stub_responses(:get_item, { item: { "open_count" => 10, "click_count" => 7, "click_pair_count" => 9 } })
+
+      expect(described_class.summary(123)).to eq(open_count: 10, click_count: 7, click_pair_count: 9)
+    end
+  end
+
+  describe ".summaries" do
+    it "batch-gets SUMMARY items and fills zeros for missing partitions" do
+      client.stub_responses(
+        :batch_get_item,
+        {
+          responses: {
+            "email_engagement" => [{ "pk" => "123", "open_count" => 10, "click_pair_count" => 4 }],
+          },
+        }
+      )
+
+      result = described_class.summaries([123, 456])
+      expect(result[123]).to eq(open_count: 10, click_count: 0, click_pair_count: 4)
+      expect(result[456]).to eq(open_count: 0, click_count: 0, click_pair_count: 0)
+    end
+
+    it "retries unprocessed keys instead of zero-filling them" do
+      allow(described_class).to receive(:sleep)
+      client.stub_responses(
+        :batch_get_item,
+        [
+          {
+            responses: { "email_engagement" => [] },
+            unprocessed_keys: {
+              "email_engagement" => { keys: [{ "pk" => "123", "sk" => "SUMMARY" }] },
+            },
+          },
+          {
+            responses: {
+              "email_engagement" => [{ "pk" => "123", "open_count" => 10, "click_pair_count" => 4 }],
+            },
+          },
+        ]
+      )
+
+      result = described_class.summaries([123])
+      expect(result[123]).to eq(open_count: 10, click_count: 0, click_pair_count: 4)
+      expect(requests.map { _1[:operation_name] }).to eq([:batch_get_item, :batch_get_item])
+    end
+
+    it "raises when unprocessed keys remain after retries" do
+      allow(described_class).to receive(:sleep)
+      client.stub_responses(
+        :batch_get_item,
+        {
+          responses: { "email_engagement" => [] },
+          unprocessed_keys: {
+            "email_engagement" => { keys: [{ "pk" => "123", "sk" => "SUMMARY" }] },
+          },
+        }
+      )
+
+      expect { described_class.summaries([123]) }.to raise_error(/Unprocessed keys remain/)
+    end
+  end
+
+  describe ".url_click_counts" do
+    it "strips protocol and www from URL# click_url values" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            { "click_url" => "https://www.gumroad.com/l/a", "click_count" => 5 },
+            { "click_url" => "https://example.com", "click_count" => 2 },
+          ],
+        }
+      )
+
+      expect(described_class.url_click_counts(123)).to eq(
+        "gumroad.com/l/a" => 5,
+        "example.com" => 2,
       )
     end
   end

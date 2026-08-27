@@ -104,10 +104,13 @@ class PurchaseRefundPolicy < ApplicationRecord
 
   private
     def ask_ai(prompt)
-      OpenAI::Client.new.chat(
+      OpenAI::Client.new(
+        access_token: GlobalConfig.get("OPENROUTER_API_KEY"),
+        uri_base: RefundPolicy::OPENROUTER_URI_BASE,
+      ).chat(
         parameters: {
           messages: [{ role: "user", content: prompt }],
-          model: "gpt-4o-mini",
+          model: RefundPolicy::FINE_PRINT_CLASSIFICATION_MODEL,
           temperature: 0.0,
           max_tokens: 10
         }

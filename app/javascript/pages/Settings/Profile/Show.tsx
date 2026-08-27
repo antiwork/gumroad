@@ -91,8 +91,6 @@ export default function SettingsPage() {
   React.useEffect(() => setCreatorProfile(creator_profile), [creator_profile]);
   const updateCreatorProfile = (newProfile: Partial<CreatorProfile>) =>
     setCreatorProfile((prevProfile) => ({ ...prevProfile, ...newProfile }));
-  const previewCreatorProfile = React.useMemo(() => ({ ...creatorProfile, can_edit: false }), [creatorProfile]);
-
   const [editableProfile, setEditableProfile] = React.useState(editable_profile);
   const lastSavedProfile = React.useRef<ProfileEditorState>({
     sections: editable_profile.sections,
@@ -134,6 +132,11 @@ export default function SettingsPage() {
   }, [profile_settings]);
   const updateProfileSettings = (newSettings: Partial<ProfileSettingsForm>) =>
     setProfileSettings((prevSettings) => ({ ...prevSettings, ...newSettings }));
+  // hide_follow_form must track the live toggle, not the saved profile, so the preview updates before saving.
+  const previewCreatorProfile = React.useMemo(
+    () => ({ ...creatorProfile, can_edit: false, hide_follow_form: profileSettings.hide_follow_form }),
+    [creatorProfile, profileSettings.hide_follow_form],
+  );
 
   const uid = React.useId();
   const [tab, setTab] = React.useState<ProfileSettingsTab>("about");
@@ -359,7 +362,10 @@ export default function SettingsPage() {
             <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
             <link rel="stylesheet" href={seller_fonts_css_source} />
             <div inert>
-              <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
+              <ProfileLayout
+                creatorProfile={previewCreatorProfile}
+                hideFollowForm={!previewSectionCount || profileSettings.hide_follow_form}
+              >
                 <EditProfile
                   {...editableProfile}
                   creator_profile={previewCreatorProfile}
@@ -459,6 +465,19 @@ export default function SettingsPage() {
                 <FieldsetDescription>
                   Product pages display your profile header above the product and the rest of your products below it, so
                   buyers landing on a shared link can browse your whole store.
+                </FieldsetDescription>
+              </Fieldset>
+              <Fieldset>
+                <ToggleSettingRow
+                  value={profileSettings.hide_follow_form}
+                  onChange={(value) => updateProfileSettings({ hide_follow_form: value })}
+                  disabled={!canUpdate}
+                  label="Hide the subscribe form in your storefront header"
+                />
+                <FieldsetDescription>
+                  Removes the email subscribe box from the header shown across your storefront: your profile, product
+                  pages, posts, wishlists, and your affiliate signup page. To redesign the whole page, use custom HTML
+                  from Pages.
                 </FieldsetDescription>
               </Fieldset>
               {loggedInUser?.policies.settings_profile.manage_social_connections ? (

@@ -18,6 +18,7 @@ class LinksController < ApplicationController
   DEFAULT_PRICE = 500
   PRICE_INPUT_MAX_LENGTH = 64
   PRICE_INPUT_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
+  TRANSPARENT_1X1_GIF = "GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xFF\xFF\xFF!\xF9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;".b.freeze
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
 
@@ -351,20 +352,30 @@ class LinksController < ApplicationController
   end
 
   def increment_views
+    source_url = request.referrer if request.get?
+    analytics_view_payload = @product.analytics_view_token_payload(params[:analytics_token], source_url:) if request.get?
+    external_analytics_source_url = analytics_view_payload&.fetch("source_url")
     skip = is_bot?
     skip |= logged_in_user.present? && (@product.user_id == current_seller.id || logged_in_user.is_team_member?)
     skip |= impersonating_user&.id
+    skip |= request.get? && analytics_view_payload.blank?
 
     unless skip
       create_product_page_view(
         user_id: logged_in_user&.id,
-        referrer: Array.wrap(params[:referrer]).compact_blank.last || request.referrer,
+        referrer: external_analytics_source_url || Array.wrap(params[:referrer]).compact_blank.last || request.referrer,
         was_product_recommended: ActiveModel::Type::Boolean.new.cast(params[:was_product_recommended]),
-        view_url: params[:view_url] || request.env["PATH_INFO"]
+        view_url: external_analytics_source_url || params[:view_url] || request.env["PATH_INFO"],
+        id: request.get? ? external_analytics_view_id(analytics_view_payload:) : SecureRandom.uuid
       )
     end
 
-    render json: { success: true }
+    if request.format.gif?
+      expires_now
+      send_data TRANSPARENT_1X1_GIF, type: "image/gif", disposition: "inline"
+    else
+      render json: { success: true }
+    end
   end
 
   def track_user_action
@@ -793,6 +804,10 @@ class LinksController < ApplicationController
   end
 
   private
+    def external_analytics_view_id(analytics_view_payload:)
+      Digest::SHA256.hexdigest([@product.id, analytics_view_payload.fetch("event_id")].join("\0"))
+    end
+
     def price_cents_from_units(value)
       value = value.to_s
       return if value.length > PRICE_INPUT_MAX_LENGTH || !value.match?(PRICE_INPUT_PATTERN)

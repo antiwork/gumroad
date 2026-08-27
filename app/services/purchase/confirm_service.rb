@@ -50,8 +50,13 @@ class Purchase::ConfirmService < Purchase::BaseService
     if purchase.pending_buyer_presentment_settlement?
       # The card was charged but Stripe settlement data is not available yet; leave the
       # purchase in_progress and let the finalization job book balances and send the
-      # receipt once real settlement data exists.
-      FinalizeBuyerPresentmentChargeJob.perform_in(FinalizeBuyerPresentmentChargeJob::INITIAL_DELAY, purchase.charge.id)
+      # receipt once real settlement data exists. Standalone confirms (subscription
+      # upgrades/resubscriptions) have no Charge row, so they use the purchase-level job.
+      if purchase.charge.present?
+        FinalizeBuyerPresentmentChargeJob.perform_in(FinalizeBuyerPresentmentChargeJob::INITIAL_DELAY, purchase.charge.id)
+      else
+        FinalizeBuyerPresentmentPurchaseJob.perform_in(FinalizeBuyerPresentmentPurchaseJob::INITIAL_DELAY, purchase.id)
+      end
       return
     end
 

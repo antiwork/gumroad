@@ -222,6 +222,48 @@ describe UrlRedirect do
     end
   end
 
+  describe "#bundle_archive" do
+    let(:buyer) { create(:user) }
+    let(:bundle) { create(:product, :bundle) }
+    let(:bundle_purchase) { create(:purchase, purchaser: buyer, link: bundle) }
+
+    def add_member_files(stampable: false)
+      bundle.bundle_products.each_with_index do |bundle_product, index|
+        attrs = { link: bundle_product.product, display_name: "file-#{index}" }
+        if stampable && index.zero?
+          create(:readable_document, pdf_stamp_enabled: true, **attrs)
+        else
+          create(:product_file, **attrs)
+        end
+      end
+    end
+
+    it "returns nil and does not create an archive when a member product has stampable pdfs" do
+      add_member_files(stampable: true)
+      bundle_purchase.create_artifacts_and_send_receipt!
+
+      expect(bundle_purchase.url_redirect.bundle_archive).to eq(nil)
+      expect(bundle.product_files_archives.alive).to be_empty
+    end
+
+    it "does not include files from another purchase of the same bundle" do
+      add_member_files
+      bundle_purchase.create_artifacts_and_send_receipt!
+      original_product_ids = bundle_purchase.product_purchases.map(&:link_id)
+
+      removed_bundle_product = bundle.bundle_products.first
+      removed_bundle_product.mark_deleted!
+      new_bundle_product = create(:bundle_product, bundle:)
+      create(:product_file, link: new_bundle_product.product, display_name: "new-file")
+      repeat_purchase = create(:purchase, purchaser: buyer, link: bundle)
+      repeat_purchase.create_artifacts_and_send_receipt!
+
+      files_for_original_token = bundle_purchase.url_redirect.bundle_archive_product_files
+      expect(files_for_original_token.map(&:link_id)).to match_array(original_product_ids)
+      expect(files_for_original_token.map(&:link_id)).not_to include(new_bundle_product.product_id)
+    end
+  end
+
   describe "streaming" do
     before do
       @product = create(:product)

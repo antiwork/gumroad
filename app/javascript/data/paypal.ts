@@ -8,7 +8,7 @@ type BillingAgreement = {
     payer_info: {
       email: string;
       payer_id: string;
-      billing_address: { country_code: string; postal_code?: string };
+      billing_address: { country_code: string; postal_code?: string; state?: string };
       first_name?: string;
       last_name?: string;
     };

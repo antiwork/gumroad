@@ -254,6 +254,8 @@ module Ai::StoreAgentApiCatalog
                                                                                                                          path_params: %w[id], params: %w[tracking_url]),
     ep("refund_sale", :put, "/sales/:id/refund", "Refund a sale, fully or partially.", scope: "refund_sales", path_params: %w[id], params: %w[amount_cents]),
     ep("resend_receipt", :post, "/sales/:id/resend_receipt", "Resend the purchase receipt email to the buyer.", scope: "edit_sales", path_params: %w[id]),
+    ep("revoke_sale_access", :put, "/sales/:id/revoke_access", "Revoke the buyer's access to a sale without refunding it. Refused for refunded, physical, and subscription sales.", scope: "edit_sales", path_params: %w[id]),
+    ep("undo_revoke_sale_access", :put, "/sales/:id/undo_revoke_access", "Restore the buyer's access to a previously revoked sale.", scope: "edit_sales", path_params: %w[id]),
 
     # ---- Payouts ----
     ep("list_payouts", :get, "/payouts", "List the creator's payouts. Returns 10 per page; when the response includes next_page_key, pass it back as page_key to fetch the next page.", read: true, scope: "view_payouts", params: %w[page_key]),

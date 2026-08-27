@@ -172,6 +172,9 @@ export function startTrackingForSeller(data: AnalyticsConfig) {
   if (!shouldTrack() || !data.googleAnalyticsId) return;
   if (typeof gtag === "undefined") loadGoogleAnalyticsScript();
 
+  // Custom landing / mobile tracking never call startTrackingForGumroad, so this
+  // path has to issue the gtag("js") bootstrap itself or seller events stay queued.
+  gtag("js", new Date());
   gtag("config", data.googleAnalyticsId, {
     groups: `seller${data.id}`,
     cookie_flags: "SameSite=None; Secure",
@@ -182,6 +185,21 @@ export function startTrackingForSeller(data: AnalyticsConfig) {
     // holds the token-bearing URL.
     page_location: sanitizedPageLocation(),
     page_referrer: sanitizedPageReferrer(),
+  });
+}
+
+export function trackHelpVideoEvent(
+  eventName: "video_start" | "video_progress" | "video_complete",
+  data: { videoId: string; title: string; url: string; percent?: number },
+) {
+  if (!shouldTrack() || typeof gtag === "undefined") return;
+
+  logGumroadEvent(eventName, {
+    video_title: data.title,
+    video_url: data.url,
+    video_provider: "gumroad",
+    video_id: data.videoId,
+    ...(data.percent == null ? {} : { video_percent: data.percent }),
   });
 }
 

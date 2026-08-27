@@ -7,7 +7,7 @@ class CreatorHomePresenter
   BALANCE_ITEMS_LIMIT = 3
   GUMHEAD_FEATURE = :gumhead
   # A fixed tag, because releases/latest here is a deploy release.
-  GUMHEAD_DOWNLOAD_URL = "https://github.com/antiwork/gumroad/releases/download/gumhead-latest/Gumhead.zip"
+  GUMHEAD_DOWNLOAD_URL = "https://github.com/antiwork/gumroad/releases/download/gumhead-latest/Gumhead.dmg"
 
   attr_reader :pundit_user, :seller
 
@@ -65,7 +65,7 @@ class CreatorHomePresenter
         "last_30" => analytics[:by_date][:totals][product.unique_permalink]&.sum || 0,
       }
     end.compact
-    balances = UserBalanceStatsService.new(user: seller).fetch[:overview]
+    balances = UserBalanceStatsService.new(user: seller).fetch_overview
 
     stripe_verification_message = nil
     if seller.stripe_account.present?
@@ -132,6 +132,7 @@ class CreatorHomePresenter
   private
     def gumhead_props
       return {} unless Feature.active?(GUMHEAD_FEATURE, seller)
+      return {} if seller.has_dismissed_gumhead_promo?
 
       { gumhead: { download_url: GUMHEAD_DOWNLOAD_URL } }
     end

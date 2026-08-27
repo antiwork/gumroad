@@ -7,65 +7,151 @@ describe UserBalanceStatsService do
   let(:instance) { described_class.new(user:) }
   let(:example_values) { { foo: "bar", nested: { key1: { key2: "value2" } }, records: [{ id: 1, name: "first" }, { id: 2, name: "second" }] } }
 
-  describe "#generate" do
-    # We're not actually testing the values generated here.
-    # The values and intended final behavior is tested in spec/requests/balance_pages_spec.rb
-    it "returns a hash" do
-      now = Time.zone.local(2020, 1, 1)
+  describe "#fetch_overview" do
+    let(:now) { Time.zone.local(2024, 6, 15, 12, 0, 0) }
+    let(:overview) do
+      {
+        balance: 12_34,
+        last_seven_days_sales_total: 10_00,
+        last_28_days_sales_total: 40_00,
+        sales_cents_total: 90_00,
+      }
+    end
+
+    before do
       travel_to(now)
-      generated = instance.send(:generate)
-      expect(generated).to be_a(Hash)
-      expect(generated.fetch(:generated_at)).to eq(now)
+      allow(user).to receive(:unpaid_balance_cents).and_return(overview[:balance])
+      allow(user).to receive(:sales_cents_total).with(no_args).and_return(overview[:sales_cents_total])
+      allow(user).to receive(:sales_cents_total).with(after: 7.days.ago).and_return(overview[:last_seven_days_sales_total])
+      allow(user).to receive(:sales_cents_total).with(after: 28.days.ago).and_return(overview[:last_28_days_sales_total])
+    end
+
+    context "when the seller is not cacheable" do
+      before { allow(instance).to receive(:should_use_cache?).and_return(false) }
+
+      it "returns the four overview scalars without building the payouts payload" do
+        expect(instance).not_to receive(:generate)
+        expect(instance.fetch_overview).to eq(overview)
+      end
+    end
+
+    context "when the seller is cacheable and the cache is cold" do
+      before { allow(instance).to receive(:should_use_cache?).and_return(true) }
+
+      it "computes the four scalars and enqueues a cache refresh" do
+        expect(instance).not_to receive(:generate)
+        expect(instance.fetch_overview).to eq(overview)
+        expect(UpdateUserBalanceStatsCacheWorker).to have_enqueued_sidekiq_job(user.id)
+      end
+    end
+
+    context "when the seller is cacheable and the cached payload has no overview" do
+      before do
+        allow(instance).to receive(:should_use_cache?).and_return(true)
+        $redis.setex(instance.send(:cache_key), 48.hours.to_i, { generated_at: now }.to_json)
+      end
+
+      it "computes the four scalars instead of returning nil" do
+        expect(instance).not_to receive(:generate)
+        expect(instance.fetch_overview).to eq(overview)
+      end
+    end
+
+    context "when the seller is cacheable and the cache is warm" do
+      let(:cached_payload) do
+        {
+          generated_at: now,
+          next_payout_period_data: { status: "payable" },
+          processing_payout_periods_data: [],
+          overview:,
+          payout_period_data: { 1 => { amount: 99 } },
+          payments: [],
+          is_paginating: false,
+        }
+      end
+
+      before do
+        allow(instance).to receive(:should_use_cache?).and_return(true)
+        $redis.setex(instance.send(:cache_key), 48.hours.to_i, cached_payload.to_json)
+      end
+
+      it "returns only the nested overview hash" do
+        expect(instance).not_to receive(:generate)
+        expect(instance).not_to receive(:overview_stats)
+        result = instance.fetch_overview
+        expect(result).to eq(overview)
+        expect(result.keys).to match_array(overview.keys)
+        expect(result).not_to have_key(:payout_period_data)
+        expect(UpdateUserBalanceStatsCacheWorker).to have_enqueued_sidekiq_job(user.id)
+      end
     end
   end
 
-  describe "#fetch" do
-    let(:fetched) { instance.fetch }
+  describe "#fetch_payout_periods" do
+    let(:payout_periods) do
+      {
+        next_payout_period_data: { status: "not_payable" },
+        processing_payout_periods_data: [],
+      }
+    end
 
-    context "when value should be retrieved from the cache" do
-      before do
-        expect(instance).to receive(:should_use_cache?).and_return(true)
+    before do
+      allow(instance).to receive(:payout_periods_stats).and_return(payout_periods)
+    end
+
+    context "when the seller is not cacheable" do
+      before { allow(instance).to receive(:should_use_cache?).and_return(false) }
+
+      it "returns the two payout period keys without building the rest of the payload" do
+        expect(instance).not_to receive(:generate)
+        expect(instance.fetch_payout_periods).to eq(payout_periods)
       end
+    end
 
-      after do
+    context "when the seller is cacheable and the cache is cold" do
+      before { allow(instance).to receive(:should_use_cache?).and_return(true) }
+
+      it "builds the payout periods and enqueues a cache refresh" do
+        expect(instance).not_to receive(:generate)
+        expect(instance.fetch_payout_periods).to eq(payout_periods)
         expect(UpdateUserBalanceStatsCacheWorker).to have_enqueued_sidekiq_job(user.id)
       end
-
-      context "when cached value exists" do
-        it "returns cached value" do
-          $redis.setex(instance.send(:cache_key), 48.hours.to_i, example_values.to_json)
-          expect(instance).not_to receive(:generate)
-          expect(fetched).to eq(example_values)
-        end
-      end
-
-      context "when cached value does not exist" do
-        it "returns generated value" do
-          expect(instance).to receive(:generate).and_return(example_values)
-          expect(fetched).to eq(example_values)
-        end
-      end
     end
 
-    context "when value should not be retrieved from the cache" do
+    context "when the seller is cacheable and the cache is warm" do
+      let(:cached_payload) do
+        payout_periods.merge(
+          generated_at: Time.current,
+          overview: { balance: 12_34 },
+        )
+      end
+
       before do
-        expect(instance).to receive(:should_use_cache?).and_return(false)
+        allow(instance).to receive(:should_use_cache?).and_return(true)
+        $redis.setex(instance.send(:cache_key), 48.hours.to_i, cached_payload.to_json)
       end
 
-      it "returns generated value" do
-        expect(instance).to receive(:generate).and_return(example_values)
-        expect(fetched).to eq(example_values)
+      it "returns only the two payout period keys out of the cached payload" do
+        expect(instance).not_to receive(:generate)
+        expect(instance).not_to receive(:payout_periods_stats)
+        result = instance.fetch_payout_periods
+
+        expect(result.keys).to match_array(%i[next_payout_period_data processing_payout_periods_data])
+        expect(result).not_to have_key(:overview)
+        expect(UpdateUserBalanceStatsCacheWorker).to have_enqueued_sidekiq_job(user.id)
       end
     end
+  end
 
-    it "returns a hash" do
+  describe "#generate" do
+    it "builds only the keys the two readers slice out of the cached payload" do
       user = create(:user)
       now = Time.zone.local(2020, 1, 1)
       travel_to(now)
       generated = described_class.new(user:).send(:generate)
       expect(generated).to be_a(Hash)
       expect(generated.keys).to match_array(
-        [:generated_at, :next_payout_period_data, :processing_payout_periods_data, :overview, :payout_period_data, :payments, :is_paginating]
+        [:generated_at, :overview, :next_payout_period_data, :processing_payout_periods_data]
       )
       expect(generated.fetch(:generated_at)).to eq(now)
     end

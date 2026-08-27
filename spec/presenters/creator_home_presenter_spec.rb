@@ -309,16 +309,43 @@ describe CreatorHomePresenter do
       end
     end
 
+    describe "dashboard query cost" do
+      # The dashboard reads four scalars out of :overview. Building the rest of the Payouts
+      # payload, per-payment period aggregates especially, is work nobody reads.
+      before do
+        create(:balance, user: seller, amount_cents: 5_000, date: 3.days.ago)
+        create(:balance, user: seller, amount_cents: 7_000, date: 2.days.ago)
+        3.times { |i| create(:payment_completed, user: seller, created_at: (i + 1).weeks.ago) }
+      end
+
+      it "does not build the per-payment payout period data the dashboard never reads" do
+        described_class.new(pundit_user).creator_home_props # warm caches
+
+        queries = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          next if payload[:name] == "SCHEMA" || payload[:cached]
+          queries << payload[:sql] if payload[:sql].to_s.start_with?("SELECT")
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          described_class.new(pundit_user).creator_home_props
+        end
+
+        purchase_queries = queries.grep(/FROM `purchases`/)
+        expect(purchase_queries.size).to be < 30,
+                                         "Expected the dashboard to stop building the Payouts payload, " \
+                                         "got #{purchase_queries.size} queries against purchases"
+      end
+    end
+
     describe "balances" do
       before do
-        allow_any_instance_of(UserBalanceStatsService).to receive(:fetch).and_return(
+        allow_any_instance_of(UserBalanceStatsService).to receive(:fetch_overview).and_return(
           {
-            overview: {
-              balance: 10_000,
-              last_seven_days_sales_total: 5_000,
-              last_28_days_sales_total: 15_000,
-              sales_cents_total: 50_000
-            },
+            balance: 10_000,
+            last_seven_days_sales_total: 5_000,
+            last_28_days_sales_total: 15_000,
+            sales_cents_total: 50_000
           }
         )
       end
@@ -432,6 +459,13 @@ describe CreatorHomePresenter do
       expect(presenter.creator_home_props[:gumhead]).to eq(
         { download_url: CreatorHomePresenter::GUMHEAD_DOWNLOAD_URL }
       )
+    end
+
+    it "omits gumhead when the seller has dismissed the promo" do
+      Feature.activate_user(:gumhead, seller)
+      seller.update!(has_dismissed_gumhead_promo: true)
+
+      expect(presenter.creator_home_props).not_to have_key(:gumhead)
     end
   end
 end

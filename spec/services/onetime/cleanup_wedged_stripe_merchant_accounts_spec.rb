@@ -97,5 +97,16 @@ describe Onetime::CleanupWedgedStripeMerchantAccounts do
 
       expect(result[:wedged_with_balance]).to eq(1)
     end
+
+    it "soft-deletes a leftover row that never received a Stripe id" do
+      user = create(:user)
+      hollow = create(:merchant_account, user:, charge_processor_merchant_id: nil, charge_processor_alive_at: nil, created_at: 8.days.ago)
+
+      result = described_class.process(dry_run: false)
+
+      expect(hollow.reload.alive?).to be(false)
+      expect(result[:cleaned]).to eq(1)
+      expect(Stripe::Account).not_to have_received(:delete)
+    end
   end
 end

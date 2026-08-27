@@ -6,6 +6,7 @@ describe Radar::AddValueListItemJob do
   let(:value_list) { double("ValueList", id: "rsl_123") }
 
   before do
+    allow(Radar::ValueListSyncService).to receive(:enabled?).and_return(true)
     allow(Stripe::Radar::ValueList).to receive(:list).and_return(double(data: [value_list]))
     allow(Stripe::Radar::ValueListItem).to receive(:list).and_return(double(data: []))
   end

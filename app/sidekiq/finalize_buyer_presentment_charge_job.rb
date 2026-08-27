@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-# Buyer-presentment charges defer purchase finalization until Stripe produces the charge's
-# balance transaction (flow of funds), because seller/affiliate balances must be booked from
-# real settlement data. This job polls the processor charge and finalizes the purchases once
+# Purchases that wait for processor settlement data defer finalization until Stripe produces the
+# charge's balance transaction (flow of funds), because seller/affiliate balances must be booked
+# from real settlement data. This job polls the processor charge and finalizes the purchases once
 # settlement data exists, then sends the receipt the checkout response withheld.
 #
-# PR-1 eligibility guarantees a presentment charge contains exactly one purchase, so the
+# Buyer-presentment eligibility guarantees a presentment charge contains exactly one purchase, so the
 # receipt for the charge cannot have been sent before that purchase became successful.
 class FinalizeBuyerPresentmentChargeJob
   include Sidekiq::Job
@@ -16,7 +16,7 @@ class FinalizeBuyerPresentmentChargeJob
 
   def perform(charge_id, attempt = 0)
     charge = Charge.find(charge_id)
-    return if charge.charge_presentment.blank?
+    return unless charge.settlement_deferrable?
 
     pending_purchases = charge.purchases.select { _1.in_progress? && _1.stripe_transaction_id.present? }
     if pending_purchases.none?
