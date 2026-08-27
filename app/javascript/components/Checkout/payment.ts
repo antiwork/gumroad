@@ -1101,9 +1101,6 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
               previousCurrency: state.buyerCurrency,
               surfaceSwitch: false,
             };
-          if (state.tip.type === "fixed" && state.tip.presentmentAmount != null) {
-            state.tip = { ...state.tip, presentmentAmount: null, presentmentCurrency: null };
-          }
         } else if ("usingSavedCard" in action) {
           // Switching surface re-asks the server which currencies it can charge, but it does not
           // touch the cart, so the loaded amounts are still the amounts. Hold them for the same

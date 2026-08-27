@@ -1570,18 +1570,19 @@ describe("reduceCheckoutState", () => {
     expect(next.surcharges).toEqual({ type: "pending" });
   });
 
-  it("does not reinterpret an exact buyer-currency tip after a currency switch", () => {
+  it("keeps an exact buyer-currency tip tagged while another currency is selected", () => {
+    const exactTip = { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" } as const;
     const next = reduceCheckoutState(
       state({
         buyerCurrency: "cad",
         products: [product({ hasTippingEnabled: true })],
-        tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
+        tip: exactTip,
         surcharges: loadedSurcharges(),
       }),
       { type: "set-value", buyerCurrency: "gbp" },
     );
 
-    expect(next.tip).toEqual({ type: "fixed", amount: 350, presentmentAmount: null, presentmentCurrency: null });
+    expect(next.tip).toEqual(exactTip);
     expect(next.surcharges).toEqual({ type: "pending" });
   });
 
@@ -2311,6 +2312,28 @@ describe("reduceCheckoutState", () => {
       expect(next.unavailableBuyerCurrency).toBe("gbp");
       expect(next.buyerCurrency).toBe("cad");
       // The response in hand is the USD fallback, so the restored CAD selection is re-quoted.
+      expect(next.surcharges).toEqual({ type: "pending" });
+      expect(next.buyerCurrencyRemint?.previousCurrency).toBe("cad");
+    });
+
+    it("keeps a tagged exact tip when a refused currency restores its previous currency", () => {
+      const exactTip = { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" } as const;
+      const loading = state({
+        buyerCurrency: "gbp",
+        buyerCurrencyRemint: { surcharges: quoted("cad", ["usd", "cad", "gbp"]), previousCurrency: "cad" },
+        products: [product({ hasTippingEnabled: true })],
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+        tip: exactTip,
+      });
+
+      const next = reduceCheckoutState(loading, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: quoted("usd", ["usd", "cad"]),
+      });
+
+      expect(next.buyerCurrency).toBe("cad");
+      expect(next.tip).toEqual(exactTip);
       expect(next.surcharges).toEqual({ type: "pending" });
       expect(next.buyerCurrencyRemint?.previousCurrency).toBe("cad");
     });

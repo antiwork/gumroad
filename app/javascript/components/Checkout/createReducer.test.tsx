@@ -324,6 +324,39 @@ describe("createReducer surcharge refetches", () => {
     });
   });
 
+  it("sends an exact presentment tip only when the selected currency matches its tag", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout();
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    act(() =>
+      result.current[1]({
+        type: "set-value",
+        tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
+        buyerCurrency: "cad",
+      }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests.at(-1)?.payload).toMatchObject({
+      buyer_currency: "cad",
+      products: [expect.objectContaining({ presentment_tip_cents: 437 })],
+    });
+
+    act(() => result.current[1]({ type: "set-value", buyerCurrency: "gbp" }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests.at(-1)?.payload).toMatchObject({
+      buyer_currency: "gbp",
+      products: [expect.not.objectContaining({ presentment_tip_cents: expect.anything() })],
+    });
+
+    act(() => result.current[1]({ type: "set-value", buyerCurrency: "cad" }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests.at(-1)?.payload).toMatchObject({
+      buyer_currency: "cad",
+      products: [expect.objectContaining({ presentment_tip_cents: 437 })],
+    });
+  });
+
   it("passes the selected buyer currency on the next surcharge fetch", async () => {
     const requests = stubSurchargeRequests();
     const { result } = renderCheckout();
