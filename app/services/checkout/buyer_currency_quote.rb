@@ -330,15 +330,9 @@ class Checkout::BuyerCurrencyQuote
       raise(InvalidToken, "quote covers no charge for this seller")
   end
 
-  # Signature- and expiry-checked but non-authoritative (gumroad-private#1958): confirms the
-  # token wasn't tampered with and is still inside its quote window, not
-  # seller/merchant-account/totals — `verify!` still runs the full check later via
-  # `Charge::CreateService#locked_buyer_currency_quote!` on Stripe charges. The expiry check is
-  # load-bearing on its own, though: non-Stripe charges (PayPal) never reach `verify!` — the
-  # charge service discards the token there — yet the rate bound here has already priced the
-  # purchase. Signatures do not age, so without this a buyer could replay a months-old token on
-  # a PayPal checkout and buy at a stale rate; with it, a replay is bounded by the quote window
-  # like every other consumer of the token.
+  # Signature- and expiry-checked but non-authoritative (gumroad-private#1958).
+  # Stripe callers may use this while constructing the purchase because `verify!` later binds
+  # the seller, merchant account, and totals; non-Stripe callers must ignore it.
   def self.listed_currency_rate_hint(token:, seller_id:, permalink:, currency:)
     return if token.blank?
 
