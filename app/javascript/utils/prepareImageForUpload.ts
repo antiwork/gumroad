@@ -23,7 +23,23 @@ export type PrepareImageOptions = {
   maxDimension?: number;
 };
 
+const isHeicLike = (file: File): boolean => {
+  const type = file.type.toLowerCase();
+  const ext = FileUtils.getFileExtension(file.name).toLowerCase();
+  return type === "image/heic" || type === "image/heif" || ext === "heic" || ext === "heif";
+};
+
+// Chrome/Firefox cannot decode HEIC. Safari can. Keep conversion off the
+// unsupported browsers so the picker does not advertise a dead format.
+export const heicDecodingLikely = (): boolean => {
+  if (typeof navigator === "undefined") return true;
+  const ua = navigator.userAgent || "";
+  if (!ua) return true;
+  return /safari/i.test(ua) && !/chrome|crios|chromium|android|edg/i.test(ua);
+};
+
 export const isLikelyImageFile = (file: File): boolean => {
+  if (isHeicLike(file) && !heicDecodingLikely()) return false;
   // SVG/ICO/etc. are image/* but we cannot re-encode them; leave those to the
   // existing extension allow-lists so they still fail as invalid file types.
   if (DECODE_TYPES.has(file.type.toLowerCase())) return true;

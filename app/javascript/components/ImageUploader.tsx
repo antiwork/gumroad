@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
-import { isLikelyImageFile, prepareImageForUpload } from "$app/utils/prepareImageForUpload";
+import { isLikelyImageFile, prepareImageForUpload, heicDecodingLikely } from "$app/utils/prepareImageForUpload";
 
 import { Button, buttonVariants } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -54,7 +54,11 @@ export const ImageUploader = ({
     }
   };
 
-  const accept = [...allowedExtensions.map((ext) => `.${ext}`), "image/*", ".heic", ".heif", ".avif"].join(",");
+  const accept = [
+    ...allowedExtensions.map((ext) => `.${ext}`),
+    "image/avif",
+    ...(heicDecodingLikely() ? [".heic", ".heif"] : []),
+  ].join(",");
 
   return (
     <div

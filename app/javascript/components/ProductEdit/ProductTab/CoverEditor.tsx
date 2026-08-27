@@ -8,7 +8,7 @@ import { CoverPayload, createCover, deleteCover } from "$app/data/covers";
 import { AssetPreview } from "$app/parsers/product";
 import FileUtils from "$app/utils/file";
 import { between } from "$app/utils/math";
-import { isLikelyImageFile, prepareImageForUpload } from "$app/utils/prepareImageForUpload";
+import { isLikelyImageFile, prepareImageForUpload, heicDecodingLikely } from "$app/utils/prepareImageForUpload";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -190,7 +190,11 @@ const CoverUploader = ({
                 type="file"
                 className="sr-only"
                 multiple
-                accept={[...ALLOWED_EXTENSIONS.map((ext) => `.${ext}`), "image/*", ".heic", ".heif", ".avif"].join(",")}
+                accept={[
+                  ...ALLOWED_EXTENSIONS.map((ext) => `.${ext}`),
+                  "image/avif",
+                  ...(heicDecodingLikely() ? [".heic", ".heif"] : []),
+                ].join(",")}
                 disabled={isUploading}
                 onChange={asyncVoid(async (event) => {
                   const input = event.currentTarget;

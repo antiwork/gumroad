@@ -1,12 +1,26 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { isLikelyImageFile, prepareImageForUpload } from "$app/utils/prepareImageForUpload";
+import { isLikelyImageFile, prepareImageForUpload, heicDecodingLikely } from "$app/utils/prepareImageForUpload";
 import { installFileDropNavigationGuard } from "$app/utils/preventFileDropNavigation";
 
 describe("isLikelyImageFile", () => {
-  it("treats HEIC and AVIF as images even when the MIME type is empty", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("treats HEIC as an image only when the browser can decode it", () => {
+    vi.stubGlobal("navigator", {
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    });
+    expect(heicDecodingLikely()).toBe(true);
     expect(isLikelyImageFile(new File([""], "photo.HEIC"))).toBe(true);
+    vi.stubGlobal("navigator", {
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    });
+    expect(heicDecodingLikely()).toBe(false);
+    expect(isLikelyImageFile(new File([""], "photo.HEIC"))).toBe(false);
     expect(isLikelyImageFile(new File([""], "shot.avif"))).toBe(true);
     expect(isLikelyImageFile(new File([""], "notes.pdf", { type: "application/pdf" }))).toBe(false);
     expect(isLikelyImageFile(new File(["<svg></svg>"], "logo.svg", { type: "image/svg+xml" }))).toBe(false);
@@ -34,6 +48,10 @@ describe("prepareImageForUpload", () => {
   });
 
   it("converts HEIC to JPEG and resizes when the source is too large", async () => {
+    vi.stubGlobal("navigator", {
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    });
     const file = new File(["heic-bytes"], "photo.heic", { type: "" });
     const close = vi.fn();
     vi.stubGlobal(

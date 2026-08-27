@@ -9,7 +9,7 @@ import typia from "typia";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
-import { isLikelyImageFile, prepareImageForUpload } from "$app/utils/prepareImageForUpload";
+import { isLikelyImageFile, prepareImageForUpload, heicDecodingLikely } from "$app/utils/prepareImageForUpload";
 import {
   canResetFileInputAfterSnapshot,
   fileListMatchesPickedFiles,
@@ -264,10 +264,8 @@ export const Image = TiptapNode.create({
           type="file"
           accept={[
             ...imageSettings.allowedExtensions.map((ext) => `.${ext}`),
-            "image/*",
-            ".heic",
-            ".heif",
-            ".avif",
+            "image/avif",
+            ...(heicDecodingLikely() ? [".heic", ".heif"] : []),
           ].join(",")}
           onChange={(e) => {
             const input = e.target;

@@ -14,6 +14,7 @@ vi.mock("$app/components/server-components/Alert", () => ({ showAlert: () => {} 
 vi.mock("$app/utils/prepareImageForUpload", () => ({
   isLikelyImageFile: () => false,
   prepareImageForUpload: async (file: File) => file,
+  heicDecodingLikely: () => false,
 }));
 
 // happy-dom has no object URL support, and uploadImages mints one per inserted image.
