@@ -41,7 +41,6 @@ class CreatorHomePresenter
     top_sales_data = analytics[:by_date][:sales]
       .sort_by { |_, sales| -sales&.sum }.take(BALANCE_ITEMS_LIMIT)
 
-    # Preload products with thumbnail attachments to avoid N+1 queries
     product_permalinks = top_sales_data.map(&:first)
     products_by_permalink = seller.products
       .where(unique_permalink: product_permalinks)
@@ -76,12 +75,9 @@ class CreatorHomePresenter
       end
     end
 
-    # Unconfirmed sellers hit invisible walls all over the product (publishing,
-    # payouts, API access all require a confirmed email), but until now the only
-    # places offering a resend were the Settings page and a few gated flows. The
-    # dashboard is where sellers land, so surface the recovery path here. Only the
-    # account owner can trigger the resend (same policy as the Settings button), so
-    # team members see the notice without the CTA.
+    # Unconfirmed sellers can't publish, take payouts, or use the API. Surface
+    # the resend path on the dashboard. Only the account owner gets the CTA
+    # (same policy as Settings); team members see the notice without it.
     email_confirmation = nil
     if seller.has_unconfirmed_email?
       email_confirmation = {
@@ -142,18 +138,6 @@ class CreatorHomePresenter
       items.sort_by { |item| item["timestamp"] }.last(ACTIVITY_ITEMS_LIMIT).reverse
     end
 
-    # Returns an array for sales to be processed by the frontend.
-    # {
-    #   "type" => String ("new_sale"),
-    #   "timestamp" => String (iso8601 UTC, example: "2022-05-16T01:01:01Z"),
-    #   "details" => {
-    #     "price_cents" => Integer,
-    #     "email" => String,
-    #     "full_name" => Nullable String,
-    #     "product_name" => String,
-    #     "product_unique_permalink" => String,
-    #   }
-    # }
     def sales_activity_items
       sales = seller.sales.successful.not_is_bundle_product_purchase.includes(:link).order(created_at: :desc).limit(ACTIVITY_ITEMS_LIMIT).load
       sales.map do |sale|
@@ -171,15 +155,6 @@ class CreatorHomePresenter
       end
     end
 
-    # Returns an array for followers activity to be processed by the frontend.
-    # {
-    #   "type" => String (one of: "follower_added" | "follower_removed"),
-    #   "timestamp" => String (iso8601 UTC, example: "2022-05-16T01:01:01Z"),
-    #   "details" => {
-    #     "email" => String,
-    #     "name" => Nullable String,
-    #   }
-    # }
     def followers_activity_items
       results = ConfirmedFollowerEvent.search(
         query: { bool: { filter: [{ term: { followed_user_id: seller.id } }] } },
@@ -188,7 +163,6 @@ class CreatorHomePresenter
         _source: [:name, :email, :timestamp, :follower_user_id],
       ).map { |result| result["_source"] }
 
-      # Collect followers' users in one DB query
       followers_user_ids = results.map { |result| result["follower_user_id"] }.compact.uniq
       followers_users_by_id = User.where(id: followers_user_ids).select(:id, :name, :timezone).index_by(&:id)
 
