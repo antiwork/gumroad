@@ -10,6 +10,11 @@ import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
 import { isLikelyImageFile, prepareImageForUpload } from "$app/utils/prepareImageForUpload";
+import {
+  canResetFileInputAfterSnapshot,
+  fileListMatchesPickedFiles,
+  snapshotPickedFiles,
+} from "$app/utils/snapshotPickedFile";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import {
@@ -44,17 +49,18 @@ export const uploadImages = ({
   view,
   files,
   imageSettings,
+  insertAt = getInsertAtFromSelection(view.state.selection),
 }: {
   view: EditorView;
   files: File[];
   insertAt?: number | undefined;
   imageSettings: ImageUploadSettings | null;
 }) => {
-  if (!imageSettings || !files.length) return;
+  if (!imageSettings || !files.length) return Promise.resolve();
 
-  void (async () => {
-    const { maxFileSize } = imageSettings;
-    const insertAt = getInsertAtFromSelection(view.state.selection);
+  const { maxFileSize } = imageSettings;
+
+  return (async () => {
     const prepared: File[] = [];
     for (const file of files) {
       try {
@@ -74,6 +80,7 @@ export const uploadImages = ({
 
     const imageSchema = assertDefined(view.state.schema.nodes.image, "Image node type missing");
 
+    // We reverse the files so their order in the editor is the same as the order they were selected
     const filesWithUrls = [...prepared].reverse().map((file) => {
       const src = URL.createObjectURL(file);
       const node = imageSchema.create({ src, uploading: true });
@@ -81,12 +88,15 @@ export const uploadImages = ({
       return { file, src };
     });
 
-    for (const { file, src } of filesWithUrls) {
-      imageSettings.onUpload(file, src)?.then(
-        (newSrc) => setImageSrcInView(view, src, newSrc),
-        () => deleteImageInView(view, src),
-      );
-    }
+    await Promise.all(
+      filesWithUrls.map(
+        ({ file, src }) =>
+          imageSettings.onUpload(file, src)?.then(
+            (newSrc) => setImageSrcInView(view, src, newSrc),
+            () => deleteImageInView(view, src),
+          ) ?? Promise.resolve(),
+      ),
+    );
   })();
 };
 
@@ -227,6 +237,7 @@ export const Image = TiptapNode.create({
 
   menuItem: (editor) => {
     const inputRef = React.useRef<HTMLInputElement | null>(null);
+    const snapshotInFlight = React.useRef(false);
     const imageSettings = useImageUploadSettings();
     if (!imageSettings) return null;
     return (
@@ -235,7 +246,10 @@ export const Image = TiptapNode.create({
           name="Insert image"
           icon={<ImageIcon className="size-5" />}
           active={editor.isActive("image")}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => {
+            if (snapshotInFlight.current || inputRef.current?.disabled) return;
+            inputRef.current?.click();
+          }}
         />
         <input
           className="sr-only"
@@ -250,10 +264,39 @@ export const Image = TiptapNode.create({
             ".avif",
           ].join(",")}
           onChange={(e) => {
-            const files = [...(e.target.files || [])];
-            if (!files.length) return;
-            uploadImages({ view: editor.view, files, imageSettings });
-            e.target.value = "";
+            const input = e.target;
+            if (snapshotInFlight.current || !input.files) return;
+            const picked = [...input.files];
+            if (!picked.length) return;
+            // Map the caret through edits that land while we read the file.
+            let insertAt = getInsertAtFromSelection(editor.view.state.selection);
+            const mapInsertAt = ({ transaction }: { transaction: { mapping: { map: (pos: number) => number } } }) => {
+              insertAt = transaction.mapping.map(insertAt);
+            };
+            editor.on("transaction", mapInsertAt);
+            snapshotInFlight.current = true;
+            input.disabled = true;
+            void snapshotPickedFiles(picked)
+              .then(async (files) => {
+                editor.off("transaction", mapInsertAt);
+                const uploads = uploadImages({ view: editor.view, files, imageSettings, insertAt });
+                const snapshotted =
+                  fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files);
+                if (snapshotted) input.value = "";
+                if (!snapshotted) {
+                  await uploads;
+                  if (fileListMatchesPickedFiles(input.files, picked)) input.value = "";
+                }
+              })
+              .catch((error: unknown) => {
+                showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+                if (fileListMatchesPickedFiles(input.files, picked)) input.value = "";
+              })
+              .finally(() => {
+                editor.off("transaction", mapInsertAt);
+                snapshotInFlight.current = false;
+                input.disabled = false;
+              });
           }}
         />
       </>

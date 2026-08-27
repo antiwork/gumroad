@@ -180,6 +180,25 @@ check(
   expect_specs: %w[spec/models/widget_spec.rb],
 )
 
+# Evaporate context, types, and vendored client are vitest-only (lint_js).
+check(
+  "Evaporate context, types, and vendored client do not escalate",
+  base_files: {
+    "app/javascript/components/EvaporateUploader.tsx" => "old",
+    "app/javascript/types/evaporate.d.ts" => "old",
+    "vendor/assets/javascripts/evaporate.cjs" => "old",
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+  },
+  head_files: {
+    "app/javascript/components/EvaporateUploader.tsx" => "new",
+    "app/javascript/types/evaporate.d.ts" => "new",
+    "vendor/assets/javascripts/evaporate.cjs" => "new",
+    "app/models/widget.rb" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
 # lib file resolves via content attribution when name mapping misses
 check(
   "lib file resolves via content attribution when name mapping misses",
